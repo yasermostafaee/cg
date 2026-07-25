@@ -330,31 +330,355 @@ export async function probeSource(
   });
 }
 
+export type ConvertedClipVerdict =
+  | { ok: true; durationMs: number; width: number; height: number }
+  | {
+      ok: false;
+      /** WHICH check failed — the message must be specific, never "conversion failed". */
+      check: 'decode' | 'duration' | 'dimensions' | 'seek' | 'playback';
+      reason: string;
+    };
+
 /**
- * Measure a converted WebM's duration from the bytes themselves (`<video>`
- * metadata) — authoritative when the SOURCE banner said `Duration: N/A`.
- * Returns 0 when the clip can't be decoded (callers must reject a 0 duration
- * before committing an element).
+ * D-128 — an ALPHA PROFILE: the reading that distinguishes "renders invisible because
+ * the ALPHA is (near) zero everywhere" from every other failure mode. A clip can pass
+ * every decode check (dimensions ✓ duration ✓ megabytes of colour data ✓) and still
+ * paint NOTHING if its alpha plane is empty — e.g. a source exported as 32-bit BGRA
+ * whose alpha byte is 0 (RGB content present, invisible on air).
  */
-export function measureDurationMs(bytes: Uint8Array): Promise<number> {
+export interface AlphaStats {
+  /** Max alpha seen across the sampled pixels (0-255). */
+  maxA: number;
+  /** Mean alpha across the sampled pixels. */
+  meanA: number;
+  /** Fraction of sampled pixels with alpha ≥ 8 (visible at all). */
+  nonTransparentFrac: number;
+  /** Fraction of sampled pixels with alpha ≥ 250 (fully opaque). */
+  opaqueFrac: number;
+  /** Total pixels sampled (across frames). */
+  sampled: number;
+}
+
+function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
+  let maxA = 0;
+  let sum = 0;
+  let nonTransparent = 0;
+  let opaque = 0;
+  let n = 0;
+  for (const buf of buffers) {
+    for (let i = 3; i < buf.length; i += 4) {
+      const a = buf[i] as number;
+      n++;
+      sum += a;
+      if (a > maxA) maxA = a;
+      if (a >= 8) nonTransparent++;
+      if (a >= 250) opaque++;
+    }
+  }
+  return {
+    maxA,
+    meanA: n > 0 ? sum / n : 0,
+    nonTransparentFrac: n > 0 ? nonTransparent / n : 0,
+    opaqueFrac: n > 0 ? opaque / n : 0,
+    sampled: n,
+  };
+}
+
+/** Render an AlphaStats as the one-line reading the operator can paste back. */
+export function formatAlphaStats(s: AlphaStats): string {
+  return (
+    `maxα=${String(s.maxA)} meanα=${s.meanA.toFixed(1)} ` +
+    `visible(α≥8)=${(s.nonTransparentFrac * 100).toFixed(2)}% ` +
+    `opaque(α≥250)=${(s.opaqueFrac * 100).toFixed(2)}% (n=${String(s.sampled)})`
+  );
+}
+
+/**
+ * D-128 — sample the SOURCE's alpha profile: decode a few spread frames to raw RGBA in
+ * the wasm and measure. Null on any failure — a diagnostics miss must never block an
+ * import. Runs under the module mutex like every wasm op.
+ */
+export async function sampleSourceAlpha(
+  file: File,
+  durationMs: number,
+  samples = 3,
+): Promise<AlphaStats | null> {
+  return withExclusive(async () => {
+    let held: FFmpeg | null = null;
+    try {
+      held = await ensureLoaded();
+      const ff = held;
+      const input = await mountSource(ff, file);
+      const buffers: Uint8Array[] = [];
+      const times =
+        durationMs > 0
+          ? Array.from({ length: samples }, (_, i) => ((i + 0.5) / samples) * (durationMs / 1000))
+          : [0];
+      for (const t of times) {
+        const out = `/alpha-probe-${String(Math.round(t * 1000))}.raw`;
+        const seek = t > 0 ? ['-ss', t.toFixed(3)] : [];
+        const code = await ff.exec([
+          '-y',
+          ...seek,
+          '-i',
+          input,
+          '-frames:v',
+          '1',
+          '-f',
+          'rawvideo',
+          '-pix_fmt',
+          'rgba',
+          out,
+        ]);
+        if (code === 0) {
+          const data = await ff.readFile(out);
+          await ff.deleteFile(out).catch(() => undefined);
+          if (typeof data !== 'string') buffers.push(data);
+        }
+      }
+      try {
+        await ff.unmount(MOUNT_DIR);
+      } catch {
+        /* nothing mounted */
+      }
+      return buffers.length > 0 ? statsOfRgba(buffers) : null;
+    } catch (err) {
+      console.warn('[video-convert] source alpha sampling failed (non-fatal):', err);
+      if (held !== null) dropWorker(held);
+      return null;
+    }
+  });
+}
+
+/**
+ * D-128 — sample the CONVERTED OUTPUT's alpha profile: decode the produced WebM in a
+ * real `<video>`, draw several spread frames to a (downscaled) canvas, and measure the
+ * unpremultiplied alpha. Null on any failure (diagnostics never block).
+ */
+export function sampleOutputAlphaStats(bytes: Uint8Array): Promise<AlphaStats | null> {
   const ab = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(ab).set(bytes);
   const url = URL.createObjectURL(new Blob([ab], { type: 'video/webm' }));
   return new Promise((resolve) => {
     const v = document.createElement('video');
-    v.preload = 'metadata';
+    v.preload = 'auto';
     v.muted = true;
-    v.onloadedmetadata = () => {
+    const finish = (r: AlphaStats | null): void => {
       URL.revokeObjectURL(url);
-      resolve(Number.isFinite(v.duration) ? Math.round(v.duration * 1000) : 0);
+      resolve(r);
     };
+    const timer = setTimeout(() => finish(null), 10_000);
     v.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(0);
+      clearTimeout(timer);
+      finish(null);
+    };
+    v.onloadeddata = () => {
+      void (async () => {
+        try {
+          // FULL resolution — a downscale averages alpha at edges and skews the profile
+          // (the field reading showed opaque 10.7%→3.8% that was mostly this sampler's
+          // 320px downscale eating small elements' opaque cores). Source sampling is
+          // full-res raw RGBA, so the comparison must be too; 1920×282×5 frames is cheap.
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, v.videoWidth);
+          c.height = Math.max(1, v.videoHeight);
+          const ctx = c.getContext('2d', { willReadFrequently: true });
+          if (ctx === null) {
+            clearTimeout(timer);
+            finish(null);
+            return;
+          }
+          const dur = Number.isFinite(v.duration) ? v.duration : 0;
+          const buffers: Uint8Array[] = [];
+          for (const frac of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+            if (dur > 0) {
+              const sought = await new Promise<boolean>((res) => {
+                const st = setTimeout(() => res(false), 3000);
+                v.onseeked = () => {
+                  clearTimeout(st);
+                  res(true);
+                };
+                v.currentTime = frac * dur;
+              });
+              if (!sought) continue;
+            }
+            ctx.clearRect(0, 0, c.width, c.height);
+            ctx.drawImage(v, 0, 0, c.width, c.height);
+            buffers.push(new Uint8Array(ctx.getImageData(0, 0, c.width, c.height).data.buffer));
+            if (dur <= 0) break;
+          }
+          clearTimeout(timer);
+          finish(buffers.length > 0 ? statsOfRgba(buffers) : null);
+        } catch {
+          clearTimeout(timer);
+          finish(null);
+        }
+      })();
     };
     v.src = url;
   });
 }
+
+/**
+ * D-128 — VERIFY the converted bytes ACTUALLY PLAY before anything is stored. The field
+ * lesson (`Lower_Default`): loading metadata and decoding a sample frame is NOT proof of
+ * playability — Chromium seek-decoded five frames of a file whose full playback throws
+ * `PIPELINE_ERROR_DECODE`. So this exercises the real thing, in order:
+ *
+ *  1. metadata reachable + finite positive duration + EXACT post-crop dimensions;
+ *  2. a SEEK SWEEP across the clip (15/35/55/75/92%) — each must fire `seeked` with a
+ *     decodable frame (`readyState ≥ HAVE_CURRENT_DATA`), catching mid-file corruption;
+ *  3. a REAL PLAYBACK SPAN — plays ~2s of media time (rate 4; the whole clip when
+ *     shorter) with the `error` listener armed the ENTIRE time: any `MediaError`
+ *     (the `PIPELINE_ERROR_*` class) fails the check with the position it died at.
+ *
+ * TIME BOUND (a long clip must not hang the modal): metadata ≤ 8 s, each of the 5 seeks
+ * ≤ 3 s, playback span ≤ 8 s wall — worst case ~31 s, typical clip ~2–4 s. Muted, 4×,
+ * on a detached element. Failures name WHICH check failed (`check`), never a generic
+ * "conversion failed".
+ */
+export function verifyConvertedClip(
+  bytes: Uint8Array,
+  expectedWidth: number,
+  expectedHeight: number,
+): Promise<ConvertedClipVerdict> {
+  const ab = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(ab).set(bytes);
+  const url = URL.createObjectURL(new Blob([ab], { type: 'video/webm' }));
+  const v = document.createElement('video');
+  v.preload = 'auto';
+  v.muted = true;
+  const mediaError = (): string => v.error?.message ?? `media error code ${String(v.error?.code)}`;
+  const fail = (
+    check: 'decode' | 'duration' | 'dimensions' | 'seek' | 'playback',
+    reason: string,
+  ): ConvertedClipVerdict => ({ ok: false, check, reason });
+
+  return new Promise<ConvertedClipVerdict>((resolve) => {
+    let settled = false;
+    const done = (verdict: ConvertedClipVerdict): void => {
+      if (settled) return;
+      settled = true;
+      try {
+        v.pause();
+        v.removeAttribute('src');
+      } catch {
+        /* detached */
+      }
+      URL.revokeObjectURL(url);
+      resolve(verdict);
+    };
+
+    // Armed for the WHOLE verification — a decode error at any stage (metadata, a seek,
+    // mid-playback) resolves with the specific position it died at.
+    v.onerror = () =>
+      done(
+        fail(
+          'playback',
+          `the output does not play (${mediaError()}) at t=${v.currentTime.toFixed(2)}s`,
+        ),
+      );
+
+    const metaTimer = setTimeout(
+      () =>
+        done(fail('decode', 'the output never reached metadata (undecodable container/stream)')),
+      8000,
+    );
+
+    v.onloadedmetadata = () => {
+      clearTimeout(metaTimer);
+      const durationMs = Number.isFinite(v.duration) ? Math.round(v.duration * 1000) : 0;
+      if (durationMs <= 0) {
+        done(fail('duration', 'the converted clip reports no duration'));
+        return;
+      }
+      if (v.videoWidth !== expectedWidth || v.videoHeight !== expectedHeight) {
+        done(
+          fail(
+            'dimensions',
+            `the converted clip decodes at ${String(v.videoWidth)}×${String(v.videoHeight)}, ` +
+              `expected ${String(expectedWidth)}×${String(expectedHeight)}`,
+          ),
+        );
+        return;
+      }
+      void (async () => {
+        // 2 — the seek sweep across the clip (not just the start)
+        const dur = v.duration;
+        for (const frac of [0.15, 0.35, 0.55, 0.75, 0.92]) {
+          const target = frac * dur;
+          const okSeek = await new Promise<boolean>((res) => {
+            const st = setTimeout(() => res(false), 3000);
+            v.onseeked = () => {
+              clearTimeout(st);
+              res(v.readyState >= 2); // HAVE_CURRENT_DATA — a frame is really there
+            };
+            v.currentTime = target;
+          });
+          if (settled) return; // the error listener already resolved (the real verdict)
+          if (!okSeek) {
+            done(
+              fail('seek', `no decodable frame at ${target.toFixed(2)}s (seek never completed)`),
+            );
+            return;
+          }
+        }
+        // 3 — a real playback span, error listener still armed
+        v.currentTime = 0;
+        v.playbackRate = 4;
+        const spanEndMedia = Math.min(dur, 2.0);
+        const playOk = await new Promise<boolean>((res) => {
+          const pt = setTimeout(() => res(v.currentTime > 0), 8000); // bound: 8s wall
+          const tick = (): void => {
+            if (settled || v.currentTime >= spanEndMedia || v.ended) {
+              clearTimeout(pt);
+              res(true);
+              return;
+            }
+            setTimeout(tick, 100);
+          };
+          v.play().then(tick, () => {
+            clearTimeout(pt);
+            res(false);
+          });
+        });
+        if (settled) return;
+        if (!playOk) {
+          done(fail('playback', 'the output does not play (playback never started)'));
+          return;
+        }
+        done({ ok: true, durationMs, width: expectedWidth, height: expectedHeight });
+      })();
+    };
+    v.src = url;
+  });
+}
+
+/**
+ * D-128 — READBACK check after `storeBytes`: the stored asset must serve back the SAME
+ * byte count that was verified. A silently truncated/corrupted store would otherwise
+ * present exactly like the field failure (every surface blank, no error anywhere).
+ * Returns null when the readback matches, else a human-readable mismatch description.
+ */
+export async function verifyStoredReadback(
+  url: string,
+  expectedByteLength: number,
+): Promise<string | null> {
+  try {
+    const got = (await (await fetch(url)).arrayBuffer()).byteLength;
+    return got === expectedByteLength
+      ? null
+      : `stored asset reads back ${String(got)} bytes, expected ${String(expectedByteLength)}`;
+  } catch (err) {
+    return `stored asset could not be read back (${String(err)})`;
+  }
+}
+
+/** The ffmpeg log tail of the most recent convert — surfaced when verification fails. */
+export function lastConvertLogTail(): readonly string[] {
+  return lastConvertLog;
+}
+let lastConvertLog: string[] = [];
 
 /**
  * Convert the mounted source to the ONE canonical stored form — VP8+alpha WebM,
@@ -366,6 +690,8 @@ export async function convertToWebm(opts: {
   file: File;
   targetFps: number;
   crop?: CropRect | undefined;
+  /** D-128 — un-premultiply a matted-against-black source (fringe fix). */
+  premultipliedAlpha?: boolean | undefined;
   onProgress?: ((ratio: number) => void) | undefined;
 }): Promise<Uint8Array<ArrayBuffer> | null> {
   return withExclusive(async () => {
@@ -391,12 +717,17 @@ export async function convertToWebm(opts: {
               outputPath: output,
               targetFps: opts.targetFps,
               crop: opts.crop,
+              premultipliedAlpha: opts.premultipliedAlpha,
             }),
           ),
         );
       } finally {
         ff.off('progress', onProgress);
       }
+      // Keep the tail around even on SUCCESS: a conversion that exits 0 can still
+      // produce an undecodable file (the 1920×282 field case), and the post-convert
+      // verification needs this log to make that failure diagnosable.
+      lastConvertLog = lines.slice(-40);
       if (code !== 0) {
         // Encode failure — surface the ffmpeg tail so the modal's "see the
         // console log" message is actually true.

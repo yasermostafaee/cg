@@ -42,7 +42,7 @@ const HOLD_LABELS: Record<HoldSource, string> = {
  * sequences count regardless of their authored `repeat` (an infinite one
  * holds until stop — still a meaningful content-driven authoring choice).
  */
-function hasContentElement(scene: Scene): boolean {
+export function hasContentElement(scene: Scene): boolean {
   // D-104 — a nested composition instance participates in the parent's
   // content-driven hold, so resolve the referenced composition's layers and
   // check THEM too (cycle-guarded by a visited set), exactly as we recurse into
@@ -60,6 +60,16 @@ function hasContentElement(scene: Scene): boolean {
       ) {
         return true;
       }
+      // D-128 — a media element (video/lottie) that is OPTED IN to drive the hold
+      // (`drivesHold === true`, the media opt-in) is a content source: the content-driven hold
+      // option must be reachable so the operator can see + tune it in the closer list below.
+      if (
+        (el.type === 'video' || el.type === 'lottie') &&
+        el.visible !== false &&
+        el.drivesHold === true
+      ) {
+        return true;
+      }
       // B-034 — a HIDDEN container / instance makes its WHOLE subtree inert: don't descend (mirrors
       // render + the runtime), so a comp whose only content lives in hidden ancestors offers no hold.
       if (el.type === 'container') return el.visible !== false && walk(el.children);
@@ -74,18 +84,36 @@ function hasContentElement(scene: Scene): boolean {
   return scene.layers.some((l) => walk(l.children));
 }
 
-type ContentKind = 'ticker' | 'sequence' | 'clock';
+type ContentKind = 'ticker' | 'sequence' | 'clock' | 'video' | 'lottie';
 interface ContentHoldItem {
   id: string;
   name: string;
   type: ContentKind;
   drivesHold: boolean;
   /**
-   * D-111 — a ticker/sequence authored with `repeat: 'infinite'`. Such a driver never
-   * completes, so while it participates (`drivesHold`) the content-driven hold runs until
-   * `stop()` (the graphic won't auto-close). A countdown clock is always finite ⇒ never true.
+   * D-111 — a driver that never completes, so while it participates (`drivesHold`) the
+   * content-driven hold runs until `stop()` (the graphic won't auto-close): a ticker/sequence
+   * with `repeat: 'infinite'`, or a video/lottie with a `loop` hold (D-128 — a loop hold loops
+   * until stop; a `freeze` hold completes at its intro end and IS a closer). A countdown clock
+   * is always finite ⇒ never true.
    */
   infinite: boolean;
+}
+
+/**
+ * D-125/D-128 — a `video` or `lottie` is an OPT-IN hold driver: `drivesHold === true` (the
+ * INVERSE of ticker/sequence, whose absent flag participates). This mirrors the runtime, which
+ * reads media `drivesHold` as `=== true`. A `loop` hold never completes (infinite); a `freeze`
+ * hold completes at its intro end, so it CAN close the graphic.
+ */
+function mediaHoldItem(el: Extract<Element, { type: 'video' | 'lottie' }>): ContentHoldItem {
+  return {
+    id: el.id,
+    name: el.name,
+    type: el.type,
+    drivesHold: el.drivesHold === true,
+    infinite: el.holdBehavior === 'loop',
+  };
 }
 
 /**
@@ -97,7 +125,7 @@ interface ContentHoldItem {
  * content is chosen by drilling into that composition's own Playout section, not
  * from the parent. `drivesHold` reflects the stored flag (absent ⇒ participates).
  */
-function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
+export function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
   const out: ContentHoldItem[] = [];
   const walk = (children: readonly Element[]): void => {
     for (const el of children) {
@@ -118,6 +146,10 @@ function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
           drivesHold: el.drivesHold !== false,
           infinite: false,
         });
+      } else if ((el.type === 'video' || el.type === 'lottie') && el.visible !== false) {
+        // D-128 — a media element (opt-in drivesHold) is a hold driver too; without this it
+        // was ABSENT from the closer list and the "repeats forever" warning (the owner's bug).
+        out.push(mediaHoldItem(el));
       } else if (el.type === 'container' && el.visible !== false) {
         // B-034 — skip a HIDDEN container's whole subtree (inert, mirrors render).
         walk(el.children);
@@ -243,6 +275,27 @@ function nestedHoldGroupsOf(scene: Scene): NestedHoldGroup[] {
             effective += 1;
             if (infinite) effectiveInfinite += 1;
           }
+        } else if ((el.type === 'video' || el.type === 'lottie') && el.visible !== false) {
+          // D-128 — a nested media element drives the parent's hold too (opt-in `drivesHold === true`,
+          // a `loop` hold is the infinite case). Mirrors the own-content media branch above.
+          const drivesHold = el.drivesHold === true;
+          const override = overrides?.[el.id];
+          const eff = override !== undefined ? override : drivesHold;
+          const infinite = el.holdBehavior === 'loop';
+          drivers.push({
+            id: el.id,
+            name: el.name,
+            type: el.type,
+            drivesHold,
+            infinite,
+            override,
+            effective: eff,
+          });
+          eligible += 1;
+          if (eff) {
+            effective += 1;
+            if (infinite) effectiveInfinite += 1;
+          }
           // B-034 — a HIDDEN container / deeper instance makes its WHOLE subtree inert: don't descend.
         } else if (el.type === 'container' && el.visible !== false) {
           walk(el.children);
@@ -307,6 +360,8 @@ const TYPE_LABEL: Record<ContentKind, string> = {
   ticker: 'ticker',
   sequence: 'sequence',
   clock: 'countdown',
+  video: 'video',
+  lottie: 'lottie',
 };
 
 const selectStyle: CSSProperties = {

@@ -514,6 +514,502 @@ midpoint`, the exact ms-space analogue of the D-125 Lottie poster rule at `runti
   (`useEffect` → `ready`). "Use existing" only ever places the asset matching the on-screen
   parameters (`duplicateMatch`, recomputed each render), never a stale one.
 
+## Phase-4 implementation record (2026-07-23, `feat/d128-p4-video-lifecycle`)
+
+- **`VideoDriver` (`video-driver.ts`) — same contract, INVERTED playhead ownership.** It joins
+  the duck-typed content-driver contract (`reset`/`start`/`pause`/`resume`/`stop`/`destroy`/
+  `whenComplete` + `playOutro()`) exactly as the D-125 `LottieDriver`, but where the Lottie is a
+  driven-frame RENDERER (the driver computes each frame and pushes `goToAndStop`), a `<video>`
+  ADVANCES ITSELF on its own `currentTime`. So the driver does not paint per rAF; it commands
+  play/pause/seek over a `VideoHandle` (`{ play, pause, seek, currentTime }`) and keeps the
+  element in lockstep off the SAME injected clock. The `VideoHandle` abstraction is what makes it
+  deterministically testable (a mock handle + fake clock covers the MAPPING — elapsed active
+  time → expected clip-time → seek/play/pause — never the real decode, the ticker's test split).
+- **The one outro ledger, widened (C1/C6, task 4.3).** A shared interface
+  `ElementOutroDriver { playOutro(): Promise<void> }` (the ONLY member the seam touches) now
+  types the ledger `Map` key, `ScopeNode.outroLotties`, the per-scope outro array
+  (`scopeOutroLotties`, now holding both kinds), and `collectSubtreeOutros`/`collectElementOutros`.
+  Both `LottieDriver` and `VideoDriver` structurally satisfy it, so an outro-owning video pushes
+  into the SAME array as a Lottie and drains through the SAME `playElementOutrosOnce` ledger —
+  ONE ledger, two driver kinds, exactly-once per exit episode. No cross-talk (the ledger keys by
+  driver IDENTITY): a Lottie and a video in one composition each play their outro once, proven by
+  `video-lifecycle.test.ts`. `whenComplete` (hold) stays a SEPARATE seam (`contentDrivers` /
+  `holdVideos`) — a video plays its outro on every exit regardless of `drivesHold`.
+- **Phase mapping (task 4.2), in the clip's own ms space.** intro `[0 → introEnd]`; hold LOOPS
+  `[loopStart → loopEnd]` (default) or FREEZES at `introEnd`; outro `[outroStart → duration]`.
+  The runtime computes the spans from `element.phases` + `durationMs`: with phases,
+  `introEnd/outroStart` as authored and `loop = [introEnd, outroStart]` (or the optional `idle`
+  window); ABSENT phases (decision (b)) ⇒ `introEnd = duration`, `loop = [0, duration]`,
+  `outroStart = duration` — the whole clip is the intro, the hold loops the whole clip, and the
+  outro is degenerate (resolves immediately ⇒ no outro; the composition's existing content exit
+  carries it). The intro starts at PLAY (like the Lottie), not at hold entry.
+- **Anti-drift threshold — 80 ms, justified by the Phase-1 spike (decision (e)).** A `<video>`
+  owns its clock, so it can drift from the injected clock during free playback. Correction is
+  BOUNDED: each tick compares `video.currentTime` against the clock-derived expected clip-time
+  and re-seeks ONLY when the error exceeds **80 ms** — never per-tick, so there is no visible
+  stutter. 80 ms is the spike's measured figure: over a 60 s hold loop it recorded 49 wraps,
+  |drift| mean 12.8 ms / **max 26.6 ms**, wrap seek ~1 ms, and **ZERO corrections** at 80 ms;
+  seek accuracy was 0 frames off across 20 targets. So 80 ms sits comfortably above the observed
+  max drift (26.6 ms) — it fires only on a genuine hiccup, never on normal jitter. Loop WRAP is
+  always driver-commanded (seek to loop start when the head reaches loop end), never
+  `<video loop>` (whose wrap timing the driver cannot observe). Every corrective/wrap seek
+  RE-ISSUES `play()` (idempotent when already playing): because the loop is driver-commanded, a
+  real `<video>` that reaches the media's natural end — the ABSENT-PHASES default, where
+  `loopEnd === duration` — fires `ended` and PAUSES, and a plain seek clears `ended` but leaves it
+  paused. Without the re-play the default whole-clip loop would run once then freeze at frame 0
+  (caught by the Phase-4 adversarial review; the driver test's mock now models the end-of-media
+  auto-pause so the regression is guarded). Pause captures the clock elapsed;
+  resume re-anchors and RE-SEEKS to the clock-derived clip-time before playing (never trusting a
+  stalled head). `playOutro()` ALWAYS resolves (degenerate/destroyed/superseded settle
+  immediately — the B-030 defense).
+- **Binding is registry-based, not a DOM walk (C3).** `scene-builder#buildVideo` registers each
+  `<video>` on `scope.videos` (a new `FieldScope.videos: VideoEntry[]`), and `createRuntime` runs
+  a `for (const v of scope.videos)` loop mirroring the Lottie loop — constructing the driver,
+  marking `data-cg-content`/`data-cg-outro`, and joining the hold aggregation + cascades
+  (play/pause/resume/stop/destroy, `onCycleRestart` re-arm, `scopeHasEffectiveHoldDrivers`). The
+  `img[data-cg-asset-id]` asset-src walk is a SEPARATE, export-side concern — left for Phase 5.
+- **What Phase 5 owes:** widen `runtime.ts`'s on-air/export asset-src walk from
+  `img[data-cg-asset-id]` to also wire `<video data-cg-asset-id>` (packaged relative path for
+  `.vcg`, base64 `data:` for single-file), so a video renders + plays on-air. Phase 4 covers the
+  DRIVER + the designer-canvas playback (`preview.ts` already wires the `<video>` src there);
+  the runtime/exported `<video>` src is Phase 5's.
+
+## Black-fringe fix — premultiplied alpha (2026-07-23, `feat/d128-p4-video-lifecycle`)
+
+**Symptom (owner):** a converted clip's dissolve/close showed BLACK EDGES around
+semi-transparent pixels (soft edges, dissolving particles); fully-opaque and
+fully-transparent areas were correct. Sources are the legacy archive AVIs
+(rawvideo/BGRA, e.g. `Logo_HazratKhadije_1.avi`).
+
+**Root cause PROVEN — (A) premultiplied alpha (dominant).** Legacy After Effects /
+BGRA archives store alpha PREMULTIPLIED (matted against black): the RGB of a
+semi-transparent pixel is already `straight · alpha`. The browser and CasparCG
+composite assuming STRAIGHT (unassociated) alpha, so those pixels are darkened a
+SECOND time → a black halo exactly where alpha is partial. The pre-fix converter
+did ZERO alpha handling (`crop?` → `-c:v libvpx -pix_fmt yuva420p …`), so the
+premultiplied RGB went straight to air. Proven numerically on a synthetic
+premultiplied source through the FULL pipeline (encode → libvpx VP8+alpha →
+libvpx decode → straight rgba): a straight-gold `(255,215,0)` pixel at α 128
+decoded back **darkened to `(124,107,0)`** under the current pipeline and
+**restored to `(254,214,0)`** with the fix. rawvideo/BGRA carries NO
+premultiplied flag; the invariant `RGB ≤ α` is necessary-but-not-sufficient (a
+dark straight source satisfies it too), so premultiplied-ness **cannot be
+auto-detected** — see the toggle below.
+
+**(B) chroma-subsample bleed — measured MINOR, not corrected.** VP8 forces
+`yuv420p` chroma; black under transparent regions can bleed into edge chroma.
+Measured by comparing the fix at 4:2:0 vs 4:4:4 (no subsample): they differ by
+**≤4/255 at the extreme low-α edge**. So (B) is real but negligible once (A) is
+fixed; a 4:4:4 / colour-fill pass would inflate output for no visible gain and is
+deliberately NOT applied.
+
+**Filter chain — before → after.**
+
+- Before: `[-vf crop=W:H:X:Y]? -c:v libvpx -pix_fmt yuva420p -auto-alt-ref 0 -crf 12 -b:v 2M -deadline good -cpu-used 5 -an -r <fps>`
+- After (premultiplied ON): the same, with the `-vf` now
+  `crop=W:H:X:Y,format=rgba,geq=r='if(gt(alpha(X,Y),0),255*r(X,Y)/alpha(X,Y),0)':g=…:b=…:a='alpha(X,Y)'`
+  (crop FIRST, then un-premultiply; crop omitted when none marked). Everything else
+  is untouched (VP8+alpha, `-an`, fps conform, crop bake, WORKERFS, single-thread).
+
+**Why `geq`, not the `unpremultiply` filter.** ffmpeg's `unpremultiply` divides the
+selected planes by the **first plane** (green in `gbrap`, the packed word in
+`rgba`) — never the actual alpha — so single-input `inplace=1` is a proven **no-op**
+here, and the 2-input `alphaextract` form scrambles planes (grayscale output). `geq`
+computes `straight = 255·c/α` exactly, guarded at α 0, and IS present in the shipped
+`@ffmpeg/core` 0.12.10 wasm (verified in the binary alongside `crop`/`libvpx`).
+
+**Correct for BOTH alpha conventions — an operator toggle, not a blind default.**
+Un-premultiplying a STRAIGHT source is the INVERSE error (it over-brightens
+semi-transparent pixels), so the fix is gated on a `Premultiplied alpha` checkbox in
+the import modal, **defaulting ON** to match the client's all-premultiplied archive.
+A straight-alpha source (a normal WebM/MOV) is imported with it OFF and is byte-for-
+byte untouched. Since BGRA can't be auto-classified, this explicit choice is the
+honest path on a broadcast pipeline (never a silent guess).
+
+**Cost.** The `geq` pass adds per-pixel expression evaluation: measured ~+6× the
+FILTER time on a 640×360×60 synthetic (libvpx encode was trivial there), and
+**+60–84 % output size** — the size growth is INHERENT to correctness (restoring
+colour into previously-darkened partial-α regions adds real detail the premultiplied
+clip had crushed toward black). It is a one-time import cost, paid only for
+premultiplied sources.
+
+**Consequence — stale assets.** The fix changes conversion output, so clips already
+imported carry the old fringe. Nothing is silently re-converted. Each asset's
+provenance now records `converterRevision` (`2026-07-23.2` = this fix) and
+`premultipliedAlpha`; a future item can flag assets with an older/absent revision and
+prompt re-import. **The owner must RE-IMPORT the affected archive clips** to clear the
+fringe on already-imported assets.
+
+## Content-driven hold — media as a closer (drivesHold, 2026-07-23)
+
+**Bug (owner):** a composition with `hold: content-driven`, `mode: auto-out`, an
+infinite Ticker, and a Video with `drivesHold: Yes` (freeze, phase marks) NEVER
+closed, and the Playout panel's "Which content closes the graphic?" list showed ONLY
+the Ticker — the Video was absent even though its `drivesHold` was on.
+
+**Which of (runtime, designer) was broken: the DESIGNER only.** The runtime already
+registers a `drivesHold` video/lottie as a content driver and aggregates it into the
+content-driven hold (Phase 4 — `holdVideos`, `scopeHasEffectiveHoldDrivers`,
+`ownContentWait`; the passing lifecycle tests confirm it). The gap was entirely in the
+Playout panel: `hasContentElement` / `contentHoldElementsOf` / `nestedHoldGroupsOf`
+walked only `ticker` / `sequence` / countdown-`clock`, so a `video`/`lottie` was never
+listed, never toggleable, and never counted in the "every content driver repeats
+forever" warning — which was therefore computed from a driver set that excluded the
+video (and wrongly fired "all infinite" when the finite video was a real closer).
+
+**Multi-driver close rule (confirmed, unchanged): ALL-COMPLETE.** A content-driven
+hold is `Promise.all` over its effective drivers (D-111/D-112), so the hold ends only
+when EVERY driver has completed. An infinite ticker never completes, so the owner's
+graphic correctly held until stop — the fix makes the panel show WHY (both drivers
+listed; the ticker flagged "loops forever", the freeze video a finite closer), so the
+operator can exclude the ticker and leave the video as the sole closer that ends the
+hold at its own completion.
+
+**Media `drivesHold` is OPT-IN in the panel too.** The closer list reads media
+`drivesHold` as `=== true` (the inverse of ticker/sequence's `!== false`), matching the
+runtime, and marks a `loop` hold as the infinite (never-completes) case, a `freeze`
+hold as a finite closer. (The precise "ends at N s" per-driver time is left for the
+timeline-derived model — see the phases-follow-timeline correction — which owns the
+close time; today the finite/infinite distinction is what the operator sees.)
+
+## Video sync robustness — background-throttle & large-gap policy (2026-07-23)
+
+**Symptoms (owner, Preview):** (1) pause→resume restarted several seconds AHEAD; (2)
+a background-tab round-trip found the `<video>` paused, then continued further ahead;
+(3) after several cycles it FROZE permanently (Stop/Out/Play inert until Preview was
+reopened); (4) a dark fringe reappeared after cycles, gone on the first clean play and
+independent of the un-premultiply toggle.
+
+**Root cause (proven, cross-verified).** The Designer Preview builds the runtime with
+NO injected clock (`preview.ts` — `createRuntime(scene, {…})`), so `VideoDriver.now()`
+is `performance.now()`, a WALL clock, and `raf` is the real `requestAnimationFrame`.
+The driver slaved the `<video>` to the wall clock ONE-DIRECTIONALLY: on drift it always
+seeked the element FORWARD to the wall-derived position, never re-anchoring its clock to
+the media's actual `currentTime`. Any interval where wall time advanced but the media
+did not — resume/seek decode latency, a decode stall, or a background tab that starves
+rAF and pauses media while `performance.now()` runs on — accrued **phantom time** that
+the next tick paid off as a forward jump (for a loop, `wall % span` — an arbitrary
+position). The per-tick, un-guarded corrective seeks became a **seek-storm** that both
+wedged the `<video>` decoder (recoverable only by a fresh element — the pooled node is
+reused across rebuilds, hence "only reopening Preview fixes it") and painted the
+half-decoded frames the owner read as a fringe (symptom 4 is a displayed-frame artifact,
+NOT alpha — consistent with its persistence with the toggle off and its absence on the
+first clean play; the specific paint is inferential, so the owner should confirm it is
+gone after this fix). Independently, `pause()` mid-outro left `playOutro()`'s promise
+pending (no `settleOutro`), and the controller's `stop()` no-ops at `phase==='outro'`,
+so the shared outro-ledger `await` could wedge the whole exit.
+
+**THE POLICY (the design decision, not an implementation detail): on a large gap the
+CLOCK RE-BASES TO THE MEDIA — the video does NOT catch up to the clock.** A per-tick
+WALL delta beyond `resyncThresholdMs` (default **400 ms** — far above any foreground
+jitter; the 80 ms drift threshold was measured on a foreground tab and says nothing
+about a multi-second gap) is treated as a throttle/stall, and the driver re-anchors
+`startedAt` so its expected clip-time equals the element's ACTUAL playhead
+(`rebaseToMedia`/`elapsedForActual`). The element **continues from where it is**; the
+driver never seeks it forward to a wall position it never reached, and never folds a
+multi-second gap into the loop modulo. Rationale: seeking a broadcast graphic forward
+loses content and shows a desynced frame; continuing smoothly is correct, and after a
+background round-trip the exact phase of a hold-loop is cosmetic. Small drift
+(80 ms–`resyncThreshold`) is still corrected by a tiny seek (imperceptible). Because the
+driver self-heals on the first post-throttle tick, NO page-visibility handler is required
+(the fix works in the exported single-file runtime too, not just Preview).
+
+**The other two defences.** (a) A **seek-in-flight guard** — a corrective/wrap seek is
+never stacked while `handle.seeking()` is true — kills the seek-storm (so the decoder is
+never thrashed into a wedge, and the resume-decode overshoot stops) and removes the
+frequent forced re-decodes behind the fringe. (b) `playOutro()` arms a **wall-clock
+backstop** (`clock.setTimeout`, outro length + 2 s) so it ALWAYS resolves even if the rAF
+is throttled or the driver is paused mid-outro — the exit can never wedge. `reset()` /
+`stop()` remain a FULL reset from any state (settle the pending outro, clear the backstop,
+clear every flag), so Stop/Out/Play always recover the driver.
+
+**Not regressed:** the Phase-3 no-remount-on-drag guard (unchanged — this is driver-only),
+the absent-phases whole-clip loop with the re-issue-`play()` fix, and the shared outro
+ledger (its `playOutro()` ALWAYS-resolves invariant is now strengthened, not weakened).
+
+### Resume-window cost — the keyframe/GOP finding + the RESUME GRACE (2026-07-24)
+
+**Refined symptom:** with TWO videos on a scene, both play smoothly at steady state; only
+AFTER pause/resume do both go very slow for a few seconds, then self-heal. So there is no
+sustained throughput problem — the cost is concentrated in the RESUME window.
+
+**Measured root cause: expensive seeks against a SPARSE keyframe grid.** Our encode passes
+NO `-g`, so libvpx uses its default `kf_max_dist` ≈ 128 frames → a keyframe only every
+**~5.12 s** (measured on a 12 s @ 25 fps VP8+alpha encode with the shipped args; keyframes
+at 0, 5.12, 10.24 s). A seek to an arbitrary resume position forces the decoder to restart
+from the preceding keyframe and decode forward — **up to ~5 s of video in one burst**. The
+classification is **(b) the decoder ramp after `resume()`'s `play()`, compounding into (a)**:
+once the re-anchor seek settles, the decoder ramps up below realtime, drift accrues, and at
+
+> 80 ms a corrective seek fires — which, at a 5 s keyframe interval, is itself a multi-second
+> decode burst that stalls the decoder further, accruing more drift and more seeks. Two videos
+> compete for decode, so each ramp is slower and the burst larger — exactly "very slow for a
+> few seconds, then recovers." (Steady-state playback issues no seeks, which is why it is fine.)
+
+**Fix shipped — RESUME GRACE (self-contained, no re-import).** For `resumeGraceMs` (default
+**750 ms**) after a resume or a large-gap re-base, drift correction is SUPPRESSED so the
+decoder ramps up unmolested; the self-amplifying seek cascade never starts. A real `<video>`
+keeps playing on its own during the grace (the media clock advances) — the grace only holds
+back corrective SEEKS, so resume playback is immediate and smooth, not delayed. The loop WRAP
+and the always-recoverable paths are never suppressed. The seek-in-flight guard and the outro
+backstop are untouched (they fixed real wedges).
+
+**Not shipped — DENSER KEYFRAMES (an encode-args change → a re-import decision, the owner's
+to make).** Adding `-g` shortens the GOP so every seek is cheap. Measured cost vs today
+(same clip): `-g 25` (1 s GOP) = **+3.5 %** size, `-g 12` (~0.5 s GOP) = **+6.5 %** size, both
+with negligible encode-time change. This is complementary to the grace (it makes the _one_
+post-grace correction cheap too), but it changes conversion output, so **already-imported
+clips keep the old ~5 s GOP and would need re-import**. Provenance already records
+`converterRevision`, so a future item can flag pre-`-g` assets — no new plumbing needed to
+adopt it later. Recommendation: ship the grace now (it removes the cascade at zero conversion
+cost); adopt `-g 25` at the next converter-revision bump IF the owner wants cheaper seeks and
+accepts the ~3.5 % size + a re-import — a call left explicitly to the owner.
+
+**Note on the black band during resume:** if it recurs only in the resume window, that is
+further evidence it is a decode artifact (a frame presented mid-decode during a seek burst),
+NOT an alpha/premultiply problem — the un-premultiply expression was not touched in this pass.
+
+## LOSSY ALPHA COMPRESSION — the real black-artifact root cause (2026-07-24)
+
+**Owner's decisive observation:** on freshly re-imported clips (fringe fix + sync fix +
+resume grace all in place) the black artifacts appear **during MOTION** — both the
+whole-rectangle darkening and the edge/particle haloing. Supporting signal: a 739 MB source
+converts to ~1.4 MB (~500×) with no quality args passed.
+
+**Mechanism PROVEN by measurement** (harness committed:
+`tools/spikes/video-convert/measure-alpha-leak.mjs` — a 720p premultiplied particle-burst,
+15 static + 45 moving frames, encoded with the exact production args, decoded, and every
+SOURCE-transparent pixel's OUTPUT alpha measured):
+
+| encode                        | moving-frame leak (α>0 / ≥4 / ≥8) | max α  | black share of visible leak | size           |
+| ----------------------------- | --------------------------------- | ------ | --------------------------- | -------------- |
+| OLD `crf 12 -b:v 2M`          | **56.7 % / 0.877 % / 0.090 %**    | **30** | **77 %**                    | 1.2 MiB        |
+| `crf 10 -b:v 8M`              | 4.0 % / 0.086 % / 0               | 9      | 91 %                        | 3.5 MiB (2.9×) |
+| **`crf 4 -qmax 16 -b:v 20M`** | 2.6 % / **0.008 % / 0**           | **6**  | (invisible)                 | 6.9 MiB (5.8×) |
+| `qmax 8 -b:v 50M`             | ≈ same                            | 6      | —                           | 8.9 MiB (7.5×) |
+| **+ ALPHA BLEED**             | unchanged α distribution          | —      | **0 %**                     | +~2 %          |
+
+In WebM the alpha plane is a SECOND VP8 stream encoded with the SAME quantiser as colour —
+**no independent alpha-quality control exists** (`ffmpeg -h encoder=libvpx` exposes no alpha
+option; empirically the leak scales monotonically with the shared quality settings, which is
+the proof it rides the same quantiser). Under the old `crf 12 + 2 Mbps cap`, motion drove the
+quantiser high enough that fully-transparent pixels decoded at α up to 30 over the BLACK
+matte RGB — 12 % opacity black smudges exactly where the motion is, and a subtle whole-rect
+veil in static frames (26 % of transparent pixels at α ≤ 7). Static frames quantise cleanly —
+why first frames always looked fine, and why a static single-frame fixture let this class
+survive three rounds of fixes.
+
+**Fix shipped (converterRevision `2026-07-24.3` — re-import required, as expected):**
+
+1. **(A) Broadcast quality:** `-crf 4 -qmax 16 -b:v 20M` — the quantiser is BOUNDED so alpha
+   can never crumble (leak: max α 6, 0.008 % ≥ 4, zero ≥ 8 on the torture clip); the 20M
+   ceiling never binds in practice. Plus **`-g 25`** (1 s keyframes — the resume-window
+   finding, +3.5 %). Measured size cost **~5.8×** on the torture clip — inside the owner's
+   pre-approved 5–10× band ("broadcast cleanliness wins"); real furniture clips (mostly
+   static) grow less. Encode-time delta ≈ none (native); the bleed below ≈ 2× total.
+2. **(B) ALPHA BLEED** (both alpha paths, never alters alpha): transparent-region RGB is
+   filled with colour extended from the nearest opaque pixels —
+   `bled = blur(premult)/blur(α)` (an opacity-weighted average of TRUE colour, so it runs
+   off the premult image: the archive input directly, or `straight·α` recomputed for a
+   straight source), composited under the straight image by `overlay`, ORIGINAL alpha
+   re-attached bit-exact via `alphaextract`+`alphamerge`. Any residual leak now shows
+   plausible local colour, never black (measured: black share 77 % → 0 %), and chroma
+   subsampling can no longer drag black into edges. All filters verified present in the
+   shipped wasm core.
+
+**Test split (stated honestly):** the committed 64×64 MOTION fixture
+(`motion-64x64-premult-bgra.avi`, orbiting particle, corners permanently transparent) guards
+the pipeline END-TO-END through the real wasm encode — transparent stays transparent across
+motion frames, nothing visible in source-transparent regions. At 64×64 even the OLD args pass
+(the cap never binds at that size), so the QUALITY args themselves are pinned by unit test
+(`crf 4 / qmax 16 / b:v 20M / -g 25`), and the resolution-scale leak is reproducible on demand
+with the committed measurement harness. A committed 720p raw fixture (100+ MB) was rejected.
+
+## 1920×282 undecodable-WebM report — sweep results + the VERIFY guard (2026-07-24)
+
+**Field report:** after re-importing at rev `2026-07-24.3`, `Lower_Default` (1920×282,
+6.5 MB output) decodes NOWHERE (thumbnail/canvas/Preview all blank — so the stored WebM
+itself), while 200×200 (2.1 MB) and 300×90 (4.3 MB) work.
+
+**Sweep — no tested variable reproduces it.** All results browser-verified (a real
+Chromium `<video>` + drawImage, not just ffprobe):
+
+| axis                                  | test                                                             | result                                              |
+| ------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------- |
+| dimensions (native, exact args+graph) | 1920×282 / 284 / 280 / **141 (odd)** / 1080, 1 s                 | ALL decode clean (ffprobe + full decode + Chromium) |
+| dimensions (REAL wasm, full app path) | 1920×282, 8 frames                                               | decodes OK in-browser                               |
+| duration (REAL wasm)                  | 1920×282, 150 frames / 6 s                                       | decodes OK                                          |
+| output size / complexity (REAL wasm)  | 1920×282, 6 s heavy detail → **16.4 MB** (2.5× the failing clip) | decodes OK                                          |
+
+**Which variable predicts failure: NONE of dimension / duration / size.** The
+odd-half-height theory is also directly disconfirmed twice over (300×90 works for the
+owner — 45 is odd; 1920×141 — height itself odd — decodes everywhere natively).
+
+**Chain audit — no dimension-dependent intermediates exist.** The bleed graph has NO
+downscale pyramid: `boxblur=12:2` is single-scale with a fixed radius (no size coupling),
+`geq` is per-pixel, `overlay`/`alphamerge` join same-sized branches, and everything up to
+the encoder runs in packed `rgba` (no chroma subsampling to violate). The only
+even-dimension-sensitive step is the final `yuva420p` conversion — and 282 is even, and
+even the fully odd 141 decodes (libvpx pads internally).
+
+**Conclusion + the fix that ships:** the failure is driven by something specific to the
+owner's source file or their local run (source-codec variant, a mid-convert hiccup, or a
+store-side truncation) — and the pipeline previously STORED whatever came out with no
+check (ffmpeg exit 0 was trusted; for a source with a known duration the produced bytes
+were never decoded at all). That silent path is the defect we can fix without the file:
+
+1. **VERIFY-BEFORE-STORE** (`verifyConvertedClip`): the produced bytes must decode in a
+   real `<video>` at the EXACT post-crop dimensions with a finite positive duration —
+   or the conversion fails LOUDLY (nothing stored) with the reason AND the ffmpeg log
+   tail (now captured on success too — the silent-warning defect) in the console.
+2. **READBACK-AFTER-STORE** (`verifyStoredReadback`): the stored asset must serve back
+   the verified byte count, or the operator sees an error instead of a dead asset (a
+   silently truncating store presents exactly like this field failure).
+
+On the owner's next re-import of `Lower_Default`, the import either works or fails with
+a visible reason + log — which pins the true cause. **Dimension matrix committed**
+(`video-dimensions.spec.ts`): 1920×282 and 300×90 (odd half-height) synthesized in pure
+node (a minimal rawvideo/BGRA AVI writer, no native-ffmpeg dependency) and pushed through
+the REAL wasm converter, asserting decode at exactly the expected dimensions.
+
+**Output size at 1920×282 (for the Phase-5 export threshold):** simple lower-third
+content 6 s → ~294 KB (~0.4 Mbps); heavy-detail torture 6 s → 16.4 MB (~22 Mbps). Real
+lower-thirds sit near the low end; the owner's 6.5 MB is consistent with mixed content.
+
+## The ALPHA axis — invisible-clip diagnostics + collapse guard (2026-07-24)
+
+**Hypothesis (owner, after `Lower_Default` STORED on the verify-guard build yet rendered
+nowhere):** the output is DECODABLE but FULLY TRANSPARENT — it passes every decode check
+(dimensions ✓ duration ✓ 6.5 MB of colour data ✓) and paints nothing because its alpha is
+(near) zero everywhere. The dimension sweep was clean because the synthetic sources always
+carried real alpha; the variable is THIS clip's alpha.
+
+**What ships:**
+
+1. **Alpha diagnostics, always on.** At probe time the SOURCE's alpha profile is sampled
+   (a few spread frames decoded to raw RGBA in the wasm); after conversion the OUTPUT's
+   profile is sampled (real `<video>` → canvas). Both are logged to the console on every
+   import — `[video-import] alpha profile — source: … | output: …` with max/mean alpha,
+   %visible (α≥8), %opaque (α≥250) — the one reading that confirms or kills the
+   hypothesis on the owner's machine.
+2. **Fully-transparent SOURCE ⇒ a prominent modal warning at probe time** (danger
+   callout): "this source appears FULLY TRANSPARENT … likely exported without an alpha
+   channel (RGB-only in a 32-bit container)". The leading suspect for `Lower_Default`: a
+   32-bit BGRA export whose alpha byte is 0 — real RGB content (hence 6.5 MB), invisible
+   on air, and the modal's own poster preview blank. Conversion stays allowed (informed
+   operator), but never again silent.
+3. **ALPHA-COLLAPSE GUARD** (source-relative, per the owner's spec — never an absolute
+   threshold, so a legitimately sparse graphic passes): if the SOURCE had visible pixels
+   (>1 % of the frame) and the OUTPUT has essentially none (<0.1 %), the conversion FAILS
+   LOUDLY with the ffmpeg log tail and stores nothing.
+4. **The fixture this class needed** (E2E, real wasm): a lower-third-shaped source — wide
+   thin strip, large transparent regions, a solid opaque bar with soft edges, animating
+   in — asserting the stored output KEEPS the bar at α≥250 and the empty regions at α≤2;
+   plus an RGB-only (alpha-byte-0) source asserting the FULLY TRANSPARENT warning appears
+   before conversion.
+
+**Trace results (own reproduction attempts):** the full chain PRESERVES alpha for the
+lower-third shape (bar survives opaque end-to-end through quality+bleed in the real
+wasm). The unpremultiply `geq` writes `a='alpha(X,Y)'` (identity); the bleed re-attaches
+the original alpha via `alphaextract`+`alphamerge` (verified on this shape, not assumed);
+toggle-ON over a straight-alpha source over-brightens colour but leaves alpha intact —
+none of these zero alpha. **A source whose alpha is already empty is the one case that
+reproduces every observation**, and it is now legible at probe time. If the owner's
+paste-back instead shows source-visible/output-empty, the collapse guard will already
+have blocked the store and named the conversion — that reading pins the true cause
+either way.
+
+## PIPELINE_ERROR_DECODE — bisect results + the strengthened guard & result panel (2026-07-24)
+
+**The owner's reading killed the collapse hypothesis:** output alpha SURVIVES (maxα 255,
+21% visible) — the real failure is Chromium's `PIPELINE_ERROR_DECODE`: the produced WebM
+does not PLAY, though metadata loads and sample frames seek-decode (which is why the old
+verify guard passed it — and why "loads metadata + decodes a frame" is NOT playability).
+
+**Bisect matrix (profile-matched fixture: 1920×282 premult, meanα 29.0 / visible 12.9% /
+opaque 10.2% vs the owner's 28.8 / 11.86 / 10.73):**
+
+| variant                         | Chromium FULL playthrough | leak(≥8)        | opaque retention | size           |
+| ------------------------------- | ------------------------- | --------------- | ---------------- | -------------- |
+| OLD crf12-2M, no bleed          | ✓ played through          | 0.001%          | 100.0%           | 0.92 MB        |
+| OLD + bleed                     | ✓                         | 0.001%          | 100.0%           | 0.99 MB        |
+| MID crf10-8M-g25 + bleed        | ✓                         | 0.000%          | 100.0%           | 2.79 MB        |
+| CUR crf4-qmax16-20M-g25 + bleed | ✓                         | 0.000% (maxα 6) | 100.0%           | 4.31 MB        |
+| CUR no bleed / CUR no -g        | ✓ / ✓                     | 0.000%          | 100.0%           | 2.02 / 4.18 MB |
+| CUR yuv420p NO-ALPHA control    | ✓                         | —               | —                | 1.68 MB        |
+| **CUR through the REAL WASM**   | **✓ played through**      | —               | —                | 4.26 MB        |
+
+**No variant reproduces the failure** — natively or through the real wasm converter, on
+content matched to the owner's alpha profile. The settings/bleed are NOT the boundary on
+this fixture; the failure needs the OWNER'S ACTUAL CLIP (a short cut of `Lower_Default.avi`
+is requested for the next round). **The opaque "regression" (10.73%→3.80%) was primarily a
+MEASUREMENT ARTIFACT:** the output sampler downscaled to 320px, averaging away small
+elements' opaque cores (also why "visible" rose 11.86→21.14%); the full-res compare shows
+100% opaque retention at every setting. The sampler now samples at FULL resolution.
+
+**Shipped regardless of root cause (the owner's robustness requirement):**
+
+1. **`verifyConvertedClip` now proves PLAYABILITY**, not metadata: (a) metadata + exact
+   post-crop dims + finite duration; (b) a 5-point SEEK SWEEP across the clip
+   (15/35/55/75/92%), each requiring a decodable frame; (c) a REAL PLAYBACK SPAN (~2s of
+   media at 4×) with the `error` listener armed throughout — any `MediaError`
+   (`PIPELINE_ERROR_*`) fails with the position it died at. TIME BOUND: metadata ≤8s,
+   seeks ≤3s each, span ≤8s wall (worst ~31s; typical 2–4s). Failures name WHICH check
+   failed (`decode`/`duration`/`dimensions`/`seek`/`playback`).
+2. **THE RESULT PANEL — shown ALWAYS, never console-only** (`video-conversion-result`):
+   a clear "✓ Output plays" PASS, alpha preservation at a glance, and a WARNING when
+   fully-opaque coverage drops sharply vs the source (>40% relative loss with source
+   opaque >2%) — solid regions compositing semi-transparent is a broadcast defect even
+   when the file plays. Raw numbers behind an expander. The element is placed by an
+   explicit **"Place element"**; "Close without placing" keeps the asset only.
+3. **Never a silent broken asset:** unplayable output / alpha collapse / readback
+   mismatch each fail with their OWN message (distinct from "source has no alpha" and
+   "converter crashed") and store nothing (readback: store nothing FURTHER — no element).
+
+## Two-path bisect on the REAL clip (2026-07-24) — time structure + the settings decision
+
+**Controlled comparison (owner's machine):** the spike converts `Lower_Default.avi` in
+~13 s and the result plays; the app's modal takes minutes and (on the owner's machine)
+produced the `PIPELINE_ERROR_DECODE` file. **The complete path diff:** the spike execs
+`-y -i /mnt/<f> [VP8 crf12 -b:v 2M …] out` — NO filters (not even un-premultiply), no
+`-r` conform, no `-g`, no `qmax`, one exec total. The modal path adds: a probe exec, a
+poster exec, THREE source-alpha sample execs, the un-premultiply geq, the alpha-bleed
+graph (a second geq + boxblur + overlay + alphamerge), `-r <projectFps>` conform,
+`-crf 4 -qmax 16 -b:v 20M -g 25`, a fresh worker per import, and the post-convert
+playability verification. Same WORKERFS mount, same core (0.12.10), same wrapper.
+
+**Ladder bisect on the REAL 5 s cut (`rawvideo/bgra 1920×282@25`, AE CS6), through the
+REAL wasm core, Chromium playthrough per rung (this machine):**
+
+| rung                                             | wall      | size    | plays? |
+| ------------------------------------------------ | --------- | ------- | ------ |
+| L1 SPIKE (no filter, crf12-2M)                   | **5.4 s** | 0.84 MB | ✓      |
+| L2 + un-premultiply geq, `-r 50` (rev .2 shape)  | 17.1 s    | 1.01 MB | ✓      |
+| L3 + bleed graph (crf12-2M)                      | 31.2 s    | 1.30 MB | ✓      |
+| L4 bleed + MID `crf10 -8M -g25`                  | 31.9 s    | 3.10 MB | ✓      |
+| L5 bleed + CUR `crf4 -qmax16 -20M -g25` (rev .3) | 32.0 s    | 4.15 MB | ✓      |
+| L6 = L5 at `-r 25` (no frame doubling)           | 32.4 s    | 4.15 MB | ✓      |
+
+**Findings.** (1) TIME is dominated by the geq FILTER stages, not the encoder settings:
+no-filter 5.4 s → +1 geq 17.1 s → +bleed (2nd geq + blur) 31.2 s, while quality steps are
+free (31.2→32.0 s) and even frame-doubling is free (encode is cheap next to geq). The
+owner's "minutes" on the 14.3 s clip ≈ 3× this cut's filter time plus the modal's extra
+probe/poster/sampling execs. (2) DECODE: every rung — including exact rev .3 on the real
+bytes — plays through on THIS machine; the native encode of the same cut also plays, and
+the app's own import of the cut passed the strengthened playability verify. The
+`PIPELINE_ERROR_DECODE` therefore did not reproduce here and is consistent with an
+OWNER-MACHINE decode path (e.g. a platform/HW VP8 decoder rejecting the very high-rate
+frames `-qmax 16` produces, where software libvpx accepts them) and/or the full-length
+clip; the produced ladder files can be played on the owner's machine to settle it.
+
+**Settings recommendation (decision the owner holds, with numbers):** step quality from
+`crf 4 -qmax 16 -b:v 20M` to **`crf 10 -b:v 8M -g 25`, keeping the bleed** — measured
+leak 0.086 % ≥4 (max α 9) vs 0.008 % (max α 6), a difference that is INVISIBLE once the
+bleed makes residual leak non-black; 25 % smaller output (3.10 vs 4.15 MB on the cut);
+identical conversion time; and it removes the extreme-quantiser regime that is the most
+plausible irritant for a stricter platform decoder. Time optimisation of the geq stages
+(the real minutes-per-import lever) is a separate follow-up item.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

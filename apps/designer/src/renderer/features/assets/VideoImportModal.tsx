@@ -69,6 +69,17 @@ type Phase =
   // (Bug 4). `sourceSha256` lets "Convert again" reuse the hash.
   | { kind: 'duplicate'; sourceSha256: string; candidates: readonly AssetMeta[] }
   | { kind: 'converting'; progress: number }
+  // D-128 — THE CONVERSION RESULT, shown ALWAYS (not only on failure): the asset stored
+  // and every check green (or with warnings), awaiting the operator's "Place element".
+  // The whole multi-round field hunt happened because a broken output was stored silently
+  // and the only symptom was "it doesn't render" — the modal now says what it produced.
+  | {
+      kind: 'result';
+      result: VideoImportResult;
+      outputAlpha: VideoConvertModule.AlphaStats | null;
+      /** Fully-opaque coverage dropped sharply vs the source (solid regions going semi-transparent). */
+      opaqueDrop: boolean;
+    }
   | { kind: 'error'; message: string };
 
 const PREVIEW_MAX_W = 480;
@@ -90,9 +101,21 @@ export function VideoImportModal(props: {
   const projectFps = useDesignerSelector((st) => st.scene?.frameRate) ?? 50;
   const [phase, setPhase] = useState<Phase>({ kind: 'probing' });
   const [probe, setProbe] = useState<SourceProbe | null>(null);
+  // D-128 — the SOURCE's alpha profile (sampled after the probe, non-blocking). A source
+  // whose alpha is (near) zero everywhere decodes fine, converts fine, stores fine — and
+  // paints NOTHING anywhere (e.g. a 32-bit export whose alpha byte is 0). The reading
+  // makes that legible BEFORE a long conversion instead of an invisible stored asset.
+  const [sourceAlpha, setSourceAlpha] = useState<VideoConvertModule.AlphaStats | null>(null);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [cropOn, setCropOn] = useState(false);
   const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, width: 1, height: 1 });
+  // D-128 — un-premultiply the source's alpha (fringe fix). Defaults ON: the
+  // client's archive is legacy AE / rawvideo-BGRA, which stores premultiplied
+  // (matted-against-black) alpha. A STRAIGHT-alpha source (already-correct WebM/
+  // MOV) must be imported with this OFF, or its semi-transparent pixels over-
+  // brighten. rawvideo/BGRA carries no premultiplied flag, so this cannot be
+  // auto-detected — it is an explicit operator choice (design.md).
+  const [premultipliedAlpha, setPremultipliedAlpha] = useState(true);
   const converter = useRef<Converter | null>(null);
   const cancelled = useRef(false);
   const hashAbort = useRef<AbortController | null>(null);
@@ -122,6 +145,20 @@ export function VideoImportModal(props: {
         setPosterUrl(result.posterUrl);
         setCrop({ x: 0, y: 0, width: result.probe.width, height: result.probe.height });
         setPhase({ kind: 'ready' });
+        // Alpha diagnostics — non-blocking, never gates the READY state; a sampling
+        // failure yields null and the import proceeds without the warning/guard.
+        void conv
+          .sampleSourceAlpha(props.file, result.probe.durationMs)
+          .then((stats) => {
+            if (!alive) return;
+            setSourceAlpha(stats);
+            if (stats !== null) {
+              // console.warn (not info): the allowed channel, and this reading is the
+              // one an operator pastes back when a clip renders invisible.
+              console.warn(`[video-import] SOURCE alpha: ${conv.formatAlphaStats(stats)}`);
+            }
+          })
+          .catch(() => undefined);
       } catch (err) {
         // An aborted probe REJECTS and lands here with alive=false — ignored.
         if (alive)
@@ -281,6 +318,7 @@ export function VideoImportModal(props: {
       file: props.file,
       targetFps: projectFps,
       crop,
+      premultipliedAlpha,
       onProgress: (ratio) =>
         setPhase({ kind: 'converting', progress: Math.max(0, Math.min(1, ratio)) }),
     });
@@ -307,17 +345,60 @@ export function VideoImportModal(props: {
       return;
     }
     try {
-      // The SOURCE banner may have said `Duration: N/A` — the CONVERTED output
-      // is the authoritative clock either way; fall back to the probe's figure.
-      const measured =
-        probe.durationMs > 0 ? probe.durationMs : await conv.measureDurationMs(bytes);
-      if (!(measured > 0)) {
+      // D-128 VERIFY-BEFORE-STORE — ffmpeg exiting 0 is NOT proof the output plays
+      // (the 1920×282 field case stored a 6.5 MB WebM no surface could decode,
+      // silently). The produced bytes must decode IN THIS BROWSER, at the expected
+      // post-crop dimensions, with a real duration — or the conversion FAILS LOUDLY
+      // and nothing is stored. Also the duration measurement (`Duration: N/A` sources).
+      const expectedW = crop?.width ?? probe.width;
+      const expectedH = crop?.height ?? probe.height;
+      const verdict = await conv.verifyConvertedClip(bytes, expectedW, expectedH);
+      if (!verdict.ok) {
+        console.error(
+          `[video-import] converted clip FAILED verification (${verdict.reason}) — ffmpeg log tail:\n` +
+            conv.lastConvertLogTail().join('\n'),
+        );
         setPhase({
           kind: 'error',
-          message: 'The converted clip reports no duration — nothing was imported.',
+          message: `The converted clip failed verification: ${verdict.reason}. Nothing was imported — see the console log for the ffmpeg output.`,
         });
         return;
       }
+      // D-128 ALPHA DIAGNOSTIC + COLLAPSE GUARD — a clip can pass every decode check and
+      // still paint NOTHING if its alpha is (near) zero everywhere. ALWAYS log both
+      // profiles (the reading the operator can paste back); FAIL only on a genuine
+      // COLLAPSE — the SOURCE had visible pixels and the OUTPUT lost them. A source that
+      // is itself fully transparent is legibly WARNED about in the modal instead (a
+      // legitimately mostly-transparent graphic is normal; the comparison is always
+      // against the source's own profile, never an absolute threshold).
+      const outputAlpha = await conv.sampleOutputAlphaStats(bytes);
+      console.warn(
+        `[video-import] alpha profile — source: ${
+          sourceAlpha !== null ? conv.formatAlphaStats(sourceAlpha) : 'unavailable'
+        } | output: ${outputAlpha !== null ? conv.formatAlphaStats(outputAlpha) : 'unavailable'}`,
+      );
+      if (
+        sourceAlpha !== null &&
+        outputAlpha !== null &&
+        sourceAlpha.nonTransparentFrac > 0.01 &&
+        outputAlpha.nonTransparentFrac < 0.001
+      ) {
+        console.error(
+          `[video-import] ALPHA COLLAPSED in conversion — source had visible pixels, the output has none. ffmpeg log tail:\n` +
+            conv.lastConvertLogTail().join('\n'),
+        );
+        setPhase({
+          kind: 'error',
+          message:
+            `The conversion LOST the alpha channel: the source has visible pixels ` +
+            `(${(sourceAlpha.nonTransparentFrac * 100).toFixed(1)}% of the frame) but the converted ` +
+            `clip is fully transparent. Nothing was imported — see the console log.`,
+        });
+        return;
+      }
+      // The SOURCE banner may have said `Duration: N/A` — the CONVERTED output
+      // is the authoritative clock either way; fall back to the probe's figure.
+      const measured = probe.durationMs > 0 ? probe.durationMs : verdict.durationMs;
       if (cancelled.current) {
         // Last exit before the point of no return — storeBytes commits the
         // asset; from there the import completes (reverting a stored asset is
@@ -342,13 +423,38 @@ export function VideoImportModal(props: {
           crop,
           sourceSha256,
           sourceBytes: props.file.size,
+          premultipliedAlpha,
         }),
       });
-      props.onDone({
-        asset,
-        durationMs: measured,
-        width: crop?.width ?? probe.width,
-        height: crop?.height ?? probe.height,
+      // D-128 READBACK — a store that silently truncates presents exactly like the
+      // field failure (every surface blank). The stored asset must serve back the
+      // verified byte count, or the operator sees an error instead of a dead asset.
+      const url = await window.cg.assets.url(asset.assetId);
+      const mismatch =
+        url === null
+          ? 'stored asset has no readable URL'
+          : await conv.verifyStoredReadback(url, bytes.byteLength);
+      if (mismatch !== null) {
+        console.error(`[video-import] stored clip FAILED readback verification: ${mismatch}`);
+        setPhase({
+          kind: 'error',
+          message: `The stored clip failed readback verification (${mismatch}). Remove the asset and re-import.`,
+        });
+        return;
+      }
+      // A SIGNIFICANT drop in fully-opaque coverage is a broadcast defect even when the
+      // file plays (solid regions compositing semi-transparent) — flagged as a WARNING
+      // in the result panel, source-relative (a sparse graphic stays quiet).
+      const opaqueDrop =
+        sourceAlpha !== null &&
+        outputAlpha !== null &&
+        sourceAlpha.opaqueFrac > 0.02 &&
+        outputAlpha.opaqueFrac < sourceAlpha.opaqueFrac * 0.6;
+      setPhase({
+        kind: 'result',
+        result: { asset, durationMs: measured, width: expectedW, height: expectedH },
+        outputAlpha,
+        opaqueDrop,
       });
     } catch (err) {
       setPhase({ kind: 'error', message: `Storing the converted clip failed: ${String(err)}` });
@@ -427,7 +533,16 @@ export function VideoImportModal(props: {
         </div>
       )}
       <div className={s.footerActions}>
-        {showDuplicate && duplicateMatch !== null && phase.kind === 'duplicate' ? (
+        {phase.kind === 'result' ? (
+          <>
+            <ModalButton variant="secondary" onClick={props.onClose}>
+              Close without placing
+            </ModalButton>
+            <ModalButton variant="primary" onClick={() => props.onDone(phase.result)}>
+              Place element
+            </ModalButton>
+          </>
+        ) : showDuplicate && duplicateMatch !== null && phase.kind === 'duplicate' ? (
           <>
             <ModalButton
               variant="secondary"
@@ -504,6 +619,18 @@ export function VideoImportModal(props: {
             </div>
 
             {notice !== null && <Callout variant="caution">{notice}</Callout>}
+
+            {sourceAlpha !== null && sourceAlpha.nonTransparentFrac < 0.001 && (
+              // D-128 — the invisible-clip trap: a 32-bit source whose alpha byte is zero
+              // everywhere decodes and converts "successfully" and then paints NOTHING on
+              // any surface. Say so BEFORE the operator waits through a conversion.
+              <Callout variant="danger">
+                This source appears FULLY TRANSPARENT — its alpha channel has no visible pixels (max
+                α {sourceAlpha.maxA} of 255). It will render invisible on air. It was likely
+                exported without an alpha channel (RGB-only in a 32-bit container). Re-export the
+                source with alpha, or proceed only if this is intentional.
+              </Callout>
+            )}
 
             {showDuplicate && duplicateMatch !== null && (
               <Callout variant="caution">
@@ -592,7 +719,69 @@ export function VideoImportModal(props: {
               )}
             </div>
 
+            <div className={s.fieldsRow}>
+              <label className={s.fieldLabel}>
+                <input
+                  type="checkbox"
+                  checked={premultipliedAlpha}
+                  disabled={busy}
+                  data-testid="video-premultiplied-toggle"
+                  onChange={(e) => setPremultipliedAlpha(e.target.checked)}
+                />{' '}
+                Premultiplied alpha (legacy After Effects / archive)
+              </label>
+              <span className={s.meta}>
+                {premultipliedAlpha
+                  ? 'Removes the black fringe on semi-transparent edges. Turn OFF for a straight-alpha source (a normal WebM/MOV), or its soft edges will over-brighten.'
+                  : 'Straight alpha — the source is used as-is. Turn ON for a matted-against-black AE / rawvideo-BGRA archive to remove black edges.'}
+              </span>
+            </div>
+
             {phase.kind === 'error' && <Callout variant="danger">{phase.message}</Callout>}
+
+            {phase.kind === 'result' && (
+              // D-128 — the CONVERSION RESULT panel, shown ALWAYS (never console-only):
+              // a clear PASS for playability, alpha preservation at a glance, warnings
+              // where they matter, raw numbers behind an expander.
+              <div data-testid="video-conversion-result">
+                <Callout variant={phase.opaqueDrop ? 'caution' : 'info'}>
+                  <div>✓ Output plays (verified: metadata, 5-point seek sweep, playback span)</div>
+                  <div>
+                    {sourceAlpha === null || phase.outputAlpha === null
+                      ? '• Alpha: profile unavailable (sampling failed — see console)'
+                      : sourceAlpha.nonTransparentFrac < 0.001
+                        ? '• Alpha: the SOURCE carries no visible pixels (see the warning above)'
+                        : phase.opaqueDrop
+                          ? `⚠ Alpha preserved, but fully-opaque coverage DROPPED sharply ` +
+                            `(${(sourceAlpha.opaqueFrac * 100).toFixed(1)}% → ` +
+                            `${(phase.outputAlpha.opaqueFrac * 100).toFixed(1)}%) — solid regions may ` +
+                            `composite semi-transparent on air.`
+                          : `✓ Alpha preserved (source ${(sourceAlpha.opaqueFrac * 100).toFixed(1)}% opaque → ` +
+                            `output ${(phase.outputAlpha.opaqueFrac * 100).toFixed(1)}%)`}
+                  </div>
+                  <details>
+                    <summary>Raw numbers</summary>
+                    <div className={s.meta}>
+                      source:{' '}
+                      {sourceAlpha !== null
+                        ? (converter.current?.formatAlphaStats(sourceAlpha) ?? '—')
+                        : 'unavailable'}
+                    </div>
+                    <div className={s.meta}>
+                      output:{' '}
+                      {phase.outputAlpha !== null
+                        ? (converter.current?.formatAlphaStats(phase.outputAlpha) ?? '—')
+                        : 'unavailable'}
+                    </div>
+                    <div className={s.meta}>
+                      stored: {phase.result.width}×{phase.result.height} ·{' '}
+                      {(phase.result.durationMs / 1000).toFixed(2)} s ·{' '}
+                      {(phase.result.asset.byteSize / 1024 / 1024).toFixed(2)} MB
+                    </div>
+                  </details>
+                </Callout>
+              </div>
+            )}
           </>
         )}
       </div>

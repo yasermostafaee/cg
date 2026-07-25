@@ -13,6 +13,7 @@ import type {
   PlayoutMode,
   Scene,
   TickerElement,
+  VideoElement,
 } from '@cg/shared-schema';
 
 /**
@@ -340,6 +341,8 @@ export interface FieldScope {
   repeaters: RepeaterEntry[];
   /** D-125 — Lottie elements rendered directly in this scope (mount containers). */
   lotties: LottieEntry[];
+  /** D-128 — video elements rendered directly in this scope (the `<video>` hosts). */
+  videos: VideoEntry[];
   /**
    * B-089 — elements rendered directly in this scope that carry an explicit
    * `lifespan` (a timeline trim). Registered at BUILD time, so every scope — not
@@ -379,6 +382,12 @@ export interface LottieEntry {
   element: LottieElement;
   /** The container div the `lottie_light` SVG mounts into (also in the elementMap). */
   container: HTMLElement;
+}
+
+/** D-128 — one built video: its element config + the `<video>` host the driver commands. */
+export interface VideoEntry {
+  element: VideoElement;
+  container: HTMLVideoElement;
 }
 
 /** D-028 — one built ticker: its element config + the band/track DOM nodes. */

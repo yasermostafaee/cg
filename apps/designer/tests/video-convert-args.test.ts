@@ -5,6 +5,7 @@ import {
   buildPosterArgs,
   buildProvenance,
   clampCrop,
+  CONVERTER_REVISION,
   cropsEqual,
   findDuplicateVideoAsset,
   fpsConformNotice,
@@ -32,25 +33,116 @@ describe('D-128 — buildConvertArgs (the DECIDED VP8+alpha recipe)', () => {
     expect(args.at(-1)).toBe('/out.webm');
   });
 
-  it('bakes an opt-in crop as an ffmpeg crop filter (w:h:x:y), after the input', () => {
+  it('BROADCAST QUALITY (lossy-alpha-leak fix): bounded quantiser + 1s GOP', () => {
+    // The alpha plane is a second VP8 stream sharing the SAME quantiser as colour; the
+    // old crf 12 / b:v 2M let motion crumble alpha (source-α=0 pixels decoded at α≤30
+    // over black — the on-air smudges). crf 4 + qmax 16 BOUND the quantiser; b:v 20M is
+    // a never-binding ceiling. -g 25 = 1s keyframes (cheap seeks, the resume finding).
+    const args = buildConvertArgs({
+      inputPath: '/mnt/clip.avi',
+      outputPath: '/out.webm',
+      targetFps: 50,
+    });
+    expect(args[args.indexOf('-crf') + 1]).toBe('4');
+    expect(args[args.indexOf('-qmax') + 1]).toBe('16');
+    expect(args[args.indexOf('-b:v') + 1]).toBe('20M');
+    expect(args[args.indexOf('-g') + 1]).toBe('25');
+  });
+
+  it('bakes an opt-in crop as the FIRST graph stage (w:h:x:y), after the input', () => {
     const args = buildConvertArgs({
       inputPath: '/mnt/clip.avi',
       outputPath: '/out.webm',
       targetFps: 25,
       crop: { x: 10, y: 20, width: 640, height: 360 },
     });
-    const vf = args.indexOf('-vf');
-    expect(vf).toBeGreaterThan(args.indexOf('/mnt/clip.avi'));
-    expect(args[vf + 1]).toBe('crop=640:360:10:20');
+    const fc = args.indexOf('-filter_complex');
+    expect(fc).toBeGreaterThan(args.indexOf('/mnt/clip.avi'));
+    const graph = args[fc + 1]!;
+    expect(graph.startsWith('[0:v]crop=640:360:10:20,')).toBe(true);
   });
 
-  it('no crop marked ⇒ no crop filter (full frame converts as before)', () => {
+  it('no crop marked ⇒ no crop stage (full frame; the alpha graph still runs)', () => {
     const args = buildConvertArgs({
       inputPath: '/mnt/clip.avi',
       outputPath: '/out.webm',
       targetFps: 25,
     });
-    expect(args).not.toContain('-vf');
+    const graph = args[args.indexOf('-filter_complex') + 1]!;
+    expect(graph).not.toContain('crop=');
+  });
+});
+
+describe('D-128 — the alpha graph: un-premultiply (fringe fix) + ALPHA BLEED (leak fix)', () => {
+  const graphOf = (args: string[]): string => args[args.indexOf('-filter_complex') + 1] ?? '';
+
+  it('every conversion runs the ALPHA BLEED: blur→extend colour, overlay, ORIGINAL alpha back', () => {
+    for (const premultipliedAlpha of [true, false]) {
+      const args = buildConvertArgs({
+        inputPath: '/mnt/clip.avi',
+        outputPath: '/out.webm',
+        targetFps: 50,
+        premultipliedAlpha,
+      });
+      const graph = graphOf(args);
+      // the bleed: blur the premult image, divide by blurred alpha (opaque bled backdrop)
+      expect(graph).toContain('boxblur=12:2');
+      expect(graph).toContain('a=255'); // the bled backdrop is opaque
+      // straight image composited OVER the bled backdrop by its own alpha
+      expect(graph).toContain('[bled][straight]overlay');
+      // the ORIGINAL alpha is re-attached bit-exact — the bleed never alters alpha
+      expect(graph).toContain('alphaextract[am]');
+      expect(graph).toContain('[comp][am]alphamerge[out]');
+      // and the graph output is mapped
+      expect(args[args.indexOf('-map') + 1]).toBe('[out]');
+      // never ffmpeg's plane-0-dividing unpremultiply/premultiply filters (proven broken)
+      expect(graph).not.toMatch(/[^n]unpremultiply|,premultiply/);
+    }
+  });
+
+  it('premultipliedAlpha ⇒ the straight branch un-premultiplies via geq (255·c/α, α-guarded)', () => {
+    const graph = graphOf(
+      buildConvertArgs({
+        inputPath: '/mnt/clip.avi',
+        outputPath: '/out.webm',
+        targetFps: 50,
+        premultipliedAlpha: true,
+      }),
+    );
+    expect(graph).toContain('[fs]geq='); // the main branch is corrected…
+    expect(graph).toContain('255*r(X,Y)/alpha(X,Y)');
+    expect(graph).toContain('gt(alpha(X,Y),0)');
+    // …and the bleed branch divides the ALREADY-premultiplied input (truecolour·α)
+    expect(graph).toContain('[fb]boxblur');
+  });
+
+  it('absent / false ⇒ the straight branch is untouched (null), bleed premultiplies its own copy', () => {
+    for (const opt of [{}, { premultipliedAlpha: false }]) {
+      const graph = graphOf(
+        buildConvertArgs({
+          inputPath: '/mnt/clip.avi',
+          outputPath: '/out.webm',
+          targetFps: 50,
+          ...opt,
+        }),
+      );
+      expect(graph).toContain('[fs]null[straight]'); // source colours NEVER brightened
+      expect(graph).toContain('r(X,Y)*alpha(X,Y)/255'); // the bleed branch premultiplies first
+    }
+  });
+
+  it('crop + premultipliedAlpha ⇒ crop FIRST, then the split into the three branches', () => {
+    const graph = graphOf(
+      buildConvertArgs({
+        inputPath: '/mnt/clip.avi',
+        outputPath: '/out.webm',
+        targetFps: 25,
+        crop: { x: 10, y: 20, width: 640, height: 360 },
+        premultipliedAlpha: true,
+      }),
+    );
+    expect(graph.indexOf('crop=640:360:10:20')).toBeLessThan(graph.indexOf('split=3'));
+    expect(graph.indexOf('split=3')).toBeLessThan(graph.indexOf('boxblur'));
   });
 
   it('poster extraction pulls exactly one frame as image2 (frame 0 when no seek)', () => {
@@ -171,13 +263,14 @@ describe('D-128 decision (d) — fps conform + warn (never block, never silently
 describe('D-128 — provenance assembly + crop clamping', () => {
   const probe = { fps: 29.97, width: 1920, height: 1080, durationMs: 10_000 };
 
-  it('captures source lineage incl. the baked crop', () => {
+  it('captures source lineage incl. the baked crop + converter revision + alpha mode', () => {
     expect(
       buildProvenance({
         sourceFilename: 'archive.avi',
         probe,
         targetFps: 50,
         crop: { x: 0, y: 0, width: 640, height: 480 },
+        premultipliedAlpha: true,
       }),
     ).toEqual({
       sourceFilename: 'archive.avi',
@@ -185,13 +278,22 @@ describe('D-128 — provenance assembly + crop clamping', () => {
       targetFps: 50,
       sourceWidth: 1920,
       sourceHeight: 1080,
+      converterRevision: CONVERTER_REVISION,
       crop: { x: 0, y: 0, width: 640, height: 480 },
+      premultipliedAlpha: true,
     });
   });
 
-  it('omits crop when none was marked (full frame)', () => {
+  it('always records the converter revision (so a future item can flag stale assets)', () => {
+    const p = buildProvenance({ sourceFilename: 'a.avi', probe, targetFps: 50 });
+    expect(p.converterRevision).toBe(CONVERTER_REVISION);
+    expect(CONVERTER_REVISION).toMatch(/^\d{4}-\d{2}-\d{2}\.\d+$/); // dated, monotonic counter
+  });
+
+  it('omits crop and alpha mode when not provided (full frame, unspecified)', () => {
     const p = buildProvenance({ sourceFilename: 'a.avi', probe, targetFps: 50 });
     expect('crop' in p).toBe(false);
+    expect('premultipliedAlpha' in p).toBe(false);
   });
 
   it('clampCrop keeps the rect inside the source bounds and integral', () => {

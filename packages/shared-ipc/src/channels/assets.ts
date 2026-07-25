@@ -50,6 +50,20 @@ export const VideoProvenanceSchema = z.object({
       height: z.number().int().positive(),
     })
     .optional(),
+  /**
+   * D-128 — the converter revision that produced this asset. Bumped whenever the
+   * conversion OUTPUT changes (e.g. the premultiplied-alpha fringe fix), so a
+   * future item can flag stale assets that predate a correctness fix and prompt a
+   * re-import. Additive + optional: assets stored before this field parse unchanged
+   * (an ABSENT revision reads as "older than the first recorded revision").
+   */
+  converterRevision: z.string().min(1).optional(),
+  /**
+   * D-128 — whether the source was treated as PREMULTIPLIED (matted-against-black)
+   * alpha and un-premultiplied at conversion (legacy AE/BGRA archives). Recorded so
+   * the lineage names how the alpha was handled, not just that it was converted.
+   */
+  premultipliedAlpha: z.boolean().optional(),
 });
 export type VideoProvenance = z.infer<typeof VideoProvenanceSchema>;
 

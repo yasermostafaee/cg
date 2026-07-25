@@ -37,10 +37,27 @@ const VP8_ALPHA_ARGS = [
   'yuva420p',
   '-auto-alt-ref',
   '0',
+  // D-128 BROADCAST QUALITY (2026-07-24) — the black smudges/halos during MOTION were
+  // LOSSY ALPHA COMPRESSION: in WebM the alpha plane is a second VP8 stream encoded with
+  // the SAME quality settings (no independent alpha control exists — `ffmpeg -h
+  // encoder=libvpx` exposes none), and the old `-crf 12 -b:v 2M` let the quantiser climb
+  // during motion until source-transparent pixels (α=0) decoded at α up to 30 over BLACK
+  // matte RGB (measured: 56.7% of transparent pixels leaked in moving frames, 77% of the
+  // visible leak black). Broadcast cleanliness beats size (owner decision): `-crf 4` +
+  // `-qmax 16` BOUND the quantiser so alpha can never crumble (measured leak: max α 6,
+  // 0.008% ≥4, zero ≥8 on a 720p particle-burst torture clip), and `-b:v 20M` is a
+  // never-binding ceiling, not a target. Measured cost ~5.8× file size on the torture
+  // clip (real furniture clips grow less — they are mostly static).
   '-crf',
-  '12',
+  '4',
+  '-qmax',
+  '16',
   '-b:v',
-  '2M',
+  '20M',
+  // ~1s keyframe interval (25fps clips): every seek decodes ≤1s instead of ≤5s (the
+  // resume-window finding), +3.5% size measured. One revision bump carries both.
+  '-g',
+  '25',
   '-deadline',
   'good',
   '-cpu-used',
@@ -49,26 +66,117 @@ const VP8_ALPHA_ARGS = [
 ] as const;
 
 /**
+ * D-128 — the converter revision recorded in each asset's provenance. BUMP this
+ * (bump the date, keep the counter monotonic) whenever the conversion OUTPUT
+ * changes, so a future item can identify assets produced by an older converter
+ * and prompt a re-import. `2026-07-23.2` = the premultiplied-alpha fringe fix;
+ * `2026-07-24.3` = broadcast quality (crf 4 / qmax 16), 1s GOP (`-g 25`), and the
+ * ALPHA BLEED (transparent-region colour fill) — the lossy-alpha-leak fix.
+ */
+export const CONVERTER_REVISION = '2026-07-24.3';
+
+/**
+ * D-128 — the geq expressions of the alpha pipeline. Why `geq` and not ffmpeg's
+ * `premultiply`/`unpremultiply` filters: those divide/multiply by the FIRST plane
+ * (red in packed rgba) — never the actual alpha — a proven no-op/corruption here.
+ * `geq` is exact and IS present in the shipped `@ffmpeg/core` 0.12.10 wasm. The
+ * single quotes protect the commas inside `if()`/`alpha(X,Y)` from the graph's own
+ * comma separator (one argv element to `ffmpeg.exec`, never shell-parsed).
+ */
+// straight = premult · 255/α, α-guarded; alpha unchanged (the fringe fix).
+const GEQ_UNPREMULT =
+  'geq=' +
+  "r='if(gt(alpha(X,Y),0),255*r(X,Y)/alpha(X,Y),0)':" +
+  "g='if(gt(alpha(X,Y),0),255*g(X,Y)/alpha(X,Y),0)':" +
+  "b='if(gt(alpha(X,Y),0),255*b(X,Y)/alpha(X,Y),0)':" +
+  "a='alpha(X,Y)'";
+// premult = straight · α/255 (the bleed branch of a STRAIGHT source needs a premult
+// image so blur(premult)/blur(α) is an opacity-weighted average of TRUE colour).
+const GEQ_PREMULT =
+  'geq=' +
+  "r='r(X,Y)*alpha(X,Y)/255':" +
+  "g='g(X,Y)*alpha(X,Y)/255':" +
+  "b='b(X,Y)*alpha(X,Y)/255':" +
+  "a='alpha(X,Y)'";
+// bled = blur(premult)/blur(α), OPAQUE output (α=255): the colour of the nearest
+// opaque pixels extended into the transparent zone. The α>4 guard avoids amplifying
+// noise where the blurred alpha is near zero (far from any content the bled stays
+// black — measured leak out there is ≤3/255, invisible).
+const GEQ_BLED_OPAQUE =
+  'geq=' +
+  "r='if(gt(alpha(X,Y),4),255*r(X,Y)/alpha(X,Y),0)':" +
+  "g='if(gt(alpha(X,Y),4),255*g(X,Y)/alpha(X,Y),0)':" +
+  "b='if(gt(alpha(X,Y),4),255*b(X,Y)/alpha(X,Y),0)':" +
+  'a=255';
+
+/**
+ * D-128 ALPHA BLEED (2026-07-24) — fill the RGB of transparent/near-transparent
+ * regions with colour EXTENDED from the nearest opaque pixels, instead of leaving
+ * it black. VP8 compresses the alpha plane LOSSILY with the same quantiser as
+ * colour, so motion leaks small non-zero alpha into source-transparent pixels; over
+ * a black matte that leak reads as smudges/halos exactly where there is motion.
+ * After the bleed, ANY residual leak shows plausible LOCAL COLOUR instead of black,
+ * and chroma subsampling can't drag black into edges either (standard game/VFX
+ * asset-pipeline practice). Measured: black share of visible leak 77% → 0%.
+ *
+ * The graph (all filters verified present in the wasm core):
+ *
+ *   [in] crop? → format=rgba → split=3 [fs][fb][fa]
+ *   [fb] (premult if straight source) → boxblur=12:2 → GEQ_BLED_OPAQUE   → [bled]
+ *   [fs] (GEQ_UNPREMULT if premultiplied source)                          → [straight]
+ *   [bled][straight] overlay  — per-pixel straight-α mix: opaque keeps its own
+ *                                colour, transparent shows the bled colour → [comp]
+ *   [fa] alphaextract → [am];  [comp][am] alphamerge — the ORIGINAL alpha,
+ *                                bit-exact, never altered by the bleed      → [out]
+ *
+ * blur(premult)/blur(α) is mathematically an opacity-weighted average of the TRUE
+ * (un-matted) colour — the bleed extends true colour, not the crushed matte, which
+ * is why the premultiplied path branches BEFORE its unpremultiply (the premult
+ * input IS truecolour·α) and the straight path premultiplies first.
+ */
+function buildAlphaGraph(crop: CropRect | undefined, premultiplied: boolean): string {
+  const cropStage =
+    crop !== undefined ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},` : '';
+  const bleedBranch = premultiplied
+    ? `[fb]boxblur=12:2,${GEQ_BLED_OPAQUE}[bled]`
+    : `[fb]${GEQ_PREMULT},boxblur=12:2,${GEQ_BLED_OPAQUE}[bled]`;
+  const straightBranch = premultiplied ? `[fs]${GEQ_UNPREMULT}[straight]` : `[fs]null[straight]`;
+  return (
+    `[0:v]${cropStage}format=rgba,split=3[fs][fb][fa];` +
+    `${bleedBranch};` +
+    `${straightBranch};` +
+    `[bled][straight]overlay=format=auto[comp];` +
+    `[fa]alphaextract[am];` +
+    `[comp][am]alphamerge[out]`
+  );
+}
+
+/**
  * Build the conversion command. The optional crop is BAKED via ffmpeg's `crop`
  * filter (decision (c) — never a playback-time crop) and the output is ALWAYS
  * CONFORMED to the project channel's frame rate via `-r` (decision (d) — a
  * non-matching rate judders on air; conforming once at import fixes it cleanly).
+ *
+ * `premultipliedAlpha` (D-128 fringe fix) selects the graph shape: ON un-premultiplies
+ * the matted archive (AFTER the crop, BEFORE the encode); OFF leaves the straight
+ * source's colours untouched. BOTH shapes run the ALPHA BLEED above — it protects any
+ * alpha source from lossy-alpha leak and never alters the alpha channel itself.
  */
 export function buildConvertArgs(opts: {
   inputPath: string;
   outputPath: string;
   targetFps: number;
   crop?: CropRect | undefined;
+  premultipliedAlpha?: boolean | undefined;
 }): string[] {
-  const filter =
-    opts.crop !== undefined
-      ? ['-vf', `crop=${opts.crop.width}:${opts.crop.height}:${opts.crop.x}:${opts.crop.y}`]
-      : [];
   return [
     '-y',
     '-i',
     opts.inputPath,
-    ...filter,
+    '-filter_complex',
+    buildAlphaGraph(opts.crop, opts.premultipliedAlpha === true),
+    '-map',
+    '[out]',
     ...VP8_ALPHA_ARGS,
     '-r',
     String(opts.targetFps),
@@ -167,6 +275,8 @@ export function buildProvenance(opts: {
   sourceSha256?: string | undefined;
   /** Source file size in bytes. */
   sourceBytes?: number | undefined;
+  /** Whether the source was treated as premultiplied (un-premultiplied at conversion). */
+  premultipliedAlpha?: boolean | undefined;
 }): VideoProvenance {
   return {
     sourceFilename: opts.sourceFilename,
@@ -174,9 +284,15 @@ export function buildProvenance(opts: {
     targetFps: opts.targetFps,
     sourceWidth: opts.probe.width,
     sourceHeight: opts.probe.height,
+    // The CURRENT converter revision — always recorded so a future item can spot
+    // assets produced by an older converter (e.g. those carrying the pre-fix fringe).
+    converterRevision: CONVERTER_REVISION,
     ...(opts.sourceSha256 !== undefined ? { sourceSha256: opts.sourceSha256 } : {}),
     ...(opts.sourceBytes !== undefined ? { sourceBytes: opts.sourceBytes } : {}),
     ...(opts.crop !== undefined ? { crop: opts.crop } : {}),
+    ...(opts.premultipliedAlpha !== undefined
+      ? { premultipliedAlpha: opts.premultipliedAlpha }
+      : {}),
   };
 }
 

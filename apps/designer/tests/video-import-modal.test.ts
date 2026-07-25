@@ -17,13 +17,40 @@ import type { AssetMeta } from '@cg/shared-ipc';
 const probeSource = vi.fn();
 const convertToWebm = vi.fn();
 const cancelConversion = vi.fn();
-const measureDurationMs = vi.fn();
+const verifyConvertedClip = vi.fn();
+const verifyStoredReadback = vi.fn();
+const lastConvertLogTail = vi.fn();
+const sampleSourceAlpha = vi.fn();
+const sampleOutputAlphaStats = vi.fn();
+const formatAlphaStats = vi.fn(() => 'stats');
 vi.mock('../src/renderer/features/assets/video-convert.js', () => ({
   probeSource,
   convertToWebm,
   cancelConversion,
-  measureDurationMs,
+  verifyConvertedClip,
+  verifyStoredReadback,
+  lastConvertLogTail,
+  sampleSourceAlpha,
+  sampleOutputAlphaStats,
+  formatAlphaStats,
 }));
+
+/** A healthy alpha profile (plenty of visible + opaque pixels). */
+const HEALTHY_ALPHA = {
+  maxA: 255,
+  meanA: 90,
+  nonTransparentFrac: 0.4,
+  opaqueFrac: 0.25,
+  sampled: 10_000,
+};
+/** A fully-transparent profile (the invisible-clip class). */
+const TRANSPARENT_ALPHA = {
+  maxA: 0,
+  meanA: 0,
+  nonTransparentFrac: 0,
+  opaqueFrac: 0,
+  sampled: 10_000,
+};
 
 // D-128 dedupe seam: the source hash + the stored-WebM metadata probe are mocked
 // so these DOM tests never touch File.stream() / a real <video>. vi.hoisted so
@@ -63,7 +90,12 @@ const onDone = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
   probeSource.mockResolvedValue({ ok: true, probe: PROBE, posterUrl: 'blob:poster' });
-  measureDurationMs.mockResolvedValue(4000);
+  // D-128 verification guards default to PASSING; individual tests flip them to failing.
+  verifyConvertedClip.mockResolvedValue({ ok: true, durationMs: 4000, width: 640, height: 360 });
+  verifyStoredReadback.mockResolvedValue(null);
+  lastConvertLogTail.mockReturnValue([]);
+  sampleSourceAlpha.mockResolvedValue(HEALTHY_ALPHA);
+  sampleOutputAlphaStats.mockResolvedValue(HEALTHY_ALPHA);
   hashSourceFile.mockResolvedValue('a'.repeat(64));
   probeStoredVideo.mockResolvedValue({ durationMs: 4000, width: 640, height: 360 });
   assetsList.mockResolvedValue([]); // no prior imports ⇒ never a duplicate by default
@@ -99,6 +131,17 @@ function button(label: string): HTMLButtonElement {
   const hit = all.find((b) => b.textContent?.includes(label));
   if (hit === undefined) throw new Error(`no button "${label}"`);
   return hit;
+}
+
+/**
+ * D-128 — a successful conversion now lands on the RESULT panel (shown always, never
+ * console-only); the element is placed by the operator's explicit "Place element".
+ */
+async function placeElement(): Promise<void> {
+  await act(async () => {
+    button('Place element').click();
+    await Promise.resolve();
+  });
 }
 
 function cropToggle(): HTMLInputElement {
@@ -207,6 +250,7 @@ describe('VideoImportModal (D-128)', () => {
       button('Convert & import').click();
     });
     expect(storeBytes).toHaveBeenCalledTimes(1);
+    await placeElement();
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
@@ -256,20 +300,172 @@ describe('VideoImportModal (D-128)', () => {
     expect(storeBytes).toHaveBeenCalled();
   });
 
-  it('a source with Duration: N/A measures the CONVERTED clip instead', async () => {
+  it('a source with Duration: N/A takes the duration from the CONVERTED clip verification', async () => {
     probeSource.mockResolvedValue({
       ok: true,
       probe: { ...PROBE, durationMs: 0 },
       posterUrl: 'blob:poster',
     });
     convertToWebm.mockResolvedValue(new Uint8Array([7]));
-    measureDurationMs.mockResolvedValue(3210);
+    verifyConvertedClip.mockResolvedValue({ ok: true, durationMs: 3210, width: 640, height: 360 });
     await renderModal();
     await act(async () => {
       button('Convert & import').click();
     });
-    expect(measureDurationMs).toHaveBeenCalled();
+    expect(verifyConvertedClip).toHaveBeenCalled();
+    await placeElement();
     expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ durationMs: 3210 }));
+  });
+
+  it('VERIFY-BEFORE-STORE: an undecodable converted clip fails LOUDLY and stores NOTHING', async () => {
+    // The 1920×282 field regression: ffmpeg exits 0, the file is 6.5MB — and no surface
+    // can decode it. The guard must catch it BEFORE storeBytes, with the reason visible.
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    verifyConvertedClip.mockResolvedValue({
+      ok: false,
+      check: 'playback',
+      reason: 'the converted clip does not decode (DEMUXER_ERROR)',
+    });
+    lastConvertLogTail.mockReturnValue(['[libvpx] some warning line']);
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(verifyConvertedClip).toHaveBeenCalledWith(expect.any(Uint8Array), 640, 360);
+    expect(storeBytes).not.toHaveBeenCalled(); // NEVER a silent broken asset
+    expect(onDone).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('failed verification');
+    expect(document.body.textContent).toContain('does not decode');
+  });
+
+  it('VERIFY-BEFORE-STORE: wrong decoded dimensions fail too (expected = post-crop dims)', async () => {
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    verifyConvertedClip.mockResolvedValue({
+      ok: false,
+      check: 'dimensions',
+      reason: 'the converted clip decodes at 640×358, expected 640×360',
+    });
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    expect(storeBytes).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('expected 640×360');
+  });
+
+  it('ALPHA-COLLAPSE GUARD: source has visible pixels, output fully transparent ⇒ fail, store NOTHING', async () => {
+    // The invisible-clip class: decodes ✓ dimensions ✓ duration ✓ megabytes of colour ✓ —
+    // and paints nothing anywhere. The guard compares against the SOURCE's own profile.
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    sampleSourceAlpha.mockResolvedValue(HEALTHY_ALPHA);
+    sampleOutputAlphaStats.mockResolvedValue(TRANSPARENT_ALPHA);
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(storeBytes).not.toHaveBeenCalled(); // never store an invisible asset
+    expect(onDone).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('LOST the alpha channel');
+  });
+
+  it('a FULLY-TRANSPARENT SOURCE is warned about legibly (not a conversion failure)', async () => {
+    // A source exported without alpha (32-bit container, alpha byte 0): the output
+    // faithfully matches the source, so the collapse guard must NOT fire — the operator
+    // sees a prominent warning BEFORE converting instead.
+    sampleSourceAlpha.mockResolvedValue(TRANSPARENT_ALPHA);
+    await renderModal();
+    await act(async () => {
+      await Promise.resolve(); // let the async sampling land
+    });
+    expect(document.body.textContent).toContain('FULLY TRANSPARENT');
+    expect(document.body.textContent).toContain('exported without an alpha channel');
+    // conversion is still allowed (informed operator) — and does NOT trip the collapse guard
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    sampleOutputAlphaStats.mockResolvedValue(TRANSPARENT_ALPHA);
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(storeBytes).toHaveBeenCalled(); // proceeded with eyes open
+  });
+
+  it('a legitimately MOSTLY-transparent graphic passes (comparison is source-relative)', async () => {
+    // 2% visible in the source, 1.5% visible out — normal sparse lower-third, no guard.
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    sampleSourceAlpha.mockResolvedValue({ ...HEALTHY_ALPHA, nonTransparentFrac: 0.02 });
+    sampleOutputAlphaStats.mockResolvedValue({ ...HEALTHY_ALPHA, nonTransparentFrac: 0.015 });
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(storeBytes).toHaveBeenCalled();
+    await placeElement();
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('the RESULT PANEL shows a PASS state on a clean conversion, and a WARNING on an opaque drop', async () => {
+    // clean: pass panel visible, alpha-preserved line, no warning
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const panel = document.querySelector('[data-testid="video-conversion-result"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain('Output plays');
+    expect(panel?.textContent).toContain('Alpha preserved');
+    expect(panel?.textContent).not.toContain('DROPPED');
+  });
+
+  it("the RESULT PANEL flags a sharp fully-opaque drop as a WARNING (the owner's 10.7%→3.8% class)", async () => {
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    sampleSourceAlpha.mockResolvedValue({ ...HEALTHY_ALPHA, opaqueFrac: 0.107 });
+    sampleOutputAlphaStats.mockResolvedValue({ ...HEALTHY_ALPHA, opaqueFrac: 0.038 });
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const panel = document.querySelector('[data-testid="video-conversion-result"]');
+    expect(panel?.textContent).toContain('DROPPED sharply');
+    expect(panel?.textContent).toContain('10.7%');
+    expect(panel?.textContent).toContain('3.8%');
+    // the asset IS stored (a warning, not a failure) and placement stays the operator's call
+    expect(storeBytes).toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+    await placeElement();
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('READBACK-AFTER-STORE: a truncated stored asset surfaces an error, never a dead element', async () => {
+    convertToWebm.mockResolvedValue(new Uint8Array([7, 8, 9]));
+    verifyStoredReadback.mockResolvedValue('stored asset reads back 2 bytes, expected 3');
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(storeBytes).toHaveBeenCalled(); // the store happened…
+    expect(onDone).not.toHaveBeenCalled(); // …but no element is placed on a corrupt asset
+    expect(document.body.textContent).toContain('readback verification');
   });
 
   it('crop numeric fields drive the rect (numbers → rectangle sync)', async () => {
@@ -482,6 +678,7 @@ describe('VideoImportModal (D-128)', () => {
         file: FILE,
         targetFps: 50,
         crop: { x: 100, y: 0, width: 320, height: 360 },
+        premultipliedAlpha: true, // the toggle defaults ON (the client's archive)
       }),
     );
     expect(storeBytes).toHaveBeenCalledWith({
@@ -494,11 +691,14 @@ describe('VideoImportModal (D-128)', () => {
         targetFps: 50,
         sourceWidth: 640,
         sourceHeight: 360,
+        converterRevision: expect.stringMatching(/^\d{4}-\d{2}-\d{2}\.\d+$/),
         sourceSha256: 'a'.repeat(64), // the dedupe key (computed during the encode) travels along
         sourceBytes: FILE_SIZE,
         crop: { x: 100, y: 0, width: 320, height: 360 },
+        premultipliedAlpha: true,
       },
     });
+    await placeElement();
     expect(onDone).toHaveBeenCalledWith({
       asset: STORED_ASSET,
       durationMs: 4000,
@@ -519,6 +719,7 @@ describe('VideoImportModal (D-128)', () => {
     expect(convertToWebm).toHaveBeenCalledWith(expect.objectContaining({ crop: undefined }));
     const prov = (storeBytes.mock.calls[0]?.[0] as { provenance: object }).provenance;
     expect('crop' in prov).toBe(false);
+    await placeElement();
     expect(onDone).toHaveBeenCalledWith(
       expect.objectContaining({ width: 640, height: 360 }), // full source frame
     );
@@ -600,6 +801,7 @@ describe('VideoImportModal — pre-convert dedupe (D-128)', () => {
     // …but a different crop, so it must convert, and stores the NEW (distinct) asset
     expect(convertToWebm).toHaveBeenCalledTimes(1);
     expect(storeBytes).toHaveBeenCalledTimes(1);
+    await placeElement();
     expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ asset: STORED_ASSET }));
   });
 
