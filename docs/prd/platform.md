@@ -494,10 +494,29 @@ cost a full session's planning for a rebase of already-shipped code; (2)
 `feat/runtime-fixed-layers-wire` (merged #404), which survived on `origin` until the owner
 deleted it by hand; (3) `wip/openspec-archive-2026-07-19`, a stale wip branch likewise deleted
 by hand.
+
+**Verified 2026-07-25** — `gh api repos/yasermostafaee/cg --jq '.delete_branch_on_merge'`
+returns **`false`**: GitHub's "Automatically delete head branches" is DISABLED on this repo.
+So the remote-leak class is live and structurally UNMITIGATED — nothing server-side deletes a
+merged head ref, and [[P-011]] step 2 (`git push origin --delete <branch>`) is the only thing
+that ever does. All three leaks above are therefore explained by the SETTING, not by a
+discipline lapse: the sequence has no net behind it, so a single skipped step leaks silently.
+
+The same check also RELOCATED the live leak. `git ls-remote --heads origin` shows `origin`
+holding only `main` — clean, because the owner hand-deleted (2) and (3) — but SEVEN LOCAL refs
+are merged-but-still-present right now: `docs/P-016-P-017-gate-and-branch-hygiene` (#406),
+`docs/file-stack-status-honesty-bugs` (#407), `docs/file-client-batch` (#390),
+`docs/file-d140-plate-source-selector` (#389), `docs/file-plates-and-file-feed` (#388),
+`docs/close-reachability-hardware-session` (#386) and `feat/d128-p2-video-schema-ingest`
+(#393). Every one reads `[gone]` upstream — i.e. step 2 happened and step 3 (`git branch -D`)
+never did. `wip/openspec-archive-2026-07-19` is an eighth of a DIFFERENT kind: its PR (#374)
+was CLOSED, never merged, so no merged-PR intersection will ever surface it. The filed class is
+real; the half actually leaking TODAY is the local one, and it is the half that costs nothing
+to check.
 **Why:** CC cannot self-heal this — the permission classifier denies the deletion push, so any
 leak CC spots must be handed to the owner as a manual command ([[P-014]]: the owner completes
 the deletion), a hand-off easily lost. Detection closes the gap between "leaked" and "someone
-happened to notice". The live audit run at filing (2026-07-25) came back EMPTY — `gh pr list
+happened to notice". The live REMOTE audit run at filing (2026-07-25) came back EMPTY — `gh pr list
 --state merged` intersected with `git ls-remote --heads origin` shows `origin` holding only
 `main`, because the owner has already cleaned leaks (2) and (3). That empty result is the POINT,
 not a reason to skip filing: the pattern is historical and real, and detection is what catches
@@ -506,6 +525,14 @@ the NEXT leak without depending on the owner's eye.
 
 - WHEN a merge completes THEN an audit intersects merged PR head refs with live `origin` heads
   and REPORTS any branch that is merged-but-still-live
+- WHEN a PR merges THEN the audit ALSO reports a LOCAL ref that is merged-but-still-present —
+  the half with no network cost and, per the 2026-07-25 count above, the half actually leaking
+- WHEN a branch's PR was CLOSED without merging, or it never had a PR at all (`wip/*`) THEN it
+  is still surfaced — a merged-PR intersection alone never sees it (leak (3) is exactly this)
+- WHEN a merged branch is currently CHECKED OUT in any worktree THEN the audit does NOT report
+  it — a track worktree legitimately sits on its merged branch until the next task branches off
+  `main`, so the audit must exclude every branch listed by `git worktree list --porcelain` or
+  it fires on nearly every turn and gets ignored
 - WHEN the audit finds a leak THEN it prints the exact human deletion command (the push CC may
   not run) so the owner can complete [[P-011]]'s sequence
 - WHEN the audit finds nothing THEN it is silent (or says "clean") — no false alarm on the
@@ -513,9 +540,43 @@ the NEXT leak without depending on the owner's eye.
 - WHEN the audit runs THEN it is DETECTION only — it NEVER deletes a branch itself; deletion
   stays a deliberate human act
 
-**Notes:** DETECTION only — deliberately not deletion. Candidate homes: the [[P-009]] Stop hook
-(it already runs at turn end and already prints repair guidance — the likeliest host), or a
-`pnpm` script the owner runs after merging. Cross-refs [[P-011]] (the sequence this audits),
-[[P-009]] (the likeliest host), [[P-014]] (the owner merges, so the deletion step is theirs to
-complete). Filed on the historical three-leak pattern above even though today's audit is clean:
-the whole value is catching the next leak automatically, not the current (empty) backlog.
+**Notes:** DETECTION only — deliberately not deletion. Filed on the historical three-leak
+pattern above even though the REMOTE audit is currently clean: the whole value is catching the
+next leak automatically, not the present backlog.
+
+**Host split — the two halves belong in different places, not either/or.** The LOCAL half needs
+NO network (`git for-each-ref` + `git worktree list`), so it can live in the [[P-009]] Stop hook,
+which already runs at turn end and already prints repair guidance. The REMOTE half needs
+`gh`/network, so it belongs in an owner-run `pnpm` script: no turn end should pay a network
+round-trip, and the remote check must degrade SILENTLY when `gh` is missing, unauthenticated or
+offline rather than reddening a turn. The local half also needs a deliberate-park exclusion
+beyond the checked-out guard above — `backup/pre-autosquash`, `backup/ux-batch-with-modal`,
+`chore/runtime-park` and `chore/designer-idle` have no PR and are kept ON PURPOSE, so the audit
+must key on "merged PR head" / upstream-`[gone]`, never on "any branch that isn't `main`".
+
+**Decision for the OWNER (recorded, NOT applied — CC has not changed the setting).** Enabling
+"Automatically delete head branches" closes the REMOTE half with no code at all: GitHub deletes
+the head ref server-side on every PR merge, regardless of which `gh pr merge` flags were used.
+The command is:
+
+```bash
+gh api -X PATCH repos/yasermostafaee/cg -f delete_branch_on_merge=true
+```
+
+Two things must land WITH it, or it makes things worse:
+
+1. **[[P-011]] step 2 must treat an already-absent remote ref as SUCCESS.** With auto-delete on,
+   `git push origin --delete <branch>` fails every time with "remote ref does not exist", and
+   CLAUDE.md's "verifying BOTH deletions" rule reads that expected no-op as a FAILURE — so every
+   ship sequence would produce a false red. The correct semantics are "remote ref already absent
+   == deletion satisfied". (CLAUDE.md is deliberately left untouched by this item while the
+   setting is off; that edit belongs to the flip, not before it.)
+2. **The audit keeps a cheap remote cross-check anyway.** A repo setting is not a guarantee — it
+   can be flipped back by anyone with admin, silently.
+
+And it does NOT retire this item: the LOCAL ref class (seven live examples above) and the
+non-PR / closed-PR class (`wip/*`, which auto-delete never touches) both survive it. P-017
+NARROWS; it does not disappear.
+
+Cross-refs [[P-011]] (the sequence this audits), [[P-009]] (host for the local half),
+[[P-014]] (the owner merges, so the deletion step is theirs to complete).
