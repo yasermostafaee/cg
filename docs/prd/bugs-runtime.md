@@ -2211,3 +2211,239 @@ closed; nothing here needs booking again.**
 **Cross-refs:** [[B-100]] (the predicate that turns this cycle into refused verbs and a black
 layer), [[B-094]] (the honest indicator for the same state), [[C-014]] (designs for the blind
 install this breaks), [[B-093]].
+
+## [ ] B-107 — an errored stack row flips to READY when the BRIDGE PROCESS dies: the browser's retained-intent projection reduces every non-played status (including `error`) to `loaded`, so a load that never got a layer presents as playable ⟨priority: high⟩
+
+**What:** While the SPA↔bridge WebSocket is up, a load that fails allocation shows on the stack
+as a red **ERROR / "no layer"** row — correct, and one such row accumulates per further failed
+load. The instant the bridge PROCESS dies (the WS drops), every one of those ERROR rows flips to
+**READY**. The mechanism is NOT the reconciler (see Notes — this was mis-hypothesised at filing
+and verified against merged `main` instead): the `Reconciler` runs IN the bridge and dies with
+it, so nothing on the bridge re-derives these rows. The BROWSER answers `stack.snapshot()` from
+its own retained intent instead — `WebSocketRuntime.#retainedProjection()` maps each retained
+item to `status: i.played ? 'unverified' : 'loaded'`, and `StackRetentionStore.isPlayed()` counts
+`error` as NOT played. So the round-trip is `error` → (mirror) `played:false` → (projection)
+`loaded` → the `airStateVisual` label **READY** (`theme.ts`). The retained intent
+(`RetainedStackItem`) carries no `status`/`errorCode` field, so the error has nowhere to live and
+is dropped the moment it is mirrored. `useStack` opts into `pullWhileDisconnected`, so the
+projection is pulled the moment the link goes `disconnected` — which is why the flip is immediate
+and hits every errored row at once. `StackRow`'s B-087 display mask rescues only a frozen
+`on-air` → `unverified`; there is NO equivalent mask for `error`, so the flip is unmasked. The
+collapse is status-BLIND in BOTH directions — the projection maps EVERY `played:false` status to
+`loaded`/READY, so `error` is only ONE instance. VERIFIED reachable: an item resting at `idle`
+after a CLEAR/`out` (an out is NOT a remove — the row stays on the stack, reconciled `idle`, and
+is published + mirrored as `played:false`) also projects to `loaded`/READY on bridge death.
+`loaded` → READY is the ONE correct case; `error` → READY (the owner's observation, and the
+dangerous one) and `idle` → READY are both lies — a failed or cleared row presenting as
+pre-rolled and playable. So `error` is one instance of a general defect, not the whole of it.
+
+**Why:** a status must NEVER improve when a link is lost. [[B-086]]/[[B-087]] established
+demote-on-silence for on-air claims — a too-confident state made honest; this is the SAME rule
+broken in the OPPOSITE direction, a FAILED state promoted to a confident, actionable one. READY
+invites the operator to PLAY a row that never loaded a producer and cannot play, on a link the SPA
+can no longer use in either direction. The collapse is status-BLIND: the projection preserves only
+the single `played` bit, so it is not specific to the layer-exhaustion trigger the owner hit —
+every error code reaches it, and so does a non-error `played:false` status: a cleared `idle` row
+projects to READY too (verified reachable, a milder lie than the errored case).
+
+**Generality check (done, PASSES):** a NON-layer error code reaches the identical errored state
+through the same path. `caspar-runtime.ts`'s `load()` acks `applyAck(seq, false,
+'unknown-template')` BEFORE `#allocate()` runs — a template that is simply not registered produces
+`status:'error'` with NO layer involved, and it projects to READY identically (`no-layer`,
+`no-layer-foreign-occupied`, `amcp-error` likewise). So this is a status-honesty defect in the
+retained-intent projection, not a pool-exhaustion symptom.
+
+**Acceptance:**
+
+- WHEN a stack row's reconciled status is any NON-PLAYED status — `error`, or `idle` after a
+  CLEAR — and the SPA↔bridge link drops (the bridge dies) THEN the published status stays honest:
+  it never resolves to `loaded`/READY, and each keeps its own meaning (an errored row reads
+  `error` or an explicit unverifiable state; a cleared row reads `idle`), because a lost link may
+  never IMPROVE a status
+- WHEN the retained-intent projection reduces a row to displayable state THEN distinct source
+  statuses stay distinct — an errored row (any errorCode, layer or not) and a cleared `idle` row
+  are each DISTINGUISHABLE from a cleanly-loaded one; the projection can never collapse `error`,
+  `idle` and `loaded` to the same output
+- WHEN the link returns THEN the authoritative reconciled status re-pulls (still `error` on the
+  bridge while the condition persists) and the honest state is restored
+
+**Notes:**
+
+- **Mechanism CORRECTED from the filing hypothesis.** The observed flip is NOT the reconciler's
+  `reconcileStatus` link-down clause: that runs in the bridge, dies with it, and its `setLinkDown`
+  demotes ONLY `on-air`/`playing` (an errored `ackedStatus:'error'` base stays `error`). On a
+  CasparCG link-drop with the bridge ALIVE the errored row correctly STAYS `error`. The flip is
+  exclusively the BROWSER-side retained-intent projection on bridge death — the SPA↔bridge link
+  ([[B-087]]'s domain), not the CasparCG link ([[B-086]]'s).
+- **Fix direction (do NOT implement):** it belongs in the browser retained-intent path —
+  `StackRetentionStore`/`RetainedStackItem` + `WebSocketRuntime.#retainedProjection` — either by
+  retaining the errored state so the projection renders it honestly, or by projecting a
+  never-loaded/errored row as something other than `loaded`/READY. NOT in the reconciler's
+  `reconcileStatus` (that site is dead when the flip happens).
+- Same honesty CLASS as [[B-086]] (CasparCG link-loss demotes on-air → `unverified`) and [[B-087]]
+  (SPA↔bridge link-loss masks a frozen on-air → `unverified`); the difference is DIRECTION — those
+  demote a state too confident, this one PROMOTES a failed state. Lives in the [[B-092]]
+  retained-intent projection.
+- **Not a regression from #405** (verified, not asserted): the projection + `isPlayed` are
+  [[B-092]] (`#343`, 2026-07-18) and the load-error ack is [[C-014]] (`#368`, 2026-07-19); both
+  predate R-021. R-021 stage 2a (`#404`) last-touched `WebSocketRuntime.ts` / `caspar-runtime.ts`
+  for the fixed-bank wire contract, not these lines; R-021 did not touch `reconciler.ts`
+  (`reconcileStatus` is [[B-100]], `#380`) or `StackRetentionStore.ts` at all.
+- **Owner product direction (2026-07-25), a decision not an open question:** the R-021 fixed-bank
+  model has the operator import/load onto PRE-DECLARED permanent rows rather than each load
+  creating a row and grabbing a layer, which removes the ad-hoc accumulation the owner hit. This
+  does NOT narrow the item — the defect is trigger-independent (any error code, no layer needed).
+  It gets WORSE: R-021's fixed rows are PERMANENT, so once stage 3 binds an item to a fixed slot,
+  an errored row that flips to READY also never leaves the screen.
+- **Open architectural question (record, do NOT answer):** whether the R-021 fixed bank COEXISTS
+  with the dynamic pool or eventually REPLACES it. On `main` the locked design COEXISTS —
+  `LayerManager` fences fixed slots from birth and `allocate()` never returns one even when the
+  dynamic range is exhausted (unit test T1, `packages/caspar-client/tests/layer-manager.test.ts`:
+  "allocate() never returns a fixed slot, even with the range otherwise exhausted"). The answer
+  shapes R-021 stage 3.
+- **Two status-derivation sites that can drift — and this bears directly on [[R-021]] stage 3
+  (record, do NOT redesign).** `#retainedProjection` derives display status INDEPENDENTLY of the
+  `Reconciler`, from the single `played` bit — a SECOND source of truth for row state, which is
+  exactly what can drift from the reconciler's. R-021 stage 2a deliberately locked against this for
+  the fixed-layer wire: its per-slot channel ships FACTS only, because "a bridge-computed row state
+  or verb list would be a SECOND derivation … that can drift from the renderer's — the exact
+  two-copies failure mode the repo's one-canonical-predicate rule exists to prevent"
+  (`openspec/changes/runtime-fixed-layers/design.md`, the stage-2a note). The retained path ALREADY
+  contains that second derivation, and it dropping `error`/`errorCode` (this very bug) is one
+  symptom of it. It bears on stage 3 concretely: a fixed-slot BINDING must survive a bridge restart,
+  so it enters this SAME retained intent — and the retained projection DROPS every field it does not
+  model. Whoever implements stage 3 must extend `RetainedStackItem` + `#retainedProjection` to carry
+  the binding, or a restart will silently lose it, exactly as the error state is lost here. Cross-ref
+  the R-021 change (`openspec/changes/runtime-fixed-layers/`).
+- **Reproduction is MANUAL** (owner, real Runtime + real bridge, 2026-07-25): load past the dynamic
+  pool size so further loads error with "no layer", then kill the bridge process — the ERROR rows
+  flip to READY. No automated reproduction exists.
+
+## [ ] B-108 — a bridge restart silently DROPS stack rows it cannot re-seat: `restore()` skips them and returns a `skipped` count no UI surface consumes ⟨priority: medium⟩
+
+**What:** on bridge restart the browser re-delivers its retained stack intent
+(`StackRestoreChannel`) and the bridge's `restore()` re-seats what it can. Any item it CANNOT
+re-seat is skipped and simply disappears from the stack — nothing tells the operator that rows
+they were looking at a moment ago are gone, or why. The information is already computed:
+`restore()` returns `{ restored, skipped }`, and `packages/shared-ipc/src/channels/stack.ts`
+documents `skipped` as "intents the bridge declined (an item it already holds, an unregistered
+template, no free layer)". The gap is that NOTHING consumes it — `WebSocketRuntime.#resync` awaits
+the restore call and DISCARDS its return value.
+
+**Why:** rows vanishing with no operator action silently desynchronises the operator's model of
+the stack from reality — the same broadcast-safety hazard as a lie about on-air state, one step
+removed. The count and its meaning already exist; only the operator-facing surface is missing.
+Scope is the GENERAL case, not the exhausted range the owner happened to trigger: `restore()`'s
+docstring names THREE skip reasons, and only one is layer exhaustion — (1) an item the live bridge
+ALREADY holds (a page reload against a healthy bridge — benign, the row is still there, backed by
+the live bridge, and nothing is lost), (2) an unregistered template (the SPA re-delivers its
+library FIRST, so this means the template is genuinely gone), and (3) no free layer (the exhausted
+range). Reasons (2) and (3) are real LOSSES — the row disappears; reason (1) is not.
+
+**Acceptance:**
+
+- WHEN a restore skips items that were on the operator's stack and are now GONE (the
+  unregistered-template and no-free-layer reasons) THEN the operator is told how many and why, in
+  a surface they will actually see
+- WHEN a restore skips ONLY the benign already-held case (a page reload against a healthy bridge,
+  which loses no row) THEN nothing is surfaced — no false alarm
+- (the widget is deliberately unspecified — that is for whoever implements)
+
+**Notes:**
+
+- **Verified: NO existing UI surface consumes `skipped`.** `WebSocketRuntime.#resync` does `await
+this.#invoke(StackRestoreChannel, …)` and drops the `{ restored, skipped }` result; nothing
+  subscribes to it or renders it. So this is a real gap, not a narrower one — the item is not
+  overstated.
+- The `skipped` count and its three-reason meaning already exist ([[B-092]]: `restore()` returns
+  it; `packages/shared-ipc/src/channels/stack.ts` documents it). Only the surface is missing.
+- **Not a regression from #405** (verified, not asserted): `restore()` and its skip/return are
+  [[B-092]] (`#343`, 2026-07-18), predating R-021. R-021 stage 2a (`#404`) last-touched
+  `caspar-runtime.ts` for the fixed-bank wire contract, not this path.
+- **Owner product direction (2026-07-25), a decision not an open question:** the R-021 fixed-bank
+  model (import/load onto pre-declared permanent rows) does NOT narrow this item — two of the three
+  skip reasons survive under fixed rows (a fixed slot can still lack its template; a dynamic load
+  can still exhaust the dynamic range), so a restore can still drop rows silently.
+- **Open architectural question (record, do NOT answer):** whether the R-021 fixed bank COEXISTS
+  with the dynamic pool or eventually REPLACES it. On `main` the locked design COEXISTS —
+  `LayerManager` fences fixed slots from birth and `allocate()` never returns one even when the
+  dynamic range is exhausted (unit test T1, `packages/caspar-client/tests/layer-manager.test.ts`).
+  The answer shapes R-021 stage 3.
+- **Reproduction is MANUAL** (owner, 2026-07-25): load past the pool size, kill the bridge, restart
+  it — only the layer-holding rows come back; the rest are gone with no message. No automated
+  reproduction exists.
+
+## [ ] B-109 — a bridge restart RE-ADDs a deliberately CLEARed graphic onto its layer: retention stores `played:false` for both `idle` and `loaded`, so `restore()` cannot tell "cleared, leave empty" from "loaded, re-seat" and re-loads the producer UNASKED ⟨priority: high⟩
+
+**What:** an operator CLEARs a graphic (the stack's `out` verb) to take it off air but keeps the
+row to re-take later — an `out` is NOT a `remove`, so the row stays on the stack, reconciled
+`idle`, with its layer slot still RESERVED (`caspar-runtime.ts` `out()` sends `CG CLEAR` and
+deletes `#loaded`, but NOT `#slots` / `rec.slot`; its comment: "the slot stays RESERVED (the item
+is still on the stack, idle) until remove"). When the bridge PROCESS restarts, the browser
+re-delivers its retained stack intent and the cleared row is not only re-seated — its producer is
+RE-LOADED onto the layer by a `CG ADD` the operator never issued. This is the ON-AIR/wire twin of
+[[B-107]]; both grow from the same root — retention does not model status.
+
+Traced on merged `main`: `StackRetentionStore` reduces reconciled state to `played` + slot and
+DROPS status (`isPlayed('idle')` is `false`, exactly like `loaded`), so a cleared `idle` row and a
+pre-rolled `loaded` row are IDENTICAL in retained intent — `{ played:false, slot }`. On restart
+`restore()` → `#slotForRestore` reserves the retained slot (the item is NOT skipped: it has a slot
+and a registered template, so this is NOT [[B-108]]'s drop path), `restoreItem` seeds it at
+`loaded`, and `#decidePendingRestores` finds the layer SILENT (the operator's CLEAR emptied it) and
+takes its "silent → the producer is gone, so re-ADD as loaded" branch: `applyIntent({kind:'load'})`
+
+- `#sendAdd` = `CG ADD`. That branch exists to recover a LOADED item whose producer a CasparCG
+  restart destroyed; it cannot tell that apart from a producer the OPERATOR destroyed with a CLEAR,
+  because retention dropped the one bit that distinguished them.
+
+**Why:** this is an ON-AIR/wire behaviour defect, not a display one. A graphic the operator
+deliberately removed is put back onto its layer by a `CG ADD` nobody asked for; the producer is
+resident again and the row returns as `loaded`/READY — one `CG PLAY` from air. The operator's model
+("I cleared that; the layer is empty") is silently falsified against the wire after a restart. It
+directly UNDERMINES the [[B-092]] restart-survival design (`#343`), whose whole safety property is
+"a restore can never change what is on a layer" — it is occupancy-aware precisely so it never CLEARs
+a LIVE layer, yet the same path RE-ADDs onto a layer the operator EMPTIED: the mirror-image
+violation. It protects a surviving producer but resurrects a cleared one.
+
+**Acceptance:**
+
+- WHEN an item is reconciled `idle` because the operator CLEARed it (out, not remove) and the bridge
+  restarts THEN `restore()` must NOT re-ADD its producer onto the layer — a cleared graphic stays
+  cleared until the operator re-takes it
+- WHEN retained intent is re-seated after a restart THEN a cleared (`idle`) row is DISTINGUISHABLE
+  from a pre-rolled (`loaded`) row, so the re-ADD decision can honour "the operator emptied this
+  layer on purpose"
+- WHEN the layer is silent at restore because the operator CLEARed it THEN silence is NOT read as "a
+  loaded producer was lost, re-ADD it" — the `#decidePendingRestores` silent branch must not
+  resurrect a deliberately cleared item
+
+**Notes:**
+
+- **Root cause SHARED with [[B-107]]:** `StackRetentionStore` reduces reconciled state to `played` +
+  slot and drops `status`, so `idle` (cleared) and `loaded` (pre-rolled) become the same retained
+  record. B-107 is the DISPLAY face (`#retainedProjection` shows both as READY); this is the WIRE
+  face (`restore()` re-ADDs both). A fix that teaches retention to carry the cleared/`idle`
+  distinction addresses both faces.
+- **NOT [[B-108]]'s territory** — this is the exact prediction that gated the filing, and it came
+  back FALSE. B-108 is items restore SKIPS (no slot / unregistered template / no free layer). The
+  cleared item is NOT skipped, because `out` RETAINS its slot: verified `out()` never calls
+  `#slots.delete` or `#layers.deallocate` (only `remove()` does, `caspar-runtime.ts:1579`), so
+  `#slotForRestore` reserves the retained slot and restore RE-SEATS the item. The slot survives the
+  CLEAR, which is exactly why the chain is reachable.
+- **Reachable in NORMAL operation, not an edge case:** clearing a graphic but keeping its row IS the
+  ordinary out-vs-remove workflow, and [[B-092]] restore runs on every bridge restart against a
+  healthy primary with a warm OSC tap. (On an OSC-blind install `#decidePendingRestores` REFUSES to
+  decide and sends nothing — so the re-ADD fires on OSC-working installs, the intended config.)
+- **Precise on the wire:** the re-ADD is `CG ADD` with play-on-load OFF, so the producer is re-loaded
+  HIDDEN (B-053: the html page stays hidden until the template's own play()), not re-played. The
+  defect is the UNREQUESTED wire mutation restoring a cleared producer to `loaded`/READY, not an
+  instantly-visible graphic — but it is one operator take from air, and the wire no longer matches
+  what the operator did.
+- **Verification level:** filed from a VERIFIED code trace on merged `main` (every step read:
+  `out()` retains the slot; `toRetained`/`isPlayed` drop status; `#slotForRestore` reserves;
+  `#decidePendingRestores` silent → `#sendAdd`), NOT from an owner sighting of this specific chain
+  and NOT from a runtime/hardware run. Fix direction (do NOT implement): model the cleared/`idle`
+  distinction in `RetainedStackItem` so restore leaves a cleared layer empty. Not resolved here.
+- **Reproduction is MANUAL** (no automated reproduction exists): load a graphic, take it, CLEAR it
+  (leaving the idle row on the stack), then kill and restart the bridge — the producer is re-ADDed
+  onto its layer and the row returns READY.

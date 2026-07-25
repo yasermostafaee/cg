@@ -227,6 +227,29 @@ FETCHED head, not the checkout this branch was cut from — the exact re-derive-
 discipline this file prescribes. The duplicate audit still prints exactly `B-056` and `B-080`. The
 space stays contiguous: `B-001` … `B-106`, no gaps. **Next free: `B-107`.**
 
+**Re-audited 2026-07-25** against `main` (`3731dac`, after #406). `B-107` and `B-108` are now
+taken — two Runtime bugs from an owner visual check, both [bugs-runtime.md](bugs-runtime.md):
+**B-107** (an errored stack row flips to READY when the bridge PROCESS dies — the browser's
+retained-intent projection collapses every non-played status, including `error`, to `loaded`) and
+**B-108** (a bridge restart silently drops stack rows `restore()` cannot re-seat; the `skipped`
+count reaches no UI surface). Verified free immediately before the commit that writes the
+headings: no `## [.] B-107` / `B-108` heading on fetched `origin/main`, on any remote ref (only
+`main` + `fix/d128-canvas-video-render`), or on disk in either sibling working tree — the only
+prior occurrence of `B-107` anywhere was THIS file's own "next free" pointer (the documented false
+positive), and `B-108` appeared nowhere. The highest heading anywhere was `B-106`. The space stays
+contiguous: `B-001` … `B-108`, no gaps. **Next free: `B-109`.**
+
+**Re-audited 2026-07-25 (same session, follow-up)** against `main` (`3731dac`). `B-109` is now
+taken — one Runtime bug from a bounded code trace off [[B-107]], [bugs-runtime.md](bugs-runtime.md):
+**B-109** (a bridge restart RE-ADDs a deliberately CLEARed graphic onto its layer, because retention
+stores `played:false` for both `idle` and `loaded` and keeps the slot, so `restore()` re-seats and
+re-ADDs it unasked). Verified free immediately before the commit that writes the heading: no `## [.]
+B-109` heading on fetched `origin/main`, on any remote ref (`main`, `fix/d128-canvas-video-render`,
+and this branch `docs/file-stack-status-honesty-bugs`), or on disk in either sibling working tree —
+the only prior occurrence of `B-109` anywhere was THIS file's own "next free" pointer (the documented
+false positive). The highest heading anywhere was `B-108`. The space stays contiguous: `B-001` …
+`B-109`, no gaps. **Next free: `B-110`.**
+
 ### RECOMMENDATION (recorded, not implemented): retire the "next free" pointer
 
 All three recorded drift modes are one disease, and the pointer is it. Look at what it actually
