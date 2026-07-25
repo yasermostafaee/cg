@@ -1075,6 +1075,63 @@ setting that produced it in `provenance.premultipliedAlpha`. FOLLOW-UP (flagged,
 provenance RECORDS the flag but the Inspector's read-only provenance line does not SURFACE
 it, so the operator currently has no UI to tell which setting an existing asset used.
 
+## FAST PATH BY DEFAULT — the corrections become opt-in (owner decision, 2026-07-25)
+
+**The bug behind "minutes vs the spike's 13 seconds":** the pixel-math stages were NOT
+gated on the toggle. `buildAlphaGraph` ran on EVERY import — with the premultiplied toggle
+OFF it still built the full bleed graph (GEQ_PREMULT + boxblur + GEQ_BLED + overlay +
+alphamerge), which the ladder measured at ~6× the whole conversion cost. The toggle only
+switched the straight branch.
+
+**The model now shipped:** DEFAULT = the spike's shape. A default import runs NO
+un-premultiply and NO bleed — no filter at all (a crop rides a plain `-vf crop`) — with the
+QUALITY settings KEPT (crf 4 / qmax 16 / -g 25: they fixed the alpha leak 56.7% → ~0%, and
+measured NATIVELY on the 5 s proxy they encode FASTER than the spike settings — 0.8 s vs
+1.8 s; they were never the cost). Corrections are two INDEPENDENT opt-in checkboxes, each
+stating its cost in the UI:
+
+- **Premultiplied alpha** (black-fringe fix) — alone it is a single linear `-vf
+format=rgba,geq` chain (no split/overlay graph).
+- **Alpha bleed** (residual-leak robustness) — genuinely optional, never silently attached
+  to the other; needs the full `-filter_complex` graph.
+
+Two checkboxes (not one with a sub-option) because the stages are orthogonal in the graph
+builder and in need: a straight source can want the bleed (leak protection) and a
+premultiplied one can skip it; nesting bleed under premultiplied would deny it to straight
+sources — where it originally shipped as unconditional protection.
+
+**Measured (REAL app, real wasm, 5 s 1920×282 BGRA proxy of the owner's clip, this machine):**
+
+| corrections           | click → result | convert exec | everything else                          |
+| --------------------- | -------------- | ------------ | ---------------------------------------- |
+| none (DEFAULT)        | **10.6 s**     | 9.3 s        | verify 0.8 s · alpha 0.15 s · rest 0.1 s |
+| premultiplied         | 27.7 s (~3×)   | 26.7 s       | (same ~1.3 s)                            |
+| premultiplied + bleed | 46.5 s (~5×)   | 44.9 s       | (same ~1.3 s)                            |
+
+Probe+poster (the READY gate): 0.3 s. Source-alpha sampling: 0.07 s (off the READY path;
+shares the worker mutex, so an immediate convert click queues behind it — negligible).
+NOTHING else is on the hot path: the default's remaining delta over the ladder's 5.4 s
+spike baseline is the encoder itself on this proxy's denser content (the native A/B above
+rules the quality settings out). The playability verify (~0.7 s) and the poster parity
+(~0.05 s healthy) STAY — both are load-bearing guards. A per-import
+`[video-import] timing —` console line reports every stage so the cost stays visible.
+
+**Result-panel pointers (the operator's new decision loop):** with corrections off by
+default, the panel must say WHICH checkbox to try. Source stats now measure
+`straightEvidenceFrac` — of the semi-transparent pixels, how many have colour EXCEEDING
+alpha, which is impossible under premultiplied alpha — so a premultiplied-looking source
+(~0 evidence with real semi-transparency) gets "if you see a black fringe, re-import with
+Premultiplied alpha"; an output whose visible-alpha fraction notably exceeds the source's
+gets "if you see dark smudges/halos around motion, re-import with Alpha bleed".
+
+**Revision + dedupe:** `CONVERTER_REVISION` → `2026-07-25.4`. The encoder args are
+unchanged, but the revision contract keys on OUTPUT — and a default import's output
+genuinely changes (no bleed) — so the bump is required; it forces NO re-imports (≤ .3
+bleed-on assets are not defective). Provenance records `alphaBleed` alongside
+`premultipliedAlpha`, and the pre-convert dedupe is REVISION-GATED + correction-matched: an
+asset from an older revision (where the bleed ran implicitly, unrecorded) or a different
+correction set is a genuinely different output and never offered as "use existing".
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

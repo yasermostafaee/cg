@@ -186,6 +186,37 @@ SHALL be recorded in its provenance (`premultipliedAlpha`).
   IN instead, the conversion un-premultiplies and the stored asset's provenance records
   `premultipliedAlpha: true`
 
+### Requirement: A default import takes the FAST PATH — no pixel-math stage runs
+
+A default conversion SHALL run NO pixel-math stage — neither the un-premultiply nor the alpha
+bleed — matching the spike's fast shape, while the QUALITY settings (bounded quantiser, 1 s
+GOP) SHALL remain on the default path. The alpha bleed SHALL be a separate, genuinely optional
+opt-in — never silently attached to the premultiplied correction — and each correction's UI
+SHALL state that opting in makes conversion substantially slower. The correction set that
+produced each stored asset SHALL be recorded in provenance, and the pre-convert duplicate
+match SHALL treat a different correction set or converter revision as a different output. The
+result panel SHALL point the operator at the relevant correction when its readings suggest one
+(a premultiplied-looking source; visible alpha leaked into source-transparent regions).
+
+#### Scenario: A default import converts with no filters; a crop stays cheap
+
+- **WHEN** the operator imports with neither correction ticked
+- **THEN** the conversion runs no un-premultiply and no bleed (with an opt-in crop riding a
+  plain crop filter), and the quality settings are still applied
+
+#### Scenario: Each correction adds exactly its own stage
+
+- **WHEN** the operator ticks one correction
+- **THEN** the conversion adds exactly that correction's stage and not the other's, and the
+  stored provenance records the exact correction set
+
+#### Scenario: The result panel points at the correction the readings suggest
+
+- **WHEN** a default import's readings show a premultiplied-looking source, or visible alpha
+  leaked into source-transparent regions
+- **THEN** the result panel names the specific correction to re-import with (Premultiplied
+  alpha / Alpha bleed) instead of leaving the operator to guess
+
 ### Requirement: A stored clip's at-rest poster is produced by ONE robust routine on every surface
 
 Every stored-asset poster surface SHALL produce the at-rest frame through ONE shared routine —

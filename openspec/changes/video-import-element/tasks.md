@@ -257,6 +257,32 @@
       surface it. Tests updated: modal default/opt-in unit tests; the fringe E2E now opts IN
       explicitly (its fixture IS premultiplied).
 
+- [x] 4b.5 FAST PATH BY DEFAULT (owner decision, 2026-07-25 — the "minutes vs the spike's
+      13 s" bug): the two pixel-math stages were UNCONDITIONALLY on the hot path — the bleed
+      graph (2× geq + boxblur + overlay + alphamerge) ran on EVERY import regardless of the
+      premultiplied toggle. Now `buildConvertArgs` takes BOTH corrections as independent
+      opt-ins: default = NO filter at all (a crop rides a plain `-vf crop`); premultiplied
+      alone = a single linear `-vf format=rgba,geq` chain; bleed (alone or with premultiplied)
+      = the full `-filter_complex` graph. QUALITY settings stay on the default path (measured
+      NATIVELY on the 5 s proxy: crf4/qmax16/g25 encodes in 0.8 s vs the spike settings'
+      1.8 s — not the cost). Two INDEPENDENT checkboxes (bleed genuinely optional, never
+      silently attached — a straight source can want the bleed, a premultiplied one can skip
+      it), each stating its cost in the UI. MEASURED in the REAL app (wasm, 5 s 1920×282 BGRA
+      proxy of the owner's clip): default click→result 10.6 s (convert exec 9.3 s, playability
+      verify 0.8 s, output-alpha 0.15 s, store+readback+poster ≈ 0.1 s, probe+poster 0.3 s,
+      source-alpha sampling 0.07 s) vs premultiplied-on 27.7 s (~3×) vs both-on 46.5 s (~5×).
+      A per-import `[video-import] timing —` console line now reports every stage's wall time.
+      Result panel HINTS point at the relevant correction: a premultiplied-looking source
+      (semi-transparent pixels whose colour never exceeds alpha — impossible under premult) →
+      "re-import with Premultiplied alpha"; leaked visible alpha (output visible-frac ≫
+      source's) → "re-import with Alpha bleed". `CONVERTER_REVISION` bumped to `2026-07-25.4`
+      (the OUTPUT-changes contract requires it: a default import no longer carries the bleed);
+      no re-import is forced — ≤ .3 bleed-on assets are not defective. Provenance records
+      `alphaBleed` (additive schema field); the pre-convert dedupe is REVISION-GATED and
+      matches the correction set (different corrections = genuinely different output). Tests:
+      graph-shape matrix (default filterless / each correction adds exactly its own stage /
+      quality args in all shapes), dedupe revision+corrections matrix, modal opt-in tests.
+
   **Phase 5 still owes the EXPORTER-side walk:** `runtime.ts`'s on-air/export asset-src walk is
   `img[data-cg-asset-id]`-only (Phase-3 note); Phase 5 widens it to `<video data-cg-asset-id>`
   (packaged relative path for `.vcg`, base64 `data:` for single-file) so a video renders + plays

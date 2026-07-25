@@ -119,6 +119,15 @@ export function VideoImportModal(props: {
   // rawvideo-BGRA case). rawvideo/BGRA carries no premultiplied flag, so this
   // cannot be auto-detected — it is an explicit operator choice (design.md).
   const [premultipliedAlpha, setPremultipliedAlpha] = useState(false);
+  // D-128 FAST PATH (owner decision 2026-07-25) — the ALPHA BLEED is the second
+  // opt-in pixel-math correction. It ran UNCONDITIONALLY before (the bug behind
+  // "minutes vs the spike's seconds": the bleed graph + its geq stages were on
+  // every import's hot path regardless of the premultiplied toggle). Default
+  // OFF; the operator opts in when residual compression leak reads as dark
+  // smudges/halos around moving content on air. Independent of the
+  // premultiplied toggle — a straight source can want the bleed and a
+  // premultiplied one can skip it; the graph builder composes them.
+  const [alphaBleed, setAlphaBleed] = useState(false);
   const converter = useRef<Converter | null>(null);
   const cancelled = useRef(false);
   const hashAbort = useRef<AbortController | null>(null);
@@ -138,18 +147,28 @@ export function VideoImportModal(props: {
       try {
         const conv = await loadConverter();
         converter.current = conv;
+        const probeT0 = performance.now();
         const result = await conv.probeSource(props.file, { signal: controller.signal });
         if (!alive) return;
         if (!result.ok) {
           setPhase({ kind: 'probe-failed', reason: result.reason, logTail: result.logTail });
           return;
         }
+        // D-128 fast-path timing — probe + poster gate READY (the crop UI needs
+        // both); everything after READY is either operator-time or convert-time.
+        console.warn(
+          `[video-import] timing — probe+poster: ${String(Math.round(performance.now() - probeT0))} ms (critical path to READY)`,
+        );
         setProbe(result.probe);
         setPosterUrl(result.posterUrl);
         setCrop({ x: 0, y: 0, width: result.probe.width, height: result.probe.height });
         setPhase({ kind: 'ready' });
         // Alpha diagnostics — non-blocking, never gates the READY state; a sampling
         // failure yields null and the import proceeds without the warning/guard.
+        // NOTE (fast-path audit): the sampling execs SHARE the single-threaded
+        // converter worker's operation mutex, so an IMMEDIATE "Convert & import"
+        // click queues behind them — the timing line makes that cost visible.
+        const sampleT0 = performance.now();
         void conv
           .sampleSourceAlpha(props.file, result.probe.durationMs)
           .then((stats) => {
@@ -159,6 +178,9 @@ export function VideoImportModal(props: {
               // console.warn (not info): the allowed channel, and this reading is the
               // one an operator pastes back when a clip renders invisible.
               console.warn(`[video-import] SOURCE alpha: ${conv.formatAlphaStats(stats)}`);
+              console.warn(
+                `[video-import] timing — source-alpha sampling: ${String(Math.round(performance.now() - sampleT0))} ms (off the READY path; shares the converter worker, so an immediate convert queues behind it)`,
+              );
             }
           })
           .catch(() => undefined);
@@ -192,6 +214,8 @@ export function VideoImportModal(props: {
           sourceSha256: phase.sourceSha256,
           targetFps: projectFps,
           crop: effectiveCrop,
+          premultipliedAlpha,
+          alphaBleed,
         })
       : null;
   useEffect(() => {
@@ -289,6 +313,8 @@ export function VideoImportModal(props: {
       sourceSha256,
       targetFps: projectFps,
       crop: effectiveCrop,
+      premultipliedAlpha,
+      alphaBleed,
     });
     if (existing !== null) {
       // The specific matching asset is recomputed LIVE in render (Bug 4) — carry
@@ -317,14 +343,29 @@ export function VideoImportModal(props: {
       precomputedHash !== undefined
         ? Promise.resolve(precomputedHash)
         : hashSourceFile(props.file, { signal: hashCtrl.signal }).catch(() => undefined);
-    const bytes = await conv.convertToWebm({
-      file: props.file,
-      targetFps: projectFps,
-      crop,
-      premultipliedAlpha,
-      onProgress: (ratio) =>
-        setPhase({ kind: 'converting', progress: Math.max(0, Math.min(1, ratio)) }),
-    });
+    // D-128 FAST PATH — per-stage wall times, summarized in ONE console.warn at
+    // the end so the owner can see where an import's seconds actually go (the
+    // reading that exposed the unconditional bleed in the first place).
+    const stageMs: Record<string, number> = {};
+    const timed = async <T,>(label: string, run: () => Promise<T>): Promise<T> => {
+      const t0 = performance.now();
+      try {
+        return await run();
+      } finally {
+        stageMs[label] = Math.round(performance.now() - t0);
+      }
+    };
+    const bytes = await timed('convert', () =>
+      conv.convertToWebm({
+        file: props.file,
+        targetFps: projectFps,
+        crop,
+        premultipliedAlpha,
+        alphaBleed,
+        onProgress: (ratio) =>
+          setPhase({ kind: 'converting', progress: Math.max(0, Math.min(1, ratio)) }),
+      }),
+    );
     if (bytes === null) {
       hashCtrl.abort();
       hashAbort.current = null;
@@ -355,7 +396,9 @@ export function VideoImportModal(props: {
       // and nothing is stored. Also the duration measurement (`Duration: N/A` sources).
       const expectedW = crop?.width ?? probe.width;
       const expectedH = crop?.height ?? probe.height;
-      const verdict = await conv.verifyConvertedClip(bytes, expectedW, expectedH);
+      const verdict = await timed('playability-verify', () =>
+        conv.verifyConvertedClip(bytes, expectedW, expectedH),
+      );
       if (!verdict.ok) {
         console.error(
           `[video-import] converted clip FAILED verification (${verdict.reason}) — ffmpeg log tail:\n` +
@@ -374,7 +417,7 @@ export function VideoImportModal(props: {
       // is itself fully transparent is legibly WARNED about in the modal instead (a
       // legitimately mostly-transparent graphic is normal; the comparison is always
       // against the source's own profile, never an absolute threshold).
-      const outputAlpha = await conv.sampleOutputAlphaStats(bytes);
+      const outputAlpha = await timed('output-alpha', () => conv.sampleOutputAlphaStats(bytes));
       console.warn(
         `[video-import] alpha profile — source: ${
           sourceAlpha !== null ? conv.formatAlphaStats(sourceAlpha) : 'unavailable'
@@ -415,20 +458,23 @@ export function VideoImportModal(props: {
       // failed — provenance omits it and the post-convert sha dedupe still holds.
       const sourceSha256 = await hashPromise;
       const webmName = props.file.name.replace(/\.[^.]*$/, '') + '.webm';
-      const { asset } = await window.cg.assets.storeBytes({
-        bytes,
-        filename: webmName,
-        kind: 'video',
-        provenance: buildProvenance({
-          sourceFilename: props.file.name,
-          probe,
-          targetFps: projectFps,
-          crop,
-          sourceSha256,
-          sourceBytes: props.file.size,
-          premultipliedAlpha,
+      const { asset } = await timed('store', () =>
+        window.cg.assets.storeBytes({
+          bytes,
+          filename: webmName,
+          kind: 'video',
+          provenance: buildProvenance({
+            sourceFilename: props.file.name,
+            probe,
+            targetFps: projectFps,
+            crop,
+            sourceSha256,
+            sourceBytes: props.file.size,
+            premultipliedAlpha,
+            alphaBleed,
+          }),
         }),
-      });
+      );
       // D-128 READBACK — a store that silently truncates presents exactly like the
       // field failure (every surface blank). The stored asset must serve back the
       // verified byte count, or the operator sees an error instead of a dead asset.
@@ -436,7 +482,7 @@ export function VideoImportModal(props: {
       const mismatch =
         url === null
           ? 'stored asset has no readable URL'
-          : await conv.verifyStoredReadback(url, bytes.byteLength);
+          : await timed('readback', () => conv.verifyStoredReadback(url, bytes.byteLength));
       if (mismatch !== null) {
         console.error(`[video-import] stored clip FAILED readback verification: ${mismatch}`);
         setPhase({
@@ -456,7 +502,9 @@ export function VideoImportModal(props: {
       // is still producible (~1 s); only a clip whose poster cannot be produced
       // at all fails — loudly, at import.
       const posterMismatch =
-        url === null ? null : await verifyStoredPoster(url, posterTimeMs(measured));
+        url === null
+          ? null
+          : await timed('poster-parity', () => verifyStoredPoster(url, posterTimeMs(measured)));
       if (posterMismatch !== null) {
         console.error(`[video-import] stored clip FAILED poster verification: ${posterMismatch}`);
         setPhase({
@@ -473,6 +521,16 @@ export function VideoImportModal(props: {
         outputAlpha !== null &&
         sourceAlpha.opaqueFrac > 0.02 &&
         outputAlpha.opaqueFrac < sourceAlpha.opaqueFrac * 0.6;
+      // The one-line cost breakdown the owner asked for — every stage on the
+      // path from "Convert & import" to the result panel, plus which
+      // corrections (the expensive pixel-math stages) were on.
+      console.warn(
+        `[video-import] timing — ${Object.entries(stageMs)
+          .map(([k, v]) => `${k}: ${String(v)} ms`)
+          .join(
+            ', ',
+          )} (corrections: premultiplied=${String(premultipliedAlpha)}, bleed=${String(alphaBleed)})`,
+      );
       setPhase({
         kind: 'result',
         result: { asset, durationMs: measured, width: expectedW, height: expectedH },
@@ -755,8 +813,26 @@ export function VideoImportModal(props: {
               </label>
               <span className={s.meta}>
                 {premultipliedAlpha
-                  ? 'On — un-premultiplies a legacy premultiplied (matted-against-black) source to remove the black fringe on soft edges. A source that is already correct will be visibly damaged by this — turn it back off unless you see the fringe.'
-                  : 'Off (default) — the source is used as-is. Turn on only for a legacy premultiplied/matted source (e.g. an After Effects / rawvideo-BGRA archive clip) showing a black fringe on soft edges.'}
+                  ? 'On — un-premultiplies a legacy premultiplied (matted-against-black) source to remove the black fringe on soft edges. Makes conversion SUBSTANTIALLY slower (~3× on measured clips). A source that is already correct will be visibly damaged by this — turn it back off unless you see the fringe.'
+                  : 'Off (default) — the source is used as-is. Turn on only for a legacy premultiplied/matted source (e.g. an After Effects / rawvideo-BGRA archive clip) showing a black fringe on soft edges. Opting in makes conversion substantially slower.'}
+              </span>
+            </div>
+
+            <div className={s.fieldsRow}>
+              <label className={s.fieldLabel}>
+                <input
+                  type="checkbox"
+                  checked={alphaBleed}
+                  disabled={busy}
+                  data-testid="video-alpha-bleed-toggle"
+                  onChange={(e) => setAlphaBleed(e.target.checked)}
+                />{' '}
+                Alpha bleed (edge-colour fill)
+              </label>
+              <span className={s.meta}>
+                {alphaBleed
+                  ? 'On — fills transparent regions with colour extended from the nearest content, so any residual compression leak shows local colour instead of black smudges/halos around motion. Makes conversion SUBSTANTIALLY slower (~6× with both corrections on measured clips).'
+                  : 'Off (default) — no fill. Turn on if the placed clip shows dark smudges/halos around moving content on air. Opting in makes conversion substantially slower.'}
               </span>
             </div>
 
@@ -782,6 +858,32 @@ export function VideoImportModal(props: {
                           : `✓ Alpha preserved (source ${(sourceAlpha.opaqueFrac * 100).toFixed(1)}% opaque → ` +
                             `output ${(phase.outputAlpha.opaqueFrac * 100).toFixed(1)}%)`}
                   </div>
+                  {/* D-128 fast-path — with the corrections OFF by default, the panel
+                      must POINT AT the relevant checkbox when the readings suggest one,
+                      instead of leaving the operator to guess which to try. */}
+                  {!premultipliedAlpha &&
+                    sourceAlpha !== null &&
+                    sourceAlpha.semiSampled > 500 &&
+                    sourceAlpha.straightEvidenceFrac < 0.02 && (
+                      <div data-testid="video-premult-hint">
+                        ⚠ The source's semi-transparent pixels look PREMULTIPLIED (colour never
+                        exceeds alpha). If the placed clip shows a black fringe on soft edges,
+                        re-import with “Premultiplied alpha” ticked.
+                      </div>
+                    )}
+                  {!alphaBleed &&
+                    sourceAlpha !== null &&
+                    phase.outputAlpha !== null &&
+                    phase.outputAlpha.nonTransparentFrac >
+                      sourceAlpha.nonTransparentFrac * 1.5 + 0.002 && (
+                      <div data-testid="video-bleed-hint">
+                        ⚠ Compression leaked visible alpha into source-transparent regions (
+                        {(sourceAlpha.nonTransparentFrac * 100).toFixed(2)}% →{' '}
+                        {(phase.outputAlpha.nonTransparentFrac * 100).toFixed(2)}% visible). If the
+                        clip shows dark smudges/halos around moving content on air, re-import with
+                        “Alpha bleed” ticked.
+                      </div>
+                    )}
                   <details>
                     <summary>Raw numbers</summary>
                     <div className={s.meta}>

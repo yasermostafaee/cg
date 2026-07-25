@@ -357,6 +357,17 @@ export interface AlphaStats {
   opaqueFrac: number;
   /** Total pixels sampled (across frames). */
   sampled: number;
+  /**
+   * D-128 fast-path — of the SEMI-transparent sampled pixels (8 ≤ α ≤ 250, where
+   * premultiplied and straight alpha actually differ), the fraction whose colour
+   * exceeds their alpha (max(r,g,b) > α + 2). That is IMPOSSIBLE under
+   * premultiplied (matted) alpha — every channel is ≤ α there — so ~0 with real
+   * semi-transparency present means the source is CONSISTENT WITH premultiplied
+   * alpha, and the result panel can point the operator at the correction.
+   */
+  straightEvidenceFrac: number;
+  /** How many semi-transparent pixels `straightEvidenceFrac` is based on. */
+  semiSampled: number;
 }
 
 function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
@@ -365,6 +376,8 @@ function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
   let nonTransparent = 0;
   let opaque = 0;
   let n = 0;
+  let semi = 0;
+  let straightEvidence = 0;
   for (const buf of buffers) {
     for (let i = 3; i < buf.length; i += 4) {
       const a = buf[i] as number;
@@ -373,6 +386,13 @@ function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
       if (a > maxA) maxA = a;
       if (a >= 8) nonTransparent++;
       if (a >= 250) opaque++;
+      if (a >= 8 && a <= 250) {
+        semi++;
+        const r = buf[i - 3] as number;
+        const g = buf[i - 2] as number;
+        const b = buf[i - 1] as number;
+        if (r > a + 2 || g > a + 2 || b > a + 2) straightEvidence++;
+      }
     }
   }
   return {
@@ -381,6 +401,8 @@ function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
     nonTransparentFrac: n > 0 ? nonTransparent / n : 0,
     opaqueFrac: n > 0 ? opaque / n : 0,
     sampled: n,
+    straightEvidenceFrac: semi > 0 ? straightEvidence / semi : 1,
+    semiSampled: semi,
   };
 }
 
@@ -690,8 +712,10 @@ export async function convertToWebm(opts: {
   file: File;
   targetFps: number;
   crop?: CropRect | undefined;
-  /** D-128 — un-premultiply a matted-against-black source (fringe fix). */
+  /** D-128 — un-premultiply a matted-against-black source (fringe fix). OPT-IN. */
   premultipliedAlpha?: boolean | undefined;
+  /** D-128 — the alpha-bleed robustness layer (transparent-region colour fill). OPT-IN. */
+  alphaBleed?: boolean | undefined;
   onProgress?: ((ratio: number) => void) | undefined;
 }): Promise<Uint8Array<ArrayBuffer> | null> {
   return withExclusive(async () => {
@@ -718,6 +742,7 @@ export async function convertToWebm(opts: {
               targetFps: opts.targetFps,
               crop: opts.crop,
               premultipliedAlpha: opts.premultipliedAlpha,
+              alphaBleed: opts.alphaBleed,
             }),
           ),
         );

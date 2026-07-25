@@ -68,6 +68,7 @@ vi.mock('../src/renderer/features/assets/video-asset-probe.js', () => ({
 }));
 
 import { VideoImportModal } from '../src/renderer/features/assets/VideoImportModal.js';
+import { CONVERTER_REVISION } from '../src/renderer/features/assets/video-convert-args.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -523,6 +524,30 @@ describe('VideoImportModal (D-128)', () => {
     expect(prov.premultipliedAlpha).toBe(true); // the opt-in is recorded in provenance
   });
 
+  it('the alpha-bleed toggle defaults OFF and opting IN passes true + is recorded (fast path)', async () => {
+    // The bleed ran UNCONDITIONALLY before (the "minutes vs the spike" bug);
+    // it must now be a genuine opt-in with its own provenance record.
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    await renderModal();
+    const toggle = document.querySelector(
+      '[data-testid="video-alpha-bleed-toggle"]',
+    ) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    act(() => {
+      toggle.click();
+    });
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(convertToWebm).toHaveBeenCalledWith(expect.objectContaining({ alphaBleed: true }));
+    const prov = (storeBytes.mock.calls[0]?.[0] as { provenance: { alphaBleed?: boolean } })
+      .provenance;
+    expect(prov.alphaBleed).toBe(true);
+  });
+
   it('crop numeric fields drive the rect (numbers → rectangle sync)', async () => {
     await renderModal();
     act(() => {
@@ -754,6 +779,7 @@ describe('VideoImportModal (D-128)', () => {
         sourceBytes: FILE_SIZE,
         crop: { x: 100, y: 0, width: 320, height: 360 },
         premultipliedAlpha: false, // the OFF default is recorded in provenance
+        alphaBleed: false, // fast path: the bleed is opt-in and its state is recorded too
       },
     });
     await placeElement();
@@ -800,6 +826,11 @@ describe('VideoImportModal — pre-convert dedupe (D-128)', () => {
       sourceHeight: 360,
       sourceSha256: 'a'.repeat(64),
       sourceBytes: FILE_SIZE, // matches FILE so the Bug-3 size pre-filter lets the hash run
+      // Dedupe is revision-gated (fast-path): only an asset produced by the
+      // CURRENT converter, with the SAME correction set, is the same output.
+      converterRevision: CONVERTER_REVISION,
+      premultipliedAlpha: false,
+      alphaBleed: false,
       ...over,
     },
   });
