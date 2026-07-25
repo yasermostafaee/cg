@@ -938,7 +938,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const loopStartMs = idle ? idle.start : hasPhases ? introEndMs : 0;
         const loopEndMs = idle ? idle.end : hasPhases ? outroStartMs : durationMs;
         const hasOutro = outroStartMs < durationMs;
-        const media = v.container;
+        // MUTABLE: `recover()` rebuilds the element in place (a terminal decode
+        // error kills the NODE, not the driver) and re-points every handle member.
+        let media = v.container;
         const handle: VideoHandle = {
           play: () => {
             try {
@@ -957,6 +959,38 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // (`media.seeking`): that seek-storm wedged the decoder and painted half-decoded
           // frames. jsdom has no real seek, so `seeking` is simply false there.
           seeking: () => media.seeking,
+          // D-128 seek-fragility recovery — `media.error` is TERMINAL: no seek or
+          // play on the dead node ever paints again (the pause/resume freeze the
+          // owner hit on a pre-alignment asset). jsdom has no MediaError: null ⇒ alive.
+          dead: () => media.error !== null && media.error !== undefined,
+          // Rebuild the element IN PLACE: fresh node, same attributes (src, class,
+          // style, playsinline, preload, every data-* — so the Designer preview's
+          // video pool re-adopts it by `data-cg-element-id`), positioned where the
+          // dead one stood. EXPLICITLY DISTINGUISHED from the Phase-3
+          // no-remount-on-drag guard: a transform change never sets `media.error`,
+          // so recovery can only fire on a genuinely dead decoder — never on a drag.
+          recover: () => {
+            const old = media;
+            const wasPlaying = !old.paused && !old.ended;
+            const at = Number.isFinite(old.currentTime) ? old.currentTime : 0;
+            const fresh = old.ownerDocument.createElement('video');
+            for (const name of old.getAttributeNames()) {
+              const val = old.getAttribute(name);
+              if (val !== null) fresh.setAttribute(name, val);
+            }
+            // `muted` is a PROPERTY in the builder (no attribute) — carry it, plus
+            // the inline transform/geometry the attribute walk already copied via
+            // `style`. An unmuted rebuilt element would be blocked from autoplay.
+            fresh.muted = true;
+            old.replaceWith(fresh);
+            media = fresh;
+            try {
+              fresh.currentTime = at;
+            } catch {
+              /* not loaded yet — the pending seek applies once metadata lands */
+            }
+            if (wasPlaying) handle.play();
+          },
         };
         const driver = new VideoDriver({
           handle,

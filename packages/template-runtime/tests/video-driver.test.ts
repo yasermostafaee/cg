@@ -85,6 +85,10 @@ function mockVideo(
   stalled: boolean;
   /** True while a seek is settling — the driver must not stack another correction. */
   seeking: boolean;
+  /** Model a TERMINAL media error (the fragile-alpha seek class on pre-.5 assets). */
+  dead: boolean;
+  /** How many times the driver asked for an element rebuild. */
+  recovers: number;
   at: () => number;
 } {
   let pos = 0;
@@ -97,6 +101,8 @@ function mockVideo(
     pauses: 0,
     stalled: false,
     seeking: false,
+    dead: false,
+    recovers: 0,
     at: () => {
       settle();
       return pos;
@@ -137,6 +143,15 @@ function mockVideo(
       return pos;
     },
     seeking: () => rec.seeking,
+    dead: () => rec.dead,
+    recover: () => {
+      // Models the runtime handle's rebuild: a FRESH element at the position the
+      // dead one last knew, playing again if it was — and no longer dead.
+      rec.recovers++;
+      rec.dead = false;
+      anchorClock = clock.ms;
+      anchorPos = pos;
+    },
   };
   return rec;
 }
@@ -217,7 +232,11 @@ describe('VideoDriver (D-128 Phase 4)', () => {
     expect(video.seeks.at(-1)! * 1000).toBeCloseTo(150, -1); // re-seeked to the expected clip-time
   });
 
-  it('pause() freezes and resume() re-anchors + re-seeks to the clock-derived clip-time', () => {
+  it('pause() freezes and resume() is SEEK-FREE — the clock re-anchors to the media and plays on', () => {
+    // REDONE 2026-07-25 (superseding the re-seek assertion): the resume re-seek
+    // was a fragile-alpha-seek trigger on pre-alignment assets (the owner's
+    // pause/resume speckle + freeze). The media froze where it froze — it is
+    // authoritative (the large-gap principle): resume just re-anchors and plays.
     const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze', introEndMs: 100_000 });
     driver.start();
     run(clock, 500); // 0.5s into the intro, smooth foreground ticks
@@ -226,10 +245,57 @@ describe('VideoDriver (D-128 Phase 4)', () => {
     const seekCount = video.seeks.length;
     clock.advance(5000); // time passes while paused — the video must NOT advance
     driver.resume();
-    // resume RE-SEEKS to the clip-time captured at pause (0.5s), never trusting a stalled head
-    expect(video.seeks.length).toBe(seekCount + 1);
-    expect(video.seeks.at(-1)!).toBeCloseTo(0.5, 2);
-    expect(video.plays).toBe(2); // played again after the re-seek
+    expect(video.seeks.length).toBe(seekCount); // NO seek — the fragile op is not performed
+    expect(video.plays).toBe(2); // just played again
+    expect(video.at()).toBeCloseTo(0.5, 2); // continues from where it froze…
+    run(clock, 500);
+    expect(video.at()).toBeCloseTo(1.0, 2); // …in lockstep with the re-anchored clock
+    expect(video.seeks.length).toBe(seekCount); // and smooth playback needs no correction
+  });
+
+  it('a DEAD element (terminal media error) is rebuilt on the next tick, rate-limited, with correction grace', () => {
+    const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze', introEndMs: 100_000 });
+    driver.start();
+    run(clock, 500);
+    video.dead = true; // the fragile-alpha seek class: the element dies mid-run
+    clock.advance(50);
+    expect(video.recovers).toBe(1); // rebuilt on the very next tick
+    // a genuinely broken asset that dies again is retried QUIETLY, never a storm
+    video.dead = true;
+    clock.advance(50);
+    expect(video.recovers).toBe(1); // rate-limited (1s window)
+    clock.advance(1000);
+    expect(video.recovers).toBe(2); // retried after the window
+  });
+
+  it('reset() rebuilds a dead element BEFORE re-arming — the next take never plays into a corpse', () => {
+    const { driver, video, clock } = makeDriver();
+    driver.start();
+    run(clock, 500);
+    video.dead = true;
+    driver.stop(); // stop() itself recovers…
+    expect(video.recovers).toBe(1);
+    video.dead = true; // …and if the element dies again while cleared,
+    clock.advance(2000);
+    driver.reset(); // reset() recovers again so start() lands on a live node
+    expect(video.recovers).toBe(2);
+    expect(video.seeks.at(-1)).toBe(0); // then parks at the intro start as always
+  });
+
+  it('playOutro() on a dead element recovers first — the outro seek lands on a LIVE node', async () => {
+    const { driver, video, clock } = makeDriver({ outroStartMs: 8000, durationMs: 10_000 });
+    driver.start();
+    run(clock, 500);
+    video.dead = true;
+    clock.advance(2000); // let the rate-limit window pass after the tick-time recovery
+    video.dead = true;
+    let resolved = false;
+    void driver.playOutro().then(() => (resolved = true));
+    expect(video.recovers).toBeGreaterThanOrEqual(2); // recovered at the outro entry
+    expect(video.seeks.at(-1)).toBeCloseTo(8.0, 2); // and the outro seek was issued after it
+    run(clock, 2100);
+    await Promise.resolve();
+    expect(resolved).toBe(true); // the outro still settles (§D6.4.1)
   });
 
   it('playOutro() plays [outroStart → duration] once and resolves at the end', async () => {
