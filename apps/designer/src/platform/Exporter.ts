@@ -13,8 +13,11 @@ import type { AssetStore } from './AssetStore.js';
 import {
   collectImageElements,
   collectLottieElements,
+  collectVideoElements,
   compositeImageSource,
   resolveImageAsset,
+  resolveVideoAsset,
+  videoMimeOf,
   type ImageAssetLibrary,
 } from '@cg/single-file-export';
 import { Emitter } from './emitter.js';
@@ -78,9 +81,15 @@ export class Exporter {
     // D-040 — an image reference is "known" if it resolves in EITHER the project
     // store OR the shared library, so a `source: 'shared'` logo isn't falsely
     // flagged missing and blocked.
-    const knownAssetIds = new Set((await this.#assets.list()).map((a) => a.assetId));
+    const projectAssets = await this.#assets.list();
+    // Meta by id across both stores — the size preflight below reads byteSize.
+    const metaById = new Map(projectAssets.map((a) => [a.assetId, a]));
+    const knownAssetIds = new Set(projectAssets.map((a) => a.assetId));
     if (this.#sharedImages !== undefined) {
-      for (const a of await this.#sharedImages.list()) knownAssetIds.add(a.assetId);
+      for (const a of await this.#sharedImages.list()) {
+        knownAssetIds.add(a.assetId);
+        if (!metaById.has(a.assetId)) metaById.set(a.assetId, a);
+      }
     }
     // Collect every element across the whole project — the main scene AND every
     // composition, recursing into containers — so binding targets resolve no
@@ -104,6 +113,17 @@ export class Exporter {
           severity: 'error',
           code: 'missing-asset',
           message: `Image element references unknown asset ${el.assetId}.`,
+          elementId: el.id,
+        });
+      }
+      // D-128 Phase 5 — a video follows the IMAGE pattern (an ERROR, decision (c)):
+      // a missing video is a black hole on air, and unlike the lottie gather-time
+      // skip, the operator must see it BEFORE any artifact is produced.
+      if (el.type === 'video' && !knownAssetIds.has(el.assetId)) {
+        issues.push({
+          severity: 'error',
+          code: 'missing-asset',
+          message: `Video element references unknown asset ${el.assetId}.`,
           elementId: el.id,
         });
       }
@@ -186,6 +206,53 @@ export class Exporter {
             elementId: el.id,
           });
         }
+      }
+    }
+
+    // D-128 Phase 5 — the SINGLE-FILE SIZE preflight (decision (d)): a WARNING
+    // with real numbers, never a block — the operator may have a legitimate
+    // reason, but must learn BEFORE producing a file CEF struggles to boot. The
+    // projected figure is the base64-inflated (×4/3) sum of every asset the
+    // single-file export inlines: videos + images + lottie JSON + shippable
+    // fonts. Fires live in the issues panel; the `.vcg` package is unaffected
+    // (its assets ride as binary files) and the message says so. The threshold
+    // is PROVISIONAL until the Phase-6 hardware pass — set from a Chromium
+    // `file://` load-time sweep (see the change's design.md).
+    {
+      const inlineIds = new Set<string>();
+      for (const { assetId } of collectVideoElements(scene)) inlineIds.add(assetId);
+      for (const { assetId } of collectImageElements(scene)) inlineIds.add(assetId);
+      for (const { assetId } of collectLottieElements(scene)) inlineIds.add(assetId);
+      for (const font of scene.fonts) {
+        const id = bundleableAssetId(font.family, knownAssetIds);
+        if (id !== null) inlineIds.add(id);
+      }
+      const parts: { name: string; inlineBytes: number }[] = [];
+      let totalInline = 0;
+      for (const id of inlineIds) {
+        const meta = metaById.get(id);
+        if (meta === undefined) continue;
+        const inlineBytes = Math.ceil((meta.byteSize * 4) / 3);
+        totalInline += inlineBytes;
+        parts.push({ name: meta.filename, inlineBytes });
+      }
+      if (totalInline > SINGLE_FILE_INLINE_WARN_BYTES) {
+        const mb = (n: number): string => (n / 1024 / 1024).toFixed(1);
+        const dominant = parts
+          .sort((a, b) => b.inlineBytes - a.inlineBytes)
+          .slice(0, 3)
+          .map((p) => `${p.name} (~${mb(p.inlineBytes)} MB inline)`)
+          .join(', ');
+        issues.push({
+          severity: 'warning',
+          code: 'single-file-size',
+          message:
+            `A single-file HTML export of this template would inline ~${mb(totalInline)} MB ` +
+            `of asset data (largest: ${dominant}) — past ~${mb(SINGLE_FILE_INLINE_WARN_BYTES)} MB ` +
+            `CasparCG's CEF gets slow to boot the file from file://. The .vcg package has no ` +
+            `such limit (its assets ship as separate binary files) — prefer it for heavy ` +
+            `templates, or trim/shorten the clips.`,
+        });
       }
     }
 
@@ -351,6 +418,33 @@ export class Exporter {
         mime: mimeFor(ext),
       });
     }
+    // D-128 Phase 5 — pack each video element's STORED canonical WebM verbatim as
+    // `assets/video/<sha>.webm` + an index entry (kind 'video'), mirroring images.
+    // NEVER re-encoded at export: the stored form is the single truth (crop baked,
+    // fps conformed, alpha corrected at import). The index.html's `assetUrls` map
+    // (all non-lottie entries) carries id → packaged path, and the runtime's
+    // widened asset-src walk sets `<video src>` — a package-relative reference,
+    // zero external requests. A missing asset is a PREFLIGHT ERROR (produce()
+    // blocks before reaching here); the guard below is belt-and-braces.
+    for (const { assetId } of collectVideoElements(scene)) {
+      if (seen.has(assetId)) continue;
+      seen.add(assetId);
+      const resolved = await resolveVideoAsset(this.#assets, assetId);
+      if (resolved === null) continue;
+      const { meta, bytes } = resolved;
+      const dot = meta.filename.lastIndexOf('.');
+      const ext = dot === -1 ? '.webm' : meta.filename.slice(dot);
+      const relativePath = `assets/video/${meta.sha256}${ext}`;
+      assetsMap.set(relativePath, bytes);
+      assetIndex.push({
+        id: meta.assetId,
+        path: relativePath,
+        kind: 'video',
+        bytes: bytes.byteLength,
+        sha256: meta.sha256,
+        mime: videoMimeOf(meta.filename),
+      });
+    }
     // D-125 — pack each Lottie element's JSON as `assets/lottie/<sha>.json` bytes +
     // an index entry (kind 'lottie'), mirroring images. The index.html boot resolves
     // these into the `lottieAssets` map (a same-origin fetch under the .vcg's 'self'
@@ -442,6 +536,20 @@ function bundleableAssetId(family: string, knownAssetIds: ReadonlySet<string>): 
  * riding in the `.vcg`, so a ticker using one measures real glyphs and needs no warning.
  */
 const RUNTIME_SELF_HOSTED_FAMILIES: ReadonlySet<string> = new Set(['Vazirmatn', 'Exo 2']);
+
+/**
+ * D-128 Phase 5 — the projected single-file INLINE payload (base64-inflated ×4/3)
+ * above which the `single-file-size` preflight warning fires. PROVISIONAL until
+ * the Phase-6 hardware pass on real CasparCG 2.3 CEF (recorded in the change's
+ * design.md). Chosen from a desktop-Chromium `file://` load sweep of REAL
+ * exporter output (boot = navigate → runtime-ready, all videos decodable on
+ * play): 33.5 MB HTML → 725 ms · 66.5 MB → 1.57 s · 132.6 MB → 2.6 s ·
+ * 264.8 MB → 4.5 s — linear, no cliff. CEF 71 on loaded broadcast hardware is
+ * assumed ~×4 slower, so 40 MiB inline ≈ a ~3 s worst-case CG ADD. The owner's
+ * realistic three-heavy-clip template (~33.5 MB inline) stays UNDER the
+ * threshold; a fourth heavy clip pushes over and warns.
+ */
+export const SINGLE_FILE_INLINE_WARN_BYTES = 40 * 1024 * 1024;
 
 /** The `@font-face` `format(…)` hint matching a packaged font's extension. */
 function fontFormatFor(ext: string): string {

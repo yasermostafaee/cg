@@ -16,6 +16,12 @@ import {
   type ImageRef,
 } from './image-export.js';
 import { collectLottieElements, resolveLottieAsset, type LottieRef } from './lottie-export.js';
+import {
+  collectVideoElements,
+  resolveVideoAsset,
+  videoMimeOf,
+  type VideoRef,
+} from './video-export.js';
 
 export interface SingleFileExportOptions {
   /** IIFE runtime bundle (`var CG = …`) — see `cg-runtime.ts` `cgJsIife`. */
@@ -100,6 +106,22 @@ export class ExporterSingleFile {
         code: 'missing-asset',
         severity: 'warning',
         message: `Image element "${ref.elementId}" references an asset whose bytes could not be resolved; it will not render in the exported HTML.`,
+        elementId: ref.elementId,
+      });
+    }
+    // D-128 Phase 5 — resolve + base64-inline each video element's STORED WebM
+    // bytes into the same `assetUrls` map (`data:video/webm;base64,…`), exactly
+    // like images: the runtime's asset-src walk sets `<video src>` from it, so
+    // the standalone file plays with ZERO external requests under CEF `file://`.
+    // The bytes are the canonical converted form, never re-encoded here. An
+    // unresolved video is a warning on this never-blocking path — the Designer's
+    // live preflight (Exporter.preflight) raises the ERROR-severity issue.
+    const { missing: missingVideo } = await this.#inlineVideos(scene, assetUrls);
+    for (const ref of missingVideo) {
+      issues.push({
+        code: 'missing-asset',
+        severity: 'warning',
+        message: `Video element "${ref.elementId}" references an asset whose bytes could not be resolved; it will not render in the exported HTML.`,
         elementId: ref.elementId,
       });
     }
@@ -196,6 +218,35 @@ export class ExporterSingleFile {
       assetUrls[ref.assetId] = toDataUri(imageMimeOf(resolved.meta.filename), resolved.bytes);
     }
     return { assetUrls, missing };
+  }
+
+  /**
+   * D-128 Phase 5 — base64-inline every video element's stored bytes as a
+   * `data:video/webm` URI INTO the shared `assetUrls` map (mutated in place so
+   * images and videos ride the one map `createRuntime` already takes). Mirrors
+   * `#inlineImages`; videos resolve from the project store only.
+   */
+  async #inlineVideos(
+    scene: Scene,
+    assetUrls: Record<string, string>,
+  ): Promise<{ missing: VideoRef[] }> {
+    const failed = new Set<string>();
+    const missing: VideoRef[] = [];
+    for (const ref of collectVideoElements(scene)) {
+      if (assetUrls[ref.assetId] !== undefined) continue; // asset already inlined
+      if (failed.has(ref.assetId)) {
+        missing.push(ref);
+        continue;
+      }
+      const resolved = await resolveVideoAsset(this.#assets, ref.assetId);
+      if (resolved === null) {
+        failed.add(ref.assetId);
+        missing.push(ref);
+        continue;
+      }
+      assetUrls[ref.assetId] = toDataUri(videoMimeOf(resolved.meta.filename), resolved.bytes);
+    }
+    return { missing };
   }
 
   /**
@@ -344,8 +395,10 @@ function buildSingleFileHtml(parts: HtmlParts): string {
          and data: fonts. The .vcg keeps a strict 'self' CSP (it's http-served);
          this file is loaded over file:// by CasparCG, where that would block
          everything inlined. -->
+    <!-- D-128 Phase 5 — media-src data: admits the base64-inlined <video> bytes;
+         without it the artifact's own CSP would block the video it carries. -->
     <meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:;" />
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; media-src data:;" />
     <title>${escapeHtml(scene.name)}</title>
     <!-- CEF-compat: keep CSS within common CasparCG builds (CEF 63=2.2,
          71=2.3.x, 117=2.4.x) — avoid bleeding-edge properties. -->

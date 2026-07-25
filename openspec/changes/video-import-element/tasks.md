@@ -348,15 +348,34 @@
 
 ## Phase 5 — both exporters + `cef-compat` + the size preflight
 
-- [ ] 5.1 `.vcg`: video bytes into the package + `kind: 'video'` assetIndex entry (manifest seam
-      exists — recon C2); package-relative reference; unzipped-dir CEF playback with zero
-      external requests.
-- [ ] 5.2 Single-file HTML: inline base64 `data:video/webm`; parity with preview and `.vcg`
-      (PRD bullet 10).
-- [ ] 5.3 Size preflight through the EXISTING issues path (threshold + warn-vs-block per the
-      owner's OPEN decision); test at/over/under threshold.
-- [ ] 5.4 `cef-compat.test.ts` passes against the video-bearing artifact (recon C7); exporter
-      tests: bytes land in both outputs, sequence-item/nested-composition closure included.
+- [x] 5.1 `.vcg`: video bytes into the package + `kind: 'video'` assetIndex entry — DONE
+      (2026-07-25): `collectVideoElements`/`resolveVideoAsset` (the shared seam in
+      `@cg/single-file-export/src/video-export.ts`, mirroring Lottie), `Exporter.#gatherBinaries`
+      packs the STORED canonical WebM VERBATIM (never re-encoded) as `assets/video/<sha>.webm`,
+      the index.html `assetUrls` map carries id → packaged relative path, and the runtime's
+      widened walk (5.2) sets `<video src>` — zero external requests. Round-trip test unpacks
+      and byte-compares.
+- [x] 5.2 Single-file HTML: `#inlineVideos` base64-inlines the stored bytes as
+      `data:video/webm` into the SAME `assetUrls` map images use, and the runtime's asset-src
+      walk (`runtime.ts applyAssetUrls`) widened from `img[data-cg-asset-id]` to include
+      `video[data-cg-asset-id]` — the Phase-3/4 debt paid. CRITICAL catch: the artifact's own
+      CSP (`default-src 'none'`) had no `media-src` — it would have BLOCKED the video it
+      carries; `media-src data:` added. Designer preview parity: no map ⇒ src untouched
+      (preview.ts owns the poster ladder there).
+- [x] 5.3 Size preflight through the EXISTING issues path — a WARNING, never a block
+      (decision (d)), from the projected base64-inflated inline payload of every inlined asset
+      class (video + image + lottie + shippable fonts). Actionable: total, dominating assets by
+      name, ".vcg has no such limit". Threshold 40 MiB inline, PROVISIONAL until Phase-6
+      hardware (design.md records the measured sweep). Tests: over fires with the numbers /
+      under (the owner-realistic 3×8.7 MB trio) stays quiet / a warning never blocks produce().
+- [x] 5.4 `cef-compat.test.ts` green against the video-widened bundles (the walk uses baseline
+      DOM APIs only); exporter tests cover both outputs, multi-video dedupe, and
+      nested-composition closure (a sequence item references a composition, and ALL
+      compositions are walked — a video inside a sequence-referenced comp is collected).
+      E2E (`video-export.spec.ts`): real import → place → BOTH exports captured — the
+      single-file HTML carries `data:video/webm` under a CSP admitting it; the unpacked `.vcg`
+      has the `kind: 'video'` entry, WebM-magic bytes at the packaged path, and a
+      package-relative index.html with no external refs.
 
 ## Phase 6 — CasparCG 2.3.x CEF hardware smoke — OWNER-VERIFIED (the pre-archive gate)
 
@@ -364,7 +383,13 @@
       video beneath, `stop()` outro-to-CLEARED, pause/resume, `file://` single-file boot with
       zero external requests.
 - [ ] 6.2 Owner verifies on the affected machine; record the verdict here. Do NOT archive before
-      this gate (the D-125 precedent).
+      this gate (the D-125 precedent). THE PHASE-6 OWNER CHECKLIST (what Phase 5 hands over): - [ ] a finished template CONTAINING a video, exported single-file, dropped in CasparCG's
+      `templates/`, ADD + PLAY on real 2.3.x: correct alpha over a live background, zero
+      external requests in the CEF log; - [ ] the same template as an unzipped `.vcg` (http-served path) plays identically; - [ ] CG ADD → first-frame latency at the owner's realistic template size (~33 MB inline
+      measured 725 ms on desktop Chromium; validate the ~×4 CEF margin assumption) — and
+      CONFIRM or MOVE the provisional 40 MiB single-file threshold from real numbers; - [ ] pause/resume + tab-switch soak on air (the seek-policy fixes under CEF); - [ ] REMEMBER: assets converted before revision 2026-07-25.5 remain seek-fragile until
+      re-imported — the recovery paths handle them, but the owner should re-import any
+      clip that will seek on air (pause/resume, authored mid-clip loop points).
 - [x] 6.3 REAL-ARCHIVE verification (import half — 2026-07-23): the owner ran the client's
       actual `rawvideo`/BGRA ARCHIVE sources through the SHIPPED import pipeline successfully —
       **152 MB and 739 MB** clips imported (probe → crop → convert → place) with no error, which

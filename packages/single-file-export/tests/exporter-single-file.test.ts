@@ -446,6 +446,108 @@ describe('ExporterSingleFile — D-125 Lottie inlining + conditional player bund
   });
 });
 
+describe('ExporterSingleFile — D-128 Phase 5 video inlining', () => {
+  // Recognizable WebM-ish bytes so the base64 round-trip is verifiable.
+  const videoBytes = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 10, 20, 30, 40, 50]);
+  const videoAssetSource = {
+    get: async (id: string): Promise<AssetMeta | null> =>
+      id.startsWith('vid-')
+        ? ({
+            assetId: id,
+            filename: `${id}.webm`,
+            kind: 'video',
+            sha256: 'a'.repeat(64),
+            byteSize: videoBytes.byteLength,
+          } as unknown as AssetMeta)
+        : null,
+    bytes: async (id: string) => (id.startsWith('vid-') ? videoBytes : null),
+  } as unknown as ImageAssetSource;
+
+  function videoExporter(assets: ImageAssetSource = videoAssetSource): ExporterSingleFile {
+    return new ExporterSingleFile({
+      cgJsIife:
+        'var CG = { createRuntime: function () { return { ready: Promise.resolve() }; }, installCasparGlobals: function () {}, applyOutputPosition: function () {} };',
+      cgCss: 'html,body{background:transparent}',
+      fontsCss: '',
+      assets,
+    });
+  }
+
+  function videoEl(id: string, assetId: string): Record<string, unknown> {
+    return {
+      id,
+      name: id,
+      type: 'video',
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: 480, h: 70 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      assetId,
+      durationMs: 14320,
+      holdBehavior: 'loop',
+    };
+  }
+
+  function sceneWithVideos(...assetIds: string[]): Scene {
+    return {
+      ...makeScene(),
+      fields: [],
+      layers: [
+        {
+          id: 'L1',
+          name: 'clips',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: assetIds.map((a, i) => videoEl(`v${String(i)}`, a)),
+        },
+      ],
+    } as unknown as Scene;
+  }
+
+  const expectedDataUri = `data:video/webm;base64,${btoa(String.fromCharCode(...videoBytes))}`;
+
+  it('inlines the stored bytes as a data:video/webm URI in the assetUrls map — zero external refs', async () => {
+    const { html, issues } = await videoExporter().produce(sceneWithVideos('vid-1'));
+    expect(html).toContain(`"vid-1":"${expectedDataUri}"`);
+    expect(issues.filter((i) => i.code === 'missing-asset')).toEqual([]);
+    expect(html).not.toMatch(/src="https?:/);
+    expect(html).not.toMatch(/\bfetch\(/);
+  });
+
+  it('the artifact CSP admits the inlined video (media-src data:) — the artifact must not block its own bytes', async () => {
+    const { html } = await videoExporter().produce(sceneWithVideos('vid-1'));
+    const csp = /Content-Security-Policy"\s*content="([^"]+)"/.exec(html)?.[1] ?? '';
+    expect(csp).toContain('media-src data:');
+    expect(csp).toContain("default-src 'none'");
+  });
+
+  it('MULTI-VIDEO: every distinct asset inlines once; a repeated asset is not duplicated', async () => {
+    const { html } = await videoExporter().produce(sceneWithVideos('vid-1', 'vid-2', 'vid-1'));
+    expect(html).toContain(`"vid-1":"${expectedDataUri}"`);
+    expect(html).toContain(`"vid-2":"${expectedDataUri}"`);
+    // one inline per ASSET, not per element: 2 data URIs for 3 video elements
+    const occurrences = html.split('data:video/webm;base64,').length - 1;
+    expect(occurrences).toBe(2);
+  });
+
+  it('a video whose bytes cannot resolve is a WARNING on this never-blocking path (the Designer preflight owns the error)', async () => {
+    const { html, issues } = await videoExporter().produce(sceneWithVideos('gone-1'));
+    const missing = issues.filter((i) => i.code === 'missing-asset');
+    expect(missing).toHaveLength(1);
+    expect(missing[0]?.severity).toBe('warning');
+    expect(missing[0]?.message).toContain('Video element');
+    expect(html).not.toContain('data:video/webm'); // nothing bogus inlined
+  });
+});
+
 describe('ExporterSingleFile — D-028 finite ticker under a TIMED hold (info)', () => {
   it('flags the combo as info (authored intent, never blocks)', async () => {
     const scene: Scene = {

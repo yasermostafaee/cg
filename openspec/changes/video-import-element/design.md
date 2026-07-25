@@ -1253,6 +1253,31 @@ between chunks — paint starves, the 0% never repaints. Two-part fix:
    fps + crop + correction set) before hashing: no possible match ⇒ straight to
    converting (the provenance hash still computes DURING the encode, in the worker).
 
+## Phase 5 — the single-file size threshold (2026-07-25, PROVISIONAL until hardware)
+
+Measured with REAL exporter artifacts (the actual `produce()` output, real cgJsIife runtime,
+the owner-class 8.7 MB/14.3 s 1920×282 clip) loaded from `file://` in desktop Chromium — the
+closest available proxy for CasparCG's CEF; REAL CEF 2.3 (Chromium 71) could not be tested
+from here and is assumed ~×4 slower (older parser, broadcast box under render load):
+
+| inline payload (HTML size)                      | boot: navigate → runtime-ready | play → ALL videos decodable |
+| ----------------------------------------------- | ------------------------------ | --------------------------- |
+| 3.1 MB (1 × 2 MB clip)                          | 311 ms                         | 101 ms, 1/1                 |
+| 11.4 MB (1 × 8.7 MB)                            | 456 ms                         | 102 ms, 1/1                 |
+| 33.5 MB (3 × 8.7 MB — the owner-realistic trio) | 725 ms                         | 101 ms, 3/3                 |
+| 66.5 MB (6 × 8.7 MB)                            | 1 571 ms                       | 102 ms, 6/6                 |
+| 132.6 MB (12 × 8.7 MB)                          | 2 609 ms                       | 302 ms, 12/12               |
+| 264.8 MB (24 × 8.7 MB)                          | 4 528 ms                       | 420 ms, 24/24               |
+
+LINEAR (~17 ms/MB after a ~300 ms base), NO CLIFF, every video decodable at every tier — so
+the threshold is a LATENCY guardrail (CG ADD responsiveness on air), not a hard failure
+boundary. **Threshold: 40 MiB inline (≈30 MB of stored WebM)** — the realistic trio stays
+under; a fourth heavy clip warns; projected CEF worst case at the threshold ≈ ~3 s ADD.
+PROVISIONAL: Phase 6 measures real ADD latency on 2.3.x hardware and confirms or moves it
+(the constant is `SINGLE_FILE_INLINE_WARN_BYTES`, one place). The warning never blocks
+(decision (d)) and names the total + dominating clips + the `.vcg` alternative (its assets
+ship as separate binary files — no inline inflation, no parse cost).
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

@@ -338,13 +338,21 @@ function collectScopeAnimated(scope: FieldScope, out: AnimatedElement[]): void {
  * D-062 — set `src` on every built `<img data-cg-asset-id>` whose id is in the
  * host-supplied `assetUrls` map. The single seam both exporters use to render
  * image elements; the Designer preview passes no map and wires `src` itself.
+ *
+ * D-128 Phase 5 — widened to `<video data-cg-asset-id>`: the exported page
+ * (`.vcg` index.html with a packaged relative path, single-file HTML with a
+ * base64 `data:video/webm` URI) wires the video source through the SAME map,
+ * so a video element plays on air with zero external requests. The Designer
+ * preview still wires video src itself (preview.ts owns the poster ladder).
  */
 function applyAssetUrls(
   container: HTMLElement,
   assetUrls?: Readonly<Record<string, string>>,
 ): void {
   if (assetUrls === undefined) return;
-  const nodes = container.querySelectorAll<HTMLImageElement>('img[data-cg-asset-id]');
+  const nodes = container.querySelectorAll<HTMLImageElement | HTMLVideoElement>(
+    'img[data-cg-asset-id], video[data-cg-asset-id]',
+  );
   nodes.forEach((node) => {
     const id = node.dataset['cgAssetId'];
     if (id === undefined) return;
