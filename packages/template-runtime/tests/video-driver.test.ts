@@ -85,6 +85,10 @@ function mockVideo(
   stalled: boolean;
   /** True while a seek is settling — the driver must not stack another correction. */
   seeking: boolean;
+  /** Model a TERMINAL media error (the fragile-alpha seek class on pre-.5 assets). */
+  dead: boolean;
+  /** How many times the driver asked for an element rebuild. */
+  recovers: number;
   at: () => number;
 } {
   let pos = 0;
@@ -97,6 +101,8 @@ function mockVideo(
     pauses: 0,
     stalled: false,
     seeking: false,
+    dead: false,
+    recovers: 0,
     at: () => {
       settle();
       return pos;
@@ -137,6 +143,15 @@ function mockVideo(
       return pos;
     },
     seeking: () => rec.seeking,
+    dead: () => rec.dead,
+    recover: () => {
+      // Models the runtime handle's rebuild: a FRESH element at the position the
+      // dead one last knew, playing again if it was — and no longer dead.
+      rec.recovers++;
+      rec.dead = false;
+      anchorClock = clock.ms;
+      anchorPos = pos;
+    },
   };
   return rec;
 }
@@ -202,22 +217,81 @@ describe('VideoDriver (D-128 Phase 4)', () => {
     expect(video.at()).toBeLessThanOrEqual(8.0 + 0.1);
   });
 
-  it('bounded drift correction: re-seeks ONLY once drift exceeds the threshold', () => {
+  it('SIGNED drift policy: a LAGGING media is never seeked forward — the clock re-bases to it', () => {
+    // REDONE 2026-07-25 (superseding the forward-correction assertion): seeking a
+    // lagging media forward to the clock is the fragile alpha seek AND the
+    // jump-ahead the large-gap policy rejects — the driver yields to the media.
     const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze', introEndMs: 100_000 });
     driver.start();
     clock.advance(50);
     const before = video.seeks.length;
     // stall the decode: the playhead freezes while the clock keeps advancing
     video.stalled = true;
-    clock.advance(50); // drift ~50ms (< 80) — no correction
-    clock.advance(20); // drift ~70ms (< 80) — still none
+    clock.advance(50); // drift ~50ms (< 80) — under the threshold, nothing
+    clock.advance(20); // drift ~70ms (< 80) — still nothing
     expect(video.seeks.length).toBe(before);
-    clock.advance(30); // drift ~100ms (> 80) — corrects now
-    expect(video.seeks.length).toBe(before + 1);
-    expect(video.seeks.at(-1)! * 1000).toBeCloseTo(150, -1); // re-seeked to the expected clip-time
+    clock.advance(30); // drift ~100ms (> 80) — media BEHIND ⇒ REBASE, never a seek
+    expect(video.seeks.length).toBe(before);
+    video.stalled = false;
+    run(clock, 1000); // wait out the rebase grace, then keep playing smoothly
+    run(clock, 500);
+    expect(video.seeks.length).toBe(before); // lockstep continues seek-free
   });
 
-  it('pause() freezes and resume() re-anchors + re-seeks to the clock-derived clip-time', () => {
+  it('TAB-RETURN: a large gap re-bases and a slow-ramping decoder is never seeked (the freeze trigger)', () => {
+    // The owner's field case: tab away → back; the two HEAVY clips froze while
+    // the light one survived. The kill chain was large-gap → grace expires →
+    // the still-ramping decoder lags → the old drift correction seeked it
+    // forward mid-clip (fragile on pre-alignment assets). The whole chain must
+    // now be seek-free.
+    const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze', introEndMs: 100_000 });
+    driver.start();
+    run(clock, 500);
+    const seeksBefore = video.seeks.length;
+    video.stalled = true; // the element throttled while backgrounded
+    clock.advance(5000); // the tab-return gap arrives as one giant tick
+    expect(video.seeks.length).toBe(seeksBefore); // large-gap RE-BASE — no seek
+    run(clock, 2000); // the resume grace (750ms) expires; the heavy decoder still lags
+    expect(video.seeks.length).toBe(seeksBefore); // media-behind drift re-bases — still no seek
+    video.stalled = false; // decoder caught up
+    run(clock, 1500);
+    expect(video.seeks.length).toBe(seeksBefore); // playback continues seek-free
+    expect(video.recovers).toBe(0); // and the element never needed a rebuild
+  });
+
+  it('an EXTERNALLY-moved (ahead) media is the ONLY drift case that still seeks', () => {
+    const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze', introEndMs: 100_000 });
+    driver.start();
+    run(clock, 500);
+    video.handle.seek(5); // something outside the driver moved the head far ahead
+    const n = video.seeks.length;
+    clock.advance(50);
+    expect(video.seeks.length).toBe(n + 1); // corrected back…
+    expect(video.seeks.at(-1)!).toBeCloseTo(0.6, 1); // …to the clock-derived clip-time
+  });
+
+  it('a HEALTHY full lifecycle NEVER rebuilds the element — recovery fires only on media.error', async () => {
+    // The distinction the no-remount-on-drag guard depends on, pinned: every
+    // lifecycle op on a live element leaves recover() untouched.
+    const { driver, video, clock } = makeDriver();
+    driver.start();
+    run(clock, 3000);
+    driver.pause();
+    driver.resume();
+    run(clock, 1000);
+    void driver.playOutro();
+    run(clock, 2500);
+    driver.stop();
+    driver.reset();
+    await Promise.resolve();
+    expect(video.recovers).toBe(0);
+  });
+
+  it('pause() freezes and resume() is SEEK-FREE — the clock re-anchors to the media and plays on', () => {
+    // REDONE 2026-07-25 (superseding the re-seek assertion): the resume re-seek
+    // was a fragile-alpha-seek trigger on pre-alignment assets (the owner's
+    // pause/resume speckle + freeze). The media froze where it froze — it is
+    // authoritative (the large-gap principle): resume just re-anchors and plays.
     const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze', introEndMs: 100_000 });
     driver.start();
     run(clock, 500); // 0.5s into the intro, smooth foreground ticks
@@ -226,10 +300,57 @@ describe('VideoDriver (D-128 Phase 4)', () => {
     const seekCount = video.seeks.length;
     clock.advance(5000); // time passes while paused — the video must NOT advance
     driver.resume();
-    // resume RE-SEEKS to the clip-time captured at pause (0.5s), never trusting a stalled head
-    expect(video.seeks.length).toBe(seekCount + 1);
-    expect(video.seeks.at(-1)!).toBeCloseTo(0.5, 2);
-    expect(video.plays).toBe(2); // played again after the re-seek
+    expect(video.seeks.length).toBe(seekCount); // NO seek — the fragile op is not performed
+    expect(video.plays).toBe(2); // just played again
+    expect(video.at()).toBeCloseTo(0.5, 2); // continues from where it froze…
+    run(clock, 500);
+    expect(video.at()).toBeCloseTo(1.0, 2); // …in lockstep with the re-anchored clock
+    expect(video.seeks.length).toBe(seekCount); // and smooth playback needs no correction
+  });
+
+  it('a DEAD element (terminal media error) is rebuilt on the next tick, rate-limited, with correction grace', () => {
+    const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze', introEndMs: 100_000 });
+    driver.start();
+    run(clock, 500);
+    video.dead = true; // the fragile-alpha seek class: the element dies mid-run
+    clock.advance(50);
+    expect(video.recovers).toBe(1); // rebuilt on the very next tick
+    // a genuinely broken asset that dies again is retried QUIETLY, never a storm
+    video.dead = true;
+    clock.advance(50);
+    expect(video.recovers).toBe(1); // rate-limited (1s window)
+    clock.advance(1000);
+    expect(video.recovers).toBe(2); // retried after the window
+  });
+
+  it('reset() rebuilds a dead element BEFORE re-arming — the next take never plays into a corpse', () => {
+    const { driver, video, clock } = makeDriver();
+    driver.start();
+    run(clock, 500);
+    video.dead = true;
+    driver.stop(); // stop() itself recovers…
+    expect(video.recovers).toBe(1);
+    video.dead = true; // …and if the element dies again while cleared,
+    clock.advance(2000);
+    driver.reset(); // reset() recovers again so start() lands on a live node
+    expect(video.recovers).toBe(2);
+    expect(video.seeks.at(-1)).toBe(0); // then parks at the intro start as always
+  });
+
+  it('playOutro() on a dead element recovers first — the outro seek lands on a LIVE node', async () => {
+    const { driver, video, clock } = makeDriver({ outroStartMs: 8000, durationMs: 10_000 });
+    driver.start();
+    run(clock, 500);
+    video.dead = true;
+    clock.advance(2000); // let the rate-limit window pass after the tick-time recovery
+    video.dead = true;
+    let resolved = false;
+    void driver.playOutro().then(() => (resolved = true));
+    expect(video.recovers).toBeGreaterThanOrEqual(2); // recovered at the outro entry
+    expect(video.seeks.at(-1)).toBeCloseTo(8.0, 2); // and the outro seek was issued after it
+    run(clock, 2100);
+    await Promise.resolve();
+    expect(resolved).toBe(true); // the outro still settles (§D6.4.1)
   });
 
   it('playOutro() plays [outroStart → duration] once and resolves at the end', async () => {
@@ -329,13 +450,16 @@ describe('VideoDriver — sync robustness (background throttle / freeze / resume
   });
 
   it('never stacks a corrective seek while one is still settling (media.seeking guard)', () => {
+    // REDONE for the signed drift policy: a LAGGING media never seeks at all now,
+    // so the guard is observed on the one drift case that still does — a head
+    // moved AHEAD externally.
     const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze', introEndMs: 100_000 });
     driver.start();
     run(clock, 100);
-    video.stalled = true; // build real drift…
-    video.seeking = true; // …but a seek is in flight
+    video.handle.seek(5); // external move far AHEAD of the ~100ms clock position
     const before = video.seeks.length;
-    run(clock, 200); // drift now well past 80ms
+    video.seeking = true; // …and a seek is in flight
+    run(clock, 200);
     expect(video.seeks.length).toBe(before); // NOT stacked — the seek-storm can't start
     video.seeking = false;
     clock.advance(50);
@@ -374,7 +498,10 @@ describe('VideoDriver — sync robustness (background throttle / freeze / resume
     expect(video.at()).toBeGreaterThan(0); // playing normally again
   });
 
-  it('RESUME GRACE: drift correction is suppressed while the decoder ramps, then resumes', () => {
+  it('RESUME GRACE: drift handling is suppressed while the decoder ramps — and stays SEEK-FREE after it', () => {
+    // REDONE for the signed drift policy: resume no longer seeks, and a lagging
+    // decoder is handled by RE-BASING the clock (observable as a play() re-engage),
+    // never by the forward seek that used to storm the ramping decoder.
     const { driver, video, clock } = makeDriver({
       holdBehavior: 'freeze',
       introEndMs: 100_000,
@@ -385,14 +512,15 @@ describe('VideoDriver — sync robustness (background throttle / freeze / resume
     driver.pause();
     clock.advance(1000);
     driver.resume();
-    const afterResume = video.seeks.length; // includes resume's own re-anchor seek
-    // A slow decoder ramp: the media stalls while wall time advances, so drift builds — the
-    // exact condition that used to trigger a self-amplifying corrective-seek storm (each seek
-    // a ~5s keyframe-decode burst). During the grace those corrections must NOT fire.
+    const seeksAfterResume = video.seeks.length; // resume itself is SEEK-FREE
+    const playsAfterResume = video.plays;
+    // A slow decoder ramp: the media stalls while wall time advances, so drift builds.
     video.stalled = true;
-    run(clock, 400); // within the 600ms grace ⇒ NO corrective seek despite the drift
-    expect(video.seeks.length).toBe(afterResume);
-    run(clock, 400); // past the grace ⇒ a single correction resumes (decoder assumed ramped)
-    expect(video.seeks.length).toBeGreaterThan(afterResume);
+    run(clock, 400); // within the 600ms grace ⇒ NOTHING fires despite the drift
+    expect(video.seeks.length).toBe(seeksAfterResume);
+    expect(video.plays).toBe(playsAfterResume);
+    run(clock, 400); // past the grace ⇒ the lagging media RE-BASES (a play, never a seek)
+    expect(video.seeks.length).toBe(seeksAfterResume); // still seek-free
+    expect(video.plays).toBeGreaterThan(playsAfterResume); // playback re-engaged
   });
 });

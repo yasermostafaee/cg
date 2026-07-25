@@ -3332,7 +3332,7 @@ Rename Project…), Enter/blur commit, Escape restore, empty-name rejection, and
 Verification is the **Designer preview** (no CasparCG). Sequence: independent of the Shared-Library
 relocation (**D-066**) and of the big features (**D-125** / **D-126**).
 
-## [ ] D-128 — import a video clip as a lifecycle-aware element (in-app WebM/VP9 conversion, import-time crop) ⟨priority: high⟩ — change dir `openspec/changes/video-import-element/` (filed with the change authored; implementation not started)
+## [~] D-128 — import a video clip as a lifecycle-aware element (in-app WebM/VP9 conversion, import-time crop) ⟨priority: high⟩ — change dir `openspec/changes/video-import-element/` (Phases 1–4 merged; 2026-07-25 field fix: canvas-blank root-caused — alpha-keyframe-misaligned cold seek — robust shared poster routine + import poster parity, and the premultiplied-alpha default flipped OFF; Phases 5–6 outstanding)
 
 **What:** Import a video clip — including the client's legacy `rawvideo`/BGRA AVI archive —
 optionally CROP it in the import modal, convert it IN-APP to WebM/VP9 with alpha preserved, and

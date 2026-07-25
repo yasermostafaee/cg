@@ -64,6 +64,15 @@ export const VideoProvenanceSchema = z.object({
    * the lineage names how the alpha was handled, not just that it was converted.
    */
   premultipliedAlpha: z.boolean().optional(),
+  /**
+   * D-128 fast-path (owner decision 2026-07-25) — whether the ALPHA BLEED
+   * (transparent-region colour fill) ran at conversion. The bleed became an
+   * OPT-IN correction (it was unconditionally on the hot path before —
+   * revisions ≤ 2026-07-24.3 imply it ran). Recorded, like `premultipliedAlpha`,
+   * so the lineage names exactly which pixel-math stages produced the bytes and
+   * the pre-convert dedupe can distinguish outputs that genuinely differ.
+   */
+  alphaBleed: z.boolean().optional(),
 });
 export type VideoProvenance = z.infer<typeof VideoProvenanceSchema>;
 

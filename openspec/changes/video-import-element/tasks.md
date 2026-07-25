@@ -208,6 +208,138 @@
       auto-outs vs ticker-driven hold; the SHARED LEDGER serving a Lottie AND a video in one
       composition with no cross-talk — the regression guard for the type widening).
 
+## Phase 4b — field fix: the canvas-blank class root-caused + the premultiplied default flip (2026-07-25)
+
+- [x] 4b.1 ROOT CAUSE PROVEN (the missing piece: what the iframe's `<video>` reported):
+      `PIPELINE_ERROR_DECODE` on the at-rest POSTER SEEK — NOT blob scope, NOT CSP, NOT a
+      size threshold. ffmpeg/libvpx encodes the WebM alpha plane as a second VP8 stream
+      (BlockAdditional) whose keyframes follow the alpha encoder's own schedule; a COLD seek
+      (preload='metadata') into a GOP whose governing main keyframe carries an alpha INTER
+      frame hands Chromium's fresh alpha decoder a reference-less frame → TERMINAL decode
+      error, while sequential playback always decodes (full alpha history) — which is exactly
+      why the strengthened playability verify passed these files honestly. Evidence: standalone
+      harness (parent and srcdoc iframe fail IDENTICALLY; bytes fetch+hash identical in both;
+      2.09 MB failed while 4.34 MB passed), deterministic GOP-band cold-seek maps, an
+      alpha-stripped control encode with ZERO failures, and an EBML container walk showing a
+      29/29 correlation: cold seek fails ⇔ alpha inter-frame at the governing main keyframe.
+      Full detail in design.md "The canvas-blank ROOT CAUSE".
+- [x] 4b.2 THE FIX — robust-canvas-render via ONE shared routine
+      (`apps/designer/src/shared/video-poster.ts#attachRobustVideoPoster`): rung 1 seeks on the
+      EAGER-load path (`preload='auto'` — measured safe on every previously-failing GOP);
+      rung 2 recovers from any media error / seek stall with `load()` + muted sequential 16×
+      decode to the poster time (the operation import verification PROVES; ~0.7 s for a 14 s
+      clip), restoring `playbackRate`/paused for the VideoDriver; rung 3 surfaces failure —
+      never a silently dead element. Wired into ALL stored-asset surfaces from the one source:
+      the canvas iframe (serialized into the srcdoc document, replacing `seekVideoPoster`'s
+      cold seek), `VideoPoster` (Inspector + assets-panel tile), and the modal (4b.3). The
+      ENCODER IS UNTOUCHED: these files are legitimate broadcast assets (playout is sequential
+      and airs them correctly) — rejecting them at import for a Chromium seek quirk would
+      refuse working assets.
+- [x] 4b.3 THE GUARD GAP closed as verify-on-canvas-path: after store + readback, the modal
+      runs `verifyStoredPoster` — the SAME shared routine on the stored URL at the same
+      `posterTimeMs` — so "import verified it" ⇒ "the canvas renders it" holds by construction
+      (shared code, not a promise). A clip whose poster cannot be produced fails LOUDLY with
+      its own message. Tests: `video-poster-robust.test.ts` (11 ladder-transition tests on a
+      scripted fake element), `preview-video-poster-guard.test.ts` (generated-source contract,
+      B-091 style), modal poster-parity + default tests, and
+      `tests/e2e/video-canvas-render.spec.ts` against COMMITTED fixtures generated with the
+      app's exact encoder args (`fragile-alpha-seek-320x90.webm` — container-verified alpha
+      keyframes only in GOP 0, every cold seek from 1.0 s dies pre-fix, including the mid-clip
+      poster; `seek-safe-64x64.webm` — the A/B control). The E2E was proven RED pre-fix with
+      the exact field error, GREEN with the fix.
+- [x] 4b.4 `Premultiplied alpha` DEFAULT flips OFF (owner decision, 2026-07-25): the ON
+      default assumed the whole archive is premultiplied, but the field shows clips that are
+      correct WITHOUT the correction and visibly damaged WITH it — a default must never degrade
+      a correct file; the operator opts IN when a black fringe is actually visible. Help text
+      rewritten symmetrically from the OFF-default perspective. Already-imported assets are
+      untouched (each records its own `provenance.premultipliedAlpha`). FOLLOW-UP flagged, not
+      built: provenance records the setting but the Inspector's provenance line does not
+      surface it. Tests updated: modal default/opt-in unit tests; the fringe E2E now opts IN
+      explicitly (its fixture IS premultiplied).
+
+- [x] 4b.5 FAST PATH BY DEFAULT (owner decision, 2026-07-25 — the "minutes vs the spike's
+      13 s" bug): the two pixel-math stages were UNCONDITIONALLY on the hot path — the bleed
+      graph (2× geq + boxblur + overlay + alphamerge) ran on EVERY import regardless of the
+      premultiplied toggle. Now `buildConvertArgs` takes BOTH corrections as independent
+      opt-ins: default = NO filter at all (a crop rides a plain `-vf crop`); premultiplied
+      alone = a single linear `-vf format=rgba,geq` chain; bleed (alone or with premultiplied)
+      = the full `-filter_complex` graph. QUALITY settings stay on the default path (measured
+      NATIVELY on the 5 s proxy: crf4/qmax16/g25 encodes in 0.8 s vs the spike settings'
+      1.8 s — not the cost). Two INDEPENDENT checkboxes (bleed genuinely optional, never
+      silently attached — a straight source can want the bleed, a premultiplied one can skip
+      it), each stating its cost in the UI. MEASURED in the REAL app (wasm, 5 s 1920×282 BGRA
+      proxy of the owner's clip): default click→result 10.6 s (convert exec 9.3 s, playability
+      verify 0.8 s, output-alpha 0.15 s, store+readback+poster ≈ 0.1 s, probe+poster 0.3 s,
+      source-alpha sampling 0.07 s) vs premultiplied-on 27.7 s (~3×) vs both-on 46.5 s (~5×).
+      A per-import `[video-import] timing —` console line now reports every stage's wall time.
+      Result panel HINTS point at the relevant correction: a premultiplied-looking source
+      (semi-transparent pixels whose colour never exceeds alpha — impossible under premult) →
+      "re-import with Premultiplied alpha"; leaked visible alpha (output visible-frac ≫
+      source's) → "re-import with Alpha bleed". `CONVERTER_REVISION` bumped to `2026-07-25.4`
+      (the OUTPUT-changes contract requires it: a default import no longer carries the bleed);
+      no re-import is forced — ≤ .3 bleed-on assets are not defective. Provenance records
+      `alphaBleed` (additive schema field); the pre-convert dedupe is REVISION-GATED and
+      matches the correction set (different corrections = genuinely different output). Tests:
+      graph-shape matrix (default filterless / each correction adds exactly its own stage /
+      quality args in all shapes), dedupe revision+corrections matrix, modal opt-in tests.
+
+- [x] 4b.6 The "darkening bug in the unpremultiply expression" — investigated with a
+      quantified banded fixture across FOUR pipelines (expression alone; old full graph;
+      premult-only through the VP8 encode; premult-only through the REAL app wasm):
+      **NOT REPRODUCED** — every reading restores the exact straight colour within
+      codec/canvas rounding at α 255/128/12. The field damage is the STRAIGHT-SOURCE case
+      (un-premultiplying an already-correct clip over-brightens by 255/α), which 4b.4's
+      OFF default + 4b.5's opt-in + premult-evidence panel hint already close. No expression
+      change ships; evidence + reopen condition recorded in design.md.
+
+- [x] 4b.7 STALE-RESULT COHERENCE (owner clarification, 2026-07-25): with the corrections
+      opt-in, the checkboxes stayed interactive after a completed conversion — ticking one
+      left the verdict / alpha numbers / stored size / "Place element" describing the
+      PREVIOUS run's bytes next to settings they don't match. SHAPE CHOSEN:
+      supersede-on-change (not the parameter lock) — any output-affecting change (crop
+      on/off, crop rect, either correction) in the 'result' OR 'error' phase returns the
+      modal to 'ready': the verdict is CLEARED (not annotated), placing is structurally
+      impossible (the button doesn't exist), a note names the supersession, and the primary
+      action relabels to "Convert again" (the owner's intended loop stays one action long; a
+      lock would tax it with an explicit "change settings" step). The superseded run's stored
+      asset is kept (close-without-placing semantics) and comes back through the dedupe step
+      if its exact settings are re-selected. Source-describing surfaces (crop poster, probe
+      meta, source alpha) stay — they are setting-independent. Tests: 4 modal unit tests
+      (supersede via correction / via crop, Convert-again round-trip with the new settings,
+      error-phase supersession) + the E2E round-trip (convert → tick → superseded → Convert
+      again → place).
+
+- [x] 4b.8 THE UNIFIED SEEK VERDICT (owner's decisive test, 2026-07-25): every remaining
+      artifact — pause/resume black speckle + dark box + unrecovered freeze, the two-video
+      "black band", the verify sweep false-positives — is the ONE proven mechanism (a seek
+      into an alpha-misaligned GOP); premultiplied and concurrency are CLEARED. Shipped:
+      (a) ALIGNMENT AT THE SOURCE — `-keyint_min 25` fixes the GOP in both encoder streams
+      (native: 15/15 aligned, 29/29 cold seeks clean, 5% smaller; wasm end-to-end: 5/5
+      GOPs, 20/20 seeks), revision `2026-07-25.5`; (b) the SEEK AUDIT (full table in
+      design.md): resume's habitual re-seek ELIMINATED (clock re-anchors to the media —
+      the large-gap principle), the verify sweep replaced by full sequential playthrough,
+      necessary seeks (wrap / drift / outro entry) backed by recovery; (c) REAL dead-media
+      recovery — `VideoHandle.dead()`/`recover()` rebuild the element in place, checked
+      every tick (rate-limited) and FORCED at reset/resume/stop/playOutro, so "stop did
+      not recover" cannot recur; distinct-by-construction from the no-remount-on-drag
+      guard (only `media.error` triggers). Engine doc: VideoDriver section added to the
+      template-runtime README.
+- [x] 4b.9 The opacity "drop" (58.1→34.9) — own finding: static encode retains opacity
+      (α=255 → 100% ≥250); matched animated frames retain within a few points; the bulk of
+      the reading was the SAMPLERS reading different frames (3 at 16.7/50/83% vs 5 at
+      10/30/50/70/90%) of an ANIMATED clip — 88% vs 80% on identical bytes on the
+      synthetic. Fixed: both profilers share `ALPHA_SAMPLE_FRACTIONS`; residual honest
+      loss is the mild moving-edge erosion class. Numbers in design.md.
+- [x] 4b.10 The pre-convert hash froze the page (owner: "Page Unresponsive" at
+      "Checking… 0%" on archive-sized sources): pure-JS sha256 of 150–740 MB on the MAIN
+      thread starves paint. Fixed twice over: `hashSourceFile` now runs the unchanged
+      streaming core in a dedicated WORKER (progress posts back; cancel = terminate), and
+      `startImport` applies the FULL hash-free predicate (`matchesConversionParams`) before
+      hashing — a size-match with a stale revision / different corrections skips the
+      up-front hash entirely and goes straight to converting (the owner's exact freeze
+      case). Tests: the streaming core suite (`hashSourceStream`), the strict pre-filter
+      modal test (hash ordered AFTER convert start, no "Checking…" phase).
+
   **Phase 5 still owes the EXPORTER-side walk:** `runtime.ts`'s on-air/export asset-src walk is
   `img[data-cg-asset-id]`-only (Phase-3 note); Phase 5 widens it to `<video data-cg-asset-id>`
   (packaged relative path for `.vcg`, base64 `data:` for single-file) so a video renders + plays

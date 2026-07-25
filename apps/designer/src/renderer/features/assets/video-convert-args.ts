@@ -58,6 +58,19 @@ const VP8_ALPHA_ARGS = [
   // resume-window finding), +3.5% size measured. One revision bump carries both.
   '-g',
   '25',
+  // D-128 ALPHA KEYFRAME ALIGNMENT (2026-07-25, the seek-fragility ROOT fix):
+  // with kf_min == kf_max the GOP is FIXED, so BOTH libvpx encoder instances —
+  // colour AND the alpha side-stream — place keyframes at exactly the same
+  // frames instead of each on its own content-driven schedule. Misaligned alpha
+  // keyframes are what made seeks terminal (`PIPELINE_ERROR_DECODE` on a
+  // playable file): Chromium's fresh alpha decoder met a reference-less inter
+  // frame at the governing main keyframe. Container-verified on the 14.32s
+  // repro: 15/15 main keyframes carry alpha keyframes, zero strays, every
+  // previously-failing cold seek decodes (29/29), 5% SMALLER output, no encode
+  // time cost. Pre-.5 assets remain misaligned — the driver/poster recovery
+  // paths stay as belt-and-braces for them.
+  '-keyint_min',
+  '25',
   '-deadline',
   'good',
   '-cpu-used',
@@ -71,9 +84,19 @@ const VP8_ALPHA_ARGS = [
  * changes, so a future item can identify assets produced by an older converter
  * and prompt a re-import. `2026-07-23.2` = the premultiplied-alpha fringe fix;
  * `2026-07-24.3` = broadcast quality (crf 4 / qmax 16), 1s GOP (`-g 25`), and the
- * ALPHA BLEED (transparent-region colour fill) — the lossy-alpha-leak fix.
+ * ALPHA BLEED (transparent-region colour fill) — the lossy-alpha-leak fix;
+ * `2026-07-25.4` = FAST PATH BY DEFAULT (owner decision): the pixel-math stages
+ * (un-premultiply, alpha bleed) became opt-in corrections — a DEFAULT import's
+ * output changes (no bleed), so the bump is required by this contract even though
+ * the ENCODER args are untouched. No re-import is forced: bleed-on assets from
+ * ≤ .3 are not defective (the bleed is a robustness layer, not a fix);
+ * `2026-07-25.5` = ALPHA KEYFRAME ALIGNMENT (`-keyint_min 25` — fixed GOP, both
+ * encoder streams keyframe together): seeks stop being terminal on the produced
+ * WebM. RE-IMPORT IMPLICATION: assets from ≤ .4 remain seek-fragile — they still
+ * play and air correctly, and the recovery paths handle them, but re-importing
+ * them under .5 removes their seek fragility at the source.
  */
-export const CONVERTER_REVISION = '2026-07-24.3';
+export const CONVERTER_REVISION = '2026-07-25.5';
 
 /**
  * D-128 — the geq expressions of the alpha pipeline. Why `geq` and not ffmpeg's
@@ -157,10 +180,20 @@ function buildAlphaGraph(crop: CropRect | undefined, premultiplied: boolean): st
  * CONFORMED to the project channel's frame rate via `-r` (decision (d) — a
  * non-matching rate judders on air; conforming once at import fixes it cleanly).
  *
- * `premultipliedAlpha` (D-128 fringe fix) selects the graph shape: ON un-premultiplies
- * the matted archive (AFTER the crop, BEFORE the encode); OFF leaves the straight
- * source's colours untouched. BOTH shapes run the ALPHA BLEED above — it protects any
- * alpha source from lossy-alpha leak and never alters the alpha channel itself.
+ * FAST PATH BY DEFAULT (owner decision 2026-07-25): a default import runs NO
+ * pixel-math — no un-premultiply, no alpha bleed — exactly the spike's shape,
+ * with the QUALITY settings kept (crf 4 / qmax 16 / -g 25 cost under a second
+ * and are what fixed the alpha leak from 56.7% to ~0%). Measured on the 5 s
+ * 1920×282 ladder: no-filter 5.4 s → +unpremultiply geq 17.1 s → +bleed 31.2 s
+ * — the two geq stages are ~6× the whole cost, so each is a separate OPT-IN:
+ *
+ * - `premultipliedAlpha` — un-premultiplies a matted archive (black-fringe fix);
+ *   a single linear `-vf` chain when it is the only correction.
+ * - `alphaBleed` — the transparent-region colour fill (residual-leak robustness);
+ *   needs the full split/overlay/alphamerge graph (`-filter_complex`).
+ *
+ * The two compose orthogonally in `buildAlphaGraph` when both are on. With
+ * neither, the crop (if any) rides a plain `-vf crop` — no format round-trip.
  */
 export function buildConvertArgs(opts: {
   inputPath: string;
@@ -168,15 +201,26 @@ export function buildConvertArgs(opts: {
   targetFps: number;
   crop?: CropRect | undefined;
   premultipliedAlpha?: boolean | undefined;
+  alphaBleed?: boolean | undefined;
 }): string[] {
+  const premultiplied = opts.premultipliedAlpha === true;
+  const bleed = opts.alphaBleed === true;
+  const cropChain =
+    opts.crop !== undefined
+      ? `crop=${opts.crop.width}:${opts.crop.height}:${opts.crop.x}:${opts.crop.y}`
+      : '';
+  const filterArgs: string[] = bleed
+    ? ['-filter_complex', buildAlphaGraph(opts.crop, premultiplied), '-map', '[out]']
+    : premultiplied
+      ? ['-vf', `${cropChain !== '' ? `${cropChain},` : ''}format=rgba,${GEQ_UNPREMULT}`]
+      : cropChain !== ''
+        ? ['-vf', cropChain]
+        : [];
   return [
     '-y',
     '-i',
     opts.inputPath,
-    '-filter_complex',
-    buildAlphaGraph(opts.crop, opts.premultipliedAlpha === true),
-    '-map',
-    '[out]',
+    ...filterArgs,
     ...VP8_ALPHA_ARGS,
     '-r',
     String(opts.targetFps),
@@ -277,6 +321,8 @@ export function buildProvenance(opts: {
   sourceBytes?: number | undefined;
   /** Whether the source was treated as premultiplied (un-premultiplied at conversion). */
   premultipliedAlpha?: boolean | undefined;
+  /** Whether the ALPHA BLEED (transparent-region colour fill) ran at conversion. */
+  alphaBleed?: boolean | undefined;
 }): VideoProvenance {
   return {
     sourceFilename: opts.sourceFilename,
@@ -293,6 +339,7 @@ export function buildProvenance(opts: {
     ...(opts.premultipliedAlpha !== undefined
       ? { premultipliedAlpha: opts.premultipliedAlpha }
       : {}),
+    ...(opts.alphaBleed !== undefined ? { alphaBleed: opts.alphaBleed } : {}),
   };
 }
 
@@ -308,25 +355,59 @@ export function cropsEqual(a: CropRect | undefined, b: CropRect | undefined): bo
 
 /**
  * Find a video asset already imported from the SAME source with the SAME
- * conversion parameters (source hash + target fps + crop) — the pre-convert
- * duplicate. A matching source with a DIFFERENT crop or fps is NOT a duplicate:
- * its output genuinely differs, so it must still convert. Returns the first
- * match, or null.
+ * conversion parameters (source hash + target fps + crop + corrections) — the
+ * pre-convert duplicate. A matching source with a DIFFERENT crop, fps, or
+ * correction set is NOT a duplicate: its output genuinely differs, so it must
+ * still convert. The match is also GATED ON THE CURRENT CONVERTER REVISION —
+ * an asset produced by an older converter is a genuinely different output (and
+ * for revisions ≤ 2026-07-24.3 the bleed ran implicitly, unrecorded), so a
+ * re-import correctly re-encodes under the current algorithm instead of
+ * offering the stale bytes. Returns the first match, or null.
  */
+/**
+ * The HASH-FREE half of the duplicate predicate: everything except the source
+ * digest — current converter revision, target fps, crop, and the exact
+ * correction set. Split out (2026-07-25, the main-thread-freeze fix) so the
+ * modal can decide "is a duplicate even POSSIBLE?" BEFORE paying for the
+ * multi-hundred-MB source hash: when no size-matched asset also passes THIS
+ * predicate, the up-front hash is skipped entirely — the exact trap was a
+ * re-import of an archive clip whose only candidates were stale-revision
+ * assets the hash-gated match would have rejected anyway.
+ */
+export function matchesConversionParams(
+  p: VideoProvenance,
+  match: {
+    targetFps: number;
+    crop: CropRect | undefined;
+    premultipliedAlpha?: boolean;
+    alphaBleed?: boolean;
+  },
+): boolean {
+  return (
+    p.converterRevision === CONVERTER_REVISION &&
+    p.targetFps === match.targetFps &&
+    cropsEqual(p.crop, match.crop) &&
+    (p.premultipliedAlpha === true) === (match.premultipliedAlpha === true) &&
+    (p.alphaBleed === true) === (match.alphaBleed === true)
+  );
+}
+
 export function findDuplicateVideoAsset<
   A extends { kind: string; provenance?: VideoProvenance | undefined },
 >(
   assets: readonly A[],
-  match: { sourceSha256: string; targetFps: number; crop: CropRect | undefined },
+  match: {
+    sourceSha256: string;
+    targetFps: number;
+    crop: CropRect | undefined;
+    premultipliedAlpha?: boolean;
+    alphaBleed?: boolean;
+  },
 ): A | null {
   for (const a of assets) {
     const p = a.provenance;
     if (a.kind !== 'video' || p === undefined) continue;
-    if (
-      p.sourceSha256 === match.sourceSha256 &&
-      p.targetFps === match.targetFps &&
-      cropsEqual(p.crop, match.crop)
-    ) {
+    if (p.sourceSha256 === match.sourceSha256 && matchesConversionParams(p, match)) {
       return a;
     }
   }

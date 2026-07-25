@@ -473,6 +473,33 @@ in-scope sequences in that change).
   zero-content parity). Transition edges are PHYSICAL — `direction` drives
   per-item bidi isolation only, never mirrors motion.
 
+### VideoDriver — the self-advancing medium + the seek policy (D-128 Phase 4)
+
+A `video` element is the INVERSE of a Lottie: the `<video>` advances on its own
+media clock, so `VideoDriver` does not paint frames — it keeps the element in
+lockstep with the injected `RuntimeClock` through a `VideoHandle`
+(`play`/`pause`/`seek`/`currentTime`/`seeking`/`dead`/`recover`), built in
+`runtime.ts` around the scene-builder's registered `<video>`. Phase mapping:
+intro `[0 → introEnd]`, hold loops `[loopStart, loopEnd]` or freezes at
+`introEnd`, outro `[outroStart → duration]` through the same element-outro seam
+as a Lottie.
+
+**THE SEEK POLICY (2026-07-25 — the fragile-alpha-seek root cause):** on
+VP8+alpha WebM whose alpha side-stream keyframes misalign with the main
+stream's (assets converted before revision `2026-07-25.5`), a seek can be a
+TERMINAL `media.error` on a perfectly playable file. The driver therefore (a)
+NEVER seeks on `resume()` — the media froze where it froze, so the clock
+re-anchors to the media and just plays (the large-gap principle); (b) keeps
+only the NECESSARY seeks (loop wrap, outro entry, bounded drift correction,
+the always-safe `t=0` on reset/start); and (c) treats `handle.dead()` as
+recoverable everywhere: every tick and every lifecycle entry (`reset` /
+`resume` / `stop` / `playOutro`) rebuilds the dead element via
+`handle.recover()` — a fresh node, same attributes/src/position, rate-limited
+on the tick path — so a terminal decode error degrades to a sub-second hiccup
+instead of a permanent freeze. Recovery fires ONLY on `media.error`; a
+transform change never sets it, so the Designer-preview no-remount-on-drag
+guarantee is untouched.
+
 ### LottieDriver + the element-outro seam (D-125)
 
 A `lottie` element mounts a `lottie_light` player (`@cg/lottie-bridge`,

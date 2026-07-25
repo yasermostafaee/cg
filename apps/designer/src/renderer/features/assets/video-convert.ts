@@ -335,7 +335,7 @@ export type ConvertedClipVerdict =
   | {
       ok: false;
       /** WHICH check failed — the message must be specific, never "conversion failed". */
-      check: 'decode' | 'duration' | 'dimensions' | 'seek' | 'playback';
+      check: 'decode' | 'duration' | 'dimensions' | 'playback';
       reason: string;
     };
 
@@ -357,6 +357,17 @@ export interface AlphaStats {
   opaqueFrac: number;
   /** Total pixels sampled (across frames). */
   sampled: number;
+  /**
+   * D-128 fast-path — of the SEMI-transparent sampled pixels (8 ≤ α ≤ 250, where
+   * premultiplied and straight alpha actually differ), the fraction whose colour
+   * exceeds their alpha (max(r,g,b) > α + 2). That is IMPOSSIBLE under
+   * premultiplied (matted) alpha — every channel is ≤ α there — so ~0 with real
+   * semi-transparency present means the source is CONSISTENT WITH premultiplied
+   * alpha, and the result panel can point the operator at the correction.
+   */
+  straightEvidenceFrac: number;
+  /** How many semi-transparent pixels `straightEvidenceFrac` is based on. */
+  semiSampled: number;
 }
 
 function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
@@ -365,6 +376,8 @@ function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
   let nonTransparent = 0;
   let opaque = 0;
   let n = 0;
+  let semi = 0;
+  let straightEvidence = 0;
   for (const buf of buffers) {
     for (let i = 3; i < buf.length; i += 4) {
       const a = buf[i] as number;
@@ -373,6 +386,13 @@ function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
       if (a > maxA) maxA = a;
       if (a >= 8) nonTransparent++;
       if (a >= 250) opaque++;
+      if (a >= 8 && a <= 250) {
+        semi++;
+        const r = buf[i - 3] as number;
+        const g = buf[i - 2] as number;
+        const b = buf[i - 1] as number;
+        if (r > a + 2 || g > a + 2 || b > a + 2) straightEvidence++;
+      }
     }
   }
   return {
@@ -381,6 +401,8 @@ function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
     nonTransparentFrac: n > 0 ? nonTransparent / n : 0,
     opaqueFrac: n > 0 ? opaque / n : 0,
     sampled: n,
+    straightEvidenceFrac: semi > 0 ? straightEvidence / semi : 1,
+    semiSampled: semi,
   };
 }
 
@@ -394,14 +416,25 @@ export function formatAlphaStats(s: AlphaStats): string {
 }
 
 /**
+ * D-128 — THE ONE sample-time set BOTH alpha profilers use. Source and output MUST
+ * read the SAME clip fractions: an animated clip's opaque coverage varies over time
+ * (intro/outro frames show less than hold frames), so profiles taken at DIFFERENT
+ * time points are apples-to-oranges — measured on a synthetic 5 s slide-in/out at
+ * full retention, the old mismatched sets (source 16.7/50/83% × 3 vs output
+ * 10/30/50/70/90% × 5) read 88% vs 80% opaque ON IDENTICAL BYTES. That comparison
+ * bias, not encode loss, was the bulk of the field's "58.1% → 34.9%" reading.
+ */
+export const ALPHA_SAMPLE_FRACTIONS = [0.1, 0.3, 0.5, 0.7, 0.9] as const;
+
+/**
  * D-128 — sample the SOURCE's alpha profile: decode a few spread frames to raw RGBA in
  * the wasm and measure. Null on any failure — a diagnostics miss must never block an
- * import. Runs under the module mutex like every wasm op.
+ * import. Runs under the module mutex like every wasm op. Sample times are the SHARED
+ * {@link ALPHA_SAMPLE_FRACTIONS} so the source/output comparison is frame-honest.
  */
 export async function sampleSourceAlpha(
   file: File,
   durationMs: number,
-  samples = 3,
 ): Promise<AlphaStats | null> {
   return withExclusive(async () => {
     let held: FFmpeg | null = null;
@@ -411,9 +444,7 @@ export async function sampleSourceAlpha(
       const input = await mountSource(ff, file);
       const buffers: Uint8Array[] = [];
       const times =
-        durationMs > 0
-          ? Array.from({ length: samples }, (_, i) => ((i + 0.5) / samples) * (durationMs / 1000))
-          : [0];
+        durationMs > 0 ? ALPHA_SAMPLE_FRACTIONS.map((f) => f * (durationMs / 1000)) : [0];
       for (const t of times) {
         const out = `/alpha-probe-${String(Math.round(t * 1000))}.raw`;
         const seek = t > 0 ? ['-ss', t.toFixed(3)] : [];
@@ -490,7 +521,9 @@ export function sampleOutputAlphaStats(bytes: Uint8Array): Promise<AlphaStats | 
           }
           const dur = Number.isFinite(v.duration) ? v.duration : 0;
           const buffers: Uint8Array[] = [];
-          for (const frac of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+          // The SHARED fraction set — the source profiler reads the same points,
+          // so the source/output comparison is frame-honest (see the const's doc).
+          for (const frac of ALPHA_SAMPLE_FRACTIONS) {
             if (dur > 0) {
               const sought = await new Promise<boolean>((res) => {
                 const st = setTimeout(() => res(false), 3000);
@@ -522,20 +555,24 @@ export function sampleOutputAlphaStats(bytes: Uint8Array): Promise<AlphaStats | 
 /**
  * D-128 — VERIFY the converted bytes ACTUALLY PLAY before anything is stored. The field
  * lesson (`Lower_Default`): loading metadata and decoding a sample frame is NOT proof of
- * playability — Chromium seek-decoded five frames of a file whose full playback throws
- * `PIPELINE_ERROR_DECODE`. So this exercises the real thing, in order:
+ * playability. What runs, in order:
  *
  *  1. metadata reachable + finite positive duration + EXACT post-crop dimensions;
- *  2. a SEEK SWEEP across the clip (15/35/55/75/92%) — each must fire `seeked` with a
- *     decodable frame (`readyState ≥ HAVE_CURRENT_DATA`), catching mid-file corruption;
- *  3. a REAL PLAYBACK SPAN — plays ~2s of media time (rate 4; the whole clip when
- *     shorter) with the `error` listener armed the ENTIRE time: any `MediaError`
- *     (the `PIPELINE_ERROR_*` class) fails the check with the position it died at.
+ *  2. a FULL SEQUENTIAL PLAYTHROUGH at 16× with the `error` listener armed the whole
+ *     way — every frame decodes or the verdict carries the position it died at.
  *
- * TIME BOUND (a long clip must not hang the modal): metadata ≤ 8 s, each of the 5 seeks
- * ≤ 3 s, playback span ≤ 8 s wall — worst case ~31 s, typical clip ~2–4 s. Muted, 4×,
- * on a detached element. Failures name WHICH check failed (`check`), never a generic
- * "conversion failed".
+ * WHY playthrough and not a seek sweep (2026-07-25): seeking VP8+alpha is not a property
+ * of the FILE in Chromium — the alpha side-stream's keyframes need not align with the
+ * main stream's, and a seek into a misaligned GOP is a terminal decode error on a
+ * perfectly playable file (container-proven; the canvas-blank root cause). The old
+ * 5-point sweep failed HEALTHY outputs under load at its very first target, while
+ * playthrough decodes EVERY frame — strictly stronger and free of that class. Playout
+ * never seeks; the canvas poster runs the recovery ladder.
+ *
+ * TIME BOUND (a long clip must not hang the modal): metadata ≤ 8 s; playthrough is
+ * duration/16 wall (decode-bound), capped at 30 s — a cap with playback progressing
+ * error-free passes the covered span and logs the cap. Muted, on a detached element.
+ * Failures name WHICH check failed (`check`), never a generic "conversion failed".
  */
 export function verifyConvertedClip(
   bytes: Uint8Array,
@@ -550,7 +587,7 @@ export function verifyConvertedClip(
   v.muted = true;
   const mediaError = (): string => v.error?.message ?? `media error code ${String(v.error?.code)}`;
   const fail = (
-    check: 'decode' | 'duration' | 'dimensions' | 'seek' | 'playback',
+    check: 'decode' | 'duration' | 'dimensions' | 'playback',
     reason: string,
   ): ConvertedClipVerdict => ({ ok: false, check, reason });
 
@@ -603,49 +640,47 @@ export function verifyConvertedClip(
         return;
       }
       void (async () => {
-        // 2 — the seek sweep across the clip (not just the start)
+        // 2 — a FULL SEQUENTIAL PLAYTHROUGH at 16x, the error listener armed the
+        // whole way. This REPLACED the 5-point seek sweep + 2s span (2026-07-25):
+        // seeking VP8+alpha is not a property of the FILE in Chromium — the
+        // alpha side-stream's keyframes need not align with the main stream's,
+        // and a seek into a misaligned GOP is a terminal decode error on a
+        // PERFECTLY PLAYABLE file (container-proven, the canvas-blank root
+        // cause). The sweep failed HEALTHY outputs under load (t=0.24s, its
+        // first target — even warmed), while playthrough decodes EVERY frame:
+        // strictly stronger verification than five sampled frames plus a 2s
+        // span, and free of the seek false-positive class. Playout never seeks;
+        // the canvas poster runs the recovery ladder. Wall-capped for very long
+        // clips: if the cap lands while playback is progressing error-free, the
+        // covered span passes and the cap is logged (never a silent truncation).
         const dur = v.duration;
-        for (const frac of [0.15, 0.35, 0.55, 0.75, 0.92]) {
-          const target = frac * dur;
-          const okSeek = await new Promise<boolean>((res) => {
-            const st = setTimeout(() => res(false), 3000);
-            v.onseeked = () => {
-              clearTimeout(st);
-              res(v.readyState >= 2); // HAVE_CURRENT_DATA — a frame is really there
-            };
-            v.currentTime = target;
-          });
-          if (settled) return; // the error listener already resolved (the real verdict)
-          if (!okSeek) {
-            done(
-              fail('seek', `no decodable frame at ${target.toFixed(2)}s (seek never completed)`),
-            );
-            return;
-          }
-        }
-        // 3 — a real playback span, error listener still armed
-        v.currentTime = 0;
-        v.playbackRate = 4;
-        const spanEndMedia = Math.min(dur, 2.0);
-        const playOk = await new Promise<boolean>((res) => {
-          const pt = setTimeout(() => res(v.currentTime > 0), 8000); // bound: 8s wall
+        v.playbackRate = 16;
+        const WALL_CAP_MS = 30_000;
+        const outcome = await new Promise<'ended' | 'cap' | 'stalled'>((res) => {
+          const wall = setTimeout(() => res(v.currentTime > 0 ? 'cap' : 'stalled'), WALL_CAP_MS);
           const tick = (): void => {
-            if (settled || v.currentTime >= spanEndMedia || v.ended) {
-              clearTimeout(pt);
-              res(true);
+            if (settled || v.ended || v.currentTime >= dur - 0.05) {
+              clearTimeout(wall);
+              res('ended');
               return;
             }
             setTimeout(tick, 100);
           };
           v.play().then(tick, () => {
-            clearTimeout(pt);
-            res(false);
+            clearTimeout(wall);
+            res('stalled');
           });
         });
-        if (settled) return;
-        if (!playOk) {
+        if (settled) return; // the error listener already resolved (the real verdict)
+        if (outcome === 'stalled') {
           done(fail('playback', 'the output does not play (playback never started)'));
           return;
+        }
+        if (outcome === 'cap') {
+          console.warn(
+            `[video-convert] playthrough hit the ${String(WALL_CAP_MS / 1000)}s wall cap — ` +
+              `verified the first ${v.currentTime.toFixed(1)}s of ${dur.toFixed(1)}s error-free`,
+          );
         }
         done({ ok: true, durationMs, width: expectedWidth, height: expectedHeight });
       })();
@@ -690,8 +725,10 @@ export async function convertToWebm(opts: {
   file: File;
   targetFps: number;
   crop?: CropRect | undefined;
-  /** D-128 — un-premultiply a matted-against-black source (fringe fix). */
+  /** D-128 — un-premultiply a matted-against-black source (fringe fix). OPT-IN. */
   premultipliedAlpha?: boolean | undefined;
+  /** D-128 — the alpha-bleed robustness layer (transparent-region colour fill). OPT-IN. */
+  alphaBleed?: boolean | undefined;
   onProgress?: ((ratio: number) => void) | undefined;
 }): Promise<Uint8Array<ArrayBuffer> | null> {
   return withExclusive(async () => {
@@ -718,6 +755,7 @@ export async function convertToWebm(opts: {
               targetFps: opts.targetFps,
               crop: opts.crop,
               premultipliedAlpha: opts.premultipliedAlpha,
+              alphaBleed: opts.alphaBleed,
             }),
           ),
         );

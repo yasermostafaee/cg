@@ -491,6 +491,17 @@ the preview iframe is the **merge of the project asset cache and the shared imag
 cache** (disjoint id-spaces); an unresolved reference renders a placeholder + a
 one-time warning, never a crash.
 
+D-128 — a `<video>` in the same walk is wired through the **shared robust poster
+routine** (`src/shared/video-poster.ts`, injected into the iframe document as
+serialized source), not a bare `src` + cold seek: a WebM whose alpha side-stream
+keyframes misalign with the main stream's makes a cold seek into a misaligned GOP a
+TERMINAL Chromium `PIPELINE_ERROR_DECODE` (permanently blank element) even though the
+clip plays sequentially and airs correctly. The routine seeks on the eager-load path
+and falls back to sequential 16× decode to the poster time, restoring
+`playbackRate`/paused for a later real play. The Inspector / assets-panel thumbnails
+(`VideoPoster`) and the import modal's post-store poster verification run the SAME
+routine — one implementation, so "import verified it" ⇒ "the canvas renders it".
+
 ## Contracts / invariants
 
 - The overlay reasons in **scene coords** and at the **effective (animated)

@@ -52,17 +52,23 @@ const TRANSPARENT_ALPHA = {
   sampled: 10_000,
 };
 
-// D-128 dedupe seam: the source hash + the stored-WebM metadata probe are mocked
-// so these DOM tests never touch File.stream() / a real <video>. vi.hoisted so
-// the fns exist before the hoisted vi.mock factories run.
-const { hashSourceFile, probeStoredVideo } = vi.hoisted(() => ({
+// D-128 dedupe seam: the source hash + the stored-WebM metadata probe + the
+// post-store poster parity check are mocked so these DOM tests never touch
+// File.stream() / a real <video>. vi.hoisted so the fns exist before the
+// hoisted vi.mock factories run.
+const { hashSourceFile, probeStoredVideo, verifyStoredPoster } = vi.hoisted(() => ({
   hashSourceFile: vi.fn(),
   probeStoredVideo: vi.fn(),
+  verifyStoredPoster: vi.fn(),
 }));
 vi.mock('../src/renderer/features/assets/source-hash.js', () => ({ hashSourceFile }));
-vi.mock('../src/renderer/features/assets/video-asset-probe.js', () => ({ probeStoredVideo }));
+vi.mock('../src/renderer/features/assets/video-asset-probe.js', () => ({
+  probeStoredVideo,
+  verifyStoredPoster,
+}));
 
 import { VideoImportModal } from '../src/renderer/features/assets/VideoImportModal.js';
+import { CONVERTER_REVISION } from '../src/renderer/features/assets/video-convert-args.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -98,6 +104,7 @@ beforeEach(() => {
   sampleOutputAlphaStats.mockResolvedValue(HEALTHY_ALPHA);
   hashSourceFile.mockResolvedValue('a'.repeat(64));
   probeStoredVideo.mockResolvedValue({ durationMs: 4000, width: 640, height: 360 });
+  verifyStoredPoster.mockResolvedValue(null); // poster parity passes by default
   assetsList.mockResolvedValue([]); // no prior imports ⇒ never a duplicate by default
   assetUrl.mockResolvedValue('blob:existing');
   storeBytes.mockResolvedValue({ asset: STORED_ASSET });
@@ -468,6 +475,178 @@ describe('VideoImportModal (D-128)', () => {
     expect(document.body.textContent).toContain('readback verification');
   });
 
+  it('POSTER PARITY: a stored clip that cannot produce its canvas poster fails the import loudly', async () => {
+    // The exact field gap this closes: "✓ plays" was honestly true while the
+    // canvas rendered BLANK — the at-rest poster is a different operation than
+    // anything the playability verify exercised. The modal now runs the SAME
+    // shared routine the canvas/thumbnails use; its failure must surface with
+    // its OWN message and place no element.
+    convertToWebm.mockResolvedValue(new Uint8Array([7, 8, 9]));
+    verifyStoredPoster.mockResolvedValue(
+      'the stored clip cannot produce its canvas poster frame (PIPELINE_ERROR_DECODE)',
+    );
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(verifyStoredPoster).toHaveBeenCalledWith('blob:existing', 2000); // posterTimeMs(4000)
+    expect(onDone).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('poster verification');
+    expect(document.body.textContent).toContain('render blank on the canvas');
+  });
+
+  it('the premultiplied-alpha toggle defaults OFF and opting IN passes true (owner decision 2026-07-25)', async () => {
+    // A default must never degrade an already-correct straight-alpha source;
+    // the operator opts IN when a black fringe is actually visible.
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    await renderModal();
+    const toggle = document.querySelector(
+      '[data-testid="video-premultiplied-toggle"]',
+    ) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    act(() => {
+      toggle.click();
+    });
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(convertToWebm).toHaveBeenCalledWith(
+      expect.objectContaining({ premultipliedAlpha: true }),
+    );
+    const prov = (storeBytes.mock.calls[0]?.[0] as { provenance: { premultipliedAlpha?: boolean } })
+      .provenance;
+    expect(prov.premultipliedAlpha).toBe(true); // the opt-in is recorded in provenance
+  });
+
+  it('the alpha-bleed toggle defaults OFF and opting IN passes true + is recorded (fast path)', async () => {
+    // The bleed ran UNCONDITIONALLY before (the "minutes vs the spike" bug);
+    // it must now be a genuine opt-in with its own provenance record.
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    await renderModal();
+    const toggle = document.querySelector(
+      '[data-testid="video-alpha-bleed-toggle"]',
+    ) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    act(() => {
+      toggle.click();
+    });
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(convertToWebm).toHaveBeenCalledWith(expect.objectContaining({ alphaBleed: true }));
+    const prov = (storeBytes.mock.calls[0]?.[0] as { provenance: { alphaBleed?: boolean } })
+      .provenance;
+    expect(prov.alphaBleed).toBe(true);
+  });
+
+  it('STALE-RESULT COHERENCE: ticking a correction after a completed conversion clears the verdict, removes Place element, and offers Convert again', async () => {
+    // The owner only TICKED a box — the defect was the STATE the modal allowed:
+    // a verdict + "Place element" describing bytes that no longer match the
+    // settings on screen. Supersede-on-change makes that state unrepresentable.
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(document.querySelector('[data-testid="video-conversion-result"]')).not.toBeNull();
+    const bleed = document.querySelector(
+      '[data-testid="video-alpha-bleed-toggle"]',
+    ) as HTMLInputElement;
+    act(() => {
+      bleed.click();
+    });
+    // the verdict is GONE, not merely annotated…
+    expect(document.querySelector('[data-testid="video-conversion-result"]')).toBeNull();
+    // …placing is STRUCTURALLY impossible (no button at all)…
+    expect(
+      [...document.querySelectorAll('button')].some((b) =>
+        b.textContent?.includes('Place element'),
+      ),
+    ).toBe(false);
+    // …the supersession is named, and the next step is visible.
+    expect(document.querySelector('[data-testid="video-superseded-note"]')).not.toBeNull();
+    expect(button('Convert again')).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('STALE-RESULT COHERENCE: a crop change after a completed conversion supersedes too', async () => {
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(document.querySelector('[data-testid="video-conversion-result"]')).not.toBeNull();
+    act(() => {
+      cropToggle().click(); // crop on/off changes the output
+    });
+    expect(document.querySelector('[data-testid="video-conversion-result"]')).toBeNull();
+    expect(document.querySelector('[data-testid="video-superseded-note"]')).not.toBeNull();
+  });
+
+  it('STALE-RESULT COHERENCE: Convert again runs a NEW conversion with the shown settings; the note clears and a fresh verdict lands', async () => {
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const bleed = document.querySelector(
+      '[data-testid="video-alpha-bleed-toggle"]',
+    ) as HTMLInputElement;
+    act(() => {
+      bleed.click();
+    });
+    await act(async () => {
+      button('Convert again').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // the second run carries the NEW settings…
+    expect(convertToWebm).toHaveBeenCalledTimes(2);
+    expect(convertToWebm).toHaveBeenLastCalledWith(expect.objectContaining({ alphaBleed: true }));
+    // …its verdict is current again: panel back, note gone, placing available.
+    expect(document.querySelector('[data-testid="video-conversion-result"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="video-superseded-note"]')).toBeNull();
+    expect(button('Place element')).toBeTruthy();
+  });
+
+  it('STALE-RESULT COHERENCE: a parameter change after a FAILED conversion clears the stale error the same way', async () => {
+    convertToWebm.mockResolvedValue(null); // conversion fails
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    expect(document.body.textContent).toContain('Conversion failed');
+    const premult = document.querySelector(
+      '[data-testid="video-premultiplied-toggle"]',
+    ) as HTMLInputElement;
+    act(() => {
+      premult.click();
+    });
+    // the failed run's message no longer describes the settings on screen
+    expect(document.body.textContent).not.toContain('Conversion failed');
+    expect(document.querySelector('[data-testid="video-superseded-note"]')).not.toBeNull();
+    expect(button('Convert again')).toBeTruthy();
+  });
+
   it('crop numeric fields drive the rect (numbers → rectangle sync)', async () => {
     await renderModal();
     act(() => {
@@ -678,7 +857,10 @@ describe('VideoImportModal (D-128)', () => {
         file: FILE,
         targetFps: 50,
         crop: { x: 100, y: 0, width: 320, height: 360 },
-        premultipliedAlpha: true, // the toggle defaults ON (the client's archive)
+        // The toggle defaults OFF (owner decision 2026-07-25): a default must
+        // never degrade an already-correct straight-alpha source; the operator
+        // opts IN when a black fringe is actually visible.
+        premultipliedAlpha: false,
       }),
     );
     expect(storeBytes).toHaveBeenCalledWith({
@@ -695,7 +877,8 @@ describe('VideoImportModal (D-128)', () => {
         sourceSha256: 'a'.repeat(64), // the dedupe key (computed during the encode) travels along
         sourceBytes: FILE_SIZE,
         crop: { x: 100, y: 0, width: 320, height: 360 },
-        premultipliedAlpha: true,
+        premultipliedAlpha: false, // the OFF default is recorded in provenance
+        alphaBleed: false, // fast path: the bleed is opt-in and its state is recorded too
       },
     });
     await placeElement();
@@ -742,8 +925,39 @@ describe('VideoImportModal — pre-convert dedupe (D-128)', () => {
       sourceHeight: 360,
       sourceSha256: 'a'.repeat(64),
       sourceBytes: FILE_SIZE, // matches FILE so the Bug-3 size pre-filter lets the hash run
+      // Dedupe is revision-gated (fast-path): only an asset produced by the
+      // CURRENT converter, with the SAME correction set, is the same output.
+      converterRevision: CONVERTER_REVISION,
+      premultipliedAlpha: false,
+      alphaBleed: false,
       ...over,
     },
+  });
+
+  it('STRICT PRE-FILTER: a size-match that CANNOT be a duplicate (stale revision / different corrections) skips the up-front hash entirely', async () => {
+    // The main-thread-freeze trap: the owner re-imported a 740 MB archive clip
+    // whose only size-matched assets were stale-revision — the multi-hundred-MB
+    // hash ran (freezing the page) chasing a match the revision gate would
+    // reject anyway. Every hash-free half of the predicate must be checked
+    // BEFORE the hash: no possible match ⇒ straight to converting.
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    assetsList.mockResolvedValue([
+      existingAsset({ converterRevision: '2026-07-24.3' }), // stale revision
+      existingAsset({ alphaBleed: true }), // different correction set
+    ]);
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(convertToWebm).toHaveBeenCalled(); // went straight to converting…
+    // …with NO blocking "Checking…" phase, and the hash called exactly ONCE —
+    // the DEFERRED provenance hash that runs alongside the encode, never the
+    // up-front duplicate check (which would have been a second call).
+    expect(document.body.textContent).not.toContain('Checking for a previous import');
+    expect(hashSourceFile).toHaveBeenCalledTimes(1);
   });
 
   it('the SAME source with the SAME crop + fps is a duplicate: no re-convert, and "Use existing" places the prior asset', async () => {

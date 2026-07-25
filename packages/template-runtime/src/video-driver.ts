@@ -16,13 +16,16 @@ import type { RuntimeClock } from './types.js';
  * frame per rAF; it lets the element play and, off the SAME injected clock, keeps
  * it in lockstep:
  *
- *  - pause() → `video.pause()` and capture the elapsed active time;
- *  - resume() → re-anchor to the clock, RE-SEEK to the clock-derived clip-time
- *    (never trust where a paused/stalled element left its head), then play;
+ *  - pause() → `video.pause()` — the element freezes where it freezes;
+ *  - resume() → SEEK-FREE: re-anchor the driver clock to the media's actual
+ *    position (the media is authoritative — the large-gap principle) and play.
+ *    The old clock-derived re-seek was a fragile-alpha-seek trigger on
+ *    pre-alignment assets (pause/resume speckle + freeze) and bought nothing;
  *  - each tick compares the element's `currentTime` against the clock-derived
- *    EXPECTED clip-time and re-seeks ONLY when the error exceeds a threshold
- *    (bounded correction, never per-tick — no visible stutter); loop wrap is
- *    driver-commanded (seek to the loop start), never `<video loop>`.
+ *    EXPECTED clip-time; past the threshold the drift handling is SIGNED
+ *    (`correctDrift`): a LAGGING media re-bases the clock (seek-free — the
+ *    tab-return fix), only an externally-moved (ahead) media is seeked; loop
+ *    wrap is driver-commanded (seek to the loop start), never `<video loop>`.
  *
  * ROBUSTNESS (the sync-lifecycle fix, 2026-07-23) — the injected clock in the
  * Designer Preview is `performance.now()` (a WALL clock), while the `<video>`
@@ -83,6 +86,23 @@ export interface VideoHandle {
    * that wedges the decoder and paints half-decoded frames.
    */
   seeking(): boolean;
+  /**
+   * True when the media hit a TERMINAL error (`media.error !== null`). On VP8+alpha
+   * assets encoded before the keyframe-alignment fix (converter revision < 2026-07-25.5),
+   * a seek into a GOP whose alpha side-stream frame is inter-coded at the governing main
+   * keyframe is exactly such an error — the element goes permanently dead (black speckle,
+   * then freeze): no seek or play on it ever paints again.
+   */
+  dead(): boolean;
+  /**
+   * Rebuild the dead media element IN PLACE (fresh node, same src/attributes, restored
+   * position, playing again if it was). The driver calls this — rate-limited — whenever
+   * {@link dead} reports true, so a terminal decode error degrades to a sub-second
+   * hiccup instead of a permanent freeze. NEVER invoked for transforms or any healthy
+   * state: `media.error` is the only trigger, which keeps the Phase-3
+   * no-remount-on-drag guarantee intact.
+   */
+  recover(): void;
 }
 
 export interface VideoDriverOptions {
@@ -166,8 +186,8 @@ export class VideoDriver implements ElementOutroDriver {
   private lastTickNow = 0;
   /** Until this `now()`, drift correction is suppressed so a resuming decoder can ramp up. */
   private correctionGraceUntil = 0;
-  /** Elapsed active ms captured at `pause()`, replayed by `resume()`. */
-  private pausedElapsed = 0;
+  /** `now()` of the last dead-media rebuild — recovery is rate-limited, never a storm. */
+  private lastRecoverAt = Number.NEGATIVE_INFINITY;
   /** True once a FREEZE hold is reached — `resume()` must NOT reopen it. */
   private settledHold = false;
   private destroyed = false;
@@ -211,9 +231,12 @@ export class VideoDriver implements ElementOutroDriver {
   reset(): void {
     this.cancelFrame();
     this.settleOutro();
+    // A dead element must be REBUILT here or the next take plays into a corpse
+    // (the owner's "stop did not recover" freeze): seek(0)+play() on a node with
+    // a terminal `media.error` never paints again.
+    this.recoverIfDead(true);
     this.running = false;
     this.settledHold = false;
-    this.pausedElapsed = 0;
     this.mode = 'intro';
     this.complete = this.armComplete();
     this.handle.pause();
@@ -236,26 +259,30 @@ export class VideoDriver implements ElementOutroDriver {
   /** Freeze the element in lockstep (no-op if not running). */
   pause(): void {
     if (!this.running) return;
-    this.pausedElapsed = this.now() - this.startedAt;
     this.running = false;
     this.cancelFrame();
     this.handle.pause();
   }
 
   /**
-   * Continue from where `pause()` froze. RE-SEEK to the clock-derived clip-time
-   * (the anti-drift step — a real element can drift or stall while paused) then
-   * play. A settled freeze hold stays frozen. `lastTickNow` is reset so the paused
-   * interval is NOT counted as a throttle gap on the first resumed tick, and the
-   * seek-in-flight guard keeps the resume-decode latency from overshooting forward.
+   * Continue from where `pause()` froze — SEEK-FREE (2026-07-25). `pause()` froze
+   * the element where it froze, so the MEDIA is authoritative (the same principle
+   * as the large-gap re-base): re-anchor the driver clock to the media's actual
+   * position and just `play()`. The old clock-derived RE-SEEK was a fragile-alpha
+   * seek trigger on pre-alignment assets (the owner's pause/resume black-speckle
+   * + freeze repro) and bought nothing — a paused element hasn't moved, so clock
+   * and media already agree within the drift threshold, and bounded correction
+   * handles any residual. A settled freeze hold stays frozen. `lastTickNow` is
+   * reset so the paused interval is NOT counted as a throttle gap.
    */
   resume(): void {
     if (this.destroyed || this.running || this.settledHold) return;
+    this.recoverIfDead(true);
     this.running = true;
-    this.startedAt = this.now() - this.pausedElapsed;
+    const actualMs = this.handle.currentTime() * 1000;
+    this.startedAt = this.now() - this.elapsedForActual(actualMs);
     this.lastTickNow = this.now();
     this.correctionGraceUntil = this.now() + this.o.resumeGraceMs;
-    this.seekMs(this.expectedClipMs(this.pausedElapsed));
     this.handle.play();
     this.tick();
     if (this.running) this.schedule();
@@ -265,6 +292,10 @@ export class VideoDriver implements ElementOutroDriver {
   stop(): void {
     this.running = false;
     this.cancelFrame();
+    // Recovery must be REAL from a stop too: a dead element left in the cleared
+    // state would show its corrupted last frame wherever the stage keeps content
+    // visible, and the next take depends on a healthy node either way.
+    if (!this.destroyed) this.recoverIfDead(true);
     this.handle.pause();
     this.settleOutro();
   }
@@ -299,6 +330,7 @@ export class VideoDriver implements ElementOutroDriver {
     if (this.o.outroStartMs >= this.o.durationMs) return Promise.resolve();
     this.settleOutro();
     this.cancelFrame();
+    this.recoverIfDead(true); // the outro seek below must land on a LIVE element
     this.mode = 'outro';
     this.settledHold = false;
     this.running = true;
@@ -349,6 +381,11 @@ export class VideoDriver implements ElementOutroDriver {
   }
 
   private tick(): void {
+    // DEAD-MEDIA DETECTION first: after a terminal decode error (the fragile-alpha
+    // seek class on pre-alignment assets) NOTHING else in this tick can work — the
+    // element never paints again. Rebuild (rate-limited) and give the fresh node
+    // this frame to reload; the grace window keeps corrections off its ramp.
+    if (this.recoverIfDead()) return;
     // GAP DETECTION → large-gap re-base. A per-tick WALL delta far larger than a frame
     // means rAF was starved (backgrounded tab) or the element stalled while `now()` ran
     // on. Do NOT let that interval become phantom clip-time (a forward seek): re-anchor
@@ -396,19 +433,42 @@ export class VideoDriver implements ElementOutroDriver {
       this.now() >= this.correctionGraceUntil &&
       Math.abs(actualMs - expected) > this.o.driftThresholdMs
     ) {
-      this.seekAndPlay(expected); // drift correction — suppressed during the resume grace
+      this.correctDrift(actualMs, expected); // signed drift policy — see correctDrift
     }
   }
 
   /**
-   * Bounded drift correction — re-seek only past the threshold, never while a seek is in
-   * flight, and never during the post-resume grace (let the decoder ramp up unmolested).
+   * SIGNED DRIFT POLICY (2026-07-25 — the tab-return freeze): media BEHIND the
+   * clock is decode pressure / a stall — the common case, and the one the
+   * owner's HEAVY clips hit after a tab return while the light clip kept up and
+   * survived. Seeking the media FORWARD to the clock is both the fragile alpha
+   * seek (terminal on pre-alignment assets) and the jump-ahead the large-gap
+   * policy already rejects at bigger scale — so for media-behind the driver
+   * YIELDS: re-base the clock to the media (seek-free) and keep playing. Media
+   * AHEAD of the clock cannot arise from normal playback (the element advances
+   * at 1× of the same wall time); it means the position was moved externally —
+   * only then is a corrective seek issued (and the dead-media recovery backs it).
+   */
+  private correctDrift(actualMs: number, expectedMs: number): void {
+    if (actualMs < expectedMs) {
+      this.rebaseToMedia();
+      return;
+    }
+    this.seekAndPlay(expectedMs);
+  }
+
+  /**
+   * Bounded drift handling — only past the threshold, never while a seek is in
+   * flight, never during the post-resume grace, and SIGNED (see correctDrift):
+   * a lagging decoder re-bases the clock instead of being seeked forward.
    */
   private reconcile(expectedMs: number): void {
     if (this.handle.seeking()) return; // a seek is settling — don't stack another (the seek-storm)
     if (this.now() < this.correctionGraceUntil) return; // resume grace — let the decoder ramp
     const actualMs = this.handle.currentTime() * 1000;
-    if (Math.abs(actualMs - expectedMs) > this.o.driftThresholdMs) this.seekAndPlay(expectedMs);
+    if (Math.abs(actualMs - expectedMs) > this.o.driftThresholdMs) {
+      this.correctDrift(actualMs, expectedMs);
+    }
   }
 
   /**
@@ -445,6 +505,25 @@ export class VideoDriver implements ElementOutroDriver {
     return new Promise<void>((res) => {
       this.completeResolve = res;
     });
+  }
+
+  /**
+   * Rebuild a dead media element. The per-TICK path is RATE-LIMITED to one
+   * rebuild per second so a genuinely undecodable asset degrades to a quiet
+   * retry cadence, never a rebuild storm; lifecycle ENTRY points (reset /
+   * resume / stop / playOutro) pass `force` — they are discrete user-visible
+   * moments whose following seek/play must land on a LIVE node. Returns true
+   * while the media is dead / freshly rebuilt — the tick skips position work
+   * for that frame; the resume-grace window keeps drift corrections off the
+   * rebuilt element's reload ramp.
+   */
+  private recoverIfDead(force = false): boolean {
+    if (this.destroyed || !this.handle.dead()) return false;
+    if (!force && this.now() - this.lastRecoverAt < 1000) return true;
+    this.lastRecoverAt = this.now();
+    this.handle.recover();
+    this.correctionGraceUntil = this.now() + this.o.resumeGraceMs;
+    return true;
   }
 
   private settleOutro(): void {
