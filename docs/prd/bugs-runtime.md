@@ -2228,7 +2228,14 @@ item to `status: i.played ? 'unverified' : 'loaded'`, and `StackRetentionStore.i
 is dropped the moment it is mirrored. `useStack` opts into `pullWhileDisconnected`, so the
 projection is pulled the moment the link goes `disconnected` — which is why the flip is immediate
 and hits every errored row at once. `StackRow`'s B-087 display mask rescues only a frozen
-`on-air` → `unverified`; there is NO equivalent mask for `error`, so the flip is unmasked.
+`on-air` → `unverified`; there is NO equivalent mask for `error`, so the flip is unmasked. The
+collapse is status-BLIND in BOTH directions — the projection maps EVERY `played:false` status to
+`loaded`/READY, so `error` is only ONE instance. VERIFIED reachable: an item resting at `idle`
+after a CLEAR/`out` (an out is NOT a remove — the row stays on the stack, reconciled `idle`, and
+is published + mirrored as `played:false`) also projects to `loaded`/READY on bridge death.
+`loaded` → READY is the ONE correct case; `error` → READY (the owner's observation, and the
+dangerous one) and `idle` → READY are both lies — a failed or cleared row presenting as
+pre-rolled and playable. So `error` is one instance of a general defect, not the whole of it.
 
 **Why:** a status must NEVER improve when a link is lost. [[B-086]]/[[B-087]] established
 demote-on-silence for on-air claims — a too-confident state made honest; this is the SAME rule
@@ -2236,7 +2243,8 @@ broken in the OPPOSITE direction, a FAILED state promoted to a confident, action
 invites the operator to PLAY a row that never loaded a producer and cannot play, on a link the SPA
 can no longer use in either direction. The collapse is status-BLIND: the projection preserves only
 the single `played` bit, so it is not specific to the layer-exhaustion trigger the owner hit —
-every error code reaches it (an idle row collapses to READY too, a milder lie).
+every error code reaches it, and so does a non-error `played:false` status: a cleared `idle` row
+projects to READY too (verified reachable, a milder lie than the errored case).
 
 **Generality check (done, PASSES):** a NON-layer error code reaches the identical errored state
 through the same path. `caspar-runtime.ts`'s `load()` acks `applyAck(seq, false,
@@ -2247,12 +2255,15 @@ retained-intent projection, not a pool-exhaustion symptom.
 
 **Acceptance:**
 
-- WHEN a stack row's reconciled status is `error` and the SPA↔bridge link drops (the bridge dies)
-  THEN the published status stays honest — it never resolves to `loaded`/READY; it reads `error`
-  (or an explicit unverifiable state), because a lost link may never IMPROVE a status
-- WHEN the retained-intent projection reduces a row to displayable state THEN an errored row (any
-  errorCode, layer or not) is DISTINGUISHABLE from a cleanly-loaded one — the projection can never
-  collapse `error` and `loaded` to the same output
+- WHEN a stack row's reconciled status is any NON-PLAYED status — `error`, or `idle` after a
+  CLEAR — and the SPA↔bridge link drops (the bridge dies) THEN the published status stays honest:
+  it never resolves to `loaded`/READY, and each keeps its own meaning (an errored row reads
+  `error` or an explicit unverifiable state; a cleared row reads `idle`), because a lost link may
+  never IMPROVE a status
+- WHEN the retained-intent projection reduces a row to displayable state THEN distinct source
+  statuses stay distinct — an errored row (any errorCode, layer or not) and a cleared `idle` row
+  are each DISTINGUISHABLE from a cleanly-loaded one; the projection can never collapse `error`,
+  `idle` and `loaded` to the same output
 - WHEN the link returns THEN the authoritative reconciled status re-pulls (still `error` on the
   bridge while the condition persists) and the honest state is restored
 
@@ -2290,6 +2301,20 @@ retained-intent projection, not a pool-exhaustion symptom.
   dynamic range is exhausted (unit test T1, `packages/caspar-client/tests/layer-manager.test.ts`:
   "allocate() never returns a fixed slot, even with the range otherwise exhausted"). The answer
   shapes R-021 stage 3.
+- **Two status-derivation sites that can drift — and this bears directly on [[R-021]] stage 3
+  (record, do NOT redesign).** `#retainedProjection` derives display status INDEPENDENTLY of the
+  `Reconciler`, from the single `played` bit — a SECOND source of truth for row state, which is
+  exactly what can drift from the reconciler's. R-021 stage 2a deliberately locked against this for
+  the fixed-layer wire: its per-slot channel ships FACTS only, because "a bridge-computed row state
+  or verb list would be a SECOND derivation … that can drift from the renderer's — the exact
+  two-copies failure mode the repo's one-canonical-predicate rule exists to prevent"
+  (`openspec/changes/runtime-fixed-layers/design.md`, the stage-2a note). The retained path ALREADY
+  contains that second derivation, and it dropping `error`/`errorCode` (this very bug) is one
+  symptom of it. It bears on stage 3 concretely: a fixed-slot BINDING must survive a bridge restart,
+  so it enters this SAME retained intent — and the retained projection DROPS every field it does not
+  model. Whoever implements stage 3 must extend `RetainedStackItem` + `#retainedProjection` to carry
+  the binding, or a restart will silently lose it, exactly as the error state is lost here. Cross-ref
+  the R-021 change (`openspec/changes/runtime-fixed-layers/`).
 - **Reproduction is MANUAL** (owner, real Runtime + real bridge, 2026-07-25): load past the dynamic
   pool size so further loads error with "no layer", then kill the bridge process — the ERROR rows
   flip to READY. No automated reproduction exists.
