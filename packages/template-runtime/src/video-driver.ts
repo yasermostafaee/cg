@@ -22,9 +22,10 @@ import type { RuntimeClock } from './types.js';
  *    The old clock-derived re-seek was a fragile-alpha-seek trigger on
  *    pre-alignment assets (pause/resume speckle + freeze) and bought nothing;
  *  - each tick compares the element's `currentTime` against the clock-derived
- *    EXPECTED clip-time and re-seeks ONLY when the error exceeds a threshold
- *    (bounded correction, never per-tick — no visible stutter); loop wrap is
- *    driver-commanded (seek to the loop start), never `<video loop>`.
+ *    EXPECTED clip-time; past the threshold the drift handling is SIGNED
+ *    (`correctDrift`): a LAGGING media re-bases the clock (seek-free — the
+ *    tab-return fix), only an externally-moved (ahead) media is seeked; loop
+ *    wrap is driver-commanded (seek to the loop start), never `<video loop>`.
  *
  * ROBUSTNESS (the sync-lifecycle fix, 2026-07-23) — the injected clock in the
  * Designer Preview is `performance.now()` (a WALL clock), while the `<video>`
@@ -432,19 +433,42 @@ export class VideoDriver implements ElementOutroDriver {
       this.now() >= this.correctionGraceUntil &&
       Math.abs(actualMs - expected) > this.o.driftThresholdMs
     ) {
-      this.seekAndPlay(expected); // drift correction — suppressed during the resume grace
+      this.correctDrift(actualMs, expected); // signed drift policy — see correctDrift
     }
   }
 
   /**
-   * Bounded drift correction — re-seek only past the threshold, never while a seek is in
-   * flight, and never during the post-resume grace (let the decoder ramp up unmolested).
+   * SIGNED DRIFT POLICY (2026-07-25 — the tab-return freeze): media BEHIND the
+   * clock is decode pressure / a stall — the common case, and the one the
+   * owner's HEAVY clips hit after a tab return while the light clip kept up and
+   * survived. Seeking the media FORWARD to the clock is both the fragile alpha
+   * seek (terminal on pre-alignment assets) and the jump-ahead the large-gap
+   * policy already rejects at bigger scale — so for media-behind the driver
+   * YIELDS: re-base the clock to the media (seek-free) and keep playing. Media
+   * AHEAD of the clock cannot arise from normal playback (the element advances
+   * at 1× of the same wall time); it means the position was moved externally —
+   * only then is a corrective seek issued (and the dead-media recovery backs it).
+   */
+  private correctDrift(actualMs: number, expectedMs: number): void {
+    if (actualMs < expectedMs) {
+      this.rebaseToMedia();
+      return;
+    }
+    this.seekAndPlay(expectedMs);
+  }
+
+  /**
+   * Bounded drift handling — only past the threshold, never while a seek is in
+   * flight, never during the post-resume grace, and SIGNED (see correctDrift):
+   * a lagging decoder re-bases the clock instead of being seeked forward.
    */
   private reconcile(expectedMs: number): void {
     if (this.handle.seeking()) return; // a seek is settling — don't stack another (the seek-storm)
     if (this.now() < this.correctionGraceUntil) return; // resume grace — let the decoder ramp
     const actualMs = this.handle.currentTime() * 1000;
-    if (Math.abs(actualMs - expectedMs) > this.o.driftThresholdMs) this.seekAndPlay(expectedMs);
+    if (Math.abs(actualMs - expectedMs) > this.o.driftThresholdMs) {
+      this.correctDrift(actualMs, expectedMs);
+    }
   }
 
   /**

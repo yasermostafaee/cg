@@ -309,6 +309,37 @@
       error-phase supersession) + the E2E round-trip (convert → tick → superseded → Convert
       again → place).
 
+- [x] 4b.8 THE UNIFIED SEEK VERDICT (owner's decisive test, 2026-07-25): every remaining
+      artifact — pause/resume black speckle + dark box + unrecovered freeze, the two-video
+      "black band", the verify sweep false-positives — is the ONE proven mechanism (a seek
+      into an alpha-misaligned GOP); premultiplied and concurrency are CLEARED. Shipped:
+      (a) ALIGNMENT AT THE SOURCE — `-keyint_min 25` fixes the GOP in both encoder streams
+      (native: 15/15 aligned, 29/29 cold seeks clean, 5% smaller; wasm end-to-end: 5/5
+      GOPs, 20/20 seeks), revision `2026-07-25.5`; (b) the SEEK AUDIT (full table in
+      design.md): resume's habitual re-seek ELIMINATED (clock re-anchors to the media —
+      the large-gap principle), the verify sweep replaced by full sequential playthrough,
+      necessary seeks (wrap / drift / outro entry) backed by recovery; (c) REAL dead-media
+      recovery — `VideoHandle.dead()`/`recover()` rebuild the element in place, checked
+      every tick (rate-limited) and FORCED at reset/resume/stop/playOutro, so "stop did
+      not recover" cannot recur; distinct-by-construction from the no-remount-on-drag
+      guard (only `media.error` triggers). Engine doc: VideoDriver section added to the
+      template-runtime README.
+- [x] 4b.9 The opacity "drop" (58.1→34.9) — own finding: static encode retains opacity
+      (α=255 → 100% ≥250); matched animated frames retain within a few points; the bulk of
+      the reading was the SAMPLERS reading different frames (3 at 16.7/50/83% vs 5 at
+      10/30/50/70/90%) of an ANIMATED clip — 88% vs 80% on identical bytes on the
+      synthetic. Fixed: both profilers share `ALPHA_SAMPLE_FRACTIONS`; residual honest
+      loss is the mild moving-edge erosion class. Numbers in design.md.
+- [x] 4b.10 The pre-convert hash froze the page (owner: "Page Unresponsive" at
+      "Checking… 0%" on archive-sized sources): pure-JS sha256 of 150–740 MB on the MAIN
+      thread starves paint. Fixed twice over: `hashSourceFile` now runs the unchanged
+      streaming core in a dedicated WORKER (progress posts back; cancel = terminate), and
+      `startImport` applies the FULL hash-free predicate (`matchesConversionParams`) before
+      hashing — a size-match with a stale revision / different corrections skips the
+      up-front hash entirely and goes straight to converting (the owner's exact freeze
+      case). Tests: the streaming core suite (`hashSourceStream`), the strict pre-filter
+      modal test (hash ordered AFTER convert start, no "Checking…" phase).
+
   **Phase 5 still owes the EXPORTER-side walk:** `runtime.ts`'s on-air/export asset-src walk is
   `img[data-cg-asset-id]`-only (Phase-3 note); Phase 5 widens it to `<video data-cg-asset-id>`
   (packaged relative path for `.vcg`, base64 `data:` for single-file) so a video renders + plays

@@ -1175,6 +1175,84 @@ the owner's that darkens WITH the toggle ON while its semi-transparent pixels me
 consistent-with-premultiplied (straight-evidence ≈ 0); the banded harness in this section
 pins the expected numbers to compare against.
 
+## THE UNIFIED SEEK VERDICT — alignment at the source + the seek audit (2026-07-25)
+
+**Every remaining artifact was the ONE proven mechanism** (owner's decisive single-clip
+test): pause/resume black speckle + the dark box + the unrecovered freeze, the earlier
+two-video "black band", the verify sweep's false positives, and canvas-blank at rest are
+all a seek meeting a GOP whose alpha side-stream frame is inter-coded at the governing
+main keyframe. Premultiplied is CLEARED (identical alpha numbers either way); concurrency
+is cleared (more videos only meant more corrective seeks).
+
+**ALIGNMENT IS ACHIEVABLE — and shipped (`-keyint_min 25`, revision `2026-07-25.5`).**
+`kf_min == kf_max` FIXES the GOP, so both libvpx encoder instances (colour + alpha)
+keyframe at exactly the same frames. Measured: native 14.32 s repro — 15/15 main
+keyframes carry alpha keyframes, ZERO strays, all 29 previously-failing cold seeks
+decode, output 5% SMALLER (8.23 vs 8.66 MB), no encode-time cost; END-TO-END through the
+REAL wasm converter — 5/5 GOPs aligned, 20/20 cold seeks clean. Re-import implication:
+≤ .4 assets stay seek-fragile (they play and air correctly; re-importing under .5 removes
+the fragility at the source; the revision-gated dedupe guarantees a true re-encode).
+Everything below is therefore BELT-AND-BRACES for pre-.5 assets — and it also unblocks
+the deferred canvas-playback/scrubbing work, which is seek-dominated.
+
+**THE SEEK AUDIT (every seek in the video path):**
+
+| seek site                               | necessity    | protection now                                        |
+| --------------------------------------- | ------------ | ----------------------------------------------------- |
+| driver `reset()`/`start()` → seek(0)    | necessary    | inherently safe (alpha frame 0 is always a keyframe)  |
+| driver `resume()` re-seek               | **HABITUAL** | **ELIMINATED** — clock re-anchors to the media + play |
+| driver loop WRAP (authored loopStart)   | necessary    | dead-detect + rebuild (below); safe on .5 assets      |
+| driver drift correction (>80 ms, rare)  | necessary    | dead-detect + rebuild; safe on .5 assets              |
+| driver `playOutro()` → seek(outroStart) | necessary    | forced recovery at entry + dead-detect; safe on .5    |
+| canvas/thumbnail/import POSTER          | necessary    | the robust ladder (eager seek → 16× sequential)       |
+| import playability verify (5-pt sweep)  | **HABITUAL** | **ELIMINATED** — full sequential playthrough          |
+| `sampleOutputAlphaStats` (5 seeks)      | diagnostics  | fail-soft (null profile, guard skipped with console)  |
+| scrub / runtime.tick                    | (none)       | never touches the video                               |
+
+**DEAD-MEDIA RECOVERY IS REAL NOW** ("stop did not recover" falsified the old reset
+claim): a terminal `media.error` kills the NODE — no seek/play on it ever paints again —
+so recovery REBUILDS the element (`VideoHandle.dead()`/`recover()`; runtime.ts builds a
+fresh node with the same attributes/src/data-\* so the Designer preview pool re-adopts it,
+restores the position, resumes playing). The driver checks per tick (rate-limited 1/s —
+no rebuild storms on a genuinely broken asset) and FORCES recovery at every lifecycle
+entry: `reset` / `resume` / `stop` / `playOutro`. Explicitly distinct from the Phase-3
+no-remount-on-drag guard: only `media.error` triggers a rebuild; a transform never sets it.
+
+## The opacity "drop" (58.1% → 34.9%) — mostly a frame-set comparison bias (2026-07-25)
+
+Its own finding, NOT part of the seek work. Measured at full resolution:
+
+- **Static encode loses nothing:** an α=255 band decodes 100% ≥250 (min 253); an α=250
+  band stays exactly; a dense sinusoidal field (mean 127.5) is bit-near-identical.
+- **Matched animated frames retain within a few points:** a sliding-bar clip decodes
+  84%→84% opaque on the advancing-edge frame, 84%→80% retreating (mild moving-edge
+  erosion — the only real loss), 100%→100% on hold frames.
+- **The samplers read DIFFERENT frames of an animated clip:** source profiled 3 frames at
+  16.7/50/83%, output 5 frames at 10/30/50/70/90% (the field reading's n=1 624 320 vs
+  n=2 707 200 is exactly 3 vs 5 frames). On the synthetic slide clip those two sets read
+  88% vs 80% opaque ON IDENTICAL BYTES; on a real lower-third with long animated
+  intro/outro tails the bias grows with the transitional share of the clip. SHIPPED FIX:
+  both profilers now sample the SAME `ALPHA_SAMPLE_FRACTIONS` (10/30/50/70/90%), making
+  the collapse guard and the opaque-drop warning like-for-like. Residual honest loss on
+  the owner's clip = the moving-edge erosion class (a few points), not tens of points.
+
+## The pre-convert hash froze the page — worker offload + strict pre-filter (2026-07-25)
+
+The "Page Unresponsive" during "Checking for a previous import… 0%": the incremental
+sha256 is pure JS, and hashing 150–740 MB on the MAIN thread yields only microtasks
+between chunks — paint starves, the 0% never repaints. Two-part fix:
+
+1. **Off the main thread:** `hashSourceFile` now runs the unchanged streaming core
+   (`hashSourceStream`, still bounded-memory, still unit-tested directly) inside a
+   dedicated Worker; progress posts back so the percentage advances and the modal stays
+   interactive; cancel = `worker.terminate()` (immediate; the File is untouched).
+2. **Skip it when a duplicate is impossible:** the size pre-filter existed but checked
+   ONLY byte size — the owner's freeze was a re-import whose size-matches were
+   stale-revision assets the hash-gated match would reject anyway. `startImport` now
+   applies the FULL hash-free predicate (`matchesConversionParams`: current revision +
+   fps + crop + correction set) before hashing: no possible match ⇒ straight to
+   converting (the provenance hash still computes DURING the encode, in the worker).
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

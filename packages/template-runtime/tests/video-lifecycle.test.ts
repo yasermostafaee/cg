@@ -278,7 +278,11 @@ describe('D-128 Phase 4 — the video composition lifecycle', () => {
     const stopP = r.stop();
     await run(clock, 100); // mid-outro (the 200ms outro has NOT finished)
     expect(onAir()).toBe(true); // background is WAITING on the video outro
-    expect(times.get('v')!() * 1000).toBeGreaterThan(800); // outro genuinely advancing past outroStart
+    // The outro ENTRY seek parked the head at outroStart. In jsdom the head only
+    // moves on a driver seek, and the SIGNED drift policy (2026-07-25) re-bases
+    // a lagging head instead of seeking it forward — so mid-outro it holds at
+    // exactly 800ms here (a real element advances on its own media clock).
+    expect(times.get('v')!() * 1000).toBeGreaterThanOrEqual(800);
 
     await run(clock, 400); // the outro completes
     await stopP;
@@ -360,12 +364,24 @@ describe('D-128 Phase 4 — the video composition lifecycle', () => {
     // the composition pause() reached the video: its head did NOT advance (a driver
     // left ticking would have kept seeking the head forward off the clock).
     expect(times.get('v')!()).toBe(atPause);
+    // SEEK-FREE RESUME + SIGNED DRIFT (2026-07-25): resume re-anchors the driver
+    // clock to the media and re-engages via play(); a lagging head is never
+    // seeked forward again (the fragile-alpha trigger). In jsdom the head only
+    // moves on a driver seek, so the PROOF of re-engagement is the play() call
+    // on the SAME element — and the head staying put proves the fragile op is gone.
+    const el = vidEl('v');
+    let playsAfterResume = 0;
+    Object.defineProperty(el, 'play', {
+      configurable: true,
+      value: () => {
+        playsAfterResume++;
+        return Promise.resolve();
+      },
+    });
     r.resume();
-    // Resume GRACE (D-128 sync-cost fix): drift correction is suppressed for ~750ms so a real
-    // decoder can ramp up unmolested. In jsdom the spied currentTime only moves on a driver
-    // SEEK, so it stays put until the grace ends; PAST the grace a correction re-engages it.
     await run(clock, 900);
-    expect(times.get('v')!()).toBeGreaterThan(atPause); // re-engaged — the head moved again
+    expect(playsAfterResume).toBeGreaterThan(0); // re-engaged on the same element…
+    expect(times.get('v')!()).toBe(atPause); // …with NO forward seek of the lagging head
     r.remove();
   });
 
