@@ -1132,6 +1132,39 @@ bleed-on assets are not defective). Provenance records `alphaBleed` alongside
 asset from an older revision (where the bleed ran implicitly, unrecorded) or a different
 correction set is a genuinely different output and never offered as "use existing".
 
+## The "darkening bug" in the unpremultiply expression — measured, NOT reproduced (2026-07-25)
+
+Investigated as its own task after the fast-path change, with a quantified banded fixture
+(known premultiplied values: opaque gold α=255 · half α=128 premult(128,108,0) · transparent
+α=0 · faint glow α=12 premult(12,10,0); expected TRUE colour everywhere content exists:
+gold 255,215,0). Four pipelines measured:
+
+| pipeline                                             | α=255 band | α=128 band | α=12 band  |
+| ---------------------------------------------------- | ---------- | ---------- | ---------- |
+| GEQ_UNPREMULT alone (native, no encode)              | 255,215,0  | 255,215,0  | 255,212,0  |
+| OLD full graph incl. bleed (native, no encode)       | 255,215,0  | 255,215,0  | 255,212,0  |
+| premult-only `-vf` path through the VP8 encode       | 254,214,0  | 254,214,0  | 254,211,0  |
+| **premult-only through the REAL app wasm (0.12.10)** | 255,215,3  | 253,212,4  | 255,212,21 |
+
+Every reading is the correct straight gold within codec/canvas-readback rounding (the α=12
+row's spread is the premultiplied-canvas quantisation at 12/255, not pipeline error). **The
+expression does not darken — in either ffmpeg generation, at any alpha level, alone or in
+the graph, before or after the encode.** The E2E fringe guard (real wasm, quantified
+thresholds) independently pins the same result.
+
+**What the field actually saw is the STRAIGHT-SOURCE case:** applying the un-premultiply to
+an already-correct source amplifies its semi-transparent pixels by 255/α (over-brightening,
+blown soft edges, halos at hard edges under 4:2:0) — "visibly damaged WITH the toggle,
+correct WITHOUT it", exactly as reported. That class is already closed by the two shipped
+decisions: the correction DEFAULTS OFF and is a knowing opt-in (its UI states the cost and
+the damage risk on a correct source), and the result panel now DETECTS a
+premultiplied-looking source (`straightEvidenceFrac`) and points at the checkbox only when
+the readings support it. No expression change ships — altering proven-correct pixel math on
+an unreproduced report would be the plausible-but-wrong trap. REOPEN CONDITION: a clip of
+the owner's that darkens WITH the toggle ON while its semi-transparent pixels measure
+consistent-with-premultiplied (straight-evidence ≈ 0); the banded harness in this section
+pins the expected numbers to compare against.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

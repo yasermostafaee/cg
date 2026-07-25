@@ -283,6 +283,15 @@
       graph-shape matrix (default filterless / each correction adds exactly its own stage /
       quality args in all shapes), dedupe revision+corrections matrix, modal opt-in tests.
 
+- [x] 4b.6 The "darkening bug in the unpremultiply expression" — investigated with a
+      quantified banded fixture across FOUR pipelines (expression alone; old full graph;
+      premult-only through the VP8 encode; premult-only through the REAL app wasm):
+      **NOT REPRODUCED** — every reading restores the exact straight colour within
+      codec/canvas rounding at α 255/128/12. The field damage is the STRAIGHT-SOURCE case
+      (un-premultiplying an already-correct clip over-brightens by 255/α), which 4b.4's
+      OFF default + 4b.5's opt-in + premult-evidence panel hint already close. No expression
+      change ships; evidence + reopen condition recorded in design.md.
+
   **Phase 5 still owes the EXPORTER-side walk:** `runtime.ts`'s on-air/export asset-src walk is
   `img[data-cg-asset-id]`-only (Phase-3 note); Phase 5 widens it to `<video data-cg-asset-id>`
   (packaged relative path for `.vcg`, base64 `data:` for single-file) so a video renders + plays
