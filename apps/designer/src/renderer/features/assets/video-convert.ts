@@ -416,14 +416,25 @@ export function formatAlphaStats(s: AlphaStats): string {
 }
 
 /**
+ * D-128 — THE ONE sample-time set BOTH alpha profilers use. Source and output MUST
+ * read the SAME clip fractions: an animated clip's opaque coverage varies over time
+ * (intro/outro frames show less than hold frames), so profiles taken at DIFFERENT
+ * time points are apples-to-oranges — measured on a synthetic 5 s slide-in/out at
+ * full retention, the old mismatched sets (source 16.7/50/83% × 3 vs output
+ * 10/30/50/70/90% × 5) read 88% vs 80% opaque ON IDENTICAL BYTES. That comparison
+ * bias, not encode loss, was the bulk of the field's "58.1% → 34.9%" reading.
+ */
+export const ALPHA_SAMPLE_FRACTIONS = [0.1, 0.3, 0.5, 0.7, 0.9] as const;
+
+/**
  * D-128 — sample the SOURCE's alpha profile: decode a few spread frames to raw RGBA in
  * the wasm and measure. Null on any failure — a diagnostics miss must never block an
- * import. Runs under the module mutex like every wasm op.
+ * import. Runs under the module mutex like every wasm op. Sample times are the SHARED
+ * {@link ALPHA_SAMPLE_FRACTIONS} so the source/output comparison is frame-honest.
  */
 export async function sampleSourceAlpha(
   file: File,
   durationMs: number,
-  samples = 3,
 ): Promise<AlphaStats | null> {
   return withExclusive(async () => {
     let held: FFmpeg | null = null;
@@ -433,9 +444,7 @@ export async function sampleSourceAlpha(
       const input = await mountSource(ff, file);
       const buffers: Uint8Array[] = [];
       const times =
-        durationMs > 0
-          ? Array.from({ length: samples }, (_, i) => ((i + 0.5) / samples) * (durationMs / 1000))
-          : [0];
+        durationMs > 0 ? ALPHA_SAMPLE_FRACTIONS.map((f) => f * (durationMs / 1000)) : [0];
       for (const t of times) {
         const out = `/alpha-probe-${String(Math.round(t * 1000))}.raw`;
         const seek = t > 0 ? ['-ss', t.toFixed(3)] : [];
@@ -512,7 +521,9 @@ export function sampleOutputAlphaStats(bytes: Uint8Array): Promise<AlphaStats | 
           }
           const dur = Number.isFinite(v.duration) ? v.duration : 0;
           const buffers: Uint8Array[] = [];
-          for (const frac of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+          // The SHARED fraction set — the source profiler reads the same points,
+          // so the source/output comparison is frame-honest (see the const's doc).
+          for (const frac of ALPHA_SAMPLE_FRACTIONS) {
             if (dur > 0) {
               const sought = await new Promise<boolean>((res) => {
                 const st = setTimeout(() => res(false), 3000);
