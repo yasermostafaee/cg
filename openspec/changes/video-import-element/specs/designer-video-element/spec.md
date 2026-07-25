@@ -217,6 +217,30 @@ result panel SHALL point the operator at the relevant correction when its readin
 - **THEN** the result panel names the specific correction to re-import with (Premultiplied
   alpha / Alpha bleed) instead of leaving the operator to guess
 
+### Requirement: A conversion verdict never outlives its settings
+
+A completed (or failed) conversion's verdict SHALL stop presenting itself as current the
+moment ANY output-affecting parameter changes — the crop on/off, the crop rect, or either
+correction: the result panel (playability verdict, alpha numbers, stored size) is cleared,
+placement SHALL be unavailable until a conversion matching the settings on screen exists, the
+supersession SHALL be stated in place, and a visible "Convert again" action SHALL run a new
+conversion with the shown settings (the intended loop: import fast → look → tick a correction
+→ convert again — never cancel-and-restart). Surfaces that describe the SOURCE (the
+crop-preview poster, probe metadata, source alpha profile) remain valid across setting changes
+and stay.
+
+#### Scenario: Ticking a correction after a completed conversion supersedes the verdict
+
+- **WHEN** a conversion has completed and the operator changes an output-affecting parameter
+- **THEN** the result panel is cleared, no element can be placed, the supersession is stated,
+  and a "Convert again" action is offered in place
+
+#### Scenario: Convert again restores a current verdict
+
+- **WHEN** the operator runs "Convert again" after a supersession
+- **THEN** a new conversion runs with exactly the settings shown, its verdict is presented as
+  current, and placement becomes available again
+
 ### Requirement: A stored clip's at-rest poster is produced by ONE robust routine on every surface
 
 Every stored-asset poster surface SHALL produce the at-rest frame through ONE shared routine —

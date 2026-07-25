@@ -292,6 +292,23 @@
       OFF default + 4b.5's opt-in + premult-evidence panel hint already close. No expression
       change ships; evidence + reopen condition recorded in design.md.
 
+- [x] 4b.7 STALE-RESULT COHERENCE (owner clarification, 2026-07-25): with the corrections
+      opt-in, the checkboxes stayed interactive after a completed conversion — ticking one
+      left the verdict / alpha numbers / stored size / "Place element" describing the
+      PREVIOUS run's bytes next to settings they don't match. SHAPE CHOSEN:
+      supersede-on-change (not the parameter lock) — any output-affecting change (crop
+      on/off, crop rect, either correction) in the 'result' OR 'error' phase returns the
+      modal to 'ready': the verdict is CLEARED (not annotated), placing is structurally
+      impossible (the button doesn't exist), a note names the supersession, and the primary
+      action relabels to "Convert again" (the owner's intended loop stays one action long; a
+      lock would tax it with an explicit "change settings" step). The superseded run's stored
+      asset is kept (close-without-placing semantics) and comes back through the dedupe step
+      if its exact settings are re-selected. Source-describing surfaces (crop poster, probe
+      meta, source alpha) stay — they are setting-independent. Tests: 4 modal unit tests
+      (supersede via correction / via crop, Convert-again round-trip with the new settings,
+      error-phase supersession) + the E2E round-trip (convert → tick → superseded → Convert
+      again → place).
+
   **Phase 5 still owes the EXPORTER-side walk:** `runtime.ts`'s on-air/export asset-src walk is
   `img[data-cg-asset-id]`-only (Phase-3 note); Phase 5 widens it to `<video data-cg-asset-id>`
   (packaged relative path for `.vcg`, base64 `data:` for single-file) so a video renders + plays

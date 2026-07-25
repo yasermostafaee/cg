@@ -128,6 +128,10 @@ export function VideoImportModal(props: {
   // premultiplied toggle — a straight source can want the bleed and a
   // premultiplied one can skip it; the graph builder composes them.
   const [alphaBleed, setAlphaBleed] = useState(false);
+  // D-128 — a completed run's verdict was superseded by a settings change (the
+  // stale-result coherence rule; see supersedeCompletedRun). Drives the note +
+  // the "Convert again" relabel; cleared when a new conversion starts.
+  const [supersededRun, setSupersededRun] = useState(false);
   const converter = useRef<Converter | null>(null);
   const cancelled = useRef(false);
   const hashAbort = useRef<AbortController | null>(null);
@@ -225,8 +229,32 @@ export function VideoImportModal(props: {
     }
   }, [phase.kind, duplicateMatch]);
 
+  /**
+   * D-128 — COHERENCE between the controls and the verdict: a completed (or
+   * failed) conversion's verdict describes THE BYTES OF THAT RUN. The moment any
+   * output-affecting parameter changes (crop on/off, the crop rect, either
+   * correction), the verdict must stop presenting itself as current: the phase
+   * returns to 'ready' — no result panel, no "Place element", so placing bytes
+   * that don't match the settings on screen is structurally impossible — a note
+   * says why, and the primary action reads "Convert again" (the owner's intended
+   * loop: import fast → look → tick a correction → convert again). The LOCK
+   * alternative (freeze parameters after a conversion behind an explicit
+   * "change settings" reset) was rejected because it taxes that primary loop
+   * with an extra step; supersede-on-change keeps the loop one action long
+   * while making a stale verdict impossible to mistake for current. The stored
+   * asset of the superseded run is kept (close-without-placing semantics) —
+   * re-selecting its exact settings offers it back through the dedupe step.
+   */
+  function supersedeCompletedRun(): void {
+    if (phase.kind === 'result' || phase.kind === 'error') {
+      setSupersededRun(true);
+      setPhase({ kind: 'ready' });
+    }
+  }
+
   function commitCrop(next: Partial<CropRect>): void {
     if (probe === null) return;
+    supersedeCompletedRun();
     setCrop((c) => clampCrop({ ...c, ...next }, probe.width, probe.height));
   }
 
@@ -256,6 +284,7 @@ export function VideoImportModal(props: {
         if (next.width < 1) next.width = 1;
         if (next.height < 1) next.height = 1;
       }
+      supersedeCompletedRun(); // the rect changed — any completed verdict is stale
       setCrop(clampCrop(next, probe.width, probe.height));
     };
     const onUp = (): void => {
@@ -278,6 +307,7 @@ export function VideoImportModal(props: {
   async function startImport(): Promise<void> {
     if (probe === null) return;
     cancelled.current = false;
+    setSupersededRun(false); // a conversion matching the shown settings is starting
     const list = await window.cg.assets.list();
     const sizeMatches = list.filter(
       (a) => a.kind === 'video' && a.provenance?.sourceBytes === props.file.size,
@@ -332,6 +362,7 @@ export function VideoImportModal(props: {
     const conv = converter.current;
     if (conv === null || probe === null) return;
     cancelled.current = false;
+    setSupersededRun(false); // this run WILL match the shown settings
     setPhase({ kind: 'converting', progress: 0 });
     // Bug 3 — the source hash goes into provenance for FUTURE dedupe, but the
     // operator must never WAIT on it. When we didn't hash up front (no size
@@ -645,7 +676,13 @@ export function VideoImportModal(props: {
               onClick={() => void startImport()}
               disabled={phase.kind !== 'ready'}
             >
-              {checking ? 'Checking…' : converting ? 'Converting…' : 'Convert & import'}
+              {checking
+                ? 'Checking…'
+                : converting
+                  ? 'Converting…'
+                  : supersededRun
+                    ? 'Convert again'
+                    : 'Convert & import'}
             </ModalButton>
           </>
         )}
@@ -769,7 +806,10 @@ export function VideoImportModal(props: {
                   checked={cropOn}
                   disabled={busy}
                   data-testid="video-crop-toggle"
-                  onChange={(e) => setCropOn(e.target.checked)}
+                  onChange={(e) => {
+                    supersedeCompletedRun();
+                    setCropOn(e.target.checked);
+                  }}
                 />{' '}
                 Crop (baked at conversion)
               </label>
@@ -807,7 +847,10 @@ export function VideoImportModal(props: {
                   checked={premultipliedAlpha}
                   disabled={busy}
                   data-testid="video-premultiplied-toggle"
-                  onChange={(e) => setPremultipliedAlpha(e.target.checked)}
+                  onChange={(e) => {
+                    supersedeCompletedRun();
+                    setPremultipliedAlpha(e.target.checked);
+                  }}
                 />{' '}
                 Premultiplied alpha (legacy After Effects / archive)
               </label>
@@ -825,7 +868,10 @@ export function VideoImportModal(props: {
                   checked={alphaBleed}
                   disabled={busy}
                   data-testid="video-alpha-bleed-toggle"
-                  onChange={(e) => setAlphaBleed(e.target.checked)}
+                  onChange={(e) => {
+                    supersedeCompletedRun();
+                    setAlphaBleed(e.target.checked);
+                  }}
                 />{' '}
                 Alpha bleed (edge-colour fill)
               </label>
@@ -835,6 +881,20 @@ export function VideoImportModal(props: {
                   : 'Off (default) — no fill. Turn on if the placed clip shows dark smudges/halos around moving content on air. Opting in makes conversion substantially slower.'}
               </span>
             </div>
+
+            {supersededRun && phase.kind === 'ready' && (
+              // D-128 stale-result coherence — the cleared verdict is NAMED, not
+              // silently vanished: the operator changed an output-affecting
+              // setting after a completed run, so nothing on screen describes
+              // current bytes and nothing can be placed until a new conversion.
+              <Callout variant="caution">
+                <span data-testid="video-superseded-note">
+                  Settings changed after the last conversion — its result no longer applies and
+                  nothing can be placed from it. “Convert again” runs a new conversion with the
+                  settings shown.
+                </span>
+              </Callout>
+            )}
 
             {phase.kind === 'error' && <Callout variant="danger">{phase.message}</Callout>}
 

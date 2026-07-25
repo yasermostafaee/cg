@@ -441,6 +441,45 @@ test('MOTION keeps transparency: source-transparent pixels stay transparent acro
   }
 });
 
+test('STALE-RESULT COHERENCE: ticking a correction after a completed conversion supersedes the verdict; Convert again re-converts (D-128)', async ({
+  app,
+  page,
+}) => {
+  // The field defect: after a conversion, the correction checkboxes stayed
+  // interactive while the verdict/alpha-numbers/Place-element still described
+  // the PREVIOUS run's bytes. Changing a setting must clear the verdict, block
+  // placing, and offer the re-convert path in place.
+  await app.newProject('VideoSupersede');
+  await page.getByRole('button', { name: 'Project assets' }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
+  await page.getByRole('menuitem', { name: 'Video…' }).click();
+  await (
+    await chooser
+  ).setFiles({
+    name: 'supersede-clip.avi',
+    mimeType: 'video/x-msvideo',
+    buffer: readFileSync(FIXTURE),
+  });
+  await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
+  await page.getByRole('button', { name: 'Convert & import' }).click();
+  await expect(page.getByTestId('video-conversion-result')).toBeVisible({ timeout: 25_000 });
+
+  // Tick a correction: the verdict must stop presenting itself as current.
+  await page.getByTestId('video-alpha-bleed-toggle').check();
+  await expect(page.getByTestId('video-conversion-result')).not.toBeAttached();
+  await expect(page.getByRole('button', { name: 'Place element' })).not.toBeAttached();
+  await expect(page.getByTestId('video-superseded-note')).toBeVisible();
+
+  // The visible next step re-converts with the settings shown, and a CURRENT
+  // verdict returns — placing is available again only now.
+  await page.getByRole('button', { name: 'Convert again' }).click();
+  await expect(page.getByTestId('video-conversion-result')).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByTestId('video-superseded-note')).not.toBeAttached();
+  await page.getByRole('button', { name: 'Place element' }).click({ timeout: 25_000 });
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
+});
+
 test('re-importing the same source is deduped: "Use existing" places an element with NO second conversion', async ({
   app,
   page,

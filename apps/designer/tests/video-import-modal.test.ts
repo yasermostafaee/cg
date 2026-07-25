@@ -548,6 +548,105 @@ describe('VideoImportModal (D-128)', () => {
     expect(prov.alphaBleed).toBe(true);
   });
 
+  it('STALE-RESULT COHERENCE: ticking a correction after a completed conversion clears the verdict, removes Place element, and offers Convert again', async () => {
+    // The owner only TICKED a box — the defect was the STATE the modal allowed:
+    // a verdict + "Place element" describing bytes that no longer match the
+    // settings on screen. Supersede-on-change makes that state unrepresentable.
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(document.querySelector('[data-testid="video-conversion-result"]')).not.toBeNull();
+    const bleed = document.querySelector(
+      '[data-testid="video-alpha-bleed-toggle"]',
+    ) as HTMLInputElement;
+    act(() => {
+      bleed.click();
+    });
+    // the verdict is GONE, not merely annotated…
+    expect(document.querySelector('[data-testid="video-conversion-result"]')).toBeNull();
+    // …placing is STRUCTURALLY impossible (no button at all)…
+    expect(
+      [...document.querySelectorAll('button')].some((b) =>
+        b.textContent?.includes('Place element'),
+      ),
+    ).toBe(false);
+    // …the supersession is named, and the next step is visible.
+    expect(document.querySelector('[data-testid="video-superseded-note"]')).not.toBeNull();
+    expect(button('Convert again')).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('STALE-RESULT COHERENCE: a crop change after a completed conversion supersedes too', async () => {
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(document.querySelector('[data-testid="video-conversion-result"]')).not.toBeNull();
+    act(() => {
+      cropToggle().click(); // crop on/off changes the output
+    });
+    expect(document.querySelector('[data-testid="video-conversion-result"]')).toBeNull();
+    expect(document.querySelector('[data-testid="video-superseded-note"]')).not.toBeNull();
+  });
+
+  it('STALE-RESULT COHERENCE: Convert again runs a NEW conversion with the shown settings; the note clears and a fresh verdict lands', async () => {
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const bleed = document.querySelector(
+      '[data-testid="video-alpha-bleed-toggle"]',
+    ) as HTMLInputElement;
+    act(() => {
+      bleed.click();
+    });
+    await act(async () => {
+      button('Convert again').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // the second run carries the NEW settings…
+    expect(convertToWebm).toHaveBeenCalledTimes(2);
+    expect(convertToWebm).toHaveBeenLastCalledWith(expect.objectContaining({ alphaBleed: true }));
+    // …its verdict is current again: panel back, note gone, placing available.
+    expect(document.querySelector('[data-testid="video-conversion-result"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="video-superseded-note"]')).toBeNull();
+    expect(button('Place element')).toBeTruthy();
+  });
+
+  it('STALE-RESULT COHERENCE: a parameter change after a FAILED conversion clears the stale error the same way', async () => {
+    convertToWebm.mockResolvedValue(null); // conversion fails
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    expect(document.body.textContent).toContain('Conversion failed');
+    const premult = document.querySelector(
+      '[data-testid="video-premultiplied-toggle"]',
+    ) as HTMLInputElement;
+    act(() => {
+      premult.click();
+    });
+    // the failed run's message no longer describes the settings on screen
+    expect(document.body.textContent).not.toContain('Conversion failed');
+    expect(document.querySelector('[data-testid="video-superseded-note"]')).not.toBeNull();
+    expect(button('Convert again')).toBeTruthy();
+  });
+
   it('crop numeric fields drive the rect (numbers → rectangle sync)', async () => {
     await renderModal();
     act(() => {
