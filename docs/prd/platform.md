@@ -452,13 +452,20 @@ see each other's slot, and run CONCURRENTLY — the exact contention P-013 exist
 and the exact CPU starvation the [[B-098]] load-flake class feeds on.
 **Why:** This stops being theoretical the moment the Linux `gate:e2e` backlog is worked off,
 because the ONLY way to discharge that backlog is to run Linux gates on the SAME machine that
-keeps running Windows ones. The outstanding Linux `gate:e2e` debts number five today —
-[[R-018]], [[R-020]], [[R-021]] (stage 2b, #405), plus the designer-track #369 ([[B-089]]) and
-#370 (there is no consolidated tally file, so this is a compiled enumeration, not a maintained
-counter; #405/stage 2b is the most recent addition) — so a Windows gate racing a WSL gate is a
-near-term reality, not a hypothetical. And the trigger is not manual: [[P-009]]'s Stop hook
-fires a gate automatically at every turn end, so "just don't start two" is not a control anyone
-can exercise.
+keeps running Windows ones. The outstanding Linux `gate:e2e` debts number NINE today: on the
+runtime track [[R-018]], [[R-020]] and [[R-021]] (stage 2b, #405); on the designer track
+[[B-089]] (#369) and [[B-090]] (#370); plus the four earlier UI merges [[B-090]]/#370's own
+note explicitly groups as owing "on the same terms" (`docs/prd/bugs-designer.md`) — #330
+([[B-085]]), #334 (the runtime inspector toast-only feedback migration), #336 ([[B-086]]) and
+#337 (a [[D-125]] Lottie canvas follow-up). There is NO consolidated tally file — the same
+`bugs-designer.md` note states this outright — so this is a compiled enumeration, not a
+maintained counter, and it is honest only because none of the nine records a DISCHARGED Linux
+run anywhere in `docs/prd/`: every discharge on record is a real-CasparCG hardware / on-air
+owner check, which is a DIFFERENT gate (a Windows `gate:e2e` pass is likewise non-authoritative
+for Linux render geometry, ~19px class). #405/stage 2b is the most recent addition. So a
+Windows gate racing a WSL gate is a near-term reality, not a hypothetical. And the trigger is
+not manual: [[P-009]]'s Stop hook fires a gate automatically at every turn end, so "just don't
+start two" is not a control anyone can exercise.
 **Acceptance:**
 
 - WHEN a gate runs under Windows and another under Linux/WSL on the SAME physical host THEN both
