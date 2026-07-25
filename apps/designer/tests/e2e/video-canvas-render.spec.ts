@@ -95,7 +95,18 @@ async function expectCanvasVideoRenders(page: Page, assetId: string): Promise<vo
     while (Date.now() < deadline) {
       if (v.error !== null) return { ok: false, error: v.error.message };
       const src = v.getAttribute('src') ?? '';
-      if (src.startsWith('blob:') && v.readyState >= 2 && v.currentTime > 0) {
+      // SETTLED poster, not merely progressing: the routine's recovery rung
+      // plays muted at 16x toward the poster time, so a mid-recovery sample
+      // would read currentTime > 0 with playbackRate 16. Settled = paused with
+      // the rate restored (rung 1 never plays; rung 2 pauses + restores on
+      // reaching the poster).
+      if (
+        src.startsWith('blob:') &&
+        v.readyState >= 2 &&
+        v.currentTime > 0 &&
+        v.paused &&
+        v.playbackRate === 1
+      ) {
         const c = document.createElement('canvas');
         c.width = v.videoWidth;
         c.height = v.videoHeight;
@@ -152,7 +163,9 @@ test('a seek-fragile VP8+alpha clip (the canvas-blank class) renders its poster 
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline) {
       if (v.error !== null) return { ok: false, error: v.error.message };
-      if (v.readyState >= 2 && v.currentTime > 0) {
+      // Same settled-poster condition as the canvas check (a mid-recovery
+      // sample reads rate 16 while the routine plays toward the poster).
+      if (v.readyState >= 2 && v.currentTime > 0 && v.paused && v.playbackRate === 1) {
         return { ok: true, t: v.currentTime, rate: v.playbackRate };
       }
       await new Promise((r) => setTimeout(r, 100));
