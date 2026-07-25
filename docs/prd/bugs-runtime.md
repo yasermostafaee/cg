@@ -2211,3 +2211,139 @@ closed; nothing here needs booking again.**
 **Cross-refs:** [[B-100]] (the predicate that turns this cycle into refused verbs and a black
 layer), [[B-094]] (the honest indicator for the same state), [[C-014]] (designs for the blind
 install this breaks), [[B-093]].
+
+## [ ] B-107 — an errored stack row flips to READY when the BRIDGE PROCESS dies: the browser's retained-intent projection reduces every non-played status (including `error`) to `loaded`, so a load that never got a layer presents as playable ⟨priority: high⟩
+
+**What:** While the SPA↔bridge WebSocket is up, a load that fails allocation shows on the stack
+as a red **ERROR / "no layer"** row — correct, and one such row accumulates per further failed
+load. The instant the bridge PROCESS dies (the WS drops), every one of those ERROR rows flips to
+**READY**. The mechanism is NOT the reconciler (see Notes — this was mis-hypothesised at filing
+and verified against merged `main` instead): the `Reconciler` runs IN the bridge and dies with
+it, so nothing on the bridge re-derives these rows. The BROWSER answers `stack.snapshot()` from
+its own retained intent instead — `WebSocketRuntime.#retainedProjection()` maps each retained
+item to `status: i.played ? 'unverified' : 'loaded'`, and `StackRetentionStore.isPlayed()` counts
+`error` as NOT played. So the round-trip is `error` → (mirror) `played:false` → (projection)
+`loaded` → the `airStateVisual` label **READY** (`theme.ts`). The retained intent
+(`RetainedStackItem`) carries no `status`/`errorCode` field, so the error has nowhere to live and
+is dropped the moment it is mirrored. `useStack` opts into `pullWhileDisconnected`, so the
+projection is pulled the moment the link goes `disconnected` — which is why the flip is immediate
+and hits every errored row at once. `StackRow`'s B-087 display mask rescues only a frozen
+`on-air` → `unverified`; there is NO equivalent mask for `error`, so the flip is unmasked.
+
+**Why:** a status must NEVER improve when a link is lost. [[B-086]]/[[B-087]] established
+demote-on-silence for on-air claims — a too-confident state made honest; this is the SAME rule
+broken in the OPPOSITE direction, a FAILED state promoted to a confident, actionable one. READY
+invites the operator to PLAY a row that never loaded a producer and cannot play, on a link the SPA
+can no longer use in either direction. The collapse is status-BLIND: the projection preserves only
+the single `played` bit, so it is not specific to the layer-exhaustion trigger the owner hit —
+every error code reaches it (an idle row collapses to READY too, a milder lie).
+
+**Generality check (done, PASSES):** a NON-layer error code reaches the identical errored state
+through the same path. `caspar-runtime.ts`'s `load()` acks `applyAck(seq, false,
+'unknown-template')` BEFORE `#allocate()` runs — a template that is simply not registered produces
+`status:'error'` with NO layer involved, and it projects to READY identically (`no-layer`,
+`no-layer-foreign-occupied`, `amcp-error` likewise). So this is a status-honesty defect in the
+retained-intent projection, not a pool-exhaustion symptom.
+
+**Acceptance:**
+
+- WHEN a stack row's reconciled status is `error` and the SPA↔bridge link drops (the bridge dies)
+  THEN the published status stays honest — it never resolves to `loaded`/READY; it reads `error`
+  (or an explicit unverifiable state), because a lost link may never IMPROVE a status
+- WHEN the retained-intent projection reduces a row to displayable state THEN an errored row (any
+  errorCode, layer or not) is DISTINGUISHABLE from a cleanly-loaded one — the projection can never
+  collapse `error` and `loaded` to the same output
+- WHEN the link returns THEN the authoritative reconciled status re-pulls (still `error` on the
+  bridge while the condition persists) and the honest state is restored
+
+**Notes:**
+
+- **Mechanism CORRECTED from the filing hypothesis.** The observed flip is NOT the reconciler's
+  `reconcileStatus` link-down clause: that runs in the bridge, dies with it, and its `setLinkDown`
+  demotes ONLY `on-air`/`playing` (an errored `ackedStatus:'error'` base stays `error`). On a
+  CasparCG link-drop with the bridge ALIVE the errored row correctly STAYS `error`. The flip is
+  exclusively the BROWSER-side retained-intent projection on bridge death — the SPA↔bridge link
+  ([[B-087]]'s domain), not the CasparCG link ([[B-086]]'s).
+- **Fix direction (do NOT implement):** it belongs in the browser retained-intent path —
+  `StackRetentionStore`/`RetainedStackItem` + `WebSocketRuntime.#retainedProjection` — either by
+  retaining the errored state so the projection renders it honestly, or by projecting a
+  never-loaded/errored row as something other than `loaded`/READY. NOT in the reconciler's
+  `reconcileStatus` (that site is dead when the flip happens).
+- Same honesty CLASS as [[B-086]] (CasparCG link-loss demotes on-air → `unverified`) and [[B-087]]
+  (SPA↔bridge link-loss masks a frozen on-air → `unverified`); the difference is DIRECTION — those
+  demote a state too confident, this one PROMOTES a failed state. Lives in the [[B-092]]
+  retained-intent projection.
+- **Not a regression from #405** (verified, not asserted): the projection + `isPlayed` are
+  [[B-092]] (`#343`, 2026-07-18) and the load-error ack is [[C-014]] (`#368`, 2026-07-19); both
+  predate R-021. R-021 stage 2a (`#404`) last-touched `WebSocketRuntime.ts` / `caspar-runtime.ts`
+  for the fixed-bank wire contract, not these lines; R-021 did not touch `reconciler.ts`
+  (`reconcileStatus` is [[B-100]], `#380`) or `StackRetentionStore.ts` at all.
+- **Owner product direction (2026-07-25), a decision not an open question:** the R-021 fixed-bank
+  model has the operator import/load onto PRE-DECLARED permanent rows rather than each load
+  creating a row and grabbing a layer, which removes the ad-hoc accumulation the owner hit. This
+  does NOT narrow the item — the defect is trigger-independent (any error code, no layer needed).
+  It gets WORSE: R-021's fixed rows are PERMANENT, so once stage 3 binds an item to a fixed slot,
+  an errored row that flips to READY also never leaves the screen.
+- **Open architectural question (record, do NOT answer):** whether the R-021 fixed bank COEXISTS
+  with the dynamic pool or eventually REPLACES it. On `main` the locked design COEXISTS —
+  `LayerManager` fences fixed slots from birth and `allocate()` never returns one even when the
+  dynamic range is exhausted (unit test T1, `packages/caspar-client/tests/layer-manager.test.ts`:
+  "allocate() never returns a fixed slot, even with the range otherwise exhausted"). The answer
+  shapes R-021 stage 3.
+- **Reproduction is MANUAL** (owner, real Runtime + real bridge, 2026-07-25): load past the dynamic
+  pool size so further loads error with "no layer", then kill the bridge process — the ERROR rows
+  flip to READY. No automated reproduction exists.
+
+## [ ] B-108 — a bridge restart silently DROPS stack rows it cannot re-seat: `restore()` skips them and returns a `skipped` count no UI surface consumes ⟨priority: medium⟩
+
+**What:** on bridge restart the browser re-delivers its retained stack intent
+(`StackRestoreChannel`) and the bridge's `restore()` re-seats what it can. Any item it CANNOT
+re-seat is skipped and simply disappears from the stack — nothing tells the operator that rows
+they were looking at a moment ago are gone, or why. The information is already computed:
+`restore()` returns `{ restored, skipped }`, and `packages/shared-ipc/src/channels/stack.ts`
+documents `skipped` as "intents the bridge declined (an item it already holds, an unregistered
+template, no free layer)". The gap is that NOTHING consumes it — `WebSocketRuntime.#resync` awaits
+the restore call and DISCARDS its return value.
+
+**Why:** rows vanishing with no operator action silently desynchronises the operator's model of
+the stack from reality — the same broadcast-safety hazard as a lie about on-air state, one step
+removed. The count and its meaning already exist; only the operator-facing surface is missing.
+Scope is the GENERAL case, not the exhausted range the owner happened to trigger: `restore()`'s
+docstring names THREE skip reasons, and only one is layer exhaustion — (1) an item the live bridge
+ALREADY holds (a page reload against a healthy bridge — benign, the row is still there, backed by
+the live bridge, and nothing is lost), (2) an unregistered template (the SPA re-delivers its
+library FIRST, so this means the template is genuinely gone), and (3) no free layer (the exhausted
+range). Reasons (2) and (3) are real LOSSES — the row disappears; reason (1) is not.
+
+**Acceptance:**
+
+- WHEN a restore skips items that were on the operator's stack and are now GONE (the
+  unregistered-template and no-free-layer reasons) THEN the operator is told how many and why, in
+  a surface they will actually see
+- WHEN a restore skips ONLY the benign already-held case (a page reload against a healthy bridge,
+  which loses no row) THEN nothing is surfaced — no false alarm
+- (the widget is deliberately unspecified — that is for whoever implements)
+
+**Notes:**
+
+- **Verified: NO existing UI surface consumes `skipped`.** `WebSocketRuntime.#resync` does `await
+this.#invoke(StackRestoreChannel, …)` and drops the `{ restored, skipped }` result; nothing
+  subscribes to it or renders it. So this is a real gap, not a narrower one — the item is not
+  overstated.
+- The `skipped` count and its three-reason meaning already exist ([[B-092]]: `restore()` returns
+  it; `packages/shared-ipc/src/channels/stack.ts` documents it). Only the surface is missing.
+- **Not a regression from #405** (verified, not asserted): `restore()` and its skip/return are
+  [[B-092]] (`#343`, 2026-07-18), predating R-021. R-021 stage 2a (`#404`) last-touched
+  `caspar-runtime.ts` for the fixed-bank wire contract, not this path.
+- **Owner product direction (2026-07-25), a decision not an open question:** the R-021 fixed-bank
+  model (import/load onto pre-declared permanent rows) does NOT narrow this item — two of the three
+  skip reasons survive under fixed rows (a fixed slot can still lack its template; a dynamic load
+  can still exhaust the dynamic range), so a restore can still drop rows silently.
+- **Open architectural question (record, do NOT answer):** whether the R-021 fixed bank COEXISTS
+  with the dynamic pool or eventually REPLACES it. On `main` the locked design COEXISTS —
+  `LayerManager` fences fixed slots from birth and `allocate()` never returns one even when the
+  dynamic range is exhausted (unit test T1, `packages/caspar-client/tests/layer-manager.test.ts`).
+  The answer shapes R-021 stage 3.
+- **Reproduction is MANUAL** (owner, 2026-07-25): load past the pool size, kill the bridge, restart
+  it — only the layer-holding rows come back; the rest are gone with no message. No automated
+  reproduction exists.
