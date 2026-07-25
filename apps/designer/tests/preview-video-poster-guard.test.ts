@@ -63,8 +63,14 @@ describe('D-128 — the canvas wires video posters through the shared robust rou
     expect(html).toMatch(/\.load\(\)/);
   });
 
-  it('the asset walk routes VIDEO through the routine — never a bare src+seek', () => {
-    expect(html).toContain("if (tag === 'VIDEO') wireVideoPoster(node, url);");
+  it('the asset walk routes VIDEO through the routine, gated per NODE — never by a src comparison', () => {
+    // The runtime's export-side walk (D-128 Phase 5) may set <video src> before
+    // this walk runs (the canvas passes assetUrls for the ticker separator), so
+    // gating the poster on `node.src !== url` silently skips arming it — the
+    // blank-canvas regression the Phase-5 E2E caught. The gate must be the
+    // explicit per-node marker.
+    expect(html).toContain("node.getAttribute('data-cg-poster-armed') !== '1'");
+    expect(html).toContain('wireVideoPoster(node, url);');
     // The pre-fix cold-seek helper is gone; reintroducing it would resurrect
     // the terminal-decode blank canvas on seek-fragile clips.
     expect(html).not.toContain('function seekVideoPoster');

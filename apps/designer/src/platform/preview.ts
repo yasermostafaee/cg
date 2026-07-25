@@ -413,11 +413,24 @@ export class Preview {
             if (!id) return;
             const url = assetUrls[id];
             if (url) {
-              if (node.src !== url) {
-                // The routine owns the src write for VIDEO (preload must be
-                // eager BEFORE the load starts — the cold-seek trap above).
-                if (tag === 'VIDEO') wireVideoPoster(node, url);
-                else node.src = url;
+              if (tag === 'VIDEO') {
+                // D-128 Phase 5 — the runtime's export-side walk now sets
+                // <video src> whenever createRuntime receives assetUrls (which
+                // the canvas passes for the ticker separator), so a src
+                // comparison can NO LONGER gate the poster: the src may already
+                // be correct while the poster was never armed (the exact
+                // regression the Phase-5 E2E caught — blank canvas again). Arm
+                // the robust routine ONCE PER NODE via an explicit marker: a
+                // pooled/transplanted node keeps its marker (never re-armed on
+                // a drag), a genuinely fresh node is wired exactly once, and
+                // the routine still owns the (re-)src write so preload turns
+                // eager before the decisive load (the cold-seek trap above).
+                if (node.getAttribute('data-cg-poster-armed') !== '1') {
+                  node.setAttribute('data-cg-poster-armed', '1');
+                  wireVideoPoster(node, url);
+                }
+              } else if (node.src !== url) {
+                node.src = url;
               }
               node.removeAttribute('data-cg-missing');
             } else if (tag === 'IMG' && node.getAttribute('data-cg-missing') !== '1') {
