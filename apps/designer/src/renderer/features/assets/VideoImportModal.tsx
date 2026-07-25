@@ -29,6 +29,7 @@ import {
   clampCrop,
   findDuplicateVideoAsset,
   fpsConformNotice,
+  matchesConversionParams,
   posterTimeMs,
   type CropRect,
   type SourceProbe,
@@ -312,7 +313,26 @@ export function VideoImportModal(props: {
     const sizeMatches = list.filter(
       (a) => a.kind === 'video' && a.provenance?.sourceBytes === props.file.size,
     );
-    if (sizeMatches.length === 0) {
+    // STRICT pre-filter (2026-07-25, the main-thread-freeze fix): the up-front
+    // hash exists ONLY to offer "you already imported this", and every OTHER
+    // half of that match is knowable for free — size, converter revision,
+    // target fps, crop, the correction set. Unless a size-matched asset also
+    // passes the hash-free predicate, a duplicate is IMPOSSIBLE and the
+    // (potentially hundreds-of-MB) hash is skipped entirely: the operator goes
+    // straight to converting, and provenance's hash computes DURING the encode
+    // as before. The owner's freeze was exactly a re-import whose only
+    // size-matches were stale-revision assets the gated match would reject.
+    const duplicatePossible = sizeMatches.some(
+      (a) =>
+        a.provenance !== undefined &&
+        matchesConversionParams(a.provenance, {
+          targetFps: projectFps,
+          crop: effectiveCrop,
+          premultipliedAlpha,
+          alphaBleed,
+        }),
+    );
+    if (!duplicatePossible) {
       // No prior import could possibly match — no up-front hash; import straight.
       await runConversion(effectiveCrop, undefined);
       return;

@@ -364,6 +364,34 @@ export function cropsEqual(a: CropRect | undefined, b: CropRect | undefined): bo
  * re-import correctly re-encodes under the current algorithm instead of
  * offering the stale bytes. Returns the first match, or null.
  */
+/**
+ * The HASH-FREE half of the duplicate predicate: everything except the source
+ * digest — current converter revision, target fps, crop, and the exact
+ * correction set. Split out (2026-07-25, the main-thread-freeze fix) so the
+ * modal can decide "is a duplicate even POSSIBLE?" BEFORE paying for the
+ * multi-hundred-MB source hash: when no size-matched asset also passes THIS
+ * predicate, the up-front hash is skipped entirely — the exact trap was a
+ * re-import of an archive clip whose only candidates were stale-revision
+ * assets the hash-gated match would have rejected anyway.
+ */
+export function matchesConversionParams(
+  p: VideoProvenance,
+  match: {
+    targetFps: number;
+    crop: CropRect | undefined;
+    premultipliedAlpha?: boolean;
+    alphaBleed?: boolean;
+  },
+): boolean {
+  return (
+    p.converterRevision === CONVERTER_REVISION &&
+    p.targetFps === match.targetFps &&
+    cropsEqual(p.crop, match.crop) &&
+    (p.premultipliedAlpha === true) === (match.premultipliedAlpha === true) &&
+    (p.alphaBleed === true) === (match.alphaBleed === true)
+  );
+}
+
 export function findDuplicateVideoAsset<
   A extends { kind: string; provenance?: VideoProvenance | undefined },
 >(
@@ -379,14 +407,7 @@ export function findDuplicateVideoAsset<
   for (const a of assets) {
     const p = a.provenance;
     if (a.kind !== 'video' || p === undefined) continue;
-    if (
-      p.converterRevision === CONVERTER_REVISION &&
-      p.sourceSha256 === match.sourceSha256 &&
-      p.targetFps === match.targetFps &&
-      cropsEqual(p.crop, match.crop) &&
-      (p.premultipliedAlpha === true) === (match.premultipliedAlpha === true) &&
-      (p.alphaBleed === true) === (match.alphaBleed === true)
-    ) {
+    if (p.sourceSha256 === match.sourceSha256 && matchesConversionParams(p, match)) {
       return a;
     }
   }

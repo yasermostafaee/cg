@@ -934,6 +934,32 @@ describe('VideoImportModal — pre-convert dedupe (D-128)', () => {
     },
   });
 
+  it('STRICT PRE-FILTER: a size-match that CANNOT be a duplicate (stale revision / different corrections) skips the up-front hash entirely', async () => {
+    // The main-thread-freeze trap: the owner re-imported a 740 MB archive clip
+    // whose only size-matched assets were stale-revision — the multi-hundred-MB
+    // hash ran (freezing the page) chasing a match the revision gate would
+    // reject anyway. Every hash-free half of the predicate must be checked
+    // BEFORE the hash: no possible match ⇒ straight to converting.
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    assetsList.mockResolvedValue([
+      existingAsset({ converterRevision: '2026-07-24.3' }), // stale revision
+      existingAsset({ alphaBleed: true }), // different correction set
+    ]);
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(convertToWebm).toHaveBeenCalled(); // went straight to converting…
+    // …with NO blocking "Checking…" phase, and the hash called exactly ONCE —
+    // the DEFERRED provenance hash that runs alongside the encode, never the
+    // up-front duplicate check (which would have been a second call).
+    expect(document.body.textContent).not.toContain('Checking for a previous import');
+    expect(hashSourceFile).toHaveBeenCalledTimes(1);
+  });
+
   it('the SAME source with the SAME crop + fps is a duplicate: no re-convert, and "Use existing" places the prior asset', async () => {
     assetsList.mockResolvedValue([existingAsset()]);
     hashSourceFile.mockResolvedValue('a'.repeat(64)); // hashes to the stored source key
