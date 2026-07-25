@@ -196,7 +196,11 @@ SHALL state that opting in makes conversion substantially slower. The correction
 produced each stored asset SHALL be recorded in provenance, and the pre-convert duplicate
 match SHALL treat a different correction set or converter revision as a different output. The
 result panel SHALL point the operator at the relevant correction when its readings suggest one
-(a premultiplied-looking source; visible alpha leaked into source-transparent regions).
+(a premultiplied-looking source; visible alpha leaked into source-transparent regions). The
+playability verification SHALL prove the output by metadata plus a FULL sequential playthrough
+(error listener armed throughout, wall-capped with an honest log on a cap) — never by seeks,
+which Chromium can fail on a playable VP8+alpha file when the alpha side-stream's keyframes
+misalign with the main stream's.
 
 #### Scenario: A default import converts with no filters; a crop stays cheap
 

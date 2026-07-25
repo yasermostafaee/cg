@@ -335,7 +335,7 @@ export type ConvertedClipVerdict =
   | {
       ok: false;
       /** WHICH check failed — the message must be specific, never "conversion failed". */
-      check: 'decode' | 'duration' | 'dimensions' | 'seek' | 'playback';
+      check: 'decode' | 'duration' | 'dimensions' | 'playback';
       reason: string;
     };
 
@@ -544,20 +544,24 @@ export function sampleOutputAlphaStats(bytes: Uint8Array): Promise<AlphaStats | 
 /**
  * D-128 — VERIFY the converted bytes ACTUALLY PLAY before anything is stored. The field
  * lesson (`Lower_Default`): loading metadata and decoding a sample frame is NOT proof of
- * playability — Chromium seek-decoded five frames of a file whose full playback throws
- * `PIPELINE_ERROR_DECODE`. So this exercises the real thing, in order:
+ * playability. What runs, in order:
  *
  *  1. metadata reachable + finite positive duration + EXACT post-crop dimensions;
- *  2. a SEEK SWEEP across the clip (15/35/55/75/92%) — each must fire `seeked` with a
- *     decodable frame (`readyState ≥ HAVE_CURRENT_DATA`), catching mid-file corruption;
- *  3. a REAL PLAYBACK SPAN — plays ~2s of media time (rate 4; the whole clip when
- *     shorter) with the `error` listener armed the ENTIRE time: any `MediaError`
- *     (the `PIPELINE_ERROR_*` class) fails the check with the position it died at.
+ *  2. a FULL SEQUENTIAL PLAYTHROUGH at 16× with the `error` listener armed the whole
+ *     way — every frame decodes or the verdict carries the position it died at.
  *
- * TIME BOUND (a long clip must not hang the modal): metadata ≤ 8 s, each of the 5 seeks
- * ≤ 3 s, playback span ≤ 8 s wall — worst case ~31 s, typical clip ~2–4 s. Muted, 4×,
- * on a detached element. Failures name WHICH check failed (`check`), never a generic
- * "conversion failed".
+ * WHY playthrough and not a seek sweep (2026-07-25): seeking VP8+alpha is not a property
+ * of the FILE in Chromium — the alpha side-stream's keyframes need not align with the
+ * main stream's, and a seek into a misaligned GOP is a terminal decode error on a
+ * perfectly playable file (container-proven; the canvas-blank root cause). The old
+ * 5-point sweep failed HEALTHY outputs under load at its very first target, while
+ * playthrough decodes EVERY frame — strictly stronger and free of that class. Playout
+ * never seeks; the canvas poster runs the recovery ladder.
+ *
+ * TIME BOUND (a long clip must not hang the modal): metadata ≤ 8 s; playthrough is
+ * duration/16 wall (decode-bound), capped at 30 s — a cap with playback progressing
+ * error-free passes the covered span and logs the cap. Muted, on a detached element.
+ * Failures name WHICH check failed (`check`), never a generic "conversion failed".
  */
 export function verifyConvertedClip(
   bytes: Uint8Array,
@@ -572,7 +576,7 @@ export function verifyConvertedClip(
   v.muted = true;
   const mediaError = (): string => v.error?.message ?? `media error code ${String(v.error?.code)}`;
   const fail = (
-    check: 'decode' | 'duration' | 'dimensions' | 'seek' | 'playback',
+    check: 'decode' | 'duration' | 'dimensions' | 'playback',
     reason: string,
   ): ConvertedClipVerdict => ({ ok: false, check, reason });
 
@@ -625,81 +629,47 @@ export function verifyConvertedClip(
         return;
       }
       void (async () => {
-        // D-128 — WARM the element before the seek sweep. A cold seek into a GOP
-        // whose alpha side-stream frame is inter-coded at the governing main
-        // keyframe is a TERMINAL Chromium decode error on a PERFECTLY PLAYABLE
-        // file (the canvas-blank root cause, container-proven 2026-07-25) — and
-        // under machine load the preload=auto element may not have buffered by
-        // the time the first sweep seek fires, turning the sweep into exactly
-        // that cold-seek trap and failing a healthy output (observed once in
-        // gate:e2e: the box fixture dying at t=0.24s — the FIRST sweep target).
-        // Warm (buffered-through) seeks are measured safe on every fragile GOP,
-        // and a genuinely corrupt frame still fails a warm seek's decode — the
-        // sweep still requires a decodable frame at all five points and the
-        // playback span is untouched, so nothing is weakened. Bounded: the blob
-        // is memory-backed, so this is typically instant.
-        await new Promise<void>((res) => {
-          const bt = setTimeout(res, 8000);
-          const check = (): void => {
-            if (settled) {
-              clearTimeout(bt);
-              res();
-              return;
-            }
-            const buf = v.buffered;
-            if (buf.length > 0 && buf.end(buf.length - 1) >= v.duration - 0.05) {
-              clearTimeout(bt);
-              res();
-              return;
-            }
-            setTimeout(check, 50);
-          };
-          check();
-        });
-        if (settled) return;
-        // 2 — the seek sweep across the clip (not just the start)
+        // 2 — a FULL SEQUENTIAL PLAYTHROUGH at 16x, the error listener armed the
+        // whole way. This REPLACED the 5-point seek sweep + 2s span (2026-07-25):
+        // seeking VP8+alpha is not a property of the FILE in Chromium — the
+        // alpha side-stream's keyframes need not align with the main stream's,
+        // and a seek into a misaligned GOP is a terminal decode error on a
+        // PERFECTLY PLAYABLE file (container-proven, the canvas-blank root
+        // cause). The sweep failed HEALTHY outputs under load (t=0.24s, its
+        // first target — even warmed), while playthrough decodes EVERY frame:
+        // strictly stronger verification than five sampled frames plus a 2s
+        // span, and free of the seek false-positive class. Playout never seeks;
+        // the canvas poster runs the recovery ladder. Wall-capped for very long
+        // clips: if the cap lands while playback is progressing error-free, the
+        // covered span passes and the cap is logged (never a silent truncation).
         const dur = v.duration;
-        for (const frac of [0.15, 0.35, 0.55, 0.75, 0.92]) {
-          const target = frac * dur;
-          const okSeek = await new Promise<boolean>((res) => {
-            const st = setTimeout(() => res(false), 3000);
-            v.onseeked = () => {
-              clearTimeout(st);
-              res(v.readyState >= 2); // HAVE_CURRENT_DATA — a frame is really there
-            };
-            v.currentTime = target;
-          });
-          if (settled) return; // the error listener already resolved (the real verdict)
-          if (!okSeek) {
-            done(
-              fail('seek', `no decodable frame at ${target.toFixed(2)}s (seek never completed)`),
-            );
-            return;
-          }
-        }
-        // 3 — a real playback span, error listener still armed
-        v.currentTime = 0;
-        v.playbackRate = 4;
-        const spanEndMedia = Math.min(dur, 2.0);
-        const playOk = await new Promise<boolean>((res) => {
-          const pt = setTimeout(() => res(v.currentTime > 0), 8000); // bound: 8s wall
+        v.playbackRate = 16;
+        const WALL_CAP_MS = 30_000;
+        const outcome = await new Promise<'ended' | 'cap' | 'stalled'>((res) => {
+          const wall = setTimeout(() => res(v.currentTime > 0 ? 'cap' : 'stalled'), WALL_CAP_MS);
           const tick = (): void => {
-            if (settled || v.currentTime >= spanEndMedia || v.ended) {
-              clearTimeout(pt);
-              res(true);
+            if (settled || v.ended || v.currentTime >= dur - 0.05) {
+              clearTimeout(wall);
+              res('ended');
               return;
             }
             setTimeout(tick, 100);
           };
           v.play().then(tick, () => {
-            clearTimeout(pt);
-            res(false);
+            clearTimeout(wall);
+            res('stalled');
           });
         });
-        if (settled) return;
-        if (!playOk) {
+        if (settled) return; // the error listener already resolved (the real verdict)
+        if (outcome === 'stalled') {
           done(fail('playback', 'the output does not play (playback never started)'));
           return;
+        }
+        if (outcome === 'cap') {
+          console.warn(
+            `[video-convert] playthrough hit the ${String(WALL_CAP_MS / 1000)}s wall cap — ` +
+              `verified the first ${v.currentTime.toFixed(1)}s of ${dur.toFixed(1)}s error-free`,
+          );
         }
         done({ ok: true, durationMs, width: expectedWidth, height: expectedHeight });
       })();

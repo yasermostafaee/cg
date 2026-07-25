@@ -904,7 +904,7 @@ export function VideoImportModal(props: {
               // where they matter, raw numbers behind an expander.
               <div data-testid="video-conversion-result">
                 <Callout variant={phase.opaqueDrop ? 'caution' : 'info'}>
-                  <div>✓ Output plays (verified: metadata, 5-point seek sweep, playback span)</div>
+                  <div>✓ Output plays (verified: metadata + full sequential playthrough)</div>
                   <div>
                     {sourceAlpha === null || phase.outputAlpha === null
                       ? '• Alpha: profile unavailable (sampling failed — see console)'
