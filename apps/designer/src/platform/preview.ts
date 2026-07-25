@@ -1,4 +1,5 @@
 import type { Scene } from '@cg/shared-schema';
+import { attachRobustVideoPoster } from '../shared/video-poster.js';
 
 export interface PreviewOptions {
   cgJs: string;
@@ -330,42 +331,34 @@ export class Preview {
               '</svg>',
           );
 
-        // D-128 Phase 3 — show a video's MID-CLIP poster frame at rest (frame 0
-        // is often transparent). Once metadata is available, seek the paused
-        // <video> to data-cg-poster-ms (else its midpoint); it then displays
-        // that frame. Playback lifecycle (VideoDriver) is Phase 4.
-        function seekVideoPoster(video) {
+        // D-128 — show a video's MID-CLIP poster frame at rest (frame 0 is often
+        // transparent) via the ONE robust poster routine, injected from
+        // src/shared/video-poster.ts so the iframe executes the SAME code the
+        // parent thumbnails and the import modal's post-store verification use.
+        // WHY not a plain cold seek (the canvas-blank field bug, proven
+        // 2026-07-25): the WebM alpha side-stream's keyframes need not align
+        // with the main stream's, and a cold seek into a misaligned GOP is a
+        // TERMINAL Chromium PIPELINE_ERROR_DECODE — while sequential playback
+        // (what the import modal verifies, and what playout does) always works.
+        // The routine seeks on the eager-load path and falls back to sequential
+        // 16x decode; see the shared module header for the mechanism.
+        const attachRobustVideoPoster = ${attachRobustVideoPoster.toString()};
+        function wireVideoPoster(video, url) {
           const ms = Number(video.dataset && video.dataset.cgPosterMs);
-          const seek = () => {
-            const t =
-              isFinite(ms) && ms > 0
-                ? ms / 1000
-                : isFinite(video.duration)
-                  ? video.duration / 2
-                  : 0;
-            try {
-              video.currentTime = t;
-            } catch (e) {
-              /* not seekable yet — the loadedmetadata path will retry */
-            }
-          };
-          // Honest surfacing (Phase-2 error principle): a media load/decode
-          // failure reaches the console rather than leaving a silently blank box.
-          video.addEventListener(
-            'error',
-            () => {
-              const err = video.error;
-              // eslint-disable-next-line no-console
-              console.error(
-                '[cg-preview] video failed to load its poster:',
-                (err && err.message) || 'unknown media error',
-                video.getAttribute('src'),
-              );
+          attachRobustVideoPoster(video, url, isFinite(ms) && ms > 0 ? ms : undefined).then(
+            (outcome) => {
+              // Honest surfacing (Phase-2 error principle): a media load/decode
+              // failure reaches the console rather than leaving a silently blank box.
+              if (!outcome.ok && outcome.error !== 'superseded') {
+                // eslint-disable-next-line no-console
+                console.error(
+                  '[cg-preview] video failed to load its poster:',
+                  outcome.error || 'unknown media error',
+                  url,
+                );
+              }
             },
-            { once: true },
           );
-          if (video.readyState >= 1) seek();
-          else video.addEventListener('loadedmetadata', seek, { once: true });
         }
 
         // D-128 Phase 3 — collect the live <video> nodes just BEFORE a rebuild so
@@ -421,8 +414,10 @@ export class Preview {
             const url = assetUrls[id];
             if (url) {
               if (node.src !== url) {
-                node.src = url;
-                if (tag === 'VIDEO') seekVideoPoster(node);
+                // The routine owns the src write for VIDEO (preload must be
+                // eager BEFORE the load starts — the cold-seek trap above).
+                if (tag === 'VIDEO') wireVideoPoster(node, url);
+                else node.src = url;
               }
               node.removeAttribute('data-cg-missing');
             } else if (tag === 'IMG' && node.getAttribute('data-cg-missing') !== '1') {

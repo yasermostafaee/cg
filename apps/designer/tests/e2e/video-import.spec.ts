@@ -275,10 +275,13 @@ test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-pr
     buffer: readFileSync(PREMULT_FIXTURE),
   });
   await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
-  // the premultiplied-alpha toggle is present and defaults ON (the client's archive)
-  await expect(page.getByTestId('video-premultiplied-toggle')).toBeChecked();
+  // The premultiplied-alpha toggle defaults OFF (owner decision 2026-07-25 — a
+  // default must never degrade an already-correct straight-alpha source); this
+  // fixture IS a legacy premultiplied source, so the operator opts IN.
+  await expect(page.getByTestId('video-premultiplied-toggle')).not.toBeChecked();
+  await page.getByTestId('video-premultiplied-toggle').check();
 
-  // convert with the default (un-premultiply ON), then decode the stored WebM
+  // convert with un-premultiply opted IN, then decode the stored WebM
   await page.getByRole('button', { name: 'Convert & import' }).click();
   // the RESULT panel (D-128 — conversion verdict shown always); place the element from it
   await page.getByRole('button', { name: 'Place element' }).click({ timeout: 25_000 });

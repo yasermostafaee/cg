@@ -1,3 +1,5 @@
+import { attachRobustVideoPoster } from '../../../shared/video-poster.js';
+
 /**
  * D-128 — read a STORED video asset's metadata (duration + intrinsic
  * dimensions) via a `<video>` element. Light and WASM-FREE, unlike the ffmpeg
@@ -26,4 +28,27 @@ export function probeStoredVideo(
     v.onerror = () => resolve(null);
     v.src = url;
   });
+}
+
+/**
+ * D-128 — post-store POSTER PARITY check: the stored clip must produce its
+ * at-rest poster frame VIA THE SAME routine every stored-asset surface runs
+ * (`attachRobustVideoPoster` — canvas iframe, Inspector, panel tile). This is
+ * what closes the "import said ✓ plays, the canvas is blank" gap: the modal now
+ * exercises the exact canvas operation, so a file whose poster cannot be
+ * produced fails LOUDLY at import instead of rendering a silent blank element.
+ * Returns null when the poster resolves, else a human-readable reason.
+ */
+export async function verifyStoredPoster(url: string, posterMs: number): Promise<string | null> {
+  const v = document.createElement('video');
+  const outcome = await attachRobustVideoPoster(v, url, posterMs);
+  try {
+    v.pause();
+    v.removeAttribute('src');
+  } catch {
+    /* detached */
+  }
+  return outcome.ok
+    ? null
+    : `the stored clip cannot produce its canvas poster frame (${outcome.error ?? 'unknown media error'})`;
 }

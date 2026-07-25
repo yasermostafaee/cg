@@ -1010,6 +1010,71 @@ identical conversion time; and it removes the extreme-quantiser regime that is t
 plausible irritant for a stricter platform decoder. Time optimisation of the geq stages
 (the real minutes-per-import lever) is a separate follow-up item.
 
+## The canvas-blank ROOT CAUSE — alpha keyframe misalignment × cold seek (2026-07-25)
+
+**The missing piece all along — what the iframe's `<video>` actually reported:**
+`PipelineStatus::PIPELINE_ERROR_DECODE`, fired during the at-rest POSTER SEEK, identically
+in the srcdoc iframe AND the parent document. Every earlier bisect tested full PLAYTHROUGH —
+which always passes on these files — so no encoder/settings variant could ever reproduce it.
+
+**The evidence chain (each step a controlled experiment, browser = the app's Chromium):**
+
+1. **Not blob scope, not CSP, not size.** A standalone harness (the app's exact CSP meta,
+   bridge-style copied-buffer blob URLs, an unsandboxed srcdoc iframe) shows parent and
+   iframe behave IDENTICALLY per clip; `fetch()` + SHA-256 of the blob inside the iframe
+   match the parent byte-for-byte. Across a size sweep encoded with the app's exact args,
+   2.09 MB FAILED while 4.34 MB passed — non-monotonic, so no size threshold exists.
+2. **Cold seeks fail in deterministic GOP bands; playback never fails.** Per-clip maps of
+   fresh-element `preload='metadata'` seeks show reproducible bad bands (on the 14.32 s
+   repro: 1 s, 4 s, 6–7.5 s — containing the owner's 7.16 s midpoint — 9 s, 12 s, 14 s).
+   The SAME element plays the whole clip sequentially without error, and the modal's exact
+   verification (metadata + 5-point sweep + 2 s span) passes every failing clip — the "✓
+   Output plays" verdict was honestly TRUE on a clip whose canvas render was blank.
+3. **The alpha side-stream is the trigger.** An alpha-stripped control encode (identical
+   content, identical settings, `yuv420p`) cold-seeks CLEAN at every previously-failing
+   point.
+4. **Container-level proof.** An EBML walk of the WebM (per block: the main VP8 frame-type
+   bit and the BlockAdditional's alpha VP8 frame-type bit) shows a 29/29 correlation: a cold
+   seek fails ⇔ the governing main keyframe carries an alpha INTER frame. libvpx places the
+   alpha stream's keyframes on its own schedule; `-g 25` does not force alignment.
+5. **The mechanism.** On a cold seek Chromium initializes a fresh alpha decoder at the
+   target's governing main keyframe; an alpha inter-frame there has no reference history →
+   terminal `PIPELINE_ERROR_DECODE`, a permanently dead element. Sequential decode from 0
+   always carries the full alpha history — why playout (CG ADD → PLAY, no seeks) airs these
+   files correctly, and why `preload='auto'` (eager-load) seeks succeed (measured at every
+   previously-failing GOP).
+6. **Why the earlier sweeps saw "no variable predicts failure":** dimension / duration /
+   size never determined WHICH GOPs get misaligned alpha keyframes — content and motion do.
+   A 1 s clip's midpoint sits in GOP 0, whose alpha frame is always a keyframe; longer clips
+   land wherever libvpx's alpha cadence happened to fall.
+
+**Decision — ROBUST-CANVAS-RENDER, plus verify-on-canvas-path (both, not either):** these
+files are LEGITIMATE broadcast assets — playout is sequential and airs them correctly — so
+failing the import would reject working assets for a Chromium seek quirk; the encoder is
+untouched. Instead (a) every stored-asset surface produces the poster through ONE shared
+routine (`src/shared/video-poster.ts`): eager-load seek, then `load()` + muted sequential
+16× decode to the poster time on any media error/stall (the PROVEN operation; ~0.7 s for a
+14 s clip), then honest failure surfacing — injected into the canvas iframe as serialized
+source so there is exactly one implementation (the B-100/P-012 no-second-copy rule); and
+(b) the import modal's post-store verification RUNS THAT SAME ROUTINE (`verifyStoredPoster`),
+so "import verified it ⇒ the canvas renders it" holds by construction of shared code rather
+than by promise. Regression fixtures are committed (generated with the app's exact encoder
+args): `fragile-alpha-seek-320x90.webm` — container-verified alpha keyframes only in GOP 0,
+every cold seek from 1.0 s (incl. the mid-clip poster) dies pre-fix — plus a seek-safe A/B
+control; the E2E was proven RED pre-fix with the exact field error and GREEN with the fix.
+
+## The premultiplied-alpha default flips OFF (owner decision, 2026-07-25)
+
+The `Premultiplied alpha` toggle now defaults OFF. The ON default assumed the whole archive
+is premultiplied and needs the correction; the field shows clips that are correct WITHOUT it
+and are visibly damaged WITH it (un-premultiplying an already-straight source brightens its
+soft edges). **A default must never degrade a correct file** — the operator turns it ON when
+they actually see the black fringe. The modal's help text is rewritten symmetrically from
+the OFF-default perspective. Already-imported assets are unaffected: each records the
+setting that produced it in `provenance.premultipliedAlpha`. FOLLOW-UP (flagged, not built):
+provenance RECORDS the flag but the Inspector's read-only provenance line does not SURFACE
+it, so the operator currently has no UI to tell which setting an existing asset used.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

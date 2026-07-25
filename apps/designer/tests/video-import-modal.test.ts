@@ -52,15 +52,20 @@ const TRANSPARENT_ALPHA = {
   sampled: 10_000,
 };
 
-// D-128 dedupe seam: the source hash + the stored-WebM metadata probe are mocked
-// so these DOM tests never touch File.stream() / a real <video>. vi.hoisted so
-// the fns exist before the hoisted vi.mock factories run.
-const { hashSourceFile, probeStoredVideo } = vi.hoisted(() => ({
+// D-128 dedupe seam: the source hash + the stored-WebM metadata probe + the
+// post-store poster parity check are mocked so these DOM tests never touch
+// File.stream() / a real <video>. vi.hoisted so the fns exist before the
+// hoisted vi.mock factories run.
+const { hashSourceFile, probeStoredVideo, verifyStoredPoster } = vi.hoisted(() => ({
   hashSourceFile: vi.fn(),
   probeStoredVideo: vi.fn(),
+  verifyStoredPoster: vi.fn(),
 }));
 vi.mock('../src/renderer/features/assets/source-hash.js', () => ({ hashSourceFile }));
-vi.mock('../src/renderer/features/assets/video-asset-probe.js', () => ({ probeStoredVideo }));
+vi.mock('../src/renderer/features/assets/video-asset-probe.js', () => ({
+  probeStoredVideo,
+  verifyStoredPoster,
+}));
 
 import { VideoImportModal } from '../src/renderer/features/assets/VideoImportModal.js';
 
@@ -98,6 +103,7 @@ beforeEach(() => {
   sampleOutputAlphaStats.mockResolvedValue(HEALTHY_ALPHA);
   hashSourceFile.mockResolvedValue('a'.repeat(64));
   probeStoredVideo.mockResolvedValue({ durationMs: 4000, width: 640, height: 360 });
+  verifyStoredPoster.mockResolvedValue(null); // poster parity passes by default
   assetsList.mockResolvedValue([]); // no prior imports ⇒ never a duplicate by default
   assetUrl.mockResolvedValue('blob:existing');
   storeBytes.mockResolvedValue({ asset: STORED_ASSET });
@@ -468,6 +474,55 @@ describe('VideoImportModal (D-128)', () => {
     expect(document.body.textContent).toContain('readback verification');
   });
 
+  it('POSTER PARITY: a stored clip that cannot produce its canvas poster fails the import loudly', async () => {
+    // The exact field gap this closes: "✓ plays" was honestly true while the
+    // canvas rendered BLANK — the at-rest poster is a different operation than
+    // anything the playability verify exercised. The modal now runs the SAME
+    // shared routine the canvas/thumbnails use; its failure must surface with
+    // its OWN message and place no element.
+    convertToWebm.mockResolvedValue(new Uint8Array([7, 8, 9]));
+    verifyStoredPoster.mockResolvedValue(
+      'the stored clip cannot produce its canvas poster frame (PIPELINE_ERROR_DECODE)',
+    );
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(verifyStoredPoster).toHaveBeenCalledWith('blob:existing', 2000); // posterTimeMs(4000)
+    expect(onDone).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('poster verification');
+    expect(document.body.textContent).toContain('render blank on the canvas');
+  });
+
+  it('the premultiplied-alpha toggle defaults OFF and opting IN passes true (owner decision 2026-07-25)', async () => {
+    // A default must never degrade an already-correct straight-alpha source;
+    // the operator opts IN when a black fringe is actually visible.
+    convertToWebm.mockResolvedValue(new Uint8Array([1]));
+    await renderModal();
+    const toggle = document.querySelector(
+      '[data-testid="video-premultiplied-toggle"]',
+    ) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    act(() => {
+      toggle.click();
+    });
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(convertToWebm).toHaveBeenCalledWith(
+      expect.objectContaining({ premultipliedAlpha: true }),
+    );
+    const prov = (storeBytes.mock.calls[0]?.[0] as { provenance: { premultipliedAlpha?: boolean } })
+      .provenance;
+    expect(prov.premultipliedAlpha).toBe(true); // the opt-in is recorded in provenance
+  });
+
   it('crop numeric fields drive the rect (numbers → rectangle sync)', async () => {
     await renderModal();
     act(() => {
@@ -678,7 +733,10 @@ describe('VideoImportModal (D-128)', () => {
         file: FILE,
         targetFps: 50,
         crop: { x: 100, y: 0, width: 320, height: 360 },
-        premultipliedAlpha: true, // the toggle defaults ON (the client's archive)
+        // The toggle defaults OFF (owner decision 2026-07-25): a default must
+        // never degrade an already-correct straight-alpha source; the operator
+        // opts IN when a black fringe is actually visible.
+        premultipliedAlpha: false,
       }),
     );
     expect(storeBytes).toHaveBeenCalledWith({
@@ -695,7 +753,7 @@ describe('VideoImportModal (D-128)', () => {
         sourceSha256: 'a'.repeat(64), // the dedupe key (computed during the encode) travels along
         sourceBytes: FILE_SIZE,
         crop: { x: 100, y: 0, width: 320, height: 360 },
-        premultipliedAlpha: true,
+        premultipliedAlpha: false, // the OFF default is recorded in provenance
       },
     });
     await placeElement();

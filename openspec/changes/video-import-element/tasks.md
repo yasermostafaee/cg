@@ -208,6 +208,55 @@
       auto-outs vs ticker-driven hold; the SHARED LEDGER serving a Lottie AND a video in one
       composition with no cross-talk — the regression guard for the type widening).
 
+## Phase 4b — field fix: the canvas-blank class root-caused + the premultiplied default flip (2026-07-25)
+
+- [x] 4b.1 ROOT CAUSE PROVEN (the missing piece: what the iframe's `<video>` reported):
+      `PIPELINE_ERROR_DECODE` on the at-rest POSTER SEEK — NOT blob scope, NOT CSP, NOT a
+      size threshold. ffmpeg/libvpx encodes the WebM alpha plane as a second VP8 stream
+      (BlockAdditional) whose keyframes follow the alpha encoder's own schedule; a COLD seek
+      (preload='metadata') into a GOP whose governing main keyframe carries an alpha INTER
+      frame hands Chromium's fresh alpha decoder a reference-less frame → TERMINAL decode
+      error, while sequential playback always decodes (full alpha history) — which is exactly
+      why the strengthened playability verify passed these files honestly. Evidence: standalone
+      harness (parent and srcdoc iframe fail IDENTICALLY; bytes fetch+hash identical in both;
+      2.09 MB failed while 4.34 MB passed), deterministic GOP-band cold-seek maps, an
+      alpha-stripped control encode with ZERO failures, and an EBML container walk showing a
+      29/29 correlation: cold seek fails ⇔ alpha inter-frame at the governing main keyframe.
+      Full detail in design.md "The canvas-blank ROOT CAUSE".
+- [x] 4b.2 THE FIX — robust-canvas-render via ONE shared routine
+      (`apps/designer/src/shared/video-poster.ts#attachRobustVideoPoster`): rung 1 seeks on the
+      EAGER-load path (`preload='auto'` — measured safe on every previously-failing GOP);
+      rung 2 recovers from any media error / seek stall with `load()` + muted sequential 16×
+      decode to the poster time (the operation import verification PROVES; ~0.7 s for a 14 s
+      clip), restoring `playbackRate`/paused for the VideoDriver; rung 3 surfaces failure —
+      never a silently dead element. Wired into ALL stored-asset surfaces from the one source:
+      the canvas iframe (serialized into the srcdoc document, replacing `seekVideoPoster`'s
+      cold seek), `VideoPoster` (Inspector + assets-panel tile), and the modal (4b.3). The
+      ENCODER IS UNTOUCHED: these files are legitimate broadcast assets (playout is sequential
+      and airs them correctly) — rejecting them at import for a Chromium seek quirk would
+      refuse working assets.
+- [x] 4b.3 THE GUARD GAP closed as verify-on-canvas-path: after store + readback, the modal
+      runs `verifyStoredPoster` — the SAME shared routine on the stored URL at the same
+      `posterTimeMs` — so "import verified it" ⇒ "the canvas renders it" holds by construction
+      (shared code, not a promise). A clip whose poster cannot be produced fails LOUDLY with
+      its own message. Tests: `video-poster-robust.test.ts` (11 ladder-transition tests on a
+      scripted fake element), `preview-video-poster-guard.test.ts` (generated-source contract,
+      B-091 style), modal poster-parity + default tests, and
+      `tests/e2e/video-canvas-render.spec.ts` against COMMITTED fixtures generated with the
+      app's exact encoder args (`fragile-alpha-seek-320x90.webm` — container-verified alpha
+      keyframes only in GOP 0, every cold seek from 1.0 s dies pre-fix, including the mid-clip
+      poster; `seek-safe-64x64.webm` — the A/B control). The E2E was proven RED pre-fix with
+      the exact field error, GREEN with the fix.
+- [x] 4b.4 `Premultiplied alpha` DEFAULT flips OFF (owner decision, 2026-07-25): the ON
+      default assumed the whole archive is premultiplied, but the field shows clips that are
+      correct WITHOUT the correction and visibly damaged WITH it — a default must never degrade
+      a correct file; the operator opts IN when a black fringe is actually visible. Help text
+      rewritten symmetrically from the OFF-default perspective. Already-imported assets are
+      untouched (each records its own `provenance.premultipliedAlpha`). FOLLOW-UP flagged, not
+      built: provenance records the setting but the Inspector's provenance line does not
+      surface it. Tests updated: modal default/opt-in unit tests; the fringe E2E now opts IN
+      explicitly (its fixture IS premultiplied).
+
   **Phase 5 still owes the EXPORTER-side walk:** `runtime.ts`'s on-air/export asset-src walk is
   `img[data-cg-asset-id]`-only (Phase-3 note); Phase 5 widens it to `<video data-cg-asset-id>`
   (packaged relative path for `.vcg`, base64 `data:` for single-file) so a video renders + plays

@@ -1,0 +1,84 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import type { Scene } from '@cg/shared-schema';
+import { Preview } from '../src/platform/preview.js';
+
+/**
+ * D-128 — the canvas iframe must produce a video's at-rest poster through the ONE
+ * shared robust routine (`src/shared/video-poster.ts`), never a bare cold seek.
+ *
+ * WHY (the canvas-blank field bug, proven 2026-07-25): the WebM alpha side-stream's
+ * keyframes need not align with the main stream's, and a COLD seek
+ * (preload='metadata', no data loaded) into a misaligned GOP is a TERMINAL Chromium
+ * `PIPELINE_ERROR_DECODE` — while sequential playback (what the import modal
+ * verifies) always decodes. The routine seeks on the eager-load path and falls back
+ * to sequential 16x decode.
+ *
+ * The preview document is generated JS text (`#buildHtml`) with the routine injected
+ * via `Function.prototype.toString()`, so these tests pin the generated source — the
+ * same contract style as `preview-lottie-assets-guard.test.ts`. The ladder's
+ * behavior itself is unit-tested in `video-poster-robust.test.ts`; the real-media
+ * end-to-end lives in `tests/e2e/video-canvas-render.spec.ts`.
+ */
+
+const urlGlobals = URL as unknown as {
+  createObjectURL: (blob: unknown) => string;
+  revokeObjectURL: (url: string) => void;
+};
+
+const SCENE: Scene = {
+  schemaVersion: 1,
+  id: 's-d128-poster',
+  name: 'preview-video-poster-guard',
+  templateType: 'custom',
+  resolution: { width: 1920, height: 1080 },
+  frameRate: 50,
+  safeAreas: { title: 10, action: 5 },
+  frameRange: { in: 0, out: 50 },
+  background: 'transparent',
+  layers: [],
+  compositions: [],
+};
+
+describe('D-128 — the canvas wires video posters through the shared robust routine', () => {
+  let html: string;
+
+  beforeAll(() => {
+    urlGlobals.createObjectURL = () => 'blob:stub';
+    urlGlobals.revokeObjectURL = () => undefined;
+    const preview = new Preview({
+      cgJs: 'export const noop = 1;',
+      cgCss: '.cg-stage{}',
+      fontsCss: '',
+    });
+    html = preview.load(SCENE).html;
+  });
+
+  it('injects the shared routine source into the document', () => {
+    // The serialized function must land as a callable binding…
+    expect(html).toMatch(/const attachRobustVideoPoster = (?:function|\()/);
+    // …and carry BOTH rungs: the eager-load seek shape and the sequential
+    // 16x recovery (the operation import verification proves).
+    expect(html).toMatch(/preload\s*=\s*["']auto["']/);
+    expect(html).toMatch(/playbackRate\s*=\s*16/);
+    expect(html).toMatch(/\.load\(\)/);
+  });
+
+  it('the asset walk routes VIDEO through the routine — never a bare src+seek', () => {
+    expect(html).toContain("if (tag === 'VIDEO') wireVideoPoster(node, url);");
+    // The pre-fix cold-seek helper is gone; reintroducing it would resurrect
+    // the terminal-decode blank canvas on seek-fragile clips.
+    expect(html).not.toContain('function seekVideoPoster');
+  });
+
+  it('a poster failure still surfaces to the parent console (honest surfacing)', () => {
+    expect(html).toContain('[cg-preview] video failed to load its poster:');
+    // …but a superseded run (asset URL replaced mid-flight) stays quiet.
+    expect(html).toMatch(/outcome\.error !== ['"]superseded['"]/);
+  });
+
+  it('the routine restores playbackRate so a later real play is untouched', () => {
+    // The recovery rung plays at 16x; the serialized source must set it back —
+    // a pooled canvas <video> is reused by the VideoDriver on play().
+    expect(html).toMatch(/playbackRate\s*=\s*1[^0-9]/);
+  });
+});

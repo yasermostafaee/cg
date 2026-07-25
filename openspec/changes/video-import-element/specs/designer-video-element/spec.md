@@ -171,6 +171,64 @@ video bytes carried inline and ZERO external requests.
 - **THEN** all three render identically, and the single-file HTML runs under CasparCG's CEF from
   `file://` with the video bytes carried inline and zero external requests
 
+### Requirement: The premultiplied-alpha correction is opt-IN, defaulting OFF
+
+The import modal's `Premultiplied alpha` correction SHALL default OFF (un-premultiply of a
+matted-against-black source): a default must never degrade an already-correct straight-alpha
+source, which the correction visibly damages. The operator SHALL be able to opt IN for a legacy
+premultiplied source showing a black fringe, and the setting that produced each stored asset
+SHALL be recorded in its provenance (`premultipliedAlpha`).
+
+#### Scenario: The default leaves a correct source untouched; opting in is recorded
+
+- **WHEN** the operator imports a video without touching the premultiplied-alpha toggle
+- **THEN** the source's colours are used as-is (no un-premultiply), and when the operator opts
+  IN instead, the conversion un-premultiplies and the stored asset's provenance records
+  `premultipliedAlpha: true`
+
+### Requirement: A stored clip's at-rest poster is produced by ONE robust routine on every surface
+
+Every stored-asset poster surface SHALL produce the at-rest frame through ONE shared routine —
+the canvas iframe, the Inspector preview, and the assets-panel tile — never per-surface copies
+that can drift. The routine SHALL NOT rely on a cold seek alone: a WebM whose
+alpha side-stream keyframes misalign with the main stream's (a legitimate libvpx encode — the
+clip plays sequentially and airs correctly) makes a cold seek into a misaligned GOP a TERMINAL
+Chromium decode error. The routine SHALL seek on the eager-load path and, on any media error or
+seek stall, SHALL recover by sequentially decoding (muted, high-rate) to the poster time — the
+operation import verification proves — restoring the element (playback rate, paused) for a later
+real play. Only a clip that cannot decode sequentially may fail to produce a poster, and that
+failure SHALL be surfaced (console at minimum), never a silently blank element.
+
+#### Scenario: A seek-fragile clip still renders its poster on the canvas
+
+- **WHEN** a stored clip whose alpha side-stream keyframes misalign with its main-stream
+  keyframes is placed on the canvas (its mid-clip poster seek would be a terminal decode error)
+- **THEN** the canvas still renders the mid-clip poster frame (via the routine's sequential
+  recovery when the seek rung fails), the element carries no media error, and it remains paused
+  at playback rate 1, ready for a real play
+
+#### Scenario: The Inspector and assets-panel thumbnails render the same clip
+
+- **WHEN** the same seek-fragile clip is shown in the Inspector preview or the assets-panel tile
+- **THEN** each produces the poster frame through the same shared routine — never a blank tile —
+  and a genuine failure is surfaced, not silent
+
+### Requirement: Import verifies the stored clip through the canvas's own poster routine
+
+After storing the converted bytes, the import SHALL verify that the stored asset produces its
+at-rest poster frame VIA THE SAME shared routine the canvas and thumbnails run — so "the import
+verified it" and "the canvas renders it" are the same code path, and a clip that would render
+blank on the canvas fails LOUDLY at import instead. This is IN ADDITION to the playability
+verification (metadata, seek sweep, playback span) and the readback check.
+
+#### Scenario: A stored clip that cannot produce its poster fails the import loudly
+
+- **WHEN** the stored bytes cannot produce the at-rest poster frame through the shared routine
+  (neither the seek rung nor sequential recovery yields a frame)
+- **THEN** the import fails with a message naming the poster verification (distinct from
+  playability, alpha, and readback failures) and the reason, instead of placing an element that
+  renders blank
+
 ### Requirement: An oversized single-file export is reported by the existing preflight
 
 An export that would exceed the single-file size threshold SHALL be reported by the EXISTING

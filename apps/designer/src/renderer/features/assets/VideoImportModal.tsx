@@ -29,11 +29,12 @@ import {
   clampCrop,
   findDuplicateVideoAsset,
   fpsConformNotice,
+  posterTimeMs,
   type CropRect,
   type SourceProbe,
 } from './video-convert-args.js';
 import { hashSourceFile } from './source-hash.js';
-import { probeStoredVideo } from './video-asset-probe.js';
+import { probeStoredVideo, verifyStoredPoster } from './video-asset-probe.js';
 import * as s from './VideoImportModal.css.js';
 
 type Converter = typeof VideoConvertModule;
@@ -109,13 +110,15 @@ export function VideoImportModal(props: {
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [cropOn, setCropOn] = useState(false);
   const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, width: 1, height: 1 });
-  // D-128 — un-premultiply the source's alpha (fringe fix). Defaults ON: the
-  // client's archive is legacy AE / rawvideo-BGRA, which stores premultiplied
-  // (matted-against-black) alpha. A STRAIGHT-alpha source (already-correct WebM/
-  // MOV) must be imported with this OFF, or its semi-transparent pixels over-
-  // brighten. rawvideo/BGRA carries no premultiplied flag, so this cannot be
-  // auto-detected — it is an explicit operator choice (design.md).
-  const [premultipliedAlpha, setPremultipliedAlpha] = useState(true);
+  // D-128 — un-premultiply the source's alpha (fringe fix). Defaults OFF
+  // (owner decision, 2026-07-25): the ON default assumed the whole archive is
+  // premultiplied and needs the correction, but the field shows clips that are
+  // correct WITHOUT it and visibly damaged WITH it — a default must never
+  // degrade a correct file. The operator turns it ON when they actually see a
+  // black fringe on soft edges (the legacy matted-against-black AE /
+  // rawvideo-BGRA case). rawvideo/BGRA carries no premultiplied flag, so this
+  // cannot be auto-detected — it is an explicit operator choice (design.md).
+  const [premultipliedAlpha, setPremultipliedAlpha] = useState(false);
   const converter = useRef<Converter | null>(null);
   const cancelled = useRef(false);
   const hashAbort = useRef<AbortController | null>(null);
@@ -442,6 +445,26 @@ export function VideoImportModal(props: {
         });
         return;
       }
+      // D-128 POSTER PARITY — the field gap this closes: "✓ plays" passed while
+      // the canvas rendered BLANK, because the canvas's at-rest poster is a
+      // different operation (a seek into one specific GOP) than anything the
+      // playability verify exercised. Run the stored bytes through THE SAME
+      // routine every stored-asset surface uses (canvas iframe / Inspector /
+      // panel tile) so "import verified it" and "the canvas renders it" are the
+      // same code path. Instant on healthy clips (the seek rung); on
+      // seek-fragile clips the routine's sequential fallback proves the poster
+      // is still producible (~1 s); only a clip whose poster cannot be produced
+      // at all fails — loudly, at import.
+      const posterMismatch =
+        url === null ? null : await verifyStoredPoster(url, posterTimeMs(measured));
+      if (posterMismatch !== null) {
+        console.error(`[video-import] stored clip FAILED poster verification: ${posterMismatch}`);
+        setPhase({
+          kind: 'error',
+          message: `The stored clip failed poster verification (${posterMismatch}). It would render blank on the canvas — remove the asset and re-import.`,
+        });
+        return;
+      }
       // A SIGNIFICANT drop in fully-opaque coverage is a broadcast defect even when the
       // file plays (solid regions compositing semi-transparent) — flagged as a WARNING
       // in the result panel, source-relative (a sparse graphic stays quiet).
@@ -732,8 +755,8 @@ export function VideoImportModal(props: {
               </label>
               <span className={s.meta}>
                 {premultipliedAlpha
-                  ? 'Removes the black fringe on semi-transparent edges. Turn OFF for a straight-alpha source (a normal WebM/MOV), or its soft edges will over-brighten.'
-                  : 'Straight alpha — the source is used as-is. Turn ON for a matted-against-black AE / rawvideo-BGRA archive to remove black edges.'}
+                  ? 'On — un-premultiplies a legacy premultiplied (matted-against-black) source to remove the black fringe on soft edges. A source that is already correct will be visibly damaged by this — turn it back off unless you see the fringe.'
+                  : 'Off (default) — the source is used as-is. Turn on only for a legacy premultiplied/matted source (e.g. an After Effects / rawvideo-BGRA archive clip) showing a black fringe on soft edges.'}
               </span>
             </div>
 
