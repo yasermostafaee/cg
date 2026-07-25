@@ -440,3 +440,75 @@ that was never allowed to finish must not be able to masquerade as a gate that r
 untouched). The kill-mid-wait evidence also validated P-013's stale-reclaim: the next gate
 acquired the orphaned slot cleanly. Scope is the lock CLI's logging/timeout surface
 (`tools/gate-hook/src/gate-lock-cli.mjs` + `gate-lock.mjs`) — no gate semantics change.
+
+## [ ] P-016 — the host gate lock does not cross an OS boundary (Windows `tmpdir` ≠ Linux/WSL `tmpdir`) ⟨priority: medium⟩
+
+**What:** [[P-013]]'s "one gate per host" lock is a host-wide advisory lock held at a stable
+path under `os.tmpdir()` (`tools/gate-hook/src/gate-lock-cli.mjs` → `proper-lockfile`). But
+`os.tmpdir()` resolves to DIFFERENT paths per OS on the SAME physical machine — a Windows
+process sees `%TEMP%` (e.g. `C:\Users\…\AppData\Local\Temp`), a Linux/WSL process sees `/tmp`.
+A Windows gate and a Linux/WSL gate on one machine therefore lock two different files, never
+see each other's slot, and run CONCURRENTLY — the exact contention P-013 exists to serialize,
+and the exact CPU starvation the [[B-098]] load-flake class feeds on.
+**Why:** This stops being theoretical the moment the Linux `gate:e2e` backlog is worked off,
+because the ONLY way to discharge that backlog is to run Linux gates on the SAME machine that
+keeps running Windows ones. The outstanding Linux `gate:e2e` debts number five today —
+[[R-018]], [[R-020]], [[R-021]] (stage 2b, #405), plus the designer-track #369 ([[B-089]]) and
+#370 (there is no consolidated tally file, so this is a compiled enumeration, not a maintained
+counter; #405/stage 2b is the most recent addition) — so a Windows gate racing a WSL gate is a
+near-term reality, not a hypothetical. And the trigger is not manual: [[P-009]]'s Stop hook
+fires a gate automatically at every turn end, so "just don't start two" is not a control anyone
+can exercise.
+**Acceptance:**
+
+- WHEN a gate runs under Windows and another under Linux/WSL on the SAME physical host THEN both
+  take the SAME exclusive slot — one waits for the other, never races it
+- WHEN the two OSes resolve different `os.tmpdir()` paths THEN the lock path is derived from a
+  host identity STABLE across the OS boundary (not `os.tmpdir()` alone), so the slot is shared
+- WHEN the cross-OS lock mechanism is unavailable or errors THEN the gate still runs WITHOUT
+  serialization and says so — [[P-013]]'s fail-open degradation is preserved, never a deadlock
+
+**Notes:** extends [[P-013]] (the lock this widens) — a DISTINCT gap from [[P-015]], which is
+the lock's logging/timeout legibility; do NOT fold the two together. The hard part is choosing a
+lock path both OSes agree on when their temp roots differ: a WSL `/tmp` is not the Windows
+`%TEMP%`, and even a shared filesystem path must round-trip through `\\wsl$\…` vs `/mnt/…`
+translation. Scope is the lock-path derivation in `gate-lock-cli.mjs` / `gate-lock.mjs`; the
+[[B-098]] `bounded-turbo-cli` inner cap is untouched — this is the OUTER host-serialization
+layer, one level up.
+
+## [ ] P-017 — merged remote branches survive the ship sequence, and nothing detects the leak ⟨priority: medium⟩
+
+**What:** [[P-011]]'s four-step ship sequence ends with `git push origin --delete <branch>` then
+`git branch -D <branch>`, but NOTHING verifies either ran. A merged branch that survives on
+`origin` is then indistinguishable from in-flight work — the hazard CLAUDE.md's "Merge status"
+section already documents. This has now happened THREE times — a pattern, not an accident: (1)
+`fix/runtime-ux-batch-2` (merged #317, 2026-07-14), the case CLAUDE.md already records, which
+cost a full session's planning for a rebase of already-shipped code; (2)
+`feat/runtime-fixed-layers-wire` (merged #404), which survived on `origin` until the owner
+deleted it by hand; (3) `wip/openspec-archive-2026-07-19`, a stale wip branch likewise deleted
+by hand.
+**Why:** CC cannot self-heal this — the permission classifier denies the deletion push, so any
+leak CC spots must be handed to the owner as a manual command ([[P-014]]: the owner completes
+the deletion), a hand-off easily lost. Detection closes the gap between "leaked" and "someone
+happened to notice". The live audit run at filing (2026-07-25) came back EMPTY — `gh pr list
+--state merged` intersected with `git ls-remote --heads origin` shows `origin` holding only
+`main`, because the owner has already cleaned leaks (2) and (3). That empty result is the POINT,
+not a reason to skip filing: the pattern is historical and real, and detection is what catches
+the NEXT leak without depending on the owner's eye.
+**Acceptance:**
+
+- WHEN a merge completes THEN an audit intersects merged PR head refs with live `origin` heads
+  and REPORTS any branch that is merged-but-still-live
+- WHEN the audit finds a leak THEN it prints the exact human deletion command (the push CC may
+  not run) so the owner can complete [[P-011]]'s sequence
+- WHEN the audit finds nothing THEN it is silent (or says "clean") — no false alarm on the
+  common case, which is the norm
+- WHEN the audit runs THEN it is DETECTION only — it NEVER deletes a branch itself; deletion
+  stays a deliberate human act
+
+**Notes:** DETECTION only — deliberately not deletion. Candidate homes: the [[P-009]] Stop hook
+(it already runs at turn end and already prints repair guidance — the likeliest host), or a
+`pnpm` script the owner runs after merging. Cross-refs [[P-011]] (the sequence this audits),
+[[P-009]] (the likeliest host), [[P-014]] (the owner merges, so the deletion step is theirs to
+complete). Filed on the historical three-leak pattern above even though today's audit is clean:
+the whole value is catching the next leak automatically, not the current (empty) backlog.

@@ -89,7 +89,11 @@ compound — turbo's task concurrency AND each `vitest run`'s fork count — so 
 `taskConcurrency × forksPerTask` stays ≤ cores (8 cores → 3 × 2 = 6 workers; the run prints
 its own bound). Unbounded, those two defaults wanted ~64 workers on 8 cores and starved
 whichever timing-sensitive suite was co-scheduled — the same `did not reach HEALTHY`
-contention red B-073 first met. Do NOT "simplify" a script back to a bare `turbo run test`
+contention red B-073 first met. **Always run these tasks through their `pnpm` script (`pnpm
+gate` / `pnpm test`); NEVER call `turbo run test` — or `turbo run` for any gate task —
+directly.** A direct `turbo` invocation skips `tools/gate-hook/src/bounded-turbo-cli.mjs` and so
+drops the worker cap, reviving the B-098 `did not reach HEALTHY` load-flake class the bound
+exists to prevent. Do NOT "simplify" a script back to a bare `turbo run test`
 (it removes the cap), do NOT drop the `VITEST_*` `passThroughEnv` keys in `turbo.json` (strict
 env mode then filters the caps out and the bound is a silent no-op), and do NOT answer a
 contention red by raising a timeout — B-073 already did that and B-098 is that bound blown in
