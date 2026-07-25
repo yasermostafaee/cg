@@ -625,6 +625,38 @@ export function verifyConvertedClip(
         return;
       }
       void (async () => {
+        // D-128 — WARM the element before the seek sweep. A cold seek into a GOP
+        // whose alpha side-stream frame is inter-coded at the governing main
+        // keyframe is a TERMINAL Chromium decode error on a PERFECTLY PLAYABLE
+        // file (the canvas-blank root cause, container-proven 2026-07-25) — and
+        // under machine load the preload=auto element may not have buffered by
+        // the time the first sweep seek fires, turning the sweep into exactly
+        // that cold-seek trap and failing a healthy output (observed once in
+        // gate:e2e: the box fixture dying at t=0.24s — the FIRST sweep target).
+        // Warm (buffered-through) seeks are measured safe on every fragile GOP,
+        // and a genuinely corrupt frame still fails a warm seek's decode — the
+        // sweep still requires a decodable frame at all five points and the
+        // playback span is untouched, so nothing is weakened. Bounded: the blob
+        // is memory-backed, so this is typically instant.
+        await new Promise<void>((res) => {
+          const bt = setTimeout(res, 8000);
+          const check = (): void => {
+            if (settled) {
+              clearTimeout(bt);
+              res();
+              return;
+            }
+            const buf = v.buffered;
+            if (buf.length > 0 && buf.end(buf.length - 1) >= v.duration - 0.05) {
+              clearTimeout(bt);
+              res();
+              return;
+            }
+            setTimeout(check, 50);
+          };
+          check();
+        });
+        if (settled) return;
         // 2 — the seek sweep across the clip (not just the start)
         const dur = v.duration;
         for (const frac of [0.15, 0.35, 0.55, 0.75, 0.92]) {

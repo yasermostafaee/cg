@@ -1116,6 +1116,16 @@ rules the quality settings out). The playability verify (~0.7 s) and the poster 
 (~0.05 s healthy) STAY — both are load-bearing guards. A per-import
 `[video-import] timing —` console line reports every stage so the cost stays visible.
 
+**Verify hardening (follow-up caught by gate:e2e):** the playability SEEK SWEEP itself
+performed the proven-fragile operation — under machine load the `preload=auto` element may
+not have buffered before the first sweep seek fires, turning it into the cold-seek
+alpha-keyframe trap and failing a HEALTHY output (observed once: the box fixture dying at
+t=0.24 s, exactly the 15% sweep target). `verifyConvertedClip` now WARMS the element
+(waits, bounded, until the blob is buffered through) before sweeping — warm seeks are
+measured safe on every fragile GOP, a genuinely corrupt frame still fails a warm seek's
+decode, and all five sweep points + the playback span remain enforced. Nothing weakened;
+one false-positive mechanism removed.
+
 **Result-panel pointers (the operator's new decision loop):** with corrections off by
 default, the panel must say WHICH checkbox to try. Source stats now measure
 `straightEvidenceFrac` — of the semi-transparent pixels, how many have colour EXCEEDING
