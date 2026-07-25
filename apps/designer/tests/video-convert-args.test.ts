@@ -33,7 +33,7 @@ describe('D-128 — buildConvertArgs (the DECIDED VP8+alpha recipe)', () => {
     expect(args.at(-1)).toBe('/out.webm');
   });
 
-  it('BROADCAST QUALITY (lossy-alpha-leak fix): bounded quantiser + 1s GOP', () => {
+  it('BROADCAST QUALITY (lossy-alpha-leak fix): bounded quantiser + 1s FIXED GOP', () => {
     // The alpha plane is a second VP8 stream sharing the SAME quantiser as colour; the
     // old crf 12 / b:v 2M let motion crumble alpha (source-α=0 pixels decoded at α≤30
     // over black — the on-air smudges). crf 4 + qmax 16 BOUND the quantiser; b:v 20M is
@@ -47,6 +47,21 @@ describe('D-128 — buildConvertArgs (the DECIDED VP8+alpha recipe)', () => {
     expect(args[args.indexOf('-qmax') + 1]).toBe('16');
     expect(args[args.indexOf('-b:v') + 1]).toBe('20M');
     expect(args[args.indexOf('-g') + 1]).toBe('25');
+  });
+
+  it('ALPHA KEYFRAME ALIGNMENT: keyint_min pins the GOP so BOTH streams keyframe together', () => {
+    // kf_min == kf_max fixes the GOP in both libvpx encoder instances (colour +
+    // the alpha side-stream), which is what makes seeks stop being terminal on
+    // the produced WebM (container-verified 15/15 aligned, 29/29 cold seeks
+    // decode, 5% smaller). Removing this reintroduces the canvas-blank /
+    // pause-resume corruption class at the SOURCE.
+    const args = buildConvertArgs({
+      inputPath: '/mnt/clip.avi',
+      outputPath: '/out.webm',
+      targetFps: 50,
+    });
+    expect(args[args.indexOf('-keyint_min') + 1]).toBe('25');
+    expect(args[args.indexOf('-keyint_min') + 1]).toBe(args[args.indexOf('-g') + 1]);
   });
 
   it('FAST PATH: a default import (no corrections) runs NO filter at all — the spike shape', () => {

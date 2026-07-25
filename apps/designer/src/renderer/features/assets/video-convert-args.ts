@@ -58,6 +58,19 @@ const VP8_ALPHA_ARGS = [
   // resume-window finding), +3.5% size measured. One revision bump carries both.
   '-g',
   '25',
+  // D-128 ALPHA KEYFRAME ALIGNMENT (2026-07-25, the seek-fragility ROOT fix):
+  // with kf_min == kf_max the GOP is FIXED, so BOTH libvpx encoder instances —
+  // colour AND the alpha side-stream — place keyframes at exactly the same
+  // frames instead of each on its own content-driven schedule. Misaligned alpha
+  // keyframes are what made seeks terminal (`PIPELINE_ERROR_DECODE` on a
+  // playable file): Chromium's fresh alpha decoder met a reference-less inter
+  // frame at the governing main keyframe. Container-verified on the 14.32s
+  // repro: 15/15 main keyframes carry alpha keyframes, zero strays, every
+  // previously-failing cold seek decodes (29/29), 5% SMALLER output, no encode
+  // time cost. Pre-.5 assets remain misaligned — the driver/poster recovery
+  // paths stay as belt-and-braces for them.
+  '-keyint_min',
+  '25',
   '-deadline',
   'good',
   '-cpu-used',
@@ -76,9 +89,14 @@ const VP8_ALPHA_ARGS = [
  * (un-premultiply, alpha bleed) became opt-in corrections — a DEFAULT import's
  * output changes (no bleed), so the bump is required by this contract even though
  * the ENCODER args are untouched. No re-import is forced: bleed-on assets from
- * ≤ .3 are not defective (the bleed is a robustness layer, not a fix).
+ * ≤ .3 are not defective (the bleed is a robustness layer, not a fix);
+ * `2026-07-25.5` = ALPHA KEYFRAME ALIGNMENT (`-keyint_min 25` — fixed GOP, both
+ * encoder streams keyframe together): seeks stop being terminal on the produced
+ * WebM. RE-IMPORT IMPLICATION: assets from ≤ .4 remain seek-fragile — they still
+ * play and air correctly, and the recovery paths handle them, but re-importing
+ * them under .5 removes their seek fragility at the source.
  */
-export const CONVERTER_REVISION = '2026-07-25.4';
+export const CONVERTER_REVISION = '2026-07-25.5';
 
 /**
  * D-128 — the geq expressions of the alpha pipeline. Why `geq` and not ffmpeg's
