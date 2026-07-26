@@ -1278,6 +1278,32 @@ PROVISIONAL: Phase 6 measures real ADD latency on 2.3.x hardware and confirms or
 (decision (d)) and names the total + dominating clips + the `.vcg` alternative (its assets
 ship as separate binary files — no inline inflation, no parse cost).
 
+## Phase-4 completion — the FOURTH hold-driver walk gains the video branch (2026-07-26)
+
+Found by the Phase-6 runbook fact-check, fixed on `fix/d128-schema-hold-driver-mirror`. The
+2026-07-23 "media as a closer" sweep (above) fixed the three Designer PANEL walks
+(`hasContentElement` / `contentHoldElementsOf` / `nestedHoldGroupsOf`) — but there is a FOURTH
+walk in a different package: `@cg/shared-schema`'s `hasEffectiveHoldDrivers`, the resolution
+boundary consumed by the exporter's `buildPlayoutMetadata` and the Playout inspector's
+`holdSourceEff`, whose own doc promises it mirrors the runtime's
+`scopeHasEffectiveHoldDrivers`. It still walked only ticker/sequence/countdown + the D-125
+Lottie branch, so a composition whose ONLY effective driver was a `drivesHold: true` video
+resolved `content-driven → timed` at that boundary: the exported `.vcg` metadata baked no
+`holdSource` (a scheduler would treat the item as timed/`holdMs`), and the inspector displayed
+the timed fallback (showing the `holdMs` input) — while the runtime, correct all along, held
+content-driven on air. The panel walks made this REACHABLE: `hasContentElement` already offers
+the Hold-source select for an opted-in video, so the operator can author exactly this scene.
+
+Fix: the Lottie branch becomes the MEDIA branch (`lottie | video`, `drivesHold === true`
+opt-in, same `visible` gate and D-112 per-instance `holdOverrides` handling). Tests pin the
+sole-driver case at both consumers: `shared-schema/tests/scene.test.ts` (opt-in / absent /
+false / hidden / override force-include + force-exclude) and
+`vcg-format/tests/playout-metadata.test.ts` (metadata bakes `content-driven` with an opted-in
+video as the only driver; resolves to timed with `holdMs` honored when the video is not opted
+in). The inspector consumes the same predicate, so its display is corrected for free — a
+user-facing display change for the video-sole-driver case only (no layout/geometry change; no
+new E2E, matching the B-032 precedent where this same resolution boundary was unit-tested).
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

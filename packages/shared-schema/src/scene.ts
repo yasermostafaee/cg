@@ -351,7 +351,8 @@ export function playoutOf(scene: Pick<Scene, 'playout' | 'lifecycle'>): Playout 
 
 /**
  * B-032 — does this composition tree have any EFFECTIVE content hold driver: a `ticker` /
- * `sequence` / countdown `clock` that EFFECTIVELY drives the hold, in its OWN layers OR reachable
+ * `sequence` / countdown `clock` (absent `drivesHold` ⇒ drives), or an OPTED-IN media element —
+ * `lottie` (D-125) / `video` (D-128), `drivesHold === true` — in its OWN layers OR reachable
  * through a nested composition instance (recursing containers; cycle-guarded)? A `content-driven`
  * hold with NONE is a zero-length, meaningless hold, so the resolution boundary (this is consumed by
  * the exporter's `buildPlayoutMetadata`, the Designer Playout inspector, and mirrored by the
@@ -382,11 +383,12 @@ export function hasEffectiveHoldDrivers(
     children.some((el) => {
       if (el.type === 'ticker' || el.type === 'sequence') return drives(el, overrides);
       if (el.type === 'clock' && el.mode === 'countdown') return drives(el, overrides);
-      // D-125 §D2.1 — a Lottie drives the hold ONLY when it OPTED IN (`drivesHold === true`),
-      // the INVERSE default of the kinds above (absent ⇒ drives), so it cannot reuse `drives()`.
-      // B-034 — a hidden Lottie is never an effective driver. Mirrors the runtime's
-      // `scopeHasEffectiveHoldDrivers`, so export metadata and on-air agree.
-      if (el.type === 'lottie')
+      // D-125 §D2.1 / D-128 (c) — MEDIA (a Lottie, a video) drives the hold ONLY when it OPTED
+      // IN (`drivesHold === true`), the INVERSE default of the kinds above (absent ⇒ drives), so
+      // it cannot reuse `drives()`. B-034 — a hidden media element is never an effective driver.
+      // Mirrors the runtime's `scopeHasEffectiveHoldDrivers` (which reads video and lottie with
+      // the same opt-in), so export metadata, the Playout inspector, and on-air agree.
+      if (el.type === 'lottie' || el.type === 'video')
         return el.visible !== false && (overrides?.[el.id] ?? el.drivesHold === true);
       // B-034 — a HIDDEN container / composition instance makes its WHOLE subtree inert: SHORT-CIRCUIT
       // before descending, so a visible driver inside a hidden ancestor is not an effective driver

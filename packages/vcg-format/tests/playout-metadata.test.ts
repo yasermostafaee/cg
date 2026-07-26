@@ -48,6 +48,39 @@ function withContentDriver(base: Scene): Scene {
   } as unknown as Scene;
 }
 
+/**
+ * D-128 — a video is an OPT-IN hold driver (`drivesHold === true`, the media inverse of the
+ * ticker's absent-⇒-drives). Appends one to the scene's first layer so the resolution boundary
+ * can be probed with a video as the ONLY candidate driver.
+ */
+function withVideo(base: Scene, drivesHold?: boolean): Scene {
+  const layer0 = base.layers[0];
+  if (!layer0) throw new Error('fixture missing layer 0');
+  const video = {
+    id: 'vid',
+    name: 'clip',
+    type: 'video',
+    transform: {
+      position: { x: 0, y: 0 },
+      size: { w: 640, h: 360 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      anchor: { x: 0, y: 0 },
+    },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    assetId: 'asset-vid',
+    durationMs: 4000,
+    ...(drivesHold === undefined ? {} : { drivesHold }),
+  };
+  return {
+    ...base,
+    layers: [{ ...layer0, children: [...layer0.children, video] }, ...base.layers.slice(1)],
+  } as unknown as Scene;
+}
+
 describe('buildPlayoutMetadata', () => {
   it('D-114 — a scene with no lifecycle (no out-point) exports as static mode', () => {
     // No out-point ⇒ static (preview == export); playoutOf resolves the default to static.
@@ -96,6 +129,34 @@ describe('buildPlayoutMetadata', () => {
     expect(meta.holdSource).toBeUndefined(); // resolved to timed (not content-driven)
     expect(meta.holdMs).toBe(5000);
     expect(meta.mode).toBe('auto-out');
+  });
+
+  it('D-128 — an opted-in video as the SOLE driver keeps the hold content-driven', () => {
+    // The exported metadata must agree with the runtime, whose per-scope mirror counts an
+    // opted-in video; resolving this to timed was the export/on-air disagreement (Phase-4 gap).
+    const scene = withVideo(
+      {
+        ...fixtureScene,
+        playout: { mode: 'auto-out', holdSource: 'content-driven' },
+      } as Scene,
+      true,
+    );
+    expect(buildPlayoutMetadata(scene)).toEqual({
+      mode: 'auto-out',
+      holdSource: 'content-driven',
+    });
+  });
+
+  it('D-128 — a NON-opted-in video is not a driver: the hold resolves to timed (holdMs honored)', () => {
+    // `drivesHold` on media is read `=== true`, never `!== false`: an absent flag means the
+    // video holds beneath someone else's hold, so alone it leaves the hold content-LESS.
+    const scene = withVideo({
+      ...fixtureScene,
+      playout: { mode: 'auto-out', holdSource: 'content-driven', holdMs: 5000 },
+    } as Scene);
+    const meta = buildPlayoutMetadata(scene);
+    expect(meta.holdSource).toBeUndefined(); // resolved to timed
+    expect(meta.holdMs).toBe(5000);
   });
 
   it("normalizes the LEGACY 'content-driven' mode into loop-cycle + content hold", () => {
