@@ -103,3 +103,85 @@ describe('createRuntime — D-062 image assetUrls seam', () => {
     expect(imgSrc('a1')).toBeNull();
   });
 });
+
+/**
+ * D-128 Phase 5 — the walk widened to `<video data-cg-asset-id>`: the exported
+ * page (`.vcg` relative path / single-file base64 `data:video/webm`) wires the
+ * video source through the SAME map. Preview parity holds: no map ⇒ untouched
+ * (preview.ts owns video src + the poster ladder there).
+ */
+function videoScene(assetId: string): Scene {
+  const base = imageScene('unused-img');
+  return {
+    ...base,
+    id: 'scene-vid',
+    layers: [
+      {
+        id: 'L1',
+        name: 'main',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: [
+          {
+            id: 'clip',
+            name: 'clip',
+            type: 'video',
+            assetId,
+            durationMs: 14320,
+            holdBehavior: 'loop',
+            opacity: 1,
+            visible: true,
+            locked: false,
+            zIndex: 0,
+            transform: {
+              position: { x: 0, y: 0 },
+              size: { w: 480, h: 70 },
+              scale: { x: 1, y: 1 },
+              rotation: 0,
+              anchor: { x: 0, y: 0 },
+            },
+          },
+        ],
+      },
+    ],
+  } as unknown as Scene;
+}
+
+const vidSrc = (assetId: string): string | null =>
+  document.querySelector(`video[data-cg-asset-id="${assetId}"]`)?.getAttribute('src') ?? null;
+
+describe('createRuntime — D-128 Phase 5 video assetUrls seam', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    document.body.className = '';
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
+    document.body.className = '';
+  });
+
+  it('sets the <video> src from a supplied assetUrls map (.vcg packaged path)', () => {
+    createRuntime(videoScene('vid-1'), {
+      assetUrls: { 'vid-1': 'assets/video/abc.webm' },
+      skipFontLoad: true,
+      installGlobals: false,
+    });
+    expect(vidSrc('vid-1')).toBe('assets/video/abc.webm');
+  });
+
+  it('inlines a data:video/webm URI verbatim (single-file HTML path)', () => {
+    const dataUri = 'data:video/webm;base64,GkXfow==';
+    createRuntime(videoScene('vid-1'), {
+      assetUrls: { 'vid-1': dataUri },
+      skipFontLoad: true,
+      installGlobals: false,
+    });
+    expect(vidSrc('vid-1')).toBe(dataUri);
+  });
+
+  it('leaves the <video> src unset when no map is supplied (Designer preview parity)', () => {
+    createRuntime(videoScene('vid-1'), { skipFontLoad: true, installGlobals: false });
+    expect(vidSrc('vid-1')).toBeNull();
+  });
+});

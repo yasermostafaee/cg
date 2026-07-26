@@ -17,4 +17,8 @@ export type { ImageAssetSource, ImageAssetLibrary, ImageRef } from './image-expo
 export { collectLottieElements, resolveLottieAsset, parseLottieJson } from './lottie-export.js';
 export type { LottieRef, LottieAssetSource } from './lottie-export.js';
 
+// D-128 Phase 5 — the video-asset seam (collector + resolver), mirroring Lottie.
+export { collectVideoElements, resolveVideoAsset, videoMimeOf } from './video-export.js';
+export type { VideoRef, VideoAssetSource } from './video-export.js';
+
 export { cgJs, cgJsIife, cgJsLottie, cgJsLottieIife, cgCss } from './cg-runtime.js';

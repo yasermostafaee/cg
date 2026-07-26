@@ -290,12 +290,31 @@ verification (metadata, seek sweep, playback span) and the readback check.
 
 ### Requirement: An oversized single-file export is reported by the existing preflight
 
-An export that would exceed the single-file size threshold SHALL be reported by the EXISTING
-preflight / issues path BEFORE export, rather than producing a file CEF cannot boot. (The
-threshold value and warn-vs-block are an owner decision recorded in `design.md`.)
+An oversized export SHALL be reported BEFORE any file is produced: when the projected
+single-file INLINE payload (base64-inflated) exceeds the threshold, the EXISTING preflight /
+issues path raises a WARNING that never blocks (owner decision (d) — the operator may have a
+legitimate reason).
+The message SHALL be actionable: the projected total, the dominating assets by name, and that
+the `.vcg` package has no such limit. The threshold (40 MiB inline) is PROVISIONAL until the
+Phase-6 hardware pass — chosen from a desktop-Chromium `file://` load sweep recorded in
+`design.md`, with margin for CasparCG 2.3's older CEF.
 
-#### Scenario: Crossing the size threshold is reported before export
+#### Scenario: Crossing the size threshold warns, actionably, before export
 
-- **WHEN** an export would exceed the single-file size threshold
-- **THEN** the existing preflight / issues path reports it before export, rather than producing a
-  file CEF cannot boot
+- **WHEN** a template's projected single-file inline payload exceeds the threshold
+- **THEN** the issues panel shows a WARNING naming the projected total, the dominating assets,
+  and the `.vcg` alternative — before any file is produced, and without blocking either export
+
+### Requirement: A missing video asset is a preflight ERROR
+
+A video element whose asset cannot be resolved SHALL raise an ERROR-severity `missing-asset`
+preflight issue (the image pattern — decision (c): a missing video is a black hole on air),
+and the `.vcg` export SHALL block on it. The single-file path, which never blocks, SHALL
+report the same condition as a warning naming the element.
+
+#### Scenario: A missing video blocks the .vcg export at preflight
+
+- **WHEN** a scene references a video asset that no longer resolves
+- **THEN** preflight reports an ERROR-severity `missing-asset` issue naming the element, and
+  producing a `.vcg` fails with that issue instead of packing a template that renders a black
+  hole on air
