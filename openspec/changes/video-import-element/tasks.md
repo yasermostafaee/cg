@@ -389,17 +389,47 @@
 
 ## Phase 6 — CasparCG 2.3.x CEF hardware smoke — OWNER-VERIFIED (the pre-archive gate)
 
-- [ ] 6.1 Real template on real hardware: alpha over live background, ticker-held graphic with
-      video beneath, `stop()` outro-to-CLEARED, pause/resume, `file://` single-file boot with
-      zero external requests.
+- [ ] 6.1 PARTIAL — owner-executed 2026-07-26 on `FRONTEND-01`, CEF/Chromium 71; verdict recorded
+      in `design.md` ("Phase 6 — on-air CEF smoke, PARTIAL verdict"). Real template on real
+      hardware: alpha over live background, ticker-held graphic with video beneath, `stop()`
+      outro-to-CLEARED, pause/resume, `file://` single-file boot with zero external requests.
+      PASSED on hardware: §3.1 alpha over a LIVE background (a real video file looping on layer
+      1-1, not black), §3.2 ticker owns hold with the video looping beneath, §3.3 video-as-closer
+      in all three variants, §3.4 `CG STOP` graceful outro-to-CLEARED, §3.8 single-file parity,
+      §3.6 two videos on one scene (steady-state half only). The box stays OPEN because
+      pause/resume was NOT executed at all — §3.5/§3.5b had no operator affordance to trigger
+      (`@cg/runtime` exposes no pause/resume control; see the new OPEN item in `design.md`), which
+      also leaves §3.6's "clean pause/resume" half untested.
 - [ ] 6.2 Owner verifies on the affected machine; record the verdict here. Do NOT archive before
-      this gate (the D-125 precedent). THE PHASE-6 OWNER CHECKLIST (what Phase 5 hands over): - [ ] a finished template CONTAINING a video, exported single-file, dropped in CasparCG's
-      `templates/`, ADD + PLAY on real 2.3.x: correct alpha over a live background, zero
-      external requests in the CEF log; - [ ] the same template as an unzipped `.vcg` (http-served path) plays identically; - [ ] CG ADD → first-frame latency at the owner's realistic template size (~33 MB inline
-      measured 725 ms on desktop Chromium; validate the ~×4 CEF margin assumption) — and
-      CONFIRM or MOVE the provisional 40 MiB single-file threshold from real numbers; - [ ] pause/resume + tab-switch soak on air (the seek-policy fixes under CEF); - [ ] REMEMBER: assets converted before revision 2026-07-25.5 remain seek-fragile until
-      re-imported — the recovery paths handle them, but the owner should re-import any
-      clip that will seek on air (pause/resume, authored mid-clip loop points).
+      this gate (the D-125 precedent). PARTIAL VERDICT RECORDED (2026-07-26, `design.md`) — the
+      gate is NOT satisfied: three checklist items below remain open, and any ONE of them is
+      enough to hold archiving under this hard stop. THE PHASE-6 OWNER CHECKLIST (what Phase 5
+      hands over):
+  - [x] a finished template CONTAINING a video, exported single-file, dropped in CasparCG's
+        `templates/`, ADD + PLAY on real 2.3.x: correct alpha over a live background, zero
+        external requests in the CEF log — §3.8 PASS (playback matched the `.vcg` run) + §3.1
+        PASS. The external-request clause was not separately audited from the CEF log; it holds by
+        construction — the single-file artifact inlines every asset, pinned by 5.4's E2E ("no
+        external refs"). MECHANISM, recorded because it is not obvious and cost a dead end:
+        `PLAY 1-N "file:///….html"` FAILS with `#404 PLAY FAILED` — this artifact is a CG
+        template, NOT a generic HTML-producer target. It loads through the CG producer by name
+        WITHOUT extension: `CG {channel}-{layer} ADD 0 "{filename-without-ext}" 1`, closed with
+        `CG {channel}-{layer} STOP 0`.
+  - [x] the same template as an unzipped `.vcg` (http-served path) plays identically — §3.1–§3.4
+        all ran as `.vcg` through the Runtime, and §3.8 confirmed the single-file run matched.
+  - [ ] CG ADD → first-frame latency at the owner's realistic template size (~33 MB inline
+        measured 725 ms on desktop Chromium; validate the ~×4 CEF margin assumption) — and
+        CONFIRM or MOVE the provisional 40 MiB single-file threshold from real numbers. §3.9
+        DEFERRED by explicit owner decision (not a smoke failure). The realistic-size assumption
+        is REVISED to ~10 MB — see the OPEN item in `design.md`.
+  - [ ] pause/resume + tab-switch soak on air (the seek-policy fixes under CEF) — §3.5/§3.5b NOT
+        EXECUTED: `@cg/runtime` currently exposes no pause/resume control, so there was no
+        operator affordance to trigger the case. A product-surface gap, not a hardware limit.
+  - [ ] the ≥10 min long run that measures on-air seek-correction cadence (§3.7) — NOT YET RUN;
+        the owner is running it in a separate session. Nothing blocks it.
+  - [ ] REMEMBER: assets converted before revision 2026-07-25.5 remain seek-fragile until
+        re-imported — the recovery paths handle them, but the owner should re-import any
+        clip that will seek on air (pause/resume, authored mid-clip loop points).
 - [x] 6.3 REAL-ARCHIVE verification (import half — 2026-07-23): the owner ran the client's
       actual `rawvideo`/BGRA ARCHIVE sources through the SHIPPED import pipeline successfully —
       **152 MB and 739 MB** clips imported (probe → crop → convert → place) with no error, which

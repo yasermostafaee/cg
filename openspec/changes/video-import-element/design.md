@@ -1304,15 +1304,66 @@ in). The inspector consumes the same predicate, so its display is corrected for 
 user-facing display change for the video-sole-driver case only (no layout/geometry change; no
 new E2E, matching the B-032 precedent where this same resolution boundary was unit-tested).
 
+## Phase 6 — on-air CEF smoke, PARTIAL verdict (2026-07-26, `FRONTEND-01`, CEF/Chromium 71)
+
+Owner-executed against real CasparCG hardware per the project runbook
+`claude/d128-phase6-onair-smoke.md` (a project doc, outside this repo). Preconditions all
+satisfied: the build was merged `main` including PR #410 (Phase 5 exporters), #412 (the
+hold-driver schema-mirror fix above) and #408 (`CONVERTER_REVISION` 2026-07-25.5, the
+seek-fragility fix); the asset was FRESHLY IMPORTED on that build with corrections at shipping
+defaults (premultiplied alpha OFF, alpha bleed OFF); and the source was the client's REAL
+`rawvideo`/BGRA archive clip, not a synthetic fixture. No code landed on either track during the
+run. Server: `2.3.2 4de6d18f Dev`.
+
+**CEF version — 71, and how to obtain it.** Inside the runbook's expected [71, 84] band. Read
+from `libcef.dll`'s own file version info (`ProductVersion = 3.3578.1870.gc974488`; CEF branch
+`3578` = Chromium 71) via `Get-Item libcef.dll | select VersionInfo`. Recorded because the
+obvious route does NOT work: CasparCG's `VERSION` and `INFO` AMCP commands and its startup log do
+not expose the CEF version at all — they report only the server version. Anyone re-deriving this
+number should skip AMCP and go straight to the DLL.
+
+| case                                                                      | verdict                   | detail                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| §3.1 alpha over live background (`.vcg` via Runtime)                      | **PASS**                  | Background was a real video file looping live on layer 1-1 — not black. Proof: same-frame comparison against the Designer canvas preview; edges and semi-transparent pixels matched.                                                                                                                                                                                                                         |
+| §3.2 ticker owns hold, video loops beneath                                | **PASS**                  | Clean loop, no flash or speckle at the wrap; the ticker ran uninterrupted to completion.                                                                                                                                                                                                                                                                                                                     |
+| §3.3 video as closer, both directions (all 3 variants, since #412 landed) | **PASS**                  | V-freeze self-completed to CLEARED with no operator action. V-loop-closer never self-completed and required an operator OUT — correct. V-solo-closer's `.vcg` playout metadata was independently confirmed structurally content-driven (not timed), corroborating #412.                                                                                                                                      |
+| §3.4 `CG STOP` graceful exit                                              | **PASS**                  | Outro played exactly once, then the layer reached CLEARED — no double outro, no strand.                                                                                                                                                                                                                                                                                                                      |
+| §3.5 / §3.5b pause/resume + background-throttle soak                      | **NOT EXECUTED**          | `@cg/runtime` exposes NO pause/resume control, so there was no operator affordance to trigger the case at all. A product-surface gap, not a hardware limitation. See the OPEN item below.                                                                                                                                                                                                                    |
+| §3.6 two videos on one scene                                              | **PASS (partial)**        | Both steady-state smooth, no black band. The "clean pause/resume" half of this case's Expect line is untested for the same reason as §3.5.                                                                                                                                                                                                                                                                   |
+| §3.7 long run ≥10 min (seek-correction UX bar)                            | **NOT YET RUN**           | Deferred to a separate future session. Not blocked by anything — simply not done yet.                                                                                                                                                                                                                                                                                                                        |
+| §3.8 single-file `file://` parity, same hardware                          | **PASS**                  | Playback matched the `.vcg` run. Mechanism: `PLAY 1-N "file:///….html"` FAILS with `#404 PLAY FAILED` — the artifact is a CG template, not a generic HTML-producer target. It loads by dropping the single-file HTML into CasparCG's `templates/` and calling the CG producer by name WITHOUT extension: `CG {channel}-{layer} ADD 0 "{filename-without-ext}" 1`, closed with `CG {channel}-{layer} STOP 0`. |
+| §3.9 CG ADD latency at ~33 MB (the 40 MiB threshold decision)             | **DEFERRED (owner call)** | Not a smoke failure. New fact that revises the premise: the owner's LARGEST real client archive asset (a 3 GB source clip) converts to at most ~10 MB after import. See the OPEN item below.                                                                                                                                                                                                                 |
+
+**The gate is NOT satisfied and this change is NOT archivable.** Three items remain open —
+§3.5/§3.5b, §3.7, §3.9 — and any ONE of them alone holds archiving under the 6.2 hard stop
+(archiving over an unrun owner-executed gate is irreversible; the D-125 precedent).
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide
   after the spike produces a real converted-archive artifact with measured sizes.
+  **STILL OPEN after the 2026-07-26 smoke** — §3.9 was DEFERRED by explicit owner decision, so no
+  CEF-measured ADD latency exists yet and `SINGLE_FILE_INLINE_WARN_BYTES` stays PROVISIONAL at
+  40 MiB. One PREMISE is revised for whenever §3.9 runs: the realistic case is **~10 MB, not the
+  ~33 MB** the Phase-5 sweep assumed — the owner's largest real client archive asset (a 3 GB
+  source clip) converts to at most ~10 MB. The desktop-Chromium baseline curve above (311 ms @
+  3.1 MB · 725 ms @ 33.5 MB · 1.57 s @ 66.5 MB · 4.53 s @ 264.8 MB — linear ~17 ms/MB, no cliff)
+  remains valid for interpolating whatever real number eventually comes back.
 - **Seek-correction UX bar:** if the spike measures visible stutter on drift correction inside a
   hold loop, the acceptable correction cadence (resume/wrap-only vs per-tick bounded) is an
   on-air quality judgment for the owner, informed by the measured numbers. Post-spike status:
   zero corrections were needed on the fixture clip; the owner's real-archive run re-measures
-  this before the bar is set.
+  this before the bar is set. **STILL OPEN after the 2026-07-26 smoke** — §3.7, the ≥10 min long
+  run that would produce the on-air cadence numbers, was NOT run; the owner is running it in a
+  separate session. The bar cannot be set until it does.
+- **NEW (2026-07-26) — `@cg/runtime` has no pause/resume affordance, and that BLOCKS on-hardware
+  verification of the seek/resume-elimination work.** §3.5/§3.5b could not be attempted on air:
+  there is no operator control in the Runtime app to pause and resume a playing template, so the
+  case has no trigger. This is a product-surface gap, distinct from the size-threshold item above
+  and not to be folded into it — the seek-policy fixes (`RESUME GRACE`, the large-gap policy, the
+  2026-07-25.5 alignment work) therefore remain verified only off-hardware, and §3.6's
+  "clean pause/resume" half is untested for the same reason. Owner decision: whether the Runtime
+  gains such a control (and at what scope) before this gate can close.
 
 ## Related
 
