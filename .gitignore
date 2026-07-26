@@ -1,5 +1,9 @@
 # Temp files
 tmp/
+# P-018 — `tmp/` above is a DIRECTORY pattern and cannot match a `tmp-` FILENAME,
+# which is how a stray 26MB `apps/designer/tmp-282-long.avi` got committed. Scoped
+# to `apps/**` so it cannot swallow legitimate fixtures elsewhere.
+apps/**/tmp-*
 
 # Dependencies
 node_modules/
