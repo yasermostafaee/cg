@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PlayoutSchema, playoutOf, SceneSchema } from '../src/scene.js';
+import { hasEffectiveHoldDrivers, PlayoutSchema, playoutOf, SceneSchema } from '../src/scene.js';
 
 const baseTransform = {
   position: { x: 0, y: 0 },
@@ -309,5 +309,83 @@ describe('Playout — D-028 holdSource axis + legacy normalization', () => {
       'auto-out',
     );
     expect(playoutOf({ lifecycle: { outPoint: 20 } }).mode).toBe('manual');
+  });
+});
+
+describe('hasEffectiveHoldDrivers — D-128 video is an OPT-IN hold driver', () => {
+  // D-128 (c) — a video drives the hold ONLY when opted in (`drivesHold === true`), the inverse
+  // of ticker/clock/sequence. This predicate is the RESOLUTION BOUNDARY shared by the exporter's
+  // `buildPlayoutMetadata` and the Designer Playout inspector; the runtime mirrors it per scope.
+  // Phase 4 wired the runtime mirror but missed this one, so a scene whose ONLY effective driver
+  // was an opted-in video exported metadata resolving content-driven → timed while the engine
+  // held content-driven on air — the disagreement these cases pin shut.
+  const video = (over: Record<string, unknown> = {}) => ({
+    ...baseElProps,
+    id: 'v1',
+    name: 'clip',
+    type: 'video' as const,
+    assetId: 'asset-v1',
+    durationMs: 4000,
+    ...over,
+  });
+
+  const sceneWith = (children: unknown[], compositions?: unknown[]) =>
+    SceneSchema.parse({
+      ...minimalScene,
+      layers: [
+        { id: 'L1', name: 'L1', visible: true, locked: false, blendMode: 'normal', children },
+      ],
+      ...(compositions === undefined ? {} : { compositions }),
+    });
+
+  it('a video with drivesHold: true is an effective driver — even as the SOLE driver', () => {
+    const s = sceneWith([video({ drivesHold: true })]);
+    expect(hasEffectiveHoldDrivers(s, s.compositions)).toBe(true);
+  });
+
+  it('an absent or false drivesHold video does NOT drive (opt-in, never `!== false`)', () => {
+    const absent = sceneWith([video()]);
+    expect(hasEffectiveHoldDrivers(absent, absent.compositions)).toBe(false);
+    const off = sceneWith([video({ drivesHold: false })]);
+    expect(hasEffectiveHoldDrivers(off, off.compositions)).toBe(false);
+  });
+
+  it('B-034 — a HIDDEN opted-in video is never an effective driver', () => {
+    const s = sceneWith([video({ drivesHold: true, visible: false })]);
+    expect(hasEffectiveHoldDrivers(s, s.compositions)).toBe(false);
+  });
+
+  it('D-112 — per-instance holdOverrides govern a NESTED video (force-include / force-exclude)', () => {
+    const comp = (child: unknown) => ({
+      id: 'c1',
+      name: 'Comp',
+      resolution: { width: 1920, height: 1080 },
+      frameRange: { in: 0, out: 50 },
+      background: 'transparent' as const,
+      layers: [
+        {
+          id: 'CL1',
+          name: 'CL1',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [child],
+        },
+      ],
+    });
+    const instance = (holdOverrides: Record<string, boolean>) => ({
+      ...baseElProps,
+      id: 'inst',
+      name: 'inst',
+      type: 'composition' as const,
+      compositionId: 'c1',
+      holdOverrides,
+    });
+    // Force-include: an absent-flag nested video counts when the instance opts it in.
+    const included = sceneWith([instance({ v1: true })], [comp(video())]);
+    expect(hasEffectiveHoldDrivers(included, included.compositions)).toBe(true);
+    // Force-exclude: an opted-in nested video is excluded by the instance override.
+    const excluded = sceneWith([instance({ v1: false })], [comp(video({ drivesHold: true }))]);
+    expect(hasEffectiveHoldDrivers(excluded, excluded.compositions)).toBe(false);
   });
 });

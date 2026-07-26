@@ -103,7 +103,12 @@ drive the hold while the video holds beneath it. The video SHALL NOT drive the h
 opt-IN-able. When opted IN (`drivesHold: true`), completion follows the hold behavior: with
 `holdBehavior: 'freeze'` the clip SHALL complete on first reaching the hold point; with
 `'loop'` it SHALL never self-complete — exactly an infinite ticker, so the existing
-infinite-repeat hold-driver flag applies.
+infinite-repeat hold-driver flag applies. An opted-in video SHALL count as an EFFECTIVE hold
+driver at the resolution boundary (`hasEffectiveHoldDrivers` — the shared predicate behind the
+exporter's `buildPlayoutMetadata` and the Designer Playout inspector, mirrored per scope by the
+runtime), so a composition whose ONLY effective driver is an opted-in video SHALL stay
+`content-driven` in the exported metadata, the inspector, and on air alike — never silently
+resolving to `timed` in one layer while another holds content-driven.
 
 #### Scenario: A ticker on top drives the hold; the video holds beneath
 
@@ -124,6 +129,16 @@ infinite-repeat hold-driver flag applies.
   `content-driven` hold
 - **THEN** it never self-completes — the hold waits for `stop()` — and the existing
   infinite-repeat hold-driver flag surfaces it, exactly as for an infinite ticker
+
+#### Scenario: A video as the SOLE opted-in driver keeps the hold content-driven everywhere
+
+- **WHEN** a `content-driven` composition's only effective hold driver is a video with
+  `drivesHold: true` (no ticker/sequence/countdown present)
+- **THEN** the resolution boundary counts the video: the exported `.vcg` playout metadata bakes
+  `holdSource: 'content-driven'`, the Designer Playout inspector resolves and displays
+  content-driven, and the runtime holds content-driven — no layer falls back to `timed`
+  (per-instance `holdOverrides` and the hidden-element gate apply to the video exactly as to
+  every other driver kind)
 
 ### Requirement: A marked outro plays through the EXISTING element-outro seam
 

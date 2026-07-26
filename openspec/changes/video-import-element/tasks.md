@@ -207,6 +207,16 @@
       content-first/background-last; no-phase carried by the content exit; `drivesHold` freeze
       auto-outs vs ticker-driven hold; the SHARED LEDGER serving a Lottie AND a video in one
       composition with no cross-talk — the regression guard for the type widening).
+- [x] 4.7 (2026-07-26, `fix/d128-schema-hold-driver-mirror`) The FOURTH hold-driver walk:
+      `@cg/shared-schema`'s `hasEffectiveHoldDrivers` gains the video branch (media opt-in
+      `=== true`, `visible` gate, D-112 `holdOverrides`), so the resolution boundary
+      (exported `.vcg` `buildPlayoutMetadata` + the Playout inspector's `holdSourceEff`)
+      agrees with the runtime for a video-sole-driver composition instead of resolving
+      `content-driven → timed`. Found by the Phase-6 runbook fact-check; the 2026-07-23
+      media-as-a-closer sweep fixed the three PANEL walks but missed this cross-package one.
+      Tests: `scene.test.ts` (sole driver / opt-in reading / hidden / overrides) +
+      `playout-metadata.test.ts` (sole opted-in video bakes `content-driven`; non-opted-in
+      resolves timed, `holdMs` honored). Design: "Phase-4 completion" entry.
 
 ## Phase 4b — field fix: the canvas-blank class root-caused + the premultiplied default flip (2026-07-25)
 
