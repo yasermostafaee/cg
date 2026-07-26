@@ -623,7 +623,7 @@ lives; it carries a `tmp-` prefix; and its name matches no test that reads it. I
 (PR #401, 2026-07-25) — i.e. it is spillover from the [[D-128]] video-import work. Nothing in
 `.gitignore` would have caught it: the only `tmp` rule is `tmp/` (line 2), a DIRECTORY pattern
 that cannot match a `tmp-` filename, and `git check-ignore -v apps/designer/tmp-282-long.avi`
-confirms the path matches no rule at all today.
+confirmed the path matched no rule at all (observed 2026-07-26, before the guard below landed).
 **Why:** Every fresh clone and every checkout pays for it, permanently — and removing it from
 HEAD does NOT reclaim that cost, because the blob stays reachable through history. The removal
 commit is still worth doing on its own terms (it stops the file being mistaken for a fixture,
@@ -641,15 +641,15 @@ paths to keep in sync, with nothing stating which is canonical. That is precisel
 below the stray file and does not justify its own item.
 **Acceptance:**
 
-- WHEN the stray file is identified THEN it is removed from HEAD in a DEDICATED commit that
-  touches nothing else
-- WHEN the removal lands THEN `.gitignore` gains a rule that would have PREVENTED it (e.g. a
-  `tmp-*` pattern scoped to `apps/`), so the class cannot recur
-- WHEN a history rewrite is considered THEN the decision is RECORDED either way — with three
-  active worktrees a rewrite forces every worktree to re-clone or hard-reset, so "accept the
-  history cost, clean HEAD only" is a legitimate recorded OUTCOME, not a deferral
-- WHEN a large binary is added in future THEN a size guard flags it — **OPTIONAL / follow-up,
-  explicitly NOT required to close this item**
+- [x] WHEN the stray file is identified THEN it is removed from HEAD in a DEDICATED commit that
+      touches nothing else
+- [x] WHEN the removal lands THEN `.gitignore` gains a rule that would have PREVENTED it (e.g. a
+      `tmp-*` pattern scoped to `apps/`), so the class cannot recur
+- [ ] WHEN a history rewrite is considered THEN the decision is RECORDED either way — with three
+      active worktrees a rewrite forces every worktree to re-clone or hard-reset, so "accept the
+      history cost, clean HEAD only" is a legitimate recorded OUTCOME, not a deferral
+- [ ] WHEN a large binary is added in future THEN a size guard flags it — **OPTIONAL / follow-up,
+      explicitly NOT required to close this item**
 
 **Notes:** the fix is a deletion plus a `.gitignore` line; the judgment call is the rewrite
 question, which is why Acceptance forces it to be answered rather than left open. If the
@@ -657,3 +657,10 @@ optional size guard is ever built, its natural home is the existing hook plumbin
 new mechanism — [[P-009]]'s Stop hook already runs at turn end and already prints repair
 guidance. Introduced by [[D-128]] Phase 4; that item is unrelated in substance and does not
 need reopening for this.
+
+**The removal does NOT reclaim the ~26 MB (2026-07-26).** The blob stays reachable from
+`7379dad`, so every clone still pays for it — HEAD is clean, the repository is not smaller. The
+standing decision is therefore **"clean HEAD only, accept the history cost"**: a rewrite would
+force all worktrees to re-clone or hard-reset, and that price is not worth 26 MB. That is a
+RECORDED outcome, not a deferral — the third Acceptance bullet ticks on it and the item closes,
+once the owner ratifies it.
