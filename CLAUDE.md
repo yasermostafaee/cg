@@ -231,6 +231,18 @@ Three worktrees share one repo: `cg`, `cg-designer`, `cg-runtime`.
   or a stash. That serialization is WITHIN one track with one driver — manageable.
   The scheme it replaces put the serialization ACROSS two independent sessions,
   which is not.
+- **Worktrees are ENUMERATED, never counted.** Tooling (Claude Code) creates
+  additional worktrees UNDER `cg/.claude/worktrees/*` holding `claude/*` branches —
+  nested inside the read-only worktree, so a scan of `cg`'s siblings misses them
+  entirely. Three appeared in a single day on 2026-07-26. Always resolve the current
+  set with `git worktree list --porcelain` before proposing any branch deletion.
+  `.claude/*` is gitignored, so these never dirty `cg`'s status.
+- **`refs/stash` is SHARED across all worktrees** (it lives in the common git dir),
+  so `git stash list` shows the same stack everywhere. A stash created on one track
+  is visible from the other and must NEVER be popped or applied from a worktree
+  other than its origin — the diff would land on the wrong checkout. Rescue an
+  unknown stash with `git tag <name> refs/stash`, which requires no checkout and no
+  clean tree.
 
 Why the old scheme could not hold: routing all docs/archive/housekeeping into `cg`
 made it the ONE worktree two independent sessions were forced to share —

@@ -648,6 +648,24 @@ NOT written here, since that edit is not this item's scope.
 ALREADY written in CLAUDE.md and was still missed seven times — so more prose is not the remedy,
 and the automated detection this item describes is.
 
+**DEFERRING the `delete_branch_on_merge` flip — reasoning recorded 2026-07-26.** The flip was
+initially recommended and then REVERSED on evidence. The remote half is already clean (every
+leaked ref observed was `[gone]` upstream, so [[P-011]] step 2 IS being executed), and the flip
+does nothing for the two classes that actually leak: the local ref, and branches whose PR was
+closed-not-merged or never opened. It also cannot land alone, since with auto-delete on, step 2
+fails on every ship until the already-absent-ref clause exists. **DECISION: hold the flip and land
+it in the same PR that implements this item's audit**, where the clause and the audit semantics
+settle together and the shared-config cost is paid once. (The clause itself already landed in
+#411, so the flip's prerequisite is satisfied and the remaining reason to wait is bundling, not
+blocking.)
+
+**A FOURTH occurrence of the LOCAL class, immediately after #413 merged (2026-07-26).**
+`origin/chore/remove-stray-tmp-avi` was pruned but `chore/remove-stray-tmp-avi` survived locally
+AND stayed CHECKED OUT in `cg-runtime`. That shows the leak is not merely an unnoticed ref: the
+worktree is still sitting on it, so any audit that proposes deletion without first moving the
+worktree off the branch will FAIL. The audit must report the HOLDING WORKTREE, not just the
+branch.
+
 Cross-refs [[P-011]] (the sequence this audits), [[P-009]] (host for the local half),
 [[P-014]] (the owner merges, so the deletion step is theirs to complete).
 
@@ -702,3 +720,97 @@ standing decision is therefore **"clean HEAD only, accept the history cost"**: a
 force all worktrees to re-clone or hard-reset, and that price is not worth 26 MB. That is a
 RECORDED outcome, not a deferral — the third Acceptance bullet ticks on it and the item closes,
 once the owner ratifies it.
+
+## [ ] P-019 — CLAUDE.md's worktree model is missing two facts, each of which has already caused a wrong action ⟨priority: medium⟩
+
+**What:** two verified facts about this multi-worktree layout that CLAUDE.md does not state.
+
+**(1) TOOLING-CREATED WORKTREES ARE NOT RARE AND ARE NESTED INSIDE THE READ-ONLY WORKTREE.**
+Verified 2026-07-26 by `git worktree list --porcelain`: the repo held FIVE worktrees, not three —
+the three owned ones plus TWO created by Claude Code, both nested inside `cg`:
+
+- `cg/.claude/worktrees/brave-pike-9e0d85` on `claude/brave-pike-9e0d85` at `0436cd1`
+- `cg/.claude/worktrees/test-d0107d` on `claude/test-d0107d` at `cb5a3ad`
+
+A THIRD of the same class, `claude/project-worktrees-c253bc`, had been removed by hand earlier the
+same day — three in one day. Neither surviving one dirtied `cg`'s status, because the `.claude/*`
+ignore rule covers them, which is exactly why they are easy to miss. Both point at commits already
+on `main` (the #411 and #410 squash commits), so both hold zero unique work — but that had to be
+checked, not assumed. Note the shape of the miss: an audit that looks at SIBLING directories of
+`cg` finds none of these, because they live UNDER the worktree that is supposed to be read-only.
+
+**(2) SHARED STASH STACK.** `refs/stash` lives in the shared git directory, not per-worktree, so
+`git stash list` shows the SAME stack from every worktree. Observed 2026-07-26: a stash labelled
+`WIP feat/runtime-modal-and-context-menu` (created on the runtime side) was visible from
+`cg-designer` and read as "misplaced work in the wrong worktree" — it was not misplaced.
+
+**Why:** (1) any inventory or audit hard-coded to three worktrees, or scanning only siblings of
+`cg`, mis-classifies a tooling worktree's branch as unheld and offers it for deletion — and
+`git branch -D` on a branch held by a live worktree fails, so the audit's own output becomes
+untrustworthy; (2) a `stash pop`/`apply` run from the wrong worktree applies another track's diff
+onto this checkout, which is silent corruption, not an error.
+
+**Acceptance:**
+
+- WHEN any tool or audit needs the worktree set THEN it enumerates
+  `git worktree list --porcelain` and never assumes a fixed count or a fixed location
+- WHEN a branch under `claude/*` is found THEN it is treated as possibly tooling-held and checked
+  against the enumerated worktree set before any deletion is proposed
+- WHEN a worktree is enumerated THEN paths nested under `cg/.claude/worktrees/` are included; a
+  sibling-directory scan is NOT sufficient
+- WHEN a stash entry is encountered THEN it is NOT applied from a worktree other than the one that
+  created it; rescue is by tag (`git tag <name> refs/stash`), which needs no checkout
+- WHEN CLAUDE.md is read by a session THEN both facts are stated there (satisfied by commit 2 of
+  this PR)
+
+**Notes:** cross-ref [[P-017]], whose audit Acceptance already requires worktree enumeration —
+this item is the general rule behind that one bullet.
+
+## [ ] P-020 — rescue tags exist only on this disk and a re-clone would destroy them ⟨priority: medium⟩
+
+**What:** the "tag before deleting" pattern this repo now uses produced two LOCAL-ONLY tags:
+`parked/openspec-archive-2026-07-19` (the parked archive WIP whose PR #374 was closed, never
+merged) and `stash-rescue/2026-07-26-runtime-modal` (the shared-stash entry above; as of filing
+this second tag has not actually been created yet). Neither is pushed. A worktree restructure, a
+fresh clone, or deleting the repo directory destroys both, and the whole point of the pattern is
+reversibility.
+**Why:** the pattern is only as durable as its weakest ref. An unpushed tag is a promise that
+survives exactly one disk.
+**Acceptance:**
+
+- WHEN a rescue tag is created THEN it is pushed, or its non-durability is recorded as a
+  deliberate choice at creation time — never left implicit
+- WHEN a worktree restructure is planned THEN pushing all local-only tags is a named prerequisite
+  step, executed BEFORE any directory moves
+- WHEN tags are pushed THEN note that a tag push is NOT a deletion, so the pre-push hook runs the
+  full gate and takes the host lock for minutes ([[P-010]]'s skip does not apply) — so it must not
+  be run between a Phase-6 build and its smoke
+
+**Notes:** the pending worktree restructure also requires reviewing every `../cg` relative path in
+docs and hooks, and the CLAUDE.md rules that exist only because `cg` permanently occupies `main`
+(no worktree can `git checkout main`) — if `cg` stops holding `main`, that rule must be DELETED,
+not left to mislead. [[P-013]]/[[P-015]]/[[P-016]] are unaffected: the gate lock is host-wide, so
+worktree count changes collision RATE, not correctness.
+
+## [ ] P-021 — the `cg:state` change was announced but its specification does not exist ⟨priority: low⟩
+
+**What:** on 2026-07-26 a change was announced as in preparation on branch
+`chore/session-state-file` in the `cg-designer` worktree, comprising husky `post-commit` /
+`post-checkout` / `post-merge` / `post-rewrite` hooks, a root `cg:state` script,
+`tools/session-state.mjs`, and a CLAUDE.md subsection. An exhaustive search found: no such branch
+locally or on `origin`, `tools/session-state.mjs` on no ref and in no worktree and not untracked,
+and no transcript on the machine containing the work. Only the announcement itself survives — a
+four-line file list with no design.
+**Why:** the file list names WHAT without saying what the state file records, where it lives, who
+reads it, or what the hooks and the script do. Reconstructing that from the summary would put
+invented policy into shared config (the hook set, root `package.json`, CLAUDE.md).
+**Acceptance:**
+
+- WHEN this change is resumed THEN the original specification is recovered first, or the design is
+  redone explicitly and from scratch with the owner — never inferred from the announcement
+- WHEN the four-line summary is all that is available THEN no implementation is written
+
+**Notes:** the correct behaviour on encountering this gap was to STOP and report, and that is what
+happened. Do not treat the announcement as a spec. A throwaway PowerShell dump the owner runs to a
+scratch path OUTSIDE every worktree is not this change and does not unblock it — it commits
+nothing and touches no shared config.
