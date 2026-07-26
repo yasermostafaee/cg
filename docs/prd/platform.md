@@ -299,7 +299,7 @@ file where the Designer session could never see it; it is now in CLAUDE.md. Docs
 process only — no source, no spec, no behaviour change, so this closes on a green gate
 like [[P-010]] and [[B-071]] rather than via an archive.
 
-## [ ] P-012 — the pre-push hook should honor the docs-only carve-out via the shared classifier ⟨priority: low⟩
+## [ ] P-012 — the pre-push hook should honor the docs-only carve-out via the shared classifier ⟨priority: medium⟩
 
 **What:** The husky pre-push hook runs the FULL turbo gate on every content push, including
 docs-only pushes — observed on PR #388's push (the first attempt died to a 3-minute tool
@@ -311,6 +311,15 @@ reuse THAT classifier on the outgoing range, so docs-only pushes pay docs-only c
 pre-push gate is the sole enforcement mechanism it also consumes this host's exclusive gate
 slot for minutes ([[P-010]]'s cost analysis, one notch milder — content exists, but it is
 markdown).
+
+**Second occurrence, 2026-07-26 — and the cost has grown since filing.** PR #409 was a pure
+docs-only PRD change (one file, `docs/prd/platform.md`) and its push still ran the FULL `pnpm
+gate`, holding this host's exclusive gate slot for the whole run. That is the #388 class
+recurring, so this is a pattern rather than a one-off. It also demonstrably consumes the
+[[P-013]] host lock — which matters more now than when this item was filed at low priority,
+because [[P-015]] (a queued gate killed at the tool cap reads as a gate FAILURE) and [[P-016]]
+(the lock does not cross the OS boundary) both raise the price of holding that slot
+unnecessarily. Hence medium.
 **Acceptance:**
 
 - WHEN the pre-push hook runs on a content push THEN it classifies the outgoing range with the
@@ -483,7 +492,7 @@ translation. Scope is the lock-path derivation in `gate-lock-cli.mjs` / `gate-lo
 [[B-098]] `bounded-turbo-cli` inner cap is untouched — this is the OUTER host-serialization
 layer, one level up.
 
-## [ ] P-017 — merged remote branches survive the ship sequence, and nothing detects the leak ⟨priority: medium⟩
+## [ ] P-017 — merged remote branches survive the ship sequence, and nothing detects the leak ⟨priority: high⟩
 
 **What:** [[P-011]]'s four-step ship sequence ends with `git push origin --delete <branch>` then
 `git branch -D <branch>`, but NOTHING verifies either ran. A merged branch that survives on
@@ -578,5 +587,73 @@ And it does NOT retire this item: the LOCAL ref class (seven live examples above
 non-PR / closed-PR class (`wip/*`, which auto-delete never touches) both survive it. P-017
 NARROWS; it does not disappear.
 
+**OBSERVED 2026-07-26 while shipping PR #409 — the already-absent case is NOT hypothetical and
+NOT conditional on the setting.** `git push origin --delete docs/p-017-scope-refinement` failed
+with "remote ref does not exist" even though `delete_branch_on_merge` is FALSE on this repo: the
+remote ref had already been removed by another path — GitHub's merge-page delete button, or an
+earlier manual delete. Confirmed after the fact: `git ls-remote origin
+refs/heads/docs/p-017-scope-refinement` returns nothing, and a `--prune` fetch found no such
+tracking ref to remove. So the "already-absent remote ref == deletion SATISFIED" semantics
+recorded above are required TODAY, with the setting off — they are not something the flip would
+introduce. That also LOWERS the future cost of the flip, since its stated prerequisite lands
+here instead of alongside it.
+
+**A SECOND door to the same [[P-011]] failure (2026-07-26).** `gh pr merge` reaches the
+identical worktree failure WITHOUT the flag CLAUDE.md bans: given no `--delete-branch`, gh still
+PROMPTS "Delete the branch locally?" interactively, and answering Yes fails with `fatal: 'main'
+is already used by worktree at .../cg` — gh checks out the PR's base before deleting, which this
+layout can never allow. CLAUDE.md forbade only the FLAG, so the interactive prompt walked
+straight through the ban. Answer **No**, or pass `--delete-branch=false` to suppress the prompt;
+the local ref is deleted by hand at step 3, after the worktree has moved on.
+
+**Priority raised medium → high (2026-07-26).** "DELETE the local ref once its PR merges" is
+ALREADY written in CLAUDE.md and was still missed seven times — so more prose is not the remedy,
+and the automated detection this item describes is.
+
 Cross-refs [[P-011]] (the sequence this audits), [[P-009]] (host for the local half),
 [[P-014]] (the owner merges, so the deletion step is theirs to complete).
+
+## [ ] P-018 — a stray 26.9 MB `.avi` is committed on `main`, beside application source ⟨priority: medium⟩
+
+**What:** `apps/designer/tmp-282-long.avi` — 26,898,154 bytes (~26.9 MB) — is tracked on `main`.
+Three things mark it as an accident rather than a fixture: it sits beside application source
+instead of under `apps/designer/tests/e2e/fixtures/`, where every legitimate video fixture
+lives; it carries a `tmp-` prefix; and its name matches no test that reads it. It entered in
+`7379dad` — `feat(designer): D-128 P4 — VideoDriver + lifecycle + shared element-outro seam`
+(PR #401, 2026-07-25) — i.e. it is spillover from the [[D-128]] video-import work. Nothing in
+`.gitignore` would have caught it: the only `tmp` rule is `tmp/` (line 2), a DIRECTORY pattern
+that cannot match a `tmp-` filename, and `git check-ignore -v apps/designer/tmp-282-long.avi`
+confirms the path matches no rule at all today.
+**Why:** Every fresh clone and every checkout pays for it, permanently — and removing it from
+HEAD does NOT reclaim that cost, because the blob stays reachable through history. The removal
+commit is still worth doing on its own terms (it stops the file being mistaken for a fixture,
+and stops a second one landing beside it), but it must not be mis-sold as a size fix: only a
+history rewrite would be one, and that carries its own price, below. For scale, this single
+blob is ~17× the entire legitimate video-fixture set.
+
+Recorded here as a SEPARATE, LOWER-priority observation — deliberately NOT filed as its own
+item: the three real `.avi` fixtures under `apps/designer/tests/e2e/fixtures/` are duplicated
+byte-for-byte under `tools/spikes/video-convert/fixtures/` — `box-64x64-bgra.avi` (662,082 B),
+`gradient-64x64-premult-bgra.avi` (415,886 B) and `motion-64x64-premult-bgra.avi` (497,926 B),
+1,575,894 B (~1.5 MB) per side. Each pair resolves to ONE blob OID, so git already stores the
+bytes once and the repo does not actually pay twice; the real cost is maintenance drift — two
+paths to keep in sync, with nothing stating which is canonical. That is precisely why it ranks
+below the stray file and does not justify its own item.
+**Acceptance:**
+
+- WHEN the stray file is identified THEN it is removed from HEAD in a DEDICATED commit that
+  touches nothing else
+- WHEN the removal lands THEN `.gitignore` gains a rule that would have PREVENTED it (e.g. a
+  `tmp-*` pattern scoped to `apps/`), so the class cannot recur
+- WHEN a history rewrite is considered THEN the decision is RECORDED either way — with three
+  active worktrees a rewrite forces every worktree to re-clone or hard-reset, so "accept the
+  history cost, clean HEAD only" is a legitimate recorded OUTCOME, not a deferral
+- WHEN a large binary is added in future THEN a size guard flags it — **OPTIONAL / follow-up,
+  explicitly NOT required to close this item**
+
+**Notes:** the fix is a deletion plus a `.gitignore` line; the judgment call is the rewrite
+question, which is why Acceptance forces it to be answered rather than left open. If the
+optional size guard is ever built, its natural home is the existing hook plumbing rather than a
+new mechanism — [[P-009]]'s Stop hook already runs at turn end and already prints repair
+guidance. Introduced by [[D-128]] Phase 4; that item is unrelated in substance and does not
+need reopening for this.

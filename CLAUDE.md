@@ -66,6 +66,20 @@ pnpm --filter @cg/<pkg> typecheck|lint|test|build   # one workspace
 pnpm openspec <cmd>                     # OpenSpec CLI (new change / validate / archive)
 ```
 
+### The owner's shell is PowerShell (Windows)
+
+- Never hand the owner a bash-only one-liner. `sed`, `awk`, `grep`, `cut`, `$(...)`,
+  `|| true` and `2>/dev/null` are NOT available in their shell and have been pasted and
+  failed more than once.
+- Prefer git's own `--format` output over text-slicing
+  (`git for-each-ref --format="%(refname:short)|%(upstream:track)|%(worktreepath)"`), and
+  PowerShell cmdlets (`Where-Object`, `ForEach-Object`, `Select-String`) when slicing is
+  unavoidable.
+- `<` is a RESERVED operator in PowerShell — never use it as a placeholder in a command handed
+  to the owner. Use a named variable or an explicit list instead.
+- This applies only to commands the OWNER runs by hand. Commands CC runs in its own tool
+  environment are unaffected.
+
 ## Green gate — definition of done
 
 `format:check` + `typecheck` + `lint` + `test` + `build` for every touched
@@ -246,7 +260,20 @@ history.
   `git push origin --delete <branch>`, then `git branch -D <branch>`, then
   `git -C ../cg pull --ff-only`. The deletion push costs ~3 s, because an
   all-deletions push skips the gate (`P-010`), and `-D` is required since a
-  squash-merged branch never reads as merged to `-d`.
+  squash-merged branch never reads as merged to `-d`. **If step 2 reports that the
+  remote ref does not exist, the deletion is SATISFIED, not failed** — the ref was
+  already removed by another path (GitHub's merge-page delete button, an earlier
+  manual delete). "Verify BOTH deletions" means both refs are ABSENT afterwards,
+  never that both delete commands printed success. Observed shipping PR #409 with
+  `delete_branch_on_merge` DISABLED, so this is not conditional on that setting
+  (`P-017`).
+- **The `--delete-branch` ban covers gh's INTERACTIVE prompt too, not just the flag.**
+  Given no flag, `gh pr merge` still asks "Delete the branch locally?" — always answer
+  **No**, or pass `--delete-branch=false` to suppress the prompt. Answering Yes fails
+  identically with `fatal: 'main' is already used by worktree at .../cg`, because gh
+  checks out the PR's base `main` before deleting and this layout can never allow that.
+  The local ref is deleted by hand at step 3, once the worktree has moved to its next
+  branch.
 - **The fourth step is what keeps `cg` honest.** Nothing else advances it, so `cg`
   silently falls behind the `main` it is supposed to mirror — it was two commits
   stale when the refs sweep found it — and a stale `cg` breaks its one job: being
