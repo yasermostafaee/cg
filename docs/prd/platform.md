@@ -511,17 +511,37 @@ merged head ref, and [[P-011]] step 2 (`git push origin --delete <branch>`) is t
 that ever does. All three leaks above are therefore explained by the SETTING, not by a
 discipline lapse: the sequence has no net behind it, so a single skipped step leaks silently.
 
-The same check also RELOCATED the live leak. `git ls-remote --heads origin` shows `origin`
+The same check also RELOCATED the live leak — **stated below as it was OBSERVED on 2026-07-25;
+all seven refs were cleaned up the same day and `git for-each-ref refs/heads` shows ZERO `[gone]`
+branches on re-check (2026-07-26).** A later reader finding zero is seeing the cleanup, not a
+false claim: the count is the item's JUSTIFICATION, not a live backlog. As observed,
+`git ls-remote --heads origin` showed `origin`
 holding only `main` — clean, because the owner hand-deleted (2) and (3) — but SEVEN LOCAL refs
-are merged-but-still-present right now: `docs/P-016-P-017-gate-and-branch-hygiene` (#406),
+were merged-but-still-present: `docs/P-016-P-017-gate-and-branch-hygiene` (#406),
 `docs/file-stack-status-honesty-bugs` (#407), `docs/file-client-batch` (#390),
 `docs/file-d140-plate-source-selector` (#389), `docs/file-plates-and-file-feed` (#388),
 `docs/close-reachability-hardware-session` (#386) and `feat/d128-p2-video-schema-ingest`
-(#393). Every one reads `[gone]` upstream — i.e. step 2 happened and step 3 (`git branch -D`)
-never did. `wip/openspec-archive-2026-07-19` is an eighth of a DIFFERENT kind: its PR (#374)
+(#393). Every one read `[gone]` upstream — i.e. step 2 happened and step 3 (`git branch -D`)
+never did. `wip/openspec-archive-2026-07-19` was an eighth of a DIFFERENT kind: its PR (#374)
 was CLOSED, never merged, so no merged-PR intersection will ever surface it. The filed class is
-real; the half actually leaking TODAY is the local one, and it is the half that costs nothing
-to check.
+real; the half actually leaking on that date was the local one, and it is the half that costs
+nothing to check.
+
+**A THIRD leak class — the never-pushed local branch (observed 2026-07-26).** A local branch with
+NO upstream is invisible to both audits described so far: it can never read `[gone]`, and it has
+no PR to intersect with. On a nine-branch local set, `backup/ux-batch-with-modal` (5 commits) and
+`backup/pre-autosquash` (10 commits), both last touched 2026-07-14, carry unique work reachable
+from NO remote and NO PR — `git rev-list --count <branch> --not --remotes` is non-zero for each.
+They overlap the deliberate-park list below, which is exactly why this class needs its own
+judgement rather than folding into the leak report: parked-on-purpose and forgotten-and-unique
+look identical from outside.
+
+**The trap in detecting it: an EMPTY `%(upstream:track)` is AMBIGUOUS.** git prints an empty
+track field for BOTH "in sync with upstream" and "no upstream configured", so a track-based test
+silently mixes the two. On the same nine-branch set (2026-07-26) SIX branches printed an empty
+track while only FIVE genuinely lacked an upstream — `main` printed empty because it was IN SYNC
+with `origin/main`. An audit must therefore test **`%(upstream)`** for emptiness, never the track
+field. (The counts move with the branch set; the ambiguity does not.)
 **Why:** CC cannot self-heal this — the permission classifier denies the deletion push, so any
 leak CC spots must be handed to the owner as a manual command ([[P-014]]: the owner completes
 the deletion), a hand-off easily lost. Detection closes the gap between "leaked" and "someone
@@ -538,6 +558,13 @@ the NEXT leak without depending on the owner's eye.
   the half with no network cost and, per the 2026-07-25 count above, the half actually leaking
 - WHEN a branch's PR was CLOSED without merging, or it never had a PR at all (`wip/*`) THEN it
   is still surfaced — a merged-PR intersection alone never sees it (leak (3) is exactly this)
+- WHEN a local branch has NO upstream and NO worktree holding it THEN the audit reports it as a
+  candidate, in a SECTION SEPARATE from the merged-and-leaked class — the two need different
+  judgement, because never-pushed work may be unique and unrecoverable, so the audit must NEVER
+  imply it is safe to delete. Emptiness is tested on `%(upstream)`, never on `%(upstream:track)`
+- WHEN the audit determines which branches are held THEN it ENUMERATES worktrees via
+  `git worktree list --porcelain` and never assumes the three named worktrees — a hard-coded
+  three would mis-classify a branch held by a fourth as unheld and offer it for deletion
 - WHEN a merged branch is currently CHECKED OUT in any worktree THEN the audit does NOT report
   it — a track worktree legitimately sits on its merged branch until the next task branches off
   `main`, so the audit must exclude every branch listed by `git worktree list --porcelain` or
@@ -605,6 +632,17 @@ is already used by worktree at .../cg` — gh checks out the PR's base before de
 layout can never allow. CLAUDE.md forbade only the FLAG, so the interactive prompt walked
 straight through the ban. Answer **No**, or pass `--delete-branch=false` to suppress the prompt;
 the local ref is deleted by hand at step 3, after the worktree has moved on.
+
+**There are not always THREE worktrees (observed 2026-07-26).** `git worktree list --porcelain`
+reported a FOURTH, tooling-created worktree at `cg/.claude/worktrees/test-d0107d` holding branch
+`claude/test-d0107d` — nested INSIDE the read-only `cg` worktree. It did not dirty `cg`'s status
+(the `.claude/*` ignore rule covers it), so nothing announced it. Any audit hard-coded to the
+three named worktrees would have read `claude/test-d0107d` as unheld and offered it for deletion
+— which is why enumeration, not assumption, is now an Acceptance bullet above. A second such
+worktree (`claude/brave-pike-9e0d85`) was present at the same check, so this is the tooling's
+normal behavior rather than a one-off. Side effect worth flagging: CLAUDE.md's "one CC session
+per worktree" invariant has an unaccounted slot, so a CLAUDE.md clause is OWED — deliberately
+NOT written here, since that edit is not this item's scope.
 
 **Priority raised medium → high (2026-07-26).** "DELETE the local ref once its PR merges" is
 ALREADY written in CLAUDE.md and was still missed seven times — so more prose is not the remedy,
