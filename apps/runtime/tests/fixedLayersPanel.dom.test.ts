@@ -136,11 +136,19 @@ function menuLabels(): string[] {
 }
 
 describe('FixedLayersPanel — idle-quiet and honest rows', () => {
-  it('renders NOTHING when no bank is declared', async () => {
+  it('renders NOTHING when no bank is declared — including the stage-3 chain’s own affordances', async () => {
     stubBridge(null, []);
     const el = await render(createElement(FixedLayersPanel));
     expect(el.querySelector('[aria-label="Fixed layers"]')).toBeNull();
     expect(el.textContent).toBe('');
+    // The blast radius of the whole fixed-layers feature is "installs that
+    // declared a bank", and this is what makes that true: with no bank the
+    // panel returns before a single row is constructed, so the row's hidden
+    // `.vcg` input and its picker do not exist either. `textContent` alone
+    // would not catch a display:none input — assert the ELEMENTS are absent.
+    expect(el.querySelector('input')).toBeNull();
+    expect(el.querySelector('button')).toBeNull();
+    expect(el.querySelector('[data-layer]')).toBeNull();
   });
 
   it('renders one permanent row per slot with alias + layer number', async () => {

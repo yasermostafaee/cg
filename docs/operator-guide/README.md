@@ -28,6 +28,10 @@ reports for that layer:
 - **`not connected — occupancy unknown`** — the Runtime's link to its bridge is down, so
   even a previously reported state can no longer be trusted. Reconnect first.
 
+**Check the fixed rows after any bridge restart:** until a later update lands, an item that
+was on a fixed layer can come back on an ordinary stack layer instead of its own — so if a
+row that had something now reads empty, load it again.
+
 The header's **Configure** opens the bank settings: the slot count can GROW (at the end,
 up to layer 89) and aliases can change live; the channel and the start layer are fixed at
 install and cannot change mid-session. A refused change tells you the rule it broke and
