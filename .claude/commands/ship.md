@@ -150,16 +150,37 @@ that is a product decision outside this command's scope.
 
 ### 2a. On-air / export / product source
 
-A bad merge here reaches broadcast output. Refuse if any changed path matches:
+A bad merge here reaches broadcast output or the exported product. CLAUDE.md states
+this as a CATEGORY — "touches on-air / export / product source" — not as a list of
+paths, so **do not translate it into one. Fail closed over the workspace trees.**
 
-- `apps/` — any app source (designer, runtime)
-- `packages/caspar-client/` — the AMCP/on-air client
-- `packages/template-runtime/` — the on-air template engine
-- `packages/single-file-export/` — the export path
-- `packages/lottie-bridge/`, `packages/ui/` — render-output packages the gate hook
-  already classifies as UI/render (`UI_RENDER_PATTERNS` in
-  `tools/gate-hook/src/gate-decision.mjs`)
-- any path matching `UI_RENDER_PATTERNS` (e.g. `*.css.ts`, `apps/*/tests/e2e/`)
+**Refuse if any changed path is under `apps/`, `packages/` or `tools/`** — the three
+workspace globs in `pnpm-workspace.yaml` — i.e. any workspace source, with only these
+exceptions, which are not product source:
+
+- `packages/eslint-config/`
+- `tools/gate-hook/` (refuses under 2c anyway)
+- `*.md` inside a workspace, and anything under `openspec/` or `docs/`
+
+An enumeration is not safe here, because the obvious names are not the whole set. All
+of the following reach air or the exported product and are NOT UI/render:
+
+- `packages/caspar-client/` and `tools/caspar-bridge/` — the AMCP path to air; the
+  bridge is the process that actually speaks AMCP to CasparCG
+- `packages/vcg-format/` and `packages/shared-schema/` — the `.vcg` package format,
+  its manifest and signing, and the domain schemas the runtime renders from
+- `packages/single-file-export/`, `packages/template-runtime/`,
+  `packages/lottie-bridge/`, `packages/ui/`, `packages/starter-templates/`,
+  `packages/text-shaping/`, `packages/storage/`, `packages/shared-ipc/`
+
+**`UI_RENDER_PATTERNS` is not the boundary of this class.** It is a `gate:e2e`
+classifier (`tools/gate-hook/src/gate-decision.mjs`), deliberately narrower than
+"reaches air" — `packages/vcg-format/` and `tools/caspar-bridge/` match none of its
+regexes. Use it as an ADDITIONAL trigger (it catches `*.css.ts` anywhere), never as
+evidence that 2a is clear.
+
+If a changed path is under `apps/`/`packages/`/`tools/` and you are unsure whether it
+reaches air or the exported product → REFUSE and name the path you were unsure about.
 
 Name the matching file(s) in the refusal.
 
@@ -230,9 +251,13 @@ PR #<n> — <title>
   checks: <status, or "none configured — local gate is the only landing gate">
 
   refusal classes checked and CLEARED:
-    [x] on-air / export / product source  — no matching paths
+    [x] on-air / export / product source  — <N paths, none under apps/ packages/ tools/;
+                                             list the workspace roots touched, if any>
     [x] hardware pass / Linux gate:e2e    — <evidence: the tasks.md line(s) relied on>
-    [x] shared config                     — no matching paths
+    [x] shared config                     — <no matching paths, or name them>
+
+Print evidence, not a verdict — "no matching paths" alone is not reviewable. The owner
+must be able to spot a miss without re-deriving the diff.
 
   main worktree resolved to: <MAIN_WT>
   head branch held by:       <HOLDER, or "nothing">
@@ -275,7 +300,27 @@ answered Yes.
 gh pr view $ARGUMENTS --json state,mergeCommit
 ```
 
-`state` must be `MERGED`. Record `mergeCommit.oid` — step 4 needs it.
+`state` must be `MERGED`. Record `mergeCommit.oid` — steps 3 and 4 need it.
+
+**Then fetch it — it is not in the local object database yet.** The squash commit is
+created server-side by the API. Nothing up to this point brings it down:
+`gh pr merge --delete-branch=false` does no local git work at all (gh's only
+local-git path is gated behind `--delete-branch`, which is banned here), and step 2's
+`git push origin --delete` uploads a ref deletion. Without this fetch, step 3a's
+`checkout --detach <mergeCommit.oid>` aborts on an unknown object — **after steps 1
+and 2 have already run irreversibly.**
+
+```bash
+git fetch origin
+git cat-file -e <mergeCommit.oid>^{commit}
+```
+
+`git fetch` is read-only, so it is safe to run here ahead of the destructive steps.
+All worktrees in this layout share one object database, so fetching once from the
+current worktree makes the commit resolvable in both `<HOLDER>` and `<MAIN_WT>`.
+
+If `cat-file -e` is non-zero → **STOP before step 2.** The merge commit did not
+arrive, step 3a cannot run, and the remote branch is still the only copy of it.
 
 ### Step 2 — delete the remote branch
 
@@ -310,7 +355,9 @@ exits 0 and carries the uncommitted changes across silently, which is precisely 
 work is disposable is the owner's call, never `/ship`'s.
 
 If it is clean, detach it at the merged `main` commit — the documented resting state
-for a track worktree between tasks:
+for a track worktree between tasks. **This depends on the fetch performed after step
+1**: `<mergeCommit.oid>` is a server-created object and is otherwise absent from the
+local object database, so a later edit must not drop that fetch.
 
 ```bash
 git -C "<HOLDER>" checkout --detach <mergeCommit.oid>
