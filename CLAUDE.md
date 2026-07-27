@@ -381,6 +381,12 @@ manual toil; it does NOT change what may be merged.
 - If a step fails or can't be verified (e.g. `gh` unavailable), say exactly
   that — "pushed branch X; PR not created, open it manually" — never invent or
   guess an identifier.
+- **A GitHub write via `gh` is confirmed by reading the value back, never by an exit
+  code.** Observed 2026-07-27: `gh pr edit <n> --body-file` aborts on the deprecated
+  `projectCards` GraphQL field, exits WITHOUT applying the change, and prints only a
+  deprecation notice — it looks like success and did nothing, twice. Use
+  `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>` instead, then
+  re-read the body to confirm.
 
 ## E2E coverage (Playwright)
 

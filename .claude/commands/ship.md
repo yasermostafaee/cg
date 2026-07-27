@@ -80,16 +80,24 @@ gh run view <run-id>                                    # prints the ANNOTATIONS
 gh api repos/{owner}/{repo}/actions/jobs/<job-id> --jq '{name,conclusion,steps:(.steps|length)}'
 ```
 
-Decide as follows, fail-closed:
+Classify the check set as a whole. These cases are mutually exclusive and
+exhaustive — evaluate top to bottom and take the FIRST that matches, so nothing can
+fall through:
 
-- Any failing check that ran **one or more steps** → a real merit failure → **STOP**.
-- Only if **every** failing check shows zero steps AND the billing annotation → treat
-  it as "no authoritative remote checks" and continue. Report it exactly that way —
-  never as green, and never as "checks passed".
-- Cannot determine why a check failed → **STOP**. Do not assume billing.
+| # | Observed signature | Verdict | Action |
+| - | ------------------ | ------- | ------ |
+| 1 | Any check still `QUEUED` / `IN_PROGRESS` / `PENDING` | not yet decided | **STOP** — do not ship mid-flight; re-run `/ship` when it settles |
+| 2 | No checks configured on the PR at all | nothing to consult | **PROCEED** — report "no checks configured" |
+| 3 | Every check `SUCCESS` (counting `NEUTRAL` / `SKIPPED` as passing) | genuinely green | **PROCEED** — report "checks green" |
+| 4 | ≥1 `FAILURE`/`TIMED_OUT`/`CANCELLED`, and **every** such check ran **zero steps** AND carries the billing annotation | never started | **PROCEED** — report "no authoritative remote checks — local gate is the only landing gate". **Never** call this green |
+| 5 | ≥1 `FAILURE` that executed **one or more steps** | real merit failure | **STOP** — report the failing check |
+| 6 | Anything else, or the signature cannot be determined | unknown | **STOP** — never assume billing |
 
-This exception exists because the local gate is currently the only landing gate; it
-must not survive billing being restored, so re-verify rather than assuming.
+Row 3 is the normal path once remote CI returns (~Aug): a check that runs steps and
+concludes successfully **proceeds**. Only a check that runs steps and *fails* stops
+the run (row 5). Row 4 is the temporary billing carve-out and must be re-verified
+rather than assumed — when billing is restored it simply stops matching, and row 3
+takes over with no edit needed.
 
 Record: title, `baseRefName`, `headRefName`, check status. `headRefName` is the
 `<branch>` used in steps 2 and 3.
