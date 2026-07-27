@@ -359,6 +359,11 @@ manual toil; it does NOT change what may be merged.
   continuing. It knows the two benign signatures — `push --delete` reporting the
   remote ref does not exist means already-deleted (satisfied), and `-d` reporting
   "not fully merged" is why step 3 uses `-D`.
+- **Step 3 frees the branch before deleting it.** `git branch -D` fails while any
+  worktree holds the branch, which the session worktree that produced it almost always
+  does; `/ship` detaches that worktree at the merge commit first, and **stops instead if
+  it has uncommitted changes** — `checkout --detach` does not refuse on a dirty tree, it
+  carries the changes across silently. It never removes a worktree.
 - **Step 4 resolves the `main` worktree dynamically** by parsing
   `git worktree list --porcelain` for `refs/heads/main`, and stops if that yields
   zero or multiple hits. It never hardcodes `../cg`: that path is correct only from a

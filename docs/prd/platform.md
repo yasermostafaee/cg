@@ -644,6 +644,26 @@ normal behavior rather than a one-off. Side effect worth flagging: CLAUDE.md's "
 per worktree" invariant has an unaccounted slot, so a CLAUDE.md clause is OWED — deliberately
 NOT written here, since that edit is not this item's scope.
 
+**`/ship` now implements the detach-before-delete step this item identified as necessary
+(2026-07-27).** "The local ref is deleted by hand at step 3, after the worktree has moved on"
+(above) is a PRECONDITION, not a description: `git branch -D` fails outright while a worktree
+holds the branch — observed literally as `error: cannot delete branch 'tmp/ship-detach-test'
+used by worktree at 'D:/wt-t'`. Since the tooling creates a worktree per session, the branch
+being shipped is almost always still held by the worktree that produced it, so an audit or a
+ship run that deletes without first moving the holder off the branch fails on essentially every
+real invocation. `.claude/commands/ship.md` resolves the holding worktree from the same
+`git worktree list --porcelain` enumeration this item's Acceptance already requires, detaches it
+at the merge commit, then deletes. Three constraints, all verified on a scratch worktree:
+
+- **A DIRTY holder STOPS the run.** `git checkout --detach` does NOT refuse on a dirty worktree —
+  it exits 0 and carries the uncommitted changes across silently. So the guard is load-bearing,
+  not belt-and-braces; git will not protect the work here.
+- **Detach, never `git worktree remove`.** Detaching frees the branch; removal is a much larger
+  mutation and stays the owner's call.
+- **Self-holding works.** A worktree can detach ITSELF and then delete its own former branch —
+  confirmed from inside the holder, since that is the common case (the session worktree ships its
+  own branch).
+
 **Priority raised medium → high (2026-07-26).** "DELETE the local ref once its PR merges" is
 ALREADY written in CLAUDE.md and was still missed seven times — so more prose is not the remedy,
 and the automated detection this item describes is.

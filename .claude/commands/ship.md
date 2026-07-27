@@ -64,13 +64,71 @@ Then read the check status:
 gh pr checks $ARGUMENTS
 ```
 
-GitHub Actions billing is exhausted until ~Aug, so **no checks configured** is the
-expected state, not a failure. Report it honestly as "no remote checks — local gate
-is the only landing gate" rather than as green. If checks DO exist and any is
-failing → STOP.
+**A failing check STOPS the run — with one narrow, verified exception.** While
+GitHub Actions billing is exhausted (~Aug), checks are still CONFIGURED and still
+report `fail`; they simply never start. Observed on PR #417: `Detect changed paths`,
+`Docs check` and `required` all `fail` in ~2s, downstream jobs `skipping`, and the
+run carries the annotation
+
+> The job was not started because recent account payments have failed or your
+> spending limit needs to be increased.
+
+Such a check has **executed zero steps** — that is the machine-checkable signal:
+
+```bash
+gh run view <run-id>                                    # prints the ANNOTATIONS block
+gh api repos/{owner}/{repo}/actions/jobs/<job-id> --jq '{name,conclusion,steps:(.steps|length)}'
+```
+
+Decide as follows, fail-closed:
+
+- Any failing check that ran **one or more steps** → a real merit failure → **STOP**.
+- Only if **every** failing check shows zero steps AND the billing annotation → treat
+  it as "no authoritative remote checks" and continue. Report it exactly that way —
+  never as green, and never as "checks passed".
+- Cannot determine why a check failed → **STOP**. Do not assume billing.
+
+This exception exists because the local gate is currently the only landing gate; it
+must not survive billing being restored, so re-verify rather than assuming.
 
 Record: title, `baseRefName`, `headRefName`, check status. `headRefName` is the
 `<branch>` used in steps 2 and 3.
+
+---
+
+## Phase 1b — Resolve the worktree holding the head branch
+
+`git branch -D <branch>` **fails while any worktree has that branch checked out**:
+
+```
+error: cannot delete branch '<branch>' used by worktree at '<path>'
+```
+
+Because a worktree is created per session, the branch being shipped is almost always
+still held by the session worktree that produced it — so without this phase, step 3
+fails on essentially every real invocation.
+
+Reuse the Phase 0 parse, selecting on the PR's head branch instead of `main`:
+
+```bash
+git worktree list --porcelain | awk -v b="refs/heads/$HEAD_REF" '/^worktree /{p=substr($0,10)} $0=="branch "b{print p}'
+```
+
+- **Zero** paths → nothing holds it. Step 3 runs unchanged. Record `HOLDER=none`.
+- **Exactly one** path → record it as `HOLDER`. It must be freed before step 3; the
+  procedure is in step 3 below. Surface it on the Phase 3 screen so the owner sees
+  the detach BEFORE confirming, never discovers it afterwards.
+- **Two or more** → git does not permit this, but if the parse yields it → STOP and
+  report all paths. Do not pick one.
+
+If `HOLDER` is set, check it for uncommitted work now, so the summary is honest:
+
+```bash
+git -C "<HOLDER>" status --short
+```
+
+Any output at all → this run will STOP at step 3. Say so on the Phase 3 screen
+rather than asking the owner to confirm a sequence that cannot complete.
 
 ---
 
@@ -177,9 +235,16 @@ PR #<n> — <title>
     [x] shared config                     — no matching paths
 
   main worktree resolved to: <MAIN_WT>
+  head branch held by:       <HOLDER, or "nothing">
+    -> will detach <HOLDER> from <headRefName> at <merge sha> before deleting it
+       (omit this line if HOLDER is none; if HOLDER is DIRTY, say instead:
+        "BLOCKED: <HOLDER> has uncommitted changes — this run will stop at step 3")
 
 Proceed with the four-step ship sequence? (steps 2 and 3 are destructive)
 ```
+
+If `HOLDER` is dirty, do not ask for confirmation at all — report the block and stop.
+There is no point confirming a sequence that cannot complete.
 
 ---
 
@@ -232,7 +297,36 @@ Must return **nothing**.
 > Verify by absence, never by the command printing success. Report it as "already
 > absent", not as an error.
 
-### Step 3 — delete the local branch
+### Step 3 — free the branch if a worktree holds it, then delete it
+
+**3a. If `HOLDER` is `none`, skip to 3b.** Otherwise the branch must be freed first —
+`git branch -D` fails outright while a worktree holds it (see Phase 1b).
+
+**If `git -C "<HOLDER>" status --short` produced ANY output → STOP.** Report the path
+and the exact dirty files. Do not detach, do not remove the worktree, do not stash,
+do not discard. `git checkout --detach` does NOT refuse on a dirty worktree — it
+exits 0 and carries the uncommitted changes across silently, which is precisely how
+"uncommitted work is what a branch switch destroys silently" plays out. Whether that
+work is disposable is the owner's call, never `/ship`'s.
+
+If it is clean, detach it at the merged `main` commit — the documented resting state
+for a track worktree between tasks:
+
+```bash
+git -C "<HOLDER>" checkout --detach <mergeCommit.oid>
+```
+
+**Never `git worktree remove`.** Detaching is sufficient to free the branch; removal
+is a far larger mutation and stays the owner's decision.
+
+This works even when `HOLDER` is the worktree `/ship` is itself running in — a
+worktree can detach itself and then delete its own former branch (verified). Compare
+`HOLDER` against `git rev-parse --show-toplevel` and say so in the report when they
+match, so the owner knows their own working directory just moved to a detached HEAD.
+
+Report which worktree was detached and to what SHA.
+
+**3b. Delete the branch:**
 
 ```bash
 git branch -D <headRefName>
@@ -288,6 +382,9 @@ Report each of the four steps with its verification evidence:
 1. merged           — gh pr view #<n> → MERGED (<mergeCommit.oid>)
 2. remote deleted   — git ls-remote --heads origin <branch> → empty
 3. local deleted    — git branch --list <branch> → empty
+     (detached <HOLDER> to <sha> first — omit if nothing held the branch;
+      say explicitly if <HOLDER> was the worktree /ship ran in, since the
+      owner's own working directory is now on a detached HEAD)
 4. main fast-fwd    — <MAIN_WT> at <oid> — matches merge commit
 ```
 
