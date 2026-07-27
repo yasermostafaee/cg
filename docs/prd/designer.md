@@ -3332,7 +3332,7 @@ Rename Project…), Enter/blur commit, Escape restore, empty-name rejection, and
 Verification is the **Designer preview** (no CasparCG). Sequence: independent of the Shared-Library
 relocation (**D-066**) and of the big features (**D-125** / **D-126**).
 
-## [~] D-128 — import a video clip as a lifecycle-aware element (in-app WebM/VP9 conversion, import-time crop) ⟨priority: high⟩ — change dir `openspec/changes/video-import-element/` (Phases 1–4 merged; 2026-07-25 field fix: canvas-blank root-caused — alpha-keyframe-misaligned cold seek — robust shared poster routine + import poster parity, and the premultiplied-alpha default flipped OFF; Phases 5–6 outstanding)
+## [x] D-128 — import a video clip as a lifecycle-aware element (in-app WebM/VP9 conversion, import-time crop) ⟨priority: high⟩ — DONE, archived 2026-07-27 (`openspec/changes/archive/2026-07-27-video-import-element/`). All six phases landed; Phase 6's owner-run CasparCG 2.3.x CEF hardware smoke closed 2026-07-27 (see that change's `design.md` → "Phase 6 — FINAL verdict"). Two of Phase 6's nine cases did NOT run and were not claimed as passing: §3.9's CG ADD latency timing is closed by owner decision (real assets convert to ~10 MB, far under the 33–40 MB range where the 40 MiB threshold would matter, so the number is moot in practice), and §3.5/§3.5b pause/resume was DECOUPLED — `@cg/runtime` has no pause/resume affordance, so the case has no trigger; it is tracked independently as [R-027](./runtime.md) and does NOT reopen this item.
 
 **What:** Import a video clip — including the client's legacy `rawvideo`/BGRA AVI archive —
 optionally CROP it in the import modal, convert it IN-APP to WebM/VP9 with alpha preserved, and

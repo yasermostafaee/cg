@@ -389,22 +389,29 @@
 
 ## Phase 6 — CasparCG 2.3.x CEF hardware smoke — OWNER-VERIFIED (the pre-archive gate)
 
-- [ ] 6.1 PARTIAL — owner-executed 2026-07-26 on `FRONTEND-01`, CEF/Chromium 71; verdict recorded
-      in `design.md` ("Phase 6 — on-air CEF smoke, PARTIAL verdict"). Real template on real
-      hardware: alpha over live background, ticker-held graphic with video beneath, `stop()`
-      outro-to-CLEARED, pause/resume, `file://` single-file boot with zero external requests.
+- [x] 6.1 CLOSED 2026-07-27 (was PARTIAL 2026-07-26) — owner-executed on `FRONTEND-01`,
+      CEF/Chromium 71; verdicts recorded in `design.md` ("Phase 6 — on-air CEF smoke, PARTIAL
+      verdict" + "Phase 6 — FINAL verdict (2026-07-27)"). Real template on real hardware: alpha
+      over live background, ticker-held graphic with video beneath, `stop()` outro-to-CLEARED,
+      `file://` single-file boot with zero external requests.
       PASSED on hardware: §3.1 alpha over a LIVE background (a real video file looping on layer
       1-1, not black), §3.2 ticker owns hold with the video looping beneath, §3.3 video-as-closer
       in all three variants, §3.4 `CG STOP` graceful outro-to-CLEARED, §3.8 single-file parity,
-      §3.6 two videos on one scene (steady-state half only). The box stays OPEN because
-      pause/resume was NOT executed at all — §3.5/§3.5b had no operator affordance to trigger
-      (`@cg/runtime` exposes no pause/resume control; see the new OPEN item in `design.md`), which
-      also leaves §3.6's "clean pause/resume" half untested.
-- [ ] 6.2 Owner verifies on the affected machine; record the verdict here. Do NOT archive before
-      this gate (the D-125 precedent). PARTIAL VERDICT RECORDED (2026-07-26, `design.md`) — the
-      gate is NOT satisfied: three checklist items below remain open, and any ONE of them is
-      enough to hold archiving under this hard stop. THE PHASE-6 OWNER CHECKLIST (what Phase 5
-      hands over):
+      §3.6 two videos on one scene (steady-state half only), and — on 2026-07-27 — §3.7's long
+      run (~2 hours of hold looping, no visible correction stutter).
+      **NOT executed, and NOT claimed as passing:** §3.5/§3.5b pause/resume — `@cg/runtime`
+      exposes no pause/resume control, so the case had no operator affordance to trigger. That is
+      now DECOUPLED from D-128 by owner decision (2026-07-27) and tracked independently as
+      **R-027** in `docs/prd/runtime.md`; §3.6's "clean pause/resume" half rides the same item.
+      §3.9's ADD-latency timing was likewise never measured — it is CLOSED by owner decision, not
+      by data (see 6.2's checklist). The box closes because no unresolved item remains ON THIS
+      CHANGE, not because every case ran.
+- [x] 6.2 Owner verifies on the affected machine; record the verdict here. Do NOT archive before
+      this gate (the D-125 precedent). PARTIAL VERDICT RECORDED 2026-07-26, **FINAL VERDICT
+      RECORDED 2026-07-27** (both in `design.md`) — the gate is now SATISFIED: of the three items
+      that held it, §3.7 PASSED on air, §3.9 was CLOSED by owner decision without the
+      measurement, and §3.5/§3.5b was DECOUPLED to R-027. THE PHASE-6 OWNER CHECKLIST (what
+      Phase 5 hands over):
   - [x] a finished template CONTAINING a video, exported single-file, dropped in CasparCG's
         `templates/`, ADD + PLAY on real 2.3.x: correct alpha over a live background, zero
         external requests in the CEF log — §3.8 PASS (playback matched the `.vcg` run) + §3.1
@@ -417,19 +424,29 @@
         `CG {channel}-{layer} STOP 0`.
   - [x] the same template as an unzipped `.vcg` (http-served path) plays identically — §3.1–§3.4
         all ran as `.vcg` through the Runtime, and §3.8 confirmed the single-file run matched.
-  - [ ] CG ADD → first-frame latency at the owner's realistic template size (~33 MB inline
-        measured 725 ms on desktop Chromium; validate the ~×4 CEF margin assumption) — and
-        CONFIRM or MOVE the provisional 40 MiB single-file threshold from real numbers. §3.9
-        DEFERRED by explicit owner decision (not a smoke failure). The realistic-size assumption
-        is REVISED to ~10 MB — see the OPEN item in `design.md`.
-  - [ ] pause/resume + tab-switch soak on air (the seek-policy fixes under CEF) — §3.5/§3.5b NOT
-        EXECUTED: `@cg/runtime` currently exposes no pause/resume control, so there was no
+  - [x] CG ADD → first-frame latency at the owner's realistic template size, and CONFIRM or MOVE
+        the provisional 40 MiB single-file threshold — **CLOSED 2026-07-27 by owner decision, NOT
+        by measurement.** The timing was never taken and no CEF-measured ADD latency exists. The
+        owner's largest real client archive asset (a 3 GB source clip) converts to at most ~10 MB,
+        so the 33–40 MB range where the number would matter is never reached in practice and the
+        figure is moot. The threshold STAYS at 40 MiB, now final rather than provisional. Recorded
+        as a business closure — not a completed test — in `design.md`.
+  - [ ] pause/resume + tab-switch soak on air (the seek-policy fixes under CEF) — §3.5/§3.5b **NOT
+        EXECUTED and NOT waived**: `@cg/runtime` exposes no pause/resume control, so there is no
         operator affordance to trigger the case. A product-surface gap, not a hardware limit.
-  - [ ] the ≥10 min long run that measures on-air seek-correction cadence (§3.7) — NOT YET RUN;
-        the owner is running it in a separate session. Nothing blocks it.
+        **DECOUPLED from D-128 by owner decision 2026-07-27** — it no longer holds this change and
+        is tracked independently as **R-027** (`docs/prd/runtime.md`); run it against the shipped
+        feature once the Runtime gains the affordance. Deliberately NOT ticked: nothing ran.
+  - [x] the ≥10 min long run that measures on-air seek-correction cadence (§3.7) — **PASS,
+        executed 2026-07-27**: ~**2 hours** on air with hold looping (far past the ≥10 min
+        minimum), **no visible correction stutter** observed throughout. The seek-correction UX
+        bar is met by the shipped resume/wrap-only policy; no cadence change owed.
   - [ ] REMEMBER: assets converted before revision 2026-07-25.5 remain seek-fragile until
         re-imported — the recovery paths handle them, but the owner should re-import any
         clip that will seek on air (pause/resume, authored mid-clip loop points).
+        NOT A GATE — a standing operational note carried forward past archiving, deliberately
+        left unticked because it is an ongoing instruction rather than a step that completes.
+        The 2026-07-26/27 smoke ran on a FRESHLY imported asset, so it was satisfied there.
 - [x] 6.3 REAL-ARCHIVE verification (import half — 2026-07-23): the owner ran the client's
       actual `rawvideo`/BGRA ARCHIVE sources through the SHIPPED import pipeline successfully —
       **152 MB and 739 MB** clips imported (probe → crop → convert → place) with no error, which

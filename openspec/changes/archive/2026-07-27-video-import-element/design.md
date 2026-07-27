@@ -1273,8 +1273,10 @@ LINEAR (~17 ms/MB after a ~300 ms base), NO CLIFF, every video decodable at ever
 the threshold is a LATENCY guardrail (CG ADD responsiveness on air), not a hard failure
 boundary. **Threshold: 40 MiB inline (≈30 MB of stored WebM)** — the realistic trio stays
 under; a fourth heavy clip warns; projected CEF worst case at the threshold ≈ ~3 s ADD.
-PROVISIONAL: Phase 6 measures real ADD latency on 2.3.x hardware and confirms or moves it
-(the constant is `SINGLE_FILE_INLINE_WARN_BYTES`, one place). The warning never blocks
+Was PROVISIONAL pending a Phase-6 real-ADD-latency measurement on 2.3.x hardware; **that
+measurement was never taken and the threshold is now FINAL at 40 MiB by owner decision
+(2026-07-27, §3.9 — see the FINAL verdict below)** (the constant is
+`SINGLE_FILE_INLINE_WARN_BYTES`, one place). The warning never blocks
 (decision (d)) and names the total + dominating clips + the `.vcg` alternative (its assets
 ship as separate binary files — no inline inflation, no parse cost).
 
@@ -1322,48 +1324,94 @@ obvious route does NOT work: CasparCG's `VERSION` and `INFO` AMCP commands and i
 not expose the CEF version at all — they report only the server version. Anyone re-deriving this
 number should skip AMCP and go straight to the DLL.
 
-| case                                                                      | verdict                   | detail                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| §3.1 alpha over live background (`.vcg` via Runtime)                      | **PASS**                  | Background was a real video file looping live on layer 1-1 — not black. Proof: same-frame comparison against the Designer canvas preview; edges and semi-transparent pixels matched.                                                                                                                                                                                                                         |
-| §3.2 ticker owns hold, video loops beneath                                | **PASS**                  | Clean loop, no flash or speckle at the wrap; the ticker ran uninterrupted to completion.                                                                                                                                                                                                                                                                                                                     |
-| §3.3 video as closer, both directions (all 3 variants, since #412 landed) | **PASS**                  | V-freeze self-completed to CLEARED with no operator action. V-loop-closer never self-completed and required an operator OUT — correct. V-solo-closer's `.vcg` playout metadata was independently confirmed structurally content-driven (not timed), corroborating #412.                                                                                                                                      |
-| §3.4 `CG STOP` graceful exit                                              | **PASS**                  | Outro played exactly once, then the layer reached CLEARED — no double outro, no strand.                                                                                                                                                                                                                                                                                                                      |
-| §3.5 / §3.5b pause/resume + background-throttle soak                      | **NOT EXECUTED**          | `@cg/runtime` exposes NO pause/resume control, so there was no operator affordance to trigger the case at all. A product-surface gap, not a hardware limitation. See the OPEN item below.                                                                                                                                                                                                                    |
-| §3.6 two videos on one scene                                              | **PASS (partial)**        | Both steady-state smooth, no black band. The "clean pause/resume" half of this case's Expect line is untested for the same reason as §3.5.                                                                                                                                                                                                                                                                   |
-| §3.7 long run ≥10 min (seek-correction UX bar)                            | **NOT YET RUN**           | Deferred to a separate future session. Not blocked by anything — simply not done yet.                                                                                                                                                                                                                                                                                                                        |
-| §3.8 single-file `file://` parity, same hardware                          | **PASS**                  | Playback matched the `.vcg` run. Mechanism: `PLAY 1-N "file:///….html"` FAILS with `#404 PLAY FAILED` — the artifact is a CG template, not a generic HTML-producer target. It loads by dropping the single-file HTML into CasparCG's `templates/` and calling the CG producer by name WITHOUT extension: `CG {channel}-{layer} ADD 0 "{filename-without-ext}" 1`, closed with `CG {channel}-{layer} STOP 0`. |
-| §3.9 CG ADD latency at ~33 MB (the 40 MiB threshold decision)             | **DEFERRED (owner call)** | Not a smoke failure. New fact that revises the premise: the owner's LARGEST real client archive asset (a 3 GB source clip) converts to at most ~10 MB after import. See the OPEN item below.                                                                                                                                                                                                                 |
+| case                                                                      | verdict                                                               | detail                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| §3.1 alpha over live background (`.vcg` via Runtime)                      | **PASS**                                                              | Background was a real video file looping live on layer 1-1 — not black. Proof: same-frame comparison against the Designer canvas preview; edges and semi-transparent pixels matched.                                                                                                                                                                                                                         |
+| §3.2 ticker owns hold, video loops beneath                                | **PASS**                                                              | Clean loop, no flash or speckle at the wrap; the ticker ran uninterrupted to completion.                                                                                                                                                                                                                                                                                                                     |
+| §3.3 video as closer, both directions (all 3 variants, since #412 landed) | **PASS**                                                              | V-freeze self-completed to CLEARED with no operator action. V-loop-closer never self-completed and required an operator OUT — correct. V-solo-closer's `.vcg` playout metadata was independently confirmed structurally content-driven (not timed), corroborating #412.                                                                                                                                      |
+| §3.4 `CG STOP` graceful exit                                              | **PASS**                                                              | Outro played exactly once, then the layer reached CLEARED — no double outro, no strand.                                                                                                                                                                                                                                                                                                                      |
+| §3.5 / §3.5b pause/resume + background-throttle soak                      | **NOT EXECUTED** → **DECOUPLED** (2026-07-27)                         | `@cg/runtime` exposes NO pause/resume control, so there was no operator affordance to trigger the case at all. A product-surface gap, not a hardware limitation. See the OPEN item below.                                                                                                                                                                                                                    |
+| §3.6 two videos on one scene                                              | **PASS (partial)** — untested half **DECOUPLED** (2026-07-27)         | Both steady-state smooth, no black band. The "clean pause/resume" half of this case's Expect line is untested for the same reason as §3.5.                                                                                                                                                                                                                                                                   |
+| §3.7 long run ≥10 min (seek-correction UX bar)                            | **NOT YET RUN** → **PASS** (2026-07-27)                               | Deferred to a separate future session. Not blocked by anything — simply not done yet.                                                                                                                                                                                                                                                                                                                        |
+| §3.8 single-file `file://` parity, same hardware                          | **PASS**                                                              | Playback matched the `.vcg` run. Mechanism: `PLAY 1-N "file:///….html"` FAILS with `#404 PLAY FAILED` — the artifact is a CG template, not a generic HTML-producer target. It loads by dropping the single-file HTML into CasparCG's `templates/` and calling the CG producer by name WITHOUT extension: `CG {channel}-{layer} ADD 0 "{filename-without-ext}" 1`, closed with `CG {channel}-{layer} STOP 0`. |
+| §3.9 CG ADD latency at ~33 MB (the 40 MiB threshold decision)             | **DEFERRED (owner call)** → **CLOSED by owner decision** (2026-07-27) | Not a smoke failure. New fact that revises the premise: the owner's LARGEST real client archive asset (a 3 GB source clip) converts to at most ~10 MB after import. See the OPEN item below.                                                                                                                                                                                                                 |
 
-**The gate is NOT satisfied and this change is NOT archivable.** Three items remain open —
-§3.5/§3.5b, §3.7, §3.9 — and any ONE of them alone holds archiving under the 6.2 hard stop
-(archiving over an unrun owner-executed gate is irreversible; the D-125 precedent).
+**As of 2026-07-26 the gate was NOT satisfied and this change was NOT archivable.** Three items
+remained open — §3.5/§3.5b, §3.7, §3.9 — and any ONE of them alone held archiving under the 6.2
+hard stop (archiving over an unrun owner-executed gate is irreversible; the D-125 precedent).
+**SUPERSEDED 2026-07-27 — see the FINAL verdict immediately below: all three are now closed and
+the gate is satisfied.**
 
-## OPEN — owner decision
+## Phase 6 — FINAL verdict (2026-07-27) — the gate is CLOSED
 
-- **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide
-  after the spike produces a real converted-archive artifact with measured sizes.
-  **STILL OPEN after the 2026-07-26 smoke** — §3.9 was DEFERRED by explicit owner decision, so no
-  CEF-measured ADD latency exists yet and `SINGLE_FILE_INLINE_WARN_BYTES` stays PROVISIONAL at
-  40 MiB. One PREMISE is revised for whenever §3.9 runs: the realistic case is **~10 MB, not the
-  ~33 MB** the Phase-5 sweep assumed — the owner's largest real client archive asset (a 3 GB
-  source clip) converts to at most ~10 MB. The desktop-Chromium baseline curve above (311 ms @
-  3.1 MB · 725 ms @ 33.5 MB · 1.57 s @ 66.5 MB · 4.53 s @ 264.8 MB — linear ~17 ms/MB, no cliff)
-  remains valid for interpolating whatever real number eventually comes back.
-- **Seek-correction UX bar:** if the spike measures visible stutter on drift correction inside a
-  hold loop, the acceptable correction cadence (resume/wrap-only vs per-tick bounded) is an
-  on-air quality judgment for the owner, informed by the measured numbers. Post-spike status:
-  zero corrections were needed on the fixture clip; the owner's real-archive run re-measures
-  this before the bar is set. **STILL OPEN after the 2026-07-26 smoke** — §3.7, the ≥10 min long
-  run that would produce the on-air cadence numbers, was NOT run; the owner is running it in a
-  separate session. The bar cannot be set until it does.
-- **NEW (2026-07-26) — `@cg/runtime` has no pause/resume affordance, and that BLOCKS on-hardware
-  verification of the seek/resume-elimination work.** §3.5/§3.5b could not be attempted on air:
+Owner decisions on the three items the 2026-07-26 PARTIAL verdict left open. Two of the three
+are closed by owner DECISION rather than by measurement; that distinction is recorded here
+deliberately, because a later reader must not mistake either for a completed test.
+
+| open item                                            | 2026-07-27 disposition                      | basis                                                                                                                                                                                                                   |
+| ---------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| §3.5 / §3.5b pause/resume + background-throttle soak | **DECOUPLED from D-128** — NOT run          | No `@cg/runtime` operator affordance exists and none is scheduled. Split off as an independent follow-up; it no longer blocks D-128. Tracked as **R-027** in `docs/prd/runtime.md`.                                     |
+| §3.7 long run ≥10 min (seek-correction cadence)      | **PASS** — executed on air                  | ~**2 hours** continuous on-air run with hold looping (vs. the runbook's ≥10-minute minimum), **no visible correction stutter** observed at any point.                                                                   |
+| §3.9 CG ADD latency at ~33 MB / the 40 MiB threshold | **CLOSED by owner decision** — NOT measured | The latency timing was NOT performed. The owner's largest real client archive asset (a 3 GB source clip) converts to at most ~10 MB, so the 33–40 MB range is never reached in practice and the precise number is moot. |
+
+**1. §3.5 / §3.5b — DECOUPLED, not executed.** `@cg/runtime` still has no pause/resume operator
+control and there is no timeline for adding one. Owner decision: this must NOT block D-128 any
+longer. It is split off as its own standalone follow-up — once `@cg/runtime` gains a pause/resume
+affordance, THAT is when §3.5/§3.5b should be run against the already-shipped video-import-element
+feature. **This case is neither PASS nor executed; it was not run at all.** §3.6's "clean
+pause/resume" half is untested for the same reason and rides the same follow-up. Filed as
+**R-027** (`docs/prd/runtime.md`) — an INDEPENDENT item whose status has no bearing on D-128's.
+
+**2. §3.7 — PASS.** The template ran on air with hold looping for approximately **2 hours** — far
+exceeding the runbook's ≥10-minute minimum — with **no visible correction stutter** observed
+throughout. This closes the seek-correction-cadence OPEN item outright: the on-air quality bar is
+met by the shipped resume/wrap-only correction policy, and no further cadence tuning is owed.
+
+**3. §3.9 — CLOSED BY OWNER DECISION, NOT BY MEASUREMENT.** The on-hardware CG ADD latency timing
+this case calls for was **not performed**, and no CEF-measured ADD latency number exists. The item
+is closed on business reasoning instead: the owner's largest real client archive asset (a 3 GB
+source clip) converts to **at most ~10 MB** after import — well under the 33–40 MB range where the
+threshold question actually bites — so real-world usage never approaches it and the precise latency
+figure is **moot in practice**. `SINGLE_FILE_INLINE_WARN_BYTES` therefore STAYS at 40 MiB, now by
+decision rather than as a provisional value awaiting data. Should a future asset class actually
+land in that range, the desktop-Chromium baseline curve above (linear ~17 ms/MB after a ~300 ms
+base, no cliff) remains the interpolation basis, and the measurement can be taken then.
+
+**Gate status: SATISFIED.** Every owner-executed gate in tasks 6.1/6.2 is now resolved — by PASS,
+by explicit owner closure, or by decoupling to an independent item — so the 6.2 hard stop is
+lifted and this change is archivable.
+
+## OPEN — owner decision (ALL CLOSED as of 2026-07-27)
+
+- **Single-file size threshold — CLOSED 2026-07-27 by owner decision, NOT by measurement.** The
+  question was the value, and whether crossing it WARNS or BLOCKS. Resolution: the threshold
+  **stays at 40 MiB and keeps WARNING** (never blocking, decision (d) above), and the constant
+  `SINGLE_FILE_INLINE_WARN_BYTES` is no longer provisional. **No CEF-measured ADD latency was ever
+  taken** — §3.9 was first DEFERRED on 2026-07-26 and then closed outright on 2026-07-27 on
+  business grounds: the owner's largest real client archive asset (a 3 GB source clip) converts to
+  at most **~10 MB**, not the ~33 MB the Phase-5 sweep assumed, so real usage never approaches the
+  33–40 MB range where the number would matter and the exact latency is moot in practice. The
+  desktop-Chromium baseline curve above (311 ms @ 3.1 MB · 725 ms @ 33.5 MB · 1.57 s @ 66.5 MB ·
+  4.53 s @ 264.8 MB — linear ~17 ms/MB, no cliff) stays on record as the interpolation basis if a
+  future asset class ever does land in that range.
+- **Seek-correction UX bar — CLOSED 2026-07-27, PASS.** The question was the acceptable correction
+  cadence (resume/wrap-only vs per-tick bounded) if drift correction produced visible stutter
+  inside a hold loop. Resolution: §3.7 ran on air for approximately **2 hours** with hold looping
+  — far past the runbook's ≥10-minute minimum — and **no visible correction stutter was observed
+  at any point**. The shipped resume/wrap-only policy meets the on-air quality bar as authored; no
+  cadence change and no further tuning is owed. (Post-spike, zero corrections were needed on the
+  fixture clip; the real-archive long run now corroborates that on hardware.)
+- **`@cg/runtime` has no pause/resume affordance — DECOUPLED from D-128 on 2026-07-27; tracked
+  INDEPENDENTLY as [[R-027]] (`docs/prd/runtime.md`).** §3.5/§3.5b could not be attempted on air:
   there is no operator control in the Runtime app to pause and resume a playing template, so the
-  case has no trigger. This is a product-surface gap, distinct from the size-threshold item above
-  and not to be folded into it — the seek-policy fixes (`RESUME GRACE`, the large-gap policy, the
-  2026-07-25.5 alignment work) therefore remain verified only off-hardware, and §3.6's
-  "clean pause/resume" half is untested for the same reason. Owner decision: whether the Runtime
-  gains such a control (and at what scope) before this gate can close.
+  case has no trigger. `@cg/runtime` still has no such control and none is scheduled. Owner
+  decision (2026-07-27): this must NOT block D-128 any longer — it is split off as its own
+  standalone follow-up and **D-128's status no longer depends on it in either direction**. Once
+  `@cg/runtime` gains a pause/resume affordance, THAT is when §3.5/§3.5b should finally be run,
+  against the already-shipped video-import-element feature. Until then the seek-policy fixes
+  (`RESUME GRACE`, the large-gap policy, the 2026-07-25.5 alignment work) remain verified only
+  off-hardware, and §3.6's "clean pause/resume" half stays untested for the same reason — both
+  facts carried forward on R-027, neither reopening this change.
 
 ## Related
 
