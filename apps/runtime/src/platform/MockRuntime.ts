@@ -198,7 +198,21 @@ export class MockRuntime {
     this.#positions.delete(itemId);
     // B-070 parity — the producer dies with the item.
     this.#loaded.delete(itemId);
+    // R-021 stage 3 parity — and so does any FIXED binding (the bridge's
+    // `#releaseSlot`): the slot stays in the bank, unbound and re-loadable, and
+    // the row stops naming an item that is no longer on the stack.
+    this.#releaseFixedBinding(itemId);
     return { accepted: true };
+  }
+
+  /** Drop `itemId`'s fixed binding, if it holds one, and republish. */
+  #releaseFixedBinding(itemId: string): void {
+    for (const [layer, bound] of this.#fixedBindings) {
+      if (bound.itemId !== itemId) continue;
+      this.#fixedBindings.delete(layer);
+      this.fixedStateChanged.emit(this.fixedLayersState());
+      return;
+    }
   }
 
   /**
@@ -281,6 +295,10 @@ export class MockRuntime {
   // the offline mock has no OSC, so outside the seed this map stays EMPTY and
   // every slot honestly reads `unknown`.
   readonly #fixedObservations = seedFixedObservations();
+  // R-021 stage 3 — the bridge's LayerManager fixed BINDING, modelled: layer →
+  // the item bound to it. The mock allocates no real layers, so this map IS its
+  // `fixedBinding`, and `loadFixed` is the only thing that writes to it.
+  readonly #fixedBindings = new Map<number, { itemId: string; templateType: string }>();
 
   fixedLayersConfig(): FixedLayerBank | null {
     return this.#fixedBank;
@@ -294,11 +312,52 @@ export class MockRuntime {
   }
 
   /**
+   * R-021 stage 3 parity — the EXACT-SLOT load. The bridge resolves the layer
+   * through `LayerManager.bindFixed`; the mock has no LayerManager, so
+   * `#fixedBindings` stands in for it — but the REFUSALS are modelled exactly,
+   * because they are what the operator UI is built against: a coordinate
+   * outside the declared bank is `not-fixed` (this path is never a door onto an
+   * arbitrary layer) and an already-bound slot is `slot-bound` (rebinding is
+   * Remove-then-load, two explicit steps). An unregistered template refuses
+   * with the same `unknown-template` the bridge answers.
+   *
+   * On acceptance the item joins the stack exactly as `load()` builds it — the
+   * fixed row is a second surface onto an ORDINARY stack item, never a parallel
+   * item kind — and the per-slot state republishes so the row names it.
+   */
+  loadFixed(
+    channel: number,
+    layer: number,
+    itemId: string,
+    templateId: string,
+    fields: FieldValues,
+  ): { accepted: boolean; errorCode?: string } {
+    const template = this.#templates.get(templateId);
+    if (template === undefined) return { accepted: false, errorCode: 'unknown-template' };
+    const bank = this.#fixedBank;
+    const inBank =
+      bank !== null &&
+      channel === bank.channel &&
+      layer >= bank.start &&
+      layer < bank.start + bank.count;
+    if (!inBank) return { accepted: false, errorCode: 'not-fixed' };
+    if (this.#fixedBindings.has(layer)) return { accepted: false, errorCode: 'slot-bound' };
+
+    this.#fixedBindings.set(layer, { itemId, templateType: template.templateType });
+    this.load(itemId, templateId, fields);
+    this.fixedStateChanged.emit(this.fixedLayersState());
+    return { accepted: true };
+  }
+
+  /**
    * Per-slot state, offline: there is no OSC and no server, so occupancy is
-   * honestly UNKNOWN for every slot (never 'empty' — the B-094 honesty rule);
-   * `binding` is null until stage 3, exactly like the bridge. The ONE exception
-   * is the e2e observation seed (`seedFixedObservations`) — explicit test mode,
-   * empty on a normal boot.
+   * honestly UNKNOWN for every slot (never 'empty' — the B-094 honesty rule).
+   * The ONE exception is the e2e observation seed (`seedFixedObservations`) —
+   * explicit test mode, empty on a normal boot.
+   *
+   * R-021 stage 3 — `binding` is real, and (bridge parity) it survives only
+   * while the item is still on the stack: a removed item drops the binding, so
+   * the row can never keep naming an item that is gone.
    */
   fixedLayersState(): FixedSlotState[] {
     if (this.#fixedBank === null) return [];
@@ -306,12 +365,13 @@ export class MockRuntime {
     const out: FixedSlotState[] = [];
     for (let layer = start; layer <= start + count - 1; layer++) {
       const alias = aliases?.[String(layer)];
+      const bound = this.#fixedBindings.get(layer);
       out.push({
         channel,
         layer,
         ...(alias !== undefined ? { alias } : {}),
         observed: this.#fixedObservations.get(layer) ?? { kind: 'unknown' },
-        binding: null,
+        binding: bound ?? null,
       });
     }
     return out;

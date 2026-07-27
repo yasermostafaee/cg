@@ -24,6 +24,12 @@ const MESSAGES: Readonly<Record<string, string>> = {
   'no-layer': 'No free layer left in this template’s range — Remove an item to free one.',
   'no-layer-foreign-occupied':
     'No free layer — the range is occupied by another system’s output (video), which cannot be cleared from here.',
+  // R-021 stage 3 — the exact-slot load's own refusals (FIXED_LAYERS_LOAD_REASONS).
+  // Both are structural, so both name the remedy rather than the rule.
+  'not-fixed':
+    'That layer is not part of the fixed bank — only bank layers can be loaded this way.',
+  'slot-bound':
+    'That fixed layer already holds an item — Remove it first, then load. (Never one compound step.)',
 };
 
 /** A human message for a refusal, or `null` when there is no code to explain. */

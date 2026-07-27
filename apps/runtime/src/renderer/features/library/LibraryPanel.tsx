@@ -1,24 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import { defaultNestedValues, type FieldValues, type Position } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { uuid } from '../../lib/uuid.js';
 import { Button } from '../../ui/Button.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { ContextMenu } from '../../ui/ContextMenu.js';
 import { useContextMenu } from '../../ui/useContextMenu.js';
 import { runRowAction } from '../../ui/rowAction.js';
 import { useConfirm } from '../../ui/useDialog.js';
-import { importTemplateFromBytes } from './templateDelivery.js';
+import { importSuccessMessage, importVcgFile } from './importVcgFile.js';
+import { onLibraryChanged } from './libraryChanged.js';
+import { newItemFields, newItemId } from './newItemFields.js';
 import { templateDisplayName } from './templateName.js';
-import { recordDefaultPosition } from '../stack/defaultPositionStore.js';
-import { recordListFieldTargets } from '../inspector/fieldTargetStore.js';
-import type { ListFieldTargets } from '../inspector/listFieldTargets.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
-// B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
-// string. Passed to the single-file export so the bundled faces inline as base64
-// and the template HTML CasparCG loads renders Persian with the correct face.
-import appFontsCss from '../../fonts.css?inline';
 
 const styles = {
   panel: {
@@ -111,61 +104,30 @@ export function LibraryPanel(): JSX.Element {
 
   useEffect(() => {
     void refresh();
+    // R-021 stage 3 — the Library is no longer the only door into the library:
+    // a fixed row's one-action chain imports into this same shared store. The
+    // panel re-lists on ANY import, so "it stays there for reuse" is something
+    // the operator can actually see.
+    return onLibraryChanged(() => void refresh());
   }, [refresh]);
 
   const importFile = useCallback(
     async (file: File): Promise<void> => {
-      let bytes: Uint8Array;
+      // R-021 stage 3 — the verify → unpack → export → register → record-side-facts
+      // sequence lives in `importVcgFile`, shared VERBATIM with the fixed row's
+      // one-action import+load chain. It throws the operator-facing message
+      // (naming the file) and registers nothing on a bad package (R-001).
+      let imported;
       try {
-        bytes = new Uint8Array(await file.arrayBuffer());
+        imported = await importVcgFile(file);
       } catch (err) {
-        reportCommandError(
-          `Could not read ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        reportCommandError(err instanceof Error ? err.message : String(err));
         return;
       }
-
-      let imported: {
-        templateId: string;
-        displayName: string;
-        warnings: string[];
-        defaultPosition?: Position;
-        listFieldTargets: ListFieldTargets;
-      };
-      try {
-        // B-038 Phase 2 — produce the self-contained standalone HTML from the
-        // unpacked `.vcg` and deliver it with the `TemplateInfo` over
-        // `templates.import`. A package that fails verification / unpack / export
-        // throws → nothing is registered (the R-001 invariant). Thrown messages
-        // are pre-formatted (e.g. "failed verification: …"); the file name is
-        // added here for the operator-facing error. The bundled fonts are inlined
-        // (Phase 3) so the delivered HTML renders Persian with the correct face.
-        // R-004 — `file.name` is the label the operator recognises, and this is the only
-        // place it exists (the bytes cannot carry it). It was already being read here for
-        // the error message and thrown away on the success path.
-        imported = await importTemplateFromBytes(window.cg, bytes, {
-          fontsCss: appFontsCss,
-          sourceFileName: file.name,
-        });
-      } catch (err) {
-        reportCommandError(`“${file.name}” ${err instanceof Error ? err.message : String(err)}`);
-        return;
-      }
-
-      // R-011 — record the manifest default position (the one moment the app
-      // holds the unpacked scene) so the Inspector's picker seeds from it.
-      recordDefaultPosition(imported.templateId, imported.defaultPosition);
-      // R-018 — record each list field's consuming element kind (same one
-      // moment) so the from-file control can default SPLIT per target.
-      recordListFieldTargets(imported.templateId, imported.listFieldTargets);
 
       await refresh();
       // R-004 — name the template the operator just imported, not its UUID.
-      reportCommandSuccess(
-        imported.warnings.length > 0
-          ? `Imported “${imported.displayName}” (${String(imported.warnings.length)} warning(s): ${imported.warnings.join('; ')}).`
-          : `Imported “${imported.displayName}”.`,
-      );
+      reportCommandSuccess(importSuccessMessage(imported));
     },
     [refresh],
   );
@@ -211,20 +173,14 @@ export function LibraryPanel(): JSX.Element {
   );
 
   const loadOntoStack = useCallback((template: TemplateInfo): Promise<{ accepted: boolean }> => {
-    // B-038 Phase 3 — seed the item's fields from the template's field-schema
-    // defaults (not `{}`), so `CG ADD` carries real data on load. Operator edits
-    // from the Inspector flow as subsequent `stack.update` values.
-    // B-067 — seed the NESTED shape: a two-comp starter's fields live under the nested
-    // instance's namespace, which is the address the template's binding reads at render.
-    // `defaultNestedValues` is the same seeder the Designer's preview uses.
-    const fields: FieldValues = defaultNestedValues({
-      fields: template.fields,
-      groups: template.groups ?? [],
-    });
+    // R-021 stage 3 — the item seed (`newItemFields`, carrying B-038 Phase 3's
+    // schema defaults in B-067's nested shape) is declared once and shared with
+    // the fixed row's exact-slot load. The DIFFERENCE between the two paths is
+    // only which channel resolves the layer: this one ALLOCATES dynamically.
     return window.cg.stack.load({
-      itemId: `item-${uuid()}`,
+      itemId: newItemId(),
       templateId: template.templateId,
-      fields,
+      fields: newItemFields(template),
     });
   }, []);
 

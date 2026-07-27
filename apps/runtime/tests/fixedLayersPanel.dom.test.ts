@@ -72,8 +72,15 @@ function stubBridge(
   bank: FixedLayerBank | null,
   slots: FixedSlotState[],
   link: Link = 'offline-mock',
-): { clear: Mock } {
+): { clear: Mock; load: Mock; list: Mock } {
   const clear = vi.fn(() => Promise.resolve({ ok: true }));
+  // R-021 stage 3 — the exact-slot load + the library the picker reads.
+  const load = vi.fn(() => Promise.resolve({ accepted: true }));
+  const list = vi.fn(() =>
+    Promise.resolve([
+      { templateId: 'tpl-1', name: 'Lower third', templateType: 'lower-third', fields: [] },
+    ]),
+  );
   const stub = {
     link: { status: () => link, onStatusChanged: () => () => undefined },
     fixedLayers: {
@@ -82,11 +89,13 @@ function stubBridge(
       onConfigChanged: () => () => undefined,
       onStateChanged: () => () => undefined,
       setConfig: () => Promise.resolve({ ok: true }),
+      load,
     },
     layers: { clear },
+    templates: { list },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
-  return { clear };
+  return { clear, load, list };
 }
 
 async function render(element: JSX.Element): Promise<HTMLDivElement> {
@@ -127,11 +136,19 @@ function menuLabels(): string[] {
 }
 
 describe('FixedLayersPanel — idle-quiet and honest rows', () => {
-  it('renders NOTHING when no bank is declared', async () => {
+  it('renders NOTHING when no bank is declared — including the stage-3 chain’s own affordances', async () => {
     stubBridge(null, []);
     const el = await render(createElement(FixedLayersPanel));
     expect(el.querySelector('[aria-label="Fixed layers"]')).toBeNull();
     expect(el.textContent).toBe('');
+    // The blast radius of the whole fixed-layers feature is "installs that
+    // declared a bank", and this is what makes that true: with no bank the
+    // panel returns before a single row is constructed, so the row's hidden
+    // `.vcg` input and its picker do not exist either. `textContent` alone
+    // would not catch a display:none input — assert the ELEMENTS are absent.
+    expect(el.querySelector('input')).toBeNull();
+    expect(el.querySelector('button')).toBeNull();
+    expect(el.querySelector('[data-layer]')).toBeNull();
   });
 
   it('renders one permanent row per slot with alias + layer number', async () => {
@@ -200,13 +217,87 @@ describe('FixedRow — the D1 verb split, button/menu parity by comparison', () 
     }
   });
 
-  it('only the observed-html row offers CLEAR; unknown/empty/non-html offer NO control', async () => {
+  it('html offers CLEAR, empty offers the stage-3 chain; unknown/non-html offer NO control', async () => {
     stubBridge(BANK, seededSlots(), 'live');
     const el = await render(createElement(FixedLayersPanel));
     expect(buttonsOf(rowOf(el, 70))).toEqual(['CLEAR']);
     expect(buttonsOf(rowOf(el, 71))).toEqual([]);
-    expect(buttonsOf(rowOf(el, 72))).toEqual([]);
+    // Task 5.3 — the one-action chain, offered ONLY where the adopt-CLEAR the
+    // load issues has nothing to destroy.
+    expect(buttonsOf(rowOf(el, 72))).toEqual(['IMPORT + LOAD', 'LOAD…']);
     expect(buttonsOf(rowOf(el, 73))).toEqual([]);
+  });
+
+  it('Load-from-library picks a template and loads it onto THAT row’s exact slot', async () => {
+    const slot = slotOf(72, { kind: 'empty' });
+    const { load, list } = stubBridge(BANK, [slot], 'live');
+    const el = await render(createElement(FixedRow, { slot }));
+
+    const btn = [...(rowOf(el, 72)?.querySelectorAll('button') ?? [])].find(
+      (b) => b.textContent?.trim() === 'LOAD…',
+    );
+    await act(async () => {
+      btn?.click();
+      await Promise.resolve();
+    });
+    // The picker opens naming the layer; nothing is loaded until a choice.
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(openDialog()?.textContent).toContain('Load onto layer 1-72');
+    expect(load).not.toHaveBeenCalled();
+
+    await clickDialogButton('Lower third');
+    expect(load).toHaveBeenCalledTimes(1);
+    // THE assertion this task exists for: the exact slot of THIS row, verbatim.
+    expect(load.mock.calls[0]?.[0]).toMatchObject({
+      channel: 1,
+      layer: 72,
+      templateId: 'tpl-1',
+    });
+  });
+
+  it('dismissing the picker loads nothing, toasts nothing, and flashes no success', async () => {
+    const slot = slotOf(72, { kind: 'empty' });
+    const { load } = stubBridge(BANK, [slot], 'live');
+    const toasts: string[] = [];
+    const unsub = onCommandError((m) => toasts.push(m));
+    try {
+      const el = await render(createElement(FixedRow, { slot }));
+      const btn = [...(rowOf(el, 72)?.querySelectorAll('button') ?? [])].find(
+        (b) => b.textContent?.trim() === 'LOAD…',
+      );
+      await act(async () => {
+        btn?.click();
+        await Promise.resolve();
+      });
+      await clickDialogButton('Cancel');
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(load).not.toHaveBeenCalled();
+      expect(toasts).toEqual([]);
+      expect(openDialog()).toBeNull();
+      // The `cancelled` path: the operator's own "no" is not a success…
+      expect(btn?.classList.contains('is-success')).toBe(false);
+      // …and not an error.
+      expect(el.querySelector('.cg-btn-error')).toBeNull();
+    } finally {
+      unsub();
+    }
+  });
+
+  it('a BOUND row names its item and offers no chain over an occupied slot', async () => {
+    const slot: FixedSlotState = {
+      channel: 1,
+      layer: 72,
+      observed: { kind: 'empty' },
+      binding: { itemId: 'item-1', templateType: 'lower-third' },
+    };
+    stubBridge(BANK, [slot], 'live');
+    const el = await render(createElement(FixedRow, { slot }));
+    const row = rowOf(el, 72);
+    expect(row?.textContent).toContain('bound: lower-third');
+    expect(buttonsOf(row)).toEqual([]);
   });
 
   it('D8 — a dead link masks every row to unknown and strips every control', async () => {

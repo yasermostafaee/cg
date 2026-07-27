@@ -23,7 +23,22 @@
   5.1b). **(D7)** 5.5's "import+load lands on the exact slot" E2E moves to stage 3 beside
   5.3. Owes a Linux `gate:e2e` (the Windows run is a signal, non-authoritative for render
   geometry) and the stage-2b hardware pass (7.3).
-- **Stage 3** = 5.3 — the one-action import+create+load chain; owes e2e + hardware.
+- **Stage 3** = 5.3 — the one-action import+create+load chain (+ the D7 E2E stage 2b
+  deferred here). **Shipped (this PR).** Honest notes: **(D9)** the chain is offered on an
+  OBSERVED-EMPTY slot only — the load's adopt-`CLEAR`, and a real `CG ADD`'s own stage
+  replace, would otherwise hide a destructive step behind a constructive label (d1); a
+  non-empty fixed slot is cleared by the operator's own explicit step, which is task 4.3.
+  **(D10)** the bound-row ITEM verb set (Take/Update/Stop/Clear) is NOT here: design (f)
+  requires it to be the STACK row's own declarations, which are currently inline in
+  `StackRow.tsx`, so mirroring them means extracting that declaration point — a change to
+  the DYNAMIC row's surface, outside 5.3's "import → bind → load". The bound row does its
+  stage-3 job meanwhile (it NAMES the bound item) and grows no private copy of those verbs;
+  the item's verbs are on its stack row. **(D11) READ BEFORE MERGING:** a fixed binding is
+  now REACHABLE, and `#slotForRestore` still falls through to allocate-elsewhere for one —
+  a restored fixed item would come back on a DYNAMIC layer, which R-021 forbids. That is
+  task 3.1 (stage 4), deliberately not folded in here; stage 4 must land before this ships
+  to an installation that restarts its bridge. Owes a Linux `gate:e2e` (the Windows run is
+  a signal, non-authoritative for render geometry) and the stage-3 hardware pass (7.3).
 - **Stage 4** = 3.1–3.3, 4.3, 4.4 — restore branch + `restore-blocked` + the fixed-row
   Clear carve-out; owes hardware.
 
@@ -140,8 +155,22 @@ naming slots. No open decisions block implementation.
       neither a success flash nor an error toast). Stage 2b's ONLY verb is the confirm-gated
       layer CLEAR on an OBSERVED html producer (D1 — see the STAGE MAP note); the
       `binding !== null` branch returns [] naming task 5.3.
-- [ ] 5.3 Row import+load chain: pick `.vcg` → library import (stays for reuse) → item bound
-      to the exact slot → Load; Load-from-library variant.
+- [x] 5.3 (stage 3) Row import+load chain: pick `.vcg` → library import (stays for reuse) →
+      item bound to the exact slot → Load; Load-from-library variant. The exact-slot path is
+      `LayerManager.bindFixed` behind the new `fixedLayers.load` channel — never `reserve()`
+      (which refuses fixed slots) and never `#allocate()`; everything after the slot is
+      resolved is the SHARED `#loadOnto` the dynamic `load()` runs, so the adopt-CLEAR, the
+      B-100 single reachability read and the B-039 pre-roll can never drift between the two.
+      The import step REUSES the Library's own flow (`importVcgFile`, extracted, not forked)
+      and the item seed (`newItemFields`), so the same bytes register and seed identically
+      whichever button ran; the library re-lists on any import (`libraryChanged`), so "it
+      stays there for reuse" is visible. `binding` on the wire is now real, from the
+      LayerManager's `fixedBinding` + the item→slot map (both halves or `null`), and Remove
+      drops it via `#releaseSlot` while KEEPING the fence. Refusals: `not-fixed`
+      (never a door onto an arbitrary layer), `slot-bound` (rebinding is Remove-then-load,
+      never one compound step), `unknown-template`. Carries 5.5's D7 E2E
+      ("import+load lands on the exact slot"). See the STAGE MAP's D9/D10/D11 notes for what
+      this stage deliberately does NOT do.
 - [x] 5.4 (stage 2b) DOM tests: verb split across the four observation cases; menu/button
       parity asserted by COMPARING the two surfaces; unknown-occupancy display; the D8
       dead-link mask; confirm-accept sends exactly one `layers.clear`, cancel sends none

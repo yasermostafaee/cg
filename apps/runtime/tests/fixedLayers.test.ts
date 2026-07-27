@@ -5,15 +5,20 @@ import { fixedRowActions } from '../src/renderer/features/fixedLayers/fixedRowAc
 import { fixedLayersReasonMessage } from '../src/renderer/ui/fixedLayersReasonMessage.js';
 
 /**
- * R-021 stage 2b — the two pure modules behind the fixed row, tested directly:
+ * R-021 — the two pure modules behind the fixed row, tested directly:
  * `occupancyLabel` (the D8/B-094 honesty wording, incl. the dead-link mask)
- * and `fixedRowActions` (the ONE verb-derivation point, design (f)/(g) — the
- * D1 split: CLEAR on observed html only, nothing anywhere else).
+ * and `fixedRowActions` (the ONE verb-derivation point, design (f)/(g)).
+ *
+ * The verb split as it stands after stage 3: observed `html` → the layer
+ * CLEAR; observed `empty` → the import+load chain and Load-from-library
+ * (task 5.3); `unknown` / non-html → still nothing until task 4.3 (stage 4).
  */
 
 const noDeps = {
   linkDown: false,
   clear: () => Promise.resolve({ accepted: true }),
+  importAndLoad: () => Promise.resolve({ accepted: true }),
+  loadFromLibrary: () => Promise.resolve({ accepted: true }),
   onError: () => undefined,
 };
 
@@ -56,7 +61,7 @@ describe('occupancyLabel — honest wording for the four display cases', () => {
   });
 });
 
-describe('fixedRowActions — the ONE verb-derivation point (D1/D2)', () => {
+describe('fixedRowActions — the ONE verb-derivation point (D1/D2/stage 3)', () => {
   it('observed html producer → exactly the confirm-gated layer CLEAR', () => {
     const actions = fixedRowActions(slot({ kind: 'producer', producer: 'html' }, 70), noDeps);
     expect(actions.map((a) => a.key)).toEqual(['clear']);
@@ -69,8 +74,45 @@ describe('fixedRowActions — the ONE verb-derivation point (D1/D2)', () => {
     expect(fixedRowActions(slot({ kind: 'unknown' }), noDeps)).toEqual([]);
   });
 
-  it('empty → NO control (the import+load chain is stage 3, task 5.3)', () => {
-    expect(fixedRowActions(slot({ kind: 'empty' }), noDeps)).toEqual([]);
+  it('empty → the stage-3 chain: import+load AND Load-from-library, nothing else', () => {
+    const actions = fixedRowActions(slot({ kind: 'empty' }), noDeps);
+    expect(actions.map((a) => a.key)).toEqual(['import-load', 'load-library']);
+    // Neither is a destructive verb: both pre-roll (CG ADD), neither clears.
+    expect(actions.map((a) => a.variant)).toEqual(['secondary', 'secondary']);
+    expect(actions.every((a) => !a.disabled)).toBe(true);
+    // Both tooltips name the exact coordinate the chain would land on.
+    for (const action of actions) expect(action.title).toContain('1-72');
+  });
+
+  it('each stage-3 verb runs its OWN injected handler — no crossed wires', async () => {
+    const calls: string[] = [];
+    const actions = fixedRowActions(slot({ kind: 'empty' }), {
+      ...noDeps,
+      importAndLoad: () => {
+        calls.push('import');
+        return Promise.resolve({ accepted: true });
+      },
+      loadFromLibrary: () => {
+        calls.push('library');
+        return Promise.resolve({ accepted: true });
+      },
+    });
+    await actions.find((a) => a.key === 'import-load')?.run();
+    await actions.find((a) => a.key === 'load-library')?.run();
+    expect(calls).toEqual(['import', 'library']);
+  });
+
+  it('the chain is offered ONLY on observed-empty — never blind, never over a producer', () => {
+    // The load path adopts the layer with a CLEAR before its first CG ADD, so
+    // offering it on `unknown` or over a producer would hide a destructive step
+    // behind a constructive label (d1). Observed-empty has nothing to destroy.
+    const chainKeys = (s: FixedSlotState): string[] =>
+      fixedRowActions(s, noDeps)
+        .map((a) => a.key)
+        .filter((k) => k === 'import-load' || k === 'load-library');
+    expect(chainKeys(slot({ kind: 'unknown' }))).toEqual([]);
+    expect(chainKeys(slot({ kind: 'producer', producer: 'html' }))).toEqual([]);
+    expect(chainKeys(slot({ kind: 'producer', producer: 'ffmpeg' }))).toEqual([]);
   });
 
   it('a non-html producer → NO control (the carve-out is stage 4, task 4.3)', () => {
@@ -90,14 +132,22 @@ describe('fixedRowActions — the ONE verb-derivation point (D1/D2)', () => {
     }
   });
 
-  it('a non-null binding returns [] — the item verb set is stage 3 (task 5.3)', () => {
-    const bound: FixedSlotState = {
+  it('a BOUND slot offers nothing here — not the chain, and no private copy of the item verbs', () => {
+    // The bound item is an ordinary stack item: its C-012 verbs are declared on
+    // its STACK row and must be mirrored from those declarations, never
+    // re-declared here. What the row must NOT do meanwhile is offer the
+    // import+load chain over a slot that already holds an item — that is
+    // `slot-bound` on the wire, and an enabled button must never invite a click
+    // that only rejects.
+    const bound = (observed: FixedSlotState['observed']): FixedSlotState => ({
       channel: 1,
       layer: 70,
-      observed: { kind: 'producer', producer: 'html' },
+      observed,
       binding: { itemId: 'item-1', templateType: 'lower-third' },
-    };
-    expect(fixedRowActions(bound, noDeps)).toEqual([]);
+    });
+    expect(fixedRowActions(bound({ kind: 'producer', producer: 'html' }), noDeps)).toEqual([]);
+    // Including over an EMPTY observation — the binding outranks the occupancy.
+    expect(fixedRowActions(bound({ kind: 'empty' }), noDeps)).toEqual([]);
   });
 
   it('the CLEAR runs the shared handler and routes refusals to the given sink', async () => {

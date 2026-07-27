@@ -154,6 +154,11 @@ export function createMockBridge(): RuntimeBridge {
     fixedLayers: {
       config: () => Promise.resolve(mock.fixedLayersConfig()),
       setConfig: (req) => Promise.resolve(mock.setFixedLayers(req)),
+      // R-021 stage 3 — the exact-slot load (mock models the bridge's refusals).
+      load: (req) =>
+        Promise.resolve(
+          mock.loadFixed(req.channel, req.layer, req.itemId, req.templateId, req.fields),
+        ),
       state: () => Promise.resolve(mock.fixedLayersState()),
       onConfigChanged: (handler) => mock.fixedConfigChanged.subscribe(handler),
       onStateChanged: (handler) => mock.fixedStateChanged.subscribe(handler),

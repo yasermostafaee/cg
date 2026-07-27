@@ -16,6 +16,7 @@ import type {
   ConnectionsSetConfigChannel,
   FixedLayerBank,
   FixedLayersConfigChannel,
+  FixedLayersLoadChannel,
   FixedLayersSetConfigChannel,
   FixedLayersStateChannel,
   FixedSlotState,
@@ -163,6 +164,16 @@ export interface RuntimeBridge {
     setConfig(
       req: ChannelRequest<typeof FixedLayersSetConfigChannel>,
     ): Promise<ChannelResponse<typeof FixedLayersSetConfigChannel>>;
+    /**
+     * R-021 stage 3 — create an item bound to an EXACT fixed slot and pre-roll
+     * it. Resolves the layer through `LayerManager.bindFixed` — never the
+     * dynamic allocation `stack.load` uses, and never `reserve()` (which
+     * refuses fixed slots by construction). Refuses `not-fixed` for a
+     * coordinate outside the bank and `slot-bound` for an occupied one.
+     */
+    load(
+      req: ChannelRequest<typeof FixedLayersLoadChannel>,
+    ): Promise<ChannelResponse<typeof FixedLayersLoadChannel>>;
     /** The current per-slot state ([] when no bank is declared). */
     state(): Promise<ChannelResponse<typeof FixedLayersStateChannel>>;
     onConfigChanged(handler: (bank: FixedLayerBank | null) => void): Unsubscribe;
