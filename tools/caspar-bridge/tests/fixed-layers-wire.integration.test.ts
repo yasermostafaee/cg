@@ -224,7 +224,9 @@ it('S8 — occupancy honesty: unknown before healthy; producer/empty on a hearin
   const slot75 = state.find((s) => s.layer === 75);
   expect(slot72?.observed).toEqual({ kind: 'producer', producer: 'ffmpeg' });
   expect(slot75?.observed).toEqual({ kind: 'empty' });
-  expect(state.every((s) => s.binding === null)).toBe(true); // stage 3 territory
+  // Nothing was loaded here, so no slot carries a binding — occupancy and
+  // binding are independent facts, and this asserts the first without the second.
+  expect(state.every((s) => s.binding === null)).toBe(true);
 });
 
 it('S9 — two identical sweeps publish ZERO; a real occupancy change publishes exactly one', async () => {

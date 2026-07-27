@@ -42,6 +42,73 @@ describe('MockRuntime fixed-bank parity (S12)', () => {
     expect(state.find((s) => s.layer === 72)?.alias).toBe('ساعت');
   });
 
+  it('stage 3 — an exact-slot load binds THAT slot, and only that slot', async () => {
+    const bridge = createMockBridge();
+    await bridge.fixedLayers.setConfig(BANK);
+    const [template] = await bridge.templates.list();
+    expect(template).not.toBeUndefined();
+    if (template === undefined) return;
+
+    const res = await bridge.fixedLayers.load({
+      channel: 1,
+      layer: 72,
+      itemId: 'item-fixed-1',
+      templateId: template.templateId,
+      fields: {},
+    });
+    expect(res.accepted).toBe(true);
+
+    const state = z.array(FixedSlotStateSchema).parse(await bridge.fixedLayers.state());
+    expect(state.find((s) => s.layer === 72)?.binding).toEqual({
+      itemId: 'item-fixed-1',
+      templateType: template.templateType,
+    });
+    // Every OTHER slot is untouched — the load landed on one coordinate.
+    expect(state.filter((s) => s.binding !== null)).toHaveLength(1);
+    // …and the item is an ORDINARY stack item, reachable the normal way.
+    expect((await bridge.stack.snapshot()).some((i) => i.itemId === 'item-fixed-1')).toBe(true);
+  });
+
+  it('stage 3 — refuses a coordinate outside the bank, and a slot already bound', async () => {
+    const bridge = createMockBridge();
+    await bridge.fixedLayers.setConfig(BANK);
+    const [template] = await bridge.templates.list();
+    if (template === undefined) throw new Error('the mock seeds at least one template');
+    const load = (
+      layer: number,
+      itemId: string,
+    ): Promise<{ accepted: boolean; errorCode?: string }> =>
+      bridge.fixedLayers.load({
+        channel: 1,
+        layer,
+        itemId,
+        templateId: template.templateId,
+        fields: {},
+      });
+
+    // Outside the declared bank — this channel is never a door onto an arbitrary layer.
+    expect(await load(10, 'item-a')).toEqual({ accepted: false, errorCode: 'not-fixed' });
+    // An unregistered template registers nothing and says so.
+    expect(
+      await bridge.fixedLayers.load({
+        channel: 1,
+        layer: 73,
+        itemId: 'item-b',
+        templateId: 'tpl-nope',
+        fields: {},
+      }),
+    ).toEqual({ accepted: false, errorCode: 'unknown-template' });
+    // Rebinding is Remove-then-load, two explicit steps (d1) — never one.
+    expect((await load(72, 'item-c')).accepted).toBe(true);
+    expect(await load(72, 'item-d')).toEqual({ accepted: false, errorCode: 'slot-bound' });
+
+    // Remove frees the slot: the fence survives, the BINDING does not.
+    await bridge.stack.remove({ itemId: 'item-c' });
+    const afterRemove = await bridge.fixedLayers.state();
+    expect(afterRemove.find((s) => s.layer === 72)?.binding).toBeNull();
+    expect((await load(72, 'item-e')).accepted).toBe(true);
+  });
+
   it('publishes config-changed and state-changed on an applied change', async () => {
     const bridge = createMockBridge();
     const configs: unknown[] = [];

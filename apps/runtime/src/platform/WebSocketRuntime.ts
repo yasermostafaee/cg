@@ -40,6 +40,7 @@ import {
   UpdateStateChannel,
   FixedLayersConfigChangedChannel,
   FixedLayersConfigChannel,
+  FixedLayersLoadChannel,
   FixedLayersSetConfigChannel,
   FixedLayersStateChangedChannel,
   FixedLayersStateChannel,
@@ -628,6 +629,11 @@ export class WebSocketRuntime implements RuntimeBridge {
     config: () => this.#invoke(FixedLayersConfigChannel, undefined),
     setConfig: (req: ChannelRequest<typeof FixedLayersSetConfigChannel>) =>
       this.#invoke(FixedLayersSetConfigChannel, req),
+    // R-021 stage 3 — the exact-slot load. Bridge-owned like `stack.load`: it
+    // commands CasparCG, so it round-trips and is refused while the link is
+    // down (the browser-local library is the only surface that works offline).
+    load: (req: ChannelRequest<typeof FixedLayersLoadChannel>) =>
+      this.#invoke(FixedLayersLoadChannel, req),
     state: () => this.#invoke(FixedLayersStateChannel, undefined),
     onConfigChanged: (handler: (bank: FixedLayerBank | null) => void) =>
       this.#fixedConfigSubs.add(handler),

@@ -12,6 +12,7 @@ import {
   DEFAULT_BRIDGE_PORT,
   FixedLayersConfigChangedChannel,
   FixedLayersConfigChannel,
+  FixedLayersLoadChannel,
   FixedLayersSetConfigChannel,
   FixedLayersStateChangedChannel,
   FixedLayersStateChannel,
@@ -421,6 +422,12 @@ export function buildRoutes(
       return result;
     }),
     route(FixedLayersStateChannel, () => b.fixedLayersState()),
+    // R-021 stage 3 — the EXACT-SLOT load: `bindFixed`, never `reserve`/allocate.
+    route(
+      FixedLayersLoadChannel,
+      (r: { channel: number; layer: number; itemId: string; templateId: string; fields: never }) =>
+        b.loadFixed({ channel: r.channel, layer: r.layer }, r.itemId, r.templateId, r.fields),
+    ),
 
     route(LockEngageChannel, (r: { pin: string }) => b.engage(r.pin)),
     route(LockReleaseChannel, (r: { pin: string }) => b.release(r.pin)),

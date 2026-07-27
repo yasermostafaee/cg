@@ -684,6 +684,78 @@ export class CasparRuntime {
       return { accepted: false, errorCode: code };
     }
 
+    return this.#loadOnto(itemId, templateId, fields, slot, seq);
+  }
+
+  /**
+   * R-021 stage 3 — load an item onto an EXACT FIXED slot (`fixedLayers.load`).
+   *
+   * The ONE difference from `load()` is how the layer is resolved, and it is
+   * the whole point: `load()` ALLOCATES from the dynamic policy ranges, this
+   * binds the coordinate the operator's row names through
+   * {@link LayerManager.bindFixed}. It deliberately does NOT call `reserve()`
+   * — `reserve()` refuses fixed slots by construction (a fixed slot is born
+   * allocated, so it is never "free") — nor `#allocate()`, which can never
+   * return a fixed slot for the same reason. Everything AFTER the slot is
+   * resolved is the shared `#loadOnto`, not a second copy of the load path:
+   * the B-100 single-reachability-read, the adopt-CLEAR, the slot/interest
+   * binding and the B-039 pre-roll `CG ADD` are identical, so a fixed load can
+   * never drift from a dynamic one.
+   *
+   * Refusals (`FIXED_LAYERS_LOAD_REASONS`): an unregistered template, a
+   * coordinate outside the declared bank (`not-fixed` — this channel is not a
+   * door onto an arbitrary layer), or a slot that already carries an item
+   * (`slot-bound` — rebinding is Remove-then-load, two explicit steps).
+   */
+  async loadFixed(
+    slot: CommandSlot,
+    itemId: string,
+    templateId: string,
+    fields: FieldValues,
+  ): Promise<{ accepted: boolean; errorCode?: string }> {
+    // B-093 — the operator is acting; any parked restore for this item is stale.
+    this.#retirePendingRestore(itemId);
+    const seq = this.#nextSeq();
+    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
+
+    // Same guard, same code as `load()`: never blind-ADD a URL we cannot serve.
+    if (!this.#templates.has(templateId)) {
+      this.#reconciler.applyAck(seq, false, 'unknown-template');
+      return { accepted: false, errorCode: 'unknown-template' };
+    }
+    if (!this.#layers.isFixed(slot)) {
+      this.#reconciler.applyAck(seq, false, 'not-fixed');
+      return { accepted: false, errorCode: 'not-fixed' };
+    }
+    // The registry's OWN templateType — the LayerManager records what is bound,
+    // and the per-slot publish reads it straight back out, so the row names the
+    // template kind the operator recognises rather than an internal id.
+    const templateType = this.#templates.get(templateId)?.templateType ?? templateId;
+    if (!this.#layers.bindFixed(slot, templateType)) {
+      this.#reconciler.applyAck(seq, false, 'slot-bound');
+      return { accepted: false, errorCode: 'slot-bound' };
+    }
+    // NOTE: the state is published from `#loadOnto`, once the item→slot map is
+    // set. A publish HERE would find only half the binding (the LayerManager's
+    // template type, no itemId yet) and so publish `null` — the honest
+    // both-halves rule in `#computeFixedState`.
+    return this.#loadOnto(itemId, templateId, fields, slot, seq);
+  }
+
+  /**
+   * The load path from the resolved slot onward — shared VERBATIM by the
+   * dynamic `load()` and the fixed `loadFixed()`, so the two can never drift on
+   * the parts that touch air (B-100's single reachability read, the
+   * adopt-CLEAR, the ownerless-producer bail, the B-056 detection and the
+   * B-039 pre-roll ADD). Only slot RESOLUTION differs between the callers.
+   */
+  async #loadOnto(
+    itemId: string,
+    templateId: string,
+    fields: FieldValues,
+    slot: CommandSlot,
+    seq: number,
+  ): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-100 — evaluate reachability ONCE, here, and gate BOTH the destructive
     // adopt-CLEAR and the constructive pre-roll ADD on this single value. The two
     // used to be independent reads of the predicate with an await between them, so
@@ -704,7 +776,7 @@ export class CasparRuntime {
     // item is gone, release the layer and bail instead of binding a ghost
     // slot/interest and ADDing an ownerless producer.
     if (this.#reconciler.get(itemId) === null) {
-      this.#layers.deallocate(slot);
+      this.#releaseSlot(slot);
       return { accepted: false };
     }
 
@@ -713,6 +785,12 @@ export class CasparRuntime {
     // Interest on every declared session's OSC so whichever is primary, its
     // confirmations pass the filter (survives failover).
     this.#addInterest(slot);
+
+    // R-021 stage 3 — BOTH halves of a fixed binding now exist (the
+    // LayerManager's template type + this item→slot entry), so the row can be
+    // told. Published through the SAME change-compare the sweep uses, never a
+    // second derivation; a no-op for a dynamic slot.
+    if (this.#layers.isFixed(slot)) this.#publishFixedStateIfChanged();
 
     // B-056 — the adopt-CLEAR did NOT land on the current primary (backup-only
     // success, or a failed CLEAR): if the primary's occupancy tap OBSERVES the
@@ -1337,13 +1415,23 @@ export class CasparRuntime {
    * `occupied(#occupancyStaleMs)`) — never a second staleness constant:
    * unhealthy primary or a silent tap ⇒ every slot `unknown` (never 'empty');
    * a hearing tap ⇒ present layers are `producer`, absent ones `empty`
-   * (B-053: on a hearing tap, silence IS empty). `binding` is null until
-   * stage 3 (the wire ships the field so stage 2b never amends the contract).
+   * (B-053: on a hearing tap, silence IS empty).
+   *
+   * R-021 stage 3 — `binding` is now real: the `itemId` comes from `#slots`
+   * (the item→slot map every load already maintains) and the `templateType`
+   * from the LayerManager's own `fixedBinding` — the SINGLE source of what is
+   * bound, never a second local map. BOTH must be present, so a half-state
+   * (an item removed but the fence not yet dropped, or vice versa) publishes
+   * `null` rather than a binding that names nothing.
    */
   #computeFixedState(): FixedSlotState[] {
     const slots = this.#layers.fixedSlots();
     if (slots.length === 0) return [];
     const aliases = this.#fixedBank?.aliases ?? {};
+    const itemBySlot = new Map<string, string>();
+    for (const [itemId, s] of this.#slots) {
+      itemBySlot.set(`${String(s.channel)}:${String(s.layer)}`, itemId);
+    }
     const session = this.#adapter.primarySession;
     const hearing =
       session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
@@ -1356,19 +1444,23 @@ export class CasparRuntime {
     return [...slots]
       .sort((a, b) => a.channel - b.channel || a.layer - b.layer)
       .map((slot) => {
+        const key = `${String(slot.channel)}:${String(slot.layer)}`;
         const alias = aliases[String(slot.layer)];
-        const producer = occupiedBy.get(`${String(slot.channel)}:${String(slot.layer)}`);
+        const producer = occupiedBy.get(key);
         const observed: FixedSlotState['observed'] = !hearing
           ? { kind: 'unknown' }
           : producer !== undefined
             ? { kind: 'producer', producer }
             : { kind: 'empty' };
+        const itemId = itemBySlot.get(key);
+        const templateType = this.#layers.fixedBinding(slot);
         return {
           channel: slot.channel,
           layer: slot.layer,
           ...(alias !== undefined ? { alias } : {}),
           observed,
-          binding: null,
+          binding:
+            itemId !== undefined && templateType !== undefined ? { itemId, templateType } : null,
         };
       });
   }
@@ -1578,7 +1670,9 @@ export class CasparRuntime {
     if (slot !== undefined) {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);
-      this.#layers.deallocate(slot);
+      // R-021 stage 3 — fixed-aware: `deallocate` no-ops on a fixed slot, so a
+      // removed item would otherwise leave its binding published forever.
+      this.#releaseSlot(slot);
       // B-056 — the layer is deallocated: resolve its warning REGARDLESS of
       // the CLEAR below landing. The layer is unowned from here — whatever
       // survives on the primary is the R-009 sweep's to surface (as a
@@ -1957,6 +2051,27 @@ export class CasparRuntime {
   // ── internals ───────────────────────────────────────────────────────
   #nextSeq(): number {
     return ++this.#seq;
+  }
+
+  /**
+   * R-021 stage 3 — release the slot an item held, whichever KIND of slot it is.
+   *
+   * `deallocate()` deliberately NO-OPS on a fixed slot (the fence must survive
+   * for the life of the process), so on its own it would leave a removed item's
+   * binding recorded forever: the row would keep naming an item that is no
+   * longer on the stack, and the slot could never be re-bound (`slot-bound`).
+   * `unbindFixed()` is the fixed counterpart — it drops the binding and KEEPS
+   * the fence. One helper so every release site gets both cases right; a second
+   * local copy of this branch is how the two would drift (B-100/P-012).
+   */
+  #releaseSlot(slot: CommandSlot): void {
+    if (this.#layers.isFixed(slot)) {
+      this.#layers.unbindFixed(slot);
+      // The binding is published state — the row must stop naming the item.
+      this.#publishFixedStateIfChanged();
+      return;
+    }
+    this.#layers.deallocate(slot);
   }
 
   /** Allocate a slot, falling back to the `custom` range for unknown types. */
