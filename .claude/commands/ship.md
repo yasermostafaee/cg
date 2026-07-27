@@ -80,24 +80,56 @@ gh run view <run-id>                                    # prints the ANNOTATIONS
 gh api repos/{owner}/{repo}/actions/jobs/<job-id> --jq '{name,conclusion,steps:(.steps|length)}'
 ```
 
-Classify the check set as a whole. These cases are mutually exclusive and
-exhaustive — evaluate top to bottom and take the FIRST that matches, so nothing can
-fall through:
+**Classify the SET, never a single check.** The monthly Actions quota is exhausted and
+GitHub RE-ATTEMPTS the runs, so a PR accumulates many runs — every push adds one, and
+retries add more. N runs all carrying the quota signature is still ONE fact ("no
+authoritative remote checks"); it must never be reported as "N failures".
 
-| # | Observed signature | Verdict | Action |
-| - | ------------------ | ------- | ------ |
-| 1 | Any check still `QUEUED` / `IN_PROGRESS` / `PENDING` | not yet decided | **STOP** — do not ship mid-flight; re-run `/ship` when it settles |
-| 2 | No checks configured on the PR at all | nothing to consult | **PROCEED** — report "no checks configured" |
-| 3 | Every check `SUCCESS` (counting `NEUTRAL` / `SKIPPED` as passing) | genuinely green | **PROCEED** — report "checks green" |
-| 4 | ≥1 `FAILURE`/`TIMED_OUT`/`CANCELLED`, and **every** such check ran **zero steps** AND carries the billing annotation | never started | **PROCEED** — report "no authoritative remote checks — local gate is the only landing gate". **Never** call this green |
-| 5 | ≥1 `FAILURE` that executed **one or more steps** | real merit failure | **STOP** — report the failing check |
-| 6 | Anything else, or the signature cannot be determined | unknown | **STOP** — never assume billing |
+Gather the whole set for the PR's head SHA:
 
-Row 3 is the normal path once remote CI returns (~Aug): a check that runs steps and
-concludes successfully **proceeds**. Only a check that runs steps and *fails* stops
-the run (row 5). Row 4 is the temporary billing carve-out and must be re-verified
-rather than assumed — when billing is restored it simply stops matching, and row 3
-takes over with no edit needed.
+```bash
+gh api "repos/{owner}/{repo}/actions/runs?branch=<headRefName>&per_page=50" \
+  --jq '.workflow_runs[] | [(.id|tostring), .status, (.conclusion // "null")] | @tsv'
+gh api "repos/{owner}/{repo}/actions/runs/<run-id>/jobs" \
+  --jq '.jobs[] | [.name, .status, (.conclusion // "null"), ((.steps|length)|tostring)] | @tsv'
+gh api "repos/{owner}/{repo}/check-runs/<check-run-id>/annotations" --jq '.[0].message'
+```
+
+Three terms, used exactly:
+
+- **executed** — the job's `steps` array is NON-empty. Zero steps means the job never
+  started, so its `conclusion` reflects infrastructure, not your code.
+- **quota-blocked** — concluded `failure`/`cancelled`, **zero** steps, AND an
+  annotation reading _"The job was not started because recent account payments have
+  failed or your spending limit needs to be increased."_
+- **`skipped` jobs carry NO signal — exclude them from the classification entirely.**
+  They are downstream jobs gated on an upstream that never ran. Observed on #417: 6 of
+  15 jobs are `skipped`, so a rule requiring "every concluded job is quota-blocked"
+  would be FALSE for a fully quota-blocked PR and would stop the run. Count and report
+  them; never let them decide.
+
+Evaluate top to bottom, first match wins. Mutually exclusive and exhaustive:
+
+| #   | Observed signature (over the whole set, `skipped` excluded)                                                     | Verdict                      | Action                                                                                                                  |
+| --- | --------------------------------------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Any** concluded job that **executed** and ended `FAILURE`/`TIMED_OUT`/`CANCELLED`                               | real merit failure           | **STOP** — a real failure DOMINATES, however many quota-blocked runs sit beside it. Name the job                          |
+| 2   | No concluded jobs at all (everything queued/in-progress, or the set is empty of results)                          | no evidence yet              | **STOP** — never classify from an empty set                                                                               |
+| 3   | ≥1 job still `QUEUED`/`IN_PROGRESS`, **and** ≥1 concluded job **executed**                                        | real CI is live, mid-flight  | **STOP** — re-run `/ship` when it settles                                                                                 |
+| 4   | Every concluded job **executed** and ended `SUCCESS`/`NEUTRAL`; nothing pending                                   | genuinely green              | **PROCEED** — report "checks green"                                                                                       |
+| 5   | Every concluded job is **quota-blocked**; any remaining jobs are only `QUEUED`/`IN_PROGRESS`                       | no authoritative remote check | **PROCEED** — report "`N` runs, all quota-blocked; `M` still queued; no authoritative check". **Never** call this green    |
+| 6   | Anything else, or the signature cannot be determined                                                              | unknown                      | **STOP** — never assume quota                                                                                             |
+
+Why rows 3 and 5 differ: a retry that is mid-flight is neither a quota failure nor a
+real one. If nothing in the set has ever executed, a pending retry is just another
+quota attempt and must not block (row 5) — otherwise `/ship` would refuse or accept at
+random depending on when it was run, which is worse than having no check. But the
+moment ANY job actually executes, real CI is live and a pending job means the verdict
+is genuinely unknown (row 3).
+
+Row 4 is the normal path once remote CI returns (~Aug): a check that executes and
+concludes successfully **proceeds**. Row 5 is the temporary quota carve-out and must be
+re-verified, never assumed — when billing is restored it simply stops matching and row
+4 takes over, with no edit to this file.
 
 Record: title, `baseRefName`, `headRefName`, check status. `headRefName` is the
 `<branch>` used in steps 2 and 3.
