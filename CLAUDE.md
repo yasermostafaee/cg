@@ -339,6 +339,33 @@ history.
 - **After remote CI returns (~Aug), the auto-merge-eligible class widens** — an independent
   check will exist, so this policy is revisited then.
 
+### `/ship <PR#>` — the four steps, automated
+
+`.claude/commands/ship.md` runs the P-011 sequence above end to end. It removes the
+manual toil; it does NOT change what may be merged.
+
+- **Typing `/ship <PR#>` IS the P-014 authorization for that specific PR** — the
+  "owner authorizes it for that task" condition above, expressed as the command
+  itself. It authorizes nothing else: not the next PR, not a re-run after a refusal.
+- **It hard-refuses the same three classes carved out above** — on-air/export/product
+  source, an owed hardware pass or Linux `gate:e2e`, and shared config another
+  worktree must rebase onto. These are ABSOLUTE: `/ship` refuses even though the
+  owner typed it, because the owner's authorization covers running the sequence, not
+  overriding a carve-out. The debt check **fails closed** — a debt reads as
+  discharged only when a checked `[x]` task states in words that it is not owed or
+  was discharged; anything ambiguous refuses. Those PRs still merge by hand.
+- **It verifies after every step** (PR reads `MERGED`; both refs absent; `cg`'s HEAD
+  matches the merge commit) and stops at the first unverified step rather than
+  continuing. It knows the two benign signatures — `push --delete` reporting the
+  remote ref does not exist means already-deleted (satisfied), and `-d` reporting
+  "not fully merged" is why step 3 uses `-D`.
+- **Step 4 resolves the `main` worktree dynamically** by parsing
+  `git worktree list --porcelain` for `refs/heads/main`, and stops if that yields
+  zero or multiple hits. It never hardcodes `../cg`: that path is correct only from a
+  direct sibling of `cg`, and resolves to nothing from a session worktree nested
+  under `.claude/worktrees/`. The `git -C ../cg` written in the two step-4 lines
+  above stays as the HUMAN procedure, run from a sibling worktree.
+
 ## Verify before claiming
 
 - Never report an external action (push, PR created, merged, archived, CI

@@ -786,8 +786,25 @@ survives exactly one disk.
   full gate and takes the host lock for minutes ([[P-010]]'s skip does not apply) — so it must not
   be run between a Phase-6 build and its smoke
 
-**Notes:** the pending worktree restructure also requires reviewing every `../cg` relative path in
-docs and hooks, and the CLAUDE.md rules that exist only because `cg` permanently occupies `main`
+**Notes — the `../cg` review is DONE (2026-07-27), audit result recorded here.** A sweep of
+`CLAUDE.md`, `docs/`, `tools/`, `.husky/`, `.claude/hooks/` and `.github/` found exactly **two**
+executable relative paths, both step 4 of the ship sequence: `CLAUDE.md:273` and `CLAUDE.md:331`
+(`git -C ../cg pull --ff-only`). **No hits in `tools/`, `.husky/`, `.claude/hooks/` or `.github/`** —
+no hook or script hardcodes it. The further `.../cg` matches (`CLAUDE.md:285`, `CLAUDE.md:299`, and
+two in this file under P-011/P-017) are NOT relative paths: they are an elided ABSOLUTE path inside
+quoted git error text (`'main' is already used by worktree at .../cg`). They need no change.
+
+**The fix ships as dynamic resolution inside `/ship`, NOT as an edit to those two lines — this is
+deliberate, not a half-done audit.** `.claude/commands/ship.md` resolves the `main` worktree by
+parsing `git worktree list --porcelain` for `refs/heads/main`, so the automated path is correct
+from any worktree, including one nested under `.claude/worktrees/` where `../cg` resolves to
+nothing. `CLAUDE.md:273` and `:331` stay as written on purpose: they document the HUMAN procedure,
+which is run from a sibling worktree where `../cg` is correct. A later reader should not "finish"
+this audit by editing them. If the restructure moves `cg` out of the sibling layout, THAT is when
+those two lines change — together with the rules below.
+
+The pending worktree restructure still requires reviewing the CLAUDE.md rules that exist only
+because `cg` permanently occupies `main`
 (no worktree can `git checkout main`) — if `cg` stops holding `main`, that rule must be DELETED,
 not left to mislead. [[P-013]]/[[P-015]]/[[P-016]] are unaffected: the gate lock is host-wide, so
 worktree count changes collision RATE, not correctness.

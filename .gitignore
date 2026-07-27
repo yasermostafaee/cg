@@ -41,6 +41,13 @@ test-results/
 .claude/*
 !.claude/settings.json
 !.claude/hooks/
+# The `/ship` slash command is SHARED tooling, so it is tracked. Same re-inclusion
+# problem as above, one level deeper: re-include the `commands/` DIRECTORY, then
+# re-exclude its contents, then except the single file. This keeps the GENERATED
+# OpenSpec slash commands ignored — only `ship.md` is tracked.
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/ship.md
 .gate-logs/
 .DS_Store
 Thumbs.db
