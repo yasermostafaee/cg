@@ -1022,3 +1022,44 @@ R-018 so the settled manual half could ship without blocking on this architectur
   split/apply/error logic or its tests. Bridge involvement (option b) is what made the original
   combined item recon-first. Cross-refs [[R-018]] (the manual half + verbatim rules), the
   Designer-track [[D-138]] (authoring-time load, one-shot — no watch there).
+
+## [ ] R-027 — operator pause/resume control for a playing template (and the D-128 §3.5/§3.5b on-air verification it unblocks) ⟨priority: medium⟩
+
+**What:** Give the Runtime an operator affordance to PAUSE a playing template and RESUME it —
+today `@cg/runtime` has none, at any surface (stack row, fixed-layer row, keyboard). Scope
+(control surface, whether it is browser-side clock suspension or an AMCP verb, and which layers
+it applies to) is part of this item, not assumed by it.
+**Why:** Two independent reasons. (1) Operators ask for it — a held graphic that must wait on a
+live event has no "hold here" control today, only Stop/Clear. (2) It is the missing TRIGGER for a
+verification the platform owes: the Designer-track seek/resume-elimination work (`RESUME GRACE`,
+the large-gap policy, `CONVERTER_REVISION` 2026-07-25.5's alignment fix) is verified only
+off-hardware, because D-128's Phase-6 on-air smoke could not run §3.5/§3.5b — there was no way to
+pause anything on air. That verification stays owed until this control exists.
+**Acceptance:**
+
+- WHEN a template is playing and the operator invokes pause THEN the graphic freezes on air and
+  the surface shows it as PAUSED — never as playing, and never as stopped
+- WHEN the operator invokes resume THEN playback continues from where it froze, with no visible
+  jump, restart, or re-entry of the intro
+- WHEN a template with a VIDEO element (D-128) is paused and resumed on real CasparCG 2.3.x CEF
+  THEN D-128's runbook §3.5 (pause/resume) and §3.5b (background-throttle soak) can be executed,
+  and both pass — no drift stutter, no black frame, no desync from the composition clock
+- WHEN a scene carries TWO video elements THEN the "clean pause/resume" half of D-128's §3.6
+  (untested for the same reason) also passes
+- WHEN the affordance does not exist for a given layer/producer kind THEN no control is offered
+  for it (never an enabled control that can only reject — the R-021 stage-2b rule)
+
+**Notes:** **Filed 2026-07-27 as an INDEPENDENT follow-up when D-128 was archived — its status
+has no bearing on D-128's, in either direction.** D-128 shipped and archived
+(`openspec/changes/archive/2026-07-27-video-import-element/`) with §3.5/§3.5b recorded as NOT
+EXECUTED rather than passing or waived; the owner decoupled the case rather than block the change
+on a Runtime capability with no timeline. The remaining work here is a Runtime capability plus,
+once it lands, an on-hardware re-run of those three D-128 cases against the already-shipped
+feature — see the archived change's `design.md` ("Phase 6 — FINAL verdict (2026-07-27)") for the
+exact cases and their preconditions. RECON-FIRST on the AMCP half for the same reason [[R-023]]
+records: what AMCP `PAUSE` actually does to an html-producer layer on real 2.3.2 is UNVERIFIED —
+probe first, never assume; a browser-side clock suspension may be the honest answer. Cross-refs
+[[R-023]] (per-layer shortcuts — its PAUSE key depends on this item existing), [[R-021]]
+(fixed-layer rows are one candidate surface). Cross-track filing: raised from the Designer track
+(the `cg-designer` worktree) because that is where the gap surfaced; the item itself is
+Runtime-track work.

@@ -1142,15 +1142,18 @@ content-first / background-last SHALL be the DEFAULT ordering when nothing is
 choreographed. This coordination SHALL live in the runtime so the preview, the
 exported single-file HTML, and on-air behave identically.
 
-An **element that OWNS an outro** — a `lottie` element with an outro segment — SHALL
+An **element that OWNS an outro** — a `lottie` element with an outro segment, or a
+`video` element with a marked outro (`phases.outroStart` — D-128) — SHALL
 play its OWN outro instead of the default fade/hide, on EVERY exit path: `out()`,
 `stop()`, AND an exit the composition triggers itself (an `auto-out` hold expiry, a
 content-driven completion, a zero-length hold, or a `loop-cycle` boundary — Phase
 3b-2; until then the controller-triggered exits bypassed the seam).
 The runtime SHALL expose an element-outro seam: on either exit it SHALL trigger each
-such element's outro (the Lottie's `[outroStart → op]` segment), and the background's
+such element's outro (the Lottie's `[outroStart → op]` segment; the video's
+`[outroStart → clip end]` span), and the background's
 close SHALL play only AFTER every element outro has finished (`Promise.all`
-semantics) — so `stop()` on a scene containing a Lottie is no longer a pure hard
+semantics) — so `stop()` on a scene containing a Lottie or an outro-owning video is
+no longer a pure hard
 hide, but still clears the non-owning content immediately. An element outro SHALL
 freeze and resume with the scene under `pause()`/`resume()` in lockstep, a superseding
 `stop()`/`play()`/`out()` SHALL supersede an in-flight element outro, and a degenerate
@@ -1158,7 +1161,9 @@ or absent element outro SHALL resolve IMMEDIATELY so it never strands the backgr
 close. The element outro SHALL be driven at most ONCE per exit episode no matter how
 many triggers reach the exit (auto-exit then `stop()`, or the runtime awaiting the
 registry then cascading `stop()` into the controllers): later triggers await an
-in-flight outro, never re-drive it. This models `SequenceDriver`'s element-owned exit
+in-flight outro, never re-drive it. There SHALL be ONE outro registry/ledger spanning
+every outro-owning element kind — a second, per-kind ledger is exactly the divergence
+this seam exists to prevent. This models `SequenceDriver`'s element-owned exit
 (`whenComplete()` resolves late) and preserves the content-first / background-last
 ordering and the CLEARED settle with every driver halted.
 
@@ -1204,10 +1209,20 @@ ordering and the CLEARED settle with every driver halted.
   with every driver halted — the background never closes over the still-animating
   Lottie
 
+#### Scenario: A video plays its own outro before the background, on Out and Stop (D-128)
+
+- **WHEN** `out()` or `stop()` is invoked on a composition containing a holding
+  `video` element with a marked outro (`phases.outroStart`)
+- **THEN** the video plays its `[outroStart → clip end]` outro span through the SAME
+  element-outro seam, the background's close plays only after it finishes, and the
+  composition settles CLEARED with every driver halted — the background never closes
+  over the still-playing video
+
 #### Scenario: A degenerate element outro does not strand the exit
 
 - **WHEN** `out()` or `stop()` is invoked on a composition whose `lottie` element has
-  no outro segment (absent phases or `outroStart ≥ op`)
+  no outro segment (absent phases or `outroStart ≥ op`) — or whose `video` element
+  has no marked outro (absent `phases`, or `outroStart` at/past the clip end)
 - **THEN** the element outro resolves immediately, the background's close plays, and
   the composition settles CLEARED — the exit never hangs on an unresolved element outro
 
