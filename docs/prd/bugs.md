@@ -725,7 +725,7 @@ is ready, with no retry — load would merely expose that ordering, not cause it
 recurs after the concurrency fix, treat it as a REAL race to chase (the preview host's
 play-vs-ready handshake), not a flake.
 
-## [ ] B-078 — flaky: a DESIGNER Playwright E2E assertion fails intermittently on CI, in shifting tests (the B-073 family's remaining half) ⟨priority: medium⟩ — TWO levers now tried and rejected: a budget bump (REVERTED, #317) and a concurrency bound (DISPROVEN by an 18-leg soak, 2026-07-14). Read "THE CONFOUND" below BEFORE attempting a third — the bug's evidence base is corrupted by turbo cache replay.
+## [ ] B-078 — flaky: a Playwright E2E assertion fails intermittently on a LOCAL `pnpm gate:e2e` run — EITHER suite, in shifting tests (the B-073 family's remaining half) ⟨priority: high⟩ — **REPRODUCED UNDER MEASUREMENT 2026-07-27** (4 full runs on ONE commit; see that section). The remaining contention is INSIDE a single suite — Playwright's own unbounded per-suite worker count — because the previously-disproven cross-suite lever is ALREADY IN FORCE and the flake happens anyway. Two levers tried and rejected: a budget bump (REVERTED, #317) and a cross-suite concurrency bound (DISPROVEN by an 18-leg soak, 2026-07-14). "THE CONFOUND" below still invalidates CI-derived evidence (`pnpm test:e2e` replays cache) but NOT the local gate (`pnpm gate:e2e` runs `--force`).
 
 **Repro:** (intermittent — 1 red in 12 observed full runs; not reproducible on demand)
 
@@ -806,6 +806,49 @@ that does not occur, so shipping one would repeat exactly the #317 mistake. Harn
 `.github/workflows/b078-soak.yml` (disarmed), CI run `29356423188`, branch
 `fix/B-078-concurrency-bound-v2` (no fix, unmerged).
 
+**REPRODUCED UNDER MEASUREMENT — 2026-07-27, locally on Windows (12 cores).** Four full
+`pnpm gate:e2e` runs against ONE commit (`a82b200`, a branch touching ZERO files under
+`apps/designer/`), during R-021 stage 3:
+
+| run           | designer | runtime |
+| ------------- | -------- | ------- |
+| A             | 231 ✅   | 41 ✅   |
+| B (Stop hook) | 4 ❌     | 1 ❌    |
+| C             | 231 ✅   | 2 ❌    |
+| D             | 3 ❌     | 41 ✅   |
+
+Nine distinct tests failed at least once; **none failed in all three red runs**; both suites went
+fully green at least once. Every failure was a timeout or element-not-found — never a wrong-value
+assertion about behaviour (the ONE exception was a genuine isolation defect, filed separately as
+[B-110](bugs-designer.md), which a worker cap would HIDE rather than fix). Run B's runtime failure
+(`stage-inspector-edits.spec.ts:126`) and run C's (`context-menu.spec.ts` ×2) have zero overlap.
+Re-run in isolation: the four designer failures pass **9/9 at `--workers=1`**;
+`stage-inspector-edits.spec.ts` alone passes **8/8** — but at 13–28 s against 4–5 s when green,
+one of them within 2 s of the 30 s test timeout.
+
+**What is NEW here, and why it narrows the search:** `gate:e2e:run` is
+`turbo run test:e2e --force --continue=dependencies-successful --concurrency=1`, so BOTH of this
+entry's confounds were already neutralised in the runs above.
+
+- **`--force`** — the turbo CACHE REPLAY that invalidated this bug's original denominator (see
+  THE CONFOUND) does not apply. All four runs genuinely EXECUTED both suites.
+- **`--concurrency=1`** — [[B-095]]'s shipped fix. The two suites were **never co-tenant**. So the
+  lever this entry records as DISPROVEN (cross-suite serialisation, 18/18 green on a 2-core
+  runner) is already in force **and the flake happens anyway**.
+
+Therefore the remaining contention is INSIDE one suite, not between the two — which is exactly the
+untried lever this entry's own closing line already named, and it is cleanly distinct from what the
+soak disproved. The mechanism is unchanged from "Where the original red actually came from" below:
+`workers: undefined` gives Playwright ~half the cores (**6 on this 12-core box**), `fullyParallel`,
+`retries: 0`, all INSIDE turbo's `--concurrency=1`.
+
+**Stated honestly: the resource is not identified.** Serial-green is consistent with contention but
+does not name what is contended — and a sample taken while idle showed node+chrome at **1% of a
+12-core box**, which argues against CPU starvation specifically. Candidates not yet separated: I/O
+wait, memory pressure during `vite preview` + ffmpeg.wasm probes, or Windows process-creation cost
+at 6 workers. Until one is measured, bounding workers is **class mitigation, not a fix** — "it went
+away" is not a diagnosis (the [[B-098]] standard: root cause MEASURED, not inferred).
+
 **THE CONFOUND — why this bug's whole evidence base is unreliable (read this first):**
 The `e2e` job runs `turbo run test:e2e` **without `--force`**, so `@cg/designer#test:e2e` is
 usually a turbo **CACHE HIT**: the suite never executes and turbo replays a stale
@@ -831,13 +874,18 @@ Consequences:
 concurrently**, plus the builds — a far heavier oversubscription than CI ever sees (CI is
 `workers: 1` per suite). CI is not the environment that produced it.
 
-**Still open because:** the one observed red has never been reproduced under measurement. The next
-lever is NOT concurrency and NOT budgets — both are now disproven or unfalsifiable. It is to make
-the suite's true reliability **observable**: the E2E gate largely does not execute (see the
-confound), so nobody knows the designer suite's real flake rate. Worth filing separately: decide
-whether the E2E task should be cache-exempt (`"cache": false`) or `--force`d on CI, at a cost of
-~6 min/PR. Only once the suite actually runs every time can a flake rate be measured — and only
-then can any fix be validated.
+**Still open because — CORRECTED 2026-07-27.** This line previously read "the one observed red has
+never been reproduced under measurement". **That is now FALSE** and is rewritten rather than left
+standing beside contradicting evidence: it reproduced four times in four runs on one commit, on the
+local gate, with the cache confound defeated by `--force`. The entry is open because **the fix has
+not been implemented** — not because the evidence is missing.
+
+The observability point below is NARROWED, not withdrawn, because it was always about CI and CI is
+unchanged: `pnpm test:e2e` (what `.github/workflows/pr.yml` runs) still carries neither `--force`
+nor `--concurrency=1`, so `@cg/designer#test:e2e` still cache-replays there and CI still tells you
+nothing about the real flake rate. Worth filing separately, unchanged: decide whether the E2E task
+should be cache-exempt (`"cache": false`) or `--force`d on CI, at ~6 min/PR. The LOCAL gate no
+longer has this problem — `pnpm gate:e2e` has run `--force` since [[B-095]]/#360.
 
 **Env:** Windows, local (`retries: 0`, `workers: undefined`). CI is far less exposed —
 `retries: CI ? 1 : 0`, `workers: CI ? 1 : undefined` — which is why this surfaces locally first.
@@ -847,6 +895,44 @@ budgets. Files: `apps/designer/playwright.config.ts`, `apps/runtime/playwright.c
 **Residual risk:** budgets reduce the failure probability, they do not prove it to zero. If it
 recurs, the next lever is capping E2E worker count under turbo (bounding the concurrency itself)
 rather than raising budgets further.
+
+**NEXT LEVER — named, NOT implemented (2026-07-27).** It recurred, so this entry's own closing line
+above is the direction: **bound Playwright's per-suite worker count to the host**, the same way
+[[B-098]] bounds vitest's forks. The obvious shape is to reuse the existing
+`tools/gate-hook/src/test-concurrency.mjs` (`resolveTestBound`) — it already computes a host-fitted
+bound for the unit gate — and feed it to Playwright's `--workers`, rather than inventing a second
+bound that can drift from the first. Deliberately NOT implemented here: this filing is evidence, and
+the resource is still unidentified (above), so a cap ships as mitigation and must be labelled as
+such, not as a root-cause fix.
+
+**Two answers that are FORBIDDEN, both already tried here:**
+
+- **Raising a timeout.** CLAUDE.md states it directly: "do NOT answer a contention red by raising a
+  timeout — B-073 already did that and B-098 is that bound blown in turn. The fix is the bound; a
+  longer rope is not." This entry independently tried it — #317's budget bump — and **REVERTED** it.
+- **Deleting, skipping or loosening the affected tests.** Every failure above is a correct assertion
+  arriving late; the tests are not wrong.
+
+**Why [[B-098]] did NOT already cover this** (the reason this surface was left uncovered): that
+change's own task 7.4 records `gate:e2e` as NOT owed — "the change alters unit/integration
+parallelism only, not e2e; `applyConcurrencyFlag` leaves `gate:e2e`'s `--concurrency=1` intact". So
+B-098 bounded turbo's task concurrency and vitest's fork count; **Playwright's own worker count was
+never in its scope**, and `fullyParallel: true` at 6 workers sits INSIDE that untouched
+`--concurrency=1`. `pnpm gate` staying green throughout is the B-098 bound holding on its own
+surface. This is a SIBLING surface, not a B-098 regression.
+
+**Priority RAISED medium → high (2026-07-27), reasoning recorded both ways.** For: it now sits on
+the critical path of queued work — a self-hosted Linux runner is being stood up specifically to
+discharge the nine-item Linux `gate:e2e` backlog, and while GitHub Actions billing is out the local
+gate is the ONLY landing gate. If those Linux runs are invoked the way CLAUDE.md describes the debt
+("a Linux/WSL run is still owed", i.e. a hand-run `pnpm gate:e2e`), then `CI` is UNSET,
+`workers: undefined` applies on that box too, and the Linux runs will be exactly as untrustworthy as
+the Windows ones — leaving the backlog undischargeable in practice. Against, recorded so the call
+can be revisited: this is a HARNESS defect, not a product or on-air one, and it is **conditional on
+invocation** — a self-hosted GitHub Actions runner sets `CI=true`, which gives `workers: 1` and
+`retries: 1` and largely blunts this mechanism. If the Linux backlog is discharged through Actions
+rather than by hand, the escalation argument does not apply and this should fall back to medium.
+[[B-073]]'s bar applies to any future fix: N/N green is the agreed bar, not a proof of absence.
 
 ## [x] B-084 — a green CI tick can hide a failure: critical gate tasks CACHE-HIT (never execute) or get KILLED by a sibling, so the check passes without ever running to a real verdict ⟨priority: high⟩ — merged (#328, `7826a88`)
 
