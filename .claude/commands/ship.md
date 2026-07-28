@@ -258,6 +258,12 @@ point. It deliberately does NOT accept a checkbox declaring "design-only, no deb
 would extend the same trust-the-checkbox weakness the fail-closed rule exists to contain,
 and a false tick would poison every later read of that file.
 
+> **The allowlist is NECESSARY, NOT SUFFICIENT — do not stop reading here.** Passing it
+> does not exempt a PR; the CARVE-OUT below can still disqualify a diff whose every path
+> is allowlisted, and `docs/prd/**` is the case where that happens most often. The
+> decision is `allowlist AND NOT carve-out`. Reading the allowlist alone as the whole
+> rule is a live misreading — it happened during this rule's own review.
+
 **CARVE-OUT — an ARCHIVE is docs-only by path and must NEVER be exempted.** Folding a
 change into `openspec/specs/` is exactly where a premature archive would smuggle past a
 genuine gate: the D-125 and D-128 precedents both held an archive open until a hardware
@@ -283,6 +289,21 @@ archive commit `a9bd116` (#416) shows three separate effects, and only the first
 dir named but not found → REFUSE" must still fire: without this line, deleting a change dir
 would skip the very check that deletion should trigger — which would make this exemption a
 REGRESSION against the rule it is amending, not merely a relaxation.
+
+**KNOWN RESIDUAL, stated rather than papered over** (the same honesty this section applies
+to the trust-the-checkbox limitation): the carve-out keys on the status TOKEN and on
+`DONE, archived`. A `docs/prd/*.md` edit that **erases debt language while LEAVING the
+token alone** — deleting "a real-hardware pass on CasparCG 2.3.2 is OWED" from an item
+that stays `[~]` — is allowlisted, trips no carve-out bullet, and is exempted. It does not
+declare the work done and merges no code, so it is weaker than the archive case; what it
+destroys is the RECORD a later reader (or a later `/ship`) would consult.
+
+This is deliberately NOT closed with a mechanical "refuses if a `docs/prd` hunk deletes a
+line matching owed/hardware/`gate:e2e`". That rule would fire on ordinary bug-file
+maintenance — #420 rewrote exactly such lines in `B-078` while filing legitimate
+evidence — so it would refuse a common, correct operation to catch a rare one. The
+residual is left open, named here, and belongs to the owner's review rather than to the
+machine. If it ever bites, the fix is that rule plus an accepted false-positive cost.
 
 Everything else about 2b — the two sources, the literal checkbox reading, fail-closed on
 ambiguity, and the honesty note — is unchanged and applies whenever the exemption does
