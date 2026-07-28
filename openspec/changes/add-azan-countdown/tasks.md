@@ -135,18 +135,22 @@ touched by this change** — every box below Phase 0 is future work.
 
 ## 4. Runtime wiring (`@cg/template-runtime`)
 
-- [ ] 4.1 `bindings.ts`: `clock-target` returns from the DOM walk with the driver-seam comment,
+- [x] 4.1 `bindings.ts`: `clock-target` returns from the DOM walk with the driver-seam comment,
       exactly as `sequence-item-text` does.
-- [ ] 4.2 `runtime.ts`: `reapplyClockTargets()` beside `reapplySequenceItemFields`, called from
-      BOTH `play()` and `update()`; parse-failure keeps the current target and reports once.
-- [ ] 4.3 `runtime.ts`: pass each scope's container to its clock drivers as the zone scope root.
-- [ ] 4.4 **Tests**: a bound `HH:mm` value re-targets on `update()` without replay; an
+- [x] 4.2 `runtime.ts`: `reapplyClockTargets()` beside `reapplySequenceItemFields`, called from
+      BOTH `play()` and `update()`; parse-failure keeps the current target and reports once
+      (an `error` event, `code: 'clock-target-unparseable'`, deduped per element + value).
+- [x] 4.3 `runtime.ts`: pass each scope's container to its clock drivers as the zone scope root.
+- [x] 4.4 **Tests**: a bound `HH:mm` value re-targets on `update()` without replay; an
       unparseable value applies NOTHING and the previous target keeps running; a namespaced
       nested binding routes to the right instance's clock (two instances of one child re-target
       independently); **nested-instance reach** — a host countdown's boundary restyles an opted-in
       element inside a nested composition instance; **nearest-wins** — host and nested countdowns
       in different zones each govern their own subtree; an override with no enclosing zone renders
-      the authored style.
+      the authored style. NOTE: jsdom resolves neither `var()` nor the cascade, so the three
+      zone-reach tests assert the full CHAIN (which scope root publishes which key, which element
+      carries which slot index, what the compiled stylesheet declares for that key) rather than a
+      computed colour. The pixel proof is owed to the phase-7 E2E and is NOT claimed here.
 
 ## 5. Designer UI (`apps/designer`)
 

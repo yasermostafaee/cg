@@ -98,8 +98,31 @@ export interface ClockDriverOptions {
  * never throw; the format is guaranteed upstream by `ClockTargetSchema` at author
  * time and by the binding's own parse at playout.
  */
+/**
+ * The `HH:mm[:ss]` shape, as ONE copy inside this package — shared by
+ * {@link resolveTimeOfDay} and {@link parseTimeOfDay} so a value the runtime
+ * accepts and the instant it resolves to can never disagree. `ClockTargetSchema`
+ * in `@cg/shared-schema` is the canonical spelling of the constraint; keep the two
+ * in step (the schema is not imported here to keep zod out of the on-air bundle).
+ */
+const TIME_OF_DAY = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/;
+
+/**
+ * D-141 — validate an operator-supplied value as a time of day: the string when it
+ * parses, `undefined` when it does not.
+ *
+ * A GDD client is NOT obliged to enforce a field's `pattern`, so a bound value
+ * reaching the runtime is untrusted and is validated here before it can touch a
+ * live countdown. The caller applies NOTHING on `undefined` — the current,
+ * possibly on-air target is kept.
+ */
+export function parseTimeOfDay(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  return TIME_OF_DAY.test(raw) ? raw : undefined;
+}
+
 export function resolveTimeOfDay(time: string, nowMs: number): number {
-  const m = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(time);
+  const m = TIME_OF_DAY.exec(time);
   if (m === null) return nowMs;
   const hh = Number(m[1]);
   const mm = Number(m[2]);
