@@ -84,7 +84,12 @@ export const scene = {
           color: '#FFFFFF',
           align: 'start',
           direction: 'rtl',
-          fitMode: 'autosize',
+          // B-111 — 'fixed', not 'autosize': this layout relies on the authored box
+          // (RTL `align: 'start'` right-aligns at x=1280) and on `overflow: 'ellipsis'`,
+          // both of which only mean anything against a fixed box. Under D-060 autosize
+          // the box hugs content and pins its top-RIGHT corner at position.x=140, which
+          // sent the text off-canvas leftward on air.
+          fitMode: 'fixed',
           overflow: 'ellipsis',
         },
         {
@@ -114,7 +119,8 @@ export const scene = {
           color: '#E5E7EB',
           align: 'start',
           direction: 'rtl',
-          fitMode: 'autosize',
+          // B-111 — same as 'name' above: fixed box, not content hug.
+          fitMode: 'fixed',
           overflow: 'ellipsis',
         },
       ],

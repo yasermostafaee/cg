@@ -275,6 +275,19 @@ commit rather than after the merge (contrast [B-056](bugs.md) / B-080, which had
 grandfathered). **Reading the candidate's BODY, not its title, is what caught it** — the title says
 "on CI" while the body says "observed locally on Windows"; that title has since been corrected.
 
+**Re-audited 2026-07-28** against `main` (`165e0a9`, after #424). `B-111` is now taken — ONE
+cross-cutting tooling bug, [bugs.md](bugs.md): **B-111** (the `tools/template-fixtures` Persian
+lower-third still said `fitMode: 'autosize'` when D-060/#223 made autosize real; its §F repair
+swept `@cg/starter-templates` only, so since then the fixture's RTL texts pin their right edge at
+`position.x`=140 and render off-canvas — misread during C-018 recon as a cross-engine RTL
+rendering defect). Verified free immediately before the commit that writes the heading: the audit
+printed exactly `B-056` and `B-080`; no `## [.] B-111` heading on freshly fetched `origin/main`,
+on the only other remote ref (`docs/recon-caspar-250-validation`, open PR #425), or in this
+session worktree. The only prior occurrences of `B-111` anywhere were THIS file's own "next free"
+pointer and the near-duplicate note above recording that `B-111` was deliberately NOT minted —
+both documented false positives. The highest heading anywhere was `B-110`. The space stays
+contiguous: `B-001` … `B-111`, no gaps. **Next free: `B-112`.**
+
 ### RECOMMENDATION (recorded, not implemented): retire the "next free" pointer
 
 All three recorded drift modes are one disease, and the pointer is it. Look at what it actually
