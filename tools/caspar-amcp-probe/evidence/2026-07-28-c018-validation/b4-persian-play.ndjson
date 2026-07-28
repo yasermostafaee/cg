@@ -1,0 +1,8 @@
+{"ts":"2026-07-28T11:49:13.340Z","dir":"send","line":"PLAY 1-10 [HTML] \"file:///D:/work/projects/claude-projects/cg-broadcast/cg/.claude/worktrees/test-d0107d/fixtures/templates/persian-lower-third/index.html\""}
+{"ts":"2026-07-28T11:49:13.344Z","dir":"recv","line":"202 PLAY OK"}
+{"ts":"2026-07-28T11:49:21.409Z","dir":"send","line":"CLEAR 1-10"}
+{"ts":"2026-07-28T11:49:21.410Z","dir":"recv","line":"202 CLEAR OK"}
+{"ts":"2026-07-28T11:50:23.365Z","dir":"send","line":"PLAY 1-10 [HTML] \"file:///D:/work/projects/claude-projects/cg-broadcast/cg/.claude/worktrees/test-d0107d/fixtures/templates/persian-lower-third/index.html\""}
+{"ts":"2026-07-28T11:50:23.369Z","dir":"recv","line":"202 PLAY OK"}
+{"ts":"2026-07-28T11:50:31.419Z","dir":"send","line":"CLEAR 1-10"}
+{"ts":"2026-07-28T11:50:31.419Z","dir":"recv","line":"202 CLEAR OK"}

@@ -1,0 +1,32 @@
+{"ts":"2026-07-28T12:13:33.100Z","dir":"send","line":"PLAY 1-10 [HTML] \"http://127.0.0.1:7910/fixtures/templates/persian-lower-third/index.html\""}
+{"ts":"2026-07-28T12:13:33.105Z","dir":"recv","line":"202 PLAY OK"}
+{"ts":"2026-07-28T12:13:33.858Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T12:13:33.859Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:13:35.123Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T12:13:35.124Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:13:36.394Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T12:13:36.395Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:13:37.665Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T12:13:37.666Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:13:39.741Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T12:13:39.742Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:13:41.015Z","dir":"send","line":"CLEAR 1-10"}
+{"ts":"2026-07-28T12:13:41.015Z","dir":"recv","line":"202 CLEAR OK"}
+{"ts":"2026-07-28T12:13:42.585Z","dir":"send","line":"PLAY 1-10 [HTML] \"file:///D:/work/projects/claude-projects/cg-broadcast/cg/.claude/worktrees/test-d0107d/fixtures/templates/persian-lower-third/index.html\""}
+{"ts":"2026-07-28T12:13:42.588Z","dir":"recv","line":"202 PLAY OK"}
+{"ts":"2026-07-28T12:13:45.664Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T12:13:45.664Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:13:46.937Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T12:13:46.937Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:13:48.213Z","dir":"send","line":"CLEAR 1-10"}
+{"ts":"2026-07-28T12:13:48.213Z","dir":"recv","line":"202 CLEAR OK"}
+{"ts":"2026-07-28T12:13:48.778Z","dir":"send","line":"PLAY 1-20 [HTML] \"file:///D:/work/projects/claude-projects/cg-broadcast/cg/.claude/worktrees/test-d0107d/tools/template-fixtures/audio-autoplay.html\""}
+{"ts":"2026-07-28T12:13:48.780Z","dir":"recv","line":"202 PLAY OK"}
+{"ts":"2026-07-28T12:13:51.342Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T12:13:51.342Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:13:53.916Z","dir":"send","line":"MIXER 1-20 VOLUME 0.5"}
+{"ts":"2026-07-28T12:13:53.917Z","dir":"recv","line":"202 MIXER OK"}
+{"ts":"2026-07-28T12:13:55.991Z","dir":"send","line":"CLEAR 1-20"}
+{"ts":"2026-07-28T12:13:55.992Z","dir":"recv","line":"202 CLEAR OK"}
+{"ts":"2026-07-28T12:13:56.054Z","dir":"send","line":"MIXER 1-20 CLEAR"}
+{"ts":"2026-07-28T12:13:56.054Z","dir":"recv","line":"202 MIXER OK"}

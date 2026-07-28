@@ -1,0 +1,36 @@
+{"ts":"2026-07-28T12:12:12.134Z","dir":"send","line":"VERSION"}
+{"ts":"2026-07-28T12:12:12.137Z","dir":"recv","line":"201 VERSION OK"}
+{"ts":"2026-07-28T12:12:12.137Z","dir":"recv","line":"2.3.2 4de6d18f Dev"}
+{"ts":"2026-07-28T12:12:12.504Z","dir":"send","line":"INFO"}
+{"ts":"2026-07-28T12:12:12.504Z","dir":"recv","line":"200 INFO OK"}
+{"ts":"2026-07-28T12:12:12.504Z","dir":"recv","line":"1 1080i5000 PLAYING"}
+{"ts":"2026-07-28T12:12:12.504Z","dir":"recv","line":""}
+{"ts":"2026-07-28T12:12:12.880Z","dir":"send","line":"PLAY 1-10 [HTML] \"file:///D:/work/projects/claude-projects/cg-broadcast/cg/.claude/worktrees/test-d0107d/fixtures/templates/persian-lower-third/index.html\""}
+{"ts":"2026-07-28T12:12:12.918Z","dir":"recv","line":"202 PLAY OK"}
+{"ts":"2026-07-28T12:12:16.945Z","dir":"send","line":"INFO 1-10"}
+{"ts":"2026-07-28T12:12:16.945Z","dir":"recv","line":"201 INFO OK"}
+{"ts":"2026-07-28T12:12:16.945Z","dir":"recv","line":"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<channel>\n   <framerate>50</framerate>\n   <framerate>1</framerate>\n   <mixer>\n      <audio>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n      </audio>\n   </mixer>\n   <stage>\n      <layer>\n         <layer_10>\n            <background>\n               <producer>empty</producer>\n            </background>\n            <foreground>\n               <file>\n                  <path>file:///D:/work/projects/claude-projects/cg-broadcast/cg/.claude/worktrees/test-d0107d/fixtures/templates/persian-lower-third/index.html</path>\n               </file>\n               <paused>false</paused>\n               <producer>html</producer>\n            </foreground>\n         </layer_10>\n      </layer>\n   </stage>\n</channel>\n"}
+{"ts":"2026-07-28T12:12:17.509Z","dir":"send","line":"CLEAR 1-10"}
+{"ts":"2026-07-28T12:12:17.510Z","dir":"recv","line":"202 CLEAR OK"}
+{"ts":"2026-07-28T12:12:18.575Z","dir":"send","line":"CG 1-10 ADD 0 \"file:///D:/work/projects/claude-projects/cg-broadcast/cg/.claude/worktrees/test-d0107d/fixtures/templates/persian-lower-third/index.html\" 0 \"{\\\"headline\\\":\\\"سلام دنیا\\\",\\\"ticker\\\":\\\"اخبار\\\"}\""}
+{"ts":"2026-07-28T12:12:18.576Z","dir":"recv","line":"404 CG ADD FAILED"}
+{"ts":"2026-07-28T12:12:22.639Z","dir":"send","line":"CG 1-10 PLAY 0"}
+{"ts":"2026-07-28T12:12:22.640Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-07-28T12:12:24.206Z","dir":"send","line":"CG 1-10 UPDATE 0 \"{\\\"headline\\\":\\\"خبر فوری ۱۴۰۳\\\",\\\"ticker\\\":\\\"به‌روزرسانی زنده\\\"}\""}
+{"ts":"2026-07-28T12:12:24.207Z","dir":"recv","line":"403 CG UPDATE FAILED"}
+{"ts":"2026-07-28T12:12:25.778Z","dir":"send","line":"CG 1-10 INVOKE 0 \"update\" \"{\\\"headline\\\":\\\"از INVOKE\\\"}\""}
+{"ts":"2026-07-28T12:12:25.779Z","dir":"recv","line":"403 CG INVOKE FAILED"}
+{"ts":"2026-07-28T12:12:26.847Z","dir":"send","line":"CG 1-10 STOP 0"}
+{"ts":"2026-07-28T12:12:26.849Z","dir":"recv","line":"403 CG STOP FAILED"}
+{"ts":"2026-07-28T12:12:27.918Z","dir":"send","line":"CG 1-10 PLAY 0"}
+{"ts":"2026-07-28T12:12:27.918Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-07-28T12:12:28.985Z","dir":"send","line":"CG 1-10 REMOVE 0"}
+{"ts":"2026-07-28T12:12:28.985Z","dir":"recv","line":"403 CG REMOVE FAILED"}
+{"ts":"2026-07-28T12:12:30.048Z","dir":"send","line":"INFO 1-10"}
+{"ts":"2026-07-28T12:12:30.049Z","dir":"recv","line":"201 INFO OK"}
+{"ts":"2026-07-28T12:12:30.049Z","dir":"recv","line":"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<channel>\n   <framerate>50</framerate>\n   <framerate>1</framerate>\n   <mixer>\n      <audio>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n      </audio>\n   </mixer>\n   <stage>\n      <layer>\n         <layer_10>\n            <background>\n               <producer>empty</producer>\n            </background>\n            <foreground>\n               <paused>false</paused>\n               <producer>empty</producer>\n            </foreground>\n         </layer_10>\n      </layer>\n   </stage>\n</channel>\n"}
+{"ts":"2026-07-28T12:12:30.423Z","dir":"send","line":"CLEAR 1-10"}
+{"ts":"2026-07-28T12:12:30.424Z","dir":"recv","line":"202 CLEAR OK"}
+{"ts":"2026-07-28T12:12:31.002Z","dir":"send","line":"INFO 1"}
+{"ts":"2026-07-28T12:12:31.002Z","dir":"recv","line":"201 INFO OK"}
+{"ts":"2026-07-28T12:12:31.002Z","dir":"recv","line":"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<channel>\n   <framerate>50</framerate>\n   <framerate>1</framerate>\n   <mixer>\n      <audio>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n      </audio>\n   </mixer>\n</channel>\n"}

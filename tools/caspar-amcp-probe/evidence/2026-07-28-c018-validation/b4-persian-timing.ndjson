@@ -1,0 +1,32 @@
+{"ts":"2026-07-28T12:02:19.240Z","dir":"send","line":"PLAY 1-10 [HTML] \"http://127.0.0.1:7910/fixtures/templates/persian-lower-third/index.html\""}
+{"ts":"2026-07-28T12:02:19.245Z","dir":"recv","line":"202 PLAY OK"}
+{"ts":"2026-07-28T12:02:19.542Z","dir":"send","line":"CG 1-10 INVOKE 0 \"scrollTo(0,360)\""}
+{"ts":"2026-07-28T12:02:19.543Z","dir":"recv","line":"201 CG OK"}
+{"ts":"2026-07-28T12:02:19.543Z","dir":"recv","line":""}
+{"ts":"2026-07-28T12:02:19.603Z","dir":"send","line":"PRINT 1 \"c018-anim-00\""}
+{"ts":"2026-07-28T12:02:19.604Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:19.980Z","dir":"send","line":"PRINT 1 \"c018-anim-01\""}
+{"ts":"2026-07-28T12:02:19.982Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:20.357Z","dir":"send","line":"PRINT 1 \"c018-anim-02\""}
+{"ts":"2026-07-28T12:02:20.358Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:20.734Z","dir":"send","line":"PRINT 1 \"c018-anim-03\""}
+{"ts":"2026-07-28T12:02:20.735Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:21.113Z","dir":"send","line":"PRINT 1 \"c018-anim-04\""}
+{"ts":"2026-07-28T12:02:21.114Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:21.489Z","dir":"send","line":"PRINT 1 \"c018-anim-05\""}
+{"ts":"2026-07-28T12:02:21.490Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:21.865Z","dir":"send","line":"PRINT 1 \"c018-anim-06\""}
+{"ts":"2026-07-28T12:02:21.865Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:22.241Z","dir":"send","line":"PRINT 1 \"c018-anim-07\""}
+{"ts":"2026-07-28T12:02:22.242Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:22.616Z","dir":"send","line":"PRINT 1 \"c018-anim-08\""}
+{"ts":"2026-07-28T12:02:22.616Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:23.693Z","dir":"send","line":"PRINT 1 \"c018-anim-09-settled\""}
+{"ts":"2026-07-28T12:02:23.694Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:25.262Z","dir":"send","line":"CG 1-10 INVOKE 0 \"scrollTo(640,360)\""}
+{"ts":"2026-07-28T12:02:25.263Z","dir":"recv","line":"201 CG OK"}
+{"ts":"2026-07-28T12:02:25.263Z","dir":"recv","line":""}
+{"ts":"2026-07-28T12:02:25.733Z","dir":"send","line":"PRINT 1 \"c018-anim-10-rightview\""}
+{"ts":"2026-07-28T12:02:25.734Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T12:02:26.201Z","dir":"send","line":"CLEAR 1-10"}
+{"ts":"2026-07-28T12:02:26.201Z","dir":"recv","line":"202 CLEAR OK"}
