@@ -3703,3 +3703,84 @@ territory). Depends on D-128 and D-137 existing; filed now, implement after both
 is the NEED, not the UI. **Naming:** the live element is user-facing "Live Source" (D-137); the
 schema type stays `video-placeholder`. **RECON-FIRST for the type-conversion semantics; needs its
 own design.md.**
+
+## [ ] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩
+
+**What:** Extend the clock element so a countdown can target a wall-clock time of day
+and drive named color zones that restyle the composition — including elements inside
+nested composition instances — as the deadline approaches. Three parts:
+
+1. **`timeofday` target** — new countdown target kind
+   `{ kind: 'timeofday', time: 'HH:mm' | 'HH:mm:ss' }`: counts down to the NEXT local
+   occurrence of that time (today if still ahead, else tomorrow), absolute time base
+   like `datetime` (pause never delays it). The target must be settable at playout via
+   the existing dynamic-fields path — a scene field bound to the clock's target time,
+   editable in the Runtime Inspector and applied by CG UPDATE — so the operator enters
+   today's official azan time each day and the same template works every day. Operator
+   entry IS the v1 data source (a decided constraint, not a gap).
+2. **Zones on countdown** — an ordered list of thresholds on REMAINING time, each
+   opening a named zone with a color. Client's case: >60 min green, 60–30 yellow,
+   30–10 orange, 10–0 red; count and boundaries configurable, this 4-zone preset
+   offered. The clock's own band/text restyles per zone.
+3. **Zone-reactive elements, composition-deep** — the runtime exposes the active zone
+   at the scope root of the composition owning the zoned countdown (e.g. a data
+   attribute), and any element in that composition's subtree can OPT INTO per-zone
+   overrides for its colorable properties (text color, background color, shape
+   fill/stroke — e.g. a rectangle turning red in the last 10 minutes). This crosses
+   nested-composition-instance boundaries: an element inside a nested composition
+   restyles from the ENCLOSING composition's active zone. Inheritance is
+   nearest-wins — a nested composition with its own zoned countdown governs its own
+   subtree. Elements without overrides are untouched; overrides are inert when no
+   enclosing zone is active (standalone preview of the nested comp included).
+   Transitions are smooth (~300–500 ms) on zone change. Preview and single-file
+   export behave identically (same runtime source).
+
+**Why:** Client requirement for prayer-time programming: an on-air countdown whose
+urgency is readable at a glance across the whole template. Mainstream CG products ship
+no native equivalent (Viz/Singular/vMix reach for per-template scripting); stage-timer
+products standardized it as "wrap-up colors". Making both first-class and declarative
+fits this product's no-user-scripting philosophy and differentiates it.
+
+**Acceptance:**
+
+- WHEN a countdown clock has `target: { kind:'timeofday', time:'20:32' }` and local
+  now is 19:00 THEN it shows 01:32:00 remaining and reaches zero exactly at 20:32
+  local, clamping at zero with existing hold/auto-out semantics unchanged
+- WHEN local now is past today's target time THEN the countdown targets tomorrow's
+  occurrence
+- WHEN the timeofday target is bound to a scene field THEN the Runtime Inspector shows
+  it as an editable field, and CG UPDATE re-targets the loaded template — including a
+  LIVE countdown — without replaying it
+- WHEN remaining time crosses a zone boundary THEN the active zone changes exactly
+  once (no flicker at the boundary) and every opted-in element in the subtree —
+  clock band, shapes, text, elements inside nested composition instances —
+  transitions smoothly to its zone override; elements without an override are
+  untouched
+- WHEN a composition containing zone-override elements plays standalone or under a
+  host with NO zoned countdown THEN those overrides are inert (base styles)
+- WHEN both a host and a nested composition have zoned countdowns THEN each governs
+  its own subtree (nearest enclosing zoned scope wins)
+- WHEN the designer configures zones THEN boundaries validate (strictly decreasing,
+  at least one), the 4-zone preset (60/30/10 min) is offered, and the preview can
+  demonstrate zone changes without waiting an hour (mechanism decided in design —
+  e.g. injectable/mock clock)
+- WHEN a composition has no zoned countdown THEN existing scenes are untouched (all
+  new fields optional — additive, no schema-version bump expected; confirm in design)
+- Wall and countup clocks ignore zones (countdown-only)
+
+**Notes:** Extends D-027 (clock); D-103 is the precedent for additive optional fields.
+Zone mechanism must be declarative (schema + runtime), not scripted; a suggested shape
+— per-zone style overrides compiled to CSS rules plus a scope-root attribute flipped
+by the ClockDriver, CSS transition for the morph — is design's to accept or replace.
+Two nesting consequences follow D-107's precedent: zone overrides for an element
+inside a nested composition are configured by drilling INTO that composition (shared
+definition — no editing from the parent), and zone names/keys form a small contract
+between host and nested comp (fixed semantic set vs. free names + mismatch handling
+is a design decision). Deferred follow-ups (do NOT implement here, future items):
+(a) azan schedule import — yearly official per-city table auto-filling the field
+daily (R-track); (b) channel-wide zone state across separate templates/Caspar layers
+(runtime/bridge shared-state concept, R-track). Data-source stance is deliberate: the
+operator enters the OFFICIAL announced time; computed prayer times must never be the
+default for broadcast. Design-shaped: implementation starts with an openspec change
+(design-only first) since it widens ClockElementSchema, binding targets, and runtime
+behavior.
