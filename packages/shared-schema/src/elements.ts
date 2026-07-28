@@ -19,6 +19,86 @@ import { ListItemSchema } from './fields.js';
 
 const TextDirectionSchema = z.enum(['auto', 'ltr', 'rtl']);
 
+/**
+ * D-141 — a zone KEY: the free-form name a zoned countdown broadcasts down its
+ * composition subtree and an element overrides against. Deliberately NOT an enum:
+ * the contract is a NAME MATCH and a mismatch is INERT at runtime (the element
+ * renders its authored style — never an error, never a fallback colour), so the
+ * schema has no safety reason to restrict the vocabulary. The Designer's picker
+ * (`normal`/`caution`/`warning`/`critical` plus a Custom escape) is an authoring
+ * affordance over this still-free-form field, never a validation boundary: a
+ * scene carrying a custom key stays valid, parses, and renders.
+ */
+export const ZoneKeySchema = z.string().min(1);
+export type ZoneKey = z.infer<typeof ZoneKeySchema>;
+
+/**
+ * D-141 — one slot of a per-zone override: an explicit colour, or the literal
+ * `'zone'` meaning "take the ACTIVE ZONE's own colour". `'zone'` is the ergonomic
+ * default — the common case ("in the danger zone I take the danger colour") is one
+ * word, and a later palette change on the countdown reaches every follower without
+ * walking the elements that opted in.
+ */
+export const ZoneColorSchema = z.union([HexColorSchema, z.literal('zone')]);
+export type ZoneColor = z.infer<typeof ZoneColorSchema>;
+
+/**
+ * D-141 — one element's colour override for ONE zone. The four slots are exactly
+ * the minimum colourable set (text colour, background colour, shape fill, shape
+ * stroke) and map 1:1 onto the properties the existing `color` BINDING target
+ * already writes — reusing that map is what keeps a rectangle recolouring
+ * identically whether a zone or an operator's colour field drove it. A slot the
+ * element's KIND does not own is INERT, never an error (the same stance `filter`
+ * takes). At least one slot must be set: an override that sets nothing is a
+ * typo, not a no-op worth storing.
+ */
+export const ZoneOverrideSchema = z
+  .object({
+    zone: ZoneKeySchema,
+    textColor: ZoneColorSchema.optional(),
+    backgroundColor: ZoneColorSchema.optional(),
+    fill: ZoneColorSchema.optional(),
+    stroke: ZoneColorSchema.optional(),
+  })
+  .superRefine((o, ctx) => {
+    if (
+      o.textColor === undefined &&
+      o.backgroundColor === undefined &&
+      o.fill === undefined &&
+      o.stroke === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'a zone override must set at least one colour slot',
+      });
+    }
+  });
+export type ZoneOverride = z.infer<typeof ZoneOverrideSchema>;
+
+/**
+ * D-141 — one element's per-zone override LIST. Zone keys are unique within an
+ * element: two overrides naming one zone have no defined winner.
+ *
+ * The uniqueness refinement lives on the ARRAY rather than on
+ * {@link ElementBaseSchema}, because that schema must stay a plain `ZodObject` —
+ * every element kind `.extend()`s (and most `.merge()`) it, and a `superRefine`
+ * there would turn it into a `ZodEffects` and break all of them. Per-array is
+ * per-element anyway, so the check is identical in effect.
+ */
+export const ZoneOverridesSchema = z.array(ZoneOverrideSchema).superRefine((list, ctx) => {
+  const seen = new Set<string>();
+  list.forEach((o, i) => {
+    if (seen.has(o.zone)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [i, 'zone'],
+        message: `duplicate zone override for key '${o.zone}'`,
+      });
+    }
+    seen.add(o.zone);
+  });
+});
+
 /** Properties common to every element. */
 export const ElementBaseSchema = z.object({
   id: IdSchema,
@@ -48,6 +128,15 @@ export const ElementBaseSchema = z.object({
    * timeline falls back to its deterministic per-id colour.
    */
   timelineColor: HexColorSchema.optional(),
+  /**
+   * D-141 — opt-in per-zone colour overrides. Optional and applied to every
+   * element type by the runtime when present (cf. `filter` / `lifespan` /
+   * `timelineColor` above), which is why it lives on the BASE rather than on each
+   * kind: one edit covers every kind — including the clock itself, which restyles
+   * through this SAME mechanism (it is an element in its own subtree, so no
+   * special case). Absent ⇒ the element is untouched by any zone.
+   */
+  zoneOverrides: ZoneOverridesSchema.optional(),
 });
 export type ElementBase = z.infer<typeof ElementBaseSchema>;
 
@@ -245,8 +334,88 @@ export const ClockTargetSchema = z.union([
     kind: z.literal('datetime'),
     iso: z.string().datetime({ offset: true, local: true }),
   }),
+  /**
+   * D-141 — a TIME OF DAY (`HH:mm` or `HH:mm:ss`). The countdown reaches zero at
+   * the NEXT LOCAL occurrence of that time on the rendering machine's clock —
+   * today's when it is still ahead, otherwise tomorrow's — so the operator types
+   * the official announced time and nothing else. ABSOLUTE like `datetime`: a
+   * pause never delays it. The occurrence is resolved ONCE per run and PINNED as a
+   * deadline (never re-resolved per paint, or the display would jump from 00:00 to
+   * a full day the instant it arrived). Like the countdown family generally it
+   * ignores the element's `timezone`, which stays `wall`-only.
+   *
+   * This regex is the CANONICAL spelling of the constraint; the Designer's
+   * `Time (HH:MM)` pattern preset is the authoring aid for the operator-facing
+   * FIELD. Two spellings of one constraint would drift.
+   *
+   * Additive: a value that validated against the old two-member union still
+   * validates against this superset, so no schema-version bump.
+   */
+  z.object({
+    kind: z.literal('timeofday'),
+    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'Expected HH:mm or HH:mm:ss'),
+  }),
 ]);
 export type ClockTarget = z.infer<typeof ClockTargetSchema>;
+
+/**
+ * D-141 — one zone STEP: while the countdown's REMAINING time is at or below
+ * `atOrBelowMs`, this zone is active. Selection is first-match-wins over the
+ * authored order, which validates as strictly decreasing. Each zone carries its
+ * own colour — an element's `'zone'` slot resolves to exactly this value.
+ */
+export const ClockZoneStepSchema = z.object({
+  /** Remaining ≤ this ⇒ this zone. */
+  atOrBelowMs: z.number().int().nonnegative(),
+  key: ZoneKeySchema,
+  /** The zone's canonical colour. */
+  color: HexColorSchema,
+});
+export type ClockZoneStep = z.infer<typeof ClockZoneStepSchema>;
+
+/**
+ * D-141 — a countdown's colour zones: ordered thresholds on remaining time plus
+ * an OPTIONAL `base` zone, which is the zone ABOVE the highest threshold. `base`
+ * absent ⇒ no zone is active up there and every override is inert (the SAME code
+ * path as "no enclosing zone at all"), so a designer who only wants "red under ten
+ * minutes" writes one step and nothing else. The 4-zone 60/30/10 preset is `base`
+ * plus three steps — 3 boundaries, 4 zones.
+ */
+export const ClockZonesSchema = z
+  .object({
+    base: z.object({ key: ZoneKeySchema, color: HexColorSchema }).optional(),
+    steps: z.array(ClockZoneStepSchema).min(1),
+  })
+  .superRefine((zones, ctx) => {
+    // Strictly decreasing: first-match-wins is only well defined over a descending
+    // list. The OFFENDING STEP is identified by path, so the Designer can mark that
+    // row rather than refusing the whole section.
+    zones.steps.forEach((step, i) => {
+      const prev = zones.steps[i - 1];
+      if (prev !== undefined && step.atOrBelowMs >= prev.atOrBelowMs) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['steps', i, 'atOrBelowMs'],
+          message: `zone thresholds must be strictly decreasing (${String(step.atOrBelowMs)} is not below ${String(prev.atOrBelowMs)})`,
+        });
+      }
+    });
+    // Unique across base + steps: the published key is ONE attribute value, so two
+    // zones sharing a name cannot be told apart by an element's override.
+    const seen = new Set<string>();
+    if (zones.base !== undefined) seen.add(zones.base.key);
+    zones.steps.forEach((step, i) => {
+      if (seen.has(step.key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['steps', i, 'key'],
+          message: `duplicate zone key '${step.key}'`,
+        });
+      }
+      seen.add(step.key);
+    });
+  });
+export type ClockZones = z.infer<typeof ClockZonesSchema>;
 
 /**
  * Digital clock element (D-027) — renders live time as text through a format
@@ -301,6 +470,14 @@ export const ClockElementSchema = ElementBaseSchema.extend({
   /** Countdown target; ignored by `wall`/`countup`. */
   target: ClockTargetSchema.optional(),
   /**
+   * D-141 — optional colour zones. COUNTDOWN-ONLY at BOTH layers: the refinement
+   * below REFUSES them on `wall`/`countup` so they cannot be authored, and the
+   * runtime independently IGNORES them for those modes, so a hand-edited `.vcg`
+   * degrades to base styles rather than misbehaving. Additive +
+   * backward-compatible — no schema-version bump.
+   */
+  zones: ClockZonesSchema.optional(),
+  /**
    * D-084 — optional IANA time-zone name (e.g. 'Europe/London'). When set,
    * `wall` mode renders that zone's current time (via Intl.DateTimeFormat);
    * absent ⇒ the machine's local zone (the prior behaviour). `countup`/
@@ -334,7 +511,17 @@ export const ClockElementSchema = ElementBaseSchema.extend({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['target'],
-        message: "mode 'countdown' requires a target (duration or datetime)",
+        message: "mode 'countdown' requires a target (duration, datetime or timeofday)",
+      });
+    }
+    // D-141 — zones ride on a countdown's remaining time, which `wall`/`countup`
+    // do not have. Refusing at author time is the first of the two layers; the
+    // runtime ignoring them for those modes is the second.
+    if (el.mode !== 'countdown' && el.zones !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['zones'],
+        message: "zones are countdown-only — 'wall' and 'countup' have no remaining time",
       });
     }
   });

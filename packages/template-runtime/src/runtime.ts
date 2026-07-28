@@ -65,6 +65,7 @@ function resolveScopeValues(values: NestedFieldValues, path: string): NestedFiel
   return cur;
 }
 import { ensureBaselineCss } from './css.js';
+import { ensureZoneCss } from './zone-css.js';
 import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
@@ -402,6 +403,19 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // the new viewBox mapping without touching the signed package. Identity for
   // conforming scenes (the Designer migrates at load, so its streams are no-ops).
   scene = migrateScenePaths(scene);
+
+  // D-141 — compile this scene's colour zones into `<style id="cg-zones">`, beside
+  // the baseline block. Emitted from the SCENE by the runtime, which is what makes
+  // preview/export parity structural: the single-file export embeds the scene and
+  // boots this same code, so both carry byte-identical rules and neither exporter
+  // needs a zone code path. A scene with no zone overrides injects nothing.
+  // Runs AFTER the path migration so the compiler and the builder see one object.
+  const zoneCss = ensureZoneCss(scene, doc);
+  for (const warning of zoneCss.warnings) {
+    // A build-time drop (an unescapable key, a clash) degrades the styling, never
+    // the render — reported, never thrown.
+    console.warn(`[cg] zone stylesheet: ${warning}`);
+  }
 
   const built = buildScene(scene, doc);
   root.appendChild(built.container);

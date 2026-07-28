@@ -21,6 +21,18 @@ export { applyFieldValues } from './bindings.js';
 export { applyTransform, stringifyValue } from './transforms.js';
 export { LifecycleStateMachine, canTransition } from './lifecycle.js';
 export { ensureBaselineCss, BASELINE_CSS } from './css.js';
+export {
+  assignZoneIndices,
+  compileZoneCss,
+  ensureZoneCss,
+  hasZonedCountdown,
+  // D-141 helper 4 (design §1) — the kind → CSS property map D-139's colour effect
+  // must honour too, so one element recolours identically whichever drove it.
+  zoneColorTargets,
+  type ZoneColorTarget,
+  type ZoneCssResult,
+  type ZoneSlot,
+} from './zone-css.js';
 export { EventBus } from './event-bus.js';
 export { FrameDriver, type FrameDriverOptions } from './frame-driver.js';
 export { PlayoutController, type PlayoutControllerOptions } from './playout-controller.js';
@@ -34,6 +46,12 @@ export {
 export {
   ClockDriver,
   clockInitialText,
+  // D-141 helpers 1–3 (design §1) — separately exported and dependency-free so
+  // D-139's rule engine REUSES them instead of growing a second copy of the same
+  // predicate (CLAUDE.md golden rule 6).
+  pickByThreshold,
+  remainingMsOf,
+  resolveTimeOfDay,
   type ClockDriverMode,
   type ClockDriverOptions,
 } from './clock-driver.js';

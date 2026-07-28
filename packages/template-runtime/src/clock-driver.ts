@@ -1,4 +1,4 @@
-import type { ClockTarget } from '@cg/shared-schema';
+import type { ClockTarget, ClockZones } from '@cg/shared-schema';
 import { formatCountClock, formatWallClock, type ClockDigits } from './clock-format.js';
 import type { RuntimeClock } from './types.js';
 
@@ -53,7 +53,125 @@ export interface ClockDriverOptions {
   blinkColon?: boolean | undefined;
   /** D-103 — colon blink half-period in ms (phase = `floor(now / period) % 2`). Absent ⇒ 1000. */
   blinkPeriodMs?: number | undefined;
+  /**
+   * D-141 — the countdown's colour zones. Honoured ONLY for `mode: 'countdown'`:
+   * `wall`/`countup` have no remaining time, so the driver IGNORES zones there.
+   * (The schema also refuses to author them — two layers, per design §2.2, so a
+   * hand-edited `.vcg` degrades to base styles rather than misbehaving.)
+   */
+  zones?: ClockZones | undefined;
+  /**
+   * D-141 — the SCOPE ROOT this driver publishes its active zone on: the owning
+   * composition's `FieldScope.container` (the root stage for the scene, the
+   * `.cg-comp-inner` div for a nested instance). One attribute on one node flips
+   * arbitrarily many elements, because the compiled custom properties INHERIT and
+   * the cascade does the distribution — nearest declaration wins, which is how
+   * nearest-enclosing-zone resolution is expressed without `@scope` or `:is()`
+   * (both past the CEF floor). Absent ⇒ the driver publishes nothing.
+   */
+  zoneRoot?: HTMLElement | undefined;
   clock?: RuntimeClock | undefined;
+}
+
+/**
+ * D-141 helper 2 (design §1) — resolve `HH:mm` / `HH:mm:ss` to the epoch ms of its
+ * NEXT LOCAL occurrence relative to `nowMs`: today's when it is still ahead,
+ * otherwise tomorrow's.
+ *
+ * Local-FIELD construction is the point. `new Date(y, m, d, hh, mm, ss)` builds
+ * from local calendar fields, so a DST transition is resolved by the platform
+ * rather than by arithmetic on a fixed 86 400 000 ms day; `setDate(+1)` likewise
+ * rolls the local calendar day, not 24 hours.
+ *
+ * An occurrence exactly EQUAL to `nowMs` counts as ARRIVED — it is returned as
+ * today's, giving remaining 0, which clamps at 00:00 and completes immediately
+ * (the same path a past `datetime` target already takes). It is NOT rolled to
+ * tomorrow: a countdown to a time that is happening right now must not read
+ * 23:59:59 on air.
+ *
+ * Separately exported and dependency-free so D-139 resolves a time of day HERE
+ * rather than growing a second copy (CLAUDE.md golden rule 6).
+ *
+ * An unparseable string returns `nowMs` — i.e. "already arrived", the same
+ * degradation a past `datetime` target already takes (paints 00:00, completes
+ * immediately). This function runs inside the on-air paint path's pin, so it must
+ * never throw; the format is guaranteed upstream by `ClockTargetSchema` at author
+ * time and by the binding's own parse at playout.
+ */
+export function resolveTimeOfDay(time: string, nowMs: number): number {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(time);
+  if (m === null) return nowMs;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  const ss = m[3] === undefined ? 0 : Number(m[3]);
+  const d = new Date(nowMs);
+  const candidate = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm, ss, 0);
+  if (candidate.getTime() < nowMs) candidate.setDate(candidate.getDate() + 1);
+  return candidate.getTime();
+}
+
+/**
+ * The ABSOLUTE deadline a target resolves to at `nowMs`, or `null` for a RELATIVE
+ * one (`duration`, which counts accumulated active time and has no epoch).
+ * `datetime` is constant, so pinning it changes nothing; `timeofday` is resolved
+ * here exactly once per run (see {@link ClockDriver}).
+ */
+function absoluteDeadlineMs(target: ClockTarget | undefined, nowMs: number): number | null {
+  if (target === undefined) return null;
+  if (target.kind === 'datetime') return Date.parse(target.iso);
+  if (target.kind === 'timeofday') return resolveTimeOfDay(target.time, nowMs);
+  return null;
+}
+
+/**
+ * D-141 helper 3 (design §1, §5.3) — select the active zone step for a remaining
+ * time, over steps whose `atOrBelowMs` thresholds are strictly decreasing (the
+ * schema enforces that). Returns `undefined` when the remaining time is above
+ * every threshold; the caller then falls back to the `base` zone, or to no zone
+ * when `base` is absent.
+ *
+ * **Compared on the DISPLAYED one-second quantum, not the raw ms.** The countdown
+ * paints `ceil(max(0, remaining) / 1000)` seconds, so a raw-ms comparison would
+ * flip the colour while the digits still read `60:00` — the colour leading the
+ * number by up to a second, on the one frame an operator is looking at. Sharing
+ * the driver's own quantum makes the colour change on exactly the frame the digits
+ * reach the boundary.
+ *
+ * **The TIGHTEST covering threshold wins.** Thresholds nest — a remaining time
+ * under ten minutes is at-or-below the 10-, 30- AND 60-minute steps — so the
+ * selected zone is the one with the SMALLEST `atOrBelowMs` that still covers it,
+ * which over a strictly-decreasing list is the LAST match. Taking the first match
+ * instead would select the 60-minute zone for every remaining time under an hour,
+ * and would contradict this feature's own rule that at and after zero the LOWEST
+ * step stays selected.
+ *
+ * Because the compared value is monotonically decreasing and quantised, the
+ * sequence of selected keys is monotone by construction — there is no oscillation
+ * at a boundary to debounce.
+ */
+export function pickByThreshold<S extends { atOrBelowMs: number }>(
+  steps: readonly S[],
+  remainingMs: number,
+): S | undefined {
+  const displayed = Math.ceil(Math.max(0, remainingMs) / 1000) * 1000;
+  let picked: S | undefined;
+  for (const step of steps) {
+    if (step.atOrBelowMs >= displayed) picked = step;
+  }
+  return picked;
+}
+
+/**
+ * D-141 helper 1 (design §1) — the ONE source of a countdown's remaining ms.
+ * Promoted from the driver's former `private remainingMs()` so nothing outside the
+ * driver ever re-derives `deadline − now`: a second local copy is how a name comes
+ * to lie about what it tests (CLAUDE.md golden rule 6). D-139's threshold rules
+ * read the quantity through here.
+ *
+ * May be negative; callers clamp (the display does, at zero).
+ */
+export function remainingMsOf(driver: ClockDriver): number {
+  return driver.remainingMs();
 }
 
 interface NormalizedDriverClock {
@@ -80,7 +198,15 @@ export function clockInitialText(
     return formatWallClock(new Date(nowMs), opts.format, opts.digits, opts.timezone);
   if (opts.mode === 'countup') return formatCountClock(0, opts.format, opts.digits);
   const t = opts.target;
-  const remaining = t === undefined ? 0 : t.kind === 'duration' ? t.ms : Date.parse(t.iso) - nowMs;
+  // D-141 — a `timeofday` resolves against `nowMs` here for the same reason a
+  // `datetime` recomputes: an absolute deadline keeps approaching, so the static
+  // build-time paint and a later `reset()` legitimately differ.
+  const remaining =
+    t === undefined
+      ? 0
+      : t.kind === 'duration'
+        ? t.ms
+        : (absoluteDeadlineMs(t, nowMs) ?? 0) - nowMs;
   return formatCountClock(Math.ceil(Math.max(0, remaining) / 1000), opts.format, opts.digits);
 }
 
@@ -109,8 +235,28 @@ export class ClockDriver {
   private resolveComplete: (() => void) | null = null;
   private completion: Promise<void>;
 
+  /**
+   * D-141 — the ABSOLUTE deadline this run counts down to, pinned ONCE per run
+   * (`start()` / `reset()`) and on an explicit `retarget()`. `null` for a relative
+   * (`duration`) target, and before the first run.
+   *
+   * The pin is load-bearing for `timeofday`, for two reasons out of the driver's
+   * own contract. (1) A per-paint resolve could never reach zero: the moment
+   * remaining hits 0 the "next occurrence" becomes tomorrow, so the very next frame
+   * would paint 23:59:59 — a countdown jumping from 00:00 to a full day, on air.
+   * (2) `whenComplete()` must resolve exactly once per run, and a countdown clamped
+   * at zero is what closes a `content-driven` hold; a target that silently re-armed
+   * would keep the hold open forever and the graphic would never leave air.
+   */
+  private pinnedDeadlineMs: number | null = null;
+
+  /** D-141 — the last zone key PUBLISHED on the scope root: the write latch. */
+  private lastZoneKey: string | null = null;
+
   constructor(options: ClockDriverOptions) {
-    this.o = options;
+    // Copied, not aliased: `retarget()` rewrites `target`, and that must not reach
+    // back into the object the caller passed in.
+    this.o = { ...options };
     this.completion = new Promise<void>((res) => {
       this.resolveComplete = res;
     });
@@ -134,8 +280,17 @@ export class ClockDriver {
    */
   get isAbsolute(): boolean {
     return (
-      this.o.mode === 'wall' || (this.o.mode === 'countdown' && this.o.target?.kind === 'datetime')
+      this.o.mode === 'wall' ||
+      // D-141 — `timeofday` joins `datetime` on the absolute side: both are real
+      // deadlines a pause never delays.
+      (this.o.mode === 'countdown' &&
+        (this.o.target?.kind === 'datetime' || this.o.target?.kind === 'timeofday'))
     );
+  }
+
+  /** The countdown's active target — the value a `retarget()` last installed. */
+  get target(): ClockTarget | undefined {
+    return this.o.target;
   }
 
   /**
@@ -147,8 +302,12 @@ export class ClockDriver {
     if (this.destroyed || this.running) return;
     this.running = true;
     this.paused = false;
-    this.startedAt = this.clock.now();
+    // ONE read of the clock feeds both the relative time base and the absolute pin,
+    // so the run's start instant and its deadline can never disagree.
+    const now = this.clock.now();
+    this.startedAt = now;
     this.pausedAccumMs = 0;
+    this.pinnedDeadlineMs = absoluteDeadlineMs(this.o.target, now);
     this.paint();
     this.scheduleFrame();
   }
@@ -203,9 +362,16 @@ export class ClockDriver {
     this.completion = new Promise<void>((res) => {
       this.resolveComplete = res;
     });
-    const text = clockInitialText(this.o, this.clock.now());
+    // D-141 — one clock read for the pin AND the initial text, so the painted value
+    // is the remaining time of the deadline this run will actually count down to.
+    const now = this.clock.now();
+    this.pinnedDeadlineMs = absoluteDeadlineMs(this.o.target, now);
+    const text = clockInitialText(this.o, now);
     this.o.node.textContent = text;
     this.lastText = text;
+    // D-141 — clear the published zone: a fresh run must re-enter at the zone its
+    // OWN remaining time selects, never inherit the last run's colour.
+    this.clearZone();
     // D-103 — back to a steady single-`textContent` value; the run's first paint re-segments
     // for the blink if `blinkColon` is on.
     this.blinkBuilt = false;
@@ -227,12 +393,81 @@ export class ClockDriver {
     return nowMs - this.startedAt - this.pausedAccumMs;
   }
 
-  /** Countdown ms left (may be negative; callers clamp). */
-  private remainingMs(): number {
+  /**
+   * Countdown ms left (may be negative; callers clamp). PUBLIC since D-141 —
+   * read it through {@link remainingMsOf}, the one exported name, rather than
+   * re-deriving `deadline − now` anywhere else.
+   *
+   * An absolute target reads the run's PINNED deadline; before any run has pinned
+   * one (a bare read on a fresh driver) it resolves at the current instant, which
+   * for a constant `datetime` is the same number and for a `timeofday` is the next
+   * occurrence from now.
+   */
+  remainingMs(): number {
     const t = this.o.target;
     if (t === undefined) return 0;
     if (t.kind === 'duration') return t.ms - this.activeElapsedMs();
-    return Date.parse(t.iso) - this.clock.now();
+    const now = this.clock.now();
+    return (this.pinnedDeadlineMs ?? absoluteDeadlineMs(t, now) ?? 0) - now;
+  }
+
+  /**
+   * D-141 — re-aim a countdown at a new target WITHOUT touching the run (design
+   * §4.3). This is the seam a `clock-target` binding applies through, so a
+   * `CG UPDATE` re-targets a LIVE countdown: the operator sees the new value at
+   * once, and nothing replays.
+   *
+   * Re-pins the deadline, forces one repaint, re-evaluates the zone (one attribute
+   * write), and re-arms completion when the new deadline is in the future. Leaves
+   * `running`/`paused`, the active-time accumulator, the colon-blink phase, the
+   * scope's lifecycle and every other driver exactly as they were.
+   *
+   * **The limit, stated rather than discovered on air:** re-targeting a countdown
+   * that ALREADY completed re-arms the DISPLAY but cannot re-open a
+   * `content-driven` hold that already closed — the scope awaited the old promise
+   * and has moved on, and a resolved gate is not un-resolved by minting a new one.
+   * Re-target a live countdown freely; to re-run one that already hit zero, replay.
+   */
+  retarget(target: ClockTarget): void {
+    if (this.destroyed) return;
+    const now = this.clock.now();
+    const nextPin = absoluteDeadlineMs(target, now);
+    // A control app re-sends the same value on every UPDATE; resolving to the same
+    // deadline must therefore cost nothing — no repaint, no zone write, no re-arm.
+    if (this.o.target?.kind === target.kind && this.isSameDeadline(target, nextPin)) return;
+
+    this.o.target = target;
+    this.pinnedDeadlineMs = nextPin;
+
+    if (this.o.mode === 'countdown' && this.remainingMs() > 0) {
+      // Re-arm the completion LATCH so the new deadline can fire it. A FRESH
+      // promise is minted only when the previous one already RESOLVED: while it is
+      // still pending it is the very promise the scope's hold is awaiting
+      // (`runtime.ts` registers `() => driver.whenComplete()` and the aggregation
+      // holds what it read), so replacing it would strand that hold open forever —
+      // the opposite of "leaves the RUN untouched". A pending promise needs no
+      // re-arm: its resolver still fires, now at the new deadline.
+      if (this.completed) {
+        this.completion = new Promise<void>((res) => {
+          this.resolveComplete = res;
+        });
+      }
+      this.completed = false;
+    }
+
+    // Force the text write even when the formatted string happens to match, so the
+    // repaint is unconditional; `paint()` then re-evaluates the zone through the
+    // same latch every other frame uses (one write, and only on a real change).
+    this.lastText = null;
+    this.paint();
+  }
+
+  /** Whether `target` resolves to the deadline this driver is already counting to. */
+  private isSameDeadline(target: ClockTarget, nextPin: number | null): boolean {
+    if (nextPin !== null) return nextPin === this.pinnedDeadlineMs;
+    // A relative target has no epoch; it is unchanged when its duration is.
+    const current = this.o.target;
+    return target.kind === 'duration' && current?.kind === 'duration' && target.ms === current.ms;
   }
 
   private currentText(): string {
@@ -256,14 +491,54 @@ export class ClockDriver {
       this.o.node.textContent = next;
       this.lastText = next;
     }
+    this.paintZone();
     // Clean end: the run completes when 0 paints — then this driver signals
     // its scope and freezes (the display stays clamped at 00:00).
-    if (this.o.mode === 'countdown' && !this.completed && this.remainingMs() <= 0) {
+    //
+    // Gated on `running` since D-141: `retarget()` repaints OUTSIDE a run (the
+    // operator may re-aim a loaded-but-not-played template), and a repaint must
+    // never be what completes a countdown that has not started.
+    if (this.running && this.o.mode === 'countdown' && !this.completed && this.remainingMs() <= 0) {
       this.fireComplete();
       this.running = false;
       this.paused = false;
       this.cancelFrame();
     }
+  }
+
+  /**
+   * D-141 — publish the active zone on the scope root, LATCHED: one attribute
+   * write per zone CHANGE, never one per frame. For the 4-zone case that is the
+   * establishing write plus three boundary crossings over an entire hour.
+   *
+   * Zone selection is pure arithmetic over `remainingMs()`, which this frame has
+   * already computed, so the ≈1-DOM-write-per-second text discipline is untouched:
+   * a run that stays inside one zone adds ZERO writes. One attribute on one node
+   * restyles arbitrarily many elements — the cascade does the distribution.
+   *
+   * Countdown-only: `wall`/`countup` have no remaining time, so their zones (which
+   * the schema refuses to author in the first place) are ignored here too.
+   */
+  private paintZone(): void {
+    const zones = this.o.zones;
+    const root = this.o.zoneRoot;
+    if (zones === undefined || root === undefined || this.o.mode !== 'countdown') return;
+    const step = pickByThreshold(zones.steps, this.remainingMs());
+    // Above every threshold the zone is `base` — or NONE when `base` is absent, in
+    // which case every override is inert up there, the same code path as a scope
+    // with no zoned countdown at all.
+    const next = step?.key ?? zones.base?.key ?? null;
+    if (next === this.lastZoneKey) return;
+    if (next === null) root.removeAttribute('data-cg-zone');
+    else root.setAttribute('data-cg-zone', next);
+    this.lastZoneKey = next;
+  }
+
+  /** Drop the published zone and the latch (a fresh run, or teardown). */
+  private clearZone(): void {
+    if (this.lastZoneKey === null) return;
+    this.o.zoneRoot?.removeAttribute('data-cg-zone');
+    this.lastZoneKey = null;
   }
 
   private fireComplete(): void {

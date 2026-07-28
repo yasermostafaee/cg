@@ -75,6 +75,21 @@ const BindingTargetSchema = z.discriminatedUnion('kind', [
     kind: z.literal('repeater-items'),
     elementId: IdSchema,
   }),
+  /**
+   * D-141 — a `text` field drives a countdown clock's TARGET: an `HH:mm` /
+   * `HH:mm:ss` time of day, so the operator enters each day's official time at
+   * playout and a `CG UPDATE` re-targets a LIVE countdown without replaying it.
+   *
+   * No new field TYPE: the value is an ordinary `text` field constrained by the
+   * existing `pattern` mechanism, so the GDD carries it as a `single-line` string
+   * and `apps/runtime` needs no change at all. Applied through the clock DRIVER's
+   * re-target seam rather than the DOM-value walk — the same routing
+   * `sequence-item-text` uses.
+   */
+  z.object({
+    kind: z.literal('clock-target'),
+    elementId: IdSchema,
+  }),
 ]);
 
 /**
