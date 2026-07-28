@@ -497,8 +497,11 @@ semantics unchanged — this adds a TRIGGER, not a verb).
 ## [ ] C-018 — CasparCG 2.5.0 upgrade + hardware validation ⟨priority: high⟩
 
 **What:** Move the project's target server from **2.3.3 LTS to 2.5.0 Stable** (released
-2025-12-10) and validate it on the real Windows playout machine — screen consumer first, a
-Decklink pass before anything on-air depends on it. OWNER DECISION, 2026-07-28. The owner
+2025-12-10) and validate it on the real Windows playout machine — screen consumer first, then a
+pass over the plant's REAL air path before anything on-air depends on it. That path is **NewTek
+iVGA into a TriCaster, not Decklink** (this plant has no Decklink card at all), and 2.5.0 has
+removed the iVGA consumer — see [[C-020]], which now owns that pass and BLOCKS this item's
+cutover. OWNER DECISION, 2026-07-28. The owner
 installs 2.5.0 **side-by-side** with 2.3.3 so rollback is preserved, and rebuilds the config
 from the 2.5 defaults (1080i5000 channel, AMCP 5250, OSC predefined-client) rather than
 copying the 2.3 config forward — a copied config is how a defaults change becomes an
@@ -602,8 +605,57 @@ Persian eyeball, live animation, leak listen, Decklink pass, channel-format deci
   **720p5000** with no OSC predefined-client, while the plant runs **1080i5000** with
   one — 1920×1080 templates overflow a 720p channel.
 
+**OWNER CHECKLIST RESULTS — measured by the owner at the box, 2026-07-28.** These are the
+six eyes-and-ears items the recon above could not settle. They are recorded here beside the
+recon's machine-measurable findings; the block above is left exactly as PR #425 wrote it,
+including the two conclusions this pass corrects.
+
+- **Audible audio on the channel output: PASS on `720p5000` AND on `1080i5000`.** Heard, not
+  inferred from the mixer array — the recon's 297 ms nonzero-volume measurement is now
+  confirmed at the ear on both channel formats, so the format decision does not affect it.
+- **`MIXER 1-20 VOLUME 0.5` / `0` / `1`: halved, muted, restored** — audibly, in that order.
+  **Operator control over template audio is real**, not just an OSC number moving. This is the
+  capability [[C-019]] is built on, and it is now hardware-confirmed rather than assumed.
+- **Fonts, shaping and joining: correct.** The [[B-111]] fix was seen on hardware — the Persian
+  text now sits against the **right edge of its authored box**, which is what the fixture was
+  always supposed to show. The recon's "shared `@cg/template-runtime` RTL quirk (text anchored
+  at the LEFT edge)" above was that stale-fixture bug, not a runtime defect; B-111 carries the
+  full diagnosis.
+- **Animation on 2.5.0 is FINE — this CORRECTS the recon's conclusion above.** The recon
+  inferred a "1 s in-animation" from the scene's `frameRange` 0–50 @ 50 fps and reported it as
+  never observed mid-flight. `frameRange` is the **timeline length, not evidence that any
+  animation exists**: this fixture simply has no keyframes, so appearing instantly is correct
+  behaviour and there was never a missing animation to observe. The owner verified OTHER
+  templates animate correctly on 2.5.0. Nothing here is owed. (The general lesson is the
+  repo's usual one — a derived number was read as an observation.)
+- **Windows first-packet leak: CONFIRMED. This SETTLES the second of the three PROVISIONAL
+  limitations listed below**, in the direction of the forum report — the leak is real on this
+  build — but **refutes the mechanism the forum attached to it**. Two measurements:
+  - With `<system-audio />` REMOVED from the config and `INFO 1` showing only the `screen`
+    consumer, **a short beep was still heard at PLAY**. No consumer was routing the channel
+    mix to the default device, so that beep cannot be the channel mix — it bypasses the
+    channel. Nothing was heard at `KILL`, so **the clean-shutdown half is clean and the
+    forum's link between the leak and shutdown does not hold** (the recon had already found
+    `QUIT` does not exist and `KILL` shuts down cleanly on both builds).
+  - With `<system-audio />` RESTORED, the same fixture gives a short **LOUDER** burst followed
+    by the continuous **quieter** tone. The A/B across the two configs is what identifies the
+    parts: the loud burst is the leak (bypassing the channel, present with no audio consumer
+    at all), the quiet continuous part is the legitimate channel mix arriving via
+    `<system-audio />`.
+  - **Operational consequence, and it is a config rule not a code fix:** on the playout box the
+    **default sound device must not be routed anywhere that reaches air**. The leak is a
+    property of the server build; containing it is a matter of where the box's default device
+    goes. Carry this into the cutover runbook.
+- **The "Decklink pass" this item originally asked for does not apply to this plant** and has
+  been rewritten in **What** above. There is no Decklink card here; the air path is NewTek
+  iVGA into a TriCaster, and 2.5.0 has removed the iVGA consumer. That pass — and the cutover
+  blocker it turned into — is now [[C-020]]. The OWNER CHECKLIST wording in the #425 block
+  above still says "Decklink pass"; it is left as written, and this bullet is its correction.
+
 PROVISIONAL limitations of the new audio path, taken from the PR #1590 discussion and forum
-posts and **NOT from our own measurements** — this item's hardware pass is what settles them:
+posts and **NOT from our own measurements** — this item's hardware pass is what settles them
+(**the first-packet leak is now SETTLED — see the owner-checklist results above**; the other
+two remain unmeasured):
 integer framerates only (our 50 Hz plant is fine; 59.94 unsupported), a reported Windows
 first-packet audio leak to the system speakers (a clean shutdown via `QUIT` was implicated),
 and a Linux path that is only lightly tested.
@@ -666,3 +718,56 @@ Designer authoring"; numbers get linked once both exist (the [[C-015]]/D-137 pat
 MIXER VOLUME per html layer becomes meaningful once audio actually flows, which makes it a
 genuine operator control rather than a no-op. On-air behaviour ⇒ real-hardware verification is
 part of done, not a follow-up.
+
+## [ ] C-020 — 2.5.0 REMOVED the iVGA consumer, and iVGA is this plant's entire air path ⟨priority: high⟩ — BLOCKS the [[C-018]] cutover
+
+**What:** Choose, install and hardware-validate the replacement for `<newtek-ivga />` before
+2.5.0 is cut over in the plant. The consumer does not exist in 2.5.0, and it is the only
+video-carrying consumer the production config declares — so starting 2.5.0 against today's
+config stops output to the TriCaster **entirely: the whole picture, not just audio**.
+**Why:** [[C-018]] moves the plant to 2.5.0 for one reason — HTML-template audio finally
+reaching the channel mixer. That upgrade cannot land while it also takes the plant off air.
+The removal is not a deprecation with a fallback; the consumer is gone and the library it
+depended on is not shipped, so the failure at cutover is total output loss, discovered live.
+**Acceptance:**
+
+- WHEN the plant's 2.5.0 config is prepared THEN it declares no `<newtek-ivga />`, and the
+  consumer replacing it is named explicitly in this item with the settings it was validated at
+- WHEN the replacement consumer runs on the playout box THEN the TriCaster sees the channel as
+  a source and the picture is on air
+- WHEN a template with a transparent background is played over the replacement path THEN fill
+  AND key both arrive at the TriCaster — alpha confirmed by looking at the switcher, never
+  inferred from the format's specification ([[B-066]] class: verify, never assume)
+- WHEN the replacement's runtime dependency is checked on the playout box THEN it is either
+  already present or recorded here as an install prerequisite of the cutover
+- WHEN this item's hardware pass is recorded THEN [[C-018]]'s cutover is unblocked
+
+**Evidence — all verified on disk during the 2026-07-28 owner checklist:**
+
+- `CHANGELOG.md` shipped beside the 2.5.0 binary, **line 186**, inside the "CasparCG 2.4.0
+  Stable" section (lines 116–193) under `### Consumers` / `##### Improvements`:
+  `* iVGA: Remove consumer`. Directly below it: `* NDI: Upgrade to NDI5`. So the removal
+  landed in 2.4.0 and 2.5.0 inherits it — the plant skipped the release that would have
+  warned it.
+- The production install's config `D:\programs\CasparCG\casparcg.config:15-19` declares
+  consumers `<system-audio />` + `<newtek-ivga />` + `<screen />`. **There is no Decklink in
+  this plant.** Fill+key reaches air over NewTek iVGA, into a TriCaster.
+- `Processing.AirSend.x64.dll` — the library iVGA requires (`CHANGELOG.md:1007` and
+  `:1062-1066`) — is **absent** from the 2.5.0 install directory.
+- The 2.5.0 config's shipped-defaults comment documents consumers `decklink` / `screen` /
+  `system-audio` / `ndi` and omits `newtek-ivga`; the same comment block in the 2.3.2 config
+  does list it.
+
+**Migration direction — INVESTIGATED, NOT VERIFIED.** Recorded so the work does not start from
+zero, explicitly not as a decision: `<newtek-ivga />` becomes `<ndi />`; 2.5.0 ships a native
+NDI consumer (NDI5, the same changelog line); the TriCaster is NewTek's own product, so NDI is
+native to it; an NDI runtime is needed on the playout box. iVGA carried fill+key — NDI supports
+alpha, but **that must be seen on hardware, never assumed**, which is why it is an acceptance
+bullet rather than a premise.
+
+**Notes:** **DEFERRED by owner decision, 2026-07-28** — this work waits for the integration
+with the company's playout software, when the real destination and its settings are reachable.
+Validating a replacement against a guessed destination would produce evidence about the guess.
+Until then [[C-018]] stays open and **nothing on air depends on 2.5.0**: the plant keeps
+running 2.3.2, the 2.5.0 install is side-by-side, and no config is cut over. The cost of the
+delay is only that [[C-019]] stays blocked.

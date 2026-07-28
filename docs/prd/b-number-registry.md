@@ -286,7 +286,38 @@ on the only other remote ref (`docs/recon-caspar-250-validation`, open PR #425),
 session worktree. The only prior occurrences of `B-111` anywhere were THIS file's own "next free"
 pointer and the near-duplicate note above recording that `B-111` was deliberately NOT minted —
 both documented false positives. The highest heading anywhere was `B-110`. The space stays
-contiguous: `B-001` … `B-111`, no gaps. **Next free: `B-112`.**
+contiguous: `B-001` … `B-111`, no gaps. **Next free: `B-112`.** _(superseded — see the
+2026-07-28 `4dc0daf` entry below; `B-112` is now taken and the pointer is `B-113`.)_
+
+**Re-audited 2026-07-28** against `main` (`4dc0daf`, after #426). `B-112` is now taken — ONE
+cross-cutting bug, [bugs.md](bugs.md): **B-112** (documents authored before D-060/#223 carry a
+stale `fitMode: 'autosize'` that the change later made real, so they render differently than
+authored — three known instances of one pattern: `@cg/starter-templates` repaired by D-060 §F,
+`tools/template-fixtures` found by [[B-111]], and `packages/vcg-format/tests/fixtures.ts` still
+carrying it deliberately as pack/unpack-only). Verified free immediately before the commit that
+writes the heading: `git fetch origin` first, then the duplicate audit printed exactly `B-056`
+and `B-080`; no `## [.] B-112` heading on freshly fetched `origin/main`, on ANY of the 32 refs
+in this repo (branches, remotes, tags, `refs/stash`, and the `snapshot/*` + `stash-rescue/*`
+rescue refs — swept programmatically for the heading pattern), or on disk in any of the four
+working trees — `cg` (main), `cg-designer`, `cg-runtime` (all three clean, 0 dirty files) and
+this session worktree. The only prior occurrence of `B-112` anywhere was THIS file's own "next
+free" pointer — the documented false positive. The highest heading anywhere was `B-111`. The
+space stays contiguous: `B-001` … `B-112`, no gaps. **Next free: `B-113`.**
+
+**Three NON-`B` numbers were claimed in the same commit, recorded here although this file's
+title says B-numbers.** The same sweep was run for them, and there is no other registry to
+record it in — leaving it unwritten would mean the next session re-derives it, which is the
+habit this file exists to break. All three are from the [[C-018]] owner-checklist pass:
+**C-020** ([caspar.md](caspar.md) — 2.5.0 removed the iVGA consumer that is this plant's entire
+air path, so it BLOCKS the C-018 cutover), **R-029** and **R-030**
+([runtime.md](runtime.md) — cued-but-not-taken template audio reaching air, and output placement
+against a hardcoded 1920×1080 frame). The per-ref sweep above reported the maximum for **all
+three prefixes at once**: the highest anywhere — merged, unpushed, stashed or on disk — was
+`C-019` and `R-028`, so no claim sits at or above `C-020`/`R-029`/`R-030`, and no sibling range
+claim sits above them either. Note that `R-029` and `R-030` are a CONTIGUOUS RANGE claimed in
+ONE commit: they are two numbers rather than one because they are two unrelated defects that
+merely surfaced in the same hardware session (audio lifecycle vs. output raster), with different
+components and different fixes — the same split test this file applies to `B-100`/`B-101`.
 
 ### RECOMMENDATION (recorded, not implemented): retire the "next free" pointer
 

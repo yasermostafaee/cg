@@ -1120,3 +1120,104 @@ layers 90–99 are free at runtime (`pinned` is declared but NEVER populated by 
 producer KIND, not identity — without declaration R-009 flags healthy playout graphics as orphans.
 **C-015 stops being distant** — it is a prerequisite. One RECON owed: whether CasparCG 2.3.2
 exposes template identity beyond producer kind, via `tools/caspar-amcp-probe` on real hardware.
+
+## [ ] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩
+
+**What:** Make template audio start at the **take**, not at the **cue**. Today `CG ADD` with no
+`PLAY` already produces audio on the channel, so an operator preparing a graphic is heard on air
+while the graphic itself is still hidden. Decide and implement the containment; the three
+candidate mechanisms are recorded below and **none is chosen yet**.
+**Why:** Cue-then-take is the core operator gesture — the whole point of loading ahead is that
+nothing reaches air until the take. Audio that ignores that boundary makes cueing unsafe, which
+in practice means operators stop cueing and start taking blind. It also lands directly on
+[[C-019]]: authoring audio into templates ships this defect to every template that has sound, so
+this is an INPUT to that item, not a follow-up to it.
+**Acceptance:**
+
+- WHEN a template carrying audio is cued (`CG ADD`, not yet played) THEN nothing from it is
+  audible on the channel output
+- WHEN that cued item is then taken (`PLAY`) THEN its audio is audible, from the start of the
+  audio — containment must not eat the head
+- WHEN the containment mechanism is chosen THEN this item records WHICH mechanism, and states
+  in words which command sources it does NOT cover
+- WHEN the template-side option is part of the chosen mechanism THEN it is enforced at
+  export/validate time, not left to authoring convention
+
+**Evidence:** measured by the [[C-018]] recon at **0.24 s after `CG ADD`**, while the page was
+still stage-loaded and hidden — `/channel/1/mixer/audio/volume` nonzero with no `PLAY` sent.
+Confirmed by ear at the box on **2026-07-28** during the same owner checklist that confirmed
+audible audio and working `MIXER VOLUME` (see [[C-018]]'s owner-checklist results). This is
+2.5.0 behaviour and it is a direct consequence of the fix C-018 wants: on 2.3.x template audio
+never reached the channel at all, so the defect could not exist there.
+
+**Containment options — recorded, NONE chosen:**
+
+1. **Template-side** — gate audio on the template's own play lifecycle rather than on load
+   (start on `play()`, not on DOM/stage load). This is the RIGHT fix in the sense that the
+   template is where the lifecycle actually lives, and it is the only option that survives any
+   command source. But it binds **only templates we author**, so it is worth nothing as a
+   convention: it must be **ENFORCED at export/validate time** — a template that starts audio
+   on load fails to export — or it will hold until the first template authored elsewhere.
+2. **Runtime/bridge-side** — `MIXER <layer> VOLUME 0` on ADD, restore on PLAY. **Technically
+   confirmed to work** (the same MIXER control validated in C-018's checklist). Covers every
+   template regardless of who authored it, but only for commands **we** send.
+3. **Neither option covers the PLAYOUT system**, which sends `CG ADD`/`PLAY` directly from
+   outside our code — the three-writers finding in [[R-028]]'s design
+   (`openspec/changes/runtime-unified-layer-rows/design.md`). A graphic cued by the playout
+   system carries whatever the template does on load, so option 1's export gate is the only one
+   that reaches it — and only for templates that went through our exporter.
+
+**Notes:** Filed from the C-018 hardware pass; no code rides this item yet. Sequencing matters
+more than usual: if [[C-019]] ships template audio before this is decided, every audio template
+authored in the meantime bakes in whichever behaviour the exporter allowed at the time.
+
+## [ ] R-030 — output placement must know the channel raster ⟨priority: medium⟩
+
+**What:** Give play-out placement the real channel geometry, and scale the stage to it. R-011's
+"author small, place anywhere" is already implemented — but against a **hardcoded 1920×1080
+output frame**, so on any other channel raster the anchors are computed against the wrong frame
+and the scene overflows. The approach is DECIDED (below): keep 1920×1080 as the reference frame
+and apply one uniform scale at play-out.
+**Why:** The [[C-018]] recon hit exactly this — the rebuilt 2.5.0 config is stock **720p5000**
+while the plant runs **1080i5000**, and a 1920×1080 scene overflowed the 720p channel. It was
+worked around with `CG 1-10 INVOKE 0 "scrollTo(0,360)"`, which is a diagnostic trick, not
+something that can be on air. Any channel-format decision — and the 2.5.0 cutover forces one —
+currently changes where every graphic lands.
+**Acceptance:**
+
+- WHEN a scene plays on a 1920×1080 channel THEN the output is pixel-identical to today
+  (`scale` = 1 — the no-regression bullet)
+- WHEN a scene plays on a 1280×720 channel THEN the stage root is uniformly scaled and every
+  anchor and offset lands proportionally correct, with no overflow and no `scrollTo` workaround
+- WHEN the bridge supplies channel geometry as a query parameter THEN that is used; WHEN it is
+  absent THEN `window.innerWidth`/`innerHeight`; WHEN neither is available THEN 1920×1080
+- WHEN the channel is not 16:9 THEN the `min()` rule letterboxes rather than distorting
+- WHEN the Designer preview renders THEN it still never calls the placement path — the author
+  keeps seeing the comp at its own resolution
+
+**What already exists** (`packages/template-runtime/src/position.ts`): a scene is built at its
+own `scene.resolution` and translated onto the output frame by one of nine anchors, with the
+operator override arriving as a bridge-appended query. The Designer preview never calls it, so
+placement is output-only **by construction**. The gap is documented in that file's own comment:
+`OUTPUT_FRAME` is hardcoded `{ width: 1920, height: 1080 }` at `position.ts:25`, and
+`applyOutputPosition` force-sizes `html`/`body` to it at `position.ts:110-111`. **The seam is
+already there** — `outputTranslate` takes a `frame` parameter with a default
+(`position.ts:80`), so the plumbing is a matter of supplying it rather than inventing it.
+
+**DECIDED approach:**
+
+- The **reference frame stays 1920×1080**; scene coordinates keep being authored against it.
+  Nothing in the Designer, the schema or any existing document changes meaning.
+- At play-out apply **ONE uniform `scale = min(channelW/refW, channelH/refH)`** to the stage
+  root. Every existing anchor and offset calculation then stays correct **unchanged** — this is
+  the reason for choosing scale over any coordinate rework.
+- **Reflow is REJECTED**, and the reason is recorded so it is not reproposed: keyframes are
+  authored in pixels, and line breaking and kerning are relative to authored boxes. Reflowing
+  makes on-air output non-deterministic and breaks preview-equals-air — the property the whole
+  placement design is built to preserve.
+- **Channel geometry source, in order:** an explicit bridge query parameter; else
+  `window.innerWidth`/`innerHeight`; else the 1920×1080 fallback.
+- **Non-16:9 channels letterbox** under the `min()` rule — a known edge case, not a blocker.
+  This plant is 16:9 throughout.
+
+**Notes:** Filed from the C-018 recon; the approach is decided but no code rides this item yet.

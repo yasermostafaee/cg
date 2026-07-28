@@ -1041,6 +1041,60 @@ render as FIXED boxes": renders the fixture through the real runtime and asserts
 `left: 140px` + `width: 1140px` with NO `right` pin (the autosize-RTL signature), plus
 `direction: rtl` / `text-align: start`.
 
+**Generalised by [[B-112]]** (appended 2026-07-28, nothing above rewritten): this entry is one of
+three known instances of the same stale-`autosize` pattern, and B-112 tracks the pattern — the
+repo-wide inventory and the open question of whether user-saved `.vcg` documents were migrated.
+
+## [ ] B-112 — documents authored before D-060 carry a stale `fitMode: 'autosize'` that has since become real, so they render differently than they were authored — silently ⟨priority: medium⟩
+
+**Repro:** take any document authored before **2026-06-29** that has a text element with
+`fitMode: 'autosize'` and `direction: 'rtl'` — its author saw the box come from
+`transform.size` — and render it through `@cg/template-runtime` on today's `main`.
+**Expected:** the box is the authored box (`transform.size`), as it was when the document was
+saved and as its author last saw it.
+**Actual:** the box hugs its content and `transform.size` is ignored; for RTL the top-RIGHT
+corner pins at `position.x` (`packages/template-runtime/src/scene-builder.ts:515`), so the run
+grows leftward from there. Nothing warns, nothing fails — the document just renders differently
+than it was authored.
+**Env:** every build since [[D-060]] (#223, merged 2026-06-29). Engine-independent (deterministic
+CSS from the shared runtime), so it reproduces identically in preview and on CasparCG.
+
+**Diagnosis — one pattern, three known instances, which is why this is ONE item.** Before D-060
+`fitMode` was **stored but never read**: the box always came from `transform.size`, so writing
+`'autosize'` was a harmless no-op and authors had no way to tell they had written it. D-060 made
+the field meaningful. Every document carrying `'autosize'` from before that date therefore has a
+value its author never really chose, and it is now load-bearing. D-060 §F audited and repaired
+`@cg/starter-templates`, but its task list named **only that workspace**:
+
+1. `@cg/starter-templates` — found and repaired by D-060 §F itself.
+2. `tools/template-fixtures/` — the same staleness, one workspace over, found months later by
+   [[B-111]] when it corrupted the C-018 hardware evidence it was supposed to produce.
+3. `packages/vcg-format/tests/fixtures.ts` — reported by the B-111 session as still carrying it.
+   Left alone there **deliberately**: that fixture is pack/unpack only and is never rendered, so
+   the stale value has no effect. Recorded because "no effect today" is a property of how the
+   fixture is used, not of the value.
+
+Three instances of one cause is the reason this is filed as a single item rather than as
+individual defects: repairing them one at a time is what produced the gap between #1 and #2.
+
+**Fix — first steps, in order:**
+
+1. **A repo-wide inventory of `fitMode: 'autosize'`**, classified by whether each occurrence is
+   ever RENDERED (a rendered occurrence is a defect; a pack/unpack-only one is a note). This is
+   the step that turns "three known" into a complete list, and it must run before any repair —
+   repairing the ones we happen to remember is exactly how instance #2 survived.
+2. **OPEN QUESTION, deliberately NOT answered here: did D-060 ship a migration for existing
+   `.vcg` documents, and if not, what is the exposure for templates users saved before
+   2026-06-29?** The three instances above are all repo-internal, where we can simply edit the
+   source. A user's saved document is not — nobody has audited that path. This is recorded as
+   OPEN because answering it requires reading what D-060 actually shipped, and reasoning it out
+   from the item text is precisely the kind of inference this repo does not accept as evidence.
+
+**Notes:** If the answer to #2 turns out to be "no migration", that work is **design-first** when
+scheduled — `@cg/shared-schema` moves first, per the repo's schema-first rule. Cross-refs
+[[B-111]] (instance #2, with the full D-060 §E/§F mechanism written out) and [[D-060]] (the change
+that made the field real — not a defect in D-060, which repaired what its own task list named).
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count
