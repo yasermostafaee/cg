@@ -1415,3 +1415,51 @@ the clamp, so the authored count and the clamp drift apart silently.
 **Regression test:** template-runtime stamp clamp (both authored items AND a bound list, covering
 the leaking path once located) + a Designer-side guard test (adding past `maxItems` is
 refused/flagged).
+
+## [ ] B-110 — `multi-select.spec.ts` tests are not isolated: `:19` reads Opacity `80` where it expects `100`, because `:181` scrubbed it in a concurrent worker ⟨priority: medium⟩
+
+**Repro:** (intermittent — surfaces only when the two tests overlap in time)
+
+1. `pnpm gate:e2e` (or `pnpm exec playwright test tests/e2e/multi-select.spec.ts`) with
+   `fullyParallel: true` and `workers: undefined` — 6 workers on a 12-core box.
+2. `multi-select.spec.ts:19` ("grouped unit-bearing inspector; per-shape boxes …") and
+   `multi-select.spec.ts:181` ("dragging a shared number field scrubs all selected live") land in
+   DIFFERENT workers and run at the same time.
+
+**Expected:** `:19` selects two fresh shapes and the shared Opacity control reads `100`.
+**Actual (observed 2026-07-27, local Windows):**
+
+```
+Error: expect(locator).toHaveValue(expected) failed
+  - waiting for getByTestId('multi-select-inspector').getByRole('spinbutton', { name: 'Opacity' })
+    17 × locator resolved to <input … value="80" … aria-label="Opacity"/>
+       - unexpected value "80"
+```
+
+**Why this is an ISOLATION defect and NOT the timeout class:** the element was present and stable
+for the whole 7 s wait — the locator resolved **17 times**, every time to `value="80"`. Nothing was
+late. The value was simply already wrong when the test looked, and `80` is precisely what `:181`
+leaves behind when it scrubs the shared Opacity field. That is stale persisted project state
+crossing a test boundary, not a correct assertion arriving after its budget.
+
+**Why the distinction matters — do not fold this into [B-078](bugs.md):** B-078's fan-out is what SURFACES
+this (two tests in one file can only overlap because `fullyParallel` puts them in different
+workers), so the two travel together and were found in the same run. But they are different
+defects with opposite fixes. Bounding Playwright's workers — B-078's named next lever — would make
+the overlap rarer and the symptom disappear, while leaving the shared-state coupling entirely
+intact: the tests would still be non-isolated, just less often caught. **A worker cap HIDES this
+bug rather than fixing it**, which is exactly why it needs its own entry and its own fix.
+
+**Not yet established (do not assume):** WHERE the shared state lives. The Designer persists project
+state, and these two tests exercise the same fixture; whether they collide through the persisted
+project, a shared storage key, or a module-level store has not been traced. That trace is the first
+step of any fix — the remedy (per-test isolation of whatever is shared) depends on which it is.
+
+**Env:** Windows, local (`fullyParallel: true`, `workers: undefined` → 6, `retries: 0`).
+CI is far less exposed (`workers: CI ? 1 : undefined` → 1 worker, so the two tests cannot overlap),
+which is why this surfaces locally — the same exposure asymmetry [B-078](bugs.md) records.
+**Files:** `apps/designer/tests/e2e/multi-select.spec.ts` (`:19` and `:181`),
+`apps/designer/playwright.config.ts`.
+**Regression test:** the fix is itself the test — `:19` must read `100` with `:181` running
+concurrently. Verify by running the file at `--workers=6` repeatedly, NOT at `--workers=1` (which
+removes the overlap and would pass vacuously).

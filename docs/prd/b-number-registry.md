@@ -250,6 +250,31 @@ the only prior occurrence of `B-109` anywhere was THIS file's own "next free" po
 false positive). The highest heading anywhere was `B-108`. The space stays contiguous: `B-001` …
 `B-109`, no gaps. **Next free: `B-110`.**
 
+**Re-audited 2026-07-28** against `main` (`befbe41`, after #419). `B-110` is now taken — ONE
+Designer bug, [bugs-designer.md](bugs-designer.md): **B-110** (`multi-select.spec.ts` `:19` reads
+Opacity `80` expecting `100` — stale persisted project state crossing a test boundary when `:19`
+and `:181` run in different workers under `fullyParallel`). Verified free immediately before the
+commit that writes the heading, at the widened scope: no `## [.] B-110` heading on fetched
+`origin/main`, on ANY ref (local, remote or tag) in any of the three bug files, or on disk in any
+of the four working trees — `cg` (main), `cg-designer`, `cg-runtime` (all three clean, 0 dirty
+files) and this session worktree. The only prior occurrence of `B-110` anywhere was THIS file's
+own "next free" pointer — the documented false positive. The highest heading anywhere was `B-109`.
+The space stays contiguous: `B-001` … `B-110`, no gaps. **Next free: `B-111`.**
+
+**A SECOND number was NOT claimed, deliberately — the near-duplicate that was caught.** The same
+session was asked to file two bugs: the Designer isolation defect above, and a second one for
+"`gate:e2e`'s Playwright worker fan-out is unbounded". The second was **not filed**: reading
+[B-078](bugs.md) showed it already covers that mechanism — it names `workers: undefined` giving
+"6 on a 12-core box" as the origin of its own red, and its closing Residual-risk line already names
+capping E2E worker count as the next lever. Its stated blocker ("never been reproduced under
+measurement") was exactly what the new evidence supplied. So the evidence was folded INTO B-078 —
+including rewriting its now-false "Still open because" line and raising it to high — rather than
+minting `B-111` for a near-duplicate of an OPEN entry in the same file. Recorded here because this
+is the failure mode the whole registry exists to prevent, and this time the check fired BEFORE the
+commit rather than after the merge (contrast [B-056](bugs.md) / B-080, which had to be
+grandfathered). **Reading the candidate's BODY, not its title, is what caught it** — the title says
+"on CI" while the body says "observed locally on Windows"; that title has since been corrected.
+
 ### RECOMMENDATION (recorded, not implemented): retire the "next free" pointer
 
 All three recorded drift modes are one disease, and the pointer is it. Look at what it actually
