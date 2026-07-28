@@ -354,6 +354,25 @@ manual toil; it does NOT change what may be merged.
   overriding a carve-out. The debt check **fails closed** — a debt reads as
   discharged only when a checked `[x]` task states in words that it is not owed or
   was discharged; anything ambiguous refuses. Those PRs still merge by hand.
+- **The debt class is skipped STRUCTURALLY when every changed path is under `docs/` or
+  `openspec/`, or is a root `*.md`.** A Linux `gate:e2e` is owed for a UI/layout/render
+  change and a hardware pass verifies on-air behaviour; a diff confined to those paths
+  can owe neither BY CONSTRUCTION — which is why a design-only change dir sails through
+  even though its `tasks.md` is full of unchecked future work. Derived from the file
+  list, so it cannot be lied about; deliberately NOT a checkbox saying "design-only, no
+  debt", which would extend the same trust-the-checkbox weakness the fail-closed rule
+  exists to contain. It is an ALLOWLIST because "outside `apps/`/`packages/`/`tools/`"
+  does NOT mean "cannot reach air" — a root `tsconfig.base.json` twenty workspaces
+  extend sits outside every workspace glob while deciding what they emit ([[B-066]]:
+  an `es2022` setting `SyntaxError`d on CEF 71).
+- **An ARCHIVE is never exempt, and is detected by its EFFECTS, not one path prefix** —
+  `openspec/changes/archive/` is merely where the CLI renames to, so a hand-rolled
+  archive has none of it. A fold into `openspec/specs/`, a delete of a change dir, or a
+  `docs/prd` item flipped to `[x]`/`DONE, archived` each re-arm the full check (D-125
+  and D-128 both held their archive until a hardware verdict landed; the `tasks.md`
+  items say "BEFORE ARCHIVE" in words). The exemption also never short-circuits the
+  fail-closed clauses — "change dir named but not found → REFUSE" still fires, or
+  deleting a dir would skip the check its deletion should trigger.
 - **It verifies after every step** (PR reads `MERGED`; both refs absent; `cg`'s HEAD
   matches the merge commit) and stops at the first unverified step rather than
   continuing. It knows the two benign signatures — `push --delete` reporting the

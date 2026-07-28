@@ -230,6 +230,66 @@ Windows `gate:e2e` is non-authoritative, and a Linux run is owed for ANY
 UI/layout/rendering change — not only when an E2E spec is edited. A hardware pass is
 owed whenever a change alters on-air behavior.
 
+#### 2b-0. STRUCTURAL EXEMPTION — check this FIRST, from the file list
+
+The question 2b actually asks is **"does the code in THIS PR owe a verification
+run?"** A Linux `gate:e2e` is owed when a change alters UI, layout or rendering; a
+hardware pass verifies on-air behaviour. **A diff that touches no path under `apps/`,
+`packages/` or `tools/` can do neither — by construction, not by assertion.**
+
+**The test is an ALLOWLIST, not a deny-list.** Using the SAME path list Phase 2 already
+computed for class 2a, the exemption fires ONLY when **every** changed path is:
+
+- under `docs/`, or
+- under `openspec/`, or
+- a ROOT-LEVEL `*.md` (e.g. `README.md`).
+
+**Anything else runs 2b-1** — including paths in no workspace tree at all: root build
+config (`tsconfig*.json`, `pnpm-workspace.yaml`), `.github/**`, `fixtures/**`, `.husky/**`.
+An allowlist is used deliberately, because "not under `apps/`/`packages/`/`tools/`" is NOT
+the same as "cannot reach air": `pnpm-workspace.yaml`'s globs bound where SOURCES live, not
+where BUILD INPUTS live, and a root `tsconfig.base.json` that twenty workspaces extend sits
+outside every glob while determining what they emit. This repo has already been bitten by
+exactly that — [[B-066]]: an `es2022` compiler setting `SyntaxError`d on CasparCG's CEF 71
+before any boot error could show.
+
+This test is derived from the diff, so **it cannot be lied about** — which is the whole
+point. It deliberately does NOT accept a checkbox declaring "design-only, no debt": that
+would extend the same trust-the-checkbox weakness the fail-closed rule exists to contain,
+and a false tick would poison every later read of that file.
+
+**CARVE-OUT — an ARCHIVE is docs-only by path and must NEVER be exempted.** Folding a
+change into `openspec/specs/` is exactly where a premature archive would smuggle past a
+genuine gate: the D-125 and D-128 precedents both held an archive open until a hardware
+verdict landed, and this repo's `tasks.md` items say so in words — "Real-hardware pass on
+CasparCG 2.3.2 … **BEFORE ARCHIVE**".
+
+**Detect the archive by its EFFECTS, not by one path prefix.** `openspec/changes/archive/`
+is only the rename DESTINATION that `pnpm openspec archive` happens to produce; a
+hand-rolled archive carries the same meaning with none of that path. Decomposing the real
+archive commit `a9bd116` (#416) shows three separate effects, and only the first touches
+`archive/`. So the exemption does NOT apply — run 2b-1 in full — if ANY of these is true:
+
+- a changed path is under **`openspec/changes/archive/`** (the CLI's rename), OR
+- a changed path is under **`openspec/specs/`** (the fold — the living spec now asserts the
+  capability), OR
+- the diff **DELETES or renames away** any file under `openspec/changes/<name>/` where
+  `<name>` is not `archive` (a change dir being retired by hand), OR
+- a **`docs/prd/*.md`** hunk flips an item's status token to **`[x]`**, or adds the words
+  **`DONE, archived`** (the status record is what the D-125/D-128 precedents actually held
+  open).
+
+**The exemption NEVER short-circuits 2b-1's fail-closed clauses.** In particular "a change
+dir named but not found → REFUSE" must still fire: without this line, deleting a change dir
+would skip the very check that deletion should trigger — which would make this exemption a
+REGRESSION against the rule it is amending, not merely a relaxation.
+
+Everything else about 2b — the two sources, the literal checkbox reading, fail-closed on
+ambiguity, and the honesty note — is unchanged and applies whenever the exemption does
+not fire.
+
+#### 2b-1. Keyword and checkbox check (runs unless 2b-0 exempted this PR)
+
 Check both sources:
 
 1. **The PR body** (from Phase 1) for `owed` / `OWED` / `owes` / `OWES` /
