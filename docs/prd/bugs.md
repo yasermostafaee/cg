@@ -996,6 +996,51 @@ already rode through it (the B-080 duplicate; the #317 misdiagnosis that reverte
 declare narrower inputs than the files they actually read. Listed for an owner decision rather
 than guessed.
 
+## [~] B-111 — the `tools/template-fixtures` Persian lower-third renders its RTL text off-canvas: the fixture still said `fitMode: 'autosize'`, which D-060 later made real — its §F repair swept `@cg/starter-templates` but not this workspace ⟨priority: medium⟩ — fix authored in the filing PR (both text nodes → `fitMode: 'fixed'` + a pinning regression test); pending merge
+
+**Repro:** build the fixture (`pnpm --filter @cg/template-fixtures build`), `PLAY 1-30 [HTML]` the
+unpacked `persian-lower-third/index.html` in CasparCG, look at the lower third. Observed during
+C-018 recon (`docs/recon/2026-07-28-casparcg-250-validation.md` on the recon branch, PR #425);
+stills `b4-233-http-01-settled.png` (2.3.2) and `c018-anim-05.png` (2.5.0) in
+`tools/caspar-amcp-probe/evidence/2026-07-28-c018-validation/`.
+**Expected:** the two Persian texts right-align inside the bar — `align: 'start'` +
+`direction: 'rtl'` in the authored box (x=140, w=1140) puts the text's right edge at x=1280.
+**Actual:** each text run's RIGHT edge sits at x≈140 and the run extends LEFTWARD off-canvas; only
+its last glyphs are visible, overlapping the accent bar.
+**Env:** CasparCG 2.3.2 (CEF ~71) AND 2.5.0 (CEF 142), identical — deterministic CSS from the
+shared runtime, engine-independent.
+
+**Diagnosis — NOT a `@cg/template-runtime` bug; the runtime does exactly what its spec says.** The
+fixture (authored 2026-05-23, M3.4) predates [[D-060]] (#223, merged 2026-06-29). Back then
+`fitMode` was stored-but-unread — the box always came from `transform.size`, so `'autosize'` was a
+harmless no-op and the text right-aligned in the fixed box. D-060 made autosize real: the box hugs
+content, `transform.size` is ignored, and per the `designer-text-autosize` spec the box grows from
+its reading-start anchor — for RTL the top-RIGHT corner pins at `position.x`
+(`scene-builder.ts` D-060 §E: `right = resolutionWidth − position.x`, pinned by
+`auto-size-text.test.ts`; the Designer gizmo reads the same semantics — `Gizmo.tsx`: "RTL pins the
+RIGHT edge"). So since #223 the fixture's autosize texts pin their right edge at x=140 and grow
+leftward — off-canvas. D-060 §F audited and repaired the shipped starter templates
+(`@cg/starter-templates`, where no `autosize` remains) but `tools/template-fixtures/` was not in
+that sweep — the same class of stale fixture, one workspace over.
+
+**Why it matters:** this fixture is the manual CasparCG validation vehicle — C-018's hardware
+evidence runs on it. Rendering wrong on both engines, it read as a cross-engine Persian/RTL
+rendering defect and cost the recon a diagnosis cycle (the layer that shows the symptom is not the
+layer with the bug). Persian/RTL is a core requirement, so a validation fixture that misrenders
+Persian poisons exactly the evidence it exists to produce.
+
+**Fix:** `fitMode: 'fixed'` on both text nodes (`name`, `role`) in
+`tools/template-fixtures/persian-lower-third.scene.mjs` — the layout relies on the authored box
+(right edge x=1280) and on `overflow: 'ellipsis'`, which only means anything against a fixed box.
+Same repair D-060 §F applied to the starter templates. The sibling schema fixture
+`packages/vcg-format/tests/fixtures.ts` also carries `autosize` but is pack/unpack-only (never
+rendered), so it is left as-is.
+
+**Regression test:** `tools/template-fixtures/tests/roundtrip.test.mjs` — "B-111 — the RTL texts
+render as FIXED boxes": renders the fixture through the real runtime and asserts both texts get
+`left: 140px` + `width: 1140px` with NO `right` pin (the autosize-RTL signature), plus
+`direction: rtl` / `text-align: start`.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count

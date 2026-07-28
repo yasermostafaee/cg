@@ -109,6 +109,30 @@ describe('persian-lower-third — template-runtime DOM render', () => {
     runtime.remove();
   });
 
+  it('B-111 — the RTL texts render as FIXED boxes (left-pinned at the authored x, no RTL right pin)', async () => {
+    // The fixture predates D-060 (which made `fitMode: 'autosize'` real) and was
+    // missed by its §F starter-template repair: under autosize an RTL text pins its
+    // top-RIGHT corner at position.x, which sent this lower-third's text off-canvas
+    // leftward on air. Both texts must stay `fixed` so `align: 'start'` + rtl
+    // right-aligns INSIDE the authored box instead.
+    document.body.innerHTML = '';
+    document.body.className = '';
+
+    const runtime = createRuntime(persianLowerThirdScene, { skipFontLoad: true });
+    await runtime.play({});
+
+    for (const id of ['name', 'role']) {
+      const el = document.querySelector(`[data-cg-element-id="${id}"]`);
+      expect(el.style.left).toBe('140px');
+      expect(el.style.width).toBe('1140px');
+      expect(el.style.right).toBe('');
+      expect(el.style.direction).toBe('rtl');
+      expect(el.style.textAlign).toBe('start');
+    }
+
+    runtime.remove();
+  });
+
   it('applies a color binding to the accent bar', async () => {
     document.body.innerHTML = '';
     document.body.className = '';
