@@ -1,0 +1,28 @@
+{"ts":"2026-07-28T11:57:01.256Z","dir":"send","line":"PLAY 1-20 [HTML] \"file:///D:/work/projects/claude-projects/cg-broadcast/cg/.claude/worktrees/test-d0107d/tools/template-fixtures/audio-autoplay.html\""}
+{"ts":"2026-07-28T11:57:01.262Z","dir":"recv","line":"202 PLAY OK"}
+{"ts":"2026-07-28T11:57:03.827Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:57:03.828Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:57:06.404Z","dir":"send","line":"MIXER 1-20 VOLUME 0.5"}
+{"ts":"2026-07-28T11:57:06.405Z","dir":"recv","line":"202 MIXER OK"}
+{"ts":"2026-07-28T11:57:08.481Z","dir":"send","line":"MIXER 1-20 VOLUME 0"}
+{"ts":"2026-07-28T11:57:08.482Z","dir":"recv","line":"202 MIXER OK"}
+{"ts":"2026-07-28T11:57:10.551Z","dir":"send","line":"MIXER 1-20 VOLUME 1"}
+{"ts":"2026-07-28T11:57:10.551Z","dir":"recv","line":"202 MIXER OK"}
+{"ts":"2026-07-28T11:57:12.120Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:57:12.120Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:57:12.682Z","dir":"send","line":"CLEAR 1-20"}
+{"ts":"2026-07-28T11:57:12.683Z","dir":"recv","line":"202 CLEAR OK"}
+{"ts":"2026-07-28T11:57:12.745Z","dir":"send","line":"MIXER 1-20 CLEAR"}
+{"ts":"2026-07-28T11:57:12.746Z","dir":"recv","line":"202 MIXER OK"}
+{"ts":"2026-07-28T11:57:14.317Z","dir":"send","line":"CG 1-20 ADD 0 \"http://127.0.0.1:7910/tools/template-fixtures/audio-autoplay.html\" 0 \"{}\""}
+{"ts":"2026-07-28T11:57:14.318Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-07-28T11:57:16.888Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:57:16.888Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:57:17.456Z","dir":"send","line":"CG 1-20 PLAY 0"}
+{"ts":"2026-07-28T11:57:17.456Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-07-28T11:57:19.523Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:57:19.523Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:57:21.592Z","dir":"send","line":"CG 1-20 STOP 0"}
+{"ts":"2026-07-28T11:57:21.592Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-07-28T11:57:22.457Z","dir":"send","line":"CLEAR 1-20"}
+{"ts":"2026-07-28T11:57:22.457Z","dir":"recv","line":"202 CLEAR OK"}

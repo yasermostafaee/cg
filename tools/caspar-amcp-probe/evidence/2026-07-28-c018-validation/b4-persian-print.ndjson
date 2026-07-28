@@ -1,0 +1,20 @@
+{"ts":"2026-07-28T11:51:53.979Z","dir":"send","line":"PLAY 1-10 [HTML] \"file:///D:/work/projects/claude-projects/cg-broadcast/cg/.claude/worktrees/test-d0107d/fixtures/templates/persian-lower-third/index.html\""}
+{"ts":"2026-07-28T11:51:53.985Z","dir":"recv","line":"202 PLAY OK"}
+{"ts":"2026-07-28T11:51:54.745Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:51:54.745Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:51:55.310Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:51:55.311Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:51:55.876Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:51:55.876Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:51:56.442Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:51:56.443Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:51:57.009Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:51:57.010Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:51:57.887Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:51:57.888Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:51:59.456Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:51:59.457Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:52:01.528Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:52:01.529Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:52:02.091Z","dir":"send","line":"CLEAR 1-10"}
+{"ts":"2026-07-28T11:52:02.092Z","dir":"recv","line":"202 CLEAR OK"}

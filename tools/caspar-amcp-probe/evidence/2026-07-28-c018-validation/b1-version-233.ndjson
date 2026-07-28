@@ -1,0 +1,10 @@
+{"ts":"2026-07-28T12:11:44.623Z","dir":"send","line":"VERSION"}
+{"ts":"2026-07-28T12:11:44.626Z","dir":"recv","line":"201 VERSION OK"}
+{"ts":"2026-07-28T12:11:44.626Z","dir":"recv","line":"2.3.2 4de6d18f Dev"}
+{"ts":"2026-07-28T12:11:44.995Z","dir":"send","line":"INFO"}
+{"ts":"2026-07-28T12:11:44.996Z","dir":"recv","line":"200 INFO OK"}
+{"ts":"2026-07-28T12:11:44.996Z","dir":"recv","line":"1 1080i5000 PLAYING"}
+{"ts":"2026-07-28T12:11:44.996Z","dir":"recv","line":""}
+{"ts":"2026-07-28T12:11:45.372Z","dir":"send","line":"INFO 1"}
+{"ts":"2026-07-28T12:11:45.373Z","dir":"recv","line":"201 INFO OK"}
+{"ts":"2026-07-28T12:11:45.373Z","dir":"recv","line":"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<channel>\n   <framerate>50</framerate>\n   <framerate>1</framerate>\n   <mixer>\n      <audio>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n      </audio>\n   </mixer>\n</channel>\n"}

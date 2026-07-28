@@ -1,0 +1,18 @@
+{"ts":"2026-07-28T11:54:26.057Z","dir":"send","line":"PLAY 1-10 [HTML] \"http://127.0.0.1:7910/fixtures/templates/persian-lower-third/index.html\""}
+{"ts":"2026-07-28T11:54:26.062Z","dir":"recv","line":"202 PLAY OK"}
+{"ts":"2026-07-28T11:54:26.828Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:54:26.828Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:54:27.390Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:54:27.391Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:54:27.953Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:54:27.954Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:54:28.516Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:54:28.517Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:54:29.282Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:54:29.283Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:54:30.559Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:54:30.559Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:54:32.630Z","dir":"send","line":"PRINT 1"}
+{"ts":"2026-07-28T11:54:32.631Z","dir":"recv","line":"202 PRINT OK"}
+{"ts":"2026-07-28T11:54:33.196Z","dir":"send","line":"CLEAR 1-10"}
+{"ts":"2026-07-28T11:54:33.196Z","dir":"recv","line":"202 CLEAR OK"}

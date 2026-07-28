@@ -1,0 +1,93 @@
+[
+  {
+    "label": "handshake",
+    "cmd": "VERSION",
+    "reply": "201 VERSION OK",
+    "code": 201
+  },
+  {
+    "label": "baseline clear",
+    "cmd": "CLEAR 1-45",
+    "reply": "202 CLEAR OK",
+    "code": 202,
+    "oscProducer": null,
+    "lifecycle": [],
+    "note": "probe layer only — never a bare CLEAR"
+  },
+  {
+    "label": "ADD",
+    "cmd": "CG 1-45 ADD 0 \"http://127.0.0.1:7901/probe.html\" 1 \"{}\"",
+    "reply": "202 CG OK",
+    "code": 202,
+    "oscProducer": "html",
+    "lifecycle": ["play"],
+    "note": "play-on-load 1 so the producer is genuinely live"
+  },
+  {
+    "label": "PLAY",
+    "cmd": "CG 1-45 PLAY 0",
+    "reply": "202 CG OK",
+    "code": 202,
+    "oscProducer": "html",
+    "lifecycle": ["play"]
+  },
+  {
+    "label": "STOP",
+    "cmd": "CG 1-45 STOP 0",
+    "reply": "202 CG OK",
+    "code": 202,
+    "oscProducer": "html",
+    "lifecycle": ["stop"],
+    "note": "DO NOT clear after this — the point is what survives"
+  },
+  {
+    "label": "PLAY again (no re-ADD)",
+    "cmd": "CG 1-45 PLAY 0",
+    "reply": "202 CG OK",
+    "code": 202,
+    "oscProducer": "html",
+    "lifecycle": ["play"],
+    "note": "resumes ⇒ producer survived STOP; nothing ⇒ STOP destroyed it"
+  },
+  {
+    "label": "NEXT",
+    "cmd": "CG 1-45 NEXT 0",
+    "reply": "202 CG OK",
+    "code": 202,
+    "oscProducer": "html",
+    "lifecycle": ["next"]
+  },
+  {
+    "label": "CLEAR",
+    "cmd": "CLEAR 1-45",
+    "reply": "202 CLEAR OK",
+    "code": 202,
+    "oscProducer": null,
+    "lifecycle": [],
+    "note": "compare OSC after CLEAR vs after STOP"
+  },
+  {
+    "label": "re-ADD for no-handler case",
+    "cmd": "CG 1-45 ADD 0 \"http://127.0.0.1:7901/probe.html?nohandler=1\" 1 \"{}\"",
+    "reply": "202 CG OK",
+    "code": 202,
+    "oscProducer": "html",
+    "lifecycle": ["play"]
+  },
+  {
+    "label": "NEXT (no next handler)",
+    "cmd": "CG 1-45 NEXT 0",
+    "reply": "202 CG OK",
+    "code": 202,
+    "oscProducer": "html",
+    "lifecycle": ["next"]
+  },
+  {
+    "label": "final clear",
+    "cmd": "CLEAR 1-45",
+    "reply": "202 CLEAR OK",
+    "code": 202,
+    "oscProducer": null,
+    "lifecycle": []
+  }
+]

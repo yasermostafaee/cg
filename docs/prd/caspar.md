@@ -531,6 +531,77 @@ unusable on air. This is the only supported path to audio inside HTML templates,
 **Notes:** RECON-FIRST — no code changes ride this item; a dedicated change follows once the
 validation passes.
 
+**Validation findings — 2026-07-28 recon** (full evidence with commands and raw output:
+`docs/recon/2026-07-28-casparcg-250-validation.md`; captures in
+`tools/caspar-amcp-probe/evidence/2026-07-28-c018-validation/`). Machine-measurable
+bullets PASS; the item stays open on the recon doc's OWNER CHECKLIST (audible audio,
+Persian eyeball, live animation, leak listen, Decklink pass, channel-format decision).
+
+- Boot clean; `VERSION` → `2.5.0 69e8ad5 Stable` — the Stable release IS the `69e8ad5`
+  build the June escape sweep ran against. Platform gates pass: AVX2 present
+  (i5-10400), MSVC runtime 14.42.34433.
+- **The "plant is 2.3.3" premise was wrong:** the rollback install reports
+  `2.3.2 4de6d18f Dev` — the exact build of the committed OSC baseline and probe
+  evidence. There is no 2.3.2-vs-2.3.3 baseline gap; all old-vs-new comparisons below
+  are same-build.
+- AMCP subset: verb matrix, return codes, `CG UPDATE`-delivers-byte-exact-Persian, and
+  STOP-resident/CLEAR-destroys lifecycle are all **identical to the 2.3.2 evidence**
+  (three-way programmatic diff). Two behaviours measured identical on BOTH builds (not
+  2.5.0 regressions): `CG ADD` rejects `file://` URLs with `404` (http works; `PLAY
+[HTML]` accepts `file://`), and `CG PLAY` acks `202 CG OK` on an empty layer while
+  the other CG verbs fail `403`.
+- OSC diff vs `fixtures/osc-traces/m1-baseline-sample.ndjson` — differences exist and
+  are hereby documented (acceptance's "or" branch): NEW in 2.5.0 are
+  `/channel/N/format`, `/channel/N/output/port/N/consumer` +
+  `/output/port/N/screen/{always_on_top,index,key_only,name}`, and
+  `transition/{direction,producer}` detail; `mixer/audio/volume` grew **8 → 16**
+  elements. The `foreground/producer = "transition"` wrapper on PLAY-loaded layers is
+  NOT new — today's 2.3.2 recapture shows it too (the 500-line baseline sample just
+  never sampled it); `CG ADD` layers report `"html"` directly on both builds. Nothing
+  disappeared; framerate args unchanged `[50,1]`. Pre-upgrade code audit: the
+  16-element volume array and any `producer === 'html'` matching on the foreground
+  address.
+- Persian template under CEF 142: renders with correct shaping/joining and **intact
+  alpha** (PRINT frames carry real transparency). Rendering is pixel-equivalent to the
+  plant build — including a shared `@cg/template-runtime` RTL quirk (text anchored at
+  the LEFT edge; separate task filed, not an upgrade blocker). CEF 142 **improves**
+  `file://`: the ES-module template renders from `file://` on 2.5.0 but renders
+  NOTHING on the plant's CEF ~71 (inline-script pages work on both). The recorded 1 s
+  in-animation was never observed mid-flight on 2.5.0 (settled ≤ 0.73 s after PLAY,
+  all later frames byte-identical) — live-output animation is an owner-checklist item.
+- Template audio (the WHY of this item), measured end-to-end with a 19,976-byte
+  inline-MP3 fixture (`tools/template-fixtures/audio-autoplay.html`): on 2.5.0,
+  `/channel/1/mixer/audio/volume` goes nonzero **297 ms** after PLAY with **no user
+  gesture**, `MIXER VOLUME 0.5` halves the level exactly (1.804e8 → 9.02e7), `VOLUME 0`
+  zeroes it, `CG STOP` → `window.stop()` → silent. Identical fixture on the plant
+  build: plays (`onload: PLAYING`) but mixer volume stays **0 across 10,339 samples** —
+  CasparCG/server#669 confirmed on the plant; PR #1590's channel routing confirmed on
+  2.5.0. C-019 note: audio of a loaded-but-not-played (`CG ADD`, hidden) template is
+  already live on the channel — gate audio on the play lifecycle, not load.
+- Autoplay finding (recorded here per acceptance): **starts with no gesture and no CEF
+  flag** — the active config has no `<html>` block at all. Same on both builds;
+  routing, not autoplay, was ever the 2.3.x blocker.
+- Windows first-packet + shutdown (recorded here per acceptance): **`QUIT` does not
+  exist — `400 ERROR` on both builds; the AMCP shutdown verb is `KILL`**, which
+  produced a clean, fully-logged shutdown (`202 KILL OK` → uninit sequence →
+  `Successfully shutdown CasparCG Server.`, port released) on both builds. The
+  first-packet leak is **still unmeasured and structurally unobservable on this
+  config**: `<system-audio/>` legitimately routes the channel mix to the same default
+  device the leak would use; deciding it needs ears plus a temporary config without
+  `<system-audio/>` (out of recon scope). No anomaly in logs or OSC at first-audio or
+  shutdown — weak negative evidence only.
+- Escape sweep re-run on 2.5.0 Stable AND on the plant build: matrices identical to
+  the June `69e8ad5` run — `js-escape+amcp-escape` remains the only byte-exact winner.
+  **The probe's "2.3.2 conclusions PROVISIONAL (no 2.3.2 build available)" qualifier
+  is resolved as CONFIRMED** — now hardware-validated on 2.3.2 `4de6d18f` and 2.5.0
+  Stable. (Locking the rule into `escape.ts` stays B-041's follow-up change.)
+- PR #1590 provisional-limitation verdicts: integer-framerates — still unmeasured and
+  moot here (both configs are 50 Hz integer modes; no 59.94 mode exists on this box);
+  first-packet leak — still unmeasured (above); Linux path — still unmeasured (Windows
+  box). Config observation for the upgrade change: the rebuilt 2.5.0 config is stock
+  **720p5000** with no OSC predefined-client, while the plant runs **1080i5000** with
+  one — 1920×1080 templates overflow a 720p channel.
+
 PROVISIONAL limitations of the new audio path, taken from the PR #1590 discussion and forum
 posts and **NOT from our own measurements** — this item's hardware pass is what settles them:
 integer framerates only (our 50 Hz plant is fine; 59.94 unsupported), a reported Windows

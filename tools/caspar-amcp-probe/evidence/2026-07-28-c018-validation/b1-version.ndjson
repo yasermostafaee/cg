@@ -1,0 +1,10 @@
+{"ts":"2026-07-28T11:38:19.639Z","dir":"send","line":"VERSION"}
+{"ts":"2026-07-28T11:38:19.664Z","dir":"recv","line":"201 VERSION OK"}
+{"ts":"2026-07-28T11:38:19.665Z","dir":"recv","line":"2.5.0 69e8ad5 Stable"}
+{"ts":"2026-07-28T11:38:20.035Z","dir":"send","line":"INFO"}
+{"ts":"2026-07-28T11:38:20.036Z","dir":"recv","line":"200 INFO OK"}
+{"ts":"2026-07-28T11:38:20.036Z","dir":"recv","line":"1 720p5000 PLAYING"}
+{"ts":"2026-07-28T11:38:20.036Z","dir":"recv","line":""}
+{"ts":"2026-07-28T11:38:20.407Z","dir":"send","line":"INFO 1"}
+{"ts":"2026-07-28T11:38:20.408Z","dir":"recv","line":"201 INFO OK"}
+{"ts":"2026-07-28T11:38:20.408Z","dir":"recv","line":"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<channel>\n   <format>720p5000</format>\n   <framerate>50</framerate>\n   <framerate>1</framerate>\n   <mixer>\n      <audio>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n      </audio>\n   </mixer>\n   <output>\n      <port>\n         <port_500>\n            <consumer>system-audio</consumer>\n         </port_500>\n         <port_600>\n            <consumer>screen</consumer>\n            <screen>\n               <always_on_top>false</always_on_top>\n               <index>0</index>\n               <key_only>false</key_only>\n               <name>Screen consumer</name>\n            </screen>\n         </port_600>\n      </port>\n   </output>\n</channel>\n"}
