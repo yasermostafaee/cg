@@ -1063,3 +1063,60 @@ probe first, never assume; a browser-side clock suspension may be the honest ans
 (fixed-layer rows are one candidate surface). Cross-track filing: raised from the Designer track
 (the `cg-designer` worktree) because that is where the gap surfaced; the item itself is
 Runtime-track work.
+
+## [ ] R-028 — one layer surface: declared rows replace the dynamic stack (supersedes R-021's parallel-bank framing) ⟨priority: high⟩
+
+**What:** Merge the fixed-layer bank and the dynamic stack into ONE operator surface — a single
+list of DECLARED layer rows, ordered descending by layer, each with an alias, the real CasparCG
+layer number, its template, a description and a state indicator. One Load button does the whole
+chain (pick a `.vcg` → register → bind to that exact slot → load). No Library panel, no separate
+Stack panel. Config declares a FIXED ceiling of candidate layers with a per-layer visibility tick;
+every candidate is fenced from automatic allocation regardless of its tick. Verbs are LOAD · PLAY
+· NEXT · UPDATE · STOP · CLEAR · REMOVE with THIS project's C-012 semantics. Ranges: playout
+60–69, Runtime rows 70–99.
+**Why:** The owner has seen R-021 stage 3 running (#419) and rejected its core premise. R-021 was
+designed as a fixed bank running BESIDE the dynamic stack — two surfaces, two ownership models,
+one operator. The deployment reality is ONE bridge with MANY browsers (two operators on different
+machines, or the same operator on a different browser tomorrow), so an item another browser loaded
+is NOT foreign: the bridge loaded it and knows its template. And three writers touch layers, not
+two — our Runtime, the PLAYOUT system sending `CG ADD`/`PLAY` directly, and anything else. A
+surface built around per-browser dynamic allocation cannot express any of that. Reference product:
+Cinegy CG (its LAYOUT, never its vocabulary — see the verb trap below).
+**Acceptance:**
+
+- WHEN the operator loads from a row THEN the item binds that row's EXACT layer via the
+  exact-slot path, never automatic allocation
+- WHEN any row is displayed THEN its REAL CasparCG layer number is visible (a display index may
+  sit beside it, never instead of it) — an operator may need it to clear that layer by hand
+- WHEN a candidate layer is unticked THEN its row hides AND the layer stays fenced — unticking
+  never returns a layer to an allocatable pool
+- WHEN the operator tries to untick a row that is occupied, OR whose occupancy is UNKNOWN THEN it
+  is refused (fail closed — unknown is never treated as empty)
+- WHEN a second browser connects to the same bridge THEN it shows the same rows, the same
+  template identity and the same verbs — "not remembered" applies only across a BRIDGE restart
+- WHEN a row is in the declared playout range THEN it is visible and labelled playout-owned with
+  honest occupancy and NO operator verbs, and R-009's sweep never surfaces it as an orphan
+- WHEN the operator invokes STOP THEN the outro runs and the producer stays resident (C-012) —
+  the reference product's inverted labels are NOT adopted
+- WHEN the loaded template has no next step THEN NEXT is not offered as an enabled control
+- WHEN the bridge restarts THEN every item returns to its OWN row's layer, never another
+- WHEN an install with items on dynamic layers is upgraded THEN nothing on air is auto-relocated
+
+**Notes:** **DESIGN ONLY so far** — see `openspec/changes/runtime-unified-layer-rows/`
+(`proposal.md`, `design.md`, spec delta, `tasks.md` all unchecked). Filed as a NEW change rather
+than a revision of `runtime-fixed-layers`, because that change has FOUR stages already merged
+(1, 2a, 2b, and stage 3 via #419) and revising it would rewrite the recorded intent of shipped
+work. **#419's plumbing STAYS** and is this model's foundation — `bindFixed`, the
+`fixedLayers.load` channel, the exact-slot import chain. **[[R-021]] stage 4 is NOT superseded and
+becomes load-bearing:** with every item on a declared row, task 3.1's restore fall-through would
+misplace EVERY item after a bridge restart rather than an edge case — it is a prerequisite here.
+Two owner calls are OPEN and block implementation: where template files live under many browsers
+(the library is BROWSER-LOCAL today, so operator B cannot see what operator A imported), and
+whether the `CG NEXT` wire gap is in scope (`command-builder.ts` has no NEXT verb — the template
+contract has `window.next`, the bridge cannot send it). Verified during design, not assumed:
+layers 90–99 are free at runtime (`pinned` is declared but NEVER populated by any caller), though
+`logo-bug` remains a `templateType` in the scene schema even when its range is freed;
+`reservedLayers` (C-015) is the only possible mechanism for the playout split because OSC reports
+producer KIND, not identity — without declaration R-009 flags healthy playout graphics as orphans.
+**C-015 stops being distant** — it is a prerequisite. One RECON owed: whether CasparCG 2.3.2
+exposes template identity beyond producer kind, via `tools/caspar-amcp-probe` on real hardware.
