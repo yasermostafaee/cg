@@ -493,3 +493,105 @@ outro already played). One ping transport should serve both; which terminal verb
 which lifecycle is the shared design.md's call — never two competing transports. Cross-refs
 [[B-030]] (this signal is also the missing observable for its diagnosis), [[C-012]] (verb
 semantics unchanged — this adds a TRIGGER, not a verb).
+
+## [ ] C-018 — CasparCG 2.5.0 upgrade + hardware validation ⟨priority: high⟩
+
+**What:** Move the project's target server from **2.3.3 LTS to 2.5.0 Stable** (released
+2025-12-10) and validate it on the real Windows playout machine — screen consumer first, a
+Decklink pass before anything on-air depends on it. OWNER DECISION, 2026-07-28. The owner
+installs 2.5.0 **side-by-side** with 2.3.3 so rollback is preserved, and rebuilds the config
+from the 2.5 defaults (1080i5000 channel, AMCP 5250, OSC predefined-client) rather than
+copying the 2.3 config forward — a copied config is how a defaults change becomes an
+unexplained behaviour difference.
+**Why:** 2.5.0 routes HTML-producer audio into the channel mixer and consumers ("HTML: Support
+audio", CasparCG/server PR #1590). On every 2.3.x/2.4.x build, template audio bypasses the
+channel and plays out of the server's **system sound device** (CasparCG/server issue #669) —
+unusable on air. This is the only supported path to audio inside HTML templates, so it gates
+[[C-019]]. The upgrade also brings current CEF fixes.
+**Acceptance:**
+
+- WHEN 2.5.0 is started against the rebuilt config THEN it boots clean and AMCP `VERSION`
+  reports 2.5.0
+- WHEN the `@cg/caspar-client` AMCP subset is exercised THEN it behaves as validated on 2.3.2 —
+  PLAY \[HTML], CG ADD / UPDATE / INVOKE / STOP / REMOVE, CLEAR, INFO
+- WHEN an OSC trace is captured THEN it diffs clean against the 2.3.2 baseline
+  (`fixtures/osc-traces/m1-baseline-sample.ndjson`), or every difference is documented in this
+  item before the upgrade is accepted
+- WHEN the Persian reference template is re-verified under **CEF 142** THEN fonts, shaping, RTL
+  and animation timing all hold — this is a large CEF jump from the ~71 the rendering
+  assumptions were built on ([[B-066]] class: verify, never assume)
+- WHEN a template carrying an inlined base64 audio asset is triggered via CG PLAY with **no
+  user gesture** THEN audio is present on the channel output, `/channel/1/mixer/audio/volume`
+  goes non-zero, and MIXER VOLUME affects it
+- WHEN autoplay behaviour is observed THEN the finding is recorded here — either it starts
+  without a gesture, or the exact CEF flag that makes it do so
+- WHEN the Windows first-packet behaviour and a clean `QUIT` shutdown are observed THEN both
+  are recorded here, confirming or refuting the reported leak below
+
+**Notes:** RECON-FIRST — no code changes ride this item; a dedicated change follows once the
+validation passes.
+
+PROVISIONAL limitations of the new audio path, taken from the PR #1590 discussion and forum
+posts and **NOT from our own measurements** — this item's hardware pass is what settles them:
+integer framerates only (our 50 Hz plant is fine; 59.94 unsupported), a reported Windows
+first-packet audio leak to the system speakers (a clean shutdown via `QUIT` was implicated),
+and a Linux path that is only lightly tested.
+
+Platform prerequisites to confirm on the target box BEFORE installing: 2.5.0 wants an
+**AVX2-capable CPU** (mandatory from 2.6, so this is a forward-looking hardware gate, not just
+a 2.5 one) and a current MSVC runtime.
+
+**Stale 2.3-target references — LISTED, deliberately NOT edited here.** A dedicated change
+updates them after validation passes; editing them now would assert a target we have not yet
+verified. 47 non-`dist/` files under `tools/`, `packages/`, `apps/` and `docs/` mention
+2.3.2/2.3.3/2.3.x. They are two different kinds and must not be swept together:
+
+- TARGET declarations — these must change: `tools/amcp-mock/src/handlers.ts`
+  (`VERSION_STRING = '2.3.2 Stable'`, plus its "subset of CasparCG 2.3.x AMCP" contract
+  comment) and its assertion in `tools/amcp-mock/tests/amcp-response.test.ts`;
+  `tools/spikes/SETUP.md` (the "Target version: **2.3.3 LTS**" runbook); [[C-001]]'s "hardware-validated
+  … on CasparCG 2.3.2 (`4de6d18f`)" wording.
+- HISTORICAL records — these must NOT be rewritten: the ADRs (`0003`–`0008`), phase docs,
+  release notes, and spike READMEs record what was measured on which build. They stay accurate
+  by staying as they are; the follow-up change ADDS 2.5.0 findings beside them.
+
+One nuance worth carrying so it is not re-derived: `tools/caspar-amcp-probe` already ran its
+escape sweep against a **2.5.0 dev build** (`69e8ad5`) and records its 2.3.2 conclusions as
+PROVISIONAL because no 2.3.2 build was available that session. That probe is therefore already
+half-validated for the new target — re-run it as part of this item and the provisional
+qualifier can be resolved in one direction or the other.
+
+Sources: <https://github.com/CasparCG/server/blob/master/CHANGELOG.md> ·
+<https://casparcgforum.org/t/release-casparcg-2-5-released/7460> ·
+<https://github.com/CasparCG/server/pull/1590> ·
+<https://github.com/CasparCG/server/issues/669>
+
+## [ ] C-019 — Audio in templates ⟨priority: medium⟩ — BLOCKED BY [[C-018]]
+
+**What:** Audio as a first-class template capability: authored in the Designer, carried inside
+the single-file export, and played by CasparCG from within the template itself — no separate
+audio layer to arm, cue and keep in sync.
+**Why:** Owner-requested feature. 2.5.0 makes it the supported path (see [[C-018]]); before
+that release there was no correct way to do it at all, since template audio left the channel
+entirely.
+**Acceptance:** to be detailed when scheduled — this item is filed to hold the decision and its
+constraints, not to be picked up as-is.
+
+**Notes:** BLOCKED BY [[C-018]] — there is no point authoring audio the playout server cannot
+route. Needs its own `design.md` / openspec change before any code, because the `.vcg` package
+gains audio assets: that is a **schema change**, so `@cg/shared-schema` moves first per the
+repo's schema-first rule.
+
+Export side: inline audio as base64 data URIs through the existing inlining seam — the
+`produceTemplateDelivery` fonts pattern
+(`apps/runtime/src/renderer/features/library/templateDelivery.ts`, archived change
+`openspec/changes/archive/2026-07-07-serve-template-and-render`). Prefer compressed formats
+(MP3/AAC); WAV bloats the single file, and base64 adds ~33% on top of whatever is chosen.
+
+Designer-side authoring (asset upload / manage / preview) is a **designer-track** item and is
+filed separately on that track — cross-reference by title for now, "Audio in templates —
+Designer authoring"; numbers get linked once both exist (the [[C-015]]/D-137 pattern).
+
+MIXER VOLUME per html layer becomes meaningful once audio actually flows, which makes it a
+genuine operator control rather than a no-op. On-air behaviour ⇒ real-hardware verification is
+part of done, not a follow-up.
