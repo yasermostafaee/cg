@@ -33,8 +33,16 @@ touched by this change** — every box below Phase 0 is future work.
       at 2 a.m. otherwise. Specified PER KEY, because the earlier empty-intersection formulation
       misses `{warning, dangre}` under `{warning, danger}`. No schema, no runtime, no exporter
       change. → tasks 5.7, 5.11.
-- [x] 0.11 Re-validated after folding both: `pnpm openspec validate add-azan-countdown --strict`
-      green; repo `format:check` green.
+- [x] 0.11 **Reconciled the `designer-zone-styling` delta with design.md §7.3 in the SAME change**
+      — requirement sentence and scenario widened from empty-intersection to PER KEY, plus
+      scenarios for the rename-orphans case, the non-blocking guarantee, and the
+      standalone-preview exclusion. Done here rather than deferred to a "before archive" task:
+      a correct fix scoped to one artefact with the sibling deferred is the exact shape that
+      produced [[B-111]] and [[B-112]] (D-060 §F audited and repaired one workspace, its task
+      list named only that workspace, and the sibling it left behind became the bug), and
+      "before archive" is precisely when such an item gets missed.
+- [x] 0.12 Re-validated after folding all three — strict validate of this change green, and
+      `pnpm openspec validate --all --strict` 41/41; repo `format:check` green.
 
 ## 1. Schema (`@cg/shared-schema`)
 
@@ -183,12 +191,6 @@ touched by this change** — every box below Phase 0 is future work.
 
 ## 8. Before archive
 
-- [ ] 8.1 Reconcile the `designer-zone-styling` delta with design.md §7.3 before the fold: its
-      warning scenario is still written as EMPTY INTERSECTION, which is narrower than the per-key
-      rule the owner closed on. Per-key SATISFIES the existing scenario (empty intersection ⇒
-      every key unmatched ⇒ warnings fire), so the spec is under-specified rather than
-      contradictory — but the living spec must not archive weaker than the design. Widen the
-      requirement sentence and its scenario to per-key. No other open decision remains (§9).
-- [ ] 8.2 The owed Linux `gate:e2e` (7.5) run and reported.
-- [ ] 8.3 `docs/prd/designer.md` D-141 flipped, and the D-139 item cross-referenced with the
+- [ ] 8.1 The owed Linux `gate:e2e` (7.5) run and reported.
+- [ ] 8.2 `docs/prd/designer.md` D-141 flipped, and the D-139 item cross-referenced with the
       helpers it should reuse (design.md §1) so the boundary survives into D-139's own design.

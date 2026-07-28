@@ -88,10 +88,23 @@ elements carry overrides, a host with no zoned countdown, and the region above t
 threshold when no base zone is configured.
 
 A zone key an element overrides but the enclosing countdown never emits SHALL likewise be inert —
-a key mismatch SHALL degrade to the authored style, never to an error or an arbitrary colour. The
-Designer SHALL surface a non-blocking warning when a nested composition's override keys have EMPTY
-intersection with the enclosing countdown's zone keys, because the failure mode is silent
-inertness.
+a key mismatch SHALL degrade to the authored style, never to an error or an arbitrary colour.
+
+Because that runtime inertness is deliberate and permanent (never fail on air), the DESIGNER
+SHALL NOT be silent about the same mismatch: for EVERY zone key an element declares that no
+enclosing zoned countdown defines, the Designer SHALL surface a non-blocking authoring warning at
+the override that declared it, naming the unmatched key and listing the keys the enclosing
+countdown does define. The check SHALL be PER KEY — an element whose keys merely INTERSECT the
+countdown's is not thereby clear, since `{warning, dangre}` under a countdown defining
+`{warning, danger}` intersects non-emptily while the typo'd half never fires. The warning SHALL
+also be raised on the countdown's zones editor when RENAMING a zone key would orphan existing
+overrides.
+
+The warning SHALL be non-blocking and SHALL NOT become a validation error: it SHALL never refuse
+a save, an export, or a play, and a currently-unmatched key SHALL remain schema-valid. It SHALL
+NOT be raised for a composition previewed STANDALONE, where every override is legitimately inert —
+that is a supported authoring state, not a mistake. It SHALL be an author-time read only: no
+schema field, no runtime branch, no exporter change, and no effect on the compiled stylesheet.
 
 Zone changes SHALL be visually smooth — a CSS transition in the 300–500 ms range on the colour
 properties involved.
@@ -114,11 +127,29 @@ properties involved.
   no zoned countdown
 - **THEN** those overrides are inert and the elements render their authored base styles
 
-#### Scenario: An unmatched zone key is inert and flagged at author time
+#### Scenario: An unmatched zone key is inert at runtime and flagged per key at author time
 
 - **WHEN** an element overrides a zone key the enclosing countdown never emits
 - **THEN** the element renders its authored style, and the Designer shows a non-blocking warning
-  where the override was authored
+  at the override that declared it, naming the unmatched key and the keys the countdown defines
+- **WHEN** an element declares `{warning, dangre}` under a countdown defining `{warning, danger}`
+- **THEN** exactly ONE warning is raised, naming `dangre` — a non-empty intersection does NOT
+  clear the element
+
+#### Scenario: Renaming a countdown's zone key flags the overrides it orphans
+
+- **WHEN** a zone key is renamed on the countdown's zones editor while elements still override the
+  old key
+- **THEN** the warning is raised for those overrides at the moment of the rename
+
+#### Scenario: The warning blocks nothing and never fires on a standalone preview
+
+- **WHEN** a scene carrying an unmatched zone key is saved, exported and played
+- **THEN** all three succeed — the warning is non-blocking, the key stays schema-valid, and the
+  runtime renders the element with its authored style
+- **WHEN** a composition carrying zone overrides is previewed STANDALONE (no enclosing countdown
+  at all)
+- **THEN** no warning is raised — every override is legitimately inert there
 
 #### Scenario: The zone change is a smooth transition
 
