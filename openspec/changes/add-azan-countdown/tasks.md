@@ -23,6 +23,18 @@ touched by this change** — every box below Phase 0 is future work.
       (design.md §6, §9).
 - [x] 0.7 Settle the Designer surface and the preview rehearsal mechanism (design.md §7).
 - [x] 0.8 `pnpm openspec validate add-azan-countdown --strict` green; repo `format:check` green.
+- [x] 0.9 **Owner closed the open decision: the PICKER**, canonical keys
+      `normal` / `caution` / `warning` / `critical` with a "Custom…" escape. Folded into
+      design.md §6 (now CLOSED) and §7.2; schema and runtime unchanged — the picker is an
+      authoring affordance over a still-free-form key, not a validation boundary. → task 5.6.
+- [x] 0.10 **Owner added the author-time unmatched-key warning** (design.md §7.3). Runtime
+      inert-on-mismatch stays exactly as §5.5 specifies — never fail on air — but the Designer
+      stops being silent: a typo is free to fix while authoring and an invisible no-op discovered
+      at 2 a.m. otherwise. Specified PER KEY, because the earlier empty-intersection formulation
+      misses `{warning, dangre}` under `{warning, danger}`. No schema, no runtime, no exporter
+      change. → tasks 5.7, 5.11.
+- [x] 0.11 Re-validated after folding both: `pnpm openspec validate add-azan-countdown --strict`
+      green; repo `format:check` green.
 
 ## 1. Schema (`@cg/shared-schema`)
 
@@ -117,14 +129,32 @@ touched by this change** — every box below Phase 0 is future work.
       defaulting the field's `pattern` to the existing `Time (HH:MM)` preset.
 - [ ] 5.5 Per-element zone-override section, shown ONLY when the open composition has a zoned
       countdown; only the slots the element's kind owns; `'zone'` default with a resolved swatch.
-- [ ] 5.6 The key-mismatch warning (empty intersection with the enclosing countdown's keys).
-- [ ] 5.7 Preview: the time-compression rehearsal control (session-only, through the injectable
+- [ ] 5.6 The zone-key PICKER (design.md §6, owner-closed): `normal` / `caution` / `warning` /
+      `critical` plus a "Custom…" escape, on both the zones editor and the override section.
+      Custom is a DISPLAY state, not a stored value — a stored key that is not one of the four
+      loads as Custom with its string intact. The picker does NOT narrow the schema: a custom key
+      stays valid, parses and renders.
+- [ ] 5.7 The unmatched-zone-key authoring warning (design.md §7.3): non-blocking, PER KEY (not
+      per element / not empty-intersection), shown at the override that declared it, naming the
+      unmatched key and listing the keys the enclosing countdown defines. Also raised on the
+      zones editor when RENAMING a zone key would orphan existing overrides. Never blocks save,
+      export or play; never becomes a schema error; NOT raised for a composition previewed
+      standalone (no enclosing countdown at all is a supported authoring state, not a mistake).
+      Designer-only — no schema field, no runtime branch, no exporter change.
+- [ ] 5.8 Preview: the time-compression rehearsal control (session-only, through the injectable
       clock) and the static zone selector.
-- [ ] 5.8 **Resolve open decision §9.1** (zone-key picker vs free text) with the owner before this
-      phase ships; the recommendation is the picker with a Custom escape.
 - [ ] 5.9 **Tests** (`pnpm --filter @cg/designer test`): the preset writes steps + clock overrides
       as one undo entry; validation marks the offending row only; the override section is hidden
       with no zoned countdown; switching a clock away from `countdown` clears/refuses zones.
+- [ ] 5.10 **Tests for the picker**: each canonical key round-trips; a stored custom key displays
+      as Custom with its string intact and is not rewritten on load; the picker never rejects or
+      normalises a custom key (schema unchanged).
+- [ ] 5.11 **Tests for the warning**: overrides `{warning, dangre}` under a countdown defining
+      `{warning, danger}` raise EXACTLY ONE warning, naming `dangre` — the per-key case an
+      empty-intersection check would miss; a fully matched element raises none; renaming a
+      countdown's zone key raises the warning on the now-orphaned overrides; a standalone-previewed
+      composition raises none; the warning blocks nothing (save, export and play still succeed)
+      and the RUNTIME still renders the unmatched element with its authored style (inert, §5.5).
 
 ## 6. Export parity
 
@@ -153,7 +183,12 @@ touched by this change** — every box below Phase 0 is future work.
 
 ## 8. Before archive
 
-- [ ] 8.1 Open decision §9.1 answered and the spec text reconciled with the answer.
+- [ ] 8.1 Reconcile the `designer-zone-styling` delta with design.md §7.3 before the fold: its
+      warning scenario is still written as EMPTY INTERSECTION, which is narrower than the per-key
+      rule the owner closed on. Per-key SATISFIES the existing scenario (empty intersection ⇒
+      every key unmatched ⇒ warnings fire), so the spec is under-specified rather than
+      contradictory — but the living spec must not archive weaker than the design. Widen the
+      requirement sentence and its scenario to per-key. No other open decision remains (§9).
 - [ ] 8.2 The owed Linux `gate:e2e` (7.5) run and reported.
 - [ ] 8.3 `docs/prd/designer.md` D-141 flipped, and the D-139 item cross-referenced with the
       helpers it should reuse (design.md §1) so the boundary survives into D-139's own design.

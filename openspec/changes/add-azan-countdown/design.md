@@ -530,8 +530,10 @@ paint():                                  // clock-driver.ts:251-267, unchanged 
   preview of the nested composition — there is no separate "unzoned" branch to get wrong.
 - **A key mismatch is inert, by the same fallback.** If a nested element overrides `danger` but
   the enclosing countdown's zones never emit `danger`, nothing ever publishes that element's
-  slot and it renders authored. Free-form keys are therefore SAFE at runtime, which is what lets
-  §6 leave the vocabulary question to UI taste.
+  slot and it renders authored. Free-form keys are therefore SAFE at runtime, which is what let
+  §6 settle the vocabulary as an authoring affordance rather than a validation boundary. This
+  runtime inertness is deliberate and permanent — never fail on air — and it is precisely why the
+  DESIGNER must not be silent about the same mismatch (§7.3).
 
 ### 5.6 Compiled-CSS hygiene
 
@@ -588,31 +590,33 @@ wants five or two zones, and — decisively — the custom-property mechanism ma
 harmless, so the schema has no safety reason to restrict it. Restricting it would be taste
 enforced by validation error, which is the wrong layer.
 
-### Explicitly OPEN (owner taste) — with a recommendation
+### The Designer's key input: a PICKER with a Custom escape (CLOSED — owner decision)
 
-**Open question:** should the Designer's zone-key input be a FREE TEXT box, or a picker over a
-fixed vocabulary with an "advanced / custom" escape?
+The one question this design left open — free-text box vs. a picker over a fixed vocabulary —
+is **closed: the picker**, over four canonical keys `normal` / `caution` / `warning` / `critical`,
+with a "Custom…" option revealing free text.
 
-**Recommendation: the picker, with a custom escape.** Offer four canonical keys —
-`normal` / `caution` / `warning` / `critical` — as the preset's keys and the picker's defaults,
-with a "Custom…" option revealing free text. Rationale: the whole VALUE of the contract is that a
-shared nested composition (D-107: compositions are shared definitions, edited by drilling in —
-`openspec/specs/designer-compositions/spec.md:46`) restyles under ANY host that uses the same
-vocabulary; free text with no default guarantees that two templates authored a week apart use
-`danger` and `critical` and silently never match. A picker makes agreement the default and
-disagreement deliberate. This mirrors exactly how the pattern presets solved the same
+The reasoning it was accepted on: the whole VALUE of the contract is that a shared nested
+composition (D-107 — compositions are shared definitions, edited by drilling in,
+`openspec/specs/designer-compositions/spec.md:46`) restyles under ANY host using the same
+vocabulary. Free text with no default guarantees that two templates authored a week apart use
+`danger` and `critical` and silently never match; a picker makes agreement the default and
+disagreement deliberate. This is exactly how the pattern presets solved the same
 "vetted-default vs. Custom (advanced)" problem for regexes
-(`openspec/specs/designer-dynamic-fields/spec.md:211-228`) — including its "Custom is a DISPLAY
-state, not a stored value" rule, which applies verbatim here.
+(`openspec/specs/designer-dynamic-fields/spec.md:211-228`), and that requirement's companion rule
+applies verbatim: **Custom is a DISPLAY state, not a stored value** — the picker shows the
+canonical key a stored value spells, and Custom otherwise, so a key authored before the picker
+existed (or hand-edited in a `.vcg`) loads as Custom with its string intact.
 
-**Why this is safe to leave open:** it moves NO schema and NO runtime behaviour. Both settle
-identically under either answer; only the Designer's input widget differs. The change is
-implementable and testable before it is answered, and answering it later costs one component.
+**Note what did NOT change when this closed.** The schema stays `ZoneKeySchema =
+z.string().min(1)` and the runtime stays name-match-with-inert-mismatch. The picker is an
+authoring affordance over a free-form field, NOT a validation boundary: a scene carrying a custom
+key remains valid, parses, and renders. Had the decision instead been "restrict the schema to
+four keys", it would have moved both layers and broken every hand-authored key — which is why the
+question was safe to leave open in the first place, and why closing it costs one component (§7.2).
 
-**Companion (not open):** whichever input wins, the Designer SHALL surface a non-blocking warning
-when a nested composition's `zoneOverrides` keys have EMPTY intersection with the enclosing
-countdown's zone keys — the failure mode is silent inertness, and it must be visible at author
-time rather than discovered on air.
+The four canonical keys are also the 4-zone preset's keys (§7.1), so the preset and the picker
+agree by construction rather than by two lists kept in sync.
 
 ---
 
@@ -661,11 +665,58 @@ convention (`apps/designer/src/renderer/features/inspector/CollapseSection.tsx`)
   background, a shape shows fill + stroke.
 - Each slot defaults to the zone's own colour (`'zone'`) with a swatch showing the resolved
   result, and an explicit-hex escape.
+- **The zone key is chosen through the §6 picker** — `normal` / `caution` / `warning` /
+  `critical` plus a "Custom…" escape, with Custom as a DISPLAY state so a stored custom key loads
+  intact and re-displays as Custom.
 - The nested case adds a line naming the enclosing composition's zone keys, so an override in a
-  nested comp is authored against the vocabulary that will actually reach it (the §6 companion
-  warning fires here).
+  nested comp is authored against the vocabulary that will actually reach it (§7.3).
 
-### 7.3 Demonstrating zone flips without waiting an hour
+### 7.3 An unmatched zone key warns at author time
+
+**Runtime behaviour does not change: inert-on-mismatch stays exactly as §5.5 specifies.** An
+element whose zone key no enclosing zoned countdown defines renders its authored style — never an
+error, never a fallback colour, never a crash. That is the correct behaviour on air and this
+section does not touch it.
+
+**But it must not be silent in the Designer.** When an element declares a zone key that NO
+enclosing zoned countdown defines, the Designer SHALL surface a non-blocking authoring warning at
+the override that declared it, naming the unmatched key and listing the keys the enclosing
+countdown actually defines.
+
+**Rationale, recorded because it is the whole point:** a typo is free to fix while authoring and
+becomes an INVISIBLE NO-OP otherwise — the graphic renders, nothing errors, and the missing
+restyle is discovered at 2 a.m. on air. The mechanism's greatest strength (a mismatch degrades
+silently instead of breaking the render) is exactly what makes the mistake undetectable at the
+one moment it is cheap to correct. The warning puts the cost back where it belongs. This is the
+same instinct as the exporters' preflight, which WARNS rather than blocks for cases a client
+cannot honour (`packages/single-file-export/src/exporter-single-file.ts:284-304`): non-blocking,
+author-time, and about a silent degradation rather than a failure.
+
+**PER-KEY, not per-element.** The check fires for EVERY unmatched key, not only when an element's
+keys have empty intersection with the enclosing countdown's. The narrower empty-intersection form
+misses the case that actually happens: overrides for `{warning, dangre}` under a countdown
+defining `{warning, danger}` intersect non-emptily, so a whole-element check stays quiet while
+the typo'd half never fires. The picker (§6) makes such a key rare; the warning is what catches
+it when a Custom escape, a hand-edited `.vcg`, or a renamed zone on the countdown produces one.
+
+**Where it appears:**
+
+- On the element's own override row, in its own composition — the place the key was typed and
+  the only place it can be fixed (compositions are shared definitions; §7.2).
+- Also on the clock's zones editor when RENAMING a zone key would orphan existing overrides, so
+  the rename is the moment the consequence is seen rather than the moment it is hidden.
+
+**Non-blocking, and it cannot become blocking.** It never refuses a save, an export, or a play,
+and it is not a schema error — a custom or currently-unmatched key stays valid (§6). An element
+inside a composition previewed STANDALONE is not warned about: with no enclosing countdown at all
+every override is legitimately inert (`designer.md:3759-3760`), which is a supported authoring
+state, not a mistake. The warning is about a key that misses a zone set that EXISTS.
+
+**Cost of ownership: none beyond the Designer.** No schema field, no runtime branch, no exporter
+change, no effect on the compiled CSS. It is a pure author-time read over data the Designer
+already has in hand — the open composition's clock `zones` and its elements' `zoneOverrides`.
+
+### 7.4 Demonstrating zone flips without waiting an hour
 
 **Settled — two mechanisms with distinct jobs, both session-only, neither persisted, neither
 reaching an exporter.**
@@ -708,11 +759,22 @@ Recorded so review can confirm the blast radius:
 - The text-repaint path, colon blink, `drivesHold`, hold aggregation, `timezone`, digit mapping —
   untouched. Zones add one gated attribute write inside the existing `paint()`.
 - `wall` / `countup` — untouched, and refused zones at the schema layer (§2.2).
+- Runtime mismatch behaviour — unchanged by §7.3. The author-time warning is a Designer-only
+  read; the runtime still renders an unmatched key's element with its authored style (§5.5).
 
 ## 9. Open questions
 
-1. **Zone-key input: picker vs free text** (§6). Owner taste. Recommendation: picker with a
-   Custom escape, canonical keys `normal` / `caution` / `warning` / `critical`. Moves no schema
-   and no runtime behaviour.
+**None.** The one question this design opened — the Designer's zone-key input — was closed by the
+owner in favour of the PICKER with a Custom escape (§6), and the author-time unmatched-key warning
+it implied is specified in §7.3. Everything in §§2–7 is settled.
 
-Everything else in §§2–5 and §7 is settled.
+Two decisions were closed after the initial design and folded in; they are recorded here so a
+later reader can see they were decided rather than assumed:
+
+1. **Zone-key input = a picker** over `normal` / `caution` / `warning` / `critical` with a
+   "Custom…" escape, on the pattern-preset precedent (§6). Schema and runtime unchanged — the
+   picker is an authoring affordance over a still-free-form key, not a validation boundary.
+2. **An unmatched zone key warns at author time** (§7.3), PER KEY. Runtime inert-on-mismatch
+   stays exactly as it was (§5.5) — never fail on air — but the Designer stops being silent about
+   a typo that is free to fix now and an invisible no-op at 2 a.m. otherwise. No schema field, no
+   runtime branch, no exporter change.
