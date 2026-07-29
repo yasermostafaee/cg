@@ -1200,6 +1200,59 @@ tap and AMCP `INFO` — and the occupancy tap stores the kind verbatim with no d
 non-html producer cannot be misread as html. Still owed: observing the NEGATIVE case (a video on a
 reserved layer) on hardware. Implemented in R-028 part B.
 
+## [ ] R-033 — the Layers surface as a table: neutral controls, state carried by icon, channel as the outer axis ⟨priority: high⟩
+
+**What:** The owner's visual review of the R-028 part B surface, filed because it was given in
+chat and would otherwise be lost. Twelve items: (1) **row number** 1..n is the primary
+identifier, left-aligned, with the REAL layer number kept on the row as a small fixed-width
+secondary; (2) **alias is the row title**, template name and description beneath it; (3) a rigid
+column grid — nothing moves horizontally when any text changes length, ellipsis inside the
+column; (4) **channel tabs as the OUTER axis**, LAYERS/PLAYOUT inside a channel (one channel for
+now, assume channel 1); (5) graceful degradation under panel drag — verbs collapse to icon-only,
+text truncates, the row never wraps, no horizontal scrollbar; (6) **one tooltip mechanism**
+inherited by default, matching the Designer; (7) **PGM/Preview reserved now** as labelled
+not-connected panels, resizable and fullscreen-able; (8) the Configure modal scales to the
+configured layer count and scrolls; (9) the **whole row is the click target**, edge to edge,
+controls excepted; (10) **neutral buttons, colour on hover only** — row state carried by a large
+coloured icon; (11) a real **table with a sticky header** plus icon-only verbs; (12) the
+**fullscreen affordance as a property of the panel primitive**, so every panel has it.
+**Why:** the reference is Cinegy's CG panel. The through-line is that in a control room the one
+question that must be answerable at a glance is _what is on air_ — and today five competing
+button colours per row leave that question nowhere to shout from. Making the controls neutral
+gives the state hues back their meaning.
+**Acceptance:**
+
+- WHEN any row's alias, template name or state text changes length THEN no other element on any
+  row moves horizontally
+- WHEN the operator clicks anywhere on a row except a control THEN that row is selected —
+  including the extreme left edge, and including empty rows
+- WHEN a button is hovered THEN its treatment comes from OUTSIDE the state hues (or is a
+  brightness/elevation change) — hovering PLAY must never flash the red that means ON AIR
+- WHEN a row is disabled versus enabled THEN the two are obviously different on the dark
+  background at a glance, without colour doing the work
+- WHEN a row state is shown THEN icon AND colour distinguish it — on air, cued, empty, error and
+  unknown are each distinct, and `unknown` never reads as `empty`
+- WHEN the panel is dragged narrow THEN columns drop in the order description → template name →
+  layer number; the verb columns NEVER drop, the row never wraps, and no horizontal scrolling is
+  needed to reach a control
+- WHEN a verb is icon-only THEN a visible column header names it, it keeps an `aria-label`, and
+  it keeps a hover tooltip — three complementary channels, not one substituting for another
+- WHEN the hit target is measured under a dense table THEN it still meets the declared minimum
+
+**Notes:** **Two items are structural and must come FIRST because retrofitting them is
+expensive.** (a) Channel is the OUTER tab level with LAYERS/PLAYOUT inside it — "Channel 1 |
+Channel 2 | Playout" in one strip is ambiguous about whose playout it means, and the reservation
+is per-channel so the yellow indicator must be attributable to a channel; invisible at one
+channel, a correctness bug at two. (b) Fullscreen and tooltips belong to a shared panel/control
+primitive, so PGM, Preview and anything added later inherit them instead of being hand-wired and
+missed. Also: item 10's "destructive stays neutral" is deliberate and must not be
+"fixed" back to a red REMOVE — the confirm gate is what protects that action, and red is
+reserved for air. Item 11's icon-only verbs are only safe BECAUSE the sticky header carries the
+label; do not ship one without the other. **Open config question for the owner, not for CC:** the
+candidate ceiling is currently four layers (70–73) while R-028's design records 70–99 as
+available — if the demo needs more than four simultaneous rows that is a config decision to take
+before the demo. Filed from `dev-r028-b2`; see `openspec/changes/runtime-unified-layer-rows/DEBT.md`.
+
 ## [ ] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩
 
 **What:** Make template audio start at the **take**, not at the **cue**. Today `CG ADD` with no

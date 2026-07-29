@@ -88,12 +88,18 @@ export const PlayoutLayersStateChangedChannel = definePublishChannel(
  * - `unknown-occupancy` — no fresh OSC for that layer, so what is there cannot
  *   be established. Silence is evidence of nothing (the B-093 lesson): a gate
  *   that cannot read its input must refuse rather than guess.
+ * - `already-empty` — the tap IS hearing and reports nothing on that layer.
+ *   Distinct from `unknown-occupancy` on purpose: "I looked and it is empty" and
+ *   "I cannot see" are opposite statements about our knowledge, and telling the
+ *   operator the bridge is blind when it actually looked would be a lie in the
+ *   more alarming direction.
  * - `amcp-error` — the CLEAR reached the wire and failed.
  */
 export const PLAYOUT_CLEAR_REASONS = [
   'not-reserved',
   'not-html',
   'unknown-occupancy',
+  'already-empty',
   'amcp-error',
 ] as const;
 

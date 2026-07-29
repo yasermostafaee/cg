@@ -7,6 +7,60 @@ item here must be discharged (or explicitly retired) before this change archives
 
 # PART B (`dev-r028-b`) — the row surface, the verbs, and the playout tab
 
+## Adversarial review of part B — 11 confirmed, 6 fixed, 5 owed
+
+The review ran over the part-B diff with the clear path as its first dimension. Fixed in the
+follow-up commit:
+
+1. **The playout state was published AFTER the sweep's `state !== 'healthy'` guard.** A
+   CasparCG outage therefore stopped the publishes entirely and the tab kept serving the last
+   "Graphic on air (html)" snapshot **with an enabled CLEAR** — unverifiable occupancy shown as
+   verified, plus an enabled control that can only reject, both house-rule violations at once.
+   The fixed-slot publish has sat before that guard since R-021 for exactly this reason; the
+   playout publish now sits beside it, with a source-level regression guard.
+2. **The per-layer playout CLEAR had no confirm gate**, contradicting this module's own doc and
+   the channel contract ("the operator is told whose layer it is and confirms"). Gated now.
+3. **`already-empty` split from `unknown-occupancy`.** "I looked and found nothing" was being
+   reported as "I cannot see" — opposite statements about our knowledge, and the alarming one
+   was being shown when the calm one was true.
+4. **Double-toast**: a specific refusal ("that layer carries a decklink") was overwritten a
+   moment later by a generic "Not accepted." from the button's own error path. Both the single
+   and bulk clears now return `cancelled` so their precise message survives; clear-all also
+   reports PARTIAL failure instead of a green success naming only the wins.
+5. **LOAD ignored `slot.observed`.** An unbound row can still carry a live producer (task 3.3's
+   own case — a graphic that survived a bridge restart), and the load chain adopt-CLEARs before
+   its `CG ADD`, so one un-gated click destroyed it. LOAD now requires an observed `empty`;
+   `unknown` fails closed.
+6. **The tombstone reversed B-085's local-wins** for ids the bridge already held, so a template
+   corrected offline would be silently ignored on reconnect and the stale HTML would keep going
+   to air. Narrowed to the resurrection case only, which is what part A actually asked for.
+
+**Owed (recorded, not fixed):**
+
+- **A live html producer on a DECLARED row with no binding has no clear affordance anywhere.**
+  Row CLEAR is item-scoped (`stack.out({itemId})`) and disabled without a binding, and the
+  orphan banner excludes declared slots by design. Reachable after a bridge restart. Needs a
+  layer-scoped clear on the row — deliberately not improvised here, because it is the same
+  adopt/clear-a-foreign-producer question R-015 governs.
+- **A template removal made while the bridge link is DOWN is silently undone on reconnect.**
+  The reconciliation policy heals offline imports but loses offline removals; the tombstone
+  lives on the bridge, which never heard about this one.
+- Three lower-severity findings (DEFAULT_CHANNEL assumption in `playoutLayersState`, the
+  channel half of the coordinate being trusted, `onError` on UPDATE double-reporting) are in
+  the review output; none is on-air-affecting.
+
+## Owner's visual review (`dev-r028-b2`) — NOT implemented, filed as R-033
+
+The owner reviewed the running surface and returned twelve items (row identity, alias-primary,
+fixed columns, channel tabs, responsive degradation, tooltips, PGM/Preview, Configure modal
+sizing, row click target, neutral buttons, table-with-sticky-header + icon-only verbs, and the
+fullscreen affordance as a panel primitive). They are filed as **PRD R-033** with the reasoning
+attached, and none is implemented here. **Two are structural and expensive to retrofit — do
+them first:** channel must be the OUTER tab axis with LAYERS/PLAYOUT inside a channel (the
+playout reservation is per-channel, so the yellow indicator must be attributable to one), and
+the fullscreen/tooltip affordances must be properties of a shared panel/control primitive so
+PGM, Preview and anything added later inherit them rather than being hand-wired.
+
 ## Decisions taken fast
 
 - **The narrow breakpoint is 900px** (`NARROW_BREAKPOINT_PX`, pinned by a test). Below it the

@@ -284,7 +284,7 @@ it('R-028 (2.5) — a candidate ceiling intersecting the reserved playout range 
   ).rejects.toThrow(/70–79.*75–84|75–84.*70–79/s);
 });
 
-it('R-028 part B — a RE-DELIVERY never resurrects a removed template, nor overwrites a held one', async () => {
+it('R-028 part B — a RE-DELIVERY never resurrects a REMOVED template (but may still repair)', async () => {
   const dir = templatesDir();
   const r = await bootRuntime(dir);
   r.templateImport(info('tpl-a', 'first name'), HTML);
@@ -298,12 +298,18 @@ it('R-028 part B — a RE-DELIVERY never resurrects a removed template, nor over
   expect(resurrect).toEqual({ registered: false, templateId: 'tpl-a', skipped: true });
   expect(r.templateList()).toHaveLength(0); // still gone — the removal stands
 
-  // A re-delivery of an id the bridge ALREADY holds keeps the bridge's copy:
-  // it is the catalogue of record and may be newer than the browser's.
+  // A re-delivery of an id the bridge ALREADY holds is NOT skipped — B-085's
+  // local-wins stands. An adversarial review caught the first draft keeping the
+  // bridge's copy: nothing here can tell which copy is newer (`TemplateInfo`
+  // carries no version), so preferring the bridge's would silently discard a
+  // template a browser had CORRECTED while offline, and the stale HTML would
+  // keep going to air with no signal that the fix never landed. The tombstone
+  // above is the narrower fix part A actually asked for — stop RESURRECTION,
+  // not stop repair.
   r.templateImport(info('tpl-b', 'bridge copy'), HTML);
-  const stale = r.templateImport(info('tpl-b', 'older browser copy'), HTML, true);
-  expect(stale).toEqual({ registered: true, templateId: 'tpl-b', skipped: true });
-  expect(r.templateGet('tpl-b')?.name).toBe('bridge copy');
+  const corrected = r.templateImport(info('tpl-b', 'corrected browser copy'), HTML, true);
+  expect(corrected.skipped).toBeUndefined();
+  expect(r.templateGet('tpl-b')?.name).toBe('corrected browser copy');
 
   // An OPERATOR import (no flag) always wins and revives a removed template.
   const reimport = r.templateImport(info('tpl-a', 'deliberately re-imported'), HTML);

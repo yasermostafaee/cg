@@ -1,9 +1,9 @@
 import {
-  ChevronRight,
+  ArrowRightFromLine,
+  CircleArrowOutDownRight,
   FileUp,
   Play,
   RefreshCw,
-  Square,
   Trash2,
   XSquare,
   Library,
@@ -63,6 +63,14 @@ import { isOnAir } from '../stack/onAir.js';
 export interface LayerRowActionDeps {
   /** The stack item bound to this row, if any (the row's whole verb state). */
   item: StackItemState | null;
+  /**
+   * What the WIRE observes on this row's layer, independent of whether we have
+   * an item bound to it. Load reads this, not just `item`: an unbound row can
+   * still be carrying somebody's live graphic (a producer that survived a
+   * bridge restart, or one the playout side put there), and loading onto it
+   * issues an adopt-CLEAR that destroys whatever is there.
+   */
+  observed: FixedSlotState['observed'];
   /** Does the loaded template have a next step? (`TemplateInfo.hasNext`.) */
   hasNext: boolean;
   /** True when the SPA→bridge link is down: every verb is refused (R-006). */
@@ -101,6 +109,21 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   // about what "already on air" means for THIS verb.
   const playing = item?.status === 'on-air' || item?.status === 'playing';
 
+  /**
+   * May an UNBOUND row accept a load?
+   *
+   * Only when the wire says the layer is EMPTY. An unbound row is not
+   * necessarily an unoccupied one: a producer can survive a bridge restart
+   * (task 3.3's honest-unknown case is exactly this), and the load chain issues
+   * an adopt-CLEAR before its `CG ADD` — so a single un-gated click on a row
+   * that merely LOOKS free would destroy a live graphic nobody has claimed.
+   *
+   * `unknown` is refused with the same fail-closed reasoning as part A's
+   * untick: silence is evidence of nothing, and this gate's failure mode is
+   * something leaving air.
+   */
+  const loadSafe = deps.observed.kind === 'empty';
+
   const act = (
     key: string,
     label: string,
@@ -137,7 +160,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     // ONE key, so the list's shape is literally identical in both states and a
     // test can assert that: only the label, variant and handler flip.
     empty
-      ? act('load-remove', 'LOAD', 'secondary', false, () => deps.load(), FileUp)
+      ? act('load-remove', 'LOAD', 'secondary', !loadSafe, () => deps.load(), FileUp)
       : act(
           'load-remove',
           'REMOVE',
@@ -178,7 +201,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       'secondary',
       empty || !onAir || !deps.hasNext,
       () => (item === null ? noop() : deps.next(item.itemId)),
-      ChevronRight,
+      ArrowRightFromLine,
     ),
     // UPDATE pushes staged field edits to a LIVE producer. Its primary surface
     // is the Inspector's Apply; on the row it is a menu-placed convenience, so
@@ -198,7 +221,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       'caution',
       empty || !onAir,
       () => (item === null ? noop() : deps.stop(item.itemId)),
-      Square,
+      CircleArrowOutDownRight,
     ),
     act(
       'clear',

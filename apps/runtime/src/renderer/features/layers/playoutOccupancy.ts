@@ -126,6 +126,11 @@ export function playoutClearRefusal(reason: string | undefined, observedProducer
   if (reason === 'unknown-occupancy') {
     return 'Refused — what is on that layer cannot be verified right now, so it was left alone.';
   }
+  if (reason === 'already-empty') {
+    // The opposite statement from `unknown-occupancy`, and it must read that
+    // way: the bridge LOOKED and found nothing, rather than being unable to see.
+    return 'That layer is already empty — nothing was sent.';
+  }
   if (reason === 'not-reserved') {
     return 'Refused — that layer is not a declared playout layer.';
   }

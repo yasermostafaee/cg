@@ -199,10 +199,40 @@ describe('a bridge-side refusal is surfaced with the rule that fired', () => {
       btn?.click();
       await Promise.resolve();
     });
-    const confirmed = [...(openDialog()?.querySelectorAll('button') ?? [])];
-    void confirmed;
+    // The per-layer clear is confirm-gated too — it takes another system's
+    // graphic off air, so it asks first.
+    const confirmBtn = [...(openDialog()?.querySelectorAll('button') ?? [])].find((b) =>
+      b.textContent?.startsWith('Clear layer 60'),
+    );
+    expect(confirmBtn).toBeDefined();
+    await act(async () => {
+      confirmBtn?.click();
+      await Promise.resolve();
+    });
     off();
+    // The SPECIFIC rule that fired survives — it must not be overwritten by a
+    // generic "Not accepted." from the button's own error path.
     expect(errors.join(' ')).toContain('decklink');
+    expect(errors.join(' ')).not.toContain('Not accepted.');
+  });
+
+  it('the per-layer CLEAR asks before it acts, and sends nothing if declined', async () => {
+    const { el, clear } = await render([HTML_LAYER]);
+    await act(async () => {
+      clearButtonFor(el, 60)?.click();
+      await Promise.resolve();
+    });
+    const dialog = openDialog();
+    expect(dialog?.textContent).toContain('NOT our layer');
+    expect(clear).not.toHaveBeenCalled();
+    const cancel = [...(dialog?.querySelectorAll('button') ?? [])].find(
+      (b) => b.textContent === 'Cancel',
+    );
+    await act(async () => {
+      cancel?.click();
+      await Promise.resolve();
+    });
+    expect(clear).not.toHaveBeenCalled();
   });
 });
 

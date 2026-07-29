@@ -84,16 +84,53 @@ export function PlayoutPanel({ layers }: Props): JSX.Element {
 
   const clearable = clearablePlayoutLayers(layers, linkDown);
 
-  const clearOne = async (layer: PlayoutLayerState): Promise<{ accepted: boolean }> => {
+  /**
+   * Clear ONE playout layer.
+   *
+   * The refusal is reported HERE, with the rule that fired, and the result is
+   * returned as `cancelled` rather than `accepted: false`. That is not a
+   * cosmetic choice: `AsyncButton` routes a plain `accepted: false` to its
+   * `onError`, which would fire a second, GENERIC "Not accepted." toast and —
+   * the toast being last-write-wins — overwrite the specific message a
+   * fraction of a second after the operator saw it. The operator would be told
+   * a clear failed but not that it failed because the layer now carries a
+   * VIDEO. `cancelled` is the one result `asyncResultMessage` deliberately
+   * stays silent about, so the specific message survives.
+   */
+  const clearOne = async (
+    layer: PlayoutLayerState,
+  ): Promise<{ accepted: boolean; cancelled?: boolean }> => {
     const res = await window.cg.playoutLayers.clear({
       channel: layer.channel,
       layer: layer.layer,
     });
     if (res.ok) return { accepted: true };
-    // The bridge holds the same gate independently; if it refuses, say which
-    // rule fired rather than a generic failure.
     reportCommandError(playoutClearRefusal(res.reason, res.observedProducer));
-    return { accepted: false };
+    return { accepted: false, cancelled: true };
+  };
+
+  /**
+   * The per-layer CLEAR's confirm gate.
+   *
+   * This module's own doc — and the channel's — promise that "the operator is
+   * told whose layer it is and confirms". The first draft dispatched straight
+   * from the button, which broke that promise on the single most dangerous
+   * control in the product: one click taking ANOTHER system's live graphic off
+   * air. Part A's `useConfirm` pattern, reused rather than reinvented.
+   */
+  const confirmAndClearOne = async (
+    layer: PlayoutLayerState,
+  ): Promise<{ accepted: boolean; cancelled?: boolean }> => {
+    const ok = await confirm({
+      title: `Clear playout layer ${String(layer.layer)}?`,
+      body:
+        `This is NOT our layer — it belongs to the playout system. Its graphic leaves air ` +
+        `immediately, with no outro. Only the playout side can put it back.`,
+      confirmLabel: `Clear layer ${String(layer.layer)}`,
+      variant: 'caution-strong',
+    });
+    if (!ok) return { accepted: false, cancelled: true };
+    return clearOne(layer);
   };
 
   const clearAll = async (): Promise<{ accepted: boolean; cancelled?: boolean }> => {
@@ -111,15 +148,31 @@ export function PlayoutPanel({ layers }: Props): JSX.Element {
       variant: 'caution-strong',
     });
     if (!ok) return { accepted: false, cancelled: true };
-    // N calls to the SAME single-layer channel, so the bridge's gate is applied
-    // per layer exactly as it would be for one click. A bulk path with its own
-    // gate could clear something the single path refuses.
+    // N calls to the SAME single-layer channel (the UN-gated `clearOne` — this
+    // bulk path carries its own confirm above, and N dialogs for one decision
+    // would be worse than none). The BRIDGE's gate still applies per layer
+    // exactly as for one click, so a bulk action can never clear something the
+    // single action would refuse.
     const results = await Promise.all(clearable.map((l) => clearOne(l)));
     const cleared = results.filter((r) => r.accepted).length;
-    if (cleared > 0) {
+    const refused = results.length - cleared;
+    // Report what actually happened, INCLUDING the failures. A green
+    // "cleared N" naming only the successes would overwrite the per-layer
+    // refusals emitted moments earlier (the toast is last-write-wins), leaving
+    // the operator believing a partial clear was a complete one — while a
+    // graphic they meant to remove is still on air.
+    if (refused > 0) {
+      reportCommandError(
+        `Cleared ${String(cleared)} of ${String(results.length)} playout layer(s) — ` +
+          `${String(refused)} refused and ${refused === 1 ? 'is' : 'are'} still on air. ` +
+          `Check the rows for the reason.`,
+      );
+    } else if (cleared > 0) {
       reportCommandSuccess(`Cleared ${String(cleared)} playout layer${cleared === 1 ? '' : 's'}.`);
     }
-    return { accepted: cleared > 0 };
+    // `cancelled` so AsyncButton stays silent: this function has already said
+    // precisely what happened, and a generic follow-up would overwrite it.
+    return { accepted: cleared > 0, cancelled: true };
   };
 
   if (layers.length === 0) {
@@ -162,7 +215,7 @@ export function PlayoutPanel({ layers }: Props): JSX.Element {
               {state.clearable ? (
                 <AsyncButton
                   variant="caution-strong"
-                  run={() => clearOne(layer)}
+                  run={() => confirmAndClearOne(layer)}
                   onError={reportCommandError}
                   aria-label={`Clear playout layer ${String(layer.layer)}`}
                 >

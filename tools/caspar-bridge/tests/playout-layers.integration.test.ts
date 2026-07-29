@@ -140,13 +140,15 @@ it('an UNVERIFIABLE layer is REFUSED — a gate that cannot read its input never
   expect(blind.ok).toBe(false);
   expect(blind.reason).toBe('unknown-occupancy');
 
-  // A hearing tap with nothing on the layer also refuses: there is nothing to
-  // clear, and reporting ok would claim an act that never happened.
+  // A hearing tap with nothing on the layer also refuses — but with its OWN
+  // reason: there is nothing to clear, and reporting ok would claim an act
+  // that never happened. `already-empty` is asserted in its own test below;
+  // what matters here is that it is NOT confused with being unable to see.
   await r.whenServerHealthy(HEALTH_MS);
   await waitFor(() => r.playoutLayersState().every((l) => l.observed.kind === 'empty'));
   const empty = await r.playoutClear(1, 60);
   expect(empty.ok).toBe(false);
-  expect(empty.reason).toBe('unknown-occupancy');
+  expect(empty.reason).not.toBe('unknown-occupancy');
 });
 
 it('a layer OUTSIDE the declared reserved set is refused — this is not a clear-anything door', async () => {
@@ -189,4 +191,43 @@ it('publishes the playout state only when it CHANGES', async () => {
   await waitFor(() => publishes >= 1);
   await new Promise((res) => setTimeout(res, SWEEP_MS * 4));
   expect(publishes).toBe(1);
+});
+
+it('an EMPTY layer is refused as already-empty, NOT as unverifiable', async () => {
+  const r = await boot();
+  await r.whenServerHealthy(HEALTH_MS);
+  await waitFor(() => r.playoutLayersState().every((l) => l.observed.kind === 'empty'));
+  // "I looked and found nothing" must never be reported as "I cannot see":
+  // they are opposite statements about our knowledge, and the alarming one
+  // must not be shown when the calm one is true.
+  expect(await r.playoutClear(1, 60)).toEqual({ ok: false, reason: 'already-empty' });
+});
+
+/**
+ * REGRESSION GUARD (adversarial review, part B) — the playout state MUST be
+ * published from the sweep BEFORE its `state !== 'healthy'` early return.
+ *
+ * The bug: published after the guard, a CasparCG outage stopped the publishes
+ * entirely, so the tab kept serving the last "Graphic on air (html)" snapshot
+ * with an ENABLED CLEAR the bridge could only refuse — unverifiable occupancy
+ * displayed as verified, plus an enabled control that can only reject.
+ *
+ * Asserted on the SOURCE because the alternative is a timing race against the
+ * session's reconnect backoff, and a flaky guard on a safety property is worse
+ * than a precise one. The fixed-slot publish has sat before that guard since
+ * R-021 for exactly this reason; this pins that the playout publish stays
+ * beside it.
+ */
+it('the playout publish sits BEFORE the healthy guard, beside the fixed-slot publish', async () => {
+  const src = await import('node:fs').then((fs) =>
+    fs.readFileSync(new URL('../src/caspar-runtime.ts', import.meta.url), 'utf8'),
+  );
+  const sweep = src.slice(src.indexOf('#sweepOccupancy(): void {'));
+  const playoutPublish = sweep.indexOf('#publishPlayoutStateIfChanged()');
+  const fixedPublish = sweep.indexOf('#publishFixedStateIfChanged()');
+  const guard = sweep.indexOf("if (session.state !== 'healthy') return;");
+  expect(playoutPublish).toBeGreaterThan(-1);
+  expect(guard).toBeGreaterThan(-1);
+  expect(fixedPublish).toBeLessThan(guard);
+  expect(playoutPublish).toBeLessThan(guard);
 });

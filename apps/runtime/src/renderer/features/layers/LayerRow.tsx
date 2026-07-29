@@ -144,6 +144,7 @@ export function LayerRow({
   const coord = { channel: slot.channel, layer: slot.layer };
   const actions = layerRowActions({
     item,
+    observed: slot.observed,
     hasNext: template?.hasNext === true,
     linkDown,
     dirty,

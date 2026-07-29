@@ -1686,6 +1686,15 @@ export class CasparRuntime {
     // healthy guard: on a disconnect the next tick honestly re-publishes every
     // slot as `unknown` instead of freezing a stale 'empty'/'producer'.
     this.#publishFixedStateIfChanged();
+    // R-028 part B — the PLAYOUT state publishes here for the SAME reason, and
+    // it matters more here than anywhere else: this is the input to a CLEAR
+    // gate. Published after the guard (as it first was), a CasparCG outage
+    // would leave the tab frozen on "Graphic on air (html)" with an ENABLED
+    // CLEAR that the bridge can only refuse — unverifiable occupancy shown as
+    // verified, and an enabled control that can only reject, both at once.
+    // The two publishes belong on the SAME side of the guard because they
+    // answer the same question about the same tap.
+    this.#publishPlayoutStateIfChanged();
 
     const session = this.#adapter.primarySession;
     if (session.state !== 'healthy') return;
@@ -1744,11 +1753,6 @@ export class CasparRuntime {
     }
     const { changed } = this.#orphanTracker.update(occupied, owned);
     if (changed) this.orphansChanged.emit(this.orphans());
-
-    // R-028 part B — the playout tab's per-layer state rides this SAME tick and
-    // the SAME occupancy sample (no second timer, no second staleness constant),
-    // published only on a real change.
-    this.#publishPlayoutStateIfChanged();
   }
 
   // ── R-028 part B: the declared playout layers (the operator's tab) ──
@@ -1841,10 +1845,15 @@ export class CasparRuntime {
     const observed = session.osc.occupancy
       .occupied(this.#occupancyStaleMs)
       .find((o) => o.channel === channel && o.layer === layer);
-    // Nothing observed on a HEARING tap means the layer is already empty
+    // Nothing observed on a HEARING tap means the layer is already EMPTY
     // (B-053: on a hearing tap, silence for a layer IS empty) — there is
     // nothing to clear, and reporting ok would claim an act we did not do.
-    if (observed === undefined) return { ok: false, reason: 'unknown-occupancy' };
+    //
+    // This is deliberately its OWN reason, not `unknown-occupancy`: the two are
+    // opposite statements about our knowledge. "I can see it is empty" and "I
+    // cannot see" must never share a message, or the operator is told the
+    // bridge is blind when in fact it looked and found nothing.
+    if (observed === undefined) return { ok: false, reason: 'already-empty' };
     if (observed.producer !== 'html') {
       return { ok: false, reason: 'not-html', observedProducer: observed.producer };
     }
@@ -2289,9 +2298,16 @@ export class CasparRuntime {
       if (this.#removedTemplateIds.has(template.templateId)) {
         return { registered: false, templateId: template.templateId, skipped: true };
       }
-      if (this.#templates.has(template.templateId)) {
-        return { registered: true, templateId: template.templateId, skipped: true };
-      }
+      // NOTE — an id the bridge ALREADY holds is deliberately NOT skipped.
+      //
+      // An earlier draft kept the bridge's copy ("the catalogue of record is
+      // newer"), which quietly REVERSED B-085's documented local-wins policy:
+      // a browser that fixed a template while offline would reconnect, be
+      // ignored, and the STALE html would keep going to air with no signal
+      // that the correction never landed. Nothing here can tell which copy is
+      // newer — `TemplateInfo` carries no version — so the safe direction is
+      // the documented one, and the tombstone above is the narrower fix that
+      // part A actually asked for (stop RESURRECTION, not stop repair).
     } else {
       // An operator re-importing a previously removed template revives it.
       this.#removedTemplateIds.delete(template.templateId);

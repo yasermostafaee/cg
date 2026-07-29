@@ -357,9 +357,9 @@ export class MockRuntime {
   ): { ok: boolean; reason?: PlayoutClearReason; observedProducer?: string } {
     const observed = this.#playoutObservations.get(layer);
     if (observed === undefined) return { ok: false, reason: 'not-reserved' };
-    if (observed.kind === 'unknown' || observed.kind === 'empty') {
-      return { ok: false, reason: 'unknown-occupancy' };
-    }
+    if (observed.kind === 'unknown') return { ok: false, reason: 'unknown-occupancy' };
+    // Distinct from unknown: the tap LOOKED and found nothing there.
+    if (observed.kind === 'empty') return { ok: false, reason: 'already-empty' };
     if (observed.producer !== 'html') {
       return { ok: false, reason: 'not-html', observedProducer: observed.producer };
     }
@@ -665,9 +665,6 @@ export class MockRuntime {
     if (redelivery) {
       if (this.#removedTemplateIds.has(template.templateId)) {
         return { registered: false, templateId: template.templateId, skipped: true };
-      }
-      if (this.#templates.has(template.templateId)) {
-        return { registered: true, templateId: template.templateId, skipped: true };
       }
     } else {
       this.#removedTemplateIds.delete(template.templateId);

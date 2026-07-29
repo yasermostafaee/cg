@@ -192,6 +192,9 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
 
   const deps = (item: Parameters<typeof layerRowActions>[0]['item'], hasNext: boolean) => ({
     item,
+    // An EMPTY layer, so LOAD is safe — the occupancy gate is exercised
+    // separately below.
+    observed: { kind: 'empty' as const },
     hasNext,
     linkDown: false,
     dirty: true,
@@ -285,6 +288,26 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     }
   });
 
+  it('LOAD is REFUSED on an unbound row the wire says is occupied or unverifiable', () => {
+    // The load chain adopt-CLEARs the layer before its CG ADD, so a row that
+    // merely LOOKS free (no binding) but carries a live producer — one that
+    // survived a bridge restart, or one the playout side put there — must not
+    // accept a single un-gated click.
+    const occupied = layerRowActions({
+      ...deps(null, false),
+      observed: { kind: 'producer', producer: 'html' },
+    });
+    expect(occupied.find((a) => a.key === 'load-remove')?.disabled).toBe(true);
+
+    // Unknown fails closed for the same reason part A's untick does.
+    const unknown = layerRowActions({ ...deps(null, false), observed: { kind: 'unknown' } });
+    expect(unknown.find((a) => a.key === 'load-remove')?.disabled).toBe(true);
+
+    // …and a provably empty layer still loads.
+    const empty = layerRowActions({ ...deps(null, false), observed: { kind: 'empty' } });
+    expect(empty.find((a) => a.key === 'load-remove')?.disabled).toBe(false);
+  });
+
   it('the toggle flips to REMOVE (danger) once the row is occupied, in the SAME position', () => {
     const emptyActions = actionsFor(deps(null, false));
     const loadedActions = actionsFor(deps(itemWith('loaded'), false));
@@ -304,10 +327,25 @@ describe('LayerRow — slot/binding shape', () => {
     rendered = await renderLayerRow({
       item: null,
       template: null,
-      slot: slotWith({ binding: { itemId: 'gone', templateType: 'clock' } }),
+      slot: slotWith({
+        binding: { itemId: 'gone', templateType: 'clock' },
+        observed: { kind: 'empty' },
+      }),
     });
     const buttons = rendered.buttons();
     expect(buttons.get('LOAD')).toBe(false);
     expect(buttons.get('PLAY')).toBe(true);
+  });
+
+  it('an unbound row still SHOWING a producer refuses LOAD — the graphic survived a restart', async () => {
+    // Exactly task 3.3's honest-unknown case in the wild: the bridge restarted,
+    // the producer is still on air, and no binding names it. Loading here would
+    // adopt-CLEAR a live graphic on one un-gated click.
+    rendered = await renderLayerRow({
+      item: null,
+      template: null,
+      slot: slotWith({ binding: null, observed: { kind: 'producer', producer: 'html' } }),
+    });
+    expect(rendered.buttons().get('LOAD')).toBe(true);
   });
 });
