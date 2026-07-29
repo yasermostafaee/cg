@@ -105,6 +105,7 @@ export class MockRuntime {
     else this.#stack[idx] = next;
     // B-070 parity — CG ADD creates the producer.
     this.#loaded.add(itemId);
+    this.#settleSlotObservation(itemId, 'producer');
     this.#audit.unshift(auditEntry('load', { itemId, templateId }));
     this.#emitStack();
     return { accepted: true };
@@ -116,6 +117,7 @@ export class MockRuntime {
     // B-070/B-039 parity — a take with no live producer re-ADDs first, so a
     // producer always exists afterwards.
     this.#loaded.add(itemId);
+    this.#settleSlotObservation(itemId, 'producer');
     this.#transition(itemId, 'playing', true);
     this.#audit.unshift(auditEntry('take', { itemId, templateId: item.templateId }));
     this.#settle(itemId, 'on-air');
@@ -209,6 +211,7 @@ export class MockRuntime {
     // B-070 parity — out's CLEAR DESTROYS the producer, so a later update
     // commits without a wire send and a later take re-ADDs.
     this.#loaded.delete(itemId);
+    this.#settleSlotObservation(itemId, 'empty');
     this.#audit.unshift(auditEntry('out', { itemId, templateId: item.templateId }));
     this.#settle(itemId, 'idle');
     // B-056 parity — the mock's simulated servers are healthy, so an out's
@@ -229,6 +232,9 @@ export class MockRuntime {
     this.#positions.delete(itemId);
     // B-070 parity — the producer dies with the item.
     this.#loaded.delete(itemId);
+    // …so the layer it held reads EMPTY on the next sweep. Settled BEFORE the
+    // binding is released, since the binding is how the layer is found.
+    this.#settleSlotObservation(itemId, 'empty');
     // R-021 stage 3 parity — and so does any FIXED binding (the bridge's
     // `#releaseSlot`): the slot stays in the bank, unbound and re-loadable, and
     // the row stops naming an item that is no longer on the stack.
@@ -241,6 +247,33 @@ export class MockRuntime {
     for (const [layer, bound] of this.#fixedBindings) {
       if (bound.itemId !== itemId) continue;
       this.#fixedBindings.delete(layer);
+      this.fixedStateChanged.emit(this.fixedLayersState());
+      return;
+    }
+  }
+
+  /**
+   * The mock's stand-in for the NEXT OSC SWEEP.
+   *
+   * On the real bridge the wire observation is not something a command writes —
+   * it is what the tap reports a moment later. A `CG ADD` puts an html producer
+   * on the layer and the next sweep says so; a `CLEAR` destroys it and the next
+   * sweep reports the layer empty. Without modelling that, the mock's rows kept
+   * reading "occupied — html producer" forever after a CLEAR, which is the exact
+   * class of divergence B-070 was: a UI built and tested against semantics the
+   * bridge does not have.
+   *
+   * Only ever touches a layer the mock itself holds a BINDING for. A foreign
+   * producer's layer (71's ffmpeg) is not ours to narrate, and an unbound row's
+   * observation must keep coming from the seed alone.
+   */
+  #settleSlotObservation(itemId: string, kind: 'producer' | 'empty'): void {
+    for (const [layer, bound] of this.#fixedBindings) {
+      if (bound.itemId !== itemId) continue;
+      this.#fixedObservations.set(
+        layer,
+        kind === 'empty' ? { kind: 'empty' } : { kind: 'producer', producer: 'html' },
+      );
       this.fixedStateChanged.emit(this.fixedLayersState());
       return;
     }
@@ -334,7 +367,7 @@ export class MockRuntime {
   readonly #fixedBindings = new Map<
     number,
     { itemId: string; templateType: string; templateId: string }
-  >();
+  >(seedFixedBindings());
 
   // R-028 part B — the declared playout layers, test-seeded like the bank.
   readonly #playoutObservations = seedPlayoutLayers();
@@ -880,8 +913,15 @@ function seedFixedBank(): FixedLayerBank | null {
     ? {
         channel: 1,
         start: 70,
-        count: 4,
-        aliases: { '70': 'CLOCK', '71': 'LOWER THIRD' },
+        // R-028 — EIGHTEEN rows, not four. 70–73 keep the four documented
+        // display cases (html / non-html / empty / unknown); 74–85 are seeded
+        // EMPTY so the E2E suite has rows it can actually LOAD onto; 86–87
+        // carry the seed's two remaining stack items. Since part B's occupancy
+        // gate refuses a load onto anything not observably empty — an unbound
+        // row can still carry a live graphic — one empty row would let exactly
+        // one spec load, once.
+        count: 18,
+        aliases: { '70': 'CLOCK', '71': 'LOWER THIRD', '86': 'TICKER', '87': 'LOGO BUG' },
       }
     : null;
 }
@@ -901,6 +941,17 @@ function seedFixedObservations(): Map<number, FixedSlotObservation> {
         [71, { kind: 'producer', producer: 'ffmpeg' }],
         [72, { kind: 'empty' }],
         [73, { kind: 'unknown' }],
+        // Loadable rows for the E2E flows (see `seedFixedBank`). Without an
+        // explicit `empty` these default to `unknown`, which the load gate
+        // refuses — correctly, but it would leave the suite nowhere to load.
+        ...([74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85] as const).map(
+          (layer) => [layer, { kind: 'empty' }] as [number, FixedSlotObservation],
+        ),
+        // 86/87 hold the seed's two IDLE items. Idle means no `CG ADD` has run,
+        // so there is no producer and the wire correctly sees an EMPTY layer —
+        // a bound row over an empty layer is not a contradiction.
+        [86, { kind: 'empty' }],
+        [87, { kind: 'empty' }],
       ])
     : new Map();
 }
@@ -931,4 +982,34 @@ function seedPlayoutLayers(): Map<number, FixedSlotObservation> {
         [63, { kind: 'empty' }],
       ])
     : new Map();
+}
+
+/**
+ * R-028 — bind the SEEDED stack items to seeded rows.
+ *
+ * Before part B the mock's seeded stack rendered in its own Stack panel, so it
+ * was visible without belonging to any layer. Now an item is only visible ON a
+ * row: the stack panel is gone and the row IS the surface. Without this the
+ * seed existed but showed nowhere, which is both a lie about the model and the
+ * reason several E2E specs had nothing to click.
+ *
+ * Bound to 70 and 71 — the two rows the seed already gives producers, so the
+ * binding and the observation agree the way they would on a real bridge.
+ */
+function seedFixedBindings(): [
+  number,
+  { itemId: string; templateType: string; templateId: string },
+][] {
+  if (!fixedBankSeedArmed()) return [];
+  const types = ['clock', 'ticker', 'logo-bug'];
+  // 70 takes the seed's LOADED item, because 70 is the row observed as an html
+  // producer and a loaded item HAS one — binding and wire agree. The two IDLE
+  // items go on 86/87, observed empty, for the same reason in reverse. 71–73
+  // stay UNBOUND so they keep modelling the foreign-producer / empty / unknown
+  // display cases cleanly.
+  const layers = [70, 86, 87];
+  return seedStack().map((item, i) => [
+    layers[i] ?? 88 + i,
+    { itemId: item.itemId, templateType: types[i] ?? 'custom', templateId: item.templateId },
+  ]);
 }

@@ -126,7 +126,7 @@ export function useTemplatePicker(): {
             {[...request.templates].reverse().map((t) => {
               const label = templateDisplayName(t);
               return (
-                <div key={t.templateId} style={styles.row}>
+                <div key={t.templateId} style={styles.row} data-template-id={t.templateId}>
                   <div style={styles.rowActions}>
                     <Button
                       variant="secondary"

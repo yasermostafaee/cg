@@ -14,7 +14,6 @@ test('the picker seeds from the manifest default, applies one override, and lock
   const page = app.page;
   const templateId = 'tpl-e2e-pos';
   await app.importVcg('positioned.vcg', await buildPositionedVcg(templateId));
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   // Seeded from the manifest default (bottom-right, −10/−20).
@@ -63,7 +62,15 @@ test('the picker seeds from the manifest default, applies one override, and lock
   await expect(picker.getByText('locked while on air')).toBeVisible();
 
   // OUT settles the item back to IDLE → editable again.
+  // R-028 part B — CLEAR is confirm-gated on the layer row. The gate is attached
+  // at the action's DECLARATION, so the button and its context-menu twin cannot
+  // drift apart: a verb that takes a graphic off air with no outro asks first,
+  // by whichever route the operator reaches it.
   await row.getByRole('button', { name: 'CLEAR', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: /^Clear / })
+    .getByRole('button', { name: 'Clear layer', exact: true })
+    .click();
   await expect(row.getByText('IDLE')).toBeVisible({ timeout: 3000 });
   await expect(picker.getByRole('button', { name: 'Apply position' })).toBeEnabled();
 });
@@ -84,9 +91,11 @@ test('B-072: an applied override survives deselect → reselect, and re-Apply do
 }) => {
   const page = app.page;
   const templateId = 'tpl-e2e-pos';
+  // Two items of the same template → selection can move A → B → A. The import
+  // itself binds the first row now (import and load are one action), so the
+  // second comes from the library — one of each path, which is also the truer
+  // shape of what an operator does.
   await app.importVcg('positioned.vcg', await buildPositionedVcg(templateId));
-  // Two items of the same template → selection can move A → B → A.
-  await app.loadTemplate(templateId);
   await app.loadTemplate(templateId);
 
   const picker = app.inspector;

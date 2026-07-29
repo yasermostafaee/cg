@@ -31,12 +31,19 @@ test('a seeded owned-slot warning names the layer and item, offers no Clear, and
   // No direct Clear on an owned layer — the strip offers no controls at all.
   await expect(banner.getByRole('button')).toHaveCount(0);
 
-  // The remedy: REMOVE the named item from the stack → the warning resolves.
+  // The remedy: REMOVE the named item → the warning resolves.
   // R-004 — a row no longer prints its ids (neither is an operator-facing label), so the row
   // is addressed by the stable data anchor it carries, and its disappearance is asserted the
-  // same way.
-  const row = app.stack.locator('[data-item-id="item-irib-news"]');
+  // same way. R-028 part B — that anchor now lives on the LAYER row (the Stack panel is gone),
+  // and REMOVE is confirm-gated there: it takes the item off the row AND clears the layer,
+  // which is not the cheap, reversible thing a bare toggle would imply.
+  const row = app.layers.locator('[data-item-id="item-irib-news"]');
   await row.getByRole('button', { name: 'REMOVE' }).click();
-  await expect(row).toHaveCount(0);
+  await page
+    .getByRole('dialog', { name: /^Remove / })
+    .getByRole('button', { name: 'Remove', exact: true })
+    .click();
+  // The ROW survives — it is a declared layer — but it stops naming the item.
+  await expect(app.layers.locator('[data-item-id="item-irib-news"]')).toHaveCount(0);
   await expect(page.getByRole('alert', { name: 'Owned-layer occupancy warnings' })).toHaveCount(0);
 });

@@ -12,7 +12,6 @@ test('a ticker list field renders an items editor (not "[object Object]") and ed
 }) => {
   const templateId = 'tpl-e2e-list';
   await app.importVcg('list.vcg', await buildListFieldVcg(templateId));
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   // The list field renders one editable input per item, showing the real text…
@@ -42,7 +41,6 @@ test('a two-line item keeps its newline: Enter inserts a line break and the \\n 
   const templateId = 'tpl-e2e-list-ml';
   const twoLines = 'خبر خط یک\nخط دوم';
   await app.importVcg('list-ml.vcg', await buildListFieldVcg(templateId));
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   // Type line 1, press Enter (must insert a newline — NOT commit/submit), type line 2.

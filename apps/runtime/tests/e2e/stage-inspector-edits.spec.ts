@@ -36,7 +36,6 @@ function readApplied(app: RuntimeApp, templateId: string): Promise<unknown> {
 test('blur and Enter send NOTHING; the field shows dirty until Update', async ({ app }) => {
   const templateId = 'tpl-r003-stage';
   await app.importVcg('stage.vcg', await buildValidVcg(templateId));
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   const applied = await readApplied(app, templateId);
@@ -60,7 +59,6 @@ test('blur and Enter send NOTHING; the field shows dirty until Update', async ({
 test('Discard reverts the draft to the applied value', async ({ app }) => {
   const templateId = 'tpl-r003-discard';
   await app.importVcg('discard.vcg', await buildValidVcg(templateId));
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   const field = app.inspector.getByRole('textbox', { name: 'anchor' });
@@ -78,7 +76,6 @@ test('the first reorder click lands immediately after editing another item (no r
 }) => {
   const templateId = 'tpl-r003-list';
   await app.importVcg('list.vcg', await buildListFieldVcg(templateId));
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   const item1 = app.inspector.getByRole('textbox', { name: '_tickerTexts item 1' });
@@ -103,8 +100,6 @@ test('a draft survives switching selection away and back — and stays UNAPPLIED
   const two = 'tpl-r003-b';
   await app.importVcg('a.vcg', await buildValidVcg(one));
   await app.importVcg('b.vcg', await buildValidVcg(two));
-  await app.loadTemplate(one);
-  await app.loadTemplate(two);
 
   await app.selectStackRow(one);
   const applied = await readApplied(app, one);
@@ -126,7 +121,6 @@ test('a draft survives switching selection away and back — and stays UNAPPLIED
 test('Take plays the applied values, not the draft; the item stays dirty', async ({ app }) => {
   const templateId = 'tpl-r003-take';
   await app.importVcg('take.vcg', await buildValidVcg(templateId));
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   const applied = await readApplied(app, templateId);
@@ -146,7 +140,6 @@ test('a number field accepts continuous multi-digit typing without losing focus 
 }) => {
   const templateId = 'tpl-r003-number';
   await app.importVcg('number.vcg', await buildNumberFieldVcg(templateId));
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   // R-020 — the number control is the shared NumericInput (type="text" +
@@ -169,7 +162,6 @@ test('a number field accepts continuous multi-digit typing without losing focus 
 test('Update with nothing staged still sends (the B-048 recovery workaround)', async ({ app }) => {
   const templateId = 'tpl-r003-nostage';
   await app.importVcg('nostage.vcg', await buildValidVcg(templateId));
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   // No dirty state, yet Update is enabled and a real stack.update is dispatched.
@@ -186,7 +178,6 @@ test('Update applies MULTIPLE staged fields as exactly ONE atomic stack.update',
 }) => {
   const templateId = 'tpl-r003-atomic';
   await app.importVcg('atomic.vcg', await buildListFieldVcg(templateId));
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   // Stage two distinct fields: the scalar `anchor` and a ticker list item.
