@@ -86,6 +86,30 @@ Note specifically that **`R-034` skips past the last known `R-030`**, so `R-031`
 `R-034` is a genuine collision, or the numbering jumped and the gap should be
 recorded as intentional.
 
+### The Description column could drop the wire's own report — found by the E2E gate, fixed
+
+Worth filing as a near-miss, because it is the B-094 honesty class and a test caught what
+manual review did not.
+
+The review specified the narrow-panel drop order as description → template name → layer
+number, so the "Description" column — which carries CasparCG's own account of the layer,
+verbatim from `occupancyLabel` — is the FIRST thing to go. At the E2E viewport (1280px)
+it is already gone. For an UNBOUND row that was harmless: the state mark IS the wire's
+verdict there, because there is nothing else it could be showing. For a BOUND row it was
+not: the mark shows the ITEM's status, so "what does CasparCG actually report about layer
+70?" had nowhere left to live. An operator on a perfectly ordinary screen size could no
+longer tell an `unknown` layer from an `empty` one for any row with a template on it —
+the precise confusion the honesty rules exist to prevent.
+
+Fixed in code, not by relaxing the assertion: the state cell's tooltip now ALWAYS ends
+with CasparCG's report, reusing the canonical `occupancyLabel` wording verbatim so the
+column and the tooltip cannot drift. The drop order the review asked for is unchanged;
+the fact is now one hover or one keyboard focus away at every density.
+
+The E2E assertions moved from the column's visible text to the state cell's label and
+tooltip, which is strictly stronger — the old form only held at the widest density and
+said nothing about what the operator sees at 1280px.
+
 ### The row's LOAD/REMOVE toggle fights the column-header model
 
 The verb block is icon-only, made safe by the sticky header printing each verb's word
@@ -162,13 +186,14 @@ Per the fast-mode contract, all of this was deliberately not done:
   pre-existing — the 2 this work introduced were fixed), `test` (**375 passed, 54
   files**), `build` (succeeds). NOT run: the full turbo fan-out across every
   workspace, `format:check`, and any uncached cross-workspace run.
-- **No Playwright E2E.** This change alters UI, layout and rendering, so by
-  `CLAUDE.md` a **Linux `gate:e2e` is owed** and has not been run on any platform. The
-  E2E suite was not even executed on Windows. The row's DOM changed shape
-  substantially (the `.cg-badge` pill in the layer row is gone, replaced by a state
-  cell carrying `data-row-state`), so **`apps/runtime/tests/e2e/` should be expected to
-  need updating** — the page object's `layerRow`, `selectLayerRow` and `data-row-body`
-  hooks were preserved deliberately, but nothing has verified that.
+- **E2E: run and GREEN on Windows, still owed on Linux.** The committed Stop hook ran
+  `pnpm gate:e2e`, which went red on `@cg/runtime#test:e2e` exactly as this entry
+  predicted. It was fixed rather than deferred, and the full gate now passes — 22/22
+  turbo tasks, `@cg/runtime` 31 passed, `@cg/designer` 231 passed. Because this change
+  alters UI, layout and rendering, a **Linux `gate:e2e` is still owed**: a green
+  Windows run is a useful signal and never discharges that debt (`CLAUDE.md`).
+  What the red run caught is recorded under "Findings" as a real defect, not a stale
+  test — see "The Description column could drop the wire's own report".
 - **No OpenSpec anything.** No `openspec validate`, no change directory, no spec
   delta, no `tasks.md` reconciliation for the R-028 items this touches. The R-028 spec
   now describes a row that no longer exists in that form.

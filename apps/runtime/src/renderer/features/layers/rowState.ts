@@ -16,6 +16,7 @@ import type { FixedSlotObservation } from '@cg/shared-ipc';
 import type { StackItemStatus } from '@cg/shared-schema';
 import { airStateVisual, badgeTone, colors, type BadgeTone } from '../../theme.js';
 import { unverifiedTitle } from '../../ui/airStateWording.js';
+import { occupancyLabel } from '../fixedLayers/occupancyLabel.js';
 
 /**
  * THE row's state, as one glanceable triple: ICON + COLOUR + WORD.
@@ -101,6 +102,31 @@ export interface RowStateInput {
   oscBlind: boolean;
 }
 
+/**
+ * Compose a state's tooltip so it ALWAYS ends with what the wire says about the
+ * layer.
+ *
+ * This is not decoration — it closes a hole this redesign opened. The wire's
+ * observation is its own column ("Description"), and that column is the FIRST to
+ * drop as the panel narrows (the review fixed that drop order). For an UNBOUND row
+ * the state mark still carries the observation, because there is nothing else it
+ * could be showing. For a BOUND row it does not: the mark shows the ITEM's status,
+ * so once the column dropped, "what does CasparCG actually report about layer 70?"
+ * became unavailable anywhere on a 1280px screen — and that question is the whole
+ * point of the B-094 honesty rules (`unknown` is not `empty`; a producer names its
+ * kind). Folding it into the tooltip keeps the drop order the review asked for AND
+ * keeps the fact one hover or one keyboard focus away at every density.
+ *
+ * The canonical `occupancyLabel` wording is reused verbatim — never re-worded here
+ * — so the column and the tooltip cannot come to say different things about the
+ * same layer.
+ */
+function withWire(explanation: string | undefined, wire: string): string {
+  return explanation === undefined
+    ? `CasparCG reports: ${wire}.`
+    : `${explanation} CasparCG reports: ${wire}.`;
+}
+
 export function rowState({
   status,
   pending,
@@ -109,6 +135,8 @@ export function rowState({
   simulated,
   oscBlind,
 }: RowStateInput): RowStateVisual {
+  const wire = occupancyLabel(observed, linkDown);
+
   // ── No item of ours on this row: the WIRE is the only witness. ─────────────
   if (status === null) {
     if (linkDown) {
@@ -117,9 +145,11 @@ export function rowState({
         color: colors.offline,
         label: 'NOT CONNECTED',
         tone: 'idle',
-        title:
+        title: withWire(
           'The bridge connection is down, so this layer cannot be read at all. ' +
-          'Occupancy is unknown — not empty.',
+            'Occupancy is unknown — not empty.',
+          wire,
+        ),
       };
     }
     switch (observed.kind) {
@@ -133,9 +163,11 @@ export function rowState({
           color: colors.pending,
           label: 'OCCUPIED',
           tone: 'attention',
-          title:
+          title: withWire(
             `A ${observed.producer} producer is on this layer and this station does not own it. ` +
-            'Loading here would clear it first — check the output before you do.',
+              'Loading here would clear it first — check the output before you do.',
+            wire,
+          ),
         };
       case 'unknown':
         return {
@@ -143,10 +175,12 @@ export function rowState({
           color: colors.pending,
           label: 'UNKNOWN',
           tone: 'attention',
-          title:
+          title: withWire(
             'No signal from CasparCG for this layer, so its occupancy is UNKNOWN — which is ' +
-            'not the same as empty. Something may be on air here. Loading is refused until ' +
-            'the wire says the layer is free.',
+              'not the same as empty. Something may be on air here. Loading is refused until ' +
+              'the wire says the layer is free.',
+            wire,
+          ),
         };
       case 'empty':
         return {
@@ -154,7 +188,7 @@ export function rowState({
           color: colors.textMuted,
           label: 'EMPTY',
           tone: 'idle',
-          title: 'CasparCG reports this layer free. Ready to load.',
+          title: withWire('This layer is free. Ready to load.', wire),
         };
     }
   }
@@ -176,7 +210,13 @@ export function rowState({
     color: simulated && claimsAir ? colors.pending : visual.color,
     label,
     tone: simulated && claimsAir ? 'attention' : tone,
-    ...(status === 'unverified' ? { title: unverifiedTitle(oscBlind, linkDown) } : {}),
+    // ALWAYS a title on a bound row too, and this is the case that needed it: the
+    // mark shows the ITEM's status, so without this the wire's own account of the
+    // layer had nowhere to live once the Description column dropped.
+    title: withWire(
+      status === 'unverified' ? unverifiedTitle(oscBlind, linkDown) : undefined,
+      wire,
+    ),
     ...(tone === 'transient' ? { transient: true } : {}),
   };
 }

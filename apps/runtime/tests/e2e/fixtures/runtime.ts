@@ -112,6 +112,32 @@ export class RuntimeApp {
     return this.fixedRow(layer);
   }
   /**
+   * A row's STATE cell — the icon + word that carries what is on the layer.
+   *
+   * Two things are asserted through it. Its TEXT is the glanceable label (`ON AIR`,
+   * `READY`, `EMPTY`, `UNKNOWN`, `OCCUPIED`), always visible. Its `title` is the
+   * long form, and always includes CasparCG's own report of the layer verbatim —
+   * which is where a spec should read occupancy from, because the visible
+   * "Description" COLUMN is the first thing the table drops as the panel narrows,
+   * so a text assertion on it only holds at the widest density.
+   */
+  layerState(layer: number): Locator {
+    return this.layerRow(layer).locator('[data-row-state]');
+  }
+  /**
+   * The cell holding the REAL CasparCG layer number.
+   *
+   * Anchored on its title rather than its text: the row also prints a ROW NUMBER
+   * (1..n), so a bare text match for "70" could find either. The row number is the
+   * operator's primary handle now and the real layer number is the secondary
+   * column beside it — see `LayerRow` for why both are on the row.
+   */
+  layerNumberCell(channel: number, layer: number): Locator {
+    return this.layerRow(layer).locator(
+      `[title="CasparCG layer ${String(channel)}-${String(layer)}"]`,
+    );
+  }
+  /**
    * A command / import ERROR, surfaced as the shared command TOAST (page-level, `role="alert"`
    * named "Command error"). Import/library errors moved from an inline Library message to this
    * toast, so it is addressed on the PAGE by name — not scoped to the Library nav, and never

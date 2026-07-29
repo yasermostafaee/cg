@@ -40,19 +40,33 @@ test('no declared bank means no rows at all', async ({ app }) => {
 test('a seeded bank renders permanent rows with aliases and honest occupancy', async ({ app }) => {
   await expect(app.layers.locator('[data-layer]')).toHaveCount(18);
 
-  // Aliases AND layer numbers, both visible.
+  // The ALIAS is the row's primary label, and the REAL layer number is still on
+  // the row beside it as its own column — the vocabulary shared with the playout
+  // side. (The row also carries a row NUMBER, 1..n, which is why the layer number
+  // is addressed by its own cell rather than by matching bare digits.)
   await expect(app.layerRow(70)).toContainText('CLOCK');
-  await expect(app.layerRow(70)).toContainText('layer 70');
+  await expect(app.layerNumberCell(1, 70)).toHaveText('70');
   await expect(app.layerRow(71)).toContainText('LOWER THIRD');
-  await expect(app.layerRow(73)).toContainText('layer 73');
+  await expect(app.layerNumberCell(1, 73)).toHaveText('73');
 
-  // Honest occupancy: unknown is explicit and NEVER reads as empty (B-094)…
-  await expect(app.layerRow(73)).toContainText('no signal — occupancy unknown');
-  await expect(app.layerRow(73)).not.toContainText('empty');
+  // Honest occupancy: unknown is explicit and NEVER reads as empty (B-094).
+  //
+  // Read from the STATE cell, not the Description column: the column is the first
+  // one the table drops as the panel narrows, so a visible-text assertion on it
+  // would only hold at the widest density and would say nothing about what the
+  // operator can see at 1280px. The state's LABEL is always visible and its
+  // tooltip always carries CasparCG's report verbatim, so both are checked.
+  await expect(app.layerState(73)).toHaveText('UNKNOWN');
+  await expect(app.layerState(73)).toHaveAttribute('title', /no signal — occupancy unknown/);
+  // `unknown` must never READ as empty anywhere on the row.
+  await expect(app.layerRow(73)).not.toContainText('EMPTY');
   // …while the genuinely-empty slot says so, and producers name their kind.
-  await expect(app.layerRow(72)).toContainText('empty');
-  await expect(app.layerRow(70)).toContainText('occupied — html producer');
-  await expect(app.layerRow(71)).toContainText('occupied — ffmpeg producer');
+  await expect(app.layerState(72)).toHaveText('EMPTY');
+  await expect(app.layerState(72)).toHaveAttribute('title', /reports: empty/);
+  await expect(app.layerState(70)).toHaveAttribute('title', /occupied — html producer/);
+  await expect(app.layerState(71)).toHaveAttribute('title', /occupied — ffmpeg producer/);
+  // An unbound row carrying somebody else's producer says OCCUPIED — never free.
+  await expect(app.layerState(71)).toHaveText('OCCUPIED');
 });
 
 test('the load gate is fail-closed: only an observably EMPTY row accepts a load', async ({
@@ -107,8 +121,9 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   await expect(confirmClear).toBeVisible();
   await confirmClear.getByRole('button', { name: 'Cancel' }).click();
   await expect(confirmClear).toHaveCount(0);
-  // Cancel did nothing: still occupied, verb still offered.
-  await expect(row).toContainText('occupied — html producer');
+  // Cancel did nothing: still occupied, verb still offered. Read through the state
+  // cell's tooltip — see the occupancy note in the seeded-bank spec above.
+  await expect(app.layerState(70)).toHaveAttribute('title', /occupied — html producer/);
   await expect(row.getByRole('button', { name: 'CLEAR' })).toBeEnabled();
 
   // The button path: cancel first, then confirm.
@@ -116,7 +131,7 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   await expect(confirmClear).toBeVisible();
   await confirmClear.getByRole('button', { name: 'Cancel' }).click();
   await expect(confirmClear).toHaveCount(0);
-  await expect(row).toContainText('occupied — html producer');
+  await expect(app.layerState(70)).toHaveAttribute('title', /occupied — html producer/);
 
   await row.getByRole('button', { name: 'CLEAR' }).click();
   await confirmClear.getByRole('button', { name: 'Clear layer', exact: true }).click();
@@ -125,11 +140,11 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   // and the ROW SURVIVES — it is permanent, which is the whole point. C-012:
   // CLEAR kills the producer but leaves the TEMPLATE on the row, so the
   // operator can play it again without re-importing.
-  await expect(row).toContainText('empty');
+  await expect(app.layerState(70)).toHaveAttribute('title', /reports: empty/);
   await expect(row.getByRole('button', { name: 'CLEAR' })).toBeDisabled();
   await expect(row.getByRole('button', { name: 'PLAY' })).toBeEnabled();
   // The ffmpeg neighbour is untouched.
-  await expect(app.layerRow(71)).toContainText('occupied — ffmpeg producer');
+  await expect(app.layerState(71)).toHaveAttribute('title', /occupied — ffmpeg producer/);
 });
 
 test('import+load lands on the EXACT row, and the template stays in the library', async ({
