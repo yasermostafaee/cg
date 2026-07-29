@@ -34,6 +34,7 @@ import {
   StackLoadChannel,
   StackNextChannel,
   StackRestoreChannel,
+  StackStopAllChannel,
   StackStopChannel,
   StackOutChannel,
   StackClearAllChannel,
@@ -427,6 +428,8 @@ export function buildRoutes(
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
     route(StackRemoveAllChannel, () => b.removeAll()),
     route(StackClearAllChannel, () => b.clearAll()),
+    // C-012 / R-028 — the GRACEFUL bulk: every on-air item runs its own outro.
+    route(StackStopAllChannel, () => b.stopAll()),
     route(StackSnapshotChannel, () => b.stackSnapshot()),
     // B-092 — the browser re-delivers its RETAINED stack intent on every
     // (re)connect, so the stack survives a restart of this process. Seeds state

@@ -195,6 +195,13 @@ export class MockRuntime {
     return { accepted: true };
   }
 
+  /** C-012 parity — STOP every on-air item; producers stay resident. */
+  stopAll(): { ok: boolean; stopped: number } {
+    const onAir = this.#stack.filter((i) => i.status !== 'idle' && i.status !== 'loaded');
+    for (const item of onAir) this.stop(item.itemId);
+    return { ok: true, stopped: onAir.length };
+  }
+
   out(itemId: string): { accepted: boolean } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false };

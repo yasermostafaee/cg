@@ -329,16 +329,36 @@ textarea.cg-field {
 
 /* ── Pill (link / session indicators) ───────────────────────────────────── */
 
+/*
+ * Status READOUTS — deliberately not button-shaped.
+ *
+ * These used to carry a border, a raised background and rounded corners: the
+ * exact chrome every control in this app uses, so operators read them as
+ * clickable and tried to press them. Nothing here is interactive — LIVE,
+ * PRIMARY A HEALTHY, NO BACKUP and the strategy are things the console is
+ * TELLING you.
+ *
+ * So the box is gone and the affordance signals with it. What remains is the
+ * signal itself: a coloured dot plus a label, on the bar's own background,
+ * separated by a hairline rule rather than by a chip outline. The state colours
+ * are untouched — they were never the problem — and `cursor: default` means the
+ * pointer stops promising an action too.
+ */
 .cg-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.15rem 0.55rem;
-  border-radius: var(--r-radius-sm);
-  border: 1px solid var(--r-border);
-  background: var(--r-surface-raised);
+  padding: 0.15rem 0;
   font-weight: var(--r-weight-bold);
   white-space: nowrap;
+  cursor: default;
+}
+
+/* A hairline between adjacent readouts: grouping without a box. */
+.cg-pill + .cg-pill {
+  margin-left: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--r-border);
 }
 
 /* ── Stack row (interactive container) ──────────────────────────────────── */

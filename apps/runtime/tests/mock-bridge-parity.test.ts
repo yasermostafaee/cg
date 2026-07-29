@@ -103,6 +103,7 @@ const BRIDGE_SURFACE: {
       'setPosition',
       'removeAll',
       'clearAll',
+      'stopAll',
       'snapshot',
       'onStateChanged',
     ],

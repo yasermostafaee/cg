@@ -165,6 +165,27 @@ export const StackClearAllChannel = defineChannel(
   z.object({ ok: z.boolean(), cleared: z.number().int().nonnegative() }),
 );
 
+/**
+ * C-012 / R-028 — STOP every on-air item: each template runs its OWN outro and
+ * its producer stays RESIDENT, so a later take RESUMES it with no re-load.
+ *
+ * The graceful sibling of `stack.clear-all`, and the pairing matters as much as
+ * either verb alone: Clear-All hard-cuts every graphic off air at once, Stop-All
+ * asks each to leave the way it was authored to. On a real programme that is the
+ * difference between a clean end-of-segment and every lower-third snapping to
+ * black together.
+ *
+ * NO new AMCP verb: it issues the SAME per-item `CG … STOP` the row's STOP
+ * button sends, over the same candidate set Clear-All uses (everything not
+ * `idle`/`loaded` that actually holds a layer of ours), sequentially — no
+ * command burst, and one stuck graphic never strands the ones behind it.
+ */
+export const StackStopAllChannel = defineChannel(
+  'stack.stop-all',
+  z.void(),
+  z.object({ ok: z.boolean(), stopped: z.number().int().nonnegative() }),
+);
+
 export const StackSnapshotChannel = defineChannel(
   'stack.snapshot',
   z.void(),

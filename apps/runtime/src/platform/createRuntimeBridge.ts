@@ -131,6 +131,7 @@ export function createMockBridge(): RuntimeBridge {
       setPosition: (req) => Promise.resolve(mock.setPosition(req.itemId, req.position)),
       removeAll: () => Promise.resolve(mock.removeAll()),
       clearAll: () => Promise.resolve(mock.clearAll()),
+      stopAll: () => Promise.resolve(mock.stopAll()),
       snapshot: () => Promise.resolve(mock.stackSnapshot()),
       onStateChanged: (handler) => mock.stackChanged.subscribe(handler),
     },

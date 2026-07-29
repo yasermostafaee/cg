@@ -28,6 +28,7 @@ import {
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackStopAllChannel,
   StackRestoreChannel,
   StackStopChannel,
   StackSetPositionChannel,
@@ -587,6 +588,8 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetPositionChannel, req),
     removeAll: () => this.#invoke(StackRemoveAllChannel, undefined),
     clearAll: () => this.#invoke(StackClearAllChannel, undefined),
+    // C-012 / R-028 — the graceful bulk beside the hard one.
+    stopAll: () => this.#invoke(StackStopAllChannel, undefined),
     snapshot: async () => {
       // B-092 — with the bridge unreachable, answer from the browser-local
       // retention instead of REFUSING. A cold page load against a dead bridge

@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
-import { Maximize2, Minimize2, PanelRight, RotateCcw } from 'lucide-react';
+import {
+  CircleArrowOutDownRight,
+  Maximize2,
+  Minimize2,
+  PanelRight,
+  RotateCcw,
+  Trash2,
+  XSquare,
+} from 'lucide-react';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -158,6 +166,31 @@ export function LayersPanel({
   }, [confirm, onAirCount]);
 
   /**
+   * C-012 — STOP All: every on-air graphic runs its OWN outro and stays
+   * resident, so a later take resumes it.
+   *
+   * The graceful sibling of Clear-All, and it sits beside it deliberately: the
+   * two are the only bulk ways off air and offering one without the other
+   * would read as a missing option. The wording spells the difference out,
+   * because this project's STOP and CLEAR are the opposite of the reference
+   * product's and confusing them on thirty rows at once is expensive.
+   */
+  const stopAll = useCallback(async (): Promise<void> => {
+    const ok = await confirm({
+      title: 'Stop all on-air items?',
+      body: `All ${String(onAirCount)} on-air item(s) run their own outro and come off air gracefully. They stay loaded and can be taken again.`,
+      confirmLabel: 'Stop all',
+      variant: 'caution',
+    });
+    if (!ok) return;
+    try {
+      await window.cg.stack.stopAll();
+    } catch (err) {
+      reportCommandError(err instanceof Error ? err.message : 'Stop all failed.');
+    }
+  }, [confirm, onAirCount]);
+
+  /**
    * R-010 — Remove All empties every row. It is not merely a convenience: it is
    * the documented unblock path for a server reconfiguration (`connections.
    * set-config` refuses while anything is on air or unsettled, and names this as
@@ -196,13 +229,29 @@ export function LayersPanel({
       <header style={styles.header}>
         <span>LAYERS</span>
         <div style={styles.headerActions}>
+          {/* The two bulk ways OFF AIR, in C-012 order: graceful first, hard
+              second — so the softer option is the one nearest to hand. */}
+          {onAirCount > 0 && (
+            <Button
+              variant="caution"
+              disabled={linkDown}
+              aria-label="Stop all on-air items"
+              title="Every on-air graphic runs its own outro and stays loaded"
+              onClick={() => void stopAll()}
+            >
+              <Icon icon={CircleArrowOutDownRight} />
+              STOP ALL
+            </Button>
+          )}
           {onAirCount > 0 && (
             <Button
               variant="caution-strong"
               disabled={linkDown}
               aria-label="Clear all on-air items"
+              title="Every on-air graphic is cut immediately, with no outro"
               onClick={() => void clearAll()}
             >
+              <Icon icon={XSquare} />
               CLEAR ALL
             </Button>
           )}
@@ -211,8 +260,10 @@ export function LayersPanel({
               variant="danger"
               disabled={linkDown}
               aria-label="Remove all items"
+              title="Clears anything on air and empties every row"
               onClick={() => void removeAll()}
             >
+              <Icon icon={Trash2} />
               REMOVE ALL
             </Button>
           )}

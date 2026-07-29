@@ -37,6 +37,7 @@ import type {
   StackRemoveChannel,
   StackSetPositionChannel,
   StackSnapshotChannel,
+  StackStopAllChannel,
   StackTakeChannel,
   StackUpdateChannel,
   PlayoutLayerState,
@@ -138,6 +139,8 @@ export interface RuntimeBridge {
      * that one empties the list, this one only clears the screen.
      */
     clearAll(): Promise<ChannelResponse<typeof StackClearAllChannel>>;
+    /** C-012 — STOP every on-air item (outros run, producers stay resident). */
+    stopAll(): Promise<ChannelResponse<typeof StackStopAllChannel>>;
     snapshot(): Promise<ChannelResponse<typeof StackSnapshotChannel>>;
     onStateChanged(handler: (snapshot: readonly StackItemState[]) => void): Unsubscribe;
   };

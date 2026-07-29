@@ -1973,6 +1973,38 @@ export class CasparRuntime {
     return { ok: true, cleared: clearable.length };
   }
 
+  /**
+   * C-012 / R-028 — STOP every on-air item: each template runs its OWN outro and
+   * its producer stays RESIDENT.
+   *
+   * The graceful sibling of `clearAll`, and the distinction is the whole point.
+   * Clear-All hard-cuts everything off air; Stop-All asks each graphic to leave
+   * the way it was authored to leave. On a real programme that is the difference
+   * between a clean end-of-segment and every lower-third snapping to black at
+   * once.
+   *
+   * Deliberately built exactly like `clearAll`: the SAME candidate predicate
+   * (anything not idle/loaded that actually holds a slot — so nothing is sent
+   * for an item that owns no layer), the SAME sequential loop through the
+   * per-item verb rather than a burst, and the SAME "a failure does not abort
+   * the rest" property — one stuck graphic must never strand the ones behind it
+   * on air. Reusing `stopItem` means the C-012 semantics (`#loaded` and
+   * `#adopted` untouched, so a later take RESUMES rather than re-ADDs) can never
+   * drift between the single and bulk paths.
+   */
+  async stopAll(): Promise<{ ok: boolean; stopped: number }> {
+    const stoppable = this.#reconciler
+      .snapshot()
+      .filter(
+        (i) =>
+          i.status !== 'idle' && i.status !== 'loaded' && this.#slots.get(i.itemId) !== undefined,
+      );
+    for (const item of stoppable) {
+      await this.stopItem(item.itemId);
+    }
+    return { ok: true, stopped: stoppable.length };
+  }
+
   async remove(itemId: string): Promise<{ accepted: boolean }> {
     const slot = this.#slots.get(itemId);
     // Drop it from the stack immediately (UI responsiveness), then best-effort

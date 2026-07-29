@@ -1,7 +1,7 @@
 import {
   ArrowRightFromLine,
   CircleArrowOutDownRight,
-  FileUp,
+  Download,
   Play,
   RefreshCw,
   Trash2,
@@ -160,7 +160,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     // ONE key, so the list's shape is literally identical in both states and a
     // test can assert that: only the label, variant and handler flip.
     empty
-      ? act('load-remove', 'LOAD', 'secondary', !loadSafe, () => deps.load(), FileUp)
+      ? act('load-remove', 'LOAD', 'secondary', !loadSafe, () => deps.load(), Download)
       : act(
           'load-remove',
           'REMOVE',
