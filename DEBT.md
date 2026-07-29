@@ -121,6 +121,20 @@ One more is left in the tree deliberately: `FailoverBanner.tsx` carries a
 belongs to a different feature, so it was not touched. Worth a sweep for other
 `M<n>` references in comments when the numbered items are filed.
 
+### PREVIEW and PROGRAM are empty for different reasons — now encoded, worth keeping
+
+A first draft labelled BOTH monitor boxes "NOT CONNECTED". That is a category error for
+PREVIEW: `R-022` specifies it as a LOCAL browser render of the loaded template through
+`@cg/template-runtime` — "no CasparCG involvement, no second channel", "nothing is ever
+sent to CasparCG" — so it has nothing to connect to, ever, and a connection state
+would send an operator hunting for a link that is not part of the design. Only PROGRAM
+awaits a real feed (`C-016`, the program-channel return).
+
+Fixed: the empty state is now per-panel (`icon` + `emptyLabel` + `detail`) — PREVIEW
+reads "Nothing to preview", PROGRAM reads "No program return". Recorded because the two
+boxes look interchangeable and the next person to touch them will be tempted to share
+one placeholder again; the reasoning is in `MonitorPanel`'s header comment.
+
 ### The failover banner overlays the monitor strip
 
 `FailoverBanner` is `position: fixed` (per `layout.ts`, deliberately, so it is not a

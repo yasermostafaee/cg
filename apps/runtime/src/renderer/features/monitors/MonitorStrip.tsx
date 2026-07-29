@@ -1,3 +1,4 @@
+import { MonitorOff, SquareDashed } from 'lucide-react';
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
 import { MonitorPanel } from './MonitorPanel.js';
 
@@ -28,23 +29,31 @@ export function MonitorStrip(): JSX.Element {
   return (
     <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minHeight: 0 }}>
       {/*
-        The copy below says what each output IS, in the operator's terms, and
-        names no internal milestone or item number. An operator has no idea what
-        an M- or C- number is, and the visible surface is not where the roadmap
-        gets tracked. The pointer lives in `MonitorPanel`'s comment instead.
+        The copy says what each output IS and why it is blank, in the operator's
+        terms, naming no internal item number — the visible surface is not where
+        the roadmap gets tracked. The pointers live in `MonitorPanel`'s comment.
+
+        The two empty states are DIFFERENT ON PURPOSE. PREVIEW is a local browser
+        render with no server involvement, so it has nothing to connect to and a
+        "not connected" label would send an operator hunting for a link that is
+        not part of the design. Only PROGRAM is genuinely waiting for a feed.
       */}
       {showPvw && (
         <MonitorPanel
           id="pvw"
           title="PREVIEW"
-          detail="This is where the next graphic will appear, before it reaches air."
+          icon={SquareDashed}
+          emptyLabel="Nothing to preview"
+          detail="The graphic loaded on the selected row will render here, in this browser, with the field values you have typed. Nothing is sent to CasparCG."
         />
       )}
       {showPgm && (
         <MonitorPanel
           id="pgm"
           title="PROGRAM"
-          detail="This is where the on-air output will appear."
+          icon={MonitorOff}
+          emptyLabel="No program return"
+          detail="This will show what is on air, returned from the playout server. No return feed is arriving yet."
         />
       )}
     </div>
