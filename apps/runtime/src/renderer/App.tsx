@@ -6,14 +6,17 @@ import { ConnectionBanner } from './features/status/ConnectionBanner.js';
 import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
 import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
+import { MonitorStrip } from './features/monitors/MonitorStrip.js';
 import { ShellDivider } from './ui/ShellDivider.js';
 import { useShellLayout } from './hooks/useShellLayout.js';
+import { ShellLayoutProvider } from './hooks/shellLayoutContext.js';
 import { Inspector } from './features/inspector/Inspector.js';
 import { applyDraft } from './features/inspector/applyDraft.js';
 import { clearDraft } from './features/inspector/draftStore.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
 import { CommandToast } from './features/status/CommandToast.js';
 import { StatusBar } from './features/status/StatusBar.js';
+import { Tooltip } from './ui/Tooltip.js';
 import { useConnections } from './hooks/useConnections.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
 import { useLink } from './hooks/useLink.js';
@@ -116,14 +119,17 @@ export function App(): JSX.Element {
 
   // Narrow: one column, the Inspector is an overlay. Fullscreen: the focused
   // panel takes everything. Otherwise: workspace | divider | Inspector.
-  const showInspectorColumn = !layout.narrow && layout.focus !== 'layers';
-  const shellColumns = layout.narrow
-    ? '1fr'
-    : layout.focus === 'layers'
-      ? '1fr'
-      : layout.focus === 'inspector'
-        ? '1fr'
-        : `1fr 6px ${String(layout.inspectorPx)}px`;
+  //
+  // The workspace holds the monitor strip AND the layer list, so a fullscreen
+  // Layers / PGM / PREVIEW all live inside it — only a fullscreen Inspector
+  // replaces it. `MonitorStrip` decides which of its two boxes a monitor focus
+  // means.
+  const monitorFocused = layout.focus === 'pgm' || layout.focus === 'pvw';
+  const showWorkspace = layout.focus !== 'inspector';
+  const showInspectorColumn =
+    !layout.narrow && (layout.focus === 'none' || layout.focus === 'inspector');
+  const shellColumns =
+    layout.narrow || layout.focus !== 'none' ? '1fr' : `1fr 6px ${String(layout.inspectorPx)}px`;
 
   // Selecting a row on a narrow screen brings the Inspector up — the operator
   // asked to inspect something, so showing it is the point.
@@ -132,18 +138,19 @@ export function App(): JSX.Element {
   }, [layout.narrow, selectedId]);
 
   return (
-    <main style={styles.page}>
-      {/* R-006 — a not-live link means NOTHING can reach air. That is a full-width alert,
+    <ShellLayoutProvider layout={layout}>
+      <main style={styles.page}>
+        {/* R-006 — a not-live link means NOTHING can reach air. That is a full-width alert,
           not a pill: the pill lost to the green HEALTHY pill beside it, and the operator
           believed a graphic was on air. Renders nothing when the link is live. */}
-      <ConnectionBanner />
-      {/* R-006 — the failover banner describes REAL servers. In test mode there are none,
+        <ConnectionBanner />
+        {/* R-006 — the failover banner describes REAL servers. In test mode there are none,
           and the mock now honestly reports them `disconnected`, so it would shout
           "PRIMARY A unhealthy" about hardware that does not exist — new noise, and a fresh
           implication that a real server is out there, broken. The TEST MODE banner is the
           truth in that mode and supersedes it. */}
-      {link !== 'offline-mock' && <FailoverBanner health={health} />}
-      {/*
+        {link !== 'offline-mock' && <FailoverBanner health={health} />}
+        {/*
         R-028 part B — a RESIZABLE shell. The Inspector is a real column whose
         width the operator owns (dragged or nudged, clamped so neither side can
         reach zero, persisted per browser, resettable from the Layers header).
@@ -153,70 +160,80 @@ export function App(): JSX.Element {
         and becomes an OVERLAY: on a small screen a squeezed Inspector makes
         both panels useless. See `useShellLayout` for why 900px.
       */}
-      <div style={{ ...styles.shell, gridTemplateColumns: shellColumns }}>
-        {/* R-028 — the Library panel is GONE, not hidden: a template is no
+        <div style={{ ...styles.shell, gridTemplateColumns: shellColumns }}>
+          {/* R-028 — the Library panel is GONE, not hidden: a template is no
             longer a thing parked in a side panel, so there is no side panel.
             Load lives on the row and does import+load in one action. */}
-        {layout.focus !== 'inspector' && (
-          <section style={styles.workspace}>
-            <div style={styles.monitor}>
-              PVW / PGM monitor strip will live here. Full monitor with frame grabs is M9.
-            </div>
-            <div style={styles.chrome}>
-              <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
-            </div>
-            {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
-                Layers panels, with the playout system's layers on their own tab. */}
-            <LayersPanel
-              onSelectionChange={setSelectedId}
-              selectedId={selectedId}
-              layout={layout}
-              inspectorOpen={inspectorOverlayOpen}
-              onToggleInspector={() => setInspectorOverlayOpen((open) => !open)}
-              onUpdate={(id) => {
-                const target = items.find((i) => i.itemId === id);
-                return target !== undefined
-                  ? applyDraft(target)
-                  : Promise.resolve({ accepted: false });
-              }}
+          {showWorkspace && (
+            <section style={styles.workspace}>
+              {/* PGM / PREVIEW — reserved in their final positions, black and
+                explicitly labelled NOT CONNECTED. Hidden only when the LAYER
+                LIST is the fullscreen panel; a fullscreen monitor is still the
+                strip, showing one box. */}
+              {layout.focus !== 'layers' && (
+                <>
+                  <div
+                    style={
+                      monitorFocused
+                        ? { display: 'flex', flex: 1, minHeight: 0 }
+                        : {
+                            display: 'flex',
+                            height: `${String(layout.monitorPx)}px`,
+                            flexShrink: 0,
+                          }
+                    }
+                  >
+                    <MonitorStrip />
+                  </div>
+                  {/* The strip's height is the operator's too — same clamped,
+                    persisted, keyboard-nudgeable treatment as the Inspector's
+                    width. No divider while a monitor is fullscreen: there is
+                    nothing below it to divide from. */}
+                  {!monitorFocused && (
+                    <ShellDivider
+                      orientation="horizontal"
+                      value={layout.monitorPx}
+                      onResize={layout.setMonitorPx}
+                      label="Resize the monitor strip"
+                    />
+                  )}
+                </>
+              )}
+              {!monitorFocused && (
+                <>
+                  <div style={styles.chrome}>
+                    <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
+                  </div>
+                  {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
+                    Layers panels, with the playout system's layers on their own tab. */}
+                  <LayersPanel
+                    onSelectionChange={setSelectedId}
+                    selectedId={selectedId}
+                    layout={layout}
+                    inspectorOpen={inspectorOverlayOpen}
+                    onToggleInspector={() => setInspectorOverlayOpen((open) => !open)}
+                    onUpdate={(id) => {
+                      const target = items.find((i) => i.itemId === id);
+                      return target !== undefined
+                        ? applyDraft(target)
+                        : Promise.resolve({ accepted: false });
+                    }}
+                  />
+                </>
+              )}
+            </section>
+          )}
+          {/* The divider only exists where there are two columns to divide. */}
+          {!layout.narrow && layout.focus === 'none' && (
+            <ShellDivider
+              orientation="vertical"
+              invert
+              value={layout.inspectorPx}
+              onResize={layout.setInspectorPx}
+              label="Resize the Inspector"
             />
-          </section>
-        )}
-        {/* The divider only exists where there are two columns to divide. */}
-        {!layout.narrow && layout.focus === 'none' && (
-          <ShellDivider inspectorPx={layout.inspectorPx} onResize={layout.setInspectorPx} />
-        )}
-        {showInspectorColumn && (
-          <Inspector
-            item={selected}
-            onApply={(id) => {
-              const target = items.find((i) => i.itemId === id);
-              return target !== undefined
-                ? applyDraft(target)
-                : Promise.resolve({ accepted: false });
-            }}
-            onDiscard={(id) => clearDraft(id)}
-          />
-        )}
-      </div>
-      {/*
-        NARROW — the Inspector as an overlay.
-
-        It is deliberately NOT full-screen: the panel is pinned to the right and
-        the Layers list stays visible beside/behind it, so the operator can see
-        what is ON AIR while editing its fields. Editing a live graphic is the
-        NORMAL case here, not the edge case, and an overlay that hides the air
-        state would make the operator work blind. Dismissing is also a single
-        action (the backdrop, or the same hamburger).
-      */}
-      {layout.narrow && inspectorOverlayOpen && (
-        <>
-          <div
-            style={styles.overlayScrim}
-            onClick={() => setInspectorOverlayOpen(false)}
-            aria-hidden="true"
-          />
-          <div style={styles.overlayPanel}>
+          )}
+          {showInspectorColumn && (
             <Inspector
               item={selected}
               onApply={(id) => {
@@ -227,22 +244,57 @@ export function App(): JSX.Element {
               }}
               onDiscard={(id) => clearDraft(id)}
             />
-          </div>
-        </>
-      )}
-      <StatusBar
-        onOpenAudit={() => setAuditOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
-      <CommandToast />
-      <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
-      <ServerSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <LockOverlay
-        engaged={lock.engaged}
-        {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}
-        {...(lock.reason !== undefined ? { reason: lock.reason } : {})}
-        onRelease={(pin) => window.cg.lock.release({ pin })}
-      />
-    </main>
+          )}
+        </div>
+        {/*
+        NARROW — the Inspector as an overlay.
+
+        It is deliberately NOT full-screen: the panel is pinned to the right and
+        the Layers list stays visible beside/behind it, so the operator can see
+        what is ON AIR while editing its fields. Editing a live graphic is the
+        NORMAL case here, not the edge case, and an overlay that hides the air
+        state would make the operator work blind. Dismissing is also a single
+        action (the backdrop, or the same hamburger).
+      */}
+        {layout.narrow && inspectorOverlayOpen && (
+          <>
+            <div
+              style={styles.overlayScrim}
+              onClick={() => setInspectorOverlayOpen(false)}
+              aria-hidden="true"
+            />
+            <div style={styles.overlayPanel}>
+              <Inspector
+                item={selected}
+                onApply={(id) => {
+                  const target = items.find((i) => i.itemId === id);
+                  return target !== undefined
+                    ? applyDraft(target)
+                    : Promise.resolve({ accepted: false });
+                }}
+                onDiscard={(id) => clearDraft(id)}
+              />
+            </div>
+          </>
+        )}
+        <StatusBar
+          onOpenAudit={() => setAuditOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+        <CommandToast />
+        {/* THE tooltip, mounted ONCE. Every control carrying a `title` inherits it
+          by delegation — nothing new has to be wired, which is the point (see
+          `ui/Tooltip.tsx`). */}
+        <Tooltip />
+        <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
+        <ServerSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <LockOverlay
+          engaged={lock.engaged}
+          {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}
+          {...(lock.reason !== undefined ? { reason: lock.reason } : {})}
+          onRelease={(pin) => window.cg.lock.release({ pin })}
+        />
+      </main>
+    </ShellLayoutProvider>
   );
 }

@@ -160,13 +160,18 @@ describe('LayerRow — CLEAR and REMOVE stay distinct verbs (C-012)', () => {
 });
 
 describe('LayerRow — what the row says (4.2)', () => {
-  it('always shows the REAL layer number, and the alias beside it', async () => {
+  it('shows the alias as the primary label AND keeps the real layer number', async () => {
     rendered = await renderLayerRow({ item: itemWith('on-air') });
     const text = rendered.container.textContent ?? '';
-    // The real number is what an operator needs to clear the layer by hand over
-    // AMCP; an alias may sit beside it but never instead of it.
-    expect(text).toContain('70');
+    // The ALIAS is what the operator thinks in, so it is the row's title now.
     expect(text).toContain('CLOCK');
+    // The real layer number STAYS on the row as a secondary column. It is the
+    // vocabulary shared with the playout side — the reservation is 60–69, not
+    // "rows 1–4" — and it is what an operator needs to clear a layer by hand
+    // over AMCP. It may sit beside the alias but never instead of it.
+    expect(rendered.container.querySelector('[title="CasparCG layer 1-70"]')?.textContent).toBe(
+      '70',
+    );
   });
 
   it('an empty row says so instead of naming a template', async () => {
@@ -181,8 +186,13 @@ describe('LayerRow — what the row says (4.2)', () => {
     // The claim is DEMOTED to the muted "WAS ON AIR", and the sacred red tone is
     // withheld — that class is reserved for a graphic a live wire confirms.
     expect(text).toContain('WAS ON AIR');
-    const badge = rendered.container.querySelector('.cg-badge');
-    expect(badge?.className).not.toContain('cg-badge--onair');
+    // The row's state cell carries its ROLE as a data attribute (the badge pill
+    // was replaced by the state column when the verbs went neutral). Asserting
+    // the role, not a hex colour: the property that matters is "not the on-air
+    // role", and a colour assertion would break on any palette tuning while
+    // saying nothing about it.
+    const state = rendered.container.querySelector('[data-row-state]');
+    expect(state?.getAttribute('data-row-state')).not.toBe('onair');
   });
 });
 

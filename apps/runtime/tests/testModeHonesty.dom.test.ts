@@ -77,6 +77,7 @@ function row(item: StackItemState): ReturnType<typeof createElement> {
     },
     item,
     template: { templateId: 'tpl-1', templateType: 'clock', fields: [] },
+    rowNumber: 1,
     selected: false,
     dirty: false,
     onSelect: () => undefined,
@@ -89,10 +90,12 @@ describe('test mode does not claim real air — R-006', () => {
     stubLink('offline-mock');
     const el = await render(row(ON_AIR));
 
-    const badge = el.querySelector('.cg-badge');
-    expect(badge?.textContent).toContain('SIM ON AIR');
-    // The sacred red tone is RESERVED for a graphic a real server confirmed.
-    expect(badge?.className).not.toContain('cg-badge--onair');
+    // The row's state CELL replaced the badge pill when the verbs went neutral
+    // and colour moved to the state. The claims below are unchanged.
+    const state = el.querySelector('[data-row-state]');
+    expect(state?.textContent).toContain('SIM ON AIR');
+    // The sacred red ROLE is RESERVED for a graphic a real server confirmed.
+    expect(state?.getAttribute('data-row-state')).not.toBe('onair');
     expect(el.querySelector('[aria-label="status SIM ON AIR"]')).not.toBeNull();
   });
 
@@ -100,10 +103,10 @@ describe('test mode does not claim real air — R-006', () => {
     stubLink('live');
     const el = await render(row(ON_AIR));
 
-    const badge = el.querySelector('.cg-badge');
-    expect(badge?.textContent).toContain('ON AIR');
-    expect(badge?.textContent).not.toContain('SIM');
-    expect(badge?.className).toContain('cg-badge--onair');
+    const state = el.querySelector('[data-row-state]');
+    expect(state?.textContent).toContain('ON AIR');
+    expect(state?.textContent).not.toContain('SIM');
+    expect(state?.getAttribute('data-row-state')).toBe('onair');
   });
 
   it('shows a loud, persistent TEST MODE alert — not a pill among pills', async () => {

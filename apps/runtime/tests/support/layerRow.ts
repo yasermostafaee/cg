@@ -102,6 +102,7 @@ export async function renderLayerRow(options: {
   template?: TemplateInfo | null;
   link?: Link;
   dirty?: boolean;
+  rowNumber?: number;
   onUpdate?: (itemId: string) => Promise<{ accepted: boolean }>;
 }): Promise<RenderedRow> {
   const link = options.link ?? 'live';
@@ -124,6 +125,9 @@ export async function renderLayerRow(options: {
           slot,
           item,
           template,
+          // The row's position as displayed. A standalone row is row 1; specs
+          // that care about numbering drive the panel, not one row.
+          rowNumber: options.rowNumber ?? 1,
           selected: false,
           dirty: options.dirty ?? false,
           onSelect: () => undefined,

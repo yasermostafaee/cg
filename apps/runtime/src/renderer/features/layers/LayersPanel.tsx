@@ -1,19 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
-import {
-  CircleArrowOutDownRight,
-  Maximize2,
-  Minimize2,
-  PanelRight,
-  RotateCcw,
-  Trash2,
-  XSquare,
-} from 'lucide-react';
+import { CircleArrowOutDownRight, PanelRight, RotateCcw, Trash2, XSquare } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { Panel } from '../../ui/Panel.js';
 import { Tabs, type TabSpec } from '../../ui/Tabs.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
+import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useStack } from '../../hooks/useStack.js';
@@ -31,6 +25,8 @@ import {
 import { pruneFromFile, restoreFromFileAttachments } from '../inspector/fromFileStore.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { LayerRow } from './LayerRow.js';
+import { LayerTableHeader } from './LayerTableHeader.js';
+import { resolveDensity } from './layerTable.js';
 import { PlayoutPanel } from './PlayoutPanel.js';
 import { hasPlayoutOccupant } from './playoutOccupancy.js';
 import { FixedBankConfigModal } from '../fixedLayers/FixedBankConfigModal.js';
@@ -47,32 +43,22 @@ interface Props {
 }
 
 const styles = {
-  panel: {
-    background: colors.panel,
-    borderRadius: '0.25rem',
-    border: `1px solid ${colors.border}`,
+  /**
+   * The channel's scroll area. The STICKY column header lives INSIDE it (below
+   * both tab strips), so it is the rows that scroll under the header rather than
+   * the header scrolling away with them.
+   */
+  list: { overflowY: 'auto' as const, minHeight: 0, flex: 1 },
+  empty: {
+    padding: '1rem',
+    fontSize: '0.85rem',
+    color: colors.textMuted,
     display: 'flex',
     flexDirection: 'column' as const,
-    flex: 1,
-    minHeight: 0,
-    overflow: 'hidden',
-  },
-  header: {
-    padding: '0.5rem 1rem',
-    borderBottom: `1px solid ${colors.border}`,
-    fontSize: '1rem',
-    fontWeight: 700,
-    color: colors.textMuted,
-    letterSpacing: '0.05em',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     gap: '0.5rem',
-    flexShrink: 0,
+    alignItems: 'flex-start',
+    lineHeight: 1.5,
   },
-  headerActions: { display: 'flex', gap: '0.5rem', alignItems: 'center' },
-  list: { overflowY: 'auto' as const, minHeight: 0, flex: 1 },
-  empty: { padding: '1rem', fontSize: '0.85rem', color: colors.textMuted },
 } as const;
 
 /**
@@ -108,6 +94,22 @@ export function LayersPanel({
   const [activeTab, setActiveTab] = useState('layers');
   const [configOpen, setConfigOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
+  /**
+   * Which CHANNEL's rows are shown. One channel for now — the bank declares
+   * exactly one — but the axis is real, so a second channel is a longer list here
+   * and nothing else.
+   */
+  const [activeChannel, setActiveChannel] = useState<string>(() =>
+    bank === null ? '1' : String(bank.channel),
+  );
+  /**
+   * The table degrades on the width of the LIST, not the viewport: the operator
+   * drags the Inspector divider and the viewport never moves. Until the first
+   * measurement lands we assume the widest density — the alternative flashes a
+   * cramped table on every mount.
+   */
+  const { ref: listRef, width: listWidth } = useElementWidth<HTMLDivElement>();
+  const density = listWidth === null ? 'full' : resolveDensity(listWidth);
 
   // Template identity for every bound row, joined once for the whole list.
   const templates = useTemplateIndex(items.map((i) => i.templateId));
@@ -218,13 +220,23 @@ export function LayersPanel({
   }, [confirm, items.length]);
 
   const playoutOccupied = hasPlayoutOccupant(playout);
+  const channelLabel = bank === null ? 'CHANNEL 1' : `CHANNEL ${String(bank.channel)}`;
+  /**
+   * The OUTER axis. Exactly one entry today (a bank declares one channel), and
+   * the strip is still rendered: it says which channel these rows belong to, and
+   * it means adding a second channel is a longer array rather than a new layout.
+   */
+  const channelTabs: TabSpec[] = [{ id: activeChannel, label: channelLabel }];
   const tabs: TabSpec[] = [
     { id: 'layers', label: 'LAYERS' },
     {
       id: 'playout',
       label: 'PLAYOUT',
       // The dot means "something IS on a playout layer" — never raised for an
-      // unknown, which is the absence of a claim rather than a claim.
+      // unknown, which is the absence of a claim rather than a claim. It is
+      // scoped to the channel whose tab is open, which is why the channel axis
+      // has to be the outer one: with two channels a dot on a shared strip could
+      // not say whose reservation it was about.
       ...(playoutOccupied && !linkDown
         ? { badge: { tone: 'warn' as const, label: 'Something is on a playout layer' } }
         : {}),
@@ -232,10 +244,13 @@ export function LayersPanel({
   ];
 
   return (
-    <section aria-label="Layers" style={styles.panel}>
-      <header style={styles.header}>
-        <span>LAYERS</span>
-        <div style={styles.headerActions}>
+    <Panel
+      id="layers"
+      title="LAYERS"
+      ariaLabel="Layers"
+      style={{ flex: 1 }}
+      actions={
+        <>
           {/* The two bulk ways OFF AIR, in C-012 order: graceful first, hard
               second — so the softer option is the one nearest to hand. */}
           {onAirCount > 0 && (
@@ -274,11 +289,27 @@ export function LayersPanel({
               REMOVE ALL
             </Button>
           )}
-          {bank !== null && (
-            <Button variant="ghost" onClick={() => setConfigOpen(true)}>
-              Configure
-            </Button>
-          )}
+          {/*
+            CONFIGURE — offered whether or not a bank exists.
+
+            It used to be gated on `bank !== null`, which meant the ONE screen
+            that tells the operator to go and configure something was the one
+            screen with no way to do it. The modal is still honest about which
+            parts it cannot change (channel, start and count are fixed at
+            install), and says so in words rather than pointing at a control that
+            is not there.
+          */}
+          <Button
+            variant="ghost"
+            title={
+              bank === null
+                ? 'No candidate layers are declared yet — see what the bridge needs'
+                : 'Show or hide rows, and name them'
+            }
+            onClick={() => setConfigOpen(true)}
+          >
+            Configure
+          </Button>
           {/* NARROW — the hamburger that brings the Inspector up as an overlay.
               Only on small screens: with two columns the Inspector is already
               there and a toggle would be a control that does nothing visible. */}
@@ -287,70 +318,104 @@ export function LayersPanel({
               variant="ghost"
               aria-label={inspectorOpen ? 'Hide the Inspector' : 'Show the Inspector'}
               aria-expanded={inspectorOpen}
+              title={inspectorOpen ? 'Hide the Inspector' : 'Show the Inspector'}
               onClick={onToggleInspector}
             >
               <Icon icon={PanelRight} />
-            </Button>
-          )}
-          {/* FULLSCREEN — either panel can take the whole shell. */}
-          {!layout.narrow && (
-            <Button
-              variant="ghost"
-              aria-label={
-                layout.focus === 'layers' ? 'Exit fullscreen Layers' : 'Show Layers fullscreen'
-              }
-              aria-pressed={layout.focus === 'layers'}
-              onClick={() => layout.setFocus(layout.focus === 'layers' ? 'none' : 'layers')}
-            >
-              <Icon icon={layout.focus === 'layers' ? Minimize2 : Maximize2} />
             </Button>
           )}
           {/* THE WAY BACK. Always reachable once anything is customised, so an
               operator who drags a panel somewhere useless at 2 a.m. is never
               stuck with it. */}
           {layout.customized && (
-            <Button variant="ghost" aria-label="Reset the panel layout" onClick={layout.reset}>
+            <Button
+              variant="ghost"
+              aria-label="Reset the panel layout"
+              title="Put every panel back to its default size"
+              onClick={layout.reset}
+            >
               <Icon icon={RotateCcw} />
             </Button>
           )}
-        </div>
-      </header>
-      <Tabs tabs={tabs} activeId={activeTab} onSelect={setActiveTab} ariaLabel="Layer surfaces">
-        {activeTab === 'layers' ? (
-          bank === null ? (
-            <div style={styles.empty}>
-              No layers are declared. Set the candidate layers in the bridge&rsquo;s configuration
-              to start loading graphics.
-            </div>
+          {/* FULLSCREEN is NOT here any more — `Panel` renders it for every
+              panel, which is how the Inspector finally got one too. */}
+        </>
+      }
+    >
+      {/*
+        CHANNEL is the OUTER axis; LAYERS / PLAYOUT sit INSIDE a channel.
+
+        These are two different axes and must never share one strip: a single
+        "Channel 1 | Channel 2 | Playout" row cannot say WHOSE playout it means.
+        The reservation is per-channel too, so the playout tab's warning dot has
+        to be attributable to a channel — with one channel that ambiguity is
+        invisible, with two it is a correctness bug, and it is far cheaper to get
+        the axis right now than to unpick it later.
+      */}
+      <Tabs
+        tabs={channelTabs}
+        activeId={activeChannel}
+        onSelect={setActiveChannel}
+        ariaLabel="Channels"
+        idPrefix="channel"
+        level="outer"
+      >
+        <Tabs tabs={tabs} activeId={activeTab} onSelect={setActiveTab} ariaLabel="Layer surfaces">
+          {activeTab === 'layers' ? (
+            bank === null ? (
+              <div style={styles.empty}>
+                <strong style={{ color: colors.text }}>No candidate layers are declared.</strong>
+                <span>
+                  This station has no rows to load onto yet. The channel and the range of candidate
+                  layers are fixed at install: set them in the bridge&rsquo;s fixed-layers config
+                  file and restart it.
+                </span>
+                <span>
+                  Once a range exists, <strong>Configure</strong> is where you show or hide
+                  individual rows and give them names.
+                </span>
+                <Button variant="secondary" onClick={() => setConfigOpen(true)}>
+                  What the bridge needs
+                </Button>
+              </div>
+            ) : (
+              <div style={styles.list} ref={listRef}>
+                {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
+                <LayerTableHeader density={density} />
+                {rows.map((slot, index) => {
+                  const item =
+                    slot.binding !== null ? (itemById.get(slot.binding.itemId) ?? null) : null;
+                  const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
+                  return (
+                    <LayerRow
+                      key={slot.layer}
+                      slot={slot}
+                      item={item}
+                      template={template}
+                      // The row's POSITION as displayed, 1 at the top. Rows are
+                      // ordered by descending layer (the list mirrors on-air
+                      // z-order), so this is deliberately NOT the layer's offset
+                      // in the bank — it is the number an operator can point at.
+                      rowNumber={index + 1}
+                      density={density}
+                      selected={item !== null && item.itemId === selectedId}
+                      dirty={item !== null && isItemDirty(item.itemId, item.fields)}
+                      onSelect={onSelectionChange}
+                      onUpdate={onUpdate}
+                    />
+                  );
+                })}
+              </div>
+            )
           ) : (
-            <div style={styles.list}>
-              {rows.map((slot) => {
-                const item =
-                  slot.binding !== null ? (itemById.get(slot.binding.itemId) ?? null) : null;
-                const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
-                return (
-                  <LayerRow
-                    key={slot.layer}
-                    slot={slot}
-                    item={item}
-                    template={template}
-                    selected={item !== null && item.itemId === selectedId}
-                    dirty={item !== null && isItemDirty(item.itemId, item.fields)}
-                    onSelect={onSelectionChange}
-                    onUpdate={onUpdate}
-                  />
-                );
-              })}
-            </div>
-          )
-        ) : (
-          <PlayoutPanel layers={playout} />
-        )}
+            <PlayoutPanel layers={playout} />
+          )}
+        </Tabs>
       </Tabs>
-      {configOpen && bank !== null && (
+      {configOpen && (
         <FixedBankConfigModal bank={bank} slots={slots} onClose={() => setConfigOpen(false)} />
       )}
       {confirmDialog}
-    </section>
+    </Panel>
   );
 }

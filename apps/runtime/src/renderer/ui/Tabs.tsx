@@ -29,6 +29,22 @@ interface Props {
   children: ReactNode;
   /** Accessible name for the tab strip. */
   ariaLabel: string;
+  /**
+   * Namespace for the generated `tab-*` / `tabpanel-*` element ids.
+   *
+   * Required once tab strips NEST — the channel strip outside, LAYERS/PLAYOUT
+   * inside it. Without a prefix a channel and an inner tab that happened to share
+   * an id would emit duplicate DOM ids and cross-wire each other's
+   * `aria-controls`, which is the kind of a11y defect that never shows up
+   * visually.
+   */
+  idPrefix?: string;
+  /**
+   * `outer` marks the CHANNEL level: a heavier, boxed treatment so the hierarchy
+   * is visible at a glance. Channel and layers-vs-playout are different axes and
+   * must never look like peers in one strip.
+   */
+  level?: 'inner' | 'outer';
 }
 
 const styles = {
@@ -54,6 +70,26 @@ const styles = {
     cursor: 'pointer',
   },
   activeTab: { color: colors.text, borderBottomColor: colors.ready },
+  /**
+   * The CHANNEL level. Distinguished by SHAPE (a raised, boxed tab that sits on a
+   * sunken strip) rather than by colour alone, so the outer axis is obvious even
+   * when only one channel exists — the point being that adding a second channel
+   * changes nothing structural.
+   */
+  outerStrip: { background: colors.background, padding: '0.25rem 0.25rem 0', gap: '0.25rem' },
+  outerTab: {
+    fontSize: '0.72rem',
+    padding: '0.35rem 0.85rem',
+    borderRadius: '0.25rem 0.25rem 0 0',
+    border: `1px solid transparent`,
+    borderBottom: 'none',
+  },
+  outerActiveTab: {
+    color: colors.text,
+    background: colors.panel,
+    border: `1px solid ${colors.border}`,
+    borderBottom: 'none',
+  },
   dot: {
     width: '0.55rem',
     height: '0.55rem',
@@ -63,21 +99,36 @@ const styles = {
   },
 } as const satisfies Record<string, CSSProperties>;
 
-export function Tabs({ tabs, activeId, onSelect, children, ariaLabel }: Props): JSX.Element {
+export function Tabs({
+  tabs,
+  activeId,
+  onSelect,
+  children,
+  ariaLabel,
+  idPrefix = 'tab',
+  level = 'inner',
+}: Props): JSX.Element {
+  const outer = level === 'outer';
   return (
     <>
-      <div style={styles.strip} role="tablist" aria-label={ariaLabel}>
+      <div
+        style={outer ? { ...styles.strip, ...styles.outerStrip } : styles.strip}
+        role="tablist"
+        aria-label={ariaLabel}
+      >
         {tabs.map((tab) => {
           const active = tab.id === activeId;
+          const base = outer ? { ...styles.tab, ...styles.outerTab } : styles.tab;
+          const activeStyle = outer ? styles.outerActiveTab : styles.activeTab;
           return (
             <button
               key={tab.id}
               type="button"
               role="tab"
-              id={`tab-${tab.id}`}
+              id={`${idPrefix}-${tab.id}`}
               aria-selected={active}
-              aria-controls={`tabpanel-${tab.id}`}
-              style={active ? { ...styles.tab, ...styles.activeTab } : styles.tab}
+              aria-controls={`${idPrefix}panel-${tab.id}`}
+              style={active ? { ...base, ...activeStyle } : base}
               onClick={() => onSelect(tab.id)}
             >
               {tab.label}
@@ -95,8 +146,8 @@ export function Tabs({ tabs, activeId, onSelect, children, ariaLabel }: Props): 
       </div>
       <div
         role="tabpanel"
-        id={`tabpanel-${activeId}`}
-        aria-labelledby={`tab-${activeId}`}
+        id={`${idPrefix}panel-${activeId}`}
+        aria-labelledby={`${idPrefix}-${activeId}`}
         style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}
       >
         {children}

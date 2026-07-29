@@ -44,8 +44,20 @@ type Props = {
    * inline error would break the layout.
    */
   onError?: (message: string) => void;
-  /** R-028 — a decorative lucide glyph beside the label (never instead of it). */
+  /** R-028 — a decorative lucide glyph beside the label. */
   icon?: LucideIcon;
+  /**
+   * Show the GLYPH only, keeping the label as the accessible name.
+   *
+   * Legitimate in exactly one place: the Layers table's verb column, where the
+   * sticky COLUMN HEADER carries the word each glyph stands for. The label is
+   * still present in the DOM (visually hidden) and the caller adds a tooltip, so
+   * the word survives in three channels — screen reader, hover/focus, and the
+   * header. Do not reach for this on a lone button with no header above it: this
+   * product's STOP and CLEAR mean the opposite of the reference product's, and an
+   * operator must never have to decode a symbol to tell them apart.
+   */
+  iconOnly?: boolean;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'type' | 'onError'>;
 
 /**
@@ -63,6 +75,7 @@ export function AsyncButton({
   disabled,
   onError,
   icon,
+  iconOnly = false,
   ...rest
 }: Props): JSX.Element {
   const [view, setView] = useState<AsyncView>(INITIAL);
@@ -123,9 +136,12 @@ export function AsyncButton({
           // spinner takes the same slot, so the control's width never jumps
           // mid-press and the busy state is unmistakable rather than a second
           // icon competing with the first.
-          icon !== undefined && <Icon icon={icon} />
+          icon !== undefined && <Icon icon={icon} size={iconOnly ? 17 : 15} />
         )}
-        <span className="cg-btn__label">{children}</span>
+        {/* The label. Visually hidden when the glyph stands alone — hidden, never
+            absent, so the button keeps an accessible name even without the
+            caller's `aria-label`. */}
+        <span className={iconOnly ? 'cg-visually-hidden' : 'cg-btn__label'}>{children}</span>
       </button>
       {view.errorMessage !== null && (
         <span className="cg-btn-error" role="alert">

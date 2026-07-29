@@ -183,6 +183,67 @@
   color: var(--r-text);
 }
 
+/*
+ * THE ROW VERB — neutral, square, icon-only.
+ *
+ * Why neutral. A bright PLAY, an amber CLEAR and a red REMOVE on EVERY row meant
+ * the one question a control room has to answer in a glance — what is on air —
+ * had nowhere left to shout from. Thirty rows of coloured affordances drown the
+ * one row that is actually live. So colour left the buttons and moved to the
+ * row's STATE mark (`rowState.ts`), which is the only thing on the row entitled
+ * to it.
+ *
+ * HOVER USES NO HUE FROM THE STATE PALETTE. This is not fastidiousness: if
+ * hovering PLAY turned it the red that means ON AIR, the cursor would flash a
+ * false air signal as it crossed the row — a control that lies about
+ * transmission while merely being pointed at. Hover is therefore ELEVATION and
+ * BRIGHTNESS only (a lifted fill, a stronger border, a shadow), which is a
+ * change no state colour can be confused with.
+ *
+ * DESTRUCTIVE VERBS ARE NEUTRAL TOO, and that is safe. CLEAR and REMOVE get
+ * their weight from a confirm gate that names the layer and says ON AIR in words
+ * — a far better protection than a red button, which an operator stops seeing by
+ * the end of a shift. Do NOT re-introduce a coloured REMOVE on the principle
+ * that destructive controls should be red; the gate is the protection.
+ *
+ * ENABLED vs DISABLED WITHOUT COLOUR. This is the real cost of going neutral,
+ * and it lands on an existing decision: buttons stay PRESENT and disabled on
+ * empty rows, so a row can show four inert controls. Opacity alone would not
+ * carry that at a glance from across a gallery. So the two states differ in
+ * SHAPE: enabled is a raised chip with a border, disabled has neither fill nor
+ * border — a bare dimmed glyph. On an empty row the single enabled LOAD reads as
+ * the only thing you can press, which is exactly true.
+ */
+.cg-btn--verb {
+  /* The hit target floor. Mirrors `VERB_TARGET_PX` in `layerTable.ts`, which
+     budgets the verb column's width from the same number. */
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  background: var(--r-surface-raised);
+  border-color: var(--r-border-strong);
+  color: var(--r-text);
+}
+.cg-btn--verb:hover:not(:disabled) {
+  background: #2c3a4e;
+  border-color: #64748b;
+  box-shadow: var(--r-shadow-1);
+  filter: none; /* the lifted fill IS the hover; brightness on top muddies it */
+}
+.cg-btn--verb:active:not(:disabled) {
+  background: var(--r-surface-sunken);
+  box-shadow: none;
+}
+.cg-btn--verb:disabled {
+  background: transparent;
+  border-color: transparent;
+  color: var(--r-text-muted);
+  box-shadow: none;
+  /* Higher than the shared 0.45: the glyph still has to be IDENTIFIABLE, because
+     which verbs a row is offering is information even when they are inert. */
+  opacity: 0.6;
+}
+
 /* Busy + success + error states (driven by AsyncButton). No layout shift: while
    busy the label goes transparent (keeps the button's width) and the spinner
    overlays centered; success/error are ring only. */
@@ -422,6 +483,36 @@ textarea.cg-field {
   .cg-badge--transient .cg-badge__icon {
     animation: none;
   }
+}
+
+/* ── Tooltip (the ONE global mechanism — see ui/Tooltip.tsx) ─────────────── */
+
+/*
+ * Positioned by the component (measured, clamped to the viewport); everything
+ * that is a LOOK lives here, so the bubble matches the rest of the console
+ * rather than carrying its own private palette in inline styles.
+ *
+ * `z-index` sits above the modal scrim (1000) and the narrow Inspector overlay
+ * (801): a tooltip explaining a button inside a dialog is useless behind it.
+ */
+.cg-tooltip {
+  position: fixed;
+  max-width: 22rem;
+  background: var(--r-surface-sunken);
+  color: var(--r-text);
+  border: 1px solid var(--r-border-strong);
+  border-radius: var(--r-radius-sm);
+  padding: 0.3rem 0.5rem;
+  font-size: var(--r-text-xs);
+  line-height: 1.35;
+  /* Long titles wrap inside the bubble; a single long token breaks rather than
+     spilling past its edge. */
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  pointer-events: none;
+  box-shadow: var(--r-shadow-2);
+  z-index: 3000;
 }
 
 /*

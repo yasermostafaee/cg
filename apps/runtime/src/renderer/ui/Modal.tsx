@@ -38,15 +38,42 @@ const styles = {
     borderRadius: '0.4rem',
     boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
     padding: '1rem 1.25rem',
-    width: 'min(460px, 92vw)',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.75rem',
     color: colors.text,
+    /**
+     * Bounded by the VIEWPORT, so a dialog whose content grows with config —
+     * thirty candidate layers rather than four — is capped by the screen and
+     * scrolls inside itself, instead of running off the bottom where its Apply
+     * button cannot be reached.
+     */
+    maxHeight: '88vh',
+    minHeight: 0,
   },
-  title: { fontSize: '1rem', fontWeight: 700, margin: 0 },
-  body: { fontSize: '0.9rem', lineHeight: 1.5, color: colors.textMuted },
-  footer: { display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', alignItems: 'center' },
+  title: { fontSize: '1rem', fontWeight: 700, margin: 0, flexShrink: 0 },
+  /**
+   * The body SCROLLS; the title and the footer do not. A dialog that asks a
+   * destructive question must keep its buttons visible however long the content
+   * is — scrolling the whole dialog would push Cancel off-screen.
+   */
+  body: {
+    fontSize: '0.9rem',
+    lineHeight: 1.5,
+    color: colors.textMuted,
+    overflowY: 'auto' as const,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.75rem',
+  },
+  footer: {
+    display: 'flex',
+    gap: '0.5rem',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
 } as const;
 
 interface ModalProps {
@@ -57,9 +84,27 @@ interface ModalProps {
   onClose: () => void;
   children?: ReactNode;
   ariaLabel?: string;
+  /**
+   * How wide the dialog is. `prose` (the default) is the ~460px column that reads
+   * well for a confirm question; `wide` is for dialogs carrying a TABLE of
+   * per-row controls, which at prose width wrap into an unreadable stack.
+   */
+  size?: 'prose' | 'wide';
 }
 
-export function Modal({ title, footer, onClose, children, ariaLabel }: ModalProps): JSX.Element {
+const WIDTHS: Record<'prose' | 'wide', string> = {
+  prose: 'min(460px, 92vw)',
+  wide: 'min(720px, 94vw)',
+};
+
+export function Modal({
+  title,
+  footer,
+  onClose,
+  children,
+  ariaLabel,
+  size = 'prose',
+}: ModalProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -111,7 +156,7 @@ export function Modal({ title, footer, onClose, children, ariaLabel }: ModalProp
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel ?? title}
-        style={styles.dialog}
+        style={{ ...styles.dialog, width: WIDTHS[size] }}
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={styles.title}>{title}</h2>

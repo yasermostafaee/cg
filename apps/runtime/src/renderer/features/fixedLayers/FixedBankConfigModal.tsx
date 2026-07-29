@@ -11,7 +11,16 @@ import { useStack } from '../../hooks/useStack.js';
 import { useLink } from '../../hooks/useLink.js';
 
 interface Props {
-  bank: FixedLayerBank;
+  /**
+   * The declared bank, or NULL when the station has none.
+   *
+   * The null case exists because of a gap the review found: the empty state told
+   * the operator to go and configure the candidate layers while withholding the
+   * Configure control, so the one screen that named the task offered no way to
+   * start it. Configure now always opens — and when there is no bank it explains
+   * what the bridge needs and which parts only its config file can set.
+   */
+  bank: FixedLayerBank | null;
   /** The live per-slot state — occupancy + binding, for the remove affordance. */
   slots: FixedSlotState[];
   onClose: () => void;
@@ -20,15 +29,46 @@ interface Props {
 const styles = {
   fixedFacts: { fontSize: '0.85rem', color: colors.textMuted },
   field: { display: 'flex', flexDirection: 'column' as const, gap: '0.3rem' },
-  aliasList: {
+  /**
+   * The candidate-layer list.
+   *
+   * It SCROLLS and it is not height-capped here: the dialog itself is bounded to
+   * 88vh and its body scrolls, so this grows to whatever the config declares. The
+   * old `maxHeight: 40vh` was sized for the four layers this station happens to
+   * declare and made a thirty-layer bank a keyhole — four is a config value, not
+   * a design constraint.
+   */
+  aliasList: { display: 'flex', flexDirection: 'column' as const, gap: '0.4rem' },
+  /**
+   * A grid, not a flex row: at four layers a flex row looks fine, and at thirty
+   * every alias input starts at a different x because the layer labels differ in
+   * width. Same declared-columns reasoning as the Layers table itself.
+   */
+  aliasRow: {
+    display: 'grid',
+    gridTemplateColumns: '5rem 5rem minmax(6rem, 1fr) auto',
+    alignItems: 'center',
+    gap: '0.5rem',
+  },
+  aliasLabel: { fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums' as const },
+  needsConfig: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.4rem',
-    maxHeight: '40vh',
-    overflowY: 'auto' as const,
+    gap: '0.6rem',
+    fontSize: '0.85rem',
+    lineHeight: 1.55,
   },
-  aliasRow: { display: 'flex', alignItems: 'center', gap: '0.5rem' },
-  aliasLabel: { minWidth: '4.5rem', fontSize: '0.85rem' },
+  code: {
+    background: colors.panelMuted,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.25rem',
+    padding: '0.5rem 0.6rem',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    fontSize: '0.72rem',
+    color: colors.text,
+    whiteSpace: 'pre' as const,
+    overflowX: 'auto' as const,
+  },
   tick: { display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' },
   bound: {
     fontSize: '0.8rem',
@@ -76,6 +116,77 @@ const styles = {
  * is what makes the row untickable.
  */
 export function FixedBankConfigModal({ bank, slots, onClose }: Props): JSX.Element {
+  // Split rather than branched inside one component: the editor's state is all
+  // derived from a bank that exists, and hooks cannot be conditional.
+  if (bank === null) return <NoBankModal onClose={onClose} />;
+  return <BankEditor bank={bank} slots={slots} onClose={onClose} />;
+}
+
+/**
+ * There is no bank. Say what the bridge needs, in the bridge's own vocabulary,
+ * and be explicit that this dialog cannot create one.
+ *
+ * The honesty matters more than the convenience: channel / start / count are
+ * fixed at install (`resize-refused` / `renumber-refused` /
+ * `channel-change-refused` are all validator refusals), so offering editable
+ * fields here would be offering a form whose Apply can only ever be rejected.
+ * What the operator needs instead is the file, the shape, and the restart.
+ */
+function NoBankModal({ onClose }: { onClose: () => void }): JSX.Element {
+  return (
+    <Modal
+      title="Candidate layers — not configured"
+      onClose={onClose}
+      footer={
+        <Button variant="primary" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      <div style={styles.needsConfig}>
+        <span>
+          This station has no candidate layers, so the Layers list has no rows and nothing can be
+          loaded. The channel and the layer range are fixed at install and cannot be set from here —
+          they live in the bridge&rsquo;s fixed-layers config file, and the bridge reads it once at
+          startup.
+        </span>
+        <span>
+          Create <code>bridge-fixed-layers.json</code> in the bridge&rsquo;s config directory (
+          <code>~/.cg-runtime/</code> by default, or wherever <code>--fixed-layers-path</code>{' '}
+          points) and restart the bridge:
+        </span>
+        <div style={styles.code}>
+          {`{
+  "channel": 1,
+  "start": 70,
+  "count": 4,
+  "aliases": { "70": "logo", "71": "clock" }
+}`}
+        </div>
+        <span>
+          <strong>start</strong> is the first layer and <strong>count</strong> how many follow it.
+          The range must not overlap the playout system&rsquo;s reserved layers or the dynamic
+          ranges, and the bridge refuses to start if it does — naming both ranges, so a clash is
+          quick to fix.
+        </span>
+        <span>
+          Once the bridge restarts with a valid file, this dialog becomes where you show or hide
+          individual rows and give them names.
+        </span>
+      </div>
+    </Modal>
+  );
+}
+
+function BankEditor({
+  bank,
+  slots,
+  onClose,
+}: {
+  bank: FixedLayerBank;
+  slots: FixedSlotState[];
+  onClose: () => void;
+}): JSX.Element {
   const [aliases, setAliases] = useState<Record<string, string>>({ ...(bank.aliases ?? {}) });
   // Checkbox model: layer → VISIBLE. Absent key in the bank means visible.
   const [visible, setVisible] = useState<Record<string, boolean>>(() => {
@@ -197,7 +308,10 @@ export function FixedBankConfigModal({ bank, slots, onClose }: Props): JSX.Eleme
 
   return (
     <Modal
-      title="Fixed layers — bank configuration"
+      title="Candidate layers — configuration"
+      // WIDE: this dialog carries a per-layer table (tick, alias, bound
+      // template, Remove), and at prose width every row wrapped into a stack.
+      size="wide"
       onClose={onClose}
       footer={
         <>

@@ -10,6 +10,7 @@ export type ButtonVariant =
   | 'caution-strong'
   | 'danger'
   | 'ghost'
+  | 'verb'
   | 'default';
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
@@ -21,6 +22,7 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   'caution-strong': 'cg-btn--caution-strong',
   danger: 'cg-btn--danger',
   ghost: 'cg-btn--ghost',
+  verb: 'cg-btn--verb',
   default: '',
 };
 
@@ -45,6 +47,11 @@ export const VARIANT_ACCENT: Record<ButtonVariant, string | undefined> = {
   'caution-strong': cssVars['--r-caution'],
   danger: cssVars['--r-danger'],
   ghost: undefined,
+  // NEUTRAL BY CONTRACT. A row verb inherits the surface text colour and carries
+  // no accent at all — the row's STATE owns colour now. `undefined` here is the
+  // load-bearing part: the right-click menu paints from this table, so a menu
+  // item mirroring a neutral button stays neutral too, without a second rule.
+  verb: undefined,
   default: undefined,
 };
 

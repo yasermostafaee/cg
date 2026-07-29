@@ -13,6 +13,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
+import { Panel } from '../../ui/Panel.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
 import { FromFileControl } from './FromFileControl.js';
@@ -43,15 +44,19 @@ interface Props {
 }
 
 const styles = {
-  panel: {
+  /**
+   * The Inspector's SCROLLING body. The panel chrome (border, background,
+   * header, and the fullscreen affordance) comes from `Panel` now — this is only
+   * the content that scrolls inside it. `Panel` clips, which is what finally
+   * bounds this scroll (see `layout.ts`: the page never scrolls, panels do).
+   */
+  scroll: {
     display: 'flex',
     flexDirection: 'column' as const,
-    background: colors.panel,
-    borderRadius: '0.25rem',
-    border: `1px solid ${colors.border}`,
     padding: '0.75rem 1rem',
     gap: '0.5rem',
     minHeight: 0,
+    flex: 1,
     overflowY: 'auto' as const,
   },
   heading: {
@@ -133,10 +138,11 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
 
   if (item === null) {
     return (
-      <aside style={styles.panel} aria-label="Inspector">
-        <h2 style={styles.heading}>INSPECTOR</h2>
-        <p style={styles.empty}>Select a stack item to inspect its fields.</p>
-      </aside>
+      <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector">
+        <div style={styles.scroll}>
+          <p style={styles.empty}>Select a stack item to inspect its fields.</p>
+        </div>
+      </Panel>
     );
   }
 
@@ -164,92 +170,93 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
   const label = info !== null ? templateDisplayName(info) : 'Unnamed template';
 
   return (
-    <aside style={styles.panel} aria-label="Inspector">
-      <h2 style={styles.heading}>INSPECTOR</h2>
-      <h3 style={styles.title} title={item.templateId}>
-        {label}
-      </h3>
-      {contentTitle !== '' && <div style={styles.meta}>{contentTitle}</div>}
-      <div style={styles.meta}>
-        Status: {item.status}
-        {item.pending ? ' (pending)' : ''}
-      </div>
-      {/* Always shown, including the empty case: "no layer" is not an absence of
+    <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector">
+      <div style={styles.scroll}>
+        <h3 style={styles.title} title={item.templateId}>
+          {label}
+        </h3>
+        {contentTitle !== '' && <div style={styles.meta}>{contentTitle}</div>}
+        <div style={styles.meta}>
+          Status: {item.status}
+          {item.pending ? ' (pending)' : ''}
+        </div>
+        {/* Always shown, including the empty case: "no layer" is not an absence of
           information, it is the answer to "why is this not on air?". The old line rendered
           only when a slot existed, so it went blank exactly when the operator was trying to
           diagnose that. */}
-      <div style={styles.meta}>{layerDetail(item.slot)}</div>
-      <div style={styles.actions}>
-        {/* Apply stays enabled even with nothing staged — re-sending unchanged
+        <div style={styles.meta}>{layerDetail(item.slot)}</div>
+        <div style={styles.actions}>
+          {/* Apply stays enabled even with nothing staged — re-sending unchanged
             values is the operator's documented B-048 recovery path. */}
-        {/* #334 — feedback goes to the command TOAST, never pinned inline in the panel.
+          {/* #334 — feedback goes to the command TOAST, never pinned inline in the panel.
             `applyDraft` (the shared apply behind this button AND the stack row's UPDATE)
             already routes any failure to the toast with its own B-070 wording, so this
             no-op only SUPPRESSES the button's duplicate INLINE error — it does not
             re-report (which would double-toast) or change the wording. Exactly what
             `StackRow`'s UPDATE does, for exactly this reason. */}
-        {/* C-012 — the AIR family, same as the stack row's UPDATE. This is the SAME
+          {/* C-012 — the AIR family, same as the stack row's UPDATE. This is the SAME
             action (both call `applyDraft`), so it must not read as one of the neutral
             staging controls beside it — Discard, Apply position, Add item — which
             touch nothing live. It pushes new values to a graphic that is on air right
             now; the outlined on-air hue says so, while the SOLID red stays PLAY's. */}
-        <AsyncButton
-          variant="air"
-          aria-label="Apply staged edits"
-          run={() => onApply(itemId)}
-          onError={() => undefined}
+          <AsyncButton
+            variant="air"
+            aria-label="Apply staged edits"
+            run={() => onApply(itemId)}
+            onError={() => undefined}
+          >
+            Update
+          </AsyncButton>
+          <Button
+            variant="ghost"
+            aria-label="Discard staged edits"
+            disabled={!dirty}
+            onClick={() => onDiscard(itemId)}
+          >
+            Discard
+          </Button>
+          {dirty && <DraftChip label="unapplied edits" />}
+        </div>
+        {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
+        <PositionPicker key={`pos-${itemId}`} item={item} />
+        <div
+          style={{
+            marginTop: '0.5rem',
+            borderTop: `1px solid ${colors.border}`,
+            paddingTop: '0.5rem',
+          }}
         >
-          Update
-        </AsyncButton>
-        <Button
-          variant="ghost"
-          aria-label="Discard staged edits"
-          disabled={!dirty}
-          onClick={() => onDiscard(itemId)}
-        >
-          Discard
-        </Button>
-        {dirty && <DraftChip label="unapplied edits" />}
+          <h2 style={styles.heading}>FIELDS</h2>
+          {isEmpty ? (
+            <p style={styles.empty}>No fields.</p>
+          ) : (
+            <>
+              {rootFields.map((row) => (
+                // Key by item+path so switching stack items remounts the controls
+                // (each re-seeds from the new item's draft-or-applied value) — no
+                // uncontrolled DOM node is ever reused across items.
+                <FieldEditor
+                  key={`${itemId}-${row.key}`}
+                  field={row.field}
+                  path={[row.key]}
+                  item={item}
+                  applied={valueAt(item.fields, [row.key])}
+                />
+              ))}
+              {groups.map((group) => (
+                <FieldGroup
+                  key={`${itemId}-${group.name}`}
+                  group={group}
+                  path={[group.name]}
+                  item={item}
+                  applied={item.fields}
+                />
+              ))}
+            </>
+          )}
+        </div>
       </div>
-      {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
-      <PositionPicker key={`pos-${itemId}`} item={item} />
-      <div
-        style={{
-          marginTop: '0.5rem',
-          borderTop: `1px solid ${colors.border}`,
-          paddingTop: '0.5rem',
-        }}
-      >
-        <h2 style={styles.heading}>FIELDS</h2>
-        {isEmpty ? (
-          <p style={styles.empty}>No fields.</p>
-        ) : (
-          <>
-            {rootFields.map((row) => (
-              // Key by item+path so switching stack items remounts the controls
-              // (each re-seeds from the new item's draft-or-applied value) — no
-              // uncontrolled DOM node is ever reused across items.
-              <FieldEditor
-                key={`${itemId}-${row.key}`}
-                field={row.field}
-                path={[row.key]}
-                item={item}
-                applied={valueAt(item.fields, [row.key])}
-              />
-            ))}
-            {groups.map((group) => (
-              <FieldGroup
-                key={`${itemId}-${group.name}`}
-                group={group}
-                path={[group.name]}
-                item={item}
-                applied={item.fields}
-              />
-            ))}
-          </>
-        )}
-      </div>
-    </aside>
+    </Panel>
   );
 }
 
