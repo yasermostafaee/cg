@@ -108,6 +108,19 @@ each rather than one per row, so they do not drown the state signal the way 30 c
 rows did. If the owner wants the neutral treatment to extend to them, it is a
 `variant` change per button and nothing else.
 
+### Retired M0–M12 milestone references still in the source
+
+The PGM/PREVIEW placeholder copy cited `(M9)`, a milestone from the retired
+Electron-era M0–M12 roadmap — a numbering scheme that no longer drives work and that
+means nothing to an operator. Fixed: the visible copy now just says what each output
+is, and the pointer moved into a code comment naming `C-016` (operator PGM confidence
+view), which actually owns the feature.
+
+One more is left in the tree deliberately: `FailoverBanner.tsx` carries a
+`Phase 8 §12 / M9.0` provenance note. It is a comment rather than visible copy and
+belongs to a different feature, so it was not touched. Worth a sweep for other
+`M<n>` references in comments when the numbered items are filed.
+
 ### The failover banner overlays the monitor strip
 
 `FailoverBanner` is `position: fixed` (per `layout.ts`, deliberately, so it is not a
