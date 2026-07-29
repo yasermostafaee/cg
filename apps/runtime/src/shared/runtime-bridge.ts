@@ -49,6 +49,9 @@ import type {
   TemplatesImportChannel,
   TemplatesListChannel,
   TemplatesRemoveChannel,
+  DelimitersListChannel,
+  DelimitersSetChannel,
+  DelimiterOption,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChannel,
@@ -293,5 +296,25 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof SettingsSetChannel>,
     ): Promise<ChannelResponse<typeof SettingsSetChannel>>;
     onChanged(handler: (next: Settings) => void): Unsubscribe;
+  };
+
+  /**
+   * R-034 — the station's split-delimiter list. On the BRIDGE, not in the
+   * browser, for the same two reasons `templates` is: an operator who adds a
+   * delimiter must find it from any browser in the gallery, and it must still
+   * be there after a bridge restart. Persisted to disk beside the templates.
+   */
+  delimiters: {
+    list(): Promise<ChannelResponse<typeof DelimitersListChannel>>;
+    /**
+     * Replace the whole list. The BRIDGE is authoritative for the refusal —
+     * it rejects an empty list and duplicate values and supplies the wording,
+     * the R-005 removal shape — so two browsers cannot disagree about what is
+     * allowed.
+     */
+    set(
+      req: ChannelRequest<typeof DelimitersSetChannel>,
+    ): Promise<ChannelResponse<typeof DelimitersSetChannel>>;
+    onChanged(handler: (delimiters: DelimiterOption[]) => void): Unsubscribe;
   };
 }

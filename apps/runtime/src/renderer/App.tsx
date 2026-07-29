@@ -15,6 +15,7 @@ import { LockOverlay } from './features/lock/LockOverlay.js';
 import { CommandToast } from './features/status/CommandToast.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { useConnections } from './hooks/useConnections.js';
+import { initDelimiters } from './features/inspector/delimiterStore.js';
 import { useLink } from './hooks/useLink.js';
 import { useLock } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
@@ -106,6 +107,12 @@ export function App(): JSX.Element {
     window.addEventListener('contextmenu', suppressNativeMenu);
     return () => window.removeEventListener('contextmenu', suppressNativeMenu);
   }, []);
+
+  // R-034 — pull the station's delimiter list once and stay subscribed. Here
+  // rather than in the control that uses it: the list is per-STATION, not per
+  // field, and a subscription per rendered field would open and close one every
+  // time the operator changed selection.
+  useEffect(() => initDelimiters(window.cg), []);
 
   // Narrow: one column, the Inspector is an overlay. Fullscreen: the focused
   // panel takes everything. Otherwise: workspace | divider | Inspector.

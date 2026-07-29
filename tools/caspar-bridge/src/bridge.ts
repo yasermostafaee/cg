@@ -45,6 +45,9 @@ import {
   StackStateChangedChannel,
   StackTakeChannel,
   StackUpdateChannel,
+  DelimitersChangedChannel,
+  DelimitersListChannel,
+  DelimitersSetChannel,
   TemplatesChangedChannel,
   TemplatesGetChannel,
   TemplatesImportChannel,
@@ -382,6 +385,8 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.templatesChanged.subscribe((t) => push(TemplatesChangedChannel, t)),
     // R-028 part B — the declared playout layers' occupancy.
     backing.playoutStateChanged.subscribe((s) => push(PlayoutLayersStateChangedChannel, s)),
+    // R-034 — the shared delimiter list.
+    backing.delimitersChanged.subscribe((d) => push(DelimitersChangedChannel, d)),
   ];
 }
 
@@ -513,6 +518,10 @@ export function buildRoutes(
     ),
     route(UpdateStateChannel, () => b.updateState()),
     route(UpdateCancelChannel, () => b.updateCancel()),
+
+    // R-034 — the station's delimiter list, bridge-owned so every browser sees one list.
+    route(DelimitersListChannel, () => b.delimitersList()),
+    route(DelimitersSetChannel, (r: { delimiters: never[] }) => b.delimitersSet(r.delimiters)),
 
     route(SettingsGetChannel, () => b.settingsGet()),
     route(SettingsSetChannel, (r: Partial<{ telemetry: never }>) => b.settingsSet(r)),

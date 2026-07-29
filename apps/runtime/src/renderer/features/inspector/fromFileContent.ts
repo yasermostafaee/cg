@@ -25,24 +25,13 @@ export interface SplitConfig {
 }
 
 /**
- * Delimiter suggestions offered to the operator (a free-text input with a
- * datalist). `\n` — one entry per line — is the default for split mode.
- */
-export const DELIMITER_SUGGESTIONS: readonly { value: string; label: string }[] = [
-  { value: '\\n', label: 'new line' },
-  { value: '|', label: 'pipe' },
-  { value: '،', label: 'Persian comma' },
-  { value: ',', label: 'comma' },
-  { value: ';', label: 'semicolon' },
-];
-
-/** The default delimiter (as typed): one entry per line. */
-export const DEFAULT_DELIMITER = '\\n';
-
-/**
- * Resolve the operator's typed delimiter: the escapes `\n` and `\t` become a
- * newline / tab (there is no other way to type them in a one-line input);
- * everything else is literal.
+ * The offered delimiters and the default one MOVED to `delimiterStore` (R-034):
+ * the list is configurable and persisted now, so a second hard-coded copy here
+ * would be a constant that silently disagrees with what the picker shows.
+ *
+ * Resolve a stored delimiter: the escapes `\n` and `\t` become a newline / tab
+ * (there is no other way to express them in a single-line value); everything
+ * else is literal.
  */
 export function parseDelimiter(raw: string): string {
   return raw.replace(/\\n/g, '\n').replace(/\\t/g, '\t');

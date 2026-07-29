@@ -60,16 +60,30 @@ Fallbacks are all OFF — verbatim, the safer Cinegy-parity default, operator ca
 - a template imported in a PREVIOUS page session lists from the bridge registry without its
   scene, so it has no record at all (same residual R-011 accepts for the position seed).
 
-## Handle persistence: SKIPPED for v1, deliberately
+## Handle persistence: SKIPPED for v1 — and SUPERSEDED (see B-113)
 
-FSA handles can be structured-cloned into IndexedDB, and a new session must re-request
-permission (gesture-gated) before reading. Persistence was skipped because the key it would
-need does not survive: from-file state is keyed by STACK ITEM id + field path, and item ids
-are minted per load (`item-<uuid>`) — after a tab reload there is no durable identity to
-re-attach a stored handle to. Persisting by template+path instead would silently re-point a
-NEW item at an old file, which fails the honesty bar. The operator re-picks the file after a
-tab reload; R-026's bridge-watch option is the real answer to surviving reloads and is
-recorded there as a trade-off.
+**This section's reasoning is stale and is kept only so the change reads in order. Handle
+persistence SHIPPED in `runtime-from-file-persistence`; read that change's `design.md` for the
+design that actually holds.**
+
+What was written here, and why it stopped being true:
+
+> FSA handles can be structured-cloned into IndexedDB, and a new session must re-request
+> permission (gesture-gated) before reading. Persistence was skipped because the key it would
+> need does not survive: from-file state is keyed by STACK ITEM id + field path, and item ids
+> are minted per load (`item-<uuid>`) — after a tab reload there is no durable identity to
+> re-attach a stored handle to.
+
+The key argument was correct when written and was overtaken by [[B-092]], which added
+`StackRetentionStore`: the stack's intent — including each `itemId` — is now persisted to OPFS
+and re-delivered on connect, so `itemId + fieldPath` DOES name the same field after a reload.
+The concern about re-pointing a NEW item at an old file never applied to that key; it applied to
+the template+path key considered as an alternative, and that alternative is still rejected.
+
+What remains true is the narrower half: a restored handle's READ PERMISSION may not survive, and
+re-granting needs a user gesture. B-113 handles that explicitly rather than treating it as a
+reason to skip persistence — a restored-but-unreadable attachment is shown as exactly that, and
+is never read from until the operator grants access.
 
 ## Verbatim / no normalization — the R-020 boundary
 

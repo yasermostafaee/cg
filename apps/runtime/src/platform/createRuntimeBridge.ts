@@ -215,5 +215,16 @@ export function createMockBridge(): RuntimeBridge {
         ),
       onChanged: (handler) => mock.settingsChanged.subscribe(handler),
     },
+
+    // R-034 — offline parity. The mock stands in for the bridge's disk-persisted
+    // list; it uses `localStorage`, which is the closest thing test mode has to
+    // "survives a restart". Cross-browser sharing is the one property the mock
+    // genuinely cannot model — there is no shared party in offline mode — and
+    // that is a property of test mode, not a gap in the contract.
+    delimiters: {
+      list: () => Promise.resolve(mock.delimitersList()),
+      set: (req) => Promise.resolve(mock.delimitersSet(req.delimiters)),
+      onChanged: (handler) => mock.delimitersChanged.subscribe(handler),
+    },
   };
 }

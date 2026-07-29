@@ -28,7 +28,7 @@ import {
   pruneDrafts,
   subscribeDrafts,
 } from '../inspector/draftStore.js';
-import { pruneFromFile } from '../inspector/fromFileStore.js';
+import { pruneFromFile, restoreFromFileAttachments } from '../inspector/fromFileStore.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { LayerRow } from './LayerRow.js';
 import { PlayoutPanel } from './PlayoutPanel.js';
@@ -119,6 +119,13 @@ export function LayersPanel({
     const ids = new Set(items.map((i) => i.itemId));
     pruneDrafts(ids);
     pruneFromFile(ids);
+    // B-113 — restore file attachments a previous session persisted, in the SAME
+    // pass that prunes. Both need exactly one thing — the set of item ids that
+    // are really on the stack — and running them apart is how a restore lands a
+    // moment before the prune that would have rejected it, flashing file names
+    // onto rows that no longer exist. Idempotent: an already-attached field is
+    // left alone, so re-running on every stack change costs nothing.
+    void restoreFromFileAttachments(ids);
   }, [items]);
 
   const itemById = useMemo(() => {

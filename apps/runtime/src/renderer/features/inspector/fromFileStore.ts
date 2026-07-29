@@ -1,5 +1,17 @@
 import type { FieldPath } from './draftStore.js';
-import type { TextFileSource } from './textFileSource.js';
+import {
+  attachmentKey,
+  deleteAttachment,
+  loadAttachments,
+  pruneAttachments,
+  saveAttachment,
+} from './fromFilePersistence.js';
+import {
+  fsaTextFileSource,
+  queryReadPermission,
+  type FileSourcePermission,
+  type TextFileSource,
+} from './textFileSource.js';
 
 /**
  * R-018 — the per-item, per-field "from file" state: the attached source, the
@@ -7,11 +19,11 @@ import type { TextFileSource } from './textFileSource.js';
  * counter + subscribe (the `draftStore` shape) so the pure attach/flag logic is
  * node-testable and the components consume it through `useSyncExternalStore`.
  *
- * SESSION-LOCAL BY DESIGN: an FSA handle could be persisted to IndexedDB, but
- * a stack item's id does not survive the page session, so there is nothing
- * durable to re-attach the handle TO — and re-reading a handle in a new
- * session needs a user-gesture permission re-grant anyway. The operator
- * re-picks the file after a tab reload; design.md records the trade-off.
+ * B-113 — no longer session-local. Every mutation writes through to IndexedDB
+ * (`fromFilePersistence`) and `restoreFromFileAttachments()` reads them back at
+ * boot, so an attachment survives a page refresh. The store stays the single
+ * source of truth for the UI; persistence is a mirror behind it, and a failure
+ * to write costs durability, never the attachment itself.
  */
 export interface FromFileState {
   source: TextFileSource;
@@ -21,6 +33,13 @@ export interface FromFileState {
   delimiter: string;
   /** The last reload's error, or null. Cleared by the next successful read. */
   error: string | null;
+  /**
+   * B-113 — whether this source can be READ right now. A freshly picked file is
+   * always `granted` (the picker IS the grant); one restored from a previous
+   * session may need the operator to re-grant, and until they do the control
+   * must say so rather than present an unreadable file as attached.
+   */
+  permission: FileSourcePermission;
 }
 
 const entries = new Map<string, FromFileState>();
@@ -33,7 +52,28 @@ function bump(): void {
 }
 
 function keyOf(itemId: string, path: FieldPath): string {
-  return JSON.stringify([itemId, ...path]);
+  return attachmentKey(itemId, path);
+}
+
+/**
+ * Mirror one field's entry to durable storage. Fire-and-forget by design: the
+ * store has already changed and the UI has already rendered it, so awaiting the
+ * write would only make an attach feel slow, and a rejected write must not undo
+ * an attachment the operator can see.
+ */
+function persist(itemId: string, path: FieldPath, entry: FromFileState): void {
+  const handle = entry.source.handle;
+  // No handle means nothing durable to write (the test fake, and any future
+  // non-FSA source). Not an error — just not persistable.
+  if (handle === undefined) return;
+  void saveAttachment({
+    key: keyOf(itemId, path),
+    itemId,
+    path,
+    handle,
+    split: entry.split,
+    delimiter: entry.delimiter,
+  });
 }
 
 /** Subscribe to from-file state changes (for `useSyncExternalStore`). Returns unsubscribe. */
@@ -61,18 +101,43 @@ export function attachFileSource(
   source: TextFileSource,
   defaults: { split: boolean; delimiter: string },
 ): void {
-  entries.set(keyOf(itemId, path), {
+  // A freshly picked file is readable by construction — the picker IS the grant.
+  const entry: FromFileState = {
     source,
     split: defaults.split,
     delimiter: defaults.delimiter,
     error: null,
-  });
+    permission: 'granted',
+  };
+  entries.set(keyOf(itemId, path), entry);
+  persist(itemId, path, entry);
   bump();
 }
 
 /** Detach the field's source (the field goes back to hand editing only). */
 export function detachFileSource(itemId: string, path: FieldPath): void {
-  if (entries.delete(keyOf(itemId, path))) bump();
+  const key = keyOf(itemId, path);
+  if (entries.delete(key)) {
+    void deleteAttachment(key);
+    bump();
+  }
+}
+
+/**
+ * B-113 — record the outcome of a permission re-grant on a restored source.
+ * Not persisted: permission is the browser's to remember, and writing our guess
+ * of it would make a stale copy that outlives the truth.
+ */
+export function setFromFilePermission(
+  itemId: string,
+  path: FieldPath,
+  permission: FileSourcePermission,
+): void {
+  const key = keyOf(itemId, path);
+  const entry = entries.get(key);
+  if (entry === undefined) return;
+  entries.set(key, { ...entry, permission, ...(permission === 'granted' ? { error: null } : {}) });
+  bump();
 }
 
 /** Update the split flag / delimiter of an attached source. No-op when none attached. */
@@ -84,7 +149,12 @@ export function updateSplitConfig(
   const key = keyOf(itemId, path);
   const entry = entries.get(key);
   if (entry === undefined) return;
-  entries.set(key, { ...entry, ...patch });
+  const next = { ...entry, ...patch };
+  entries.set(key, next);
+  // The split flag and the delimiter are part of what "this field's source"
+  // means, so they persist with it — a refresh that restored the file but not
+  // the delimiter would silently change how the file is read.
+  persist(itemId, path, next);
   bump();
 }
 
@@ -108,6 +178,44 @@ export function pruneFromFile(liveItemIds: Iterable<string>): void {
       changed = true;
     }
   }
+  if (changed) bump();
+}
+
+/**
+ * B-113 — restore attachments persisted by a previous session.
+ *
+ * Called once the stack is known, and given the ids that are actually on it:
+ * restoring blind would resurrect attachments for items that are gone, and
+ * prune them a moment later — a flicker of file names on rows that do not have
+ * them. Anything not in `liveItemIds` is dropped from durable storage in the
+ * same pass, so a profile cannot accumulate handles forever.
+ *
+ * An already-attached field is left ALONE: the live session's attachment is the
+ * operator's most recent intent, and a restore arriving late must never
+ * overwrite a file they just picked.
+ */
+export async function restoreFromFileAttachments(liveItemIds: Iterable<string>): Promise<void> {
+  const live = new Set(liveItemIds);
+  const records = await loadAttachments();
+  let changed = false;
+  for (const record of records) {
+    if (!live.has(record.itemId)) continue;
+    if (entries.has(record.key)) continue;
+    // Asked, never prompted: `queryPermission` cannot show a dialog, so this is
+    // safe during boot. Where it comes back short of granted the entry is still
+    // restored — the operator sees WHICH file was attached and is offered the
+    // gesture — but it is marked unreadable so nothing reads stale content.
+    const permission = await queryReadPermission(record.handle);
+    entries.set(record.key, {
+      source: fsaTextFileSource(record.handle),
+      split: record.split,
+      delimiter: record.delimiter,
+      error: null,
+      permission,
+    });
+    changed = true;
+  }
+  void pruneAttachments(live);
   if (changed) bump();
 }
 

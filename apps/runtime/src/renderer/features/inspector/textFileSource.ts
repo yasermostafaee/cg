@@ -19,7 +19,70 @@ export interface TextFileSource {
    * error; they never blank a field because a share went away.
    */
   read(): Promise<string>;
+  /**
+   * B-113 — the underlying handle, when there is one, so the attachment can be
+   * PERSISTED (a handle is structured-cloneable; a closure is not). Absent on
+   * the test fake and on any future non-FSA source, which is why it is optional
+   * rather than part of the contract every source must satisfy.
+   */
+  readonly handle?: FileSystemFileHandle;
 }
+
+/**
+ * B-113 — whether a RESTORED source may be read without asking the operator.
+ *
+ * A handle survives a reload; the READ PERMISSION attached to it may not.
+ * Chromium can return it already granted (persistent permissions), and often
+ * does for a file the operator has used before — but it may equally return
+ * `prompt`, and `requestPermission` then needs a user gesture, which a page
+ * doing its boot restore does not have. So restoration reports the state rather
+ * than guessing, and the control offers the gesture when one is needed.
+ */
+export type FileSourcePermission = 'granted' | 'needs-gesture' | 'denied';
+
+interface PermissionCapableHandle extends FileSystemFileHandle {
+  queryPermission?: (d: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+  requestPermission?: (d: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+}
+
+/** Ask, without prompting, whether this handle can currently be read. */
+export async function queryReadPermission(
+  handle: FileSystemFileHandle,
+): Promise<FileSourcePermission> {
+  const query = (handle as PermissionCapableHandle).queryPermission;
+  // No permissions API on the handle means the browser does not gate reads this
+  // way — treat it as readable and let an actual read report any real failure.
+  if (query === undefined) return 'granted';
+  try {
+    const state = await query.call(handle, { mode: 'read' });
+    if (state === 'granted') return 'granted';
+    return state === 'denied' ? 'denied' : 'needs-gesture';
+  } catch {
+    return 'needs-gesture';
+  }
+}
+
+/**
+ * Ask the operator to re-grant read access. MUST be called from a user gesture;
+ * the caller wires it to a button click for exactly that reason.
+ */
+export async function requestReadPermission(
+  handle: FileSystemFileHandle,
+): Promise<FileSourcePermission> {
+  const request = (handle as PermissionCapableHandle).requestPermission;
+  if (request === undefined) return 'granted';
+  try {
+    const state = await request.call(handle, { mode: 'read' });
+    if (state === 'granted') return 'granted';
+    return state === 'denied' ? 'denied' : 'needs-gesture';
+  } catch {
+    return 'denied';
+  }
+}
+
+/** Operator-facing reason shown while a restored attachment is not yet readable. */
+export const FILE_SOURCE_NEEDS_PERMISSION_MESSAGE =
+  'This file was reattached from your last session. Grant access to read it again.';
 
 /**
  * The slice of the File System Access API this feature uses. `showOpenFilePicker`
@@ -47,6 +110,7 @@ export function fileSourceSupported(w: Window = window): boolean {
 export function fsaTextFileSource(handle: FileSystemFileHandle): TextFileSource {
   return {
     name: handle.name,
+    handle,
     read: async (): Promise<string> => {
       const file = await handle.getFile();
       return file.text();

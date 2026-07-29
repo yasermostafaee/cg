@@ -47,3 +47,4 @@ export * from './channels/updates.js';
 export * from './channels/settings.js';
 export * from './channels/fixedLayers.js';
 export * from './channels/playoutLayers.js';
+export * from './channels/delimiters.js';

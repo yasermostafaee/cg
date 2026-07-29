@@ -1353,3 +1353,31 @@ already there** — `outputTranslate` takes a `frame` parameter with a default
   This plant is 16:9 throughout.
 
 **Notes:** Filed from the C-018 recon; the approach is decided but no code rides this item yet.
+
+## [ ] R-034 — the delimiter list is CONFIGURABLE in settings, not hard-coded in the control ⟨priority: medium⟩
+
+**What:** the five delimiters offered under a list field are a hard-coded array in
+`fromFileContent.ts` (`DELIMITER_SUGGESTIONS`). The owner asked for a section in settings where
+the list can be added to and removed from, so a station whose source files use a separator nobody
+anticipated can add it once rather than hand-typing it on every field, every session.
+
+Pairs with [[B-113]], which makes the control a proper picker: once the operator cannot type a
+delimiter inline, the configured list becomes the ONLY way to introduce one, so it must be
+editable somewhere.
+
+**Why:** the current list is a guess at what Persian broadcast source files use. It is right often
+enough to look finished and wrong often enough to matter, and the cost of being wrong is an
+operator retyping an escape sequence under time pressure. Configuration moves that cost to a
+one-time setup step.
+
+**Acceptance:**
+
+- Settings offers a section listing the configured delimiters, each with the label the picker
+  shows and the character(s) it splits on.
+- A delimiter can be added, with a label, and appears in the field picker immediately.
+- A delimiter can be removed, and disappears from the picker immediately.
+- The list persists across a page refresh.
+- Removing a delimiter that a field is currently using does not silently change that field's
+  split: the field keeps splitting on what it was given.
+- The list can never be emptied to nothing — a list field with split on must always have at
+  least one delimiter to choose.

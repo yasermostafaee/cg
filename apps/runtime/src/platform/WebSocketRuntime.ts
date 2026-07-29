@@ -37,6 +37,10 @@ import {
   StackTakeChannel,
   StackUpdateChannel,
   TemplatesChangedChannel,
+  DelimitersChangedChannel,
+  DelimitersListChannel,
+  DelimitersSetChannel,
+  type DelimiterOption,
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
@@ -230,6 +234,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #lockSubs = new Subs<LockState>();
   readonly #updateSubs = new Subs<PendingUpdate | null>();
   readonly #settingsSubs = new Subs<Settings>();
+  /** R-034 — the bridge-owned delimiter list, pushed on every change. */
+  readonly #delimiterSubs = new Subs<DelimiterOption[]>();
   readonly #statusSubs = new Subs<BridgeLinkStatus>();
   // R-028 (o1) — the bridge-owned catalogue push.
   readonly #templatesSubs = new Subs<TemplateInfo[]>();
@@ -524,6 +530,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#updateSubs.emit(p.data);
         break;
       }
+      case DelimitersChangedChannel.name: {
+        const p = DelimitersChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#delimiterSubs.emit(p.data);
+        break;
+      }
       case SettingsChangedChannel.name: {
         const p = SettingsChangedChannel.payload.safeParse(payload);
         if (p.success) this.#settingsSubs.emit(p.data);
@@ -795,5 +806,14 @@ export class WebSocketRuntime implements RuntimeBridge {
     get: () => this.#invoke(SettingsGetChannel, undefined),
     set: (req: ChannelRequest<typeof SettingsSetChannel>) => this.#invoke(SettingsSetChannel, req),
     onChanged: (handler: (next: Settings) => void) => this.#settingsSubs.add(handler),
+  };
+
+  /** R-034 — the station's delimiter list, owned and disk-persisted by the bridge. */
+  readonly delimiters = {
+    list: () => this.#invoke(DelimitersListChannel, undefined),
+    set: (req: ChannelRequest<typeof DelimitersSetChannel>) =>
+      this.#invoke(DelimitersSetChannel, req),
+    onChanged: (handler: (delimiters: DelimiterOption[]) => void) =>
+      this.#delimiterSubs.add(handler),
   };
 }

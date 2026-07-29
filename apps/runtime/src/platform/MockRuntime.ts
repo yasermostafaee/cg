@@ -13,7 +13,9 @@ import type {
   PlayoutLayerState,
   Settings,
   TemplateInfo,
+  DelimiterOption,
 } from '@cg/shared-ipc';
+import { DelimiterOptionSchema } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
 import { isLoopbackHost } from '../shared/loopback.js';
 import { seedConfig, seedHealth, seedStack, seedTemplates } from './seed.js';
@@ -24,6 +26,16 @@ type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
 type FieldValues = StackItemState['fields'];
 
 const SETTINGS_KEY = 'cg-runtime:settings';
+const DELIMITERS_KEY = 'cg-runtime:delimiters';
+
+/** R-034 parity — the same shipped list the bridge starts a station with. */
+const DEFAULT_DELIMITERS: readonly DelimiterOption[] = [
+  { id: 'newline', label: 'new line', value: '\\n' },
+  { id: 'pipe', label: 'pipe', value: '|' },
+  { id: 'persian-comma', label: 'Persian comma', value: '،' },
+  { id: 'comma', label: 'comma', value: ',' },
+  { id: 'semicolon', label: 'semicolon', value: ';' },
+];
 
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -53,6 +65,8 @@ export class MockRuntime {
   readonly templatesChanged = new Emitter<TemplateInfo[]>();
   // R-028 part B — the declared playout layers' occupancy.
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
+  // R-034 parity — the shared delimiter list.
+  readonly delimitersChanged = new Emitter<DelimiterOption[]>();
 
   #stack: StackItemState[] = seedStack();
   #templates = new Map<string, TemplateInfo>(seedTemplates().map((t) => [t.templateId, t]));
@@ -760,6 +774,58 @@ export class MockRuntime {
   }
 
   // ── settings ────────────────────────────────────────────────────────
+  /**
+   * R-034 parity — the delimiter list. The bridge persists it to DISK; the
+   * offline mock has no disk, so it uses `localStorage` — which is the closest
+   * thing test mode has to "survives a restart", and the same store the mock
+   * already uses for settings.
+   */
+  delimitersList(): DelimiterOption[] {
+    try {
+      const raw = localStorage.getItem(DELIMITERS_KEY);
+      if (raw !== null) {
+        const parsed = DelimiterOptionSchema.array().safeParse(JSON.parse(raw));
+        if (parsed.success && parsed.data.length > 0) return parsed.data;
+      }
+    } catch {
+      // Unusable storage falls through to the defaults — never an empty picker.
+    }
+    return [...DEFAULT_DELIMITERS];
+  }
+
+  /** Mirrors the bridge's refusals exactly, so the UI meets one behaviour. */
+  delimitersSet(delimiters: readonly DelimiterOption[]): {
+    ok: boolean;
+    reason?: 'empty-list' | 'duplicate-value';
+    message?: string;
+  } {
+    if (delimiters.length === 0) {
+      return {
+        ok: false,
+        reason: 'empty-list',
+        message: 'At least one delimiter must remain — a split field needs something to split on.',
+      };
+    }
+    const seen = new Set<string>();
+    for (const d of delimiters) {
+      if (seen.has(d.value)) {
+        return {
+          ok: false,
+          reason: 'duplicate-value',
+          message: `“${d.value}” appears twice — two delimiters that split identically cannot be told apart.`,
+        };
+      }
+      seen.add(d.value);
+    }
+    try {
+      localStorage.setItem(DELIMITERS_KEY, JSON.stringify(delimiters));
+    } catch {
+      // Persistence lost, the session's list is not.
+    }
+    this.delimitersChanged.emit([...delimiters]);
+    return { ok: true };
+  }
+
   settingsGet(): Settings {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
