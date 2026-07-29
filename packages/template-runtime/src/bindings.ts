@@ -44,7 +44,7 @@ export function applyFieldValues(
 }
 
 /** A doc that owns fields + bindings: the root scene or a composition. */
-interface FieldDocLite {
+export interface FieldDocLite {
   fields?: readonly DynamicField[] | undefined;
   bindings?: readonly FieldBinding[] | undefined;
 }
@@ -101,8 +101,13 @@ function applyDocScope(
   }
 }
 
-/** A namespace sub-object (not a scalar field value, not an image `{assetId}`). */
-function isNamespace(v: unknown): v is NestedFieldValues {
+/**
+ * A namespace sub-object (not a scalar field value, not an image `{assetId}`).
+ * Exported since D-141: the clock-target re-apply walks the SAME namespace tree
+ * and must decide "is this a child's namespace?" exactly the way this walk does —
+ * a second local copy is how the two would come to disagree.
+ */
+export function isNamespace(v: unknown): v is NestedFieldValues {
   return typeof v === 'object' && v !== null && !Array.isArray(v) && !('assetId' in v);
 }
 
@@ -267,6 +272,16 @@ function applyOne(
       // DOM walk: the item's span is built by the SequenceDriver (not in `elementMap`).
       // It flows through the driver's `textValueFor` seam (see runtime.ts), keyed to this
       // explicit binding, so the value reaches the live item on play + every update().
+      return;
+    }
+    case 'clock-target': {
+      // D-141 — a countdown's target is NOT applied via this DOM walk: there is no
+      // node to write, only a driver to re-aim, and a re-target must re-pin the
+      // deadline and re-arm completion rather than set a property. It flows through
+      // the ClockDriver's own `retarget()` seam (see `reapplyClockTargets` in
+      // runtime.ts), keyed to this explicit binding, so the value reaches the live
+      // countdown on play() AND on every update(). Same routing as
+      // `sequence-item-text` above.
       return;
     }
     case 'repeater-items': {

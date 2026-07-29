@@ -17,7 +17,7 @@ import {
   entranceSettleFrame,
   type AnimatedElement,
 } from './animation-applier.js';
-import { applyScopedFieldValues } from './bindings.js';
+import { applyScopedFieldValues, isNamespace, type FieldDocLite } from './bindings.js';
 
 /**
  * Deep-merge a nested field-value patch into the current values. Plain objects
@@ -65,6 +65,7 @@ function resolveScopeValues(values: NestedFieldValues, path: string): NestedFiel
   return cur;
 }
 import { ensureBaselineCss } from './css.js';
+import { ensureZoneCss } from './zone-css.js';
 import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
@@ -76,7 +77,7 @@ import {
 } from './scene-builder.js';
 import { createLottiePlayer, lottieClipMeta, lottieTiming } from '@cg/lottie-bridge';
 import { registerLottiePlayer } from './lottie-registry.js';
-import { ClockDriver } from './clock-driver.js';
+import { ClockDriver, parseTimeOfDay } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
 import { VideoDriver, type VideoHandle, type ElementOutroDriver } from './video-driver.js';
 import {
@@ -403,6 +404,19 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // conforming scenes (the Designer migrates at load, so its streams are no-ops).
   scene = migrateScenePaths(scene);
 
+  // D-141 — compile this scene's colour zones into `<style id="cg-zones">`, beside
+  // the baseline block. Emitted from the SCENE by the runtime, which is what makes
+  // preview/export parity structural: the single-file export embeds the scene and
+  // boots this same code, so both carry byte-identical rules and neither exporter
+  // needs a zone code path. A scene with no zone overrides injects nothing.
+  // Runs AFTER the path migration so the compiler and the builder see one object.
+  const zoneCss = ensureZoneCss(scene, doc);
+  for (const warning of zoneCss.warnings) {
+    // A build-time drop (an unescapable key, a clash) degrades the styling, never
+    // the render — reported, never thrown.
+    console.warn(`[cg] zone stylesheet: ${warning}`);
+  }
+
   const built = buildScene(scene, doc);
   root.appendChild(built.container);
 
@@ -525,6 +539,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * override reaches each stamp's own driver only by inheriting the map. ONLY the element maps are
    * inherited: the per-scope LIFECYCLE axes are not, so a row keeps its own independent lifecycle.
    */
+  /**
+   * D-141 — per-SCOPE `elementId → ClockDriver`, so a `clock-target` binding
+   * re-aims the right instance's clock when one child composition is instanced
+   * twice (the D-025 namespace rule, applied to a driver instead of a DOM node).
+   * A WeakMap keyed by the scope object, so a re-stamped subtree's entries go with
+   * it rather than accumulating.
+   */
+  const clockDriversByScope = new WeakMap<FieldScope, Map<string, ClockDriver>>();
+
   const wireScopeSubtree = (
     subtreeScope: FieldScope,
     subtreePath: string,
@@ -632,6 +655,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // rehearse a countdown to a wall-clock time. `wall`/`countup` never complete — no timing to
       // tune, so they are never overridden (and never listed in the preview panel).
       const holdCountdowns: ClockDriver[] = [];
+      // D-141 — this scope's clock drivers by element id (the `clock-target` route).
+      const scopeClockDrivers = new Map<string, ClockDriver>();
+      clockDriversByScope.set(scope, scopeClockDrivers);
       const scopeClocks = scope.clocks.map((c) => {
         const durationOverride =
           c.element.mode === 'countdown'
@@ -650,8 +676,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           timezone: c.element.timezone,
           blinkColon: c.element.blinkColon,
           blinkPeriodMs: c.element.blinkPeriodMs,
+          // D-141 — the countdown's colour zones, published on THIS scope's own
+          // container. `FieldScope.container` is the root stage for the scene and
+          // the `.cg-comp-inner` div for a nested instance, which is exactly the
+          // scope-root granularity nearest-wins resolves at: a nested instance with
+          // its own zoned countdown governs its own subtree, one without stays
+          // transparent to its host's zone. The driver ignores zones for
+          // `wall`/`countup` (the schema refuses to author them there at all).
+          zones: c.element.zones,
+          zoneRoot: scope.container,
           clock: options.clock,
         });
+        scopeClockDrivers.set(c.element.id, driver);
         // D-105 — mark the content root for the coordinated exit (out/stop).
         c.node.dataset['cgContent'] = 'clock';
         // D-102 Phase 2 — stamp the EFFECTIVE (post-override) countdown duration so the operator
@@ -1543,6 +1579,62 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const s of sub.sequences) s.applyFieldsToCurrent(currentValues);
   };
 
+  /**
+   * D-141 — route every `clock-target` binding to its clock DRIVER, on play() and
+   * on every update(), so a `CG UPDATE` re-aims a LIVE countdown without replaying
+   * it. The sibling of {@link reapplySequenceItemFields}: both exist because their
+   * value has no DOM node for `applyOne`'s walk to write.
+   *
+   * Walks the D-025 NAMESPACE tree, so the same child composition instanced twice
+   * re-targets each instance's own clock from its own namespace.
+   *
+   * A value that does not parse applies NOTHING — the current, possibly on-air
+   * target is KEPT and the failure is reported once per (element, value). That is
+   * the house rule for operator input reaching air: never a countdown blanked or
+   * zeroed by a typo.
+   */
+  const reportedClockTargets = new Set<string>();
+  const reapplyClockTargets = (): void => {
+    const walk = (doc_: FieldDocLite, values: NestedFieldValues, scope: FieldScope): void => {
+      const drivers = clockDriversByScope.get(scope);
+      if (drivers !== undefined && drivers.size > 0) {
+        const defaults = new Map<string, unknown>();
+        for (const field of doc_.fields ?? []) {
+          defaults.set(field.id, 'default' in field ? field.default : undefined);
+        }
+        for (const binding of doc_.bindings ?? []) {
+          if (binding.target.kind !== 'clock-target') continue;
+          const driver = drivers.get(binding.target.elementId);
+          if (driver === undefined) continue;
+          const raw =
+            binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
+          if (raw === undefined) continue;
+          const time = parseTimeOfDay(raw);
+          if (time === undefined) {
+            const key = `${binding.target.elementId}:${String(raw)}`;
+            if (!reportedClockTargets.has(key)) {
+              reportedClockTargets.add(key);
+              bus.emit('error', {
+                code: 'clock-target-unparseable',
+                message: `clock target value ${JSON.stringify(raw)} is not HH:mm or HH:mm:ss; keeping the current target`,
+                elementId: binding.target.elementId,
+              });
+            }
+            continue;
+          }
+          driver.retarget({ kind: 'timeofday', time });
+        }
+      }
+      for (const child of scope.children) {
+        const childDoc = scene.compositions?.find((c) => c.id === child.compositionId);
+        if (childDoc === undefined) continue;
+        const sub = values[child.name];
+        walk(childDoc, isNamespace(sub) ? sub : {}, child.scope);
+      }
+    };
+    walk(scene, currentValues, built.scopeTree);
+  };
+
   // D-105 — coordinated split exit. Content roots (ticker / clock / sequence)
   // carry `data-cg-content`; the keyframed background does NOT. `out()` fades the
   // content off, awaits it, then plays the background outro (the existing stop
@@ -1711,6 +1803,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       reapplySequenceItemFields();
+      reapplyClockTargets();
       machine.transition('playing');
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
@@ -1792,6 +1885,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       }
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       reapplySequenceItemFields();
+      reapplyClockTargets();
       bus.emit('update');
     },
 

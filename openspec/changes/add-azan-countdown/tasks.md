@@ -46,17 +46,21 @@ touched by this change** — every box below Phase 0 is future work.
 
 ## 1. Schema (`@cg/shared-schema`)
 
-- [ ] 1.1 `elements.ts`: widen `ClockTargetSchema` with `{ kind: 'timeofday', time }`; the regex
+- [x] 1.1 `elements.ts`: widen `ClockTargetSchema` with `{ kind: 'timeofday', time }`; the regex
       is the canonical one (the Designer preset stays the authoring aid, not a second source).
-- [ ] 1.2 `elements.ts`: `ZoneKeySchema`, `ClockZoneStepSchema`, `ClockZonesSchema`
+- [x] 1.2 `elements.ts`: `ZoneKeySchema`, `ClockZoneStepSchema`, `ClockZonesSchema`
       (`base?` + `steps.min(1)`), `zones` on `ClockElementSchema`.
-- [ ] 1.3 `elements.ts`: extend the existing clock `superRefine` — `zones` present with
+- [x] 1.3 `elements.ts`: extend the existing clock `superRefine` — `zones` present with
       `mode !== 'countdown'` is an error; steps strictly decreasing; keys unique across
-      `base` + `steps`.
-- [ ] 1.4 `elements.ts`: `ZoneColorSchema` (`HexColor | 'zone'`), `ZoneOverrideSchema`,
-      `zoneOverrides` on `ElementBaseSchema` (unique zone keys, ≥1 slot per entry).
-- [ ] 1.5 `bindings.ts`: widen `BindingTargetSchema` with `{ kind: 'clock-target', elementId }`.
-- [ ] 1.6 **Tests** (`pnpm --filter @cg/shared-schema test`): `timeofday` accepts `HH:mm` and
+      `base` + `steps`. (Placement per design.md §2.2: the mode gate is on the clock's own
+      `superRefine`; strictly-decreasing + key-uniqueness are on `ClockZonesSchema`, where §2.2's
+      code sketch puts them, so the issue path names the offending STEP.)
+- [x] 1.4 `elements.ts`: `ZoneColorSchema` (`HexColor | 'zone'`), `ZoneOverrideSchema`,
+      `zoneOverrides` on `ElementBaseSchema` (unique zone keys, ≥1 slot per entry). Uniqueness
+      rides on the ARRAY schema, because `ElementBaseSchema` must stay a `ZodObject` — every
+      element kind `.extend()`s it and a `superRefine` there would break all of them.
+- [x] 1.5 `bindings.ts`: widen `BindingTargetSchema` with `{ kind: 'clock-target', elementId }`.
+- [x] 1.6 **Tests** (`pnpm --filter @cg/shared-schema test`): `timeofday` accepts `HH:mm` and
       `HH:mm:ss` and rejects `24:00` / `9:5` / `20:32:60` / empty; zones reject non-decreasing
       thresholds, an empty `steps`, duplicate keys, and presence on `wall`/`countup`;
       `zoneOverrides` reject duplicate zones and an all-empty entry; **a fixture scene authored
@@ -65,65 +69,88 @@ touched by this change** — every box below Phase 0 is future work.
 
 ## 2. Clock driver (`@cg/template-runtime`)
 
-- [ ] 2.1 `clock-driver.ts`: `resolveTimeOfDay(time, nowMs)` — local-field construction,
-      `<=` rolls to tomorrow, DST-safe via `setDate(+1)`. Exported (design.md §1 helper 2).
-- [ ] 2.2 `clock-driver.ts`: pin the resolved deadline at `start()`/`reset()`; branch
+- [x] 2.1 `clock-driver.ts`: `resolveTimeOfDay(time, nowMs)` — local-field construction,
+      DST-safe via `setDate(+1)`. Exported (design.md §1 helper 2). **The comparison is `<`, not
+      the `<=` in design.md §3.1's pseudo-code:** an occurrence exactly equal to now counts as
+      ARRIVED, per the spec delta ("SHALL count as ARRIVED, not as a fresh full day"), task 2.6
+      below, and §3.1's own prose. See the PR's Findings — design.md §3.1/§3.3 need correcting.
+- [x] 2.2 `clock-driver.ts`: pin the resolved deadline at `start()`/`reset()`; branch
       `remainingMs()`, `clockInitialText()` and `isAbsolute` on the new kind.
-- [ ] 2.3 `clock-driver.ts`: promote `remainingMsOf` to a public read (helper 1) and add
+- [x] 2.3 `clock-driver.ts`: promote `remainingMsOf` to a public read (helper 1) and add
       `pickByThreshold(steps, remainingMs)` comparing on the DISPLAYED one-second quantum
-      (helper 3).
-- [ ] 2.4 `clock-driver.ts`: zone publication inside `paint()` behind a `lastZoneKey` latch;
+      (helper 3). **The TIGHTEST covering step wins** (the last match over a strictly-decreasing
+      list), not the first: first-match-wins would select the 60-minute zone for every remaining
+      time under an hour and contradicts "at and after zero the LOWEST step stays selected".
+      See the PR's Findings — design.md §5.3 needs correcting.
+- [x] 2.4 `clock-driver.ts`: zone publication inside `paint()` behind a `lastZoneKey` latch;
       clear on `reset()`, remove on `destroy()`; accept the scope root via driver options.
-- [ ] 2.5 `clock-driver.ts`: `retarget(target)` per the design.md §4.3 table — re-pin, re-arm
+- [x] 2.5 `clock-driver.ts`: `retarget(target)` per the design.md §4.3 table — re-pin, re-arm
       completion only when the new deadline is future, force a repaint, re-evaluate the zone,
-      leave the run untouched.
-- [ ] 2.6 **Tests** 2.6–2.14 all run on a fake `RuntimeClock` via
+      leave the run untouched. A FRESH promise is minted only when the previous one already
+      RESOLVED: replacing a still-pending one would strand the hold the scope is awaiting.
+- [x] 2.6 **Tests** 2.6–2.14 all run on a fake `RuntimeClock` via
       `pnpm --filter @cg/template-runtime test`. Next-occurrence today vs tomorrow, and the
       `now == target` edge (arrived, not a fresh full day).
-- [ ] 2.7 A DST spring-forward / fall-back day resolves to the right local instant.
-- [ ] 2.8 The deadline does NOT roll forward at zero — the display stays `00:00`,
+- [x] 2.7 A DST spring-forward / fall-back day resolves to the right local instant.
+- [x] 2.8 The deadline does NOT roll forward at zero — the display stays `00:00`,
       `whenComplete()` resolves exactly ONCE, and the driver stops.
-- [ ] 2.9 Pause/resume does not delay the deadline (absolute base).
-- [ ] 2.10 **Zone-flip boundary exactness**: at the threshold ms and at ±1 ms either side, with
+- [x] 2.9 Pause/resume does not delay the deadline (absolute base).
+- [x] 2.10 **Zone-flip boundary exactness**: at the threshold ms and at ±1 ms either side, with
       the selected key asserted against the PAINTED digits (the shared quantum).
-- [ ] 2.11 A run through all four zones performs exactly THREE attribute writes (latch proof),
-      and at/after zero the lowest step stays selected.
-- [ ] 2.12 `reset()` clears the zone and a second loop cycle re-establishes it from the new run.
-- [ ] 2.13 `retarget()` on a LIVE countdown: new remaining, no replay, run state preserved, zone
+- [x] 2.11 A run through all four zones performs exactly THREE attribute writes (latch proof),
+      and at/after zero the lowest step stays selected. The three are the BOUNDARY CROSSINGS; the
+      run's own establishing write (entering `base`) is asserted separately, since a zone cannot
+      be published without writing it once.
+- [x] 2.12 `reset()` clears the zone and a second loop cycle re-establishes it from the new run.
+- [x] 2.13 `retarget()` on a LIVE countdown: new remaining, no replay, run state preserved, zone
       re-evaluated in one write; an unchanged deadline is a no-op.
-- [ ] 2.14 `retarget()` after completion re-arms the display and does NOT re-open the closed hold.
+- [x] 2.14 `retarget()` after completion re-arms the display and does NOT re-open the closed hold.
 
 ## 3. Zone CSS compiler (`@cg/template-runtime`)
 
-- [ ] 3.1 New `zone-css.ts`: walk the scene, assign a deterministic per-scene INDEX per opted-in
+- [x] 3.1 New `zone-css.ts`: walk the scene, assign a deterministic per-scene INDEX per opted-in
       element, emit the publication rules (per zone key), the consumption rules (`var()` with the
-      authored value as fallback) and the transition rule.
-- [ ] 3.2 `zoneColorTargets(element)` — the §2.4 kind → CSS-property map, sharing the property
-      choices with the existing `color` binding target (helper 4).
-- [ ] 3.3 Escape zone keys in selector values; drop an unescapable key with a build warning;
+      authored value as fallback) and the transition rule. **Plus a RESET rule** keyed on
+      `data-cg-zone-root`, emitted first: without it a host's published value inherits straight
+      through a nested zoned root that happens not to publish that slot, and the nested countdown
+      silently fails to govern its own subtree (design.md §5.2's walkthrough only covers the case
+      where both zones publish the same slot). Consumption declarations carry `!important`,
+      because the scene-builder writes every authored colour as an INLINE style — without it the
+      compiled rules could never win. Both noted in the PR.
+- [x] 3.2 `zoneColorTargets(element)` — the §2.4 kind → CSS-property map, sharing the property
+      choices with the existing `color` binding target (helper 4). Two narrowings vs. §2.4's
+      summary table, both following D-056 and the renderer as it is: `ticker`/`clock`/`sequence`
+      own ONLY `textColor` (design.md §2.3 states this for the clock in words), and a slot whose
+      AUTHORED value is a gradient is omitted rather than flattened.
+- [x] 3.3 Escape zone keys in selector values; drop an unescapable key with a build warning;
       validate colours before they reach a declaration.
-- [ ] 3.4 Inject as `<style id="cg-zones">` beside `ensureBaselineCss`, idempotent.
-- [ ] 3.5 `scene-builder.ts`: stamp `data-cg-zone-root` on a scope container owning a zoned
-      countdown, and `data-cg-zone-el="<index>"` on opted-in elements.
-- [ ] 3.6 **Tests**: emitted CSS is stable and snapshot-clean; an element id containing quotes /
+- [x] 3.4 Inject as `<style id="cg-zones">` beside `ensureBaselineCss`, idempotent.
+- [x] 3.5 `scene-builder.ts`: stamp `data-cg-zone-root` on a scope container owning a zoned
+      countdown, and `data-cg-zone-el="<index>"` on opted-in elements. All four scope containers
+      are stamped — root stage, composition instance, sequence composition item, repeater row.
+- [x] 3.6 **Tests**: emitted CSS is stable and snapshot-clean; an element id containing quotes /
       spaces / a backslash produces well-formed CSS and still styles correctly; **no post-baseline
       CSS feature appears** (no `@scope`, no `:is(`, no `:where(`); an element with no overrides
       emits no rules.
 
 ## 4. Runtime wiring (`@cg/template-runtime`)
 
-- [ ] 4.1 `bindings.ts`: `clock-target` returns from the DOM walk with the driver-seam comment,
+- [x] 4.1 `bindings.ts`: `clock-target` returns from the DOM walk with the driver-seam comment,
       exactly as `sequence-item-text` does.
-- [ ] 4.2 `runtime.ts`: `reapplyClockTargets()` beside `reapplySequenceItemFields`, called from
-      BOTH `play()` and `update()`; parse-failure keeps the current target and reports once.
-- [ ] 4.3 `runtime.ts`: pass each scope's container to its clock drivers as the zone scope root.
-- [ ] 4.4 **Tests**: a bound `HH:mm` value re-targets on `update()` without replay; an
+- [x] 4.2 `runtime.ts`: `reapplyClockTargets()` beside `reapplySequenceItemFields`, called from
+      BOTH `play()` and `update()`; parse-failure keeps the current target and reports once
+      (an `error` event, `code: 'clock-target-unparseable'`, deduped per element + value).
+- [x] 4.3 `runtime.ts`: pass each scope's container to its clock drivers as the zone scope root.
+- [x] 4.4 **Tests**: a bound `HH:mm` value re-targets on `update()` without replay; an
       unparseable value applies NOTHING and the previous target keeps running; a namespaced
       nested binding routes to the right instance's clock (two instances of one child re-target
       independently); **nested-instance reach** — a host countdown's boundary restyles an opted-in
       element inside a nested composition instance; **nearest-wins** — host and nested countdowns
       in different zones each govern their own subtree; an override with no enclosing zone renders
-      the authored style.
+      the authored style. NOTE: jsdom resolves neither `var()` nor the cascade, so the three
+      zone-reach tests assert the full CHAIN (which scope root publishes which key, which element
+      carries which slot index, what the compiled stylesheet declares for that key) rather than a
+      computed colour. The pixel proof is owed to the phase-7 E2E and is NOT claimed here.
 
 ## 5. Designer UI (`apps/designer`)
 

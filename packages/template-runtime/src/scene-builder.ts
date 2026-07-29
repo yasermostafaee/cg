@@ -27,6 +27,7 @@ import { clockInitialText } from './clock-driver.js';
 import { makeSequenceItemNode } from './sequence-driver.js';
 import { TEXT_NODE_DATASET } from './text-render-node.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
+import { assignZoneIndices, hasZonedCountdown } from './zone-css.js';
 
 /**
  * Build a DOM tree from a Scene. Returns the container element (caller
@@ -85,6 +86,10 @@ export function buildScene(scene: Scene, doc: Document = document): BuildSceneRe
   if (scene.background !== 'transparent') {
     container.style.background = scene.background;
   }
+  // D-141 — this scope owns a zoned countdown, so it is a zone ROOT: the driver
+  // publishes `data-cg-zone` here at run time, and the compiled reset rule keys off
+  // this marker so a nested zoned root cannot inherit its host's zone values.
+  if (hasZonedCountdown(scene.layers)) container.dataset['cgZoneRoot'] = '';
 
   const rootScope = newScope(container, scene);
   const ctx: BuildCtx = {
@@ -114,12 +119,20 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
   node.dataset['cgLayerId'] = layer.id;
   if (!layer.visible) node.style.display = 'none';
 
+  // D-141 — the per-scene slot numbering the zone stylesheet was compiled with.
+  // Keyed by element id, so the same authored element inside a composition
+  // instanced twice stamps the SAME index on both DOM copies — each then reads the
+  // nearest publishing ancestor, which is what makes nearest-wins work per instance.
+  const zoneIndices = assignZoneIndices(ctx.scene);
+
   // Sort by zIndex so DOM order matches z-stack semantics.
   const sorted = [...layer.children].sort((a, b) => a.zIndex - b.zIndex);
   for (const element of sorted) {
     const elementNode = buildElement(element, ctx);
     if (elementNode === null) continue;
     node.appendChild(elementNode);
+    const zoneIndex = zoneIndices.get(element.id);
+    if (zoneIndex !== undefined) elementNode.dataset['cgZoneEl'] = String(zoneIndex);
     // Every scope owns its elements, keyed by id, so field bindings apply within
     // the right instance (the same child instanced twice has two scopes).
     ctx.scope.elementMap.set(element.id, elementNode);
@@ -246,6 +259,10 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
   const sy = comp.resolution.height === 0 ? 1 : element.transform.size.h / comp.resolution.height;
   inner.style.transform = `scale(${String(sx)}, ${String(sy)})`;
   if (comp.background !== 'transparent') inner.style.background = comp.background;
+  // D-141 — a nested instance whose own composition carries a zoned countdown is a
+  // zone root in its own right; one without stays transparent to the host's zone,
+  // which is how zone state crosses instance boundaries.
+  if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
 
   // A fresh field scope for THIS instance — so the same child instanced twice
   // gets two independent element maps, addressed by the instance's namespace.
@@ -860,6 +877,9 @@ export function buildSequenceCompositionItem(
   const sy = comp.resolution.height === 0 ? 1 : box.height / comp.resolution.height;
   inner.style.transform = `scale(${String(sx)}, ${String(sy)})`;
   if (comp.background !== 'transparent') inner.style.background = comp.background;
+  // D-141 — a stamped scope is a scope: it publishes its own zone when it owns a
+  // zoned countdown (same rule as every other scope container).
+  if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
 
   // A fresh item scope — real per-scope semantics (drivers, holds) by construction,
   // but NEVER in `scope.children` (the sequence driver owns its lifecycle).
@@ -994,6 +1014,8 @@ export function buildRepeaterRows(
     inner.style.transformOrigin = '0 0';
     inner.style.transform = `scale(${String(scale)}, ${String(scale)})`;
     if (comp.background !== 'transparent') inner.style.background = comp.background;
+    // D-141 — same rule for a stamped repeater row.
+    if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
 
     // A fresh ROW scope — real per-scope semantics (lifecycle, drivers,
     // content holds) by construction, but NEVER in `scope.children`.

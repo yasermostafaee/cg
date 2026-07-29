@@ -164,5 +164,8 @@ export function describeBinding(binding: FieldBinding, nameOf?: (id: string) => 
       return `sequence item text ${on(t.elementId)}`;
     case 'repeater-items':
       return `repeater rows ${on(t.elementId)}`;
+    case 'clock-target':
+      // D-141 — the countdown's target time, the clock's ONE bindable value.
+      return `countdown target ${on(t.elementId)}`;
   }
 }
