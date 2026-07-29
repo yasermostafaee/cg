@@ -21,6 +21,8 @@ import type {
 } from '@cg/shared-schema';
 import {
   isLayerVisible,
+  type PLAYOUT_CLEAR_REASONS,
+  type PlayoutLayerState,
   type ChannelResponse,
   type ConnectionConfig,
   type ConnectionHealth,
@@ -54,6 +56,9 @@ import {
 
 /** R-010 — the `connections.set-config` response shape. */
 type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
+
+/** R-028 part B — a refused deliberate playout clear. */
+type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
 
 /**
  * R-010 — where the OSC UDP ingest binds, derived from the declared server's
@@ -174,6 +179,8 @@ export class CasparRuntime {
    * so every connected browser converges on the same library.
    */
   readonly templatesChanged = new Emitter<TemplateInfo[]>();
+  /** R-028 part B — emitted ONLY when the declared playout layers' state changes. */
+  readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
 
   // R-010 — mutable: `setConfig` swaps the whole connection layer at runtime.
   #config: ConnectionConfig;
@@ -197,6 +204,8 @@ export class CasparRuntime {
   /** The same list as a Set, for the sweep/clear/restore membership checks. */
   readonly #reservedSet: ReadonlySet<number>;
   #lastFixedStateJson: string | null = null;
+  /** R-028 part B — the last PUBLISHED playout state (publish-on-change compare). */
+  #lastPlayoutStateJson: string | null = null;
   readonly #builder = new CommandBuilder();
 
   /**
@@ -300,6 +309,15 @@ export class CasparRuntime {
   // hydrated in the constructor so the registry is complete before the
   // WebSocket ever answers a `templates.list`.
   readonly #templates: TemplateRegistry;
+  /**
+   * R-028 part B — ids this bridge REMOVED, so a reconnecting browser's
+   * re-delivery cannot bring them back. Process-lifetime only, deliberately: a
+   * bridge restart re-reads the persisted registry, and a template absent from
+   * it is indistinguishable from one that was never imported — at which point a
+   * browser's re-delivery is the desired REPAIR rather than a resurrection. The
+   * tombstone only needs to outlive the reconnects of the session that removed.
+   */
+  readonly #removedTemplateIds = new Set<string>();
   readonly #templateServer: TemplateHttpServer;
   #serveOptions: TemplateServeOptions;
   /** Kept for `setConfig`'s serve re-derivation (explicit overrides keep winning). */
@@ -1347,6 +1365,36 @@ export class CasparRuntime {
     return { accepted: ok };
   }
 
+  /**
+   * R-028 (5.4) — advance the item's template sequence: `CG … NEXT`.
+   *
+   * Modelled on `stopItem`, and for the same reasons: it is on-air-affecting
+   * (the graphic visibly changes), so it is REFUSED with no reachable server
+   * (R-006) rather than optimistically applied, and it rides the urgent lane —
+   * an operator stepping a sequence must not queue behind a load.
+   *
+   * NOT an intent: `next` carries no per-item state the Reconciler models
+   * (the item stays exactly as on-air as it was; only the template's internal
+   * step moved), so it applies no intent and arms no expiry. That is why it
+   * touches neither `#loaded` nor `#adopted` — advancing a sequence proves
+   * nothing new about the producer's existence beyond what PLAY already did.
+   *
+   * The bridge does NOT re-check `hasNext` here: whether a template has a next
+   * step is import-time knowledge carried on `TemplateInfo`, and the row gates
+   * on it. A NEXT that reaches a single-step template is a harmless no-op on
+   * the wire (`CG NEXT` on a template with no sequence does nothing), so the
+   * gate is the UI's to hold and this path stays a thin verb.
+   */
+  async nextItem(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    // B-093 — the operator is acting; any parked restore for this item is stale.
+    this.#retirePendingRestore(itemId);
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
+    if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    const { ok, errorCode } = await this.#send(this.#builder.next(slot), this.#nextSeq(), 'urgent');
+    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
+  }
+
   async out(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
@@ -1696,6 +1744,116 @@ export class CasparRuntime {
     }
     const { changed } = this.#orphanTracker.update(occupied, owned);
     if (changed) this.orphansChanged.emit(this.orphans());
+
+    // R-028 part B — the playout tab's per-layer state rides this SAME tick and
+    // the SAME occupancy sample (no second timer, no second staleness constant),
+    // published only on a real change.
+    this.#publishPlayoutStateIfChanged();
+  }
+
+  // ── R-028 part B: the declared playout layers (the operator's tab) ──
+
+  /**
+   * The state of every DECLARED reserved layer, computed on demand ([] when
+   * nothing is reserved).
+   *
+   * Occupancy is read through the SAME hearing predicate the fixed rows use —
+   * a healthy primary AND a fresh OSC tap — so `unknown` means the same thing
+   * on both surfaces. It is deliberately NOT collapsed to `empty`: a tab that
+   * reads "nothing here" when it simply cannot see is the failure mode part A's
+   * untick refusal and task 3.3's honest-unknown both exist to prevent, and
+   * here it would also be the input to a CLEAR gate.
+   *
+   * The reserved set is channel-agnostic (a layer NUMBER is reserved), so the
+   * rows are reported on the bridge's own channel — the one it drives.
+   */
+  playoutLayersState(): PlayoutLayerState[] {
+    if (this.#reservedLayers.length === 0) return [];
+    const session = this.#adapter.primarySession;
+    const hearing =
+      session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
+    const producerByLayer = new Map<number, string>();
+    if (hearing) {
+      for (const o of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
+        if (o.channel === DEFAULT_CHANNEL) producerByLayer.set(o.layer, o.producer);
+      }
+    }
+    return [...this.#reservedLayers]
+      .sort((a, b) => a - b)
+      .map((layer) => {
+        const producer = producerByLayer.get(layer);
+        const observed: PlayoutLayerState['observed'] = !hearing
+          ? { kind: 'unknown' }
+          : producer !== undefined
+            ? { kind: 'producer', producer }
+            : { kind: 'empty' };
+        return { channel: DEFAULT_CHANNEL, layer, observed };
+      });
+  }
+
+  /** Publish the playout-layer state ONLY when it differs (the orphan-tracker precedent). */
+  #publishPlayoutStateIfChanged(): void {
+    if (this.#reservedLayers.length === 0) return;
+    const state = this.playoutLayersState();
+    const json = JSON.stringify(state);
+    if (json === this.#lastPlayoutStateJson) return;
+    this.#lastPlayoutStateJson = json;
+    this.playoutStateChanged.emit(state);
+  }
+
+  /**
+   * R-028 part B — the operator's DELIBERATE clear of one declared playout
+   * layer, from the playout tab. Every refusal fails closed.
+   *
+   * This is a second, narrower door than `clearLayer`, never a loosening of
+   * it: `clearLayer` still refuses reserved layers outright (part A), the
+   * orphan sweep still excludes them, and no automatic path can reach here.
+   * Only an operator who opened a tab labelled "not our layers" can.
+   *
+   * The gate, in order, and why each step fails closed:
+   *
+   *   NOT RESERVED  → refuse. This channel is for declared playout layers
+   *     only; it must never become a general clear-anything door.
+   *   NOT HEARING / NO FRESH OBSERVATION → refuse (`unknown-occupancy`).
+   *     Silence is evidence of nothing (B-093). A kind gate that cannot read
+   *     its input must refuse rather than guess — and guessing here means
+   *     possibly clearing a live video feed.
+   *   NOT `html`    → refuse (`not-html`), naming what was seen. The
+   *     reservation says who owns the LAYER, not what is on it: a video,
+   *     route or decklink can land on 60–69 by the playout operator's own
+   *     mistake, and that is exactly the antenna/live-channel accident the
+   *     reservation exists to prevent. "Not html" fails safe — video kinds are
+   *     never enumerated.
+   *
+   * Ownership check ordering note: a reserved layer can never be in `#slots`
+   * (allocation and reserve are both fenced off reserved layers), so there is
+   * no owned-vs-reserved ambiguity to resolve here.
+   */
+  async playoutClear(
+    channel: number,
+    layer: number,
+  ): Promise<{ ok: boolean; reason?: PlayoutClearReason; observedProducer?: string }> {
+    if (!this.#reservedSet.has(layer)) return { ok: false, reason: 'not-reserved' };
+    const session = this.#adapter.primarySession;
+    const hearing =
+      session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
+    if (!hearing) return { ok: false, reason: 'unknown-occupancy' };
+    const observed = session.osc.occupancy
+      .occupied(this.#occupancyStaleMs)
+      .find((o) => o.channel === channel && o.layer === layer);
+    // Nothing observed on a HEARING tap means the layer is already empty
+    // (B-053: on a hearing tap, silence for a layer IS empty) — there is
+    // nothing to clear, and reporting ok would claim an act we did not do.
+    if (observed === undefined) return { ok: false, reason: 'unknown-occupancy' };
+    if (observed.producer !== 'html') {
+      return { ok: false, reason: 'not-html', observedProducer: observed.producer };
+    }
+    const slot: CommandSlot = { channel, layer };
+    const { ok } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    // Deliberately NOT marked adopted: adoption is bookkeeping about layers we
+    // OWN, and clearing a playout layer never makes it ours. The next sweep
+    // re-reads the tap and the tab tells the truth either way.
+    return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };
   }
 
   /**
@@ -2104,10 +2262,40 @@ export class CasparRuntime {
    * self-contained HTML, keyed by id. Re-import replaces both. The HTML is held,
    * not served yet (Phase 3 serves it over HTTP; Phase 4 `CG ADD`s its URL).
    */
+  /**
+   * R-028 part B — the reconciliation policy, enforced here because this is
+   * where a removal actually happens.
+   *
+   * An operator's import (no `redelivery` flag) always wins and clears the
+   * tombstone. A reconnect RE-DELIVERY is ignored when the id is either:
+   *
+   *   - deliberately REMOVED — otherwise any browser still holding a local copy
+   *     resurrects it on its next reconnect, and a page reload is enough. The
+   *     removal was an operator decision on the catalogue of record; a stale
+   *     browser must not undo it;
+   *   - ALREADY HELD — the bridge's copy is the catalogue of record and may be
+   *     newer than the re-delivering browser's, so an older local copy must not
+   *     overwrite it.
+   *
+   * Both cases answer `registered: true` (the template IS available, which is
+   * all the caller needs) with `skipped: true` for honesty.
+   */
   templateImport(
     template: TemplateInfo,
     html: string,
-  ): { registered: boolean; templateId: string } {
+    redelivery = false,
+  ): { registered: boolean; templateId: string; skipped?: boolean } {
+    if (redelivery) {
+      if (this.#removedTemplateIds.has(template.templateId)) {
+        return { registered: false, templateId: template.templateId, skipped: true };
+      }
+      if (this.#templates.has(template.templateId)) {
+        return { registered: true, templateId: template.templateId, skipped: true };
+      }
+    } else {
+      // An operator re-importing a previously removed template revives it.
+      this.#removedTemplateIds.delete(template.templateId);
+    }
     const result = this.#templates.import(template, html);
     // R-028 (o1) — every browser converges on the same catalogue.
     this.templatesChanged.emit(this.#templates.list());
@@ -2158,6 +2346,9 @@ export class CasparRuntime {
     }
 
     this.#templates.remove(templateId);
+    // R-028 part B — remember the removal, so a browser that still holds a
+    // local copy cannot resurrect it by reconnecting (see `templateImport`).
+    this.#removedTemplateIds.add(templateId);
     // R-028 (o1) — every browser converges on the same catalogue.
     this.templatesChanged.emit(this.#templates.list());
     return { ok: true };

@@ -206,3 +206,36 @@ it('STOP on an unknown item is refused, and sends nothing', async () => {
   const lines = (await recvLines(mock, tracePath)).slice(before);
   expect(lines.some((l) => l.includes('STOP'))).toBe(false);
 }, 40_000);
+
+/**
+ * R-028 (o2 / 5.4) — the NEXT verb reaches the wire.
+ *
+ * The capability existed template-side all along (`window.next` and the
+ * runtime's per-scope sequence drivers); what was missing was a way to SEND
+ * it. Part A added the builder verb; this pins the whole path — runtime verb →
+ * AMCP line — plus the R-006 refusal every on-air-affecting verb owes.
+ */
+it('R-028 — next() sends CG <ch>-<layer> NEXT, and refuses an unknown item', async () => {
+  tracePath = path.join(os.tmpdir(), `cg-next-${String(process.pid)}-${String(Date.now())}.ndjson`);
+  const oscPort = await freeUdpPort();
+  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, tracePath });
+  const r = await onAir(mock, oscPort);
+  const before = (await recvLines(mock, tracePath)).length;
+
+  expect((await r.nextItem('item1')).accepted).toBe(true);
+
+  const lines = (await recvLines(mock, tracePath)).slice(before);
+  // The item's own slot, and the flash layer every other CG verb uses.
+  expect(lines.some((l) => l.startsWith('CG 1-10 NEXT 0'))).toBe(true);
+  // NEXT advances the template in place: it must not re-ADD or clear.
+  expect(lines.some((l) => l.startsWith('CG 1-10 ADD'))).toBe(false);
+  expect(lines.some((l) => l.startsWith('CLEAR 1-10'))).toBe(false);
+  // …and the item is still exactly as on air as it was.
+  expect(status(r, 'item1')).toBe('on-air');
+
+  // An unknown item is refused rather than sent blind.
+  expect(await r.nextItem('no-such-item')).toEqual({
+    accepted: false,
+    errorCode: 'unknown-item',
+  });
+});

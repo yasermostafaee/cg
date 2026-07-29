@@ -1,7 +1,124 @@
-# DEBT — R-028 part A (`dev-r028-a`, fast mode, 2026-07-29)
+# DEBT — R-028 parts A and B (fast mode, 2026-07-29)
 
-What this session deliberately skipped, found un-runnable, or discovered mid-flight. Every
+What these sessions deliberately skipped, found un-runnable, or discovered mid-flight. Every
 item here must be discharged (or explicitly retired) before this change archives.
+
+---
+
+# PART B (`dev-r028-b`) — the row surface, the verbs, and the playout tab
+
+## Decisions taken fast
+
+- **The narrow breakpoint is 900px** (`NARROW_BREAKPOINT_PX`, pinned by a test). Below it the
+  Inspector stops being a column and becomes a right-pinned overlay. Reasoning: the shell's
+  default is a 1fr workspace beside a 320px Inspector, and a layer row needs roughly 520px
+  before its verb buttons wrap under the template name — 900 is the first round number that
+  keeps BOTH usable side by side. Below that a squeezed Inspector beside a squeezed row makes
+  neither usable, so one has to go.
+- **The overlay is right-pinned at `min(24rem, 82vw)`, not full-screen**, and the scrim
+  dismisses in one click. That is the owner's "must not hide what is on air" constraint: the
+  Layers list stays visible to its left, so the operator can see on-air state while editing a
+  live graphic's fields — the normal case on this console, not the edge case.
+- **Panel geometry persists in `localStorage`, per browser** — it is a per-operator preference
+  about their own screen, not shared state. Two operators on one bridge must not fight over
+  each other's panel widths, so it deliberately does NOT live in bridge config.
+- **The escape hatch is a CLAMP, not just a reset button.** Neither panel can be dragged below
+  its floor (Inspector 240px, workspace 420px), because `reset()` only helps if the operator
+  can still find the control — a panel dragged to 0px might be covering it.
+- **Icons are decorative; every verb keeps its word.** STOP and CLEAR mean the opposite here of
+  what they mean in the reference product, so an operator must never have to decode a glyph to
+  know which one they are pressing.
+
+## The task-1.3 recon: RUN, and it came back POSITIVE
+
+Part A recorded this as unrun and no longer load-bearing. Part B needed it after all — the
+playout tab's clear gate turns on whether producer KIND is legible for a layer we did not
+create — so it was probed against **the station's own running CasparCG 2.3.2** (AMCP 5250,
+OSC 6250, the owner's live bridge attached):
+
+- **Kind IS legible for foreign layers.** Four html producers were observed on layers
+  61/70/71/72 that this bridge session did not create (their served URLs point at dead ports
+  from previous sessions), reported identically through the OSC occupancy tap
+  (`fixedLayers.state` on the running bridge) and through AMCP `INFO 1`
+  (`<producer>html</producer>` per layer).
+- **The tap can never INVENT a kind.** `occupancy-tap.ts` stores `event.producer` verbatim and
+  only skips the literal `'empty'`; there is no defaulting. So a non-html producer cannot be
+  misread as html, and a layer with no OSC evidence has no entry at all — which the contract
+  reports as `unknown`, and unknown offers no clear.
+- **Re-verified against the owner's OWN hand-placed fixture** (`cg 1-61 add 0 vp8-alpha-test 1`,
+  placed outside this codebase on a reserved layer, deliberately looping): AMCP `INFO 1` reports
+  layer 61 as `<producer>html</producer>` with
+  `file://…/template/vp8-alpha-test.html`. This is the case the premise is actually about — a
+  graphic we did NOT create — and the kind is legible. Also confirmed: the owner's running
+  bridge reports `layers.orphans: []` while that graphic is on air, so part A's reserved-layer
+  exclusion is working in the wild — the AUTOMATIC surface is not inviting him to clear it.
+  (Station is CasparCG **2.5.0 Stable** `69e8ad5`, not 2.3.2 — the C-018 upgrade landed.)
+- **NOT observed on hardware: the negative case.** The station currently has no video/route
+  producer anywhere, and putting one there to watch it would have been an on-air action on a
+  live channel. The negative direction rests on the code path above (verbatim pass-through)
+  plus the mock (`ffmpeg` reported correctly). **Owed: confirm on hardware that a video
+  producer on a reserved layer reports a non-`html` kind, at the next opportunity when
+  something non-graphic is legitimately on air.** The gate fails safe either way — anything
+  that is not exactly `html` is refused — so this is confirmation, not a blocker.
+- **The CLEAR itself was NOT executed against the fixture.** The owner asked to be told before
+  his fixture is cleared, and a mid-turn notification is not something this session can do, so
+  the clear was left for him rather than performed unannounced on a live channel. Everything
+  up to it is verified (presence, kind, and that the gate would offer the control); the clear
+  path itself is covered by seven bridge integration tests against the AMCP mock.
+  **Owed: one single-layer clear against the fixture, with the owner watching.** The command
+  that re-places it is `cg 1-61 add 0 vp8-alpha-test 1`.
+
+## What the owner should NOT assume is covered
+
+- **The playout tab is mock- and unit-tested, never hardware-tested.** The bridge-side gate is
+  integration-tested against `amcp-mock` (`playout-layers.integration.test.ts`), including
+  that part A's automatic-path refusals still stand. No CLEAR has been sent to a real playout
+  layer on real hardware by this session — deliberately: the reserved layers on the station
+  carry live graphics.
+- **The E2E suite is NOT passing and was not run** (section 9, suspended). The fixture's boot
+  assertion was re-pointed from the deleted Library import button to the Layers region, and
+  the seven specs bound to the deleted Library/Stack panels were removed. The remaining twelve
+  need their load flows rewritten onto the row's LOAD action. **Owed in full before archive.**
+
+## Known part-B seams (carried forward, not bugs)
+
+- **The `features/fixedLayers/` directory is now a misnomer.** Its panel and row are deleted;
+  what remains is shared machinery the Layers surface uses (`fixedSlotLoad`, `occupancyLabel`,
+  `useTemplatePicker`, `FixedBankConfigModal`). Renaming it to `layers/` was deliberately NOT
+  done here — it would churn every import and every test path in a diff that already deletes
+  three panels. Part C touches these files anyway (section 6 retires the dynamic path); fold
+  the rename in there.
+- **Template REMOVAL was re-homed into the template picker dialog.** It had no other surface
+  after the Library panel was deleted, and silently losing a shipped capability (R-005) would
+  have been worse than putting it somewhere slightly unexpected. If the owner wants template
+  management in Settings instead, that is a small move — the bridge contract is unchanged.
+- **The tombstone that stops resurrection is PROCESS-LIFETIME.** `#removedTemplateIds` lives in
+  the bridge and is not persisted, on purpose: after a restart the bridge re-reads its
+  persisted registry, and a template absent from it is indistinguishable from one that was
+  never imported — at which point a browser's re-delivery is the desired REPAIR. The tombstone
+  only has to outlive the reconnects of the session that removed. If a removal must survive a
+  bridge restart against a browser that was offline for both, it needs persisting; nobody has
+  asked for that and it is not obviously right.
+- **`hasNext` rides `TemplateInfo`, so templates imported BEFORE this change have no bit** and
+  will not offer NEXT until re-imported. Absent is read as "no next step" — the safe
+  direction, since an enabled control that can only no-op is the anti-pattern the rule exists
+  to prevent.
+- **The Designer's `canStepScene` now delegates to the shared `hasNextStep`,** which widens it:
+  it descends into `repeater` rows and D-083 sequence composition items, both of which the
+  runtime's `next()` cascade genuinely reaches. The full Designer suite (98 files) is green,
+  including the B-034 hidden-content-inert fixtures. Called out because it is a behaviour
+  change in another app: the Designer's preview Next button is now enabled in cases where it
+  was previously (wrongly) greyed.
+
+## Skipped process (fast mode — owner's instruction)
+
+- Section 8 (docs + PRD status flips, engine doc-sync) — not done for part B either.
+- Section 9 (`openspec validate --strict` against the updated change docs is RUN and green;
+  the full uncached `pnpm gate` is run; `gate:e2e` is NOT — see above; no hardware pass).
+
+---
+
+# PART A (`dev-r028-a`, fast mode, 2026-07-29)
 
 ## Prerequisite NOT met when part A started
 

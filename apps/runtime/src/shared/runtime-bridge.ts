@@ -39,6 +39,10 @@ import type {
   StackSnapshotChannel,
   StackTakeChannel,
   StackUpdateChannel,
+  PlayoutLayerState,
+  PlayoutLayersClearChannel,
+  PlayoutLayersStateChannel,
+  StackNextChannel,
   TemplateInfo,
   TemplatesGetChannel,
   TemplatesImportChannel,
@@ -102,6 +106,13 @@ export interface RuntimeBridge {
     stop(
       req: ChannelRequest<typeof StackStopChannel>,
     ): Promise<ChannelResponse<typeof StackStopChannel>>;
+    /**
+     * R-028 (5.4) — advance the template's sequence (`CG NEXT`). Offered only
+     * when `TemplateInfo.hasNext` says the template has a step to advance to.
+     */
+    next(
+      req: ChannelRequest<typeof StackNextChannel>,
+    ): Promise<ChannelResponse<typeof StackNextChannel>>;
     out(
       req: ChannelRequest<typeof StackOutChannel>,
     ): Promise<ChannelResponse<typeof StackOutChannel>>;
@@ -207,6 +218,25 @@ export interface RuntimeBridge {
     ): Promise<ChannelResponse<typeof LockReleaseChannel>>;
     state(): Promise<LockState>;
     onStateChanged(handler: (state: LockState) => void): Unsubscribe;
+  };
+
+  /**
+   * R-028 part B — the declared PLAYOUT layers (C-015) and the operator's
+   * deliberate, kind-gated clear. Separate from `layers` on purpose: those are
+   * unowned orphans the app may reclaim, these are another system's layers the
+   * operator may only touch from a surface labelled as such.
+   */
+  playoutLayers: {
+    state(): Promise<ChannelResponse<typeof PlayoutLayersStateChannel>>;
+    /**
+     * Clear ONE declared playout layer. The bridge refuses anything that is
+     * not an observed `html` producer (`not-html`) and anything it cannot see
+     * (`unknown-occupancy`) — the gate is bridge-side, not merely unoffered.
+     */
+    clear(
+      req: ChannelRequest<typeof PlayoutLayersClearChannel>,
+    ): Promise<ChannelResponse<typeof PlayoutLayersClearChannel>>;
+    onStateChanged(handler: (state: PlayoutLayerState[]) => void): Unsubscribe;
   };
 
   templates: {

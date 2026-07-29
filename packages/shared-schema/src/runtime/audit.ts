@@ -20,6 +20,8 @@ export const AuditEntrySchema = z.object({
     'export',
     // C-012 — the graceful stop, distinct from `out`'s destroying CLEAR.
     'stop',
+    // R-028 (5.4) — advancing a template's sequence (`CG NEXT`).
+    'next',
     'lock-engage',
     'lock-release',
     'update-deferred',

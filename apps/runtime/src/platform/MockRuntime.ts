@@ -9,12 +9,17 @@ import type {
   OrphanLayer,
   OwnedOccupancyWarning,
   PendingUpdate,
+  PLAYOUT_CLEAR_REASONS,
+  PlayoutLayerState,
   Settings,
   TemplateInfo,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
 import { isLoopbackHost } from '../shared/loopback.js';
 import { seedConfig, seedHealth, seedStack, seedTemplates } from './seed.js';
+
+/** R-028 part B — the mock mirrors the bridge's refusal union exactly. */
+type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
 
 type FieldValues = StackItemState['fields'];
 
@@ -46,9 +51,13 @@ export class MockRuntime {
   readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
   // R-028 (o1) parity — the bridge pushes the full catalogue on every change.
   readonly templatesChanged = new Emitter<TemplateInfo[]>();
+  // R-028 part B — the declared playout layers' occupancy.
+  readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
 
   #stack: StackItemState[] = seedStack();
   #templates = new Map<string, TemplateInfo>(seedTemplates().map((t) => [t.templateId, t]));
+  /** R-028 part B parity — ids removed here, so a re-delivery cannot revive them. */
+  readonly #removedTemplateIds = new Set<string>();
   #config: ConnectionConfig = seedConfig();
   #health: ConnectionHealth = seedHealth('A');
   #lock: LockState = { engaged: false };
@@ -170,6 +179,19 @@ export class MockRuntime {
     this.#audit.unshift(auditEntry('stop', { itemId, templateId: item.templateId }));
     // The producer survives, so `#loaded` is deliberately NOT cleared.
     this.#settle(itemId, 'loaded');
+    return { accepted: true };
+  }
+
+  /**
+   * R-028 (5.4) parity — advance the template's sequence. Offline there is no
+   * template running, so this changes NO item state: `next` carries none on
+   * the bridge either (only the template's internal step moves). Modelled at
+   * all so the row's NEXT verb dispatches identically in test mode.
+   */
+  next(itemId: string): { accepted: boolean; errorCode?: string } {
+    const item = this.#find(itemId);
+    if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    this.#audit.unshift(auditEntry('next', { itemId, templateId: item.templateId }));
     return { accepted: true };
   }
 
@@ -307,8 +329,44 @@ export class MockRuntime {
     { itemId: string; templateType: string; templateId: string }
   >();
 
+  // R-028 part B — the declared playout layers, test-seeded like the bank.
+  readonly #playoutObservations = seedPlayoutLayers();
+
   fixedLayersConfig(): FixedLayerBank | null {
     return this.#fixedBank;
+  }
+
+  /** R-028 part B — the declared playout layers and what is observed on them. */
+  playoutLayersState(): PlayoutLayerState[] {
+    return [...this.#playoutObservations.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([layer, observed]) => ({ channel: 1, layer, observed }));
+  }
+
+  /**
+   * R-028 part B parity — the deliberate playout clear, with the bridge's gate
+   * modelled EXACTLY, because the gate is what the operator UI is built
+   * against: not reserved → `not-reserved`; unverifiable or absent occupancy →
+   * `unknown-occupancy`; any non-`html` kind → `not-html`, naming what was
+   * seen. A mock that cleared freely would teach test mode a different — and
+   * more dangerous — mental model than air.
+   */
+  playoutClear(
+    channel: number,
+    layer: number,
+  ): { ok: boolean; reason?: PlayoutClearReason; observedProducer?: string } {
+    const observed = this.#playoutObservations.get(layer);
+    if (observed === undefined) return { ok: false, reason: 'not-reserved' };
+    if (observed.kind === 'unknown' || observed.kind === 'empty') {
+      return { ok: false, reason: 'unknown-occupancy' };
+    }
+    if (observed.producer !== 'html') {
+      return { ok: false, reason: 'not-html', observedProducer: observed.producer };
+    }
+    this.#playoutObservations.set(layer, { kind: 'empty' });
+    this.playoutStateChanged.emit(this.playoutLayersState());
+    void channel;
+    return { ok: true };
   }
 
   setFixedLayers(next: FixedLayerBank): { ok: boolean; message?: string } {
@@ -598,7 +656,22 @@ export class MockRuntime {
    * Inspector picks up its field schema). A re-imported id overwrites the prior
    * entry. No persistence — the registry resets on reload (see design.md).
    */
-  templateImport(template: TemplateInfo): { registered: boolean; templateId: string } {
+  templateImport(
+    template: TemplateInfo,
+    redelivery = false,
+  ): { registered: boolean; templateId: string; skipped?: boolean } {
+    // R-028 part B parity — the same reconciliation rule as the bridge: a
+    // re-delivery never resurrects a removal and never overwrites what is held.
+    if (redelivery) {
+      if (this.#removedTemplateIds.has(template.templateId)) {
+        return { registered: false, templateId: template.templateId, skipped: true };
+      }
+      if (this.#templates.has(template.templateId)) {
+        return { registered: true, templateId: template.templateId, skipped: true };
+      }
+    } else {
+      this.#removedTemplateIds.delete(template.templateId);
+    }
     this.#templates.set(template.templateId, template);
     // R-028 (o1) parity — the catalogue push every browser converges on.
     this.templatesChanged.emit(this.templateList());
@@ -635,6 +708,7 @@ export class MockRuntime {
     }
 
     this.#templates.delete(templateId);
+    this.#removedTemplateIds.add(templateId);
     // R-028 (o1) parity — the catalogue push every browser converges on.
     this.templatesChanged.emit(this.templateList());
     return { ok: true };
@@ -823,6 +897,34 @@ function seedFixedObservations(): Map<number, FixedSlotObservation> {
         [71, { kind: 'producer', producer: 'ffmpeg' }],
         [72, { kind: 'empty' }],
         [73, { kind: 'unknown' }],
+      ])
+    : new Map();
+}
+
+/**
+ * R-028 part B — the e2e playout-layer seed, armed by the SAME flag as the
+ * fixed bank. It covers all THREE occupant cases the tab must distinguish, and
+ * they are the cases the safety gate turns on:
+ *
+ *   60 — an `html` producer      → clearable (the playout graphics case)
+ *   61 — an `ffmpeg` producer    → NOT clearable, and no control at all: a
+ *        video on a playout layer is the antenna/live-channel accident the
+ *        reservation exists to prevent
+ *   62 — `unknown`               → NOT clearable: occupancy cannot be
+ *        verified, and unknown is never treated as empty
+ *   63 — `empty`                 → nothing there, nothing offered
+ *
+ * The offline mock has no OSC, so UNSEEDED there are no reserved layers at all
+ * and the tab does not appear — the bridge-side truth is integration-tested in
+ * tools/caspar-bridge.
+ */
+function seedPlayoutLayers(): Map<number, FixedSlotObservation> {
+  return fixedBankSeedArmed()
+    ? new Map<number, FixedSlotObservation>([
+        [60, { kind: 'producer', producer: 'html' }],
+        [61, { kind: 'producer', producer: 'ffmpeg' }],
+        [62, { kind: 'unknown' }],
+        [63, { kind: 'empty' }],
       ])
     : new Map();
 }

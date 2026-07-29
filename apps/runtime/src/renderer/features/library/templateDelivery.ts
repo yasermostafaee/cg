@@ -5,7 +5,12 @@ import type {
   TemplateInfo,
   TemplatesImportChannel,
 } from '@cg/shared-ipc';
-import { aggregateCompositionFields, type Manifest, type Position } from '@cg/shared-schema';
+import {
+  aggregateCompositionFields,
+  hasNextStep,
+  type Manifest,
+  type Position,
+} from '@cg/shared-schema';
 import { unpack, verify } from '@cg/vcg-format';
 import {
   ExporterSingleFile,
@@ -176,6 +181,11 @@ export async function produceTemplateDelivery(
     templateType: scene.templateType,
     fields: [...aggregate.fields],
     groups: [...aggregate.groups],
+    // R-028 (5.4) — derived HERE, the one moment the app holds the unpacked
+    // scene, by the canonical predicate the Designer's transport also uses.
+    // It rides `TemplateInfo` (not a browser-local store like R-011/R-018) so
+    // the bridge persists it and every browser gets the same answer.
+    hasNext: hasNextStep(scene, scene.compositions),
   };
 
   try {

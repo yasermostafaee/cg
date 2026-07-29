@@ -91,32 +91,49 @@ for what part A deliberately skipped or found un-runnable.**
       producer kind is all the row claims) — identity is never inferred from what happens to
       be on disk.
 
-## 4. The row surface
+## 4. The row surface — DONE (part B, 2026-07-29)
 
-- [ ] 4.1 ONE row list replacing the Stack and Library panels; DESCENDING layer order.
-- [ ] 4.2 Row content: alias · REAL layer number (always) · template name · description · state
-      indicator (playing / stopped / empty). A display index may sit beside the real number.
-- [ ] 4.3 ONE Load button running the whole chain — reuses #419's shipped
-      `importVcgFile` → `fixedLayers.load` → `bindFixed` path, promoted from special case to
-      primary path.
-- [ ] 4.4 Keep the Inspector, driven by row selection (position + full nested field set).
-- [ ] 4.5 Settings: the candidate-layer table — every candidate layer, checkbox, alias field.
+- [x] 4.1 ONE row list replacing the Stack and Library panels; DESCENDING layer order. DONE:
+      `features/layers/LayersPanel.tsx`; `LibraryPanel`, `StackPanel`, `StackRow`,
+      `FixedLayersPanel`, `FixedRow` and `fixedRowActions` DELETED; the 240px library grid
+      column removed from `layout.ts`.
+- [x] 4.2 Row content: alias · REAL layer number (always) · template name · description · state
+      indicator. DONE (`LayerRow.tsx`): layer number + alias in their own cell, `StatusBadge`
+      (carrying R-006's SIM treatment and B-087's link-down mask), the resolved template label,
+      and the honest occupancy line. An empty row says "Empty — load a template".
+- [x] 4.3 ONE Load button running the whole chain — reuses #419's shipped
+      `importVcgFile` → `fixedLayers.load` → `bindFixed` path. DONE, unchanged and promoted to
+      the primary path; the already-imported variant is menu-placed beside it.
+- [x] 4.4 Keep the Inspector, driven by row selection. DONE — the row's body click reports the
+      bound item id up to `App`, exactly as the stack row did; the Inspector is untouched.
+- [x] 4.5 Settings: the candidate-layer table. DONE via the existing bank config modal
+      (per-layer visibility tick + alias, ceiling read-only), reached from the Layers header.
 
-## 5. Verbs
+## 5. Verbs — DONE (part B, 2026-07-29), with 5.3 REVERSED by owner decision
 
-- [ ] 5.1 Verb set LOAD · PLAY · NEXT · UPDATE · STOP · CLEAR · REMOVE with OUR C-012 semantics.
-      Cinegy's LAYOUT and icons; NEVER its vocabulary (design.md §d — adopting its labels would
-      invert STOP).
-- [ ] 5.2 Extend `RowAction` with a PLACEMENT hint so buttons and menu still derive from ONE list
-      (`toMenuItems` keeps receiving the whole list). A second "menu-only actions" array is
-      forbidden — that is the drift `rowAction.ts` exists to prevent.
-- [ ] 5.3 Playout-owned rows: visible, labelled, honest occupancy, NO operator verbs. Foreign
-      (undeclared) rows state what is known — wording depends on 1.3.
-- [ ] 5.4 Derive `hasNext` at IMPORT (the `produceTemplateDelivery` seam that already yields
-      R-011's `defaultPosition` and R-018's `listFieldTargets`) and gate NEXT on it. No
-      always-enabled-and-no-op control.
-- [ ] 5.5 DOM tests: the verb split per row state, asserted by COMPARING the button and menu
-      surfaces; playout rows offer nothing; NEXT hidden without `hasNext`.
+- [x] 5.1 Verb set LOAD · PLAY · NEXT · UPDATE · STOP · CLEAR · REMOVE with OUR C-012 semantics.
+      DONE (`layerRowActions.ts`) — STOP stays the graceful exit and CLEAR the hard kill; the
+      reference product's inverted vocabulary is not adopted.
+- [x] 5.2 `RowAction` gains a PLACEMENT hint (`surface?: 'button' | 'menu'`, default button) and
+      `buttonActions()` is the ONE reader of it; `toMenuItems` still receives the whole list. No
+      second array. UPDATE, REMOVE and LOAD-FROM-LIBRARY are menu-placed.
+- [x] 5.3 **REVERSED — see R-032.** The owner decided that declared playout layers SHOULD be
+      clearable from a deliberate surface. The main Layers list still offers playout rows no
+      verbs; a separate PLAYOUT TAB lists them with a yellow tab indicator and clears them,
+      individually and all at once, gated: html-only, unknown-never-empty, confirm-gated
+      clear-all, and part A's automatic-path exclusions (orphan sweep, `layers.clear`) UNCHANGED.
+      Foreign-row wording: task 1.3's recon was RUN this session (see `DEBT.md`) — producer kind
+      IS legible for layers we did not create, so the tab names the observed kind.
+- [x] 5.4 `hasNext` derived at IMPORT via `produceTemplateDelivery`, by the new canonical
+      `hasNextStep` predicate in `@cg/shared-schema` (the Designer's duplicate now delegates to
+      it). It rides `TemplateInfo` rather than a browser-local store — so it is persisted with
+      the bridge registry and identical in every browser — and NEXT is withheld entirely without
+      it. `stack.next` channel → `nextItem` → `CG … NEXT`, wire-tested.
+- [x] 5.5 DOM tests: `layerRow.dom.test.ts` (19) asserts the verb split per row state and
+      COMPARES the button surface against the menu surface (menu is a superset; every menu item
+      disabled exactly when its declaration is; link-down disables both);
+      `playoutPanel.dom.test.ts` (13) covers the tab's three occupant cases (html · non-html ·
+      unknown) plus empty, the gated clear-all, and the pure gate without a DOM.
 
 ## 6. Retiring the dynamic path (design.md §k — each piece keeps its recorded reason)
 

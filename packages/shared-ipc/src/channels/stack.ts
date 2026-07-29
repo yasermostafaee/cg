@@ -75,6 +75,28 @@ export const StackStopChannel = defineChannel(
   z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
 );
 
+/**
+ * R-028 (owner call o2, task 5.4) — advance the template's sequence:
+ * `CG <ch>-<layer> NEXT`.
+ *
+ * The capability existed template-side all along (`window.next`, the runtime's
+ * per-scope sequence drivers); what was missing was the wire. Part A added the
+ * verb to the command builder; this is the channel that reaches it.
+ *
+ * OFFERED ONLY when the loaded template actually has a next step
+ * (`TemplateInfo.hasNext`, derived at import by the canonical `hasNextStep`).
+ * An always-enabled NEXT that silently no-ops on a single-step template is the
+ * anti-pattern R-021 stage 2b named — an enabled control must never invite a
+ * click that can only do nothing.
+ *
+ * On-air-affecting, so refused while no server is reachable, like take/stop/out.
+ */
+export const StackNextChannel = defineChannel(
+  'stack.next',
+  z.object({ itemId: IdSchema }),
+  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
+);
+
 export const StackOutChannel = defineChannel(
   'stack.out',
   z.object({ itemId: IdSchema, immediate: z.boolean().optional() }),

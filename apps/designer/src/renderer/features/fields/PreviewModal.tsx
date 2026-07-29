@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   aggregateCompositionFields,
   defaultNestedValues,
+  hasNextStep,
   type AggregatedFields,
   type FieldValue,
   type ListItem,
@@ -80,30 +81,18 @@ function dirtyPaths(
 }
 
 /**
- * D-029 — can `next()` advance anything in this scene? True when the scene
- * (or any of its compositions — nested instances advance via the runtime's
- * per-scope cascade) contains a sequence element. The D-031 steps model will
- * widen this same predicate when authored steps join the next() dispatch.
+ * D-029 — can `next()` advance anything in this scene?
+ *
+ * R-028 (5.4) — this WAS a local copy; it now delegates to the canonical
+ * `hasNextStep` in `@cg/shared-schema`, because the Runtime's per-row NEXT verb
+ * asks the same question and two copies is how the two surfaces come to
+ * disagree (the repo's one-canonical-predicate rule). The shared version also
+ * closes two under-reports this copy had: it descends into `repeater` rows and
+ * into D-083 sequence composition items, both of which the runtime's `next()`
+ * cascade genuinely reaches.
  */
 function canStepScene(scene: Scene): boolean {
-  // B-034 — walk the instance tree FROM THE ROOT (not every composition independently) so visibility
-  // propagates through ancestors: a sequence reachable ONLY through a HIDDEN instance / container (or
-  // a hidden sequence itself) is inert and must NOT make the scene steppable — mirroring render's
-  // display:none and the runtime hold. Cycle-guarded like the other instance walks.
-  const visited = new Set<string>();
-  const walk = (children: readonly Scene['layers'][number]['children'][number][]): boolean =>
-    children.some((el) => {
-      if (el.type === 'sequence') return el.visible !== false;
-      if (el.type === 'container') return el.visible !== false && walk(el.children);
-      if (el.type === 'composition') {
-        if (el.visible === false || visited.has(el.compositionId)) return false;
-        visited.add(el.compositionId);
-        const comp = scene.compositions?.find((c) => c.id === el.compositionId);
-        return comp !== undefined && comp.layers.some((l) => walk(l.children));
-      }
-      return false;
-    });
-  return scene.layers.some((l) => walk(l.children));
+  return hasNextStep(scene, scene.compositions);
 }
 
 /**

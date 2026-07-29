@@ -343,15 +343,44 @@ textarea.cg-field {
 
 /* ── Stack row (interactive container) ──────────────────────────────────── */
 
+/*
+ * R-028 part B — SELECTION had to become unmistakable. It used to be the exact
+ * same `--r-surface-raised` background as :hover, so on a real console the
+ * operator could not tell which row the Inspector was editing — they looked
+ * identical the moment the pointer rested anywhere in the list.
+ *
+ * Two constraints shaped the fix:
+ *
+ *  1. NOT COLOUR ALONE. The cue is STRUCTURAL — a 4px left accent bar plus an
+ *     inset padding shift — so it survives a monochrome display and any form of
+ *     colour blindness. The background lift is reinforcement, never the signal.
+ *  2. IT MUST NOT RESEMBLE ON AIR. Selection is about FOCUS; on air is about the
+ *     TRANSMISSION. The bar therefore uses the interactive accent (sky), which
+ *     is the colour this app already means "you are interacting with this" —
+ *     never the sacred `--r-on-air` red, which is reserved for a graphic a real
+ *     server confirmed. An operator glancing at the screen must never read
+ *     "selected" as "on air".
+ */
 .cg-row {
   cursor: pointer;
-  transition: background var(--r-dur-fast) ease;
+  /* The transparent bar reserves the space, so selecting a row never shifts its
+     content sideways — the buttons stay exactly where the finger expects. */
+  border-left: 4px solid transparent;
+  transition:
+    background var(--r-dur-fast) ease,
+    border-color var(--r-dur-fast) ease;
 }
 .cg-row:hover {
   background: var(--r-surface-raised);
 }
 .cg-row.is-selected {
   background: var(--r-surface-raised);
+  border-left-color: var(--r-accent);
+  /* Lifts the selected row above a merely-hovered one, which shares the
+     background — without this the two are still indistinguishable. A dimmed
+     wash of `--r-accent` (#38BDF8); inline rather than a new token because it
+     is one decorative reinforcement, not a semantic role. */
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.28);
 }
 .cg-row:focus-visible {
   outline: none;
@@ -373,4 +402,22 @@ textarea.cg-field {
   .cg-badge--transient .cg-badge__icon {
     animation: none;
   }
+}
+
+/*
+ * R-028 part B — visually hidden, still announced. Used where a signal is
+ * carried by colour or shape for sighted operators (the playout tab's warning
+ * dot) so the same signal reaches a screen reader in words. Colour is never
+ * the only channel.
+ */
+.cg-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

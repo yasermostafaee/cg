@@ -28,7 +28,11 @@ import {
   SettingsChangedChannel,
   SettingsGetChannel,
   SettingsSetChannel,
+  PlayoutLayersClearChannel,
+  PlayoutLayersStateChangedChannel,
+  PlayoutLayersStateChannel,
   StackLoadChannel,
+  StackNextChannel,
   StackRestoreChannel,
   StackStopChannel,
   StackOutChannel,
@@ -375,6 +379,8 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.fixedStateChanged.subscribe((s) => push(FixedLayersStateChangedChannel, s)),
     // R-028 (o1) — the bridge-owned template catalogue.
     backing.templatesChanged.subscribe((t) => push(TemplatesChangedChannel, t)),
+    // R-028 part B — the declared playout layers' occupancy.
+    backing.playoutStateChanged.subscribe((s) => push(PlayoutLayersStateChangedChannel, s)),
   ];
 }
 
@@ -410,6 +416,8 @@ export function buildRoutes(
     ),
     // C-012 — the graceful stop (outro runs, producer stays resident).
     route(StackStopChannel, (r: { itemId: string }) => b.stopItem(r.itemId)),
+    // R-028 (o2 / 5.4) — advance the template's sequence.
+    route(StackNextChannel, (r: { itemId: string }) => b.nextItem(r.itemId)),
     route(StackOutChannel, (r: { itemId: string }) => b.out(r.itemId)),
     route(StackRemoveChannel, (r: { itemId: string }) => b.remove(r.itemId)),
     // R-011 — the operator's per-item on-air position override.
@@ -470,6 +478,15 @@ export function buildRoutes(
         b.loadFixed({ channel: r.channel, layer: r.layer }, r.itemId, r.templateId, r.fields),
     ),
 
+    // R-028 part B — the declared playout layers + the operator's DELIBERATE,
+    // kind-gated clear. A separate door from `layers.clear` (which still
+    // refuses reserved layers): only an operator who opened the playout tab
+    // can reach this, and the bridge holds the html-only gate.
+    route(PlayoutLayersStateChannel, () => b.playoutLayersState()),
+    route(PlayoutLayersClearChannel, (r: { channel: number; layer: number }) =>
+      b.playoutClear(r.channel, r.layer),
+    ),
+
     route(LockEngageChannel, (r: { pin: string }) => b.engage(r.pin)),
     route(LockReleaseChannel, (r: { pin: string }) => b.release(r.pin)),
     route(LockStateChannel, () => b.lockState()),
@@ -478,8 +495,8 @@ export function buildRoutes(
     route(TemplatesListChannel, () => b.templateList()),
     // B-038 Phase 2 — retain the browser-produced self-contained HTML alongside
     // the TemplateInfo (held, not served yet).
-    route(TemplatesImportChannel, (r: { template: never; html: string }) =>
-      b.templateImport(r.template, r.html),
+    route(TemplatesImportChannel, (r: { template: never; html: string; redelivery?: boolean }) =>
+      b.templateImport(r.template, r.html, r.redelivery ?? false),
     ),
     // R-005 — the bridge is authoritative for the refusal (refuse-while-referenced).
     route(TemplatesRemoveChannel, (r: { templateId: string }) => b.templateRemove(r.templateId)),

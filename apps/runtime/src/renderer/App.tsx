@@ -4,10 +4,10 @@ import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
 import { ConnectionBanner } from './features/status/ConnectionBanner.js';
 import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
-import { LibraryPanel } from './features/library/LibraryPanel.js';
-import { FixedLayersPanel } from './features/fixedLayers/FixedLayersPanel.js';
 import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
-import { StackPanel } from './features/stack/StackPanel.js';
+import { LayersPanel } from './features/layers/LayersPanel.js';
+import { ShellDivider } from './ui/ShellDivider.js';
+import { useShellLayout } from './hooks/useShellLayout.js';
 import { Inspector } from './features/inspector/Inspector.js';
 import { applyDraft } from './features/inspector/applyDraft.js';
 import { clearDraft } from './features/inspector/draftStore.js';
@@ -72,6 +72,9 @@ export function App(): JSX.Element {
   const orphans = useOrphans();
   const ownedOccupancy = useOwnedOccupancy();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // R-028 part B — the operator's own workspace geometry (persisted per browser).
+  const layout = useShellLayout();
+  const [inspectorOverlayOpen, setInspectorOverlayOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const selected = useMemo(
@@ -104,6 +107,23 @@ export function App(): JSX.Element {
     return () => window.removeEventListener('contextmenu', suppressNativeMenu);
   }, []);
 
+  // Narrow: one column, the Inspector is an overlay. Fullscreen: the focused
+  // panel takes everything. Otherwise: workspace | divider | Inspector.
+  const showInspectorColumn = !layout.narrow && layout.focus !== 'layers';
+  const shellColumns = layout.narrow
+    ? '1fr'
+    : layout.focus === 'layers'
+      ? '1fr'
+      : layout.focus === 'inspector'
+        ? '1fr'
+        : `1fr 6px ${String(layout.inspectorPx)}px`;
+
+  // Selecting a row on a narrow screen brings the Inspector up — the operator
+  // asked to inspect something, so showing it is the point.
+  useEffect(() => {
+    if (layout.narrow && selectedId !== null) setInspectorOverlayOpen(true);
+  }, [layout.narrow, selectedId]);
+
   return (
     <main style={styles.page}>
       {/* R-006 — a not-live link means NOTHING can reach air. That is a full-width alert,
@@ -116,29 +136,93 @@ export function App(): JSX.Element {
           implication that a real server is out there, broken. The TEST MODE banner is the
           truth in that mode and supersedes it. */}
       {link !== 'offline-mock' && <FailoverBanner health={health} />}
-      <div style={styles.shell}>
-        <LibraryPanel />
-        <section style={styles.workspace}>
-          <div style={styles.monitor}>
-            PVW / PGM monitor strip will live here. Full monitor with frame grabs is M9.
-          </div>
-          <div style={styles.chrome}>
-            <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
-          </div>
-          {/* R-021 — the fixed bank, above the stack. Renders NOTHING with no
-              bank declared, so the column is byte-identical to today then. */}
-          <FixedLayersPanel />
-          <StackPanel onSelectionChange={setSelectedId} />
-        </section>
-        <Inspector
-          item={selected}
-          onApply={(id) => {
-            const target = items.find((i) => i.itemId === id);
-            return target !== undefined ? applyDraft(target) : Promise.resolve({ accepted: false });
-          }}
-          onDiscard={(id) => clearDraft(id)}
-        />
+      {/*
+        R-028 part B — a RESIZABLE shell. The Inspector is a real column whose
+        width the operator owns (dragged or nudged, clamped so neither side can
+        reach zero, persisted per browser, resettable from the Layers header).
+        Either panel can be taken fullscreen.
+
+        Below `NARROW_BREAKPOINT_PX` the Inspector stops being a column at all
+        and becomes an OVERLAY: on a small screen a squeezed Inspector makes
+        both panels useless. See `useShellLayout` for why 900px.
+      */}
+      <div style={{ ...styles.shell, gridTemplateColumns: shellColumns }}>
+        {/* R-028 — the Library panel is GONE, not hidden: a template is no
+            longer a thing parked in a side panel, so there is no side panel.
+            Load lives on the row and does import+load in one action. */}
+        {layout.focus !== 'inspector' && (
+          <section style={styles.workspace}>
+            <div style={styles.monitor}>
+              PVW / PGM monitor strip will live here. Full monitor with frame grabs is M9.
+            </div>
+            <div style={styles.chrome}>
+              <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
+            </div>
+            {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
+                Layers panels, with the playout system's layers on their own tab. */}
+            <LayersPanel
+              onSelectionChange={setSelectedId}
+              selectedId={selectedId}
+              layout={layout}
+              inspectorOpen={inspectorOverlayOpen}
+              onToggleInspector={() => setInspectorOverlayOpen((open) => !open)}
+              onUpdate={(id) => {
+                const target = items.find((i) => i.itemId === id);
+                return target !== undefined
+                  ? applyDraft(target)
+                  : Promise.resolve({ accepted: false });
+              }}
+            />
+          </section>
+        )}
+        {/* The divider only exists where there are two columns to divide. */}
+        {!layout.narrow && layout.focus === 'none' && (
+          <ShellDivider inspectorPx={layout.inspectorPx} onResize={layout.setInspectorPx} />
+        )}
+        {showInspectorColumn && (
+          <Inspector
+            item={selected}
+            onApply={(id) => {
+              const target = items.find((i) => i.itemId === id);
+              return target !== undefined
+                ? applyDraft(target)
+                : Promise.resolve({ accepted: false });
+            }}
+            onDiscard={(id) => clearDraft(id)}
+          />
+        )}
       </div>
+      {/*
+        NARROW — the Inspector as an overlay.
+
+        It is deliberately NOT full-screen: the panel is pinned to the right and
+        the Layers list stays visible beside/behind it, so the operator can see
+        what is ON AIR while editing its fields. Editing a live graphic is the
+        NORMAL case here, not the edge case, and an overlay that hides the air
+        state would make the operator work blind. Dismissing is also a single
+        action (the backdrop, or the same hamburger).
+      */}
+      {layout.narrow && inspectorOverlayOpen && (
+        <>
+          <div
+            style={styles.overlayScrim}
+            onClick={() => setInspectorOverlayOpen(false)}
+            aria-hidden="true"
+          />
+          <div style={styles.overlayPanel}>
+            <Inspector
+              item={selected}
+              onApply={(id) => {
+                const target = items.find((i) => i.itemId === id);
+                return target !== undefined
+                  ? applyDraft(target)
+                  : Promise.resolve({ accepted: false });
+              }}
+              onDiscard={(id) => clearDraft(id)}
+            />
+          </div>
+        </>
+      )}
       <StatusBar
         onOpenAudit={() => setAuditOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { LucideIcon } from 'lucide-react';
 import { colors } from '../theme.js';
+import { Icon } from './Icon.js';
 import { VARIANT_ACCENT, type ButtonVariant } from './Button.js';
 
 /**
@@ -34,6 +36,8 @@ export interface ContextMenuItem {
   disabled?: boolean;
   /** Why it is disabled, or what it does — the source button's tooltip. */
   title?: string;
+  /** R-028 — the source button's OWN glyph, so the two surfaces match. */
+  icon?: LucideIcon;
 }
 
 interface Props {
@@ -66,6 +70,7 @@ const styles = {
   item: {
     display: 'flex',
     alignItems: 'center',
+    gap: '0.5rem',
     height: ITEM_HEIGHT,
     padding: '0 0.75rem',
     cursor: 'pointer',
@@ -200,6 +205,7 @@ export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Ele
                 }
               }}
             >
+              {item.icon !== undefined && <Icon icon={item.icon} />}
               {item.label}
             </div>
           );

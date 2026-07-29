@@ -283,3 +283,40 @@ it('R-028 (2.5) — a candidate ceiling intersecting the reserved playout range 
     }),
   ).rejects.toThrow(/70–79.*75–84|75–84.*70–79/s);
 });
+
+it('R-028 part B — a RE-DELIVERY never resurrects a removed template, nor overwrites a held one', async () => {
+  const dir = templatesDir();
+  const r = await bootRuntime(dir);
+  r.templateImport(info('tpl-a', 'first name'), HTML);
+
+  // The operator removes it. Any browser still holding a local copy will
+  // re-deliver on its next reconnect — a page reload is enough.
+  expect(r.templateRemove('tpl-a').ok).toBe(true);
+  expect(r.templateList()).toHaveLength(0);
+
+  const resurrect = r.templateImport(info('tpl-a', 'first name'), HTML, true);
+  expect(resurrect).toEqual({ registered: false, templateId: 'tpl-a', skipped: true });
+  expect(r.templateList()).toHaveLength(0); // still gone — the removal stands
+
+  // A re-delivery of an id the bridge ALREADY holds keeps the bridge's copy:
+  // it is the catalogue of record and may be newer than the browser's.
+  r.templateImport(info('tpl-b', 'bridge copy'), HTML);
+  const stale = r.templateImport(info('tpl-b', 'older browser copy'), HTML, true);
+  expect(stale).toEqual({ registered: true, templateId: 'tpl-b', skipped: true });
+  expect(r.templateGet('tpl-b')?.name).toBe('bridge copy');
+
+  // An OPERATOR import (no flag) always wins and revives a removed template.
+  const reimport = r.templateImport(info('tpl-a', 'deliberately re-imported'), HTML);
+  expect(reimport.skipped).toBeUndefined();
+  expect(r.templateGet('tpl-a')?.name).toBe('deliberately re-imported');
+});
+
+it('R-028 part B — re-delivery still REPAIRS a registry that genuinely lost a template', async () => {
+  const dir = templatesDir();
+  const r = await bootRuntime(dir);
+  // Nothing removed, nothing held: this is the case re-delivery exists for (an
+  // offline import, or a registry predating persistence). It must still land.
+  const delivered = r.templateImport(info('tpl-new'), HTML, true);
+  expect(delivered).toEqual({ registered: true, templateId: 'tpl-new' });
+  expect(r.templateGet('tpl-new')).not.toBeNull();
+});

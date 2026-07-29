@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
-import { StackPanel } from '../src/renderer/features/stack/StackPanel.js';
+import { LayersPanel } from '../src/renderer/features/layers/LayersPanel.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 
 /**
@@ -44,6 +44,18 @@ function stubBridge(
     link: { status: () => link, onStatusChanged: () => () => undefined },
     // R-004 — the panel joins each row against the registry to label its template.
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
+    // R-028 — the merged panel also reads the declared layers and the playout tab.
+    fixedLayers: {
+      config: () => Promise.resolve(null),
+      state: () => Promise.resolve([]),
+      onConfigChanged: () => () => undefined,
+      onStateChanged: () => () => undefined,
+    },
+    playoutLayers: {
+      state: () => Promise.resolve([]),
+      clear: () => Promise.resolve({ ok: true }),
+      onStateChanged: () => () => undefined,
+    },
     stack: {
       snapshot: () => Promise.resolve(stack),
       onStateChanged: () => () => undefined,
@@ -67,7 +79,22 @@ async function renderPanel(): Promise<HTMLDivElement> {
       createElement(
         StrictMode,
         null,
-        createElement(StackPanel, { onSelectionChange: () => undefined }),
+        createElement(LayersPanel, {
+          onSelectionChange: () => undefined,
+          selectedId: null,
+          layout: {
+            inspectorPx: 320,
+            focus: 'none' as const,
+            narrow: false,
+            setInspectorPx: () => undefined,
+            setFocus: () => undefined,
+            reset: () => undefined,
+            customized: false,
+          },
+          inspectorOpen: false,
+          onToggleInspector: () => undefined,
+          onUpdate: () => Promise.resolve({ accepted: true }),
+        }),
       ),
     );
     await Promise.resolve();
@@ -143,6 +170,18 @@ describe('StackPanel Remove-All — R-010', () => {
         },
       },
       templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
+      // R-028 — the merged panel also reads the declared layers and the playout tab.
+      fixedLayers: {
+        config: () => Promise.resolve(null),
+        state: () => Promise.resolve([]),
+        onConfigChanged: () => () => undefined,
+        onStateChanged: () => () => undefined,
+      },
+      playoutLayers: {
+        state: () => Promise.resolve([]),
+        clear: () => Promise.resolve({ ok: true }),
+        onStateChanged: () => () => undefined,
+      },
       stack: {
         snapshot: () => Promise.resolve(items(2)),
         onStateChanged: () => () => undefined,

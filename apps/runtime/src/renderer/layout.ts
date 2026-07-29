@@ -47,7 +47,12 @@ export const appShell = {
   /** The three panels. Takes all remaining height and clips — the panels scroll, not this. */
   shell: {
     display: 'grid',
-    gridTemplateColumns: '240px 1fr 320px',
+    // R-028 — the 240px Library column is GONE (the panel was deleted, not
+    // hidden): the workspace takes the space the library used to hold. The
+    // columns are now COMPUTED per render (`useShellLayout`) — the operator
+    // drags the divider, takes a panel fullscreen, or drops below the narrow
+    // breakpoint — so this is only the server-rendered default.
+    gridTemplateColumns: '1fr 6px 320px',
     gap: '0.75rem',
     padding: '0.75rem',
     flex: 1,
@@ -85,6 +90,34 @@ export const appShell = {
    * shrink under a small viewport would push the stack out of its bound and
    * hand the overflow to the page.
    */
+  /**
+   * R-028 part B — the narrow-screen Inspector overlay.
+   *
+   * A SCRIM plus a right-pinned panel, deliberately NOT a full-screen sheet:
+   * the Layers list stays visible to its left, so the operator can still see
+   * what is ON AIR while editing a live graphic's fields. That is the normal
+   * case on this console, not an edge case. The scrim is the single-action
+   * dismissal.
+   */
+  overlayScrim: {
+    position: 'fixed' as const,
+    inset: 0,
+    background: 'rgba(0, 0, 0, 0.45)',
+    zIndex: 800,
+  },
+  overlayPanel: {
+    position: 'fixed' as const,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    // Leaves a strip of the Layers list visible beside it — the on-air state
+    // must never be fully covered.
+    width: 'min(24rem, 82vw)',
+    zIndex: 801,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    boxShadow: '-8px 0 24px rgba(0, 0, 0, 0.45)',
+  },
   fixedPanel: {
     display: 'flex',
     flexDirection: 'column',

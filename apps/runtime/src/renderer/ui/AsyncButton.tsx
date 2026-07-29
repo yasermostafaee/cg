@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import { buttonClass, type ButtonVariant } from './Button.js';
+import { Icon } from './Icon.js';
 import {
   AsyncButtonController,
   type AsyncResult,
@@ -42,6 +44,8 @@ type Props = {
    * inline error would break the layout.
    */
   onError?: (message: string) => void;
+  /** R-028 — a decorative lucide glyph beside the label (never instead of it). */
+  icon?: LucideIcon;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'type' | 'onError'>;
 
 /**
@@ -58,6 +62,7 @@ export function AsyncButton({
   children,
   disabled,
   onError,
+  icon,
   ...rest
 }: Props): JSX.Element {
   const [view, setView] = useState<AsyncView>(INITIAL);
@@ -105,14 +110,21 @@ export function AsyncButton({
         onClick={() => ctrlRef.current?.press(run)}
         {...rest}
       >
-        {view.showSpinner &&
-          (reduced ? (
+        {view.showSpinner ? (
+          reduced ? (
             <span className="cg-btn__busy-dots" aria-hidden="true">
               ···
             </span>
           ) : (
             <span className="cg-btn__spinner" aria-hidden="true" />
-          ))}
+          )
+        ) : (
+          // R-028 — the verb's glyph, shown only when NOT in flight: the
+          // spinner takes the same slot, so the control's width never jumps
+          // mid-press and the busy state is unmistakable rather than a second
+          // icon competing with the first.
+          icon !== undefined && <Icon icon={icon} />
+        )}
         <span className="cg-btn__label">{children}</span>
       </button>
       {view.errorMessage !== null && (

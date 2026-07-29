@@ -96,6 +96,8 @@ const BRIDGE_SURFACE: {
       'update',
       // C-012 — the graceful stop, beside the destroying `out`.
       'stop',
+      // R-028 (5.4) — advance the template's sequence.
+      'next',
       'out',
       'remove',
       'setPosition',
@@ -113,6 +115,15 @@ const BRIDGE_SURFACE: {
       'onConfigChanged',
     ],
     layers: ['orphans', 'clear', 'onOrphansChanged', 'ownedOccupancy', 'onOwnedOccupancyChanged'],
+    // R-028 part B — `fixedLayers` was MISSING from this guard (recorded as a
+    // part-A seam): `tests/**` is not typechecked, so the mapped type above
+    // never caught the omission and any mock↔bridge divergence in the fixed
+    // surface shipped silently. Both layer groups are covered now, and
+    // `playoutLayers` especially: it is a SAFETY surface, and a mock that
+    // cleared where the bridge refuses would teach test mode a more dangerous
+    // model than air.
+    fixedLayers: ['config', 'setConfig', 'load', 'state', 'onConfigChanged', 'onStateChanged'],
+    playoutLayers: ['state', 'clear', 'onStateChanged'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
     // R-028 (o1) — `onChanged`: the bridge-owned catalogue push.
     templates: ['get', 'list', 'import', 'remove', 'onChanged'],

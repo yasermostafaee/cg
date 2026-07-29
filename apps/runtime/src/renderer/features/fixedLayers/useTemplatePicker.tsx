@@ -3,6 +3,8 @@ import type { TemplateInfo } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Modal } from '../../ui/Modal.js';
+import { useConfirm } from '../../ui/useDialog.js';
+import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { templateDisplayName } from '../library/templateName.js';
 
 /**
@@ -21,6 +23,13 @@ import { templateDisplayName } from '../library/templateName.js';
  * A dismissal (Cancel / Escape / backdrop, all of which route through the
  * Modal's safe path) resolves `null`, which the caller reports as the
  * operator's own "no": no success flash, no error toast.
+ *
+ * R-028 part B — this dialog is now the ONLY template list in the product (the
+ * Library panel was deleted), so R-005's REMOVE lives here too. It is a
+ * re-homing of a shipped capability, not a new one: without it, deleting the
+ * panel would have silently taken away the operator's only way to remove a
+ * template. The bridge stays authoritative for the refusal
+ * (refuse-while-referenced) and the wording is surfaced verbatim.
  */
 
 const styles = {
@@ -32,6 +41,7 @@ const styles = {
     overflowY: 'auto' as const,
   },
   row: { display: 'flex', flexDirection: 'column' as const, alignItems: 'stretch' },
+  rowActions: { display: 'flex', gap: '0.35rem', alignItems: 'center' },
   meta: { fontSize: '0.75rem', color: colors.textMuted },
   empty: { fontSize: '0.85rem', color: colors.textMuted, margin: 0 },
 } as const;
@@ -47,6 +57,7 @@ export function useTemplatePicker(): {
 } {
   const [request, setRequest] = useState<PickRequest | null>(null);
   const resolver = useRef<((template: TemplateInfo | null) => void) | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const pickTemplate = useCallback(async (title: string): Promise<TemplateInfo | null> => {
     const templates = await window.cg.templates.list();
@@ -55,6 +66,36 @@ export function useTemplatePicker(): {
       setRequest({ title, templates });
     });
   }, []);
+
+  /**
+   * R-005, re-homed. The BRIDGE decides whether a removal is allowed (it
+   * refuses while any row still references the template) and supplies the
+   * operator-facing reason; this only asks, then re-lists.
+   */
+  const removeTemplate = useCallback(
+    async (template: TemplateInfo): Promise<void> => {
+      const label = templateDisplayName(template);
+      const ok = await confirm({
+        title: 'Remove this template?',
+        body: `“${label}” is removed from the library for every browser. This cannot be undone — the .vcg must be re-imported.`,
+        confirmLabel: 'Remove',
+      });
+      if (!ok) return;
+      try {
+        const res = await window.cg.templates.remove({ templateId: template.templateId });
+        if (!res.ok) {
+          reportCommandError(res.message ?? 'The template could not be removed.');
+          return;
+        }
+        reportCommandSuccess(`Removed “${label}”.`);
+        const templates = await window.cg.templates.list();
+        setRequest((current) => (current === null ? null : { ...current, templates }));
+      } catch (err) {
+        reportCommandError(err instanceof Error ? err.message : 'Remove failed.');
+      }
+    },
+    [confirm],
+  );
 
   const settle = useCallback((template: TemplateInfo | null): void => {
     setRequest(null);
@@ -86,20 +127,30 @@ export function useTemplatePicker(): {
               const label = templateDisplayName(t);
               return (
                 <div key={t.templateId} style={styles.row}>
-                  <Button
-                    variant="secondary"
-                    aria-label={`Load ${label} onto this layer`}
-                    title={t.templateId}
-                    onClick={() => settle(t)}
-                  >
-                    {label}
-                  </Button>
+                  <div style={styles.rowActions}>
+                    <Button
+                      variant="secondary"
+                      aria-label={`Load ${label} onto this layer`}
+                      title={t.templateId}
+                      onClick={() => settle(t)}
+                    >
+                      {label}
+                    </Button>
+                    <Button
+                      variant="danger"
+                      aria-label={`Remove ${label}`}
+                      onClick={() => void removeTemplate(t)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                   <span style={styles.meta}>{t.templateType}</span>
                 </div>
               );
             })}
           </div>
         )}
+        {confirmDialog}
       </Modal>
     );
 

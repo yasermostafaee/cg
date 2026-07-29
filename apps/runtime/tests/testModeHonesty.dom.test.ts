@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
-import { StackRow } from '../src/renderer/features/stack/StackRow.js';
+import { LayerRow } from '../src/renderer/features/layers/LayerRow.js';
 import { ConnectionBanner } from '../src/renderer/features/status/ConnectionBanner.js';
 import { seedHealth } from '../src/platform/seed.js';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
@@ -29,7 +29,12 @@ afterEach(() => {
 });
 
 function stubLink(status: 'live' | 'disconnected' | 'offline-mock'): void {
-  const stub = { link: { status: () => status, onStatusChanged: () => () => undefined } };
+  const noopAsync = (): Promise<{ accepted: boolean }> => Promise.resolve({ accepted: true });
+  const stub = {
+    link: { status: () => status, onStatusChanged: () => () => undefined },
+    stack: { take: noopAsync, next: noopAsync, stop: noopAsync, out: noopAsync, remove: noopAsync },
+    templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
+  };
   (window as unknown as { cg: typeof stub }).cg = stub;
 }
 
@@ -54,16 +59,28 @@ const ON_AIR: StackItemState = {
 
 const noop = (): Promise<{ accepted: boolean }> => Promise.resolve({ accepted: true });
 
+/**
+ * R-028 part B — the same claims, now on the LAYER row that replaced StackRow.
+ * The badge treatment is precisely what these tests protect, so they moved with
+ * it rather than being left behind with the deleted component. (Porting them
+ * caught a real regression: the first draft of the new row rendered a raw
+ * status label, which would have claimed "ON AIR" in test mode.)
+ */
 function row(item: StackItemState): ReturnType<typeof createElement> {
-  return createElement(StackRow, {
+  return createElement(LayerRow, {
+    slot: {
+      channel: 1,
+      layer: 70,
+      alias: 'CLOCK',
+      observed: { kind: 'producer' as const, producer: 'html' },
+      binding: { itemId: item.itemId, templateType: 'clock', templateId: item.templateId },
+    },
     item,
+    template: { templateId: 'tpl-1', templateType: 'clock', fields: [] },
     selected: false,
     dirty: false,
     onSelect: () => undefined,
-    onPlay: noop,
     onUpdate: noop,
-    onOut: noop,
-    onRemove: noop,
   });
 }
 

@@ -1121,6 +1121,85 @@ producer KIND, not identity — without declaration R-009 flags healthy playout 
 **C-015 stops being distant** — it is a prerequisite. One RECON owed: whether CasparCG 2.3.2
 exposes template identity beyond producer kind, via `tools/caspar-amcp-probe` on real hardware.
 
+## [~] R-031 — the operator surface, as the owner described it: one Layers section, no Library, verbs on the row ⟨priority: high⟩
+
+**What:** The concrete UI shape [[R-028]] resolves to, stated by the owner in review and filed
+here because it was decided in chat and would otherwise exist only in a prompt. (1) The NUMBER of
+layers and which are active is set in Settings. (2) The Library panel is DELETED — not hidden,
+not collapsed. (3) Fixed Layers and Stack MERGE into one list, and what remains is the layer
+list. (4) The section is called just **Layers** — with one list, "Fixed" distinguishes nothing.
+(5) **Load means import + load together, in one action.** (6) Nothing is ever appended to a list
+below — the stack model goes away entirely. (7) The verb buttons live on the layer ROW. (8) The
+buttons MAY be present before a load, rendered DISABLED when that layer has no template.
+**Why:** R-028's design settled the model; this is the owner's own description of what the
+operator actually sees, and several points are not derivable from the design (the deletion of the
+Library rather than its demotion, the section's NAME, and point 8's disabled-not-absent rule).
+Point 8 is the one that looks like a contradiction and is not: [[R-021]] stage 2b forbids an
+ENABLED control that can only reject, which a DISABLED button is not. A fixed control set that
+lights up as state changes is legible under time pressure; controls that appear and disappear
+move the target under the operator's hand. **Point 8 wins as written — do not "correct" it back
+to hiding the buttons.**
+**Acceptance:**
+
+- WHEN the Runtime is opened THEN there is ONE section named Layers, and no Library panel exists
+  anywhere in the product
+- WHEN a row has no template THEN its verb buttons are present and DISABLED (never absent, never
+  enabled-and-rejecting)
+- WHEN the operator uses a row's Load THEN one action imports the `.vcg` AND loads it onto that
+  row's exact layer
+- WHEN an item is loaded THEN it appears on its own row and nothing is appended to any list below
+- WHEN the candidate layers are configured THEN that happens in Settings, not on the row
+
+**Notes:** Implemented in R-028 part B (`dev-r028-b`): `features/layers/LayersPanel.tsx` +
+`LayerRow.tsx`, with `LibraryPanel`, `StackPanel`, `StackRow`, `FixedLayersPanel` and `FixedRow`
+DELETED. Template REMOVAL was re-homed into the template picker dialog — it had no other surface
+once the Library panel went, and losing a shipped capability (R-005) silently would have been
+worse. Settings-side candidate-layer editing is the existing bank config modal, reached from the
+Layers header. See `openspec/changes/runtime-unified-layer-rows/DEBT.md` for what part B left
+owed (E2E suite, hardware pass).
+
+## [~] R-032 — a PLAYOUT tab: see and clear what the playout system has on the reserved layers ⟨priority: high⟩
+
+**What:** A second tab beside Layers, listing the DECLARED reserved (playout-owned) layers and
+what is on each. When something is present on a reserved layer a **yellow indicator appears on
+the tab** so the operator knows without opening it. Opening the tab lists the occupants and
+allows clearing — individually and all at once. **This REVERSES [[R-028]] task 5.3's "playout
+rows offer NO operator verbs"**: the main Layers list still offers none, but this tab does.
+**Why (the owner's reasoning, which IS the specification):** the original rule against clearing
+layers that are not ours existed to prevent accidentally killing the antenna layer itself, or a
+live channel. Now that the graphics layers are declared in advance, even a graphic the playout
+system put on 60–69 is something the operator should be able to see and clear.
+**Acceptance:**
+
+- WHEN something is on a declared playout layer THEN a yellow indicator appears on the tab, and
+  opening it lists every reserved layer with what is observed on it
+- WHEN an occupant is an `html` producer THEN a clear is offered, individually and via clear-all
+- WHEN an occupant is ANY other producer kind (video, route, decklink, unrecognised) THEN NO
+  clear control is offered at all and the row says why — the bridge refuses it independently
+- WHEN a layer's occupancy cannot be verified THEN it reads as UNKNOWN in its own right (never as
+  empty), and no clear is offered
+- WHEN clear-all is invoked THEN it is confirm-gated, names how many and WHICH layers, states
+  plainly that these are not our layers, and EXCLUDES every non-html and unverifiable occupant
+- WHEN the R-009 orphan sweep runs THEN reserved layers are still excluded from it, and
+  `layers.clear` still refuses them — automatic paths never touch these layers
+
+**Notes:** The three constraints are not optional and are what make the reversal safe: **(1)
+automatic never, deliberate yes** — part A's sweep exclusion and `layers.clear` refusal stand
+UNCHANGED; this is a separate channel (`playoutLayers.clear`) reachable only from a labelled tab
+the operator opens on purpose. **(2) html only** — the reservation is a claim about who owns the
+LAYER, never about what is on it; a video landing there (including by the playout operator's own
+mistake) is exactly the antenna/live-channel accident the reservation exists to prevent. **(3)
+unknown is not empty** — fail closed, as [[R-028]]'s untick refusal and task 3.3 already do.
+**The kind gate's boundary, stated honestly:** it guarantees "never a non-graphic". It does NOT
+guarantee "never something important" — an html producer on a playout layer may well be the
+station's own on-air graphics package, and clearing it takes real graphics off air. That is
+accepted and intended; the wording must not imply a stronger promise. **Premise verified on the
+station's running CasparCG 2.3.2** (R-028 task 1.3's recon, finally run): producer kind IS legible
+for layers this bridge did not create — four foreign `html` producers observed via both the OSC
+tap and AMCP `INFO` — and the occupancy tap stores the kind verbatim with no defaulting, so a
+non-html producer cannot be misread as html. Still owed: observing the NEGATIVE case (a video on a
+reserved layer) on hardware. Implemented in R-028 part B.
+
 ## [ ] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩
 
 **What:** Make template audio start at the **take**, not at the **cue**. Today `CG ADD` with no

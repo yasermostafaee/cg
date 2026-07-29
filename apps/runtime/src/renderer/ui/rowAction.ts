@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react';
 import type { ButtonVariant } from './Button.js';
 import type { ContextMenuItem } from './ContextMenu.js';
 import {
@@ -40,6 +41,40 @@ export interface RowAction {
    * `applyDraft` does — and a second report would double-toast.
    */
   onError: (message: string) => void;
+  /**
+   * R-028 (5.2) — WHERE this action appears. `'button'` (the default) renders a
+   * button AND a menu item; `'menu'` renders the menu item only.
+   *
+   * PLACEMENT ONLY. It is deliberately one optional field on the SINGLE
+   * declaration rather than a second "menu-only actions" array, because the
+   * array is exactly the drift this module exists to prevent: two lists mean two
+   * gates, two handlers and two wordings to keep agreeing. `toMenuItems` still
+   * receives the WHOLE list, so a menu-placed action is gated and handled by the
+   * same declaration as any other — only its button is withheld.
+   *
+   * Why any action is menu-placed at all: seven verbs across thirty rows is 210
+   * controls if every verb is a button. The row shows the ones an operator
+   * reaches for under time pressure and files the rest one right-click away.
+   */
+  surface?: 'button' | 'menu' | undefined;
+  /**
+   * R-028 part B — the lucide glyph shown BESIDE the label (never instead of
+   * it). Declared here with everything else so a verb's icon cannot differ
+   * between its button and its menu item.
+   *
+   * The word always stays: this product's STOP and CLEAR mean the opposite of
+   * the reference product's, so an operator must never have to decode a symbol
+   * to know which one they are about to press.
+   */
+  icon?: LucideIcon | undefined;
+}
+
+/**
+ * The actions that get a BUTTON — the one place the placement hint is read, so
+ * "default is button" cannot drift between rows.
+ */
+export function buttonActions(actions: readonly RowAction[]): RowAction[] {
+  return actions.filter((a) => a.surface !== 'menu');
 }
 
 /**
@@ -99,6 +134,7 @@ export function toMenuItems(actions: readonly RowAction[]): ContextMenuItem[] {
     variant: action.variant,
     disabled: action.disabled,
     ...(action.title !== undefined ? { title: action.title } : {}),
+    ...(action.icon !== undefined ? { icon: action.icon } : {}),
     onSelect: () => runRowAction(action),
   }));
 }

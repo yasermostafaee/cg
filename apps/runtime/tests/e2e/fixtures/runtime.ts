@@ -23,18 +23,29 @@ import { pack } from '@cg/vcg-format';
 export class RuntimeApp {
   constructor(readonly page: Page) {}
 
-  /** Load the app at `/` and wait until the Library's import affordance is shown. */
+  /**
+   * Load the app at  and wait until the operator surface is shown.
+   *
+   * R-028 part B — the boot signal WAS the Library's Import button; the Library
+   * panel is deleted, so it is now the Layers region, which is the surface every
+   * spec actually drives.
+   */
   async goto(): Promise<void> {
     await this.page.goto('/');
-    await expect(this.importButton).toBeVisible();
+    await expect(this.layers).toBeVisible();
   }
 
   // ── regions ───────────────────────────────────────────────────────────────
-  get library(): Locator {
-    return this.page.getByRole('navigation', { name: 'Library' });
+  /**
+   * R-028 part B — THE operator surface: one Layers list (it replaced the
+   * Library, Stack and Fixed-Layers panels).
+   */
+  get layers(): Locator {
+    return this.page.getByRole('region', { name: 'Layers' });
   }
-  get stack(): Locator {
-    return this.page.getByRole('region', { name: 'Stack' });
+  /** The playout tab's panel (the reserved layers another system owns). */
+  get playoutTab(): Locator {
+    return this.page.getByRole('tab', { name: /PLAYOUT/ });
   }
   get inspector(): Locator {
     return this.page.getByRole('complementary', { name: 'Inspector' });

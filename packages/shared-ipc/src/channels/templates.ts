@@ -50,6 +50,23 @@ export const TemplateInfoSchema = z.object({
    * absent/`[]` means a flat, single-composition template, exactly as before.
    */
   groups: z.array(CompositionFieldGroupSchema).optional(),
+  /**
+   * R-028 (5.4) — does this template have a NEXT step (a reachable, visible
+   * sequence element)? Derived ONCE at import, the moment the app holds the
+   * unpacked scene, by the canonical `hasNextStep` predicate — the R-011
+   * `defaultPosition` / R-018 `listFieldTargets` precedent.
+   *
+   * It rides `TemplateInfo` — NOT a browser-local store like those two — on
+   * purpose: R-028 made the BRIDGE the catalogue of record, so a bit kept per
+   * browser would light NEXT for the operator who imported and hide it for
+   * everyone else, and would be lost on a bridge restart. On `TemplateInfo` it
+   * is persisted with the registry and identical in every browser.
+   *
+   * Absent means NO next step: the safe direction. An enabled control that can
+   * only no-op is the anti-pattern R-021 stage 2b named, so a template whose
+   * bit predates this field simply does not offer NEXT until re-imported.
+   */
+  hasNext: z.boolean().optional(),
 });
 export type TemplateInfo = z.infer<typeof TemplateInfoSchema>;
 
@@ -82,8 +99,28 @@ export const TemplatesListChannel = defineChannel(
  */
 export const TemplatesImportChannel = defineChannel(
   'templates.import',
-  z.object({ template: TemplateInfoSchema, html: z.string() }),
-  z.object({ registered: z.boolean(), templateId: IdSchema }),
+  z.object({
+    template: TemplateInfoSchema,
+    html: z.string(),
+    /**
+     * R-028 part B — is this a reconnect RE-DELIVERY rather than an operator's
+     * import? A re-delivery means "restore this if you lost it", never
+     * "resurrect it if you dropped it on purpose": the bridge ignores one whose
+     * id it has deliberately REMOVED, and keeps its own copy of an id it
+     * already holds instead of letting an older browser copy overwrite it.
+     *
+     * Absent/false = an operator import, which always wins and clears any
+     * tombstone. The flag is the browser's honest statement about which of the
+     * two it is; the bridge decides what that means.
+     */
+    redelivery: z.boolean().optional(),
+  }),
+  z.object({
+    registered: z.boolean(),
+    templateId: IdSchema,
+    /** True when a re-delivery was deliberately ignored (removed, or already held). */
+    skipped: z.boolean().optional(),
+  }),
 );
 
 /**
