@@ -302,7 +302,28 @@ rescue refs — swept programmatically for the heading pattern), or on disk in a
 working trees — `cg` (main), `cg-designer`, `cg-runtime` (all three clean, 0 dirty files) and
 this session worktree. The only prior occurrence of `B-112` anywhere was THIS file's own "next
 free" pointer — the documented false positive. The highest heading anywhere was `B-111`. The
-space stays contiguous: `B-001` … `B-112`, no gaps. **Next free: `B-113`.**
+space stays contiguous: `B-001` … `B-112`, no gaps. **Next free: `B-113`.** _(superseded — see
+the 2026-07-29 entry below; `B-113` is now taken and the pointer is `B-114`.)_
+
+**Re-audited 2026-07-29** immediately before the commit that writes the heading. `B-113` is now
+taken — ONE runtime bug, [bugs-runtime.md](bugs-runtime.md): **B-113** (R-018's from-file
+control: the chosen source file is lost on every page refresh because `fromFileStore` is a
+module-level `Map` nothing persists, and the delimiter `<datalist>` filters itself down to the
+one option already in the input, hiding the other four until the operator clears the box). Swept
+programmatically for `^## \[.\] B-113` across all 28 refs in this repo — branches, remotes, tags
+and `refs/stash` — after a `git fetch origin`: zero hits, including THIS file, which had only
+ever carried `B-113` as its "next free" pointer. The highest heading anywhere was `B-112`. The
+space stays contiguous: `B-001` … `B-113`, no gaps. **Next free: `B-114`.** _(superseded — see
+the entry below; `B-114` is now taken and the pointer is `B-115`.)_
+
+**Re-audited 2026-07-29 (second mint of the day)** immediately before the commit that writes the
+heading. `B-114` is now taken — ONE runtime bug, [bugs-runtime.md](bugs-runtime.md): **B-114** (a
+bridge restart empties every declared layer row, because `#slotForRestore` re-seats a retained
+fixed coordinate with `reserve()`, which refuses fixed slots by construction). Swept
+programmatically for `^## \[.\] B-114` across all 28 refs in this repo — branches, remotes, tags
+and `refs/stash` — after a `git fetch origin`: zero hits, including THIS file, which had only
+ever carried `B-114` as its "next free" pointer. The highest heading anywhere was `B-113`. The
+space stays contiguous: `B-001` … `B-114`, no gaps. **Next free: `B-115`.**
 
 **Three NON-`B` numbers were claimed in the same commit, recorded here although this file's
 title says B-numbers.** The same sweep was run for them, and there is no other registry to

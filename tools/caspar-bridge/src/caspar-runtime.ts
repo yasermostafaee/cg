@@ -23,6 +23,7 @@ import {
   isLayerVisible,
   type PLAYOUT_CLEAR_REASONS,
   type PlayoutLayerState,
+  type DelimiterOption,
   type ChannelResponse,
   type ConnectionConfig,
   type ConnectionHealth,
@@ -46,6 +47,7 @@ import {
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
 import { TemplateRegistry } from './template-registry.js';
+import { DelimiterStore } from './delimiter-store.js';
 import {
   TemplateHttpServer,
   deriveServeOptions,
@@ -181,6 +183,8 @@ export class CasparRuntime {
   readonly templatesChanged = new Emitter<TemplateInfo[]>();
   /** R-028 part B — emitted ONLY when the declared playout layers' state changes. */
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
+  /** R-034 — emitted with the full delimiter list whenever a browser changes it. */
+  readonly delimitersChanged = new Emitter<DelimiterOption[]>();
 
   // R-010 — mutable: `setConfig` swaps the whole connection layer at runtime.
   #config: ConnectionConfig;
@@ -309,6 +313,8 @@ export class CasparRuntime {
   // hydrated in the constructor so the registry is complete before the
   // WebSocket ever answers a `templates.list`.
   readonly #templates: TemplateRegistry;
+  /** R-034 — the station's delimiter list, persisted beside the templates. */
+  readonly #delimiters: DelimiterStore;
   /**
    * R-028 part B — ids this bridge REMOVED, so a reconnecting browser's
    * re-delivery cannot bring them back. Process-lifetime only, deliberately: a
@@ -408,6 +414,11 @@ export class CasparRuntime {
     // for it; a bridge restart must not empty the library.
     this.#templates = new TemplateRegistry(options.templatesDir);
     this.#templates.loadPersisted();
+    // R-034 — same shape, same reason: the delimiter list is read from disk
+    // before the WebSocket can answer a `delimiters.list`, so a bridge restart
+    // never hands a browser the defaults over the operator's own list.
+    this.#delimiters = new DelimiterStore(options.templatesDir);
+    this.#delimiters.hydrate();
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
@@ -959,7 +970,13 @@ export class CasparRuntime {
           played: item.played,
         }) === null
       ) {
-        this.#layers.deallocate(slot);
+        // B-114 — release by the SAME door the slot was taken through.
+        // `deallocate` returns early for a fixed slot on purpose (it must keep
+        // the fence), so using it alone here would leave the row bound to an
+        // item the reconciler just refused — a permanently occupied row holding
+        // nothing, which no verb can clear.
+        if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
+        else this.#layers.deallocate(slot);
         skipped++;
         continue;
       }
@@ -1018,7 +1035,25 @@ export class CasparRuntime {
       // exhausted-range case; the survivor is the playout team's to deal with.
       if (this.#reservedSet.has(item.slot.layer)) return null;
       const slot = { channel: item.slot.channel, layer: item.slot.layer };
-      if (this.#layers.reserve(slot, item.templateId)) return slot;
+      // B-114 — a retained coordinate inside the DECLARED BANK is re-bound with
+      // `bindFixed`, not `reserve`.
+      //
+      // `reserve()` refuses a fixed slot BY CONSTRUCTION (a fixed slot is born
+      // allocated, so it is never "free" to reserve). Falling through to
+      // `#allocate()` for one is wrong twice over: it re-homes the operator's
+      // row onto some dynamic layer, and for a `custom` template type that
+      // range IS the reserved playout range, so allocation throws and the item
+      // is SKIPPED entirely. Either way `fixedBinding` is never recorded, so
+      // after a bridge restart every declared row published `binding: null` —
+      // the operator's templates vanished from the surface, and the rows also
+      // refused a fresh LOAD because their occupancy is `unknown` until OSC
+      // arrives. The row was left with nothing on it and no way to fill it.
+      //
+      // The bound value is the REGISTRY's `templateType`, resolved exactly as
+      // `fixedLoad` resolves it — the row reads this straight back out as its
+      // label, so binding the raw id here would restore the row under a UUID.
+      const templateType = this.#templates.get(item.templateId)?.templateType ?? item.templateId;
+      if (this.#layers.bindFixed(slot, templateType)) return slot;
     }
     try {
       return this.#allocate(item.templateId);
@@ -2407,6 +2442,28 @@ export class CasparRuntime {
     if (action !== undefined) rows = rows.filter((r) => r.action === action);
     if (actor !== undefined) rows = rows.filter((r) => r.actor === actor);
     return rows.slice(0, limit);
+  }
+
+  /** R-034 — the station's split delimiters (disk-persisted, shared by every browser). */
+  delimitersList(): DelimiterOption[] {
+    return this.#delimiters.list();
+  }
+
+  /**
+   * Replace the delimiter list. The STORE decides whether the list is allowed
+   * and supplies the operator-facing reason — the R-005 removal shape — so the
+   * refusal cannot differ between the two browsers that might attempt it.
+   */
+  delimitersSet(delimiters: readonly DelimiterOption[]): {
+    ok: boolean;
+    reason?: 'empty-list' | 'duplicate-value';
+    message?: string;
+  } {
+    const refusal = this.#delimiters.set(delimiters);
+    if (refusal !== null) return { ok: false, reason: refusal.reason, message: refusal.message };
+    // Every connected browser converges, the `templates.changed` precedent.
+    this.delimitersChanged.emit(this.#delimiters.list());
+    return { ok: true };
   }
 
   settingsGet(): Settings {

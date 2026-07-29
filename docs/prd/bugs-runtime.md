@@ -2447,3 +2447,92 @@ violation. It protects a surviving producer but resurrects a cleared one.
 - **Reproduction is MANUAL** (no automated reproduction exists): load a graphic, take it, CLEAR it
   (leaving the idle row on the stack), then kill and restart the bridge — the producer is re-ADDed
   onto its layer and the row returns READY.
+
+## [ ] B-113 — a field's chosen source FILE is lost on every page refresh, and the delimiter list hides four of its five options behind a text input the operator must first clear ⟨priority: high⟩
+
+**What:** two defects in R-018's "from file" affordance, both reported by the owner from live
+use, both in the same control:
+
+1. **The chosen file does not survive a refresh.** `fromFileStore.ts` keeps the attachment in a
+   module-level `Map` (`const entries = new Map<string, FromFileState>()`), keyed by
+   `itemId + fieldPath`. Nothing writes it to `localStorage`, OPFS or IndexedDB and nothing
+   sends it over the bridge, so a page reload — which an operator does routinely, and which the
+   SPA also does on its own after certain recoveries — drops every attachment silently. The
+   field keeps its last applied VALUE, so nothing looks broken; the operator only discovers the
+   loss when Reload is gone and the file must be picked again mid-programme. (A bridge
+   disconnect/reconnect is NOT affected — the store is never cleared on link change and item
+   ids are stable across it — but the owner reported both together and both must hold.)
+
+2. **The delimiter list is invisible until the input is cleared.** The control is a free-text
+   `<input>` backed by a `<datalist>` (`FromFileControl.tsx`), initialised to `DEFAULT_DELIMITER`
+   = `\n`. A `<datalist>` FILTERS its options against the input's current value, so with `\n`
+   already in the box the only matching option is "new line" — pipe, Persian comma, comma and
+   semicolon are all filtered out. The operator must delete the input's contents to discover
+   that four other delimiters exist, and a plain text input carries no dropdown affordance to
+   suggest they do. Worse, the popup renders the option's raw `value`, so what is offered reads
+   as the escape sequence `\n` rather than "new line".
+
+**Why:** (1) is data loss in an operational surface — the whole point of a file source is that
+the operator stops hand-typing content, and an attachment that evaporates on refresh returns them
+to hand-typing at the worst moment. (2) is a discoverability failure that makes the feature look
+like it supports one delimiter: the Persian comma entry exists precisely because Persian content
+needs it, and a Persian operator cannot find it. The control is also free-text where it should not
+be — a delimiter typed by hand is a way to produce a split nobody intended.
+
+**Acceptance:**
+
+- A field's file attachment (the handle, the split flag and the delimiter) survives a page
+  refresh: after reload the field still names its file and still offers Reload.
+- Where the browser cannot restore READ permission without a gesture, the restored attachment
+  says so plainly and offers the gesture — it never silently presents an unreadable file as
+  attached, and never reads stale content in place of the file.
+- A field's file attachment survives a bridge disconnect and reconnect.
+- The delimiter control presents ALL configured delimiters at once, by NAME, with no typing
+  required and no filtering step.
+- The delimiter control cannot be free-typed.
+
+## [x] B-114 — a bridge RESTART empties every declared row and leaves it unable to accept a new load: `#slotForRestore` re-seats a retained fixed coordinate with `reserve()`, which refuses fixed slots by construction ⟨priority: high⟩
+
+**What:** restart the bridge process and every declared layer row loses the template on it —
+the row publishes `binding: null`, so the operator's loaded graphics simply disappear from the
+surface — AND the row's LOAD button is disabled, so nothing can be put back. Reported by the
+owner from live use; reproduced in an integration test against a real AMCP mock, where the
+restored row's binding is `null` (`fixed-layers-load.integration.test.ts`, the B-114 case).
+
+Two mechanisms combine, and only one of them is a defect:
+
+1. **The defect.** `restore()` → `#slotForRestore` re-seats a retained coordinate with
+   `this.#layers.reserve(slot, …)`. `LayerManager.reserve()` returns `false` for a FIXED slot by
+   construction — a fixed slot is born allocated, so it is never "free" to reserve, and
+   `bindFixed` is the only door onto one (`fixedLoad` uses it; its comment says exactly this).
+   The retained item therefore fell through to `#allocate()`, which either re-homed the
+   operator's row onto some dynamic layer or, for a `custom` template type — whose range IS the
+   reserved playout range — threw, so the item was SKIPPED entirely ([[B-108]]'s drop path).
+   Neither branch records a `fixedBinding`, and `fixedLayersState` reads `binding` straight off
+   `LayerManager.fixedBinding`, so every row published `null`.
+
+2. **Correct behaviour that made it unrecoverable.** A freshly restarted bridge has heard no OSC
+   yet, so each row's occupancy is `unknown`, and R-028 part B's load gate refuses a load onto
+   anything not observably `empty` (fail closed — an unbound row can still be carrying a live
+   graphic, [[B-093]]). That is right on its own. Combined with (1) the operator got a row that
+   showed nothing and could do nothing.
+
+**Why:** the operator's layer assignments are the whole operator surface. Losing them on a
+restart is the [[B-092]] failure one level up: B-092 made the stack survive a bridge restart, and
+this is the same promise broken for the row a stack item was assigned to.
+
+**Fix (shipped):** `#slotForRestore` re-binds a retained coordinate that is a fixed slot through
+`bindFixed`, using the registry's own `templateType` exactly as `fixedLoad` resolves it (binding
+the raw `templateId` would restore the row under a UUID). `reserve()` is still tried first and
+still correctly handles every dynamic coordinate. The rollback path releases by the same door it
+took: `deallocate` returns early for a fixed slot on purpose (it must keep the fence), so a
+refused `restoreItem` now calls `unbindFixed` instead — otherwise a failed restore left the row
+bound to an item that does not exist, occupied forever and clearable by nothing.
+
+**Acceptance:**
+
+- After a bridge restart, an item retained on a declared row is bound to THAT row again, named
+  by the registry's template type.
+- The item's slot is its own row's coordinate — never re-homed into the dynamic pool.
+- No other declared row is disturbed.
+- A restore the reconciler refuses leaves the row UNBOUND, not stuck.
