@@ -29,3 +29,9 @@ apps/designer/src/generated/
 # Generated harness output — written to cwd by @cg/caspar-amcp-probe (C-001 Phase 3b)
 caspar-amcp-probe-*.results.json
 caspar-amcp-probe-*.wire.ndjson
+
+# Committed capture evidence — raw tool output, kept byte-identical to what the
+# tool emitted. Formatting it would edit the record: prettier appends a trailing
+# newline and collapses short arrays onto one line, so the committed file stops
+# being the artifact the run produced.
+tools/*/evidence/**
