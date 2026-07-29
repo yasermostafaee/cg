@@ -171,9 +171,13 @@ describe('fixedLayersReasonMessage — one sentence per validator code', () => {
       'overlaps-policy',
       'overlaps-reserved',
       'alias-out-of-bank',
+      'visibility-out-of-bank',
       'renumber-refused',
       'channel-change-refused',
-      'shrink-occupied',
+      // R-028 — the fixed ceiling + the fail-closed untick pair.
+      'resize-refused',
+      'untick-occupied',
+      'untick-unknown',
     ]) {
       const message = fixedLayersReasonMessage(reason);
       expect(message, reason).not.toBeNull();

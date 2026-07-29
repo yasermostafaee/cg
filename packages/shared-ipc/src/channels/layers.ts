@@ -47,6 +47,13 @@ export const LayersOrphansChangedChannel = definePublishChannel(
  * never be able to clear a video layer, from any caller — this refusal is
  * the prohibition, not the UI's missing button. The warning resolves on the
  * next sweep's observed empty — never optimistically.
+ *
+ * R-028 / C-015 — refused with `reason: 'reserved'` for a layer in the
+ * DECLARED playout range. OSC cannot distinguish a playout html graphic from
+ * ours — that indistinguishability is exactly why the reservation exists in
+ * config — so config is the identity, and clearing a reserved layer must be
+ * impossible from ANY caller: it would take the company's playout output off
+ * air.
  */
 export const LayersClearChannel = defineChannel(
   'layers.clear',
@@ -56,7 +63,7 @@ export const LayersClearChannel = defineChannel(
   }),
   z.object({
     ok: z.boolean(),
-    reason: z.enum(['owned', 'foreign', 'amcp-error']).optional(),
+    reason: z.enum(['owned', 'foreign', 'reserved', 'amcp-error']).optional(),
   }),
 );
 

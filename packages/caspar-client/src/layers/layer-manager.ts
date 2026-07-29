@@ -63,6 +63,15 @@ export interface LayerManagerOptions {
    * ({@link FixedPinnedConflictError}) — conflicts resolve loudly at startup.
    */
   fixed?: readonly LayerSlot[];
+  /**
+   * R-028 / C-015 — layer NUMBERS reserved for the playout system, fenced on
+   * EVERY channel: `allocate()` never returns one and `reserve()` refuses one
+   * (a restore must never put our graphic back onto a playout layer, even if
+   * its retained coordinate predates the reservation). Config-declared, never
+   * inferred from the wire — a playout graphic and one of ours are
+   * indistinguishable there (OSC reports producer kind, not identity).
+   */
+  reservedLayers?: readonly number[];
 }
 
 export interface LayerManagerEvents {
@@ -137,11 +146,14 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
    * (live bank changes, stage 2a).
    */
   private readonly fixed: Map<string, LayerSlot>;
+  /** R-028 / C-015 — reserved playout layer numbers (channel-agnostic fence). */
+  private readonly reservedLayers: ReadonlySet<number>;
   private readonly slots = new Map<string, SlotState>();
 
   constructor(options: LayerManagerOptions = {}) {
     super();
     this.policy = options.policy ?? DEFAULT_LAYER_POLICY;
+    this.reservedLayers = new Set(options.reservedLayers ?? []);
     const pinnedEntries: [string, PinnedSlot][] = [];
     for (const p of options.pinned ?? []) {
       pinnedEntries.push([keyOf(p), p]);
@@ -176,6 +188,10 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
     // past, so an exhausted range can say WHY it is exhausted.
     let quarantinedInRange = 0;
     for (let layer = low; layer <= high; layer++) {
+      // R-028 / C-015 — a reserved playout layer is never an allocation
+      // candidate, whatever the policy range says (the default policy's
+      // `custom` 60–69 is exactly where the playout split lives).
+      if (this.reservedLayers.has(layer)) continue;
       const slot = { channel, layer };
       const state = this.slots.get(keyOf(slot));
       if (state === undefined || state.status === 'free') {
@@ -208,6 +224,10 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
   reserve(slot: LayerSlot, templateType: string): boolean {
     const key = keyOf(slot);
     if (this.fixed.has(key)) return false;
+    // R-028 / C-015 — a retained coordinate that now sits in the reserved
+    // playout range is refused: honouring it would put our graphic onto a
+    // layer the playout system owns.
+    if (this.reservedLayers.has(slot.layer)) return false;
     const state = this.slots.get(key);
     if (state !== undefined && state.status !== 'free') return false;
     this.slots.set(key, { status: 'allocated', templateType });

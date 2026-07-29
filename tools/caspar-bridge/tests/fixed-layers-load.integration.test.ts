@@ -101,8 +101,14 @@ it('an exact-slot load lands the CG ADD on THAT layer and publishes the binding'
   }
 
   // …and the published binding names the item + the REGISTRY's template type
-  // (not the id) — a value only `bindFixed` can put on a fixed slot.
-  expect(slotState(r, 72)?.binding).toEqual({ itemId: 'item-clock', templateType: 'clock' });
+  // (not the id) — a value only `bindFixed` can put on a fixed slot. R-028
+  // (3.1): the bridge also resolves WHICH template is on the row, so every
+  // browser reads the same identity.
+  expect(slotState(r, 72)?.binding).toEqual({
+    itemId: 'item-clock',
+    templateType: 'clock',
+    templateId: 'tpl-clock',
+  });
   expect(r.fixedLayersState().filter((s) => s.binding !== null)).toHaveLength(1);
   // The binding is PUBLISHED, not merely readable — the row learns about it.
   expect(published.some((s) => s.find((x) => x.layer === 72)?.binding !== null)).toBe(true);
@@ -159,7 +165,11 @@ it('refuses a coordinate outside the bank, an unregistered template, and an occu
     errorCode: 'slot-bound',
   });
   // The refused second load did NOT disturb the resident item's binding.
-  expect(slotState(r, 72)?.binding).toEqual({ itemId: 'item-d', templateType: 'clock' });
+  expect(slotState(r, 72)?.binding).toEqual({
+    itemId: 'item-d',
+    templateType: 'clock',
+    templateId: 'tpl-clock',
+  });
 });
 
 it('Remove drops the binding but KEEPS the fence — the slot is re-loadable, never allocatable', async () => {
@@ -179,5 +189,9 @@ it('Remove drops the binding but KEEPS the fence — the slot is re-loadable, ne
   expect(
     (await r.loadFixed({ channel: 1, layer: 71 }, 'item-second', 'tpl-clock', {})).accepted,
   ).toBe(true);
-  expect(slotState(r, 71)?.binding).toEqual({ itemId: 'item-second', templateType: 'clock' });
+  expect(slotState(r, 71)?.binding).toEqual({
+    itemId: 'item-second',
+    templateType: 'clock',
+    templateId: 'tpl-clock',
+  });
 });

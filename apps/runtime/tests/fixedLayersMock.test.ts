@@ -59,9 +59,12 @@ describe('MockRuntime fixed-bank parity (S12)', () => {
     expect(res.accepted).toBe(true);
 
     const state = z.array(FixedSlotStateSchema).parse(await bridge.fixedLayers.state());
-    expect(state.find((s) => s.layer === 72)?.binding).toEqual({
+    // R-028 (3.1) — the binding carries WHICH template is on the row (id +
+    // display name when it has one), the same join the bridge does.
+    expect(state.find((s) => s.layer === 72)?.binding).toMatchObject({
       itemId: 'item-fixed-1',
       templateType: template.templateType,
+      templateId: template.templateId,
     });
     // Every OTHER slot is untouched — the load landed on one coordinate.
     expect(state.filter((s) => s.binding !== null)).toHaveLength(1);

@@ -88,6 +88,21 @@ export class CommandBuilder {
     return `CG ${target(slot)} STOP ${String(FLASH_LAYER)}`;
   }
 
+  /**
+   * R-028 (owner call o2) — advance the template's sequence: `CG NEXT`.
+   *
+   * The capability has existed template-side all along — the exporter sets
+   * `window.next`, `next()` is a CasparCG global, and `runtime.next()`
+   * dispatches to the sequence drivers — but the bridge could never SEND it:
+   * this builder had no NEXT verb, so the wire gap made the whole feature
+   * unreachable. The verb lands here (the single AMCP construction seam);
+   * the channel/UI wiring is R-028 part B, gated on the import-derived
+   * `hasNext` bit so an enabled control can never be a no-op.
+   */
+  next(slot: CommandSlot): string {
+    return `CG ${target(slot)} NEXT ${String(FLASH_LAYER)}`;
+  }
+
   /** Hard-out: clear the slot. DESTROYS the producer — contrast `stop()`. */
   out(slot: CommandSlot): string {
     return `CLEAR ${target(slot)}`;

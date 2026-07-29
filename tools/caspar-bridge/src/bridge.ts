@@ -40,6 +40,7 @@ import {
   StackStateChangedChannel,
   StackTakeChannel,
   StackUpdateChannel,
+  TemplatesChangedChannel,
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
@@ -50,10 +51,12 @@ import {
   UpdateStateChannel,
   parseWsFrame,
   serializeWsFrame,
+  reservedLayerNumbers,
   type AnyChannel,
   type AnyPublishChannel,
   type ConnectionConfig,
   type FixedLayerBank,
+  type ReservedLayers,
   type WsPublishFrame,
   type WsResponseFrame,
 } from '@cg/shared-ipc';
@@ -61,6 +64,7 @@ import { DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
 import { CasparRuntime } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import { loadFixedLayerBank, saveFixedLayerBank, validateFixedBank } from './fixed-layers-store.js';
+import { loadReservedLayers } from './reserved-layers-store.js';
 import type { TemplateServeOverride } from './template-http-server.js';
 
 export interface BridgeOptions {
@@ -98,6 +102,26 @@ export interface BridgeOptions {
    * warn-and-ignore).
    */
   fixedLayersPath?: string;
+  /**
+   * R-028 / C-015 — the RESERVED playout layers, explicit. Precedence mirrors
+   * the fixed bank: explicit option > persisted file > nothing reserved.
+   * Validated against the fixed bank at boot; fenced from allocation for the
+   * life of the process.
+   */
+  reservedLayers?: ReservedLayers;
+  /**
+   * R-028 / C-015 — where the reserved playout layers load from (JSON). An
+   * ABSENT file means nothing reserved; a PRESENT-but-unusable file is a HARD
+   * boot failure (`reserved-layers-store.ts` — a silently-dropped reservation
+   * would let our graphics land on the company's playout layers).
+   */
+  reservedLayersPath?: string;
+  /**
+   * R-028 (o1) — where the bridge's template registry persists (one JSON file
+   * per template). Absent = in-memory only; a bridge restart then empties the
+   * library exactly as before.
+   */
+  templatesDir?: string;
   /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
@@ -184,19 +208,34 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   // ONCE and the SAME object goes to both the validator and the LayerManager —
   // never two copies of the policy.
   const layerPolicy = DEFAULT_LAYER_POLICY;
+  // R-028 / C-015 — the reserved playout layers, from REAL config (explicit >
+  // persisted file > nothing). Resolved ONCE; the SAME list goes to the boot
+  // validator, every live-change validation, and the LayerManager's
+  // allocation fence — never re-derived.
+  const reserved =
+    options.reservedLayers ??
+    (options.reservedLayersPath !== undefined
+      ? loadReservedLayers(options.reservedLayersPath)
+      : null);
+  const reservedLayers =
+    reserved !== null && reserved !== undefined ? reservedLayerNumbers(reserved) : [];
   const fixedBank =
     options.fixedLayers ??
     (options.fixedLayersPath !== undefined ? loadFixedLayerBank(options.fixedLayersPath) : null);
   const fixedSlots =
     fixedBank !== null && fixedBank !== undefined
-      ? // reservedLayers is the C-015 Live Source seam: empty until that item
-        // lands its layer plan, which will be threaded through here.
-        validateFixedBank(fixedBank, { policy: layerPolicy, reservedLayers: [] })
+      ? // R-028 (2.5) — the candidate ceiling must never intersect the
+        // reserved playout range: refused HERE at load, and again at every
+        // change (`setFixedLayers` reads the same list). A violation throws
+        // BEFORE the WebSocket binds — conflicts resolve loudly at startup.
+        validateFixedBank(fixedBank, { policy: layerPolicy, reservedLayers })
       : [];
   const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
     fixedSlots,
     layerPolicy,
+    reservedLayers,
     ...(fixedBank !== null && fixedBank !== undefined ? { fixedBank } : {}),
+    ...(options.templatesDir !== undefined ? { templatesDir: options.templatesDir } : {}),
     ...(options.runtimeTuning ?? {}),
   });
   const routes = buildRoutes(runtime, options.persistPath, options.fixedLayersPath);
@@ -334,6 +373,8 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     // R-021 stage 2a — fixed-bank config + per-slot state.
     backing.fixedConfigChanged.subscribe((c) => push(FixedLayersConfigChangedChannel, c)),
     backing.fixedStateChanged.subscribe((s) => push(FixedLayersStateChangedChannel, s)),
+    // R-028 (o1) — the bridge-owned template catalogue.
+    backing.templatesChanged.subscribe((t) => push(TemplatesChangedChannel, t)),
   ];
 }
 

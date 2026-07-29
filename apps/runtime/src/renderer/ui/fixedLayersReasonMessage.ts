@@ -20,13 +20,19 @@ const MESSAGES = {
   'overlaps-policy':
     'The bank would overlap a dynamic template-type range — the two must stay disjoint.',
   'overlaps-reserved':
-    'The bank would overlap a reserved (Live Source) layer — the two must stay disjoint.',
+    'The candidate layers would overlap the reserved playout range — the two must stay disjoint.',
   'alias-out-of-bank': 'An alias names a layer outside the bank.',
+  'visibility-out-of-bank': 'A visibility tick names a layer outside the bank.',
   'renumber-refused': 'The bank’s start layer cannot move mid-session — it is fixed at install.',
   'channel-change-refused':
     'The bank’s channel cannot change mid-session — it is fixed at install.',
-  'shrink-occupied':
-    'The bank cannot shrink while the removed slots hold a resident item — clear them first.',
+  // R-028 — the ceiling is fixed at install; ticks + aliases are the live surface.
+  'resize-refused':
+    'The number of candidate layers cannot change mid-session — edit the bridge’s fixed-layers config and restart it.',
+  'untick-occupied':
+    'That row is occupied — remove its template first (removal implies clear), then untick.',
+  'untick-unknown':
+    'That row’s occupancy cannot be verified right now — unknown is never treated as empty, so the row cannot be hidden.',
 } satisfies Record<FixedLayersSetConfigReason, string>;
 
 /**

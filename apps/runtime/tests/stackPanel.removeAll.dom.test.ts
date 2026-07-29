@@ -43,7 +43,7 @@ function stubBridge(
     // R-006 — StackRow + the header bulk actions mirror the connection refusal.
     link: { status: () => link, onStatusChanged: () => () => undefined },
     // R-004 — the panel joins each row against the registry to label its template.
-    templates: { list: () => Promise.resolve([]) },
+    templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     stack: {
       snapshot: () => Promise.resolve(stack),
       onStateChanged: () => () => undefined,
@@ -142,7 +142,7 @@ describe('StackPanel Remove-All — R-010', () => {
           return () => listeners.delete(h);
         },
       },
-      templates: { list: () => Promise.resolve([]) },
+      templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
       stack: {
         snapshot: () => Promise.resolve(items(2)),
         onStateChanged: () => () => undefined,

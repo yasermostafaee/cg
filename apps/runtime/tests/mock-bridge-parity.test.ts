@@ -114,7 +114,8 @@ const BRIDGE_SURFACE: {
     ],
     layers: ['orphans', 'clear', 'onOrphansChanged', 'ownedOccupancy', 'onOwnedOccupancyChanged'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
-    templates: ['get', 'list', 'import', 'remove'],
+    // R-028 (o1) — `onChanged`: the bridge-owned catalogue push.
+    templates: ['get', 'list', 'import', 'remove', 'onChanged'],
     audit: ['recent'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
     settings: ['get', 'set', 'onChanged'],

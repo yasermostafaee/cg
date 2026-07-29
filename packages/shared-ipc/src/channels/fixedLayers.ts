@@ -21,12 +21,75 @@ export const FixedLayerBankSchema = z.object({
   channel: z.number().int().positive(),
   /** First layer of the bank. Immutable mid-session (validator-enforced). */
   start: z.number().int().positive().default(70),
-  /** Bank size. Extendable ONLY at the end; the 89 layer ceiling is validator-enforced. */
-  count: z.number().int().min(1).max(20).default(10),
+  /**
+   * R-028 — the FIXED CEILING of candidate layers. Immutable mid-session
+   * (validator-enforced: `resize-refused`); changing it means editing the
+   * persisted install config and restarting the bridge. The 89 layer ceiling
+   * is validator-enforced. Replaces R-021's mutable, grow-at-end `count`.
+   */
+  count: z.number().int().min(1).max(30).default(10),
   /** Optional display aliases, keyed by layer number (as a numeric string). */
   aliases: z.record(z.string().regex(/^\d+$/), z.string().min(1)).optional(),
+  /**
+   * R-028 — per-layer visibility ticks, keyed by layer number (as a numeric
+   * string). An ABSENT key means VISIBLE (the default). Visibility controls
+   * ONLY whether the row is DISPLAYED: every candidate layer stays fenced
+   * from automatic allocation regardless of its tick (fencing derives from
+   * `start`/`count`, never from this record), and unticking an occupied — or
+   * unknown-occupancy — layer is refused by the validator (fail closed).
+   */
+  visibility: z.record(z.string().regex(/^\d+$/), z.boolean()).optional(),
 });
 export type FixedLayerBank = z.infer<typeof FixedLayerBankSchema>;
+
+/**
+ * R-028 — THE canonical visibility predicate: is this candidate layer's row
+ * displayed? An absent `visibility` entry means VISIBLE. Bridge validator and
+ * renderer both read THIS function — a second local copy of the default is how
+ * "absent means visible" would drift.
+ */
+export function isLayerVisible(bank: FixedLayerBank, layer: number): boolean {
+  return bank.visibility?.[String(layer)] !== false;
+}
+
+/**
+ * R-028 / C-015 — the RESERVED playout layers: the layer numbers the
+ * company's playout system owns (it binds templates to playlist videos and
+ * drives them over AMCP directly). Declared as inclusive ranges in install
+ * config; NEVER inferred from the wire (OSC reports producer kind, not
+ * identity, so a playout graphic and one of ours are indistinguishable
+ * there). The candidate ceiling must never intersect these layers —
+ * validator-enforced at load and at every change (`overlaps-reserved`) — and
+ * automatic allocation is fenced off them entirely.
+ */
+/**
+ * Upper bound for a declared reserved layer. CasparCG layers in practice sit
+ * well under 1000; the cap exists so a typo'd range (`{ from: 0, to: 2e9 }`)
+ * is a LEGIBLE schema refusal at boot, never an out-of-memory expansion.
+ */
+export const MAX_RESERVED_LAYER = 9999;
+
+export const ReservedLayersSchema = z.object({
+  /** Inclusive reserved ranges, e.g. `[{ "from": 60, "to": 69 }]`. */
+  ranges: z.array(
+    z
+      .object({
+        from: z.number().int().nonnegative().max(MAX_RESERVED_LAYER),
+        to: z.number().int().nonnegative().max(MAX_RESERVED_LAYER),
+      })
+      .refine((r) => r.to >= r.from, { message: '`to` must be >= `from`' }),
+  ),
+});
+export type ReservedLayers = z.infer<typeof ReservedLayersSchema>;
+
+/** Expand the declared reserved ranges to a flat, de-duplicated layer list. */
+export function reservedLayerNumbers(reserved: ReservedLayers): number[] {
+  const out = new Set<number>();
+  for (const { from, to } of reserved.ranges) {
+    for (let layer = from; layer <= to; layer++) out.add(layer);
+  }
+  return [...out].sort((a, b) => a - b);
+}
 
 /**
  * R-021 stage 2a — the validator's refusal codes, as ONE shared const so the
@@ -39,9 +102,20 @@ export const FIXED_LAYERS_SET_CONFIG_REASONS = [
   'overlaps-policy',
   'overlaps-reserved',
   'alias-out-of-bank',
+  'visibility-out-of-bank',
   'renumber-refused',
   'channel-change-refused',
-  'shrink-occupied',
+  // R-028 — the ceiling is FIXED at install: grow and shrink are BOTH refused
+  // mid-session (replaces R-021's grow-at-end allowance and its
+  // `shrink-occupied` rule, which only a mutable count needed).
+  'resize-refused',
+  // R-028 — unticking a row is refused while its layer is OCCUPIED (a bound
+  // item, retained intent, or an observed producer) …
+  'untick-occupied',
+  // … AND while its occupancy is UNKNOWN (no healthy primary / no fresh OSC).
+  // Fail closed: unknown is never treated as empty — hiding a row that may be
+  // on air would leave the operator no surface for a live graphic.
+  'untick-unknown',
 ] as const;
 
 /**
@@ -80,7 +154,28 @@ export const FixedSlotStateSchema = z.object({
    */
   binding: z.union([
     z.null(),
-    z.object({ itemId: z.string().min(1), templateType: z.string().min(1) }),
+    z.object({
+      itemId: z.string().min(1),
+      templateType: z.string().min(1),
+      /**
+       * R-028 (3.1) — WHICH template is on this row, resolved by the BRIDGE
+       * (the item's `templateId` joined with its own registry), so every
+       * browser gets the same answer — an item another browser loaded is not
+       * foreign. Optional and additive: absent when the bridge cannot
+       * establish identity (e.g. after ITS restart, until the item is
+       * reloaded) — absence is the honest "unknown", never a guess.
+       */
+      templateId: z.string().min(1).optional(),
+      /**
+       * The registry's raw manifest/scene name for `templateId`, when it has
+       * one. RAW facts, not a resolved label: the renderer resolves the
+       * display label with its ONE canonical rule (`templateDisplayName` —
+       * file name first, then this), never a second bridge-side copy.
+       */
+      templateName: z.string().min(1).optional(),
+      /** The imported `.vcg` file name, verbatim (display resolution input). */
+      sourceFileName: z.string().min(1).optional(),
+    }),
   ]),
 });
 export type FixedSlotState = z.infer<typeof FixedSlotStateSchema>;

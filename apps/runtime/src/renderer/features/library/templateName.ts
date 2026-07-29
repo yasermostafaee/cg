@@ -62,6 +62,20 @@ export function pickTemplateName(
 }
 
 /**
+ * The ONE priority rule over the raw naming facts, for callers that hold them
+ * without a full `TemplateInfo` — R-028's fixed-row binding carries
+ * `{ templateName, sourceFileName }` over the wire precisely so the label is
+ * resolved HERE, never by a second bridge-side copy of this rule.
+ * `undefined` when neither fact is usable (the caller picks its fallback).
+ */
+export function displayLabel(parts: {
+  name?: string | undefined;
+  sourceFileName?: string | undefined;
+}): string | undefined {
+  return cleanFileName(parts.sourceFileName) ?? usable(parts.name);
+}
+
+/**
  * What the operator reads for a registered template, on EVERY surface — the Library card,
  * the stack row, the Inspector header.
  *
@@ -69,5 +83,5 @@ export function pickTemplateName(
  * words; showing a UUID as a label is the bug this replaced.
  */
 export function templateDisplayName(template: TemplateInfo): string {
-  return cleanFileName(template.sourceFileName) ?? usable(template.name) ?? 'Unnamed template';
+  return displayLabel(template) ?? 'Unnamed template';
 }

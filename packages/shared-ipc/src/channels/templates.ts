@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CompositionFieldGroupSchema, DynamicFieldSchema, IdSchema } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
+import { definePublishChannel } from '../publish.js';
 
 /**
  * Templates channels (Phase 7 §3 / Phase 8 M7.2). The Runtime's
@@ -10,7 +11,7 @@ import { defineChannel } from '../channel.js';
  * to expose that schema to the Renderer.
  */
 
-const TemplateInfoSchema = z.object({
+export const TemplateInfoSchema = z.object({
   templateId: IdSchema,
   /**
    * R-004 — the human-readable display name (the `.vcg` manifest's `name`; a bundled
@@ -110,4 +111,16 @@ export const TemplatesRemoveChannel = defineChannel(
     reason: z.enum(['in-use', 'unknown-template']).optional(),
     message: z.string().optional(),
   }),
+);
+
+/**
+ * R-028 (o1) — the BRIDGE owns the template catalogue. Pushed with the full
+ * catalogue whenever it changes (an import or a removal), so every connected
+ * browser converges on the same library without polling: operator B's Library
+ * re-lists the moment operator A imports. Full snapshot, not deltas — the
+ * `stack.state-changed` precedent, and what makes a missed frame harmless.
+ */
+export const TemplatesChangedChannel = definePublishChannel(
+  'templates.changed',
+  z.array(TemplateInfoSchema),
 );

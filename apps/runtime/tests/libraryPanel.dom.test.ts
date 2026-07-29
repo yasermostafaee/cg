@@ -65,8 +65,12 @@ function stubBridge(templates: TemplateInfo[], removeResult: RemoveResult = { ok
       list: () => Promise.resolve([...live]),
       import: () => Promise.resolve({ registered: true, templateId: 'x' }),
       remove: removeSpy,
+      // R-028 (o1) — the panel subscribes to the bridge catalogue push.
+      onChanged: () => () => undefined,
     },
     stack: { load: () => Promise.resolve({ accepted: true }) },
+    // R-028 — the panel ties its list pull to the link (B-080 rule).
+    link: { status: () => 'offline-mock', onStatusChanged: () => () => undefined },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
 }

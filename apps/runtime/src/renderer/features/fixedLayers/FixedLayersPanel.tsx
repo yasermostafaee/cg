@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isLayerVisible } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { appShell } from '../../layout.js';
@@ -53,11 +54,29 @@ export function FixedLayersPanel(): JSX.Element | null {
         </Button>
       </header>
       <div style={styles.list}>
-        {slots.map((slot) => (
-          <FixedRow key={slot.layer} slot={slot} />
-        ))}
+        {/* R-028 — visibility is DISPLAY-ONLY: an unticked layer is filtered
+            from the panel here, and nowhere else. Fencing never reads it.
+            HONESTY OVERRIDE: a row that is BOUND or shows an observed
+            producer stays visible even unticked — hiding it would remove the
+            only operator surface for something that is (or may be) on that
+            layer (fixed slots are excluded from the orphan sweep, so no other
+            surface would ever name it). Reachable via a persisted hidden tick
+            plus a later exact-slot load, which visibility deliberately does
+            not gate. */}
+        {slots
+          .filter(
+            (slot) =>
+              isLayerVisible(bank, slot.layer) ||
+              slot.binding !== null ||
+              slot.observed.kind === 'producer',
+          )
+          .map((slot) => (
+            <FixedRow key={slot.layer} slot={slot} />
+          ))}
       </div>
-      {configOpen && <FixedBankConfigModal bank={bank} onClose={() => setConfigOpen(false)} />}
+      {configOpen && (
+        <FixedBankConfigModal bank={bank} slots={slots} onClose={() => setConfigOpen(false)} />
+      )}
     </section>
   );
 }

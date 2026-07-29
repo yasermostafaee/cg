@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   FIXED_LAYERS_SET_CONFIG_REASONS,
+  FixedLayerBankSchema,
   FixedLayersSetConfigChannel,
   FixedSlotStateSchema,
+  ReservedLayersSchema,
+  isLayerVisible,
+  reservedLayerNumbers,
 } from '../src/index.js';
 
 /**
@@ -51,6 +55,72 @@ describe('FixedSlotState (S1)', () => {
     });
     expect(parsed.alias).toBe('ساعت');
     expect(parsed.binding).toEqual({ itemId: 'item-1', templateType: 'clock' });
+  });
+
+  it('R-028 (3.1) — the binding carries optional template identity, and absence stays valid', () => {
+    const withIdentity = FixedSlotStateSchema.parse({
+      ...base,
+      observed: { kind: 'producer', producer: 'html' },
+      binding: {
+        itemId: 'item-1',
+        templateType: 'clock',
+        templateId: 'tpl-1',
+        templateName: 'ساعت اذان',
+      },
+    });
+    expect(withIdentity.binding).toMatchObject({ templateId: 'tpl-1', templateName: 'ساعت اذان' });
+    // Absent identity is the honest post-restart shape — never required.
+    expect(
+      FixedSlotStateSchema.safeParse({
+        ...base,
+        observed: { kind: 'producer', producer: 'html' },
+        binding: { itemId: 'item-1', templateType: 'clock' },
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe('R-028 — visibility ticks + the canonical isLayerVisible predicate', () => {
+  it('absent record and absent key both mean VISIBLE; only an explicit false hides', () => {
+    const bare = FixedLayerBankSchema.parse({ channel: 1, start: 70, count: 4 });
+    expect(isLayerVisible(bare, 70)).toBe(true);
+    const ticked = FixedLayerBankSchema.parse({
+      channel: 1,
+      start: 70,
+      count: 4,
+      visibility: { '71': false, '72': true },
+    });
+    expect(isLayerVisible(ticked, 70)).toBe(true); // absent key
+    expect(isLayerVisible(ticked, 71)).toBe(false); // explicit false
+    expect(isLayerVisible(ticked, 72)).toBe(true); // explicit true
+  });
+
+  it('visibility keys must be numeric strings', () => {
+    expect(
+      FixedLayerBankSchema.safeParse({
+        channel: 1,
+        start: 70,
+        count: 4,
+        visibility: { 'layer-71': false },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('R-028 / C-015 — ReservedLayersSchema + reservedLayerNumbers', () => {
+  it('expands inclusive ranges to a flat, de-duplicated, sorted layer list', () => {
+    const reserved = ReservedLayersSchema.parse({
+      ranges: [
+        { from: 60, to: 62 },
+        { from: 62, to: 63 },
+        { from: 105, to: 105 },
+      ],
+    });
+    expect(reservedLayerNumbers(reserved)).toEqual([60, 61, 62, 63, 105]);
+  });
+
+  it('refuses a backwards range (to < from)', () => {
+    expect(ReservedLayersSchema.safeParse({ ranges: [{ from: 69, to: 60 }] }).success).toBe(false);
   });
 });
 

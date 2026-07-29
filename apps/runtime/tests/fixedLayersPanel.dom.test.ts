@@ -93,6 +93,12 @@ function stubBridge(
     },
     layers: { clear },
     templates: { list },
+    // R-028 (2.4) — the config modal reads the stack for its ON AIR wording.
+    stack: {
+      snapshot: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+      remove: () => Promise.resolve({ accepted: true }),
+    },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
   return { clear, load, list };
@@ -185,6 +191,29 @@ describe('FixedLayersPanel — idle-quiet and honest rows', () => {
       configure?.click();
     });
     expect(openDialog()?.textContent).toContain('bank configuration');
+  });
+
+  it('R-028 — an unticked EMPTY row is hidden; an unticked BOUND or PRODUCER row stays visible (honesty override)', async () => {
+    const hiddenBank: FixedLayerBank = {
+      ...BANK,
+      visibility: { '70': false, '71': false, '72': false },
+    };
+    const slots = seededSlots();
+    // 70 hidden + producer → shown; 71 hidden + bound → shown; 72 hidden +
+    // empty → hidden; 73 unticked-nowhere → shown as normal.
+    const slot71 = slots[1];
+    if (slot71 !== undefined) {
+      slot71.binding = { itemId: 'item-1', templateType: 'clock' };
+    }
+    stubBridge(hiddenBank, slots);
+    const el = await render(createElement(FixedLayersPanel));
+    const layersShown = [...el.querySelectorAll('[data-layer]')].map((r) =>
+      r.getAttribute('data-layer'),
+    );
+    expect(layersShown).toContain('70'); // producer observed — never invisible
+    expect(layersShown).toContain('71'); // bound — never invisible
+    expect(layersShown).not.toContain('72'); // provably empty — hidden as ticked
+    expect(layersShown).toContain('73');
   });
 });
 

@@ -38,7 +38,9 @@ it('a rejected Load surfaces via the command toast and pins nothing inline in th
       list: () => Promise.resolve([TEMPLATE]),
       import: () => Promise.resolve({ registered: true, templateId: 'x' }),
       remove: () => Promise.resolve({ ok: true }),
+      onChanged: () => () => undefined,
     },
+    link: { status: () => 'offline-mock', onStatusChanged: () => () => undefined },
     stack: {
       load: () =>
         Promise.reject(new Error('Bridge disconnected — command rejected. Not sent to CasparCG.')),

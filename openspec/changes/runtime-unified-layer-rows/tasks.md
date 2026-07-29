@@ -1,55 +1,95 @@
 # Tasks — one layer surface (R-028)
 
-**ALL UNCHECKED — this change is DESIGN ONLY. No production code in this PR.**
+**Implementation started 2026-07-29 (fast-mode session `dev-r028-a`, part A of three: config +
+the bridge-owned template store). Sections 4–9 are parts B/C. See `DEBT.md` in this change dir
+for what part A deliberately skipped or found un-runnable.**
 
-## 0. BLOCKING owner calls (design.md OPEN CALLS) — implementation cannot start without them
+## 0. BLOCKING owner calls (design.md OPEN CALLS) — ANSWERED (owner, 2026-07-29)
 
-- [ ] 0.1 **(o1) Where template files live** under one bridge / many browsers (design.md §h).
-      The library is BROWSER-LOCAL today (§a), so operator B cannot see or load what operator A
-      imported. Recommendation on file: upload once, serve from the bridge, give the bridge's
-      registry persistence. Alternative: a shared filesystem. This decides whether section 3
-      below is a small channel addition or a `runtime-template-library` change.
-- [ ] 0.2 **(o2) Is the `CG NEXT` wire gap in scope** (design.md §f)? `command-builder.ts` has no
-      NEXT verb, so the bridge cannot send `CG NEXT` at all today.
+- [x] 0.1 **(o1) Where template files live** — DECIDED: **the BRIDGE owns the templates,
+      persisted to disk** (design.md §h route 1, the recommendation, adopted). Every browser
+      that connects sees the same library, and a bridge restart does not empty it.
+      Implemented in part A: `TemplateRegistry` persists one JSON file per template under
+      `--templates-dir` (default `~/.cg-runtime/bridge-templates`), hydrated at boot;
+      `templates.changed` publishes the full catalogue to every browser on import/removal;
+      `templates.list/get` are bridge-served while live (browser-local `LibraryStore` remains
+      the offline fallback + reconnect re-delivery source).
+- [x] 0.2 **(o2) The `CG NEXT` wire gap IS in scope** — DECIDED: yes. Part A adds the NEXT
+      verb to `command-builder.ts` (`CG <ch>-<layer> NEXT 0`) so the capability the template
+      already implements stops being designed out; the channel/UI wiring lands in part B with
+      the rest of the verbs (5.1/5.4).
 
 ## 1. Prerequisites that must land FIRST
 
 - [ ] 1.1 **R-021 stage 4 task 3.1** (`#slotForRestore`: a declared row NEVER falls through to
       `#allocate()`). Under this model every item is on a declared row, so the fall-through would
       misplace EVERY item after a bridge restart, not an edge case (design.md §l). Blocking.
-- [ ] 1.2 **C-015 `reservedLayers` wired to real config** — the playout split's only mechanism.
-      It is `[]` at both call sites today (`bridge.ts:194`, `caspar-runtime.ts:1370-1373`); the
-      validator half already exists (`fixed-layers-store.ts:79`/`:127`). Blocking for section 5.
+- [x] 1.2 **C-015 `reservedLayers` wired to real config** — the playout split's only mechanism.
+      DONE (part A): `ReservedLayersSchema` in `@cg/shared-ipc`; `reserved-layers-store.ts`
+      loads it (`--reserved-layers 60-69` flag or `bridge-reserved-layers.json`;
+      present-but-unusable = HARD boot failure); the SAME resolved list reaches the boot
+      validator, every live `setFixedLayers` validation, AND the `LayerManager` — which now
+      fences reserved layer numbers from `allocate()` and `reserve()` so no automatic path
+      can put our graphic on a playout layer.
 - [ ] 1.3 RECON: **does CasparCG 2.3.2 expose template identity** beyond producer kind (OSC tree
       and the `INFO` family)? `tools/caspar-amcp-probe` against real hardware, never reasoned
       from our own code (design.md §j). Blocks only the foreign-row wording (5.3).
+      **UNRUN — no hardware in the part-A session, and NO LONGER LOAD-BEARING for row
+      identity: with 0.1 answered, per-row identity comes from the bridge's own records +
+      persisted registry, never from what CasparCG reports. See `DEBT.md`.**
 
-## 2. Config — the fixed ceiling and per-layer visibility
+## 2. Config — the fixed ceiling and per-layer visibility — DONE (part A, 2026-07-29)
 
-- [ ] 2.1 Config shape: a FIXED ceiling of candidate layers (never grows/shrinks at runtime),
+- [x] 2.1 Config shape: a FIXED ceiling of candidate layers (never grows/shrinks at runtime),
       each with a visibility tick and an optional alias. Replaces R-021's mutable `count` and the
-      grow/shrink/renumber rules it required.
-- [ ] 2.2 Fence the WHOLE ceiling from automatic allocation regardless of tick — visibility and
-      fencing are separate (design.md §b4). Mechanism is R-021's born-allocated fencing applied
-      to the ceiling, not to the visible subset.
-- [ ] 2.3 Untick refused when the row is occupied AND when occupancy is UNKNOWN (fail closed).
-- [ ] 2.4 Remove-template-from-config carries the row's own confirm gate, and the dialog states
-      explicitly when the item is ON AIR (removal implies clear).
-- [ ] 2.5 Validation: candidate ceiling ∩ reserved playout range refused at load AND at change,
-      error naming both ranges (extends the existing `validateFixedBank` checks).
-- [ ] 2.6 Unit tests for 2.1–2.5, message CONTENT asserted (both ranges named; the occupied /
-      unknown refusals distinguishable).
+      grow/shrink/renumber rules it required. DONE: `FixedLayerBankSchema` gains
+      `visibility` (per-layer, absent = visible — canonical predicate `isLayerVisible`);
+      `validateFixedBankChange` refuses ANY count change (`resize-refused`); the config
+      modal shows channel/start/count as read-only facts and edits ticks + aliases only.
+- [x] 2.2 Fence the WHOLE ceiling from automatic allocation regardless of tick — visibility and
+      fencing are separate (design.md §b4). DONE structurally: fencing derives from
+      `start`/`count` (every validated slot goes to the LayerManager as fixed), never from
+      the `visibility` record; the panel filter is the ONLY reader of the tick. Tested.
+- [x] 2.3 Untick refused when the row is occupied AND when occupancy is UNKNOWN (fail closed).
+      DONE: `untick-occupied` / `untick-unknown` (distinct codes + messages naming the
+      layer); occupancy composed from the bridge's own records FIRST, then the OSC tap with
+      the same hearing predicate the per-slot state publishes from (`#fixedSlotOccupancy`).
+- [x] 2.4 Remove-template-from-config carries the row's own confirm gate, and the dialog states
+      explicitly when the item is ON AIR (removal implies clear). DONE: the config modal's
+      per-row "Remove…" → `useConfirm` dialog naming the template, stating ON AIR + "CLEARS
+      layer N" when the stack says playing/on-air → `stack.remove` (whose CLEAR is the
+      existing behaviour).
+- [x] 2.5 Validation: candidate ceiling ∩ reserved playout range refused at load AND at change,
+      error naming both ranges (extends the existing `validateFixedBank` checks). DONE — the
+      boot path throws before the WebSocket binds; the change path re-runs the same check
+      with the same resolved list; the message names the ceiling range AND the reserved
+      range(s) AND the intersecting layers.
+- [x] 2.6 Unit tests for 2.1–2.5, message CONTENT asserted (both ranges named; the occupied /
+      unknown refusals distinguishable). DONE: `fixed-layers-store.test.ts` (message-content
+      asserts per refusal), `fixed-layers-wire.integration.test.ts` S5/S10 (live resize
+      refusal; fail-closed untick against REAL occupancy over the wire),
+      `template-persistence.integration.test.ts` (boot refusal naming both ranges),
+      `layer-manager.test.ts` (reserved fencing), `fixedBankConfigModal.dom.test.ts`
+      (renderer half incl. the 2.4 gate).
 
-## 3. Template identity across browsers (shape depends on 0.1)
+## 3. Template identity across browsers (shape per 0.1) — DONE (part A, 2026-07-29)
 
-- [ ] 3.1 The bridge reports, per row, WHICH template is on it — the same answer to every browser
-      (design.md §b2). The stack is already bridge-published (§a), so this is an extension of the
-      existing per-row state, not a new ownership model.
-- [ ] 3.2 Whatever 0.1 decides: either give the bridge's `TemplateRegistry` persistence + a
-      catalogue channel every browser reads (recommended), or a shared-filesystem path contract.
-      NOTE: the registry is in-memory and empty on restart today.
-- [ ] 3.3 Row state after a BRIDGE restart reports template identity as unknown honestly, rather
-      than guessing (§b2's only carve-out).
+- [x] 3.1 The bridge reports, per row, WHICH template is on it — the same answer to every browser
+      (design.md §b2). DONE: `FixedSlotState.binding` gains optional `templateId` +
+      `templateName`, resolved bridge-side (item → reconciler `templateId` → own registry);
+      published state, so every browser reads the same answer; the row and the config modal
+      display the name.
+- [x] 3.2 The bridge's `TemplateRegistry` gains persistence + a catalogue channel every browser
+      reads (0.1's route 1). DONE: one JSON file per template (atomic tmp+rename), hydrated
+      at boot before the WS binds; corrupt entries warned + skipped, never fatal;
+      `templates.changed` publish carries the full catalogue; `templates.list/get`
+      bridge-served while live. The RESTART path is tested explicitly
+      (`template-persistence.integration.test.ts`, `template-registry.test.ts`).
+- [x] 3.3 Row state after a BRIDGE restart reports template identity as unknown honestly, rather
+      than guessing (§b2's only carve-out). DONE + tested: after a restart with the producer
+      still on air and the registry fully persisted, `binding` is `null` (the observed
+      producer kind is all the row claims) — identity is never inferred from what happens to
+      be on disk.
 
 ## 4. The row surface
 

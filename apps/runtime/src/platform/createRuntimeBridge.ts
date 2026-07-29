@@ -180,6 +180,8 @@ export function createMockBridge(): RuntimeBridge {
       import: (req) => Promise.resolve(mock.templateImport(req.template)),
       // R-005 — the mock applies the same refuse-while-referenced predicate as the bridge.
       remove: (req) => Promise.resolve(mock.templateRemove(req.templateId)),
+      // R-028 (o1) — the catalogue push, mirrored by the mock's own emitter.
+      onChanged: (handler) => mock.templatesChanged.subscribe(handler),
     },
 
     audit: {

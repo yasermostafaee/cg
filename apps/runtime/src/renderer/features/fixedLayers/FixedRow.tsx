@@ -9,6 +9,7 @@ import { useConfirm } from '../../ui/useDialog.js';
 import { pickFile } from '../../ui/pickFile.js';
 import { useLink } from '../../hooks/useLink.js';
 import { reportCommandError } from '../status/commandFeedback.js';
+import { displayLabel } from '../library/templateName.js';
 import { fixedRowActions } from './fixedRowActions.js';
 import { importAndLoadOntoFixedSlot, loadTemplateOntoFixedSlot } from './fixedSlotLoad.js';
 import { useTemplatePicker } from './useTemplatePicker.js';
@@ -132,8 +133,18 @@ export function FixedRow({ slot }: Props): JSX.Element {
               the wire actually observes. The row never infers one from the
               other (design (f)/(g)) — a bound row over an unknown occupancy
               says exactly that. Masked with everything else on a dead link:
-              the frozen snapshot's binding is a claim the wire cannot back. */}
-          {!linkDown && slot.binding !== null && ` · bound: ${slot.binding.templateType}`}
+              the frozen snapshot's binding is a claim the wire cannot back.
+              R-028 (3.1) — the bridge carries the RAW naming facts (same
+              answer to every browser); the label resolves through the ONE
+              canonical rule every other surface uses. */}
+          {!linkDown &&
+            slot.binding !== null &&
+            ` · bound: ${
+              displayLabel({
+                name: slot.binding.templateName,
+                sourceFileName: slot.binding.sourceFileName,
+              }) ?? slot.binding.templateType
+            }`}
         </div>
       </div>
       <div style={styles.actions}>

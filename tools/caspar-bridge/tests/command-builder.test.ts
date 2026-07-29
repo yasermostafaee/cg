@@ -35,6 +35,13 @@ describe('CommandBuilder (ADR 0006 seam — amcp-mock-validated)', () => {
     expect(builder.out(slot)).toBe('CLEAR 1-10');
   });
 
+  it('R-028 (o2) — next → CG NEXT: the wire gap is closed at the one construction seam', () => {
+    // The template side (`window.next`, the sequence drivers) has existed all
+    // along; this is the verb the bridge could never send. Channel/UI wiring
+    // is part B — but the capability is no longer designed out.
+    expect(builder.next(slot)).toBe('CG 1-10 NEXT 0');
+  });
+
   it('escapes embedded quotes/backslashes so the wire never desyncs', () => {
     const line = builder.update(slot, { text: 'a"b\\c' });
     expect(line.startsWith('CG 1-10 UPDATE 0 "')).toBe(true);

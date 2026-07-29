@@ -12,6 +12,7 @@ import { onLibraryChanged } from './libraryChanged.js';
 import { newItemFields, newItemId } from './newItemFields.js';
 import { templateDisplayName } from './templateName.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
+import { useLink } from '../../hooks/useLink.js';
 
 const styles = {
   panel: {
@@ -102,14 +103,27 @@ export function LibraryPanel(): JSX.Element {
     setTemplates(await window.cg.templates.list());
   }, []);
 
+  // R-028 (o1) — `templates.list` is bridge-served while live, so the pull is
+  // tied to the LINK, not just the mount (the B-080 rule): a panel mounted
+  // while disconnected shows the local-fallback subset, and the transition to
+  // a usable link must swap in the bridge's shared catalogue.
+  const link = useLink();
   useEffect(() => {
     void refresh();
     // R-021 stage 3 — the Library is no longer the only door into the library:
     // a fixed row's one-action chain imports into this same shared store. The
     // panel re-lists on ANY import, so "it stays there for reuse" is something
     // the operator can actually see.
-    return onLibraryChanged(() => void refresh());
-  }, [refresh]);
+    const offLocal = onLibraryChanged(() => void refresh());
+    // R-028 (o1) — the bridge owns the catalogue and pushes it on every
+    // change from ANY browser: operator B's panel re-lists the moment
+    // operator A imports (or removes) a template.
+    const offBridge = window.cg.templates.onChanged(() => void refresh());
+    return () => {
+      offLocal();
+      offBridge();
+    };
+  }, [refresh, link]);
 
   const importFile = useCallback(
     async (file: File): Promise<void> => {

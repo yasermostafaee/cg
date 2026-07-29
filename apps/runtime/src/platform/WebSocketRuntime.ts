@@ -31,8 +31,10 @@ import {
   StackStateChangedChannel,
   StackTakeChannel,
   StackUpdateChannel,
-  type TemplatesGetChannel,
+  TemplatesChangedChannel,
+  TemplatesGetChannel,
   TemplatesImportChannel,
+  TemplatesListChannel,
   TemplatesRemoveChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
@@ -58,6 +60,7 @@ import {
   type OwnedOccupancyWarning,
   type PendingUpdate,
   type Settings,
+  type TemplateInfo,
 } from '@cg/shared-ipc';
 import { MemoryWorkspace } from '@cg/storage';
 import type {
@@ -169,13 +172,14 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #pending = new Map<string, Pending>();
 
   /**
-   * B-085 — the browser-local template library is the source of truth AND the
-   * reconnect-reconciliation retention set (it REPLACES the former page-lifetime
-   * `#retained` map, and is now persistent). `templates.*` are served from it
-   * with no bridge round-trip, so they work with the bridge down; `#resync()`
-   * re-delivers `#library.entries()` FIRST on every reconnect so a subsequent
-   * load resolves against a populated bridge registry (conflict policy:
-   * local-wins).
+   * B-085, re-scoped by R-028 (o1): the browser-local library is now the
+   * OFFLINE FALLBACK and the reconnect re-delivery set — the BRIDGE's
+   * persisted registry is the catalogue of record (one bridge, many browsers,
+   * one library). While live, `templates.list/get` are served from the bridge;
+   * with the link down they answer from this retained copy (this browser's own
+   * imports), display-only. `#resync()` still re-delivers `#library.entries()`
+   * FIRST on every reconnect so an offline import reaches the bridge (per-id
+   * conflict policy: local-wins, unchanged).
    */
   readonly #library: LibraryStore;
 
@@ -221,6 +225,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #updateSubs = new Subs<PendingUpdate | null>();
   readonly #settingsSubs = new Subs<Settings>();
   readonly #statusSubs = new Subs<BridgeLinkStatus>();
+  // R-028 (o1) — the bridge-owned catalogue push.
+  readonly #templatesSubs = new Subs<TemplateInfo[]>();
 
   #readyResolve: (() => void) | null = null;
   #readyReject: ((err: Error) => void) | null = null;
@@ -465,6 +471,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#ownedOccupancySubs.emit(p.data);
         break;
       }
+      case TemplatesChangedChannel.name: {
+        const p = TemplatesChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#templatesSubs.emit(p.data);
+        break;
+      }
       case LockStateChangedChannel.name: {
         const p = LockStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#lockSubs.emit(p.data);
@@ -649,14 +660,37 @@ export class WebSocketRuntime implements RuntimeBridge {
     onStateChanged: (handler: (state: LockState) => void) => this.#lockSubs.add(handler),
   };
 
-  // B-085 — the template library is browser-local: reads and writes are served
-  // from `#library` and do NOT round-trip `#invoke`, so they work with the bridge
-  // process unreachable (none of them commands CasparCG). The bridge is a
-  // delivery/serve target reconciled on (re)connect (`#resync`).
+  // R-028 (o1) — the BRIDGE owns the template catalogue: one bridge, many
+  // browsers, one library. While the link is LIVE, reads are served from the
+  // bridge so every browser sees the same list (including templates other
+  // browsers imported); the browser-local `#library` (B-085) remains the
+  // OFFLINE fallback and the reconnect re-delivery source — a read that cannot
+  // reach the bridge answers from the local retained copy rather than
+  // rejecting, the same display-only degradation the stack snapshot uses.
   readonly templates = {
-    get: (req: ChannelRequest<typeof TemplatesGetChannel>) =>
-      Promise.resolve(this.#library.get(req.templateId)),
-    list: () => Promise.resolve(this.#library.list()),
+    get: async (req: ChannelRequest<typeof TemplatesGetChannel>) => {
+      if (this.#status === 'live') {
+        try {
+          const fromBridge = await this.#invoke(TemplatesGetChannel, req);
+          // A local-only template (imported offline, delivery still pending)
+          // must keep resolving — fall through to the local copy on null.
+          if (fromBridge !== null) return fromBridge;
+        } catch {
+          /* mid-flight drop — answer from the retained copy below */
+        }
+      }
+      return this.#library.get(req.templateId);
+    },
+    list: async () => {
+      if (this.#status === 'live') {
+        try {
+          return await this.#invoke(TemplatesListChannel, undefined);
+        } catch {
+          /* mid-flight drop — answer from the retained copy below */
+        }
+      }
+      return this.#library.list();
+    },
     import: async (req: ChannelRequest<typeof TemplatesImportChannel>) => {
       // Register LOCALLY first (the source of truth) — this is what makes import
       // succeed offline. Then, when live, deliver to the bridge so it can serve
@@ -684,6 +718,10 @@ export class WebSocketRuntime implements RuntimeBridge {
       // stack (exact while disconnected — the bridge cannot mutate it).
       return this.#library.remove(req.templateId, this.#referencedCount(req.templateId));
     },
+    // R-028 (o1) — the bridge pushes the full catalogue on every change, so
+    // operator B's Library re-lists the moment operator A imports.
+    onChanged: (handler: (templates: TemplateInfo[]) => void): Unsubscribe =>
+      this.#templatesSubs.add(handler),
   };
 
   readonly audit = {

@@ -25,12 +25,13 @@ void _wireCoversValidator;
 void _validatorCoversWire;
 
 /**
- * R-021 stage 1 — the bank validators + persistence. Every refusal carries a
- * stable code AND a message naming what the operator must fix (a1: an overlap
- * names BOTH ranges; e1: a refused shrink names the occupied slot NUMBERS) —
- * asserted on message CONTENT, not just the code. The loader's
- * present-but-unusable → THROW behaviour (never warn-and-ignore) is the
- * deliberate divergence from connection-store documented in the module header.
+ * R-021 stage 1 / R-028 — the bank validators + persistence. Every refusal
+ * carries a stable code AND a message naming what the operator must fix (an
+ * overlap names BOTH ranges; an untick refusal names the layer and
+ * distinguishes OCCUPIED from UNKNOWN) — asserted on message CONTENT, not
+ * just the code (R-028 task 2.6). The loader's present-but-unusable → THROW
+ * behaviour (never warn-and-ignore) is the deliberate divergence from
+ * connection-store documented in the module header.
  */
 
 const POLICY = DEFAULT_LAYER_POLICY;
@@ -97,45 +98,42 @@ describe('validateFixedBank', () => {
   });
 });
 
-describe('validateFixedBankChange', () => {
-  const NEVER_BUSY = (): boolean => false;
+describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes are ticks + aliases)', () => {
+  const ALL_EMPTY = (): 'empty' => 'empty';
 
-  it('T12 — grow-at-end is accepted; shrink with all affected slots idle is accepted', () => {
-    const grown = validateFixedBankChange(bank(), bank({ count: 12 }), {
-      policy: POLICY,
-      reservedLayers: [],
-      isSlotBusy: NEVER_BUSY,
-    });
-    expect(grown).toHaveLength(12);
-
-    const shrunk = validateFixedBankChange(bank(), bank({ count: 8 }), {
-      policy: POLICY,
-      reservedLayers: [],
-      isSlotBusy: NEVER_BUSY,
-    });
-    expect(shrunk).toHaveLength(8);
+  it('alias and visibility changes over provably-empty layers are accepted', () => {
+    const slots = validateFixedBankChange(
+      bank(),
+      bank({ aliases: { '71': 'ساعت' }, visibility: { '72': false } }),
+      { policy: POLICY, reservedLayers: [], slotOccupancy: ALL_EMPTY },
+    );
+    expect(slots).toHaveLength(10);
   });
 
-  it('T13 — a shrink over resident slots is refused, naming the occupied slot NUMBERS', () => {
-    const busy = new Set([78, 79]);
-    const { code, message } = codeOf(() =>
-      validateFixedBankChange(bank(), bank({ count: 6 }), {
-        policy: POLICY,
-        reservedLayers: [],
-        isSlotBusy: (slot: LayerSlot) => busy.has(slot.layer),
-      }),
-    );
-    expect(code).toBe('shrink-occupied');
-    expect(message).toContain('78, 79');
+  it('R-028 (2.1) — grow AND shrink are BOTH refused mid-session: the ceiling is fixed at install', () => {
+    for (const nextCount of [12, 8]) {
+      const { code, message } = codeOf(() =>
+        validateFixedBankChange(bank(), bank({ count: nextCount }), {
+          policy: POLICY,
+          reservedLayers: [],
+          slotOccupancy: ALL_EMPTY,
+        }),
+      );
+      expect(code).toBe('resize-refused');
+      expect(message).toContain('10'); // the current ceiling
+      expect(message).toContain(String(nextCount)); // the refused one
+      expect(message).toContain('fixed at install');
+      expect(message).toContain('restart the bridge'); // the only path that changes it
+    }
   });
 
   it('T14 — moving start or channel mid-session is refused with their codes', () => {
     expect(
       codeOf(() =>
-        validateFixedBankChange(bank(), bank({ start: 71, count: 9 }), {
+        validateFixedBankChange(bank(), bank({ start: 71 }), {
           policy: POLICY,
           reservedLayers: [],
-          isSlotBusy: NEVER_BUSY,
+          slotOccupancy: ALL_EMPTY,
         }),
       ).code,
     ).toBe('renumber-refused');
@@ -144,10 +142,97 @@ describe('validateFixedBankChange', () => {
         validateFixedBankChange(bank(), bank({ channel: 2 }), {
           policy: POLICY,
           reservedLayers: [],
-          isSlotBusy: NEVER_BUSY,
+          slotOccupancy: ALL_EMPTY,
         }),
       ).code,
     ).toBe('channel-change-refused');
+  });
+
+  it('R-028 (2.3) — unticking an OCCUPIED layer is refused, naming the layer and the remedy', () => {
+    const { code, message } = codeOf(() =>
+      validateFixedBankChange(bank(), bank({ visibility: { '74': false } }), {
+        policy: POLICY,
+        reservedLayers: [],
+        slotOccupancy: (slot: LayerSlot) => (slot.layer === 74 ? 'occupied' : 'empty'),
+      }),
+    );
+    expect(code).toBe('untick-occupied');
+    expect(message).toContain('74');
+    expect(message).toContain('OCCUPIED');
+    expect(message).toContain('remove its template first');
+  });
+
+  it('R-028 (2.3) — unticking with UNKNOWN occupancy is refused too (fail closed), distinguishably', () => {
+    const { code, message } = codeOf(() =>
+      validateFixedBankChange(bank(), bank({ visibility: { '74': false } }), {
+        policy: POLICY,
+        reservedLayers: [],
+        slotOccupancy: () => 'unknown',
+      }),
+    );
+    expect(code).toBe('untick-unknown');
+    expect(message).toContain('74');
+    expect(message).toContain('UNKNOWN');
+    expect(message).toContain('never treated as empty');
+    // The two refusals must be DISTINGUISHABLE (2.6) — different code, and a
+    // message that names the missing evidence rather than claiming occupancy.
+    expect(message).not.toContain('OCCUPIED (');
+  });
+
+  it('a layer that is ALREADY hidden stays hidden without re-adjudication', () => {
+    // Occupancy callback would refuse everything — but the tick is not
+    // CHANGING, so it must not be consulted for already-hidden layers.
+    const hidden = bank({ visibility: { '74': false } });
+    const slots = validateFixedBankChange(
+      hidden,
+      bank({ visibility: { '74': false, '75': true } }),
+      {
+        policy: POLICY,
+        reservedLayers: [],
+        slotOccupancy: () => 'unknown',
+      },
+    );
+    expect(slots).toHaveLength(10);
+  });
+
+  it('R-028 (2.5) — reserved-range overlap is refused AT CHANGE too, naming both ranges', () => {
+    const { code, message } = codeOf(() =>
+      validateFixedBankChange(bank(), bank({ aliases: { '75': 'x' } }), {
+        policy: POLICY,
+        reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 78, 79],
+        slotOccupancy: ALL_EMPTY,
+      }),
+    );
+    expect(code).toBe('overlaps-reserved');
+    expect(message).toContain('70–79'); // the candidate ceiling
+    expect(message).toContain('60–69'); // the reserved playout range, as a RANGE
+    expect(message).toContain('78, 79'); // the intersecting layers
+  });
+});
+
+describe('R-028 — visibility shape validation', () => {
+  it('a visibility key outside the bank is refused, naming the key', () => {
+    const { code, message } = codeOf(() =>
+      validateFixedBank(bank({ visibility: { '69': false } }), {
+        policy: POLICY,
+        reservedLayers: [],
+      }),
+    );
+    expect(code).toBe('visibility-out-of-bank');
+    expect(message).toContain('69');
+  });
+
+  it('R-028 (2.2) — an UNTICKED layer is still among the validated slots: hiding never unfences', () => {
+    const slots = validateFixedBank(bank({ visibility: { '72': false, '73': false } }), {
+      policy: POLICY,
+      reservedLayers: [],
+    });
+    // The whole ceiling is returned — the LayerManager fences every slot the
+    // validator yields, so an unticked layer can never re-enter the
+    // allocatable pool (visibility is display-only by construction).
+    expect(slots).toHaveLength(10);
+    expect(slots.map((s) => s.layer)).toContain(72);
+    expect(slots.map((s) => s.layer)).toContain(73);
   });
 });
 

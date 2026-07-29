@@ -39,7 +39,7 @@ function stubBridge(
   const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: stack.length }));
   const stub = {
     link: { status: () => link, onStatusChanged: () => () => undefined },
-    templates: { list: () => Promise.resolve([]) },
+    templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     stack: {
       snapshot: () => Promise.resolve(stack),
       onStateChanged: () => () => undefined,
@@ -187,7 +187,7 @@ describe('StackPanel Clear-All', () => {
           return () => listeners.delete(h);
         },
       },
-      templates: { list: () => Promise.resolve([]) },
+      templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
       stack: {
         snapshot: () => Promise.resolve([item('a', 'on-air')]),
         onStateChanged: () => () => undefined,

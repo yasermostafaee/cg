@@ -44,6 +44,8 @@ export class MockRuntime {
   // R-021 stage 2a — fixed-bank parity.
   readonly fixedConfigChanged = new Emitter<FixedLayerBank | null>();
   readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
+  // R-028 (o1) parity — the bridge pushes the full catalogue on every change.
+  readonly templatesChanged = new Emitter<TemplateInfo[]>();
 
   #stack: StackItemState[] = seedStack();
   #templates = new Map<string, TemplateInfo>(seedTemplates().map((t) => [t.templateId, t]));
@@ -298,7 +300,12 @@ export class MockRuntime {
   // R-021 stage 3 — the bridge's LayerManager fixed BINDING, modelled: layer →
   // the item bound to it. The mock allocates no real layers, so this map IS its
   // `fixedBinding`, and `loadFixed` is the only thing that writes to it.
-  readonly #fixedBindings = new Map<number, { itemId: string; templateType: string }>();
+  // R-028 (3.1) — `templateId` rides along so the published binding carries
+  // identity, exactly like the bridge's registry join.
+  readonly #fixedBindings = new Map<
+    number,
+    { itemId: string; templateType: string; templateId: string }
+  >();
 
   fixedLayersConfig(): FixedLayerBank | null {
     return this.#fixedBank;
@@ -343,7 +350,7 @@ export class MockRuntime {
     if (!inBank) return { accepted: false, errorCode: 'not-fixed' };
     if (this.#fixedBindings.has(layer)) return { accepted: false, errorCode: 'slot-bound' };
 
-    this.#fixedBindings.set(layer, { itemId, templateType: template.templateType });
+    this.#fixedBindings.set(layer, { itemId, templateType: template.templateType, templateId });
     this.load(itemId, templateId, fields);
     this.fixedStateChanged.emit(this.fixedLayersState());
     return { accepted: true };
@@ -366,12 +373,29 @@ export class MockRuntime {
     for (let layer = start; layer <= start + count - 1; layer++) {
       const alias = aliases?.[String(layer)];
       const bound = this.#fixedBindings.get(layer);
+      // R-028 (3.1) parity — the binding carries WHICH template is on the row
+      // as RAW naming facts (id + name + file name), the same join the bridge
+      // does with its registry; the renderer resolves the label canonically.
+      const boundInfo = bound !== undefined ? this.#templates.get(bound.templateId) : undefined;
       out.push({
         channel,
         layer,
         ...(alias !== undefined ? { alias } : {}),
         observed: this.#fixedObservations.get(layer) ?? { kind: 'unknown' },
-        binding: bound ?? null,
+        binding:
+          bound !== undefined
+            ? {
+                itemId: bound.itemId,
+                templateType: bound.templateType,
+                templateId: bound.templateId,
+                ...(boundInfo?.name !== undefined && boundInfo.name !== ''
+                  ? { templateName: boundInfo.name }
+                  : {}),
+                ...(boundInfo?.sourceFileName !== undefined && boundInfo.sourceFileName !== ''
+                  ? { sourceFileName: boundInfo.sourceFileName }
+                  : {}),
+              }
+            : null,
       });
     }
     return out;
@@ -576,6 +600,9 @@ export class MockRuntime {
    */
   templateImport(template: TemplateInfo): { registered: boolean; templateId: string } {
     this.#templates.set(template.templateId, template);
+    // R-028 (o1) parity — the catalogue push every browser converges on.
+    this.templatesChanged.emit(this.templateList());
+    this.fixedStateChanged.emit(this.fixedLayersState());
     return { registered: true, templateId: template.templateId };
   }
 
@@ -608,6 +635,8 @@ export class MockRuntime {
     }
 
     this.#templates.delete(templateId);
+    // R-028 (o1) parity — the catalogue push every browser converges on.
+    this.templatesChanged.emit(this.templateList());
     return { ok: true };
   }
 

@@ -10,6 +10,8 @@
 //   caspar-bridge --host 0.0.0.0 --port 5280          # opt-in LAN exposure of the WS (NOT default)
 //   caspar-bridge --persist-path C:\cg\conn.json      # R-010: where the applied config persists
 //   caspar-bridge --fixed-layers-path C:\cg\fixed.json  # R-021: the fixed operator layer bank
+//   caspar-bridge --reserved-layers 60-69             # R-028/C-015: the playout system's layers
+//   caspar-bridge --templates-dir C:\cg\templates     # R-028: where the template library persists
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -19,10 +21,21 @@
 // (~/.cg-runtime/bridge-fixed-layers.json by default). ABSENT file = no bank;
 // a PRESENT but invalid file is a HARD boot failure (never silently ignored —
 // an operator must not believe a layer is fenced when it is not).
+//
+// R-028/C-015: the reserved playout layers load from --reserved-layers (a
+// range list like `60-69` or `60-69,105`) or --reserved-layers-path
+// (~/.cg-runtime/bridge-reserved-layers.json by default). Same doctrine as the
+// fixed bank: ABSENT file = nothing reserved; PRESENT but invalid = HARD boot
+// failure — a silently-dropped reservation would let our graphics land on the
+// company's playout layers.
+//
+// R-028: the template library persists under --templates-dir
+// (~/.cg-runtime/bridge-templates by default), one JSON file per template, so
+// a bridge restart does not empty the library any browser sees.
 
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createBridge } from '../dist/index.js';
+import { createBridge, parseReservedLayersFlag } from '../dist/index.js';
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -36,6 +49,32 @@ const fixedLayersPath =
   typeof args['fixed-layers-path'] === 'string'
     ? args['fixed-layers-path']
     : path.join(os.homedir(), '.cg-runtime', 'bridge-fixed-layers.json');
+
+// R-028/C-015 — the reserved playout layers: explicit flag > persisted file.
+// A flag given WITHOUT a value is a hard boot error, never silently ignored —
+// the operator believes a reservation is in force, and a dropped one would let
+// our graphics land on the playout layers (the store's fail-closed doctrine).
+if (args['reserved-layers'] === true) {
+  console.error(
+    '[caspar-bridge] --reserved-layers needs a value (e.g. --reserved-layers 60-69). ' +
+      'Refusing to boot without it rather than silently reserving nothing.',
+  );
+  process.exit(1);
+}
+const reservedLayers =
+  typeof args['reserved-layers'] === 'string'
+    ? parseReservedLayersFlag(args['reserved-layers'])
+    : undefined;
+const reservedLayersPath =
+  typeof args['reserved-layers-path'] === 'string'
+    ? args['reserved-layers-path']
+    : path.join(os.homedir(), '.cg-runtime', 'bridge-reserved-layers.json');
+
+// R-028 — the persisted template library (one JSON file per template).
+const templatesDir =
+  typeof args['templates-dir'] === 'string'
+    ? args['templates-dir']
+    : path.join(os.homedir(), '.cg-runtime', 'bridge-templates');
 
 // Build the CasparCG connection from flags, falling back to defaults.
 // B-046 — server B exists ONLY when a --backup-* flag declares it; the
@@ -84,6 +123,9 @@ const handle = await createBridge({
   connection,
   persistPath,
   fixedLayersPath,
+  reservedLayers,
+  reservedLayersPath,
+  templatesDir,
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);

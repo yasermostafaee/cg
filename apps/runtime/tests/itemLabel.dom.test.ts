@@ -65,6 +65,7 @@ function stubBridge(templates: TemplateInfo[], stack: StackItemState[] = []): vo
         Promise.resolve(templates.find((t) => t.templateId === req.templateId) ?? null),
       remove: () => Promise.resolve({ ok: true }),
       import: () => Promise.resolve({ registered: true, templateId: 'x' }),
+      onChanged: () => () => undefined,
     },
     stack: {
       snapshot: () => Promise.resolve(stack),

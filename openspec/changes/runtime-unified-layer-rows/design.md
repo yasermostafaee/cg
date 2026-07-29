@@ -240,13 +240,22 @@ live graphics between layers at upgrade time would be an unattended on-air actio
 repo's whole restore doctrine forbids (`design.md` §d of R-021: automatic paths never destroy).
 The upgrade note tells the operator to clear and reload onto rows at a safe moment.
 
-## OPEN CALLS — blocking implementation, not this design
+## OPEN CALLS — ANSWERED (owner, 2026-07-29; implemented in part A)
 
-- **(o1) Where template files live** under one bridge and many browsers (§h). Recommendation:
-  upload once, serve from the bridge, give the registry persistence.
-- **(o2) Is the `CG NEXT` wire gap in scope** for this change or a follow-up (§f)?
+- **(o1) Where template files live — DECIDED: route 1, upload once, serve from the bridge.**
+  The bridge's registry persists to disk (one JSON file per template under `--templates-dir`)
+  and is hydrated at boot; a `templates.changed` publish carries the full catalogue to every
+  browser; `templates.list/get` are bridge-served while the link is live, with the
+  browser-local `LibraryStore` demoted to offline fallback + reconnect re-delivery source.
+  Every browser sees the same library, and a bridge restart does not empty it.
+- **(o2) The `CG NEXT` wire gap IS in scope — DECIDED: yes.** `command-builder.ts` gained the
+  NEXT verb in part A; the channel/UI wiring lands in part B with the rest of the verbs.
 
 ## RECON owed before implementation
 
 - **Does CasparCG 2.3.2 expose template identity** beyond producer kind, over OSC or `INFO`?
-  (§j) — `tools/caspar-amcp-probe` against real hardware.
+  (§j) — `tools/caspar-amcp-probe` against real hardware. **STILL UNRUN (no hardware in the
+  part-A session), and no longer load-bearing for OUR row identity: with (o1) answered,
+  identity comes from the bridge's own records + persisted registry, never from what CasparCG
+  reports. It still matters only for the FOREIGN-row wording (task 5.3, part B) — see this
+  change's `DEBT.md`.**

@@ -19,25 +19,27 @@ import type {
   RetainedStackItem,
   StackItemState,
 } from '@cg/shared-schema';
-import type {
-  ChannelResponse,
-  ConnectionConfig,
-  ConnectionHealth,
-  ConnectionsSetConfigChannel,
-  FixedLayerBank,
-  FixedSlotState,
-  LockState,
-  OrphanLayer,
-  OwnedOccupancyWarning,
-  PendingUpdate,
-  Settings,
-  TemplateInfo,
+import {
+  isLayerVisible,
+  type ChannelResponse,
+  type ConnectionConfig,
+  type ConnectionHealth,
+  type ConnectionsSetConfigChannel,
+  type FixedLayerBank,
+  type FixedSlotState,
+  type LockState,
+  type OrphanLayer,
+  type OwnedOccupancyWarning,
+  type PendingUpdate,
+  type Settings,
+  type TemplateInfo,
 } from '@cg/shared-ipc';
 import {
   validateFixedBank,
   validateFixedBankChange,
   FixedLayersConfigError,
   type FixedLayersErrorCode,
+  type SlotOccupancy,
 } from './fixed-layers-store.js';
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
@@ -167,6 +169,11 @@ export class CasparRuntime {
   readonly fixedConfigChanged = new Emitter<FixedLayerBank | null>();
   /** R-021 stage 2a — emitted ONLY when the per-slot fixed state changes. */
   readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
+  /**
+   * R-028 (o1) — emitted with the full catalogue after every import/removal,
+   * so every connected browser converges on the same library.
+   */
+  readonly templatesChanged = new Emitter<TemplateInfo[]>();
 
   // R-010 — mutable: `setConfig` swaps the whole connection layer at runtime.
   #config: ConnectionConfig;
@@ -181,6 +188,14 @@ export class CasparRuntime {
   // the last PUBLISHED per-slot state (JSON, for the publish-on-change compare).
   #fixedBank: FixedLayerBank | null;
   readonly #layerPolicy: LayerPolicy;
+  /**
+   * R-028 / C-015 — the reserved playout layer numbers, from real config.
+   * The SAME list the boot validator saw and the LayerManager fences on —
+   * resolved once in `createBridge`, never re-derived here.
+   */
+  readonly #reservedLayers: readonly number[];
+  /** The same list as a Set, for the sweep/clear/restore membership checks. */
+  readonly #reservedSet: ReadonlySet<number>;
   #lastFixedStateJson: string | null = null;
   readonly #builder = new CommandBuilder();
 
@@ -281,7 +296,10 @@ export class CasparRuntime {
   // B-038 Phase 2 — holds each imported template's info + the browser-produced
   // self-contained HTML, keyed by id. B-038 Phase 3 — the HTTP server serves that
   // HTML at `/template/<id>`, so `CG ADD` can reference a real, loadable URL.
-  readonly #templates = new TemplateRegistry();
+  // R-028 (o1) — persisted to disk when a templates dir is configured, and
+  // hydrated in the constructor so the registry is complete before the
+  // WebSocket ever answers a `templates.list`.
+  readonly #templates: TemplateRegistry;
   readonly #templateServer: TemplateHttpServer;
   #serveOptions: TemplateServeOptions;
   /** Kept for `setConfig`'s serve re-derivation (explicit overrides keep winning). */
@@ -345,14 +363,33 @@ export class CasparRuntime {
        * side of live change validation). Absent = no bank declared.
        */
       fixedBank?: FixedLayerBank;
+      /**
+       * R-028 / C-015 — the reserved playout layer numbers, from real config
+       * (resolved once in `createBridge`; the SAME list the boot validator
+       * saw). Fenced from allocation in the LayerManager AND enforced against
+       * every live bank change here.
+       */
+      reservedLayers?: readonly number[];
+      /**
+       * R-028 (o1) — where the template registry persists (one JSON file per
+       * template). Absent = in-memory only (unit tests).
+       */
+      templatesDir?: string;
     } = {},
   ) {
+    this.#reservedLayers = options.reservedLayers ?? [];
+    this.#reservedSet = new Set(this.#reservedLayers);
     this.#layers = new LayerManager({
       ...(options.layerPolicy !== undefined ? { policy: options.layerPolicy } : {}),
       ...(options.fixedSlots !== undefined ? { fixed: options.fixedSlots } : {}),
+      reservedLayers: this.#reservedLayers,
     });
     this.#layerPolicy = options.layerPolicy ?? DEFAULT_LAYER_POLICY;
     this.#fixedBank = options.fixedBank ?? null;
+    // R-028 (o1) — hydrate the persisted catalogue BEFORE anything can ask
+    // for it; a bridge restart must not empty the library.
+    this.#templates = new TemplateRegistry(options.templatesDir);
+    this.#templates.loadPersisted();
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
@@ -953,6 +990,15 @@ export class CasparRuntime {
    */
   #slotForRestore(item: RetainedStackItem): CommandSlot | null {
     if (item.slot !== undefined) {
+      // R-028 / C-015 — a retained coordinate now inside the RESERVED playout
+      // range is SKIPPED, never re-homed. Falling through to `#allocate()`
+      // would consult a DIFFERENT layer's occupancy (the exact
+      // wrong-layer-occupancy hazard this method's contract forbids) and could
+      // re-ADD a duplicate while the surviving producer stays live on the
+      // playout layer — two copies on air, with the row pointing at the wrong
+      // one. Skipping keeps the wire untouched, exactly like the
+      // exhausted-range case; the survivor is the playout team's to deal with.
+      if (this.#reservedSet.has(item.slot.layer)) return null;
       const slot = { channel: item.slot.channel, layer: item.slot.layer };
       if (this.#layers.reserve(slot, item.templateId)) return slot;
     }
@@ -1364,19 +1410,44 @@ export class CasparRuntime {
   } {
     let slots: readonly LayerSlot[];
     try {
-      slots =
-        this.#fixedBank === null
-          ? // No current bank: installing one live is a pure grow-at-end case.
-            validateFixedBank(next, { policy: this.#layerPolicy, reservedLayers: [] })
-          : validateFixedBankChange(this.#fixedBank, next, {
-              policy: this.#layerPolicy,
-              reservedLayers: [],
-              isSlotBusy: (slot) =>
-                isFixedSlotBusy(slot, {
-                  fixedBinding: (s) => this.#layers.fixedBinding(s),
-                  retainedSlotKeys: this.#retainedFixedSlotKeys(),
-                }),
-            });
+      if (this.#fixedBank === null) {
+        // No current bank: installing one live is validated like a load…
+        slots = validateFixedBank(next, {
+          policy: this.#layerPolicy,
+          reservedLayers: this.#reservedLayers,
+        });
+        // …PLUS the fail-closed untick rule, which validateFixedBank alone
+        // cannot carry (the BOOT path shares it, and at boot occupancy is
+        // always unknown — the persisted ticks were adjudicated when applied).
+        // A LIVE install that arrives with layers already hidden must not
+        // slip an occupied or unverifiable layer out of sight in one step.
+        for (let layer = next.start; layer <= next.start + next.count - 1; layer++) {
+          if (isLayerVisible(next, layer)) continue;
+          const occupancy = this.#fixedSlotOccupancy({ channel: next.channel, layer });
+          if (occupancy === 'occupied') {
+            throw new FixedLayersConfigError(
+              'untick-occupied',
+              `cannot hide layer ${String(layer)}: it is OCCUPIED (an item or producer is on ` +
+                `it) — remove its template first (removal implies clear), then untick`,
+            );
+          }
+          if (occupancy === 'unknown') {
+            throw new FixedLayersConfigError(
+              'untick-unknown',
+              `cannot hide layer ${String(layer)}: its occupancy is UNKNOWN (no healthy ` +
+                `CasparCG link or no fresh OSC), and unknown is never treated as empty — a ` +
+                `hidden row may be on air. Restore the link/OSC so the layer reads empty, ` +
+                `then untick`,
+            );
+          }
+        }
+      } else {
+        slots = validateFixedBankChange(this.#fixedBank, next, {
+          policy: this.#layerPolicy,
+          reservedLayers: this.#reservedLayers,
+          slotOccupancy: (slot) => this.#fixedSlotOccupancy(slot),
+        });
+      }
     } catch (err) {
       if (err instanceof FixedLayersConfigError) {
         return { ok: false, reason: err.code, message: err.message };
@@ -1407,6 +1478,39 @@ export class CasparRuntime {
       keys.add(`${String(slot.channel)}:${String(slot.layer)}`);
     }
     return keys;
+  }
+
+  /**
+   * R-028 (2.3) — the occupancy verdict the untick validator reads, composed
+   * from the two knowledge sources IN ORDER:
+   *
+   *   1. The bridge's OWN records — a bound item or retained intent
+   *      (`isFixedSlotBusy`). Valid even with no OSC at all: the bridge put
+   *      the item there, so `occupied` needs no wire confirmation.
+   *   2. The occupancy tap, with the SAME hearing predicate
+   *      `#computeFixedState` publishes from (`state === 'healthy'` +
+   *      `hasFreshOsc`) — never a second staleness constant. Hearing +
+   *      observed producer → `occupied` (a foreign/playout producer blocks
+   *      hiding too); hearing + silent → `empty` (B-053); not hearing →
+   *      `unknown` — which the validator REFUSES, fail closed.
+   */
+  #fixedSlotOccupancy(slot: LayerSlot): SlotOccupancy {
+    if (
+      isFixedSlotBusy(slot, {
+        fixedBinding: (s) => this.#layers.fixedBinding(s),
+        retainedSlotKeys: this.#retainedFixedSlotKeys(),
+      })
+    ) {
+      return 'occupied';
+    }
+    const session = this.#adapter.primarySession;
+    const hearing =
+      session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
+    if (!hearing) return 'unknown';
+    const observed = session.osc.occupancy
+      .occupied(this.#occupancyStaleMs)
+      .some((o) => o.channel === slot.channel && o.layer === slot.layer);
+    return observed ? 'occupied' : 'empty';
   }
 
   /**
@@ -1454,13 +1558,44 @@ export class CasparRuntime {
             : { kind: 'empty' };
         const itemId = itemBySlot.get(key);
         const templateType = this.#layers.fixedBinding(slot);
+        // R-028 (3.1) — WHICH template is on the row, resolved by the bridge
+        // (item → templateId → its own registry), so every browser reads the
+        // SAME answer and an item another browser loaded is never foreign.
+        // (3.3) — resolution needs a LIVE item→slot binding: after a bridge
+        // restart there is none until the item is reloaded, so identity is
+        // simply ABSENT (honest unknown) — never guessed from the persisted
+        // registry, which records what was imported, not what is on a layer.
+        let identity: {
+          templateId?: string;
+          templateName?: string;
+          sourceFileName?: string;
+        } = {};
+        if (itemId !== undefined) {
+          const templateId = this.#reconciler.get(itemId)?.templateId;
+          if (templateId !== undefined) {
+            // RAW naming facts only — name AND sourceFileName. The renderer
+            // resolves the display label with its ONE canonical rule
+            // (`templateDisplayName`: file name first); resolving here would
+            // be the second copy of that rule.
+            const info = this.#templates.get(templateId);
+            identity = {
+              templateId,
+              ...(info?.name !== undefined && info.name !== '' ? { templateName: info.name } : {}),
+              ...(info?.sourceFileName !== undefined && info.sourceFileName !== ''
+                ? { sourceFileName: info.sourceFileName }
+                : {}),
+            };
+          }
+        }
         return {
           channel: slot.channel,
           layer: slot.layer,
           ...(alias !== undefined ? { alias } : {}),
           observed,
           binding:
-            itemId !== undefined && templateType !== undefined ? { itemId, templateType } : null,
+            itemId !== undefined && templateType !== undefined
+              ? { itemId, templateType, ...identity }
+              : null,
         };
       });
   }
@@ -1538,7 +1673,15 @@ export class CasparRuntime {
     // allocatable pool (and returns them when the foreign producer leaves).
     this.#reconcileForeignQuarantine();
 
-    const occupied = session.osc.occupancy.occupied(this.#occupancyStaleMs);
+    // R-028 / C-015 — declared playout layers are excluded from the orphan
+    // candidates entirely (the spec scenario "Declared playout layers never
+    // surface as orphans"): the sweep would otherwise permanently surface a
+    // healthy playout graphic as reclaimable and invite the operator to clear
+    // live automation output. Exclusion, not ownership — the bridge neither
+    // owns nor watches these layers; it just declares them off limits.
+    const occupied = session.osc.occupancy
+      .occupied(this.#occupancyStaleMs)
+      .filter((o) => !this.#reservedSet.has(o.layer));
     const owned = new Set<string>();
     for (const slot of this.#slots.values()) {
       owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
@@ -1582,7 +1725,15 @@ export class CasparRuntime {
   async clearLayer(
     channel: number,
     layer: number,
-  ): Promise<{ ok: boolean; reason?: 'owned' | 'foreign' | 'amcp-error' }> {
+  ): Promise<{ ok: boolean; reason?: 'owned' | 'foreign' | 'reserved' | 'amcp-error' }> {
+    // R-028 / C-015 — a DECLARED playout layer is never clearable, from any
+    // caller. The R-015 `html` discriminator below cannot protect it: a
+    // playout template graphic IS an html producer, and that
+    // indistinguishability is exactly why the reservation exists in config.
+    // Config is the identity here; clearing would take playout output off air.
+    if (this.#reservedSet.has(layer)) {
+      return { ok: false, reason: 'reserved' };
+    }
     for (const slot of this.#slots.values()) {
       if (slot.channel === channel && slot.layer === layer) {
         return { ok: false, reason: 'owned' };
@@ -1957,7 +2108,13 @@ export class CasparRuntime {
     template: TemplateInfo,
     html: string,
   ): { registered: boolean; templateId: string } {
-    return this.#templates.import(template, html);
+    const result = this.#templates.import(template, html);
+    // R-028 (o1) — every browser converges on the same catalogue.
+    this.templatesChanged.emit(this.#templates.list());
+    // A re-import can change the template's display name — the rows naming it
+    // must follow (published through the same change-compare as always).
+    this.#publishFixedStateIfChanged();
+    return result;
   }
   /** The retained HTML for a template id, or `null` (the Phase 3 serve seam). */
   templateHtml(templateId: string): string | null {
@@ -2001,6 +2158,8 @@ export class CasparRuntime {
     }
 
     this.#templates.remove(templateId);
+    // R-028 (o1) — every browser converges on the same catalogue.
+    this.templatesChanged.emit(this.#templates.list());
     return { ok: true };
   }
 

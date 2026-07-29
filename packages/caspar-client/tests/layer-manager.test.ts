@@ -294,3 +294,28 @@ describe('LayerManager — fixed operator slots (R-021)', () => {
     }
   });
 });
+
+describe('LayerManager — reserved playout layers (R-028 / C-015)', () => {
+  it('allocate() never returns a reserved layer, whatever the policy range says', () => {
+    // The default policy's `custom` range is 60–69 — exactly where the playout
+    // split lives. With 60–68 reserved, allocation must skip straight to 69.
+    const lm = new LayerManager({
+      reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68],
+    });
+    expect(lm.allocate('custom', 1)).toEqual({ channel: 1, layer: 69 });
+    // Range now exhausted (everything else reserved): honest failure, no
+    // silent spill onto a playout layer.
+    expect(() => lm.allocate('custom', 1)).toThrow(OutOfLayersError);
+  });
+
+  it('reserve() refuses a reserved layer — a retained coordinate never lands on playout', () => {
+    const lm = new LayerManager({ reservedLayers: [65] });
+    expect(lm.reserve({ channel: 1, layer: 65 }, 'lower-third')).toBe(false);
+    expect(lm.reserve({ channel: 1, layer: 66 }, 'lower-third')).toBe(true);
+  });
+
+  it('the fence is per layer NUMBER across channels (conservative for the split)', () => {
+    const lm = new LayerManager({ reservedLayers: [60] });
+    expect(lm.reserve({ channel: 2, layer: 60 }, 'x')).toBe(false);
+  });
+});

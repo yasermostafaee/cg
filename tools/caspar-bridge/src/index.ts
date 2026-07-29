@@ -1,5 +1,10 @@
 export { createBridge } from './bridge.js';
 export type { BridgeHandle, BridgeOptions } from './bridge.js';
+export {
+  loadReservedLayers,
+  parseReservedLayersFlag,
+  ReservedLayersFileError,
+} from './reserved-layers-store.js';
 export { CasparRuntime } from './caspar-runtime.js';
 export { CommandBuilder } from './command-builder.js';
 export type { CommandSlot } from './command-builder.js';

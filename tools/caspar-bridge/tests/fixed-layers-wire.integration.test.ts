@@ -23,10 +23,12 @@ async function invokeRoute(
 }
 
 /**
- * R-021 stage 2a — the fixed-bank wire contract end to end (S4–S9): config
- * read, LIVE grow-at-end, refusals that apply/persist/publish NOTHING,
- * persistence round-trip across bridge boots, D3 occupancy honesty, and D8
- * publish-only-on-change.
+ * R-021 stage 2a / R-028 — the fixed-bank wire contract end to end (S4–S10):
+ * config read, the FIXED ceiling (resize refused live; ticks + aliases are
+ * the only live changes), refusals that apply/persist/publish NOTHING,
+ * persistence round-trip across bridge boots, D3 occupancy honesty, D8
+ * publish-only-on-change, and the fail-closed untick (occupied AND unknown
+ * both refuse, distinguishably).
  */
 
 let mock: MockHandle | null = null;
@@ -126,18 +128,30 @@ it('S4 — fixedLayers.config returns the booted bank, and null with no bank', a
   expect(b2.runtime.fixedLayersState()).toEqual([]);
 });
 
-it('S5 — grow-at-end applies LIVE: new slots fenced immediately and in the change publish', async () => {
+it('S5 — R-028: the ceiling is FIXED live — resize refuses (nothing applied); alias changes apply + publish', async () => {
   const b = await boot({ bank: { channel: 1, start: 70, count: 10 } });
   const published: FixedSlotState[][] = [];
   b.runtime.fixedStateChanged.subscribe((s) => published.push(s));
 
-  const result = b.runtime.setFixedLayers({ channel: 1, start: 70, count: 12 });
-  expect(result).toEqual({ ok: true });
-  expect(b.runtime.fixedSlots()).toHaveLength(12);
-  expect(b.runtime.fixedSlots().some((s) => s.layer === 81)).toBe(true);
-  // The applied change published a state carrying the new slots.
+  // Grow AND shrink both refuse: the candidate ceiling never changes at runtime.
+  for (const count of [12, 8]) {
+    const refused = b.runtime.setFixedLayers({ channel: 1, start: 70, count });
+    expect(refused.ok).toBe(false);
+    expect(refused.reason).toBe('resize-refused');
+  }
+  expect(b.runtime.fixedSlots()).toHaveLength(10); // unchanged — fenced ceiling intact
+
+  // An alias change is a legitimate live change and publishes.
+  const ok = b.runtime.setFixedLayers({
+    channel: 1,
+    start: 70,
+    count: 10,
+    aliases: { '71': 'LOWER THIRD' },
+  });
+  expect(ok).toEqual({ ok: true });
+  expect(b.runtime.fixedLayersConfig()?.aliases).toEqual({ '71': 'LOWER THIRD' });
   expect(published.length).toBeGreaterThan(0);
-  expect(published[published.length - 1]).toHaveLength(12);
+  expect(published[published.length - 1]?.find((s) => s.layer === 71)?.alias).toBe('LOWER THIRD');
 });
 
 it('S6 — renumber and channel-change refuse with their codes; nothing applied/persisted/published', async () => {
@@ -183,11 +197,12 @@ it('S7 — an applied set-config persists, and a fresh boot on that path loads t
   });
   await b.runtime.whenServerHealthy(HEALTH_MS);
 
-  // Through the REAL route layer: validate → apply → persist-on-ok.
+  // Through the REAL route layer: validate → apply → persist-on-ok. R-028 —
+  // the live change is ticks/aliases; the count rides along UNCHANGED.
   const result = (await invokeRoute(
     b,
     'fixedLayers.set-config',
-    { channel: 1, start: 70, count: 12 },
+    { channel: 1, start: 70, count: 10, aliases: { '72': 'ساعت' } },
     file,
   )) as { ok: boolean };
   expect(result.ok).toBe(true);
@@ -199,8 +214,13 @@ it('S7 — an applied set-config persists, and a fresh boot on that path loads t
   mock = null;
 
   const b2 = await boot({ fixedLayersPath: file });
-  expect(b2.runtime.fixedLayersConfig()).toEqual({ channel: 1, start: 70, count: 12 });
-  expect(b2.runtime.fixedSlots()).toHaveLength(12);
+  expect(b2.runtime.fixedLayersConfig()).toEqual({
+    channel: 1,
+    start: 70,
+    count: 10,
+    aliases: { '72': 'ساعت' },
+  });
+  expect(b2.runtime.fixedSlots()).toHaveLength(10);
 });
 
 it('S8 — occupancy honesty: unknown before healthy; producer/empty on a hearing tap', async () => {
@@ -258,4 +278,48 @@ it('S9 — two identical sweeps publish ZERO; a real occupancy change publishes 
     kind: 'producer',
     producer: 'ffmpeg',
   });
+});
+
+it('S10 — R-028 fail-closed untick over the REAL occupancy: unknown refuses, empty applies, producer refuses', async () => {
+  const b = await boot({ bank: { channel: 1, start: 70, count: 10 } });
+  if (mock === null) throw new Error('mock not booted');
+  const untick = (layer: number): { ok: boolean; reason?: string; message?: string } =>
+    b.runtime.setFixedLayers({
+      channel: 1,
+      start: 70,
+      count: 10,
+      visibility: { [String(layer)]: false },
+    });
+
+  // BEFORE the session is healthy the tap has never heard: occupancy is
+  // UNKNOWN, and unknown REFUSES — never treated as empty (fail closed).
+  const blind = untick(74);
+  expect(blind.ok).toBe(false);
+  expect(blind.reason).toBe('untick-unknown');
+  expect(blind.message).toContain('74');
+  expect(b.runtime.fixedLayersConfig()?.visibility).toBeUndefined(); // nothing applied
+
+  // Healthy + hearing tap, layer provably empty → the untick applies.
+  await b.runtime.whenServerHealthy(HEALTH_MS);
+  await waitFor(() => b.runtime.fixedLayersState().every((s) => s.observed.kind === 'empty'));
+  const empty = untick(74);
+  expect(empty).toEqual({ ok: true });
+  expect(b.runtime.fixedLayersConfig()?.visibility).toEqual({ '74': false });
+
+  // A FOREIGN producer on the layer (playout-style, not ours): occupied → refused.
+  await foreignPlay(mock, 'PLAY 1-75 "program-feed.mov"');
+  await waitFor(() =>
+    b.runtime.fixedLayersState().some((s) => s.layer === 75 && s.observed.kind === 'producer'),
+  );
+  const occupied = b.runtime.setFixedLayers({
+    channel: 1,
+    start: 70,
+    count: 10,
+    visibility: { '74': false, '75': false },
+  });
+  expect(occupied.ok).toBe(false);
+  expect(occupied.reason).toBe('untick-occupied');
+  expect(occupied.message).toContain('75');
+  // The refusal applied NOTHING: 74 keeps its earlier tick state only.
+  expect(b.runtime.fixedLayersConfig()?.visibility).toEqual({ '74': false });
 });

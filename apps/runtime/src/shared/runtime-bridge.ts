@@ -39,6 +39,7 @@ import type {
   StackSnapshotChannel,
   StackTakeChannel,
   StackUpdateChannel,
+  TemplateInfo,
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
@@ -230,6 +231,12 @@ export interface RuntimeBridge {
     remove(
       req: ChannelRequest<typeof TemplatesRemoveChannel>,
     ): Promise<ChannelResponse<typeof TemplatesRemoveChannel>>;
+    /**
+     * R-028 (o1) — the bridge owns the catalogue and pushes the full template
+     * list on every import/removal, from ANY connected browser. Subscribing
+     * surfaces is how operator B's Library re-lists when operator A imports.
+     */
+    onChanged(handler: (templates: TemplateInfo[]) => void): Unsubscribe;
   };
 
   audit: {

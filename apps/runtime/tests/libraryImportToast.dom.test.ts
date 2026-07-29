@@ -26,7 +26,10 @@ let unsub: (() => void) | null = null;
 beforeEach(() => {
   successMessages.length = 0;
   unsub = onCommandSuccess((m) => successMessages.push(m));
-  const stub = { templates: { list: () => Promise.resolve([]) } };
+  const stub = {
+    templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
+    link: { status: () => 'offline-mock', onStatusChanged: () => () => undefined },
+  };
   (window as unknown as { cg: typeof stub }).cg = stub;
 });
 
