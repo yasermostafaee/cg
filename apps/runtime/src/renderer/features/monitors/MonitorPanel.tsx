@@ -7,8 +7,13 @@ import type { PanelId } from '../../hooks/useShellLayout.js';
 
 /**
  * PGM and PREVIEW — reserved in their final positions now, so the layout the
- * operator learns is the layout they keep. The video itself (frame grabs over
- * the bridge) is M9.
+ * operator learns is the layout they keep.
+ *
+ * The video itself is owned by `C-016` (operator PGM confidence view: periodic
+ * program-channel grabs served over the bridge's HTTP server). That pointer lives
+ * HERE, in a comment, and deliberately not in the panel's visible copy: an
+ * operator has no idea what an item number is, and the retired Electron-era M0–M12
+ * milestones the copy used to cite do not drive work any more.
  *
  * WHY THESE SAY "NOT CONNECTED" IN WORDS. A plain black rectangle in a broadcast
  * UI is not a neutral placeholder — it is what a DEAD FEED looks like. An

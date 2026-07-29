@@ -27,18 +27,24 @@ export function MonitorStrip(): JSX.Element {
 
   return (
     <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minHeight: 0 }}>
+      {/*
+        The copy below says what each output IS, in the operator's terms, and
+        names no internal milestone or item number. An operator has no idea what
+        an M- or C- number is, and the visible surface is not where the roadmap
+        gets tracked. The pointer lives in `MonitorPanel`'s comment instead.
+      */}
       {showPvw && (
         <MonitorPanel
           id="pvw"
           title="PREVIEW"
-          detail="The next graphic, before it reaches air. Frame grabs arrive with the full monitor (M9)."
+          detail="This is where the next graphic will appear, before it reaches air."
         />
       )}
       {showPgm && (
         <MonitorPanel
           id="pgm"
           title="PROGRAM"
-          detail="What is on air right now. Frame grabs arrive with the full monitor (M9)."
+          detail="This is where the on-air output will appear."
         />
       )}
     </div>
