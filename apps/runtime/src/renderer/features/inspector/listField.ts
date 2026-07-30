@@ -39,6 +39,24 @@ export function removeItem(items: readonly ListItem[], index: number): ListItem[
   return items.filter((_, i) => i !== index);
 }
 
+/** Which edge of the hovered item a drag would land on. */
+export type DropEdge = 'before' | 'after';
+
+/**
+ * The index `from` must move to so it lands on `edge` of item `over` — the whole of
+ * the drag-reorder arithmetic, kept pure and out of the component so it can be
+ * tested without a DOM (native drag events are not synthesizable in jsdom).
+ *
+ * The correction exists because {@link moveItem} REMOVES before it inserts: once the
+ * dragged item is lifted out, every index above it shifts down by one, so a raw
+ * "drop before item 3" would insert one slot too high whenever the item came from
+ * below that point.
+ */
+export function dropTargetIndex(from: number, over: number, edge: DropEdge): number {
+  if (edge === 'before') return from < over ? over - 1 : over;
+  return from > over ? over + 1 : over;
+}
+
 /** Move the item at `from` to `to` (out-of-range → an unchanged copy). */
 export function moveItem(items: readonly ListItem[], from: number, to: number): ListItem[] {
   if (from < 0 || from >= items.length || to < 0 || to >= items.length) return [...items];

@@ -10,6 +10,7 @@ import {
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
@@ -33,6 +34,20 @@ import {
 /** The shared field class, plus the dirty accent (border only — no layout shift). */
 function fieldClass(dirty: boolean): string {
   return dirty ? 'cg-field is-dirty' : 'cg-field';
+}
+
+/**
+ * Which field kinds need the panel's FULL width, with their label stacked above.
+ *
+ * Text-carrying kinds do; scalar kinds (boolean, number, colour, select) have a small
+ * intrinsic width and stay in the compact two-column row, which is denser and easier
+ * to scan. The split is by KIND rather than by width alone because it is right at
+ * EVERY width — a 160px value column was never enough for a Persian headline, no
+ * matter how wide the screen it sat on. `controls.css` adds a container query on top
+ * of this, collapsing even the compact rows once the panel itself runs out of room.
+ */
+function isWideKind(kind: DynamicField['type'] | 'unknown'): boolean {
+  return kind === 'text' || kind === 'multiline' || kind === 'list' || kind === 'image';
 }
 
 interface Props {
@@ -69,16 +84,23 @@ const styles = {
   empty: { color: colors.textMuted, fontSize: '0.9rem' },
   title: { fontSize: '1.1rem', fontWeight: 700, margin: 0, overflowWrap: 'anywhere' as const },
   meta: { color: colors.textMuted, fontSize: '0.85rem' },
-  actions: { display: 'flex', gap: '0.5rem', marginTop: '0.25rem', alignItems: 'center' },
-  fieldRow: {
-    display: 'grid',
-    gridTemplateColumns: '120px 1fr',
+  // `flexWrap`: at a narrow panel width these three would otherwise push the row
+  // wider than the panel. They wrap onto a second line instead.
+  actions: {
+    display: 'flex',
     gap: '0.5rem',
-    padding: '0.25rem 0',
-    fontSize: '0.9rem',
+    marginTop: '0.25rem',
     alignItems: 'center',
+    flexWrap: 'wrap' as const,
   },
-  fieldLabel: { color: colors.textMuted, fontWeight: 500, display: 'flex', gap: '0.3rem' },
+  fieldLabel: {
+    color: colors.textMuted,
+    fontWeight: 500,
+    display: 'flex',
+    gap: '0.3rem',
+    minWidth: 0,
+    overflowWrap: 'anywhere' as const,
+  },
   // B-067 — a nested composition's fields, indented under the instance's label.
   group: {
     marginTop: '0.5rem',
@@ -139,7 +161,7 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
   if (item === null) {
     return (
       <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector">
-        <div style={styles.scroll}>
+        <div className="cg-inspector-body" style={styles.scroll}>
           <p style={styles.empty}>Select a stack item to inspect its fields.</p>
         </div>
       </Panel>
@@ -339,7 +361,7 @@ function FieldEditor({
   const fromFileKind =
     kind === 'text' || kind === 'multiline' || kind === 'list' ? kind : undefined;
   return (
-    <div style={styles.fieldRow}>
+    <div className={isWideKind(kind) ? 'cg-field-row--wide' : 'cg-field-row'}>
       <span style={styles.fieldLabel}>
         {label}
         {dirty && (
@@ -442,10 +464,12 @@ function FieldControl({
   }
   if (kind === 'multiline') {
     const v = typeof value === 'string' ? value : '';
+    // Grows with its CONTENT (wrapped height, not newline count) — see
+    // `AutoGrowTextarea`. `is-dirty` still rides the class, so the amber
+    // unapplied-edit border is unchanged.
     return (
-      <textarea
-        className={fieldClass(dirty)}
-        style={{ minHeight: 60 }}
+      <AutoGrowTextarea
+        className={dirty ? 'is-dirty' : undefined}
         value={v}
         onChange={(e) => onStage(e.target.value)}
         aria-label={fieldId}

@@ -390,6 +390,157 @@ textarea.cg-field {
   resize: vertical;
   line-height: 1.4;
 }
+/* See `AutoGrowTextarea` — it owns the height, so the drag handle would only be
+   undone by the next keystroke. It scrolls internally past its cap instead. */
+textarea.cg-field--autogrow {
+  resize: none;
+  overflow-y: auto;
+}
+
+/* ── Inspector field layout ─────────────────────────────────────────────────
+ *
+ * WHY A CONTAINER QUERY AND NOT A MEDIA QUERY. The Inspector is a resizable
+ * column (the operator drags the divider), it can go fullscreen, and below the
+ * narrow breakpoint it becomes a right-pinned overlay at `min(24rem, 82vw)`. Its
+ * width is therefore NOT a function of the viewport's, so a media query would ask
+ * the wrong question and get it wrong in the two cases that matter most — a
+ * dragged-narrow column on a wide screen, and the overlay. `container-type:
+ * inline-size` on the panel body makes the fields respond to the space they are
+ * actually in, which is the only correct axis (the CLAUDE.md "probe the axis you
+ * intend to judge" rule, applied to layout).
+ */
+.cg-inspector-body {
+  container-type: inline-size;
+  container-name: inspector;
+}
+
+/*
+ * A COMPACT field: label beside its control. Right for a checkbox, a number, a
+ * colour swatch or a select — controls with an intrinsic, small width.
+ *
+ * `minmax(0, …)` on BOTH tracks, not `120px 1fr`: a grid track's default `min-width:
+ * auto` refuses to shrink below its content, which is how a long label or a wide
+ * control pushed the row past the panel and forced horizontal overflow.
+ */
+.cg-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
+  gap: var(--r-space-2);
+  padding: 0.25rem 0;
+  font-size: var(--r-text-md);
+  align-items: center;
+}
+
+/*
+ * A WIDE field — text, multiline, list, image — stacks its label ABOVE the control.
+ *
+ * This is the real fix for the unusable list editors, and it is a LAYOUT fix rather
+ * than a width setting. At the default 320px panel the two-column row left roughly
+ * 160px for the control; the list editor then spent ~95px of that on its own reorder
+ * and delete buttons, leaving an ~80px textarea in which Persian text broke mid-word
+ * across three lines. Widening the value column could not fix that — the label
+ * column and the buttons were both taking from the same 288px. Giving the control
+ * the panel's FULL width, and moving the buttons off its line (see
+ * `.cg-list-item`), is what actually gives the text room.
+ */
+.cg-field-row--wide {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.3rem 0;
+  font-size: var(--r-text-md);
+  min-width: 0;
+}
+
+/* Below this, even a compact row has no room for two tracks — the overlay on a
+   phone, or a column dragged to its minimum. Everything stacks. */
+@container inspector (max-width: 15rem) {
+  .cg-field-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.2rem;
+  }
+}
+
+/* ── Inspector list-field items (ticker / sequence rows) ────────────────────── */
+
+.cg-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  border-radius: var(--r-radius-sm);
+  /* Reserved so the drop indicator below never shifts the list as it moves. */
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+}
+
+/* The controls' own line, BENEATH the textarea rather than beside it. */
+.cg-list-item__tools {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+/* The item's display number — the operator's way of telling two identical-looking
+   rows apart, and it matches the 1-based numbering the rest of the console uses. */
+.cg-list-item__index {
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-bold);
+  color: var(--r-text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 1.5em;
+}
+
+/* Pushes the destructive ✕ away from the reorder pair, so the two kinds of action
+   are not one undifferentiated strip of glyphs. */
+.cg-list-item__spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * THE DRAG HANDLE. Pointer-only by nature, which is exactly why the ↑/↓ buttons
+ * stay: drag is unreachable by keyboard and awkward under time pressure, so it is
+ * an ADDITION to them, never a replacement. `cursor: grab` and the grip glyph are
+ * the whole affordance.
+ */
+.cg-list-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--r-text-muted);
+  cursor: grab;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.cg-list-handle:hover {
+  color: var(--r-text);
+}
+.cg-list-item.is-dragging {
+  opacity: 0.5;
+}
+.cg-list-item.is-dragging .cg-list-handle {
+  cursor: grabbing;
+}
+
+/*
+ * THE DROP INDICATOR — a line on the EDGE the item would land on, not a highlight
+ * of the hovered row. A filled row says "this row", which is the wrong answer: the
+ * question a reorder drag asks is "between which two?". Sky, the interactive accent,
+ * because this is an interaction in progress and never an air claim.
+ */
+.cg-list-item.is-drop-before {
+  border-top-color: var(--r-accent);
+}
+.cg-list-item.is-drop-after {
+  border-bottom-color: var(--r-accent);
+}
 
 /* ── Checkbox ───────────────────────────────────────────────────────────── */
 
