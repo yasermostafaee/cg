@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { CircleArrowOutDownRight, PanelRight, RotateCcw, Trash2, XSquare } from 'lucide-react';
 import { colors } from '../../theme.js';
@@ -17,13 +17,7 @@ import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { bankPosition, isLayerVisible, isRehearsing } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import { isOnAir } from '../stack/onAir.js';
-import {
-  draftsVersion,
-  isItemDirty,
-  pruneDrafts,
-  subscribeDrafts,
-} from '../inspector/draftStore.js';
-import { pruneFromFile, restoreFromFileAttachments } from '../inspector/fromFileStore.js';
+import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { LayerRow } from './LayerRow.js';
 import { LayerTableHeader } from './LayerTableHeader.js';
@@ -109,21 +103,15 @@ export function LayersPanel({
   // Template identity for every bound row, joined once for the whole list.
   const templates = useTemplateIndex(items.map((i) => i.templateId));
 
-  // Live draft chips (staged-but-unapplied edits), and the prune that keeps the
-  // store from growing as items come and go — inherited from the stack panel.
+  // Live draft chips (staged-but-unapplied edits). Subscribe only — this panel
+  // RENDERS drafts, it no longer prunes them.
+  //
+  // The prune moved to `useStackHousekeeping`, called from `App`. It was stack
+  // housekeeping living in a component `App` unmounts on either fullscreen path,
+  // and on remount it ran against the bootstrap snapshot and deleted every staged
+  // edit the operator had typed. Do not bring it back here: the bug is not the
+  // prune's logic, it is a destructive pass keyed to a view's mount lifetime.
   useSyncExternalStore(subscribeDrafts, draftsVersion);
-  useEffect(() => {
-    const ids = new Set(items.map((i) => i.itemId));
-    pruneDrafts(ids);
-    pruneFromFile(ids);
-    // B-113 — restore file attachments a previous session persisted, in the SAME
-    // pass that prunes. Both need exactly one thing — the set of item ids that
-    // are really on the stack — and running them apart is how a restore lands a
-    // moment before the prune that would have rejected it, flashing file names
-    // onto rows that no longer exist. Idempotent: an already-attached field is
-    // left alone, so re-running on every stack change costs nothing.
-    void restoreFromFileAttachments(ids);
-  }, [items]);
 
   const itemById = useMemo(() => {
     const map = new Map<string, StackItemState>();

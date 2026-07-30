@@ -492,7 +492,45 @@ keyed wrongly would make the class unrepresentable rather than merely known.
 
 ---
 
-### OPEN BUG (not fixed, diagnosed): a panel fullscreen round-trip DESTROYS unapplied drafts
+### CLOSED: a panel fullscreen round-trip destroyed unapplied drafts
+
+Fixed in `dev-draft-loss`. **The readiness contract, stated once so the next consumer
+inherits it:** `useBridgeSnapshotState` returns `{ value, ready }`, where `ready` is
+false for the bootstrap window — the hook is handing back the caller's `initial`
+value because nothing has arrived, NOT because the bridge said the value is empty.
+`useStackSnapshot()` exposes that for the stack.
+
+**Anything that acts on an item's ABSENCE takes `StackPruneInput`**, which is
+`{ ready: false }` or `{ ready: true, liveItemIds }` — the not-ready shape carries no
+ids at all, so there is no way to hand a prune a list it cannot vouch for. A plain
+`(ids, ready)` pair was rejected deliberately: the next caller passes `true` by habit.
+Consumers that merely RENDER keep using `useStack()`; an empty list for one frame is
+not a loss.
+
+The prune now runs from `useStackHousekeeping`, called by `App` — the one component
+mounted for the life of the page. The fail-closed guard inside `pruneDrafts` is kept
+as well: the placement stops this instance, the guard stops the class.
+
+**Sweep result, so nobody repeats it** — three consumers read the stack snapshot and
+act on absence, all in the same pass, all now guarded: `pruneDrafts` (the reported
+one), `pruneFromFile` (file attachments, same pass, same loss), and
+`restoreFromFileAttachments` → `pruneAttachments`, which was the **worst** of the
+three and was not in the original report: it deletes from DURABLE storage, so driven
+by the bootstrap snapshot it would wipe every persisted attachment handle in the
+profile, and a reload would not bring them back. Everything else that reads the stack
+(`ChannelScope`, `PreviewPanel`, `ServerSettingsPanel`, `FixedBankConfigModal`,
+`LayersPanel`) only renders or derives — checked, none had the bug.
+
+**Known seams, left deliberately:** `useStackHousekeeping` opens a SECOND subscription
+to the stack channel alongside `App`'s own `useStack()` — both receive the same pushes,
+so it is a small cost and not a correctness issue. And `ready` latches permanently
+rather than clearing on a link drop: once the bridge has said what is on the stack,
+a later disconnect does not make that knowledge un-arrive, and clearing it would
+re-open the bootstrap window on every blip.
+
+---
+
+### (superseded — kept for the record) the diagnosis as first written
 
 **Reported by the owner:** with unsaved Inspector edits staged, maximising the
 Inspector — or maximising then restoring PGM/PVW — loses the draft.

@@ -61,6 +61,9 @@ function item(fields: FieldValues = {}): StackItemState {
 
 const PATH = ['crawl'] as const;
 
+/** A stack snapshot that HAS arrived, carrying these ids. */
+const live = (...ids: string[]) => ({ ready: true as const, liveItemIds: new Set(ids) });
+
 describe('initial load (choose file) — stages like a hand edit', () => {
   it('whole-file mode stages ONE list item holding the entire content verbatim', async () => {
     const source = fakeSource(['خبر اول *** خبر دوم']);
@@ -179,8 +182,22 @@ describe('store housekeeping', () => {
     const source = fakeSource(['x']);
     attachFileSource('item-1', PATH, source, { split: false, delimiter: '\\n' });
     attachFileSource('item-2', PATH, source, { split: false, delimiter: '\\n' });
-    pruneFromFile(['item-2']);
+    pruneFromFile(live('item-2'));
     expect(fromFileState('item-1', PATH)).toBeUndefined();
+    expect(fromFileState('item-2', PATH)).toBeDefined();
+  });
+
+  /**
+   * `pruneFromFile` rode the SAME pass as `pruneDrafts`, so it lost file
+   * attachments on exactly the remounts that lost the drafts. A different store
+   * and a different loss, one mechanism — asserted separately for that reason.
+   */
+  it('pruneFromFile deletes NOTHING when the snapshot has not arrived', () => {
+    const source = fakeSource(['x']);
+    attachFileSource('item-1', PATH, source, { split: false, delimiter: '\\n' });
+    attachFileSource('item-2', PATH, source, { split: false, delimiter: '\\n' });
+    pruneFromFile({ ready: false });
+    expect(fromFileState('item-1', PATH)).toBeDefined();
     expect(fromFileState('item-2', PATH)).toBeDefined();
   });
 

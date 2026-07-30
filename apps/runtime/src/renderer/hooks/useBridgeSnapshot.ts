@@ -27,6 +27,28 @@ import { useLink } from './useLink.js';
  * `fetchSnapshot` / `subscribe` must be stable across renders (module-level functions) —
  * they are effect dependencies.
  */
+/**
+ * A snapshot together with whether it has actually ARRIVED yet.
+ *
+ * `ready: false` is the bootstrap window — the hook is handing back the caller's
+ * `initial` value because nothing has landed, NOT because the bridge said the
+ * value is empty. Those two are different facts and the type keeps them apart.
+ *
+ * This is the project's own "unknown ≠ empty" doctrine (B-094), applied to DATA
+ * rather than to occupancy. It is here rather than at one call site because the
+ * mistake has now been made three times in this renderer — the b2 density bug,
+ * PVW's white page, and `pruneDrafts` DELETING every staged edit on remount — and
+ * only the third one destroyed the operator's work. Any consumer that ACTS on the
+ * absence of an item (deletes, unbinds, clears, marks stale) must read this form
+ * and do nothing while `ready` is false; a consumer that merely RENDERS can keep
+ * using the plain value, because rendering an empty list for one frame is not a
+ * loss.
+ */
+export interface BridgeSnapshot<T> {
+  readonly value: T;
+  readonly ready: boolean;
+}
+
 export function useBridgeSnapshot<T>(
   fetchSnapshot: () => Promise<T>,
   subscribe: (handler: (next: T) => void) => Unsubscribe,
@@ -40,7 +62,25 @@ export function useBridgeSnapshot<T>(
    */
   pullWhileDisconnected = false,
 ): T {
+  return useBridgeSnapshotState(fetchSnapshot, subscribe, initial, pullWhileDisconnected).value;
+}
+
+/**
+ * The same subscription, returning {@link BridgeSnapshot} — the value AND whether
+ * it has arrived. Use this wherever absence drives an action; see the type's note.
+ */
+export function useBridgeSnapshotState<T>(
+  fetchSnapshot: () => Promise<T>,
+  subscribe: (handler: (next: T) => void) => Unsubscribe,
+  initial: T,
+  pullWhileDisconnected = false,
+): BridgeSnapshot<T> {
   const [value, setValue] = useState<T>(initial);
+  // Latches on the FIRST arrival — a push or a resolved pull — and never clears.
+  // Deliberately not tied to link state: once the bridge has told us what is on the
+  // stack, a later disconnect does not make that knowledge un-arrive, and clearing
+  // it would re-open the bootstrap window on every blip.
+  const [ready, setReady] = useState(false);
   const link = useLink();
   // Bumped by every push. A pull that resolves with a stale generation lost the race
   // against a publish and is dropped.
@@ -51,6 +91,7 @@ export function useBridgeSnapshot<T>(
       subscribe((next) => {
         generation.current += 1;
         setValue(next);
+        setReady(true);
       }),
     [subscribe],
   );
@@ -64,7 +105,10 @@ export function useBridgeSnapshot<T>(
     const pulledAt = generation.current;
     void fetchSnapshot().then(
       (next) => {
-        if (!cancelled && generation.current === pulledAt) setValue(next);
+        if (!cancelled && generation.current === pulledAt) {
+          setValue(next);
+          setReady(true);
+        }
       },
       () => {
         // The link dropped between the check above and the round-trip landing. Nothing to
@@ -76,5 +120,5 @@ export function useBridgeSnapshot<T>(
     };
   }, [fetchSnapshot, link, pullWhileDisconnected]);
 
-  return value;
+  return { value, ready };
 }

@@ -21,6 +21,7 @@ import { StatusBar } from './features/status/StatusBar.js';
 import { Tooltip } from './ui/Tooltip.js';
 import { useConnections } from './hooks/useConnections.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
+import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
 import { useLink } from './hooks/useLink.js';
 import { useLock } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
@@ -117,6 +118,13 @@ export function App(): JSX.Element {
   // field, and a subscription per rendered field would open and close one every
   // time the operator changed selection.
   useEffect(() => initDelimiters(window.cg), []);
+
+  // Stack housekeeping — the prune of per-item state for items that have left the
+  // stack, plus the file-attachment restore. HERE because `App` is the one
+  // component mounted for the life of the page: as an effect inside `LayersPanel`
+  // it re-ran on every fullscreen round-trip (which unmounts that panel) against a
+  // bootstrap snapshot, and deleted every staged edit. See `useStackHousekeeping`.
+  useStackHousekeeping();
 
   // Narrow: one column, the Inspector is an overlay. Fullscreen: the focused
   // panel takes everything. Otherwise: workspace | divider | Inspector.

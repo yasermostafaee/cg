@@ -1,4 +1,4 @@
-import type { FieldPath } from './draftStore.js';
+import type { FieldPath, StackPruneInput } from './draftStore.js';
 import {
   attachmentKey,
   deleteAttachment,
@@ -167,9 +167,16 @@ export function setFromFileError(itemId: string, path: FieldPath, error: string 
   bump();
 }
 
-/** Drop entries for items no longer on the stack (wired beside `pruneDrafts`). */
-export function pruneFromFile(liveItemIds: Iterable<string>): void {
-  const live = new Set(liveItemIds);
+/**
+ * Drop entries for items no longer on the stack (wired beside `pruneDrafts`).
+ *
+ * Takes the same {@link StackPruneInput} and fails closed for the same reason: it
+ * rides the SAME pass, so it lost file attachments on exactly the remounts that
+ * lost the drafts. A different store and a different loss, one mechanism.
+ */
+export function pruneFromFile(snapshot: StackPruneInput): void {
+  if (!snapshot.ready) return;
+  const live = snapshot.liveItemIds;
   let changed = false;
   for (const key of [...entries.keys()]) {
     const [itemId] = JSON.parse(key) as [string, ...string[]];
@@ -193,9 +200,17 @@ export function pruneFromFile(liveItemIds: Iterable<string>): void {
  * An already-attached field is left ALONE: the live session's attachment is the
  * operator's most recent intent, and a restore arriving late must never
  * overwrite a file they just picked.
+ *
+ * TAKES {@link StackPruneInput}, NOT A BARE ID LIST, because the `pruneAttachments`
+ * below deletes from DURABLE storage. Driven by the bootstrap snapshot it would
+ * have wiped every persisted attachment in the profile — the same mechanism as the
+ * draft loss but a strictly worse blast radius, since that one survives a reload.
+ * It was reachable only because this ran in the same pass as the prunes; the type
+ * now makes it unreachable rather than merely un-called.
  */
-export async function restoreFromFileAttachments(liveItemIds: Iterable<string>): Promise<void> {
-  const live = new Set(liveItemIds);
+export async function restoreFromFileAttachments(snapshot: StackPruneInput): Promise<void> {
+  if (!snapshot.ready) return;
+  const live = snapshot.liveItemIds;
   const records = await loadAttachments();
   let changed = false;
   for (const record of records) {

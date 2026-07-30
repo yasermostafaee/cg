@@ -240,9 +240,32 @@ function deleteAt(root: FieldValues, path: FieldPath): void {
   if (Object.keys(child).length === 0) delete root[head];
 }
 
-/** Drop drafts for items no longer on the stack (wired to the snapshot). */
-export function pruneDrafts(liveItemIds: Iterable<string>): void {
-  const live = new Set(liveItemIds);
+/**
+ * What a prune is allowed to be driven by.
+ *
+ * A DELETE keyed on absence-of-evidence is the worst available combination of
+ * those two facts, so the readiness is part of the ARGUMENT rather than a boolean
+ * beside it: `{ ready: false }` carries no ids at all, so there is no shape in
+ * which a caller can hand a prune an id list it cannot vouch for. That is the
+ * difference between fixing this line and removing the landmine — a plain
+ * `(ids, ready)` pair would let the next caller pass `true` by habit.
+ */
+export type StackPruneInput =
+  | { readonly ready: false }
+  | { readonly ready: true; readonly liveItemIds: ReadonlySet<string> };
+
+/**
+ * Drop drafts for items no longer on the stack.
+ *
+ * FAILS CLOSED on a snapshot that has not arrived. This is the cheap guard and it
+ * is kept even though the call site moved: the failure mode is silent destruction
+ * of work the operator typed, and there is no undo, which is exactly when defence
+ * in depth is worth its cost. A prune that cannot tell what is on the stack has no
+ * business deleting drafts.
+ */
+export function pruneDrafts(snapshot: StackPruneInput): void {
+  if (!snapshot.ready) return;
+  const live = snapshot.liveItemIds;
   let changed = false;
   for (const itemId of [...drafts.keys()]) {
     if (!live.has(itemId)) {

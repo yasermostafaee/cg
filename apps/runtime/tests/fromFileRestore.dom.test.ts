@@ -21,6 +21,9 @@ import type { PersistedAttachment } from '../src/renderer/features/inspector/fro
  */
 
 const saved = new Map<string, PersistedAttachment>();
+
+/** A stack snapshot that HAS arrived, carrying these ids. */
+const live = (...ids: string[]) => ({ ready: true as const, liveItemIds: new Set(ids) });
 const pruneCalls: string[][] = [];
 
 vi.mock('../src/renderer/features/inspector/fromFilePersistence.js', async () => {
@@ -79,7 +82,7 @@ describe('from-file attachments survive a refresh', () => {
     __resetFromFileForTest();
     expect(fromFileState('item-1', ['anchor'])).toBeUndefined();
 
-    await restoreFromFileAttachments(['item-1']);
+    await restoreFromFileAttachments(live('item-1'));
     const restored = fromFileState('item-1', ['anchor']);
     expect(restored?.source.name).toBe('names.txt');
     // The split CONFIG comes back with the file — restoring one without the
@@ -94,7 +97,7 @@ describe('from-file attachments survive a refresh', () => {
     attachFileSource('item-1', ['anchor'], source(handle), { split: false, delimiter: '\\n' });
     __resetFromFileForTest();
 
-    await restoreFromFileAttachments(['item-1']);
+    await restoreFromFileAttachments(live('item-1'));
     const restored = fromFileState('item-1', ['anchor']);
     // Visible — the operator must know WHICH file was attached…
     expect(restored?.source.name).toBe('needs-grant.txt');
@@ -109,9 +112,21 @@ describe('from-file attachments survive a refresh', () => {
     });
     __resetFromFileForTest();
 
-    await restoreFromFileAttachments(['item-still-here']);
+    await restoreFromFileAttachments(live('item-still-here'));
     expect(fromFileState('item-gone', ['anchor'])).toBeUndefined();
     expect(pruneCalls.at(-1)).toEqual(['item-still-here']);
+  });
+
+  /**
+   * THE WORST BLAST RADIUS OF THE THREE. This one's `pruneAttachments` deletes
+   * from DURABLE storage, so driven by the bootstrap snapshot it would not merely
+   * lose the session's attachments — it would wipe every persisted handle in the
+   * profile, and a reload would not bring them back.
+   */
+  it('restoreFromFileAttachments touches durable storage NOT AT ALL when the snapshot has not arrived', async () => {
+    const before = pruneCalls.length;
+    await restoreFromFileAttachments({ ready: false });
+    expect(pruneCalls.length).toBe(before);
   });
 
   it('never overwrites a LIVE attachment with a restored one', async () => {
@@ -126,7 +141,7 @@ describe('from-file attachments survive a refresh', () => {
       delimiter: '\\n',
     });
 
-    await restoreFromFileAttachments(['item-1']);
+    await restoreFromFileAttachments(live('item-1'));
     expect(fromFileState('item-1', ['anchor'])?.source.name).toBe('just-picked.txt');
   });
 
@@ -139,7 +154,7 @@ describe('from-file attachments survive a refresh', () => {
     expect(saved.size).toBe(0);
 
     __resetFromFileForTest();
-    await restoreFromFileAttachments(['item-1']);
+    await restoreFromFileAttachments(live('item-1'));
     expect(fromFileState('item-1', ['anchor'])).toBeUndefined();
   });
 });
