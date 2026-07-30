@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { CSSProperties, Ref } from 'react';
 import type { FieldValues, Position } from '@cg/shared-schema';
+import { positionQuery } from '@cg/shared-schema';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { applyOperatorPosition, type PageRuntimeWindow } from './frameEnvironment.js';
 
@@ -109,8 +110,18 @@ export function RehearsalFrame({
     setReady(false);
   }, [html]);
 
+  // THE CLEANUP IS NOT TIDINESS. Without it an unmounting frame leaves its id in
+  // the stage's ready set, so a row that leaves rehearse and comes back is
+  // counted as booted the instant it remounts — and the transport is armed
+  // against a document that has not run yet. `window.play` is not defined on a
+  // blank page, so the optional call would no-op and the operator would see PLAY
+  // run the composite with one graphic sitting still. Silent, and exactly the
+  // "some rows and not others" shape.
   useEffect(() => {
     onReadyChange?.(itemId, ready);
+    return () => {
+      onReadyChange?.(itemId, false);
+    };
   }, [onReadyChange, itemId, ready]);
 
   // Push the operator's CURRENT values whenever they change, so an edit is
@@ -122,17 +133,26 @@ export function RehearsalFrame({
     templateWindow()?.update?.(JSON.stringify(fields));
   }, [ready, fields, templateWindow]);
 
-  // THE POSITION EDIT REACHING THE PREVIEW. `ready` and `position` are BOTH
-  // dependencies, and that pairing is what makes an Apply visible:
-  // `ready` covers the first placement after a boot, `position` covers every
-  // later Apply on an already-booted page. Neither alone is enough — with only
+  // THE POSITION EDIT REACHING THE PREVIEW. `ready` and the placement are BOTH
+  // dependencies, and that pairing is what makes an Apply visible: `ready`
+  // covers the first placement after a boot, the placement covers every later
+  // Apply on an already-booted page. Neither alone is enough — with only
   // `ready`, an Apply changed nothing until something happened to remount the
   // frame, which is why typing into an unrelated Inspector field looked like it
   // "fixed" the preview.
   //
-  // ONLY THE FRAME WHOSE SUBJECT CHANGED RE-RUNS. This effect is per frame, so
+  // KEYED ON THE PLACEMENT'S VALUE, NOT THE OBJECT'S IDENTITY. `position` is a
+  // fresh object out of every bridge stack push, so depending on it directly
+  // re-placed every frame in the composite on every unrelated push — including
+  // frames whose row nobody had touched. `applyOutputPosition` is idempotent so
+  // nothing moved, but "only the edited row's frame is written to" would have
+  // been true of the intent and false of the code, and the next person to make
+  // that function non-idempotent would have found out the hard way.
+  //
+  // ONLY THE FRAME WHOSE PLACEMENT CHANGED RE-RUNS. This effect is per frame, so
   // applying a position to the selected row leaves every other frame's document
   // untouched — the composite does not re-place graphics nobody edited.
+  const placementKey = position === undefined ? null : positionQuery(position);
   useEffect(() => {
     if (!ready) return;
     const frame = frameRef.current;
@@ -140,9 +160,13 @@ export function RehearsalFrame({
     applyOperatorPosition(
       frame.contentWindow as TemplateWindow | null,
       frame.contentDocument,
-      position,
+      // Re-derived from the key rather than closed over, so the value the effect
+      // applies is the one its dependency describes — they cannot drift.
+      placementKey === null ? undefined : position,
     );
-  }, [ready, position]);
+    // `position` is deliberately absent from the deps: `placementKey` is its
+    // value, and adding the object back would restore the identity churn above.
+  }, [ready, placementKey]);
 
   return (
     <iframe

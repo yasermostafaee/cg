@@ -247,6 +247,58 @@ test('an applied position reaches the SELECTED row’s frame and no other', asyn
 });
 
 /**
+ * ── A ROW THAT LEAVES REHEARSE AND COMES BACK IS NOT COUNTED AS ALREADY BOOTED ─
+ *
+ * Found by reviewing this change's own diff rather than by a report, and it is
+ * the failure class the composite makes possible: the stage arms its transport
+ * once EVERY frame has booted, tracked as a set of item ids. An unmounting frame
+ * that did not withdraw its id left the set claiming a row was ready, so on
+ * re-entry the transport was live against a document that had not run yet —
+ * `window.play` undefined, the optional call a no-op, and PLAY visibly running
+ * the composite with one graphic sitting still. Silent, and exactly the "lands
+ * for some rows and not others" shape.
+ */
+test('re-entering rehearse re-arms the transport rather than inheriting stale readiness', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const a = await app.importVcg('a.vcg', await buildValidVcg('tpl-a'));
+  const b = await app.importVcg('b.vcg', await buildValidVcg('tpl-b'));
+  await stubRetainedPage(page);
+
+  const transport = page
+    .getByRole('region', { name: 'PREVIEW' })
+    .getByRole('button', { name: /^PLAY/ });
+
+  await rehearseRow(page, a);
+  await rehearseRow(page, b);
+  await expect(frames(page)).toHaveCount(2);
+  await expect(transport).toBeEnabled();
+
+  // Leave rehearse on one row, then re-enter it. The verb is a TOGGLE in a fixed
+  // slot, so its word flips to END REHEARSE while the row is rehearsing.
+  await page
+    .locator(`[data-layer="${String(b)}"]`)
+    .getByRole('button', { name: 'END REHEARSE', exact: true })
+    .click();
+  await expect(frames(page)).toHaveCount(1);
+  await rehearseRow(page, b);
+  await expect(frames(page)).toHaveCount(2);
+
+  // Both frames must really have booted for the transport to be live — and the
+  // returning row must have gone through a fresh boot to get there.
+  await expect(transport).toBeEnabled();
+  const booted = await frames(page).evaluateAll((els) =>
+    els.every(
+      (el) =>
+        typeof (el as HTMLIFrameElement).contentWindow?.['play' as keyof Window] === 'function',
+    ),
+  );
+  expect(booted).toBe(true);
+});
+
+/**
  * The scene is BYTE-IDENTICAL after a position rehearsal. "Saving the position"
  * writes the operator override (R-011) and never the authored position in the
  * scene — otherwise the operator would silently rewrite a template that other
