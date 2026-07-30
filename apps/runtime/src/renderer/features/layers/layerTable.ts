@@ -59,8 +59,20 @@ const VERB_COL_PX = 48;
  */
 const VERB_GAP_PX = 12;
 
-/** How many verbs get a BUTTON on the row (the rest are right-click only). */
-export const VERB_COUNT = 5;
+/**
+ * How many verbs get a BUTTON on the row (the rest are right-click only).
+ *
+ * SIX since R-022 added REHEARSE. This number is not decoration: it is the width
+ * of the verb block AND the column count of the grid the header's word row and
+ * the row's button row BOTH lay out on. Leaving it at five when the row started
+ * emitting a sixth button did two things at once — the sixth button (CLEAR) wrapped
+ * onto a second line, and every header word from NEXT rightward sat above the WRONG
+ * glyph. That second one is the dangerous half: this product's STOP (graceful) and
+ * CLEAR (hard kill) are the inverse of the reference product's, and the header word
+ * is precisely the channel that retires the misread. Adding a button here without
+ * adding its head to `VERB_HEADS` re-opens it.
+ */
+export const VERB_COUNT = 6;
 
 /** Gap between table columns, and the row's horizontal padding, in px. */
 const COL_GAP_PX = 12;

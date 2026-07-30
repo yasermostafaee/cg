@@ -44,6 +44,14 @@ const VERB_HEADS: readonly { label: string; title: string }[] = [
     title: 'LOAD on an empty row; once a template is on the row this button becomes REMOVE.',
   },
   { label: 'PLAY', title: 'Take the row’s graphic to air.' },
+  {
+    // R-022 — emitted by `layerRowActions` BETWEEN play and next, so it is
+    // declared here in that position. Its absence did not merely omit a word: it
+    // shifted every head to its right onto the wrong glyph.
+    label: 'REHEARSE',
+    title:
+      'Render this row’s graphic locally in PREVIEW, with PLAY interlocked off. Nothing is sent to CasparCG.',
+  },
   { label: 'NEXT', title: 'Advance a multi-step template to its next step.' },
   {
     label: 'STOP',
@@ -166,8 +174,12 @@ export function LayerTableHeader({
       {/* No LAYER column — the real CasparCG layer number is in the Inspector and
           in each row's own tooltip / accessible name. */}
       <span style={VERBS_GRID}>
+        {/* `data-verb-head` is the E2E's hook for the one invariant neither file
+            can show on its own: exactly one head per verb BUTTON, in the same
+            order. A mismatch puts a word above the wrong glyph — and this
+            product's STOP/CLEAR are inverted from the reference product's. */}
         {VERB_HEADS.map((verb) => (
-          <span key={verb.label} style={styles.verbHead} title={verb.title}>
+          <span key={verb.label} data-verb-head style={styles.verbHead} title={verb.title}>
             {verb.label}
           </span>
         ))}
