@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type TextareaHTMLAttributes } from 'react';
+import { EDITOR_DIR } from './editorTextDirection.js';
 
 /**
  * A `<textarea>` that SIZES ITSELF to its content.
@@ -54,6 +55,10 @@ export function AutoGrowTextarea({
       // input); the effect above decides the real height from here.
       rows={2}
       {...rest}
+      // AFTER `rest`, so no caller can accidentally pin a direction on an editor.
+      // See `editorTextDirection` — this is presentation only and never reaches the
+      // value, the scene or air.
+      dir={EDITOR_DIR}
     />
   );
 }

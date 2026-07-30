@@ -10,6 +10,42 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### b4 — two same-named sequences still produce IDENTICAL Inspector headings
+
+Found while answering b4 item 2, and now ASSERTED rather than assumed away
+(`packages/shared-schema/tests/composition-fields.test.ts`, the "TWO same-named sequences"
+case).
+
+A sequence composition item's display label is built from the sequence ELEMENT's name
+(`sequenceItemNamespace`), so two sequences both called `Sequence`, each with an item at
+position 1, both render the heading `Sequence — item 1`. The value KEYS are distinct and
+id-based, so nothing collides or collapses in the data — this is purely that the operator
+cannot tell the two headings apart from the Inspector.
+
+The old test comment claimed "the operator disambiguates by element". He cannot: the
+element name is not shown in the Inspector, only the label. That comment is now corrected
+to state the real limit.
+
+**Not fixed here.** Making sibling labels unique needs a de-dup pass over the aggregate
+(the shape of `uniqueInstanceName`, but applied to labels and producing something better
+than `Sequence — item 1 2`). It is a Designer-facing authoring nicety as much as a Runtime
+one, and it deserves its own decision about the wording. The workaround today is to rename
+one of the two sequence elements in the Designer.
+
+### b4 — `Reload` and `Grant access` are still ACCENT-coloured affordances
+
+Item 5 named Discard and `From file…`; both are `neutral` now, as is `Add item` in the list
+editor (it was in the same file being rebuilt). `FromFileControl`'s `Reload` and
+`Grant access` remain `variant="secondary"` — a sky-accent outline
+(`apps/runtime/src/renderer/features/inspector/FromFileControl.tsx:154,170`).
+
+Left deliberately, flagged rather than swept: by the strict reading of the neutral rule
+they are affordances and should carry no hue, but `Grant access` in particular only appears
+in an attention state (a restored file source whose read permission the browser did not
+carry over), so its accent is arguably state-adjacent. It is a one-word `variant` change
+per button if the owner wants them neutral too — the same shape as the still-coloured bulk
+verbs recorded further down.
+
 ### ⚠ VOID — the CasparCG 2.5.0 conclusion below is WRONG. 2.5.0 works.
 
 **Struck through, not deleted, because the mistake is more instructive than the
@@ -139,10 +175,26 @@ through a change that emptied the rule of meaning. A green suite is not evidence
 
 Owed: re-word R-006 and B-087 in `docs/prd/*` to name the air colour by role rather than
 by hue, and audit the surface for reds that no longer mean danger. Two were already caught
-and fixed in code this session (`.cg-btn--air`'s hard-coded rose tint and text, which would
+and fixed in code in b3 (`.cg-btn--air`'s hard-coded rose tint and text, which would
 have left a red control claiming to be the on-air family). `theme.ts`'s header and
 `tests/theme.test.ts`'s prose were corrected in place; the PRD was not touched, per fast
 mode.
+
+**Re-confirmed as a PRD edit owed (2026-07-30, owner).** ON AIR is GREEN, per the
+mock-up — closed, not open for revisiting. The consequence to RECORD rather than solve is
+exactly this entry: R-006's sentence "a simulation may never wear the broadcast **red**"
+is now anchored to the wrong colour. `docs/prd/*` was deliberately NOT edited (fast mode
+forbids it).
+
+**b4 update:** the `air` VARIANT is now gone entirely, not merely retinted — the Inspector's
+UPDATE was its last caller and went `neutral`, so the type, the class map, the accent map
+and the CSS block were all deleted. That removes the last control wearing an air hue, which
+narrows the audit this entry asks for but does not discharge the re-wording.
+
+**And the trap is worth restating, because it is the reason this needs recording at all:**
+the tests assert the ROLE (`data-row-state`, `cg-badge--onair`, `badgeTone`), never the hex.
+That is the durable form and was kept deliberately — but it means the suite stays GREEN
+while the PRD wording drifts away from the code. A green suite is not evidence here.
 
 ### The `#` column and the default alias are ONE number by construction — keep it that way
 
@@ -265,7 +317,39 @@ name says. Pre-existing.
 
 ## Skipped process
 
-Per the fast-mode contract, all of this was deliberately not done:
+Per the fast-mode contract, all of this was deliberately not done.
+
+**b4 (the Inspector task) specifically:**
+
+- **No `pnpm gate`.** Ran the affected workspaces' own tasks instead, all green before
+  hand-off: `@cg/runtime` `typecheck`, `lint` (**0 errors**; the same 6 pre-existing
+  warnings, none introduced), `test` (**391 passed, 55 files**), `build` (succeeds);
+  `@cg/shared-schema` `test` (**21 passed** in the touched file) and `build`. NOT run: the
+  full turbo fan-out, `format:check` beyond what the pre-commit `lint-staged` prettier pass
+  covers, and any uncached cross-workspace run.
+- **E2E NOT RUN AT ALL for b4** — neither Windows nor Linux. This is the biggest gap in the
+  task. It changes UI and layout, so a Linux `gate:e2e` is owed on CLAUDE.md's own terms,
+  and on top of that **three Designer E2E assertions were edited blind**
+  (`apps/designer/tests/e2e/sequence-composition-item-fields.spec.ts`) to match the new
+  `Sequence — item 1` label. Their new expected strings are derived from the changed
+  function and were verified against the shared-schema unit test that pins the same format,
+  but the Playwright specs themselves were never executed. **Run them before this reaches
+  `main`.** The em-dash in the expected text is the specific thing to watch.
+- **Item 6 is asserted in jsdom, which has NO bidi engine.** The tests pin what this repo
+  controls — the attribute is `auto`, no editor pins a literal `rtl`/`ltr`, and values
+  round-trip byte-identically — and deliberately do NOT claim to have verified the browser's
+  first-strong-character resolution. The `@IRIBNEWS`-stays-LTR behaviour is the browser's
+  UAX #9 implementation and needs a real browser (or the owner's eye) to observe.
+- **No OpenSpec anything, no `docs/prd/*` edits, no item numbers claimed.** The R-028 spec
+  does not describe the Inspector as it now is.
+- **Engine doc-sync not done** for the two new UI extension points (`AutoGrowTextarea`,
+  `editorTextDirection`).
+- **No hardware verification.** Nothing in b4 reaches an on-air path, so the adversarial
+  review requirement did not fire — with the one exception the task itself named, item 6,
+  which was held to the editor/value separation and is covered by the round-trip test rather
+  than by review.
+
+**Earlier tasks (b3 and before):**
 
 - **No `pnpm gate`.** Ran the affected workspace's own tasks instead, and all were
   green before hand-off: `@cg/runtime` `typecheck`, `lint` (0 errors; 6 warnings, all
@@ -298,6 +382,61 @@ Per the fast-mode contract, all of this was deliberately not done:
 
 Each of these was an open design question. The simplest reversible option was taken
 and recorded here rather than blocking on the owner.
+
+### b4 — WIDE vs COMPACT field rows is decided by field KIND, not by width alone
+
+Item 1 asked for the layout to stop starving the textareas. Two mechanisms were possible:
+a pure width rule, or a per-kind rule. Both are in, and the split is:
+
+- **text / multiline / list / image** stack their label ABOVE the control and take the
+  panel's full width. Chosen because a 160px value column was never enough for a Persian
+  headline **at any panel width** — widening the screen does not fix a fixed 120px label
+  column plus in-line buttons.
+- **boolean / number / colour / select** keep the compact two-column row: they have a small
+  intrinsic width and the denser form is easier to scan.
+- A **container query** then collapses even the compact rows below 15rem.
+
+The alternative — collapse everything on width alone — was rejected because it makes a
+checkbox row as tall as a headline row on a normal-width panel for no gain. Reversible: it
+is one predicate (`isWideKind`) and one CSS class.
+
+### b4 — the container query is on the PANEL, not the viewport (and this one is not really optional)
+
+Recorded because a future reader may be tempted to "simplify" it to a media query. The
+Inspector is a draggable column, can go fullscreen, and below the narrow breakpoint becomes
+a right-pinned overlay at `min(24rem, 82vw)`. Its width is therefore NOT a function of the
+viewport's, so a media query gets the answer wrong in precisely the two cases the owner
+named as constraints. `container-type: inline-size` on `.cg-inspector-body` asks the panel
+about its own width — the same "probe the axis you intend to judge" rule CLAUDE.md states
+for liveness, applied to layout.
+
+### b4 — auto-grow textareas have NO resize handle
+
+`AutoGrowTextarea` owns the height and re-measures on every value change, so a manual drag
+would be silently undone by the next keystroke. A handle that quietly stops working is
+worse than no handle, so `resize: none` plus a ~200px cap with internal scrolling. If the
+owner wants manual resize back, the cap is the thing to raise instead.
+
+### b4 — the drag handle is `aria-hidden`, and the arrows are the accessible path
+
+Native drag is pointer-only. Rather than announce a control a keyboard or screen-reader user
+cannot operate, the grip is `aria-hidden` + `tabIndex={-1}` and the labelled ↑/↓ buttons —
+which the owner explicitly required be kept — remain the complete, keyboard-reachable route
+to the same result. The alternative (a full ARIA drag-and-drop pattern with keyboard pickup)
+is a much larger surface and would duplicate what the arrows already do correctly.
+
+### b4 — the sequence label was fixed at the SOURCE, so the Designer's wording changed too
+
+`ROTATOR[0]` → `ROTATOR — item 1` was applied in `sequenceItemNamespace`
+(`@cg/shared-schema`) rather than by reformatting the string inside the Runtime Inspector.
+That means the Designer's preview form and the GDD now show the new wording as well.
+
+Chosen deliberately: it is ONE display string with one definition, and having the Runtime
+and the Designer disagree about what the same group is called is worse than a wider diff.
+Munging `"ROTATOR[0]"` back into a friendly form at the display site would also mean parsing
+a label, which is fragile. Cost: three Designer E2E assertions and one shared-schema unit
+assertion were updated (values and keys untouched — the KEY is `name`, which did not
+change).
 
 ### The real layer number STAYS on the row (a documented softening of task 4.2)
 
@@ -473,10 +612,18 @@ destruction the disjointness rules exist to prevent. `T10b` in
 `tools/caspar-bridge/tests/fixed-layers-store.test.ts` now pins the pairing, asserting the
 full 70–99 bank validates AND that no dynamic range overlaps 70–99.
 
-**This is an on-air-adjacent change and it is NOT verified on air.** It alters where
-dynamically-allocated `logo-bug` graphics land — 40–49 instead of 90–99 — on any install
-that uses dynamic allocation. Nothing on this machine could confirm that; a hardware pass is
-owed. One test moved with it (`layer-manager.test.ts`'s pinned-slot skip pinned layer 95 and
+**RE-SCOPED by the owner (2026-07-30) — this is NOT a hardware debt.** The b3 session
+recorded "a hardware pass is owed" for the `logo-bug` move to 40–49. The owner has closed
+it: **`logo-bug`'s dynamic range stays at 40–49**, and his reasoning is that the bank is
+70–99 and **the operator picks the row**, so a template type's range no longer decides
+where a logo lands. Section 6 of R-028 will make those ranges DESCRIPTIVE anyway.
+
+So this belongs to **part C's** job, not to a hardware verification queue. Nothing about
+it needs a CasparCG to confirm. The paragraph below is kept for the record of what moved
+and why; treat its "hardware pass is owed" as superseded by this note.
+
+It alters where dynamically-allocated `logo-bug` graphics land — 40–49 instead of 90–99 —
+on any install that uses dynamic allocation. One test moved with it (`layer-manager.test.ts`'s pinned-slot skip pinned layer 95 and
 expected an allocation at 90; both were inside the old range and neither is inside the new
 one, so the assertion had stopped testing the skip — it now pins 40 and expects 41).
 

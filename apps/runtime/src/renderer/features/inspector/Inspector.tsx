@@ -16,6 +16,7 @@ import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { Panel } from '../../ui/Panel.js';
+import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
 import { FromFileControl } from './FromFileControl.js';
@@ -474,6 +475,7 @@ function FieldControl({
       <input
         className={fieldClass(dirty)}
         type="text"
+        dir={EDITOR_DIR}
         value={v}
         placeholder="asset id"
         onChange={(e) => onStage({ assetId: e.target.value })}
@@ -501,10 +503,14 @@ function FieldControl({
   }
   // Default: text input (controlled — stages on change, no blur/Enter commit).
   const v = typeof value === 'string' ? value : value === undefined ? '' : String(value);
+  // `dir={EDITOR_DIR}` — the browser's first-strong-character rule, so a Persian
+  // headline reads RTL while `@IRIBNEWS` stays LTR. Presentation only: it never
+  // reaches the staged value or the scene. See `editorTextDirection`.
   return (
     <input
       className={fieldClass(dirty)}
       type="text"
+      dir={EDITOR_DIR}
       value={v}
       onChange={(e) => onStage(e.target.value)}
       aria-label={fieldId}
