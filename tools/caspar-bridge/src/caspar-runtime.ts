@@ -44,6 +44,9 @@ import {
   type ChannelSettings,
   type ChannelSettingsState,
   type CHANNEL_SETTINGS_SET_REASONS,
+  type Rehearsal,
+  type REHEARSE_ENTER_REASONS,
+  type REHEARSE_EXIT_REASONS,
 } from '@cg/shared-ipc';
 import { ChannelSettingsStore } from './channel-settings-store.js';
 import {
@@ -73,6 +76,68 @@ type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
 
 /** R-030 — a refused channel-settings change. */
 type ChannelSettingsSetReason = (typeof CHANNEL_SETTINGS_SET_REASONS)[number];
+
+/** R-022 — a refused rehearse entry. */
+type RehearseEnterReason = (typeof REHEARSE_ENTER_REASONS)[number];
+/** R-022 — a refused rehearse exit. */
+type RehearseExitReason = (typeof REHEARSE_EXIT_REASONS)[number];
+
+/**
+ * R-022 — the wording for a rehearse transition that is already in flight.
+ *
+ * WHY THIS SERIALISATION EXISTS, because it looks like mere debounce and is not.
+ * The mute and the un-mute are separate AMCP round trips, and `exitRehearse`
+ * necessarily drops the claim BEFORE its un-mute lands (so the state is honest if
+ * the send fails). Two overlapping transitions can therefore interleave as:
+ *
+ *   exit: drop claim → [await un-mute]
+ *   enter:              mute → set claim
+ *   exit:                              → un-mute LANDS
+ *
+ * leaving a row that CLAIMS to be rehearsing while its layer is NOT muted. On
+ * 2.5.0 that is audio on air behind a UI insisting the graphic cannot reach air —
+ * the worst kind of wrong this feature can be, because the interlock is the whole
+ * point of it. Serialising per item makes the interleaving unrepresentable rather
+ * than merely unlikely, which is the standard this surface holds everywhere else.
+ */
+const BUSY_MESSAGE =
+  'A rehearse change for this row is still in flight — wait for it to finish, then try again.';
+
+/**
+ * R-022 — the volume a layer is INTENDED to have: full.
+ *
+ * A named constant, not a bare `1`, because it appears in four places that must
+ * agree — the take path's unconditional re-assert, the rehearse exit, the startup
+ * re-assert, and the tests — and because it is the seam a future per-layer volume
+ * feature would replace. Rehearse does NOT change a layer's intended volume; it
+ * applies a temporary mute over it, which is why the restore is a re-assert of
+ * intent rather than an "un-mute" that has to remember what it clobbered.
+ */
+const INTENDED_VOLUME = 1;
+
+/**
+ * THE on-air predicate for a stack item — the ONE definition of "on air or
+ * unsettled", read by R-010's `setConfig` gate, R-030's raster gate, the
+ * rehearse-entry guard and the rehearse abort.
+ *
+ * Extracted because rehearse made it the fourth consumer, and a fourth inline
+ * copy of this status list is exactly how one of them comes to disagree — the
+ * repo's one-canonical-predicate rule (CLAUDE.md golden rule 6). The stakes
+ * differ per caller but the question does not: `updating`/`exiting` ride an
+ * on-air producer, and B-044's `unconfirmed` means the on-air result is UNKNOWN.
+ * Unknown must count as on air in every one of these gates, because each one's
+ * failure mode is acting on a live graphic.
+ */
+function isOnAirStatus(status: StackItemState['status'], pending: boolean): boolean {
+  return (
+    pending ||
+    status === 'playing' ||
+    status === 'on-air' ||
+    status === 'updating' ||
+    status === 'exiting' ||
+    status === 'unconfirmed'
+  );
+}
 
 /**
  * R-010 — where the OSC UDP ingest binds, derived from the declared server's
@@ -204,6 +269,12 @@ export class CasparRuntime {
    * a `mismatch` without anybody touching config.
    */
   readonly channelSettingsChanged = new Emitter<ChannelSettingsState>();
+  /**
+   * R-022 — emitted whenever the rehearsing set changes. Bridge-owned and pushed
+   * to EVERY client: if rehearse lived in one browser, the second operator would
+   * see that row as ordinary and load onto it — a collision on a real layer.
+   */
+  readonly rehearseChanged = new Emitter<Rehearsal[]>();
 
   // R-010 — mutable: `setConfig` swaps the whole connection layer at runtime.
   #config: ConnectionConfig;
@@ -355,6 +426,22 @@ export class CasparRuntime {
    * reading and bury the next distinct problem in its own noise.
    */
   readonly #mismatchWarned = new Map<number, boolean>();
+  /**
+   * R-022 — rows currently in REHEARSE, keyed by item id. Process state, not
+   * persisted: a bridge restart is precisely the case where the claim must NOT
+   * survive — the mute does not survive either (startup re-asserts every declared
+   * row's volume), so a persisted rehearse flag would outlive the condition it
+   * describes and interlock PLAY on a layer that is no longer muted.
+   */
+  readonly #rehearsing = new Map<string, Rehearsal>();
+  /**
+   * R-022 — items whose rehearse transition (mute or un-mute) is in flight. See
+   * {@link BUSY_MESSAGE} for the interleaving this prevents; it is a correctness
+   * lock, not a debounce.
+   */
+  readonly #rehearseBusy = new Set<string>();
+  /** R-022 — the startup volume re-assert is once per process, not per sweep. */
+  #volumesReasserted = false;
   /**
    * R-028 part B — ids this bridge REMOVED, so a reconnecting browser's
    * re-delivery cannot bring them back. Process-lifetime only, deliberately: a
@@ -1321,6 +1408,27 @@ export class CasparRuntime {
   }
 
   async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    /**
+     * R-022 — THE INTERLOCK. A rehearsing item cannot be taken to air, and the
+     * refusal lives HERE rather than only in a disabled button.
+     *
+     * This is the whole point of making rehearse a mode instead of a preview
+     * pane. A greyed-out PLAY is a request, not a guarantee: another browser with
+     * a stale snapshot, a client that reconnected mid-rehearse, or any direct
+     * call reaches this method with the button's opinion nowhere in sight. If the
+     * only thing standing between rehearse and air were UI state, rehearse would
+     * be exactly the "preview pane we hope nobody plays from" this feature exists
+     * not to be.
+     *
+     * Refused rather than silently exiting rehearse and playing: leaving the mode
+     * is the operator's decision, and a PLAY that quietly dropped the interlock
+     * would be a compound verb hiding a mode change behind a take — the same
+     * objection that keeps re-binding a row a two-step Remove-then-Load.
+     *
+     * FIRST in the method, before `#retirePendingRestore`: a refused take must
+     * mutate nothing, and retiring a parked restore is a mutation.
+     */
+    if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -1356,12 +1464,244 @@ export class CasparRuntime {
       }
     }
 
+    // R-022 — RE-ASSERT THE INTENDED VOLUME, UNCONDITIONALLY, ON EVERY TAKE.
+    //
+    // This is the single most important line in the rehearse feature, and it is
+    // deliberately HERE — in the play path — rather than in a "leave rehearse"
+    // step. Rehearse mutes a layer whose producer stays resident, and MIXER state
+    // is channel state: it survives a CLEAR, a CG REMOVE and a bridge restart,
+    // and nothing restores it implicitly. A mute that is not restored means A
+    // GRAPHIC THAT GOES TO AIR SILENT — which is worse than the audio leak the
+    // mute prevents, because nobody notices until someone asks why there is no
+    // sound.
+    //
+    // Putting the restore only on the rehearse-exit path would leave a crash, a
+    // browser reload, a dropped WebSocket or any missed transition able to strand
+    // the mute. Re-asserting on every take makes that class of bug unreachable:
+    // whatever happened before, a graphic cannot reach air without its intended
+    // volume being set on the way.
+    //
+    // It rides its OWN seq, not the take's, so a MIXER refusal cannot perturb the
+    // take's reconciled status — and it is deliberately NOT gated on
+    // `#rehearsing.has(itemId)`. Gating it would reintroduce exactly the
+    // dependence on our own bookkeeping being correct that this exists to remove;
+    // the command is idempotent and costs one AMCP line.
+    const volumeOk = await this.#send(
+      this.#builder.mixerVolume(slot, INTENDED_VOLUME),
+      this.#nextSeq(),
+      'urgent',
+    );
+    if (!volumeOk.ok) {
+      // A FAILED re-assert does NOT block the take, and it must not be silent.
+      //
+      // Not blocking: refusing to put a graphic on air because a volume command
+      // was rejected would be the worse failure — the operator would have no way
+      // to get their graphic up, over an audio setting.
+      //
+      // Not silent: this is the one moment at which the "graphic airs silent"
+      // failure becomes possible, and it is otherwise completely undetectable —
+      // every other signal about the layer reads identically muted or not. The
+      // first cut of this swallowed the result entirely, which meant the single
+      // most consequential failure in the feature had no trace anywhere.
+      process.stderr.write(
+        `[caspar-bridge] ⚠ could not re-assert volume on ${String(slot.channel)}-${String(slot.layer)} ` +
+          `before taking ${itemId} to air (${volumeOk.errorCode ?? 'unknown'}). If this layer was ` +
+          `left muted by a rehearsal, the graphic may be ON AIR SILENT — check the output audio.\n`,
+      );
+    }
+
     // B-079 — bounded completion for a take, which it never had: #armExpiry was called for
     // update and out only, so a take whose ack never settled rested on its optimistic
     // playing/on-air claim forever, with nothing to bound it.
     this.#armExpiry(seq);
     const { ok } = await this.#send(this.#builder.take(slot), seq, 'normal');
     return ok ? { accepted: true } : { accepted: false, errorCode: 'amcp-error' };
+  }
+
+  /**
+   * R-022 — enter REHEARSE for a loaded, not-on-air item.
+   *
+   * The producer STAYS RESIDENT and the layer is muted. The alternative —
+   * CLEAR then re-ADD — is exactly the sequence that failed in the field: the
+   * adopt-CLEAR succeeded, the `CG ADD` after it returned 404, and the layer was
+   * left empty on air. Rehearse must not depend on a path with a known failure
+   * mode (and this is R-029's recorded containment option 2, not a new
+   * invention).
+   *
+   * Every guard is HERE, bridge-side, so no UI state can bypass it — and the mute
+   * is part of the guard, not a follow-up: if the layer cannot be muted, rehearse
+   * is REFUSED rather than entered. Entering it anyway would leave a resident
+   * producer unmuted while every browser shows the row as safely rehearsing,
+   * which on 2.5.0 is audio on air.
+   */
+  async enterRehearse(itemId: string): Promise<{
+    ok: boolean;
+    reason?: RehearseEnterReason;
+    message?: string;
+  }> {
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    if (this.#rehearseBusy.has(itemId)) return { ok: false, reason: 'busy', message: BUSY_MESSAGE };
+    if (this.#rehearsing.has(itemId)) return { ok: true };
+    const item = this.#reconciler.get(itemId);
+    if (item === null || item === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    // Fail closed on the air question: `unconfirmed`/`pending` mean the on-air
+    // result is UNKNOWN, and an unknown must never be muted on a guess. Reuses
+    // the SAME predicate `#onAirCount` and R-010's `setConfig` gate read, never a
+    // second local list of what counts as on air.
+    if (isOnAirStatus(item.status, item.pending)) {
+      return {
+        ok: false,
+        reason: 'on-air',
+        message:
+          'That graphic is on air or unsettled. Take it off air before rehearsing it — ' +
+          'rehearse mutes the layer, and muting a live graphic is not something this will do.',
+      };
+    }
+    if (!this.#loaded.has(itemId)) {
+      return {
+        ok: false,
+        reason: 'not-loaded',
+        message:
+          'Nothing is loaded on that layer, so there is no graphic held ready to rehearse. Load it first.',
+      };
+    }
+    // The mute IS the safety condition. Refuse if it does not land.
+    this.#rehearseBusy.add(itemId);
+    try {
+      const { ok } = await this.#send(
+        this.#builder.mixerVolume(slot, 0),
+        this.#nextSeq(),
+        'urgent',
+      );
+      if (!ok) {
+        return {
+          ok: false,
+          reason: 'mute-failed',
+          message:
+            'The layer could not be muted, so rehearse was not started. Rehearse is only claimed ' +
+            'once the graphic genuinely cannot reach air.',
+        };
+      }
+      this.#rehearsing.set(itemId, { itemId, channel: slot.channel, layer: slot.layer });
+      this.rehearseChanged.emit(this.rehearseState());
+      return { ok: true };
+    } finally {
+      this.#rehearseBusy.delete(itemId);
+    }
+  }
+
+  /**
+   * R-022 — leave REHEARSE and restore the layer's intended volume.
+   *
+   * Reports `ok` even when the un-mute command fails, and says so in `message`.
+   * The alternative would leave every browser claiming rehearse over a layer the
+   * bridge no longer treats as rehearsing — a UI that lies about an interlock is
+   * worse than one that admits a command failed. The restore is also not the last
+   * line of defence: the PLAY path re-asserts the intended volume on every take
+   * and the bridge re-asserts for every declared row at startup, so a failed
+   * un-mute here cannot strand a silent graphic on air.
+   */
+  async exitRehearse(itemId: string): Promise<{
+    ok: boolean;
+    reason?: RehearseExitReason;
+    message?: string;
+  }> {
+    if (this.#rehearseBusy.has(itemId)) return { ok: false, reason: 'busy', message: BUSY_MESSAGE };
+    const rehearsal = this.#rehearsing.get(itemId);
+    if (rehearsal === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not rehearsing.' };
+    }
+    // Dropped from the set FIRST, so the state is honest even if the send throws:
+    // the bridge has stopped interlocking this row, and it must not keep telling
+    // browsers otherwise.
+    this.#rehearsing.delete(itemId);
+    this.rehearseChanged.emit(this.rehearseState());
+    this.#rehearseBusy.add(itemId);
+    try {
+      const { ok } = await this.#send(
+        this.#builder.mixerVolume(
+          { channel: rehearsal.channel, layer: rehearsal.layer },
+          INTENDED_VOLUME,
+        ),
+        this.#nextSeq(),
+        'urgent',
+      );
+      if (ok) return { ok: true };
+      return {
+        ok: true,
+        message:
+          'Rehearse ended, but the layer volume could not be restored. It will be re-asserted the ' +
+          'next time this layer is taken to air.',
+      };
+    } finally {
+      this.#rehearseBusy.delete(itemId);
+    }
+  }
+
+  /** R-022 — every row currently rehearsing. */
+  rehearseState(): Rehearsal[] {
+    return [...this.#rehearsing.values()].sort(
+      (a, b) => a.channel - b.channel || a.layer - b.layer,
+    );
+  }
+
+  /**
+   * R-022 — REHEARSE IS A CLAIM ABOUT OUR INTENT, NOT A GUARANTEE ABOUT THE
+   * CHANNEL. If the layer goes live by ANY route while a row is rehearsing —
+   * another operator on another browser, the playout system driving AMCP
+   * directly, anything — the honest response to being wrong is to stop claiming
+   * it, immediately, and restore the volume.
+   *
+   * Called from the occupancy sweep. The signal is the RECONCILED ITEM STATUS,
+   * not OSC occupancy, and the distinction matters: a rehearsing layer carries a
+   * resident `html` producer, so OSC reports `html` whether it is playing or
+   * merely held ready — occupancy genuinely cannot tell the two apart, and using
+   * it here would abort every rehearsal on the first sweep. The reconciler's
+   * status is driven by AMCP acks and OSC confirmations together and is the only
+   * thing that distinguishes them.
+   */
+  #abortRehearsalsThatWentLive(): void {
+    for (const itemId of [...this.#rehearsing.keys()]) {
+      const item = this.#reconciler.get(itemId);
+      // An item that has VANISHED (removed from the stack) is also no longer
+      // ours to interlock. Its volume still has to be restored — the producer may
+      // be gone but the mixer setting is not.
+      const live = item == null || isOnAirStatus(item.status, item.pending);
+      if (!live) continue;
+      process.stderr.write(
+        `[caspar-bridge] rehearse on ${String(itemId)} ended: the layer went live by another ` +
+          `route, so the rehearse claim was withdrawn and the volume restored.\n`,
+      );
+      void this.exitRehearse(itemId);
+    }
+  }
+
+  /**
+   * R-022 — re-assert the intended volume for every DECLARED row at startup.
+   *
+   * The bridge already owns restore, and this belongs with it. A bridge that died
+   * mid-rehearse left a muted layer behind: mixer state is channel state and
+   * survives the process, so without this the next operator would take that
+   * graphic to air silent, with nothing anywhere explaining why. Runs once the
+   * primary is first reachable, best-effort, and is idempotent.
+   */
+  async #reassertDeclaredVolumes(): Promise<void> {
+    const bank = this.#fixedBank;
+    if (bank === null) return;
+    for (let layer = bank.start; layer < bank.start + bank.count; layer++) {
+      // `normal`, not `urgent`: this is startup housekeeping across the whole
+      // bank, and it must never sit ahead of an operator's take in the queue.
+      await this.#send(
+        this.#builder.mixerVolume({ channel: bank.channel, layer }, INTENDED_VOLUME),
+        this.#nextSeq(),
+        'normal',
+      );
+    }
   }
 
   async update(
@@ -1779,6 +2119,13 @@ export class CasparRuntime {
     // answer the same question about the same tap.
     this.#publishPlayoutStateIfChanged();
 
+    // R-022 — withdraw any rehearse claim whose layer has gone live by another
+    // route. Deliberately BEFORE the reachability guards, like the two publishes
+    // above and for the same reason: this reads the RECONCILER, not the wire, so
+    // it needs no healthy session — and a rehearse claim that has become false
+    // must not be left standing just because the server is unreachable.
+    this.#abortRehearsalsThatWentLive();
+
     const session = this.#adapter.primarySession;
 
     // R-030 — piggyback the video-mode read on this tick rather than arming a
@@ -1800,6 +2147,17 @@ export class CasparRuntime {
       for (const channel of this.#declaredChannels()) {
         if (this.#modeReadFrom.get(channel) === this.#adapter.currentPrimary) continue;
         void this.#readChannelMode(channel);
+      }
+      // R-022 — re-assert every declared row's intended volume, once, as soon as a
+      // server is first reachable. A bridge that died mid-rehearse left a MUTED
+      // layer behind (mixer state is channel state and outlives the process), and
+      // without this the next operator would take that graphic to air silent with
+      // nothing anywhere explaining why. Gated on `isLiveState` for the same reason
+      // as the mode read: it is an AMCP-axis action, so OSC silence must not
+      // decide whether it happens.
+      if (!this.#volumesReasserted) {
+        this.#volumesReasserted = true;
+        void this.#reassertDeclaredVolumes();
       }
     }
 
@@ -2424,17 +2782,7 @@ export class CasparRuntime {
    * `error`/`disconnected` rest states don't.
    */
   #onAirCount(): number {
-    return this.#reconciler
-      .snapshot()
-      .filter(
-        (i) =>
-          i.pending ||
-          i.status === 'playing' ||
-          i.status === 'on-air' ||
-          i.status === 'updating' ||
-          i.status === 'exiting' ||
-          i.status === 'unconfirmed',
-      ).length;
+    return this.#reconciler.snapshot().filter((i) => isOnAirStatus(i.status, i.pending)).length;
   }
 
   health(): ConnectionHealth {

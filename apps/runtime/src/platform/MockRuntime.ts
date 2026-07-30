@@ -14,6 +14,8 @@ import type {
   Settings,
   TemplateInfo,
   DelimiterOption,
+  Rehearsal,
+  REHEARSE_ENTER_REASONS,
   ChannelRaster,
   ChannelSettings,
   ChannelSettingsState,
@@ -95,6 +97,11 @@ export class MockRuntime {
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
   // R-030 parity — the per-channel output raster + the video-mode reading.
   readonly channelSettingsChanged = new Emitter<ChannelSettingsState>();
+  // R-022 parity — the rehearsing set.
+  readonly rehearseChanged = new Emitter<Rehearsal[]>();
+
+  /** R-022 parity — rows in REHEARSE, keyed by item id. Session state, like the bridge's. */
+  readonly #rehearsing = new Map<string, Rehearsal>();
 
   #stack: StackItemState[] = seedStack();
   #templates = new Map<string, TemplateInfo>(seedTemplates().map((t) => [t.templateId, t]));
@@ -154,6 +161,11 @@ export class MockRuntime {
   }
 
   take(itemId: string): { accepted: boolean; errorCode?: string } {
+    // R-022 parity — THE INTERLOCK, and the mock must hold it too. If test mode
+    // allowed a take the real bridge refuses, the interlock would be exercised
+    // nowhere in the suite and the UI would be built against semantics the bridge
+    // does not have — the precise mistake the `update` comment below records.
+    if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
     // B-070/B-039 parity — a take with no live producer re-ADDs first, so a
@@ -981,6 +993,90 @@ export class MockRuntime {
       // Persistence lost, the session's raster is not.
     }
     this.channelSettingsChanged.emit(this.channelSettingsState());
+    return { ok: true };
+  }
+
+  /**
+   * R-022 parity — REHEARSE.
+   *
+   * Mirrors the bridge's guards EXACTLY, including the fail-closed on-air rule.
+   * The mock has no AMCP socket, so it cannot fail the mute and never returns
+   * `mute-failed` — which is an honest gap and not a modelled behaviour: test mode
+   * simply has no layer to leave unmuted. Everything the UI branches on is here.
+   */
+  rehearseState(): Rehearsal[] {
+    return [...this.#rehearsing.values()].sort(
+      (a, b) => a.channel - b.channel || a.layer - b.layer,
+    );
+  }
+
+  enterRehearse(itemId: string): {
+    ok: boolean;
+    reason?: (typeof REHEARSE_ENTER_REASONS)[number];
+    message?: string;
+  } {
+    const item = this.#find(itemId);
+    if (item === null) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    if (this.#rehearsing.has(itemId)) return { ok: true };
+    // Fail closed: `unconfirmed`/`pending` mean the on-air result is UNKNOWN, and
+    // an unknown must never be muted on a guess. Same status list as the bridge's
+    // `isOnAirStatus`.
+    const onAir =
+      item.pending ||
+      item.status === 'playing' ||
+      item.status === 'on-air' ||
+      item.status === 'updating' ||
+      item.status === 'exiting' ||
+      item.status === 'unconfirmed';
+    if (onAir) {
+      return {
+        ok: false,
+        reason: 'on-air',
+        message:
+          'That graphic is on air or unsettled. Take it off air before rehearsing it — ' +
+          'rehearse mutes the layer, and muting a live graphic is not something this will do.',
+      };
+    }
+    if (!this.#loaded.has(itemId)) {
+      return {
+        ok: false,
+        reason: 'not-loaded',
+        message:
+          'Nothing is loaded on that layer, so there is no graphic held ready to rehearse. Load it first.',
+      };
+    }
+    const slot = this.#slotFor(itemId);
+    if (slot === null) {
+      // Unreachable in practice — the mock's `load` is the fixed-slot load, so
+      // anything in `#loaded` has a binding. Handled rather than asserted because
+      // inventing a layer number would put a false coordinate on the wire, which
+      // a second browser would then read as fact.
+      return {
+        ok: false,
+        reason: 'not-loaded',
+        message: 'That item is not bound to a layer, so there is nothing to rehearse.',
+      };
+    }
+    this.#rehearsing.set(itemId, { itemId, channel: slot.channel, layer: slot.layer });
+    this.rehearseChanged.emit(this.rehearseState());
+    return { ok: true };
+  }
+
+  /** The fixed layer this item is bound to, or null when the mock knows of none. */
+  #slotFor(itemId: string): { channel: number; layer: number } | null {
+    for (const [layer, bound] of this.#fixedBindings) {
+      if (bound.itemId === itemId) return { channel: this.#fixedBank?.channel ?? 1, layer };
+    }
+    return null;
+  }
+
+  exitRehearse(itemId: string): { ok: boolean; reason?: 'unknown-item'; message?: string } {
+    if (!this.#rehearsing.delete(itemId)) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not rehearsing.' };
+    }
+    this.rehearseChanged.emit(this.rehearseState());
     return { ok: true };
   }
 

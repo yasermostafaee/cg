@@ -140,10 +140,30 @@ const BRIDGE_SURFACE: {
     playoutLayers: ['state', 'clear', 'onStateChanged'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
     // R-028 (o1) — `onChanged`: the bridge-owned catalogue push.
-    templates: ['get', 'list', 'import', 'remove', 'onChanged'],
+    // R-022 — `html` is the RETAINED self-contained page for a template, read from
+    // THIS browser's local library. Declared here like every other method because
+    // both implementations must answer it: the live one from its `LibraryStore`, the
+    // mock with `null` (it retains no rendered page, so the rehearsal panel shows
+    // its honest "unavailable in this browser" state).
+    templates: ['get', 'list', 'import', 'remove', 'onChanged', 'html'],
     audit: ['recent'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
     settings: ['get', 'set', 'onChanged'],
+    /**
+     * R-022 — REHEARSE belongs in this guard for exactly the reason
+     * `playoutLayers.clear` and `fixedLayers.clearLayer` do: it is a SAFETY
+     * surface. It carries the PLAY-to-air interlock, and a mock that let a take
+     * through where the bridge refuses would teach test mode a more dangerous
+     * model than air — which is the specific mistake this guard exists to catch.
+     */
+    rehearse: ['state', 'enter', 'exit', 'onStateChanged'],
+    /**
+     * R-030 — likewise a safety surface, less obviously. A wrong raster mis-places
+     * EVERY graphic on the channel, and `set` carries an on-air refusal (changing
+     * the raster re-scales what is live). A mock that accepted where the bridge
+     * refuses would let the UI be built against the wrong gate.
+     */
+    channelSettings: ['get', 'set', 'onChanged'],
   },
 };
 

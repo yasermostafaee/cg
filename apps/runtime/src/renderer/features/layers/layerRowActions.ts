@@ -2,6 +2,7 @@ import {
   ArrowRightFromLine,
   CircleArrowOutDownRight,
   Download,
+  MonitorPlay,
   Play,
   RefreshCw,
   Trash2,
@@ -77,6 +78,17 @@ export interface LayerRowActionDeps {
   linkDown: boolean;
   /** Has the operator staged unapplied field edits for this item? */
   dirty: boolean;
+  /**
+   * R-022 — is this row in REHEARSE? Bridge-owned, so every browser agrees.
+   *
+   * It gates PLAY here as a COURTESY, never as the guarantee: the bridge refuses
+   * `stack.take` for a rehearsing item, which is what actually makes the interlock
+   * hold against a stale client. A disabled button that were the only barrier
+   * would make rehearse "a preview pane we hope nobody plays from".
+   */
+  rehearsing: boolean;
+  /** Enter or leave rehearse — one toggle in a fixed slot, like LOAD/REMOVE. */
+  toggleRehearse: (itemId: string) => Promise<AsyncResult>;
   /** The one-action chain: pick a `.vcg`, import it, bind it to THIS row. */
   load: () => Promise<AsyncResult>;
   /** Load a template already in the library onto this row (the picker path). */
@@ -194,9 +206,35 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     act(
       'play',
       'PLAY',
-      empty || playing,
+      // R-022 — a rehearsing row cannot be taken to air. THE INTERLOCK, and the
+      // reason rehearse is a mode rather than a pane. This disabled state is the
+      // courtesy; the bridge's own refusal (`errorCode: 'rehearsing'`) is the
+      // guarantee, and it is what holds when a second browser's snapshot is stale.
+      empty || playing || deps.rehearsing,
       () => (item === null ? noop() : deps.play(item.itemId)),
       Play,
+    ),
+    /**
+     * R-022 — REHEARSE, a TOGGLE in a fixed slot, exactly like LOAD/REMOVE.
+     *
+     * One key and one position, so the verb set on a row never changes SHAPE —
+     * only its label and enabled state flip. That is the same rule the rest of
+     * this list follows and the same reason: a control surface that moves under
+     * the operator's finger gets mis-clicked, and at 2 a.m. that is a wrong
+     * graphic on air.
+     *
+     * Enabled only for a row with an item that is NOT on air, which mirrors the
+     * bridge's guard rather than restating it loosely: the bridge refuses `on-air`
+     * (rehearse mutes the layer, and muting a live graphic is not on offer) and
+     * `not-loaded`. While rehearsing, the toggle stays enabled — leaving is always
+     * available, and it is the ONLY way back to a playable row.
+     */
+    act(
+      'rehearse',
+      deps.rehearsing ? 'END REHEARSE' : 'REHEARSE',
+      empty || (!deps.rehearsing && onAir),
+      () => (item === null ? noop() : deps.toggleRehearse(item.itemId)),
+      MonitorPlay,
     ),
   ];
 

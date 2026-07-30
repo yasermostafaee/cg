@@ -67,6 +67,28 @@ export const colors = {
    * an operator has to be able to read which slot is free.
    */
   emptyRow: 'rgb(91 93 96)',
+  /**
+   * R-022 — REHEARSING. Violet, and every other candidate in the palette was
+   * ruled out for a specific reason rather than on taste:
+   *
+   *   - GREEN is out absolutely. It is the sacred ON AIR hue, and rehearse is the
+   *     one state that most needs to not be confusable with air — it is precisely
+   *     "this graphic CANNOT reach air".
+   *   - SKY (`ready`) is out because READY is the state a row was in immediately
+   *     before rehearse, so sharing the hue would make the mode change invisible
+   *     at exactly the glance that matters.
+   *   - AMBER (`pending`) is out because it means ATTENTION here (OCCUPIED,
+   *     UNKNOWN, UNCONFIRMED). Rehearse is a deliberate, safe operator choice,
+   *     not something to go and look at.
+   *   - RED is out: error and destructive intent only.
+   *
+   * Violet is new to the state vocabulary, which is the point — a mode nobody has
+   * seen before should not arrive wearing a colour that already means something.
+   * And per the rule this whole module is built on, the hue is never alone: the
+   * state carries its own SHAPE (a monitor, unique among a set of circles) and its
+   * own WORD as well.
+   */
+  rehearsing: '#A78BFA',
 } as const;
 
 /**

@@ -10,6 +10,32 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### ⛔ `dev-r028-b5` (Inspector restyle) was NOT STARTED — the third task of this session
+
+Three task files arrived in one session: `dev-r022-rehearse`, `dev-r030-channel-raster`
+and `dev-r028-b5`. **The first two shipped, gate-green. b5 was not begun** — not a single
+file of it is touched.
+
+**Why it was left rather than half-done.** b5 is a styling task whose acceptance is the
+owner's eyes on four panels, and §0.7 puts its central change in the SHARED `Panel`
+primitive, so its blast radius is Layers, Inspector, PGM and PVW together. Its own brief
+says a regression there is a regression everywhere and requires all four checked visually
+before hand-off. Landing a partial restyle on top of two large, already-committed features
+— one of which (r022) REWRITES the PVW panel b5 would then be restyling — would have meant
+handing over an unreviewed visual change across the whole surface. Stopping at the task
+boundary keeps r030 and r022 independently reviewable.
+
+**One thing r022 changed that b5 must now account for.** PVW is no longer a
+`MonitorPanel` with props: it is a new `PreviewPanel` component with real behaviour
+(`apps/runtime/src/renderer/features/monitors/PreviewPanel.tsx` +
+`RehearsalStage.tsx`). PGM is still `MonitorPanel`. So b5's §0.7 audit — "list which panels
+consume the primitive and confirm none hand-rolls a bar" — has one more consumer than its
+brief assumes, and `PreviewPanel` does consume `Panel`, so the primitive count is
+Layers / Inspector / PGM / PVW as before.
+
+**Also unaddressed, and cheap to lose track of:** b5 §6 reports `ROTATOR[n]` still visible
+on the surface (unfinished b4 item 2). Nothing in this session touched it.
+
 ### ⛔ CHAIN STOPPED AFTER `dev-clear-bank-scoped` — two queued tasks are UNTOUCHED
 
 The owner queued four units to run unattended, in order. **Two are done and pushed; two
@@ -440,6 +466,50 @@ name says. Pre-existing.
 
 Per the fast-mode contract, all of this was deliberately not done.
 
+**`dev-r030-channel-raster` + `dev-r022-rehearse` (this session):**
+
+- **No OpenSpec change artifacts.** Both features shipped straight to code. `R-030` and
+  `R-022` in `docs/prd/runtime.md` are NOT flipped to `[~]` and no
+  `openspec/changes/<name>/` exists for either. Two features' worth of spec authoring is
+  owed before either can archive.
+- **`pnpm gate` WAS run, uncached, and is green** (`82 successful, 82 total` /
+  `0 cached, 82 total`) for each of the two commits. This is not among the skipped items.
+- **`pnpm gate:e2e` was NOT run, and a Linux run is owed for r022.** r022 changes UI
+  (a new row state, a new verb in the fixed slot, a rewritten PVW panel), which is exactly
+  the class that owes a Linux `gate:e2e` per CLAUDE.md. r030's renderer change is one
+  banner; it owes the same pass by the same rule. **No E2E spec was written for either** —
+  owed at implementation time per the E2E coverage rule.
+- **The task order was FLIPPED relative to the `dev-r030` task file's header.** That file
+  says "run after `dev-r022-rehearse`"; the `dev-r022` file (Version 2) says the order was
+  flipped and r030 ships first, and gives the reason (otherwise r022 ships a disabled
+  position control and enables it one task later — two passes over one control plus a
+  visual review of a control that does nothing). r030 ran first. The r030 file's header is
+  the stale one.
+- **`dev-r028-b5` (the Inspector restyle) was NOT started.** See "Findings to file".
+
+**Nothing in either feature is verified on air, and neither can be from this machine.**
+
+- **r030 — a 720p channel is the useful manual check.** The uniform-scale maths is
+  confirmed against unit tests and the amcp-mock only. The owner can configure a
+  720p5000 channel on the test CasparCG; until then, "a 1280×720 channel places
+  proportionally" is asserted in jsdom, not observed on a raster. The 1080 no-regression
+  case IS asserted on the emitted declaration (no `scale`, no `transform-origin`), which is
+  the strongest form available without hardware.
+- **r030 — the video-mode read is confirmed against the amcp-mock's `INFO` stub, not real
+  `INFO`.** The mock answers `<video-mode>1080i5000</video-mode>`, which is the owner's real
+  plant value, and `INFO <channel>` is already used in the live handshake — but this
+  project has never parsed its XML off real hardware. If the real body differs in shape,
+  `parseVideoModeFromInfo` returns null and the check reports `unreadable`: a recorded gap,
+  never a silent assumption. That degradation is deliberate and tested.
+- **r022 — `MIXER … VOLUME` has NEVER been sent to this plant by this project.** It is
+  long-standing documented AMCP and the mock now models it, but the verb is unvalidated on
+  2.3.2 here. If real 2.3.2 refuses it, `enterRehearse` fails closed with `mute-failed` and
+  rehearse simply cannot be entered — which is the correct failure, but it means the
+  feature's availability on the plant is UNCONFIRMED.
+- **r022 — the 2.5.0 premise behind the mute is inherited, not re-measured.** The mute
+  exists because on 2.5.0 `CG ADD` alone puts audio on air 0.24 s later; that measurement
+  comes from the earlier recon, not from this session.
+
 **b4 (the Inspector task) specifically:**
 
 - **No `pnpm gate`.** Ran the affected workspaces' own tasks instead, all green before
@@ -526,6 +596,68 @@ Per the fast-mode contract, all of this was deliberately not done.
 ---
 
 ## Decisions taken fast
+
+### r030 + r022 — POSITION REHEARSAL: which of the two "positions" is written
+
+The two task files both insist on precision here because confusing them would be bad, so
+stating it plainly: **nothing in this session writes the AUTHORED position, and nothing in
+this session added a new position-writing path at all.**
+
+- The **authored** position lives in the scene (`scene.defaultPosition`) and belongs to
+  the Designer. Untouched. r030 only reads it, through the pre-existing
+  `resolveOutputPosition`.
+- The **operator's override** (R-011) already existed: stored per item in the bridge
+  (`#positions`), appended to the served URL, and applied by the on-air page. r022 does not
+  add a second writer — the Inspector's existing `PositionPicker` → `stack.setPosition` is
+  still the only path, and it is still refused while the item is on air.
+
+**So "saving the position while rehearsing" works today by construction**, because a
+rehearsing item is by definition NOT on air, which is exactly when `setPosition` is
+permitted. The rehearsal render reads the resulting placement rather than producing it.
+
+**How the rehearsal stays truthful about it, and why there is no placement maths in the
+renderer.** `RehearsalStage` renders the retained self-contained page in an iframe **sized
+to the channel's real raster**. The page then places itself with its own
+`applyOutputPosition`, whose R-030 geometry order is query → `window.innerWidth/innerHeight`
+→ reference frame — and inside a frame that middle term IS the box we sized. So the preview
+inherits the real placement instead of recomputing it, and there is no second
+implementation to drift from air. The panel-fit scale is a CSS transform on the iframe
+ELEMENT, which cannot perturb what the document inside measures; the two scales are
+deliberately kept on opposite sides of the frame boundary.
+
+**The "scene is byte-identical after a position rehearsal" test both files ask for was NOT
+written, and the reason is that it would assert nothing.** The scene is not in the SPA's
+hands at all on this path: it is inlined inside the retained HTML, which is read-only here
+and never re-rendered or re-packed. There is no code path from rehearsal to the scene to
+guard. A test asserting byte-identity would be pinning the absence of a feature nobody
+built — the honest guard is the architecture (no writer exists), and that is what this
+entry records. **If a future change gives the Runtime a scene-writing path, this test
+becomes owed immediately.**
+
+### r022 — the mute is `MIXER VOLUME 0`, the producer STAYS (owner decision, recorded)
+
+CLEAR-then-re-ADD was the other candidate and is rejected: that cycle is the sequence that
+failed in the field (adopt-`CLEAR` succeeded, the `CG ADD` after it 404'd, the layer was
+left empty on air). Rehearse must not depend on a path with a known failure mode. This is
+R-029's recorded containment option 2, so it is not a new invention.
+
+**Two mechanisms close the "graphic airs silent" failure, and both are implemented:**
+PLAY re-asserts the intended volume unconditionally on every take (not gated on our own
+rehearse bookkeeping, deliberately — that is the dependence being removed), and the bridge
+re-asserts every declared row's volume once a server is first reachable. A third mechanism
+(a retry set for a failed un-mute) was considered and NOT built: if no PLAY happens nothing
+is on air, so nothing is silent on air, and the moment it goes to air is via PLAY, which
+re-asserts. The two stated mechanisms genuinely close it.
+
+### r022 — REHEARSE is violet, and the alternatives were each ruled out for a reason
+
+Not green (the sacred ON AIR hue — and rehearse is precisely "cannot reach air"), not sky
+(that is READY, the state a row was in immediately before rehearse, so sharing it would
+make the mode change invisible at the glance that matters), not amber (that means ATTENTION
+on this surface; rehearse is a deliberate safe choice and crying wolf devalues the real
+alarms), not red (error and destructive intent only). Violet is new to the state
+vocabulary, which is the point. Shape and word carry it too: a monitor glyph, the only
+non-circle among the bound-item marks, plus the word REHEARSING.
 
 Each of these was an open design question. The simplest reversible option was taken
 and recorded here rather than blocking on the owner.

@@ -1,6 +1,7 @@
-import { MonitorOff, SquareDashed } from 'lucide-react';
+import { MonitorOff } from 'lucide-react';
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
 import { MonitorPanel } from './MonitorPanel.js';
+import { PreviewPanel } from './PreviewPanel.js';
 
 /**
  * The monitor strip: PREVIEW beside PROGRAM, in their final positions.
@@ -21,7 +22,7 @@ import { MonitorPanel } from './MonitorPanel.js';
  * monitor: the shell's job is "the workspace is fullscreen-ing something", and
  * which box that is belongs here.
  */
-export function MonitorStrip(): JSX.Element {
+export function MonitorStrip({ selectedId }: { selectedId: string | null }): JSX.Element {
   const { focus } = useShellLayoutContext();
   const showPvw = focus !== 'pgm';
   const showPgm = focus !== 'pvw';
@@ -38,15 +39,14 @@ export function MonitorStrip(): JSX.Element {
         "not connected" label would send an operator hunting for a link that is
         not part of the design. Only PROGRAM is genuinely waiting for a feed.
       */}
-      {showPvw && (
-        <MonitorPanel
-          id="pvw"
-          title="PREVIEW"
-          icon={SquareDashed}
-          emptyLabel="Nothing to preview"
-          detail="The graphic loaded on the selected row will render here, in this browser, with the field values you have typed. Nothing is sent to CasparCG."
-        />
-      )}
+      {/*
+        R-022 — PREVIEW is no longer a reserved empty box: it renders the rehearsal
+        for a row the operator has put into REHEARSE. It gets its own component
+        rather than props on `MonitorPanel`, because it now has behaviour (which
+        rehearsal to show, the retained page, the channel raster, the operator's
+        staged values) while PROGRAM is still genuinely awaiting a feed (C-016).
+      */}
+      {showPvw && <PreviewPanel selectedId={selectedId} />}
       {showPgm && (
         <MonitorPanel
           id="pgm"

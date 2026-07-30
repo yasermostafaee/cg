@@ -55,6 +55,12 @@ interface Props {
   selected: boolean;
   dirty: boolean;
   /**
+   * R-022 — is this row in REHEARSE? Resolved by the PANEL from the bridge's
+   * pushed set (via the canonical `isRehearsing`), not by a per-row subscription:
+   * one snapshot for the whole table keeps thirty rows agreeing by construction.
+   */
+  rehearsing: boolean;
+  /**
    * How much text this width can carry (see `layerTable.ts`). Defaults to the
    * widest — a row rendered on its own shows everything it has.
    */
@@ -214,6 +220,7 @@ export function LayerRow({
   bankPosition,
   selected,
   dirty,
+  rehearsing,
   density = 'full',
   onSelect,
   onUpdate,
@@ -257,6 +264,17 @@ export function LayerRow({
     hasNext: template?.hasNext === true,
     linkDown,
     dirty,
+    rehearsing,
+    // R-022 — one toggle, both directions. The bridge answers
+    // `{ ok, reason?, message? }`; the row's verbs speak `AsyncResult`, so the
+    // guard's `reason` rides through as `errorCode` for operator wording — the
+    // `clearLayer` pattern below.
+    toggleRehearse: async (itemId) => {
+      const res = rehearsing
+        ? await window.cg.rehearse.exit({ itemId })
+        : await window.cg.rehearse.enter({ itemId });
+      return { accepted: res.ok, ...(res.reason !== undefined ? { errorCode: res.reason } : {}) };
+    },
     load: async () => {
       const input = fileRef.current;
       if (input === null) return { accepted: false };
@@ -364,6 +382,7 @@ export function LayerRow({
     linkDown,
     simulated,
     oscBlind,
+    rehearsing,
   });
 
   // The wire's occupancy report is no longer rendered as a column — `rowState` folds

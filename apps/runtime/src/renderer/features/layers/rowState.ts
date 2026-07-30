@@ -5,6 +5,7 @@ import {
   CirclePlay,
   CircleQuestionMark,
   LoaderCircle,
+  MonitorPlay,
   RefreshCw,
   CircleArrowOutDownRight,
   TriangleAlert,
@@ -34,6 +35,11 @@ import { occupancyLabel } from '../fixedLayers/occupancyLabel.js';
  *    so the Playwright hooks ('ON AIR', 'UPDATING', 'UNCONFIRMED', …) stay
  *    stable, and so an operator never has to decode a glyph to know whether a
  *    graphic is on air.
+ *
+ * R-022 added REHEARSING to this set, under both halves of the rule above: it has
+ * its own SHAPE (a monitor — the only non-circle among the bound-item marks) and
+ * its own HUE (violet), and it may never borrow the on-air green, because
+ * rehearse is precisely the state in which a graphic CANNOT reach air.
  *
  * `unknown` MUST NOT READ AS `empty` (the B-094 honesty class). They are opposite
  * claims: `empty` says the wire told us the layer is free, `unknown` says the
@@ -102,6 +108,11 @@ export interface RowStateInput {
   simulated: boolean;
   /** B-093 — this `unverified` came from a blind occupancy tap, not a dead link. */
   oscBlind: boolean;
+  /**
+   * R-022 — this row is in REHEARSE: the graphic renders locally in PVW and PLAY
+   * to air is interlocked off. Bridge-owned, so it is the same for every browser.
+   */
+  rehearsing: boolean;
 }
 
 /**
@@ -136,6 +147,7 @@ export function rowState({
   linkDown,
   simulated,
   oscBlind,
+  rehearsing,
 }: RowStateInput): RowStateVisual {
   const wire = occupancyLabel(observed, linkDown);
 
@@ -201,6 +213,42 @@ export function rowState({
   const visual = airStateVisual(status, pending);
   const tone = badgeTone(status, pending);
   const claimsAir = tone === 'onair';
+
+  /**
+   * R-022 — REHEARSING, a state beside on air / ready / empty / error / unknown.
+   *
+   * DELIBERATELY AFTER `claimsAir` IS COMPUTED, AND SUBORDINATE TO IT. If a row
+   * somehow claims air while we believe it is rehearsing, the AIR claim wins the
+   * display — the operator's one urgent question is "what is on air", and a
+   * rehearse badge over a live graphic would answer it wrongly. The bridge
+   * withdraws the rehearse claim within one sweep in that case (it treats going
+   * live by any route as evidence that our claim was wrong), so this branch is
+   * the honest reading for the interval in between, not a permanent override.
+   *
+   * `transient` is also excluded: a take in flight is a transition toward air.
+   */
+  if (rehearsing && !claimsAir && tone !== 'transient') {
+    return {
+      // A MONITOR, unique among this module's circles — shape carries the state
+      // before colour does, and "playing on a monitor, not on air" is exactly what
+      // rehearse is.
+      icon: MonitorPlay,
+      color: colors.rehearsing,
+      label: 'REHEARSING',
+      // `idle` and not `attention`: rehearse is a deliberate, safe operator choice,
+      // not something to go and look at. Amber here would cry wolf.
+      tone: 'idle',
+      title: withWire(
+        'Rehearsing: this graphic is rendering in PREVIEW inside this browser, and PLAY to air ' +
+          'is refused by the bridge while it is. The CasparCG layer is held ready and muted — ' +
+          'nothing is being sent to air. Preview is faithful but NOT pixel-identical to the ' +
+          'on-air render, and a Live Source region shows as a labelled placeholder rather than ' +
+          'video, so this catches wrong values, broken layouts and bad motion — it is not an ' +
+          'air check.',
+        wire,
+      ),
+    };
+  }
   // B-093 — the blind-tap `unverified` is an open QUESTION, not a past tense: the
   // link is up and the graphic is probably still burning on PGM.
   const baseLabel = status === 'unverified' && oscBlind ? 'ON AIR?' : visual.label;

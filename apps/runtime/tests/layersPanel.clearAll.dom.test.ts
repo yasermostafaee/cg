@@ -14,7 +14,7 @@ import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js
  * directions: Remove-All empties the list (recovering costs a re-import and re-typing every
  * field), Clear-All only takes the graphics off air and leaves the rows idle and re-takeable.
  *
- * The gate is the app's own modal, not `window.confirm` — so these drive the dialog's real
+ * The gate is the app's own modal, not `window.confirm` â so these drive the dialog's real
  * buttons, and assert that no native dialog is reached for at all.
  */
 
@@ -40,13 +40,19 @@ function stubBridge(
   const stub = {
     link: { status: () => link, onStatusChanged: () => () => undefined },
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
-    // R-028 — the merged panel also reads the declared layers and the playout tab.
+    // R-028 â the merged panel also reads the declared layers and the playout tab.
     fixedLayers: {
       config: () => Promise.resolve(null),
       state: () => Promise.resolve([]),
       onConfigChanged: () => () => undefined,
       onStateChanged: () => () => undefined,
     },
+    // R-022 — rehearse is bridge-owned, so the panel subscribes to it on mount.
+    rehearse: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
+
     playoutLayers: {
       state: () => Promise.resolve([]),
       clear: () => Promise.resolve({ ok: true }),
@@ -105,7 +111,7 @@ const removeAllButton = (el: HTMLElement): HTMLButtonElement | null =>
   el.querySelector<HTMLButtonElement>('button[aria-label="Remove all items"]');
 
 describe('StackPanel Clear-All', () => {
-  it('confirming clears air — and does NOT remove anything', async () => {
+  it('confirming clears air â and does NOT remove anything', async () => {
     const { clearAll, removeAll } = stubBridge([item('a', 'on-air'), item('b', 'on-air')]);
     const confirmSpy = vi.spyOn(window, 'confirm');
     const el = await renderPanel();
@@ -115,7 +121,7 @@ describe('StackPanel Clear-All', () => {
       await Promise.resolve();
     });
 
-    // The app's own dialog, saying what clearing costs — and what it does not cost.
+    // The app's own dialog, saying what clearing costs â and what it does not cost.
     const dialog = openDialog();
     expect(dialog?.textContent).toContain('2 on-air item(s)');
     expect(dialog?.textContent).toContain('stay on the stack');
@@ -144,7 +150,7 @@ describe('StackPanel Clear-All', () => {
     expect(openDialog()).toBeNull();
   });
 
-  it('stays PRESENT and enabled when nothing reads as on air — it is the escape hatch', async () => {
+  it('stays PRESENT and enabled when nothing reads as on air â it is the escape hatch', async () => {
     stubBridge([item('a', 'loaded'), item('b', 'idle')]);
     const el = await renderPanel();
 
@@ -155,7 +161,7 @@ describe('StackPanel Clear-All', () => {
       what might be wrong, so they may not be what withholds the remedy. If the state
       model is confused, the operator must still be able to take everything off.
 
-      Its weight comes from the confirm gate, not from being hidden — always
+      Its weight comes from the confirm gate, not from being hidden â always
       AVAILABLE is not always IMMEDIATE.
     */
     const clear = clearAllButton(el);
@@ -175,7 +181,7 @@ describe('StackPanel Clear-All', () => {
       await Promise.resolve();
     });
 
-    // One on air out of three rows — a `loaded` item was ADDed but never PLAYed.
+    // One on air out of three rows â a `loaded` item was ADDed but never PLAYed.
     expect(openDialog()?.textContent).toContain('1 on-air item(s)');
   });
 
@@ -187,7 +193,7 @@ describe('StackPanel Clear-All', () => {
     expect(removeAllButton(el)?.textContent).toBe('REMOVE ALL');
   });
 
-  it('renders every bulk action NEUTRAL — colour belongs to state, not affordances', async () => {
+  it('renders every bulk action NEUTRAL â colour belongs to state, not affordances', async () => {
     stubBridge([item('a', 'on-air')]);
     const el = await renderPanel();
 
@@ -204,7 +210,7 @@ describe('StackPanel Clear-All', () => {
       air months later.
     */
     for (const button of [clearAllButton(el), removeAllButton(el)]) {
-      // `--neutral`, the neutral TEXT variant — not `--verb`, which carries the row
+      // `--neutral`, the neutral TEXT variant â not `--verb`, which carries the row
       // verb's icon-only geometry (`padding: 0`, square, full-width) and squashed
       // these labels against their borders when it was first reused here.
       expect(button?.classList.contains('cg-btn--neutral')).toBe(true);
@@ -231,7 +237,7 @@ describe('StackPanel Clear-All', () => {
 
   it('both bulk actions are enabled while live and DISABLED while the link is down', async () => {
     // Was-live-then-dropped: the on-air snapshot persists across the drop (useBridgeSnapshot
-    // keeps its last value while disconnected), so both stay SHOWN but disabled — the stack is
+    // keeps its last value while disconnected), so both stay SHOWN but disabled â the stack is
     // bridge-owned, so a bulk action can no more reach CasparCG than a per-item one can.
     const listeners = new Set<(s: 'live' | 'disconnected') => void>();
     let status: 'live' | 'disconnected' = 'live';
@@ -244,13 +250,19 @@ describe('StackPanel Clear-All', () => {
         },
       },
       templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
-      // R-028 — the merged panel also reads the declared layers and the playout tab.
+      // R-028 â the merged panel also reads the declared layers and the playout tab.
       fixedLayers: {
         config: () => Promise.resolve(null),
         state: () => Promise.resolve([]),
         onConfigChanged: () => () => undefined,
         onStateChanged: () => () => undefined,
       },
+      // R-022 — rehearse is bridge-owned, so the panel subscribes to it on mount.
+      rehearse: {
+        state: () => Promise.resolve([]),
+        onStateChanged: () => () => undefined,
+      },
+
       playoutLayers: {
         state: () => Promise.resolve([]),
         clear: () => Promise.resolve({ ok: true }),
@@ -280,7 +292,7 @@ describe('StackPanel Clear-All', () => {
 
     /*
       Remove-All follows R-006 and goes disabled: it is a bridge round-trip like any
-      other, and refusing it costs nothing — the rows stay exactly as they are.
+      other, and refusing it costs nothing â the rows stay exactly as they are.
 
       Clear-All does NOT, and that exemption is the point of this assertion. A WRONG
       `linkDown` is precisely the bug the escape hatch exists for, and the two costs

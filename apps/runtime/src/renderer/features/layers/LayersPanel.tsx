@@ -14,7 +14,8 @@ import { useStack } from '../../hooks/useStack.js';
 import { useFixedBank, useFixedSlots } from '../../hooks/useFixedLayers.js';
 import { usePlayoutLayers } from '../../hooks/usePlayoutLayers.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
-import { bankPosition, isLayerVisible } from '@cg/shared-ipc';
+import { bankPosition, isLayerVisible, isRehearsing } from '@cg/shared-ipc';
+import { useRehearse } from '../../hooks/useRehearse.js';
 import { isOnAir } from '../stack/onAir.js';
 import {
   draftsVersion,
@@ -88,6 +89,8 @@ export function LayersPanel({
 }: Props): JSX.Element {
   const bank = useFixedBank();
   const slots = useFixedSlots();
+  // R-022 — ONE rehearse snapshot for the whole table, from the bridge.
+  const rehearsals = useRehearse();
   const playout = usePlayoutLayers();
   const items = useStack();
   const linkDown = useLink() === 'disconnected';
@@ -426,6 +429,12 @@ export function LayersPanel({
                     density={density}
                     selected={item !== null && item.itemId === selectedId}
                     dirty={item !== null && isItemDirty(item.itemId, item.fields)}
+                    // R-022 — read through the canonical `isRehearsing`, never a
+                    // local `.some()`: the bridge refuses PLAY on the same
+                    // predicate, and if the two ever disagreed the UI would offer a
+                    // take the bridge rejects — or worse, allow one it thought was
+                    // interlocked off.
+                    rehearsing={item !== null && isRehearsing(rehearsals, item.itemId)}
                     onSelect={onSelectionChange}
                     onUpdate={onUpdate}
                   />

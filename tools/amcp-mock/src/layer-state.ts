@@ -22,6 +22,9 @@ export class LayerRegistry {
       paused: false,
       onAir: false,
       pageResolution: 'resolved',
+      // R-022 — a fresh layer is at FULL volume, as on real CasparCG. Defaulting
+      // to 0 would have made a missing restore look correct in every test.
+      volume: 1,
     };
     this.slots.set(key, fresh);
     return fresh;

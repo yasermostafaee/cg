@@ -8,10 +8,10 @@ import { LayersPanel } from '../src/renderer/features/layers/LayersPanel.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 
 /**
- * R-010 — the StackPanel header's Remove-All: confirm-gated (accept → one
- * stack.removeAll call; cancel → none), hidden on an empty stack.
+ * R-010 â the StackPanel header's Remove-All: confirm-gated (accept â one
+ * stack.removeAll call; cancel â none), hidden on an empty stack.
  *
- * The gate is now the app's own modal, not `window.confirm` — so these drive the dialog's
+ * The gate is now the app's own modal, not `window.confirm` â so these drive the dialog's
  * real buttons, and assert that no native dialog is reached for at all.
  */
 
@@ -40,17 +40,23 @@ function stubBridge(
 ): { removeAll: Mock } {
   const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: stack.length }));
   const stub = {
-    // R-006 — StackRow + the header bulk actions mirror the connection refusal.
+    // R-006 â StackRow + the header bulk actions mirror the connection refusal.
     link: { status: () => link, onStatusChanged: () => () => undefined },
-    // R-004 — the panel joins each row against the registry to label its template.
+    // R-004 â the panel joins each row against the registry to label its template.
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
-    // R-028 — the merged panel also reads the declared layers and the playout tab.
+    // R-028 â the merged panel also reads the declared layers and the playout tab.
     fixedLayers: {
       config: () => Promise.resolve(null),
       state: () => Promise.resolve([]),
       onConfigChanged: () => () => undefined,
       onStateChanged: () => () => undefined,
     },
+    // R-022 — rehearse is bridge-owned, so the panel subscribes to it on mount.
+    rehearse: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
+
     playoutLayers: {
       state: () => Promise.resolve([]),
       clear: () => Promise.resolve({ ok: true }),
@@ -106,7 +112,7 @@ function removeAllButton(el: HTMLElement): HTMLButtonElement | null {
   return el.querySelector<HTMLButtonElement>('button[aria-label="Remove all items"]');
 }
 
-describe('StackPanel Remove-All — R-010', () => {
+describe('StackPanel Remove-All â R-010', () => {
   it('confirming in the modal calls stack.removeAll once', async () => {
     const { removeAll } = stubBridge(items(3));
     const confirmSpy = vi.spyOn(window, 'confirm');
@@ -120,7 +126,7 @@ describe('StackPanel Remove-All — R-010', () => {
       await Promise.resolve();
     });
 
-    // The app's own dialog, naming the consequence — not the browser's.
+    // The app's own dialog, naming the consequence â not the browser's.
     const dialog = openDialog();
     expect(dialog).not.toBeNull();
     expect(dialog?.textContent).toContain('This clears anything on air');
@@ -163,9 +169,9 @@ describe('StackPanel Remove-All — R-010', () => {
     expect(remove?.disabled).toBe(true);
   });
 
-  it('is DISABLED while the CasparCG link is down — the stack is bridge-owned', async () => {
+  it('is DISABLED while the CasparCG link is down â the stack is bridge-owned', async () => {
     // Was-live-then-dropped: the snapshot persists (useBridgeSnapshot keeps its last value while
-    // disconnected), so the button stays SHOWN but disabled — it can no more reach CasparCG
+    // disconnected), so the button stays SHOWN but disabled â it can no more reach CasparCG
     // than the per-item PLAY/UPDATE/CLEAR/REMOVE can.
     const listeners = new Set<(s: 'live' | 'disconnected') => void>();
     let status: 'live' | 'disconnected' = 'live';
@@ -179,13 +185,19 @@ describe('StackPanel Remove-All — R-010', () => {
         },
       },
       templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
-      // R-028 — the merged panel also reads the declared layers and the playout tab.
+      // R-028 â the merged panel also reads the declared layers and the playout tab.
       fixedLayers: {
         config: () => Promise.resolve(null),
         state: () => Promise.resolve([]),
         onConfigChanged: () => () => undefined,
         onStateChanged: () => () => undefined,
       },
+      // R-022 — rehearse is bridge-owned, so the panel subscribes to it on mount.
+      rehearse: {
+        state: () => Promise.resolve([]),
+        onStateChanged: () => () => undefined,
+      },
+
       playoutLayers: {
         state: () => Promise.resolve([]),
         clear: () => Promise.resolve({ ok: true }),
@@ -212,7 +224,7 @@ describe('StackPanel Remove-All — R-010', () => {
     });
 
     const btn = removeAllButton(el);
-    expect(btn).not.toBeNull(); // still shown — items persist across the drop
+    expect(btn).not.toBeNull(); // still shown â items persist across the drop
     expect(btn?.disabled).toBe(true);
   });
 });

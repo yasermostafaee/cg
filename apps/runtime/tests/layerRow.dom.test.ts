@@ -256,6 +256,9 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     hasNext,
     linkDown: false,
     dirty: true,
+    // R-022 — not rehearsing by default; the interlock is exercised on its own below.
+    rehearsing: false,
+    toggleRehearse: () => Promise.resolve({ accepted: true }),
     load: () => Promise.resolve({ accepted: true }),
     loadFromLibrary: () => Promise.resolve({ accepted: true }),
     play: () => Promise.resolve({ accepted: true }),
@@ -265,6 +268,36 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     clear: () => Promise.resolve({ accepted: true }),
     remove: () => Promise.resolve({ accepted: true }),
     onError: () => undefined,
+  });
+
+  it('R-022 — REHEARSE interlocks PLAY, stays a toggle, and never disables CLEAR', () => {
+    const loaded = deps(itemWith('loaded'), true);
+
+    // Not rehearsing: PLAY is available, the toggle offers REHEARSE.
+    const idle = layerRowActions(loaded);
+    expect(idle.find((a) => a.key === 'play')?.disabled).toBe(false);
+    expect(idle.find((a) => a.key === 'rehearse')?.label).toBe('REHEARSE');
+    expect(idle.find((a) => a.key === 'rehearse')?.disabled).toBe(false);
+
+    // Rehearsing: PLAY is interlocked off and the toggle offers the way back.
+    // (The GUARANTEE is the bridge's own refusal — this is the courtesy half.)
+    const rehearsing = layerRowActions({ ...loaded, rehearsing: true });
+    expect(rehearsing.find((a) => a.key === 'play')?.disabled).toBe(true);
+    expect(rehearsing.find((a) => a.key === 'rehearse')?.label).toBe('END REHEARSE');
+    // Leaving must ALWAYS be available — it is the only route back to a playable row.
+    expect(rehearsing.find((a) => a.key === 'rehearse')?.disabled).toBe(false);
+    // CLEAR is the escape hatch and rehearse is precisely a state where the model
+    // can get confused, so it keeps its no-gate-at-all rule here too.
+    expect(rehearsing.find((a) => a.key === 'clear')?.disabled).toBe(false);
+
+    // An ON-AIR row cannot ENTER rehearse (it would mute a live graphic), and the
+    // renderer mirrors the bridge's `on-air` refusal rather than restating it loosely.
+    const onAir = layerRowActions(deps(itemWith('on-air'), true));
+    expect(onAir.find((a) => a.key === 'rehearse')?.disabled).toBe(true);
+
+    // An EMPTY row has nothing to rehearse.
+    const empty = layerRowActions(deps(null, false));
+    expect(empty.find((a) => a.key === 'rehearse')?.disabled).toBe(true);
   });
 
   it('every menu item is disabled exactly when its declaration is — no second door', () => {
@@ -328,7 +361,20 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     // `load-remove` is ONE control in ONE position whose label flips (LOAD on an
     // empty row, REMOVE on an occupied one) — the owner's toggle. Its KEY is
     // stable, which is what keeps the shape assertion meaningful.
-    const SHAPE = ['load-remove', 'load-library', 'play', 'next', 'update', 'stop', 'clear'];
+    // R-022 added `rehearse` as a TOGGLE in a fixed slot (label flips REHEARSE /
+    // END REHEARSE), exactly like `load-remove`: one key, one position, so the
+    // shape assertion keeps its meaning and the control never moves under the
+    // operator's finger.
+    const SHAPE = [
+      'load-remove',
+      'load-library',
+      'play',
+      'rehearse',
+      'next',
+      'update',
+      'stop',
+      'clear',
+    ];
     // Empty, loaded, on air, with and without a next step, link up and down:
     // the control set is identical every time. Only `disabled` moves. This is
     // the property the owner asked for after watching NEXT appear and vanish.

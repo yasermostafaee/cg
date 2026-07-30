@@ -107,6 +107,39 @@ export class CommandBuilder {
   out(slot: CommandSlot): string {
     return `CLEAR ${target(slot)}`;
   }
+
+  /**
+   * R-022 — set a layer's audio volume: `MIXER <ch>-<layer> VOLUME <value>`.
+   *
+   * The sixth verb, and the one REHEARSE is built on. Rehearse leaves the
+   * CasparCG producer RESIDENT and mutes the layer, rather than
+   * CLEAR-then-re-ADD: that cycle is exactly the sequence that failed in the
+   * field — an adopt-`CLEAR` succeeded, the `CG ADD` after it returned 404, and
+   * the layer was left empty on air. Rehearse must not depend on a path with a
+   * known failure mode. (This is also R-029's recorded containment option 2.)
+   *
+   * WHY A MUTE IS NEEDED AT ALL. On 2.3.2 a resident, unplayed template is
+   * already silent (issue #669 — zero across all 10,339 OSC samples) and
+   * invisible (`cg-pending` hides the stage), so on today's plant this is
+   * belt-and-braces. On 2.5.0 `CG ADD` alone puts audio on air 0.24 s later with
+   * the stage still hidden — so the mute is what makes rehearse survive the
+   * upgrade instead of becoming a landmine on it.
+   *
+   * MIXER STATE IS NOT PRODUCER STATE. It belongs to the channel's mixer, so it
+   * survives a `CLEAR` and a `CG REMOVE` of the producer on the layer. Nothing
+   * restores it implicitly — which is why {@link CommandBuilder.mixerVolume} is
+   * called from the PLAY path unconditionally, on every take, rather than only
+   * from a "leave rehearse" step: the failure mode of a missed restore is a
+   * graphic that airs SILENT, and no crash, reload or missed transition may be
+   * able to cause it.
+   *
+   * Not hardware-validated. `MIXER … VOLUME` is long-standing, documented AMCP
+   * and the 2.3.2 plant is the reference, but this verb has not been exercised on
+   * it by this project — recorded in `DEBT.md`.
+   */
+  mixerVolume(slot: CommandSlot, volume: number): string {
+    return `MIXER ${target(slot)} VOLUME ${String(volume)}`;
+  }
 }
 
 /** `<channel>-<layer>` per AMCP. */

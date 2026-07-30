@@ -45,6 +45,11 @@ import {
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
   type ChannelSettingsState,
+  RehearseEnterChannel,
+  RehearseExitChannel,
+  RehearseStateChangedChannel,
+  RehearseStateChannel,
+  type Rehearsal,
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
@@ -243,6 +248,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #delimiterSubs = new Subs<DelimiterOption[]>();
   /** R-030 — the bridge-owned channel raster + video-mode reading. */
   readonly #channelSettingsSubs = new Subs<ChannelSettingsState>();
+  /** R-022 — the bridge-owned rehearsing set, pushed to every client. */
+  readonly #rehearseSubs = new Subs<Rehearsal[]>();
   readonly #statusSubs = new Subs<BridgeLinkStatus>();
   // R-028 (o1) — the bridge-owned catalogue push.
   readonly #templatesSubs = new Subs<TemplateInfo[]>();
@@ -547,6 +554,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#channelSettingsSubs.emit(p.data);
         break;
       }
+      case RehearseStateChangedChannel.name: {
+        const p = RehearseStateChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#rehearseSubs.emit(p.data);
+        break;
+      }
       case SettingsChangedChannel.name: {
         const p = SettingsChangedChannel.payload.safeParse(payload);
         if (p.success) this.#settingsSubs.emit(p.data);
@@ -771,6 +783,8 @@ export class WebSocketRuntime implements RuntimeBridge {
       }
       return this.#library.list();
     },
+    // R-022 — a LOCAL read. The page is already here; never a bridge round trip.
+    html: (templateId: string) => Promise.resolve(this.#library.html(templateId)),
     import: async (req: ChannelRequest<typeof TemplatesImportChannel>) => {
       // Register LOCALLY first (the source of truth) — this is what makes import
       // succeed offline. Then, when live, deliver to the bridge so it can serve
@@ -831,6 +845,16 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(ChannelSettingsSetChannel, req),
     onChanged: (handler: (state: ChannelSettingsState) => void) =>
       this.#channelSettingsSubs.add(handler),
+  };
+
+  /** R-022 — REHEARSE. Bridge-owned; the PLAY interlock is enforced bridge-side. */
+  readonly rehearse = {
+    state: () => this.#invoke(RehearseStateChannel, undefined),
+    enter: (req: ChannelRequest<typeof RehearseEnterChannel>) =>
+      this.#invoke(RehearseEnterChannel, req),
+    exit: (req: ChannelRequest<typeof RehearseExitChannel>) =>
+      this.#invoke(RehearseExitChannel, req),
+    onStateChanged: (handler: (rehearsals: Rehearsal[]) => void) => this.#rehearseSubs.add(handler),
   };
 
   /** R-034 — the station's delimiter list, owned and disk-persisted by the bridge. */

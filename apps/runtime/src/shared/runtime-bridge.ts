@@ -56,6 +56,10 @@ import type {
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
   ChannelSettingsState,
+  Rehearsal,
+  RehearseEnterChannel,
+  RehearseExitChannel,
+  RehearseStateChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChannel,
@@ -287,6 +291,21 @@ export interface RuntimeBridge {
      * surfaces is how operator B's Library re-lists when operator A imports.
      */
     onChanged(handler: (templates: TemplateInfo[]) => void): Unsubscribe;
+    /**
+     * R-022 — the RETAINED self-contained page for a template, from THIS browser's
+     * local library, or null when it holds none.
+     *
+     * Browser-local by nature and deliberately NOT an `@cg/shared-ipc` channel:
+     * the page is already in this browser (the SPA produces it at import and keeps
+     * it to re-deliver on reconnect), so routing the read through the bridge would
+     * be a round trip to fetch something we hold — and would fail with the bridge
+     * down, when rehearse is exactly the thing that should still work.
+     *
+     * `null` is the honest "not in this browser": a template imported on another
+     * machine has metadata from the bridge's catalogue but no local page here, and
+     * the rehearsal panel says so instead of showing a blank box.
+     */
+    html(templateId: string): Promise<string | null>;
   };
 
   audit: {
@@ -343,6 +362,37 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof ChannelSettingsSetChannel>,
     ): Promise<ChannelResponse<typeof ChannelSettingsSetChannel>>;
     onChanged(handler: (state: ChannelSettingsState) => void): Unsubscribe;
+  };
+
+  /**
+   * R-022 — REHEARSE: run a loaded graphic's lifecycle and edit its values while
+   * it renders LOCALLY in PVW, with PLAY-to-air interlocked off.
+   *
+   * BRIDGE-OWNED, not browser-local, and that is not an implementation
+   * preference: several browsers share one bridge, so a rehearse flag held in one
+   * of them would leave the second operator seeing an ordinary loaded row and
+   * loading onto it — a collision on a real layer.
+   *
+   * The interlock is enforced by the BRIDGE — `stack.take` refuses a rehearsing
+   * item with `rehearsing` — so a disabled PLAY button is the courtesy, not the
+   * guarantee. A stale client cannot play past it.
+   */
+  rehearse: {
+    state(): Promise<ChannelResponse<typeof RehearseStateChannel>>;
+    /**
+     * Enter rehearse. Refused `on-air` (rehearse mutes the layer; muting a live
+     * graphic is not on offer), `not-loaded` (no resident producer to rehearse)
+     * and `mute-failed` — the last being the important one: rehearse is never
+     * CLAIMED unless the mute that makes it safe actually landed.
+     */
+    enter(
+      req: ChannelRequest<typeof RehearseEnterChannel>,
+    ): Promise<ChannelResponse<typeof RehearseEnterChannel>>;
+    /** Leave rehearse and restore the layer's intended volume. */
+    exit(
+      req: ChannelRequest<typeof RehearseExitChannel>,
+    ): Promise<ChannelResponse<typeof RehearseExitChannel>>;
+    onStateChanged(handler: (rehearsals: Rehearsal[]) => void): Unsubscribe;
   };
 
   delimiters: {

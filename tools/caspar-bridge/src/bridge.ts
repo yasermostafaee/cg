@@ -52,6 +52,10 @@ import {
   ChannelSettingsChangedChannel,
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
+  RehearseEnterChannel,
+  RehearseExitChannel,
+  RehearseStateChangedChannel,
+  RehearseStateChannel,
   TemplatesChangedChannel,
   TemplatesGetChannel,
   TemplatesImportChannel,
@@ -394,6 +398,9 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.delimitersChanged.subscribe((d) => push(DelimitersChangedChannel, d)),
     // R-030 — the per-channel raster + the configured-vs-real mode reading.
     backing.channelSettingsChanged.subscribe((s) => push(ChannelSettingsChangedChannel, s)),
+    // R-022 — the rehearsing set, so a second browser never sees a rehearsing row
+    // as an ordinary loaded one and loads onto it.
+    backing.rehearseChanged.subscribe((r) => push(RehearseStateChangedChannel, r)),
   ];
 }
 
@@ -542,6 +549,13 @@ export function buildRoutes(
     // graphics land, and it has to survive a bridge restart.
     route(ChannelSettingsGetChannel, () => b.channelSettingsState()),
     route(ChannelSettingsSetChannel, (r: ChannelSettings) => b.setChannelSettings(r)),
+
+    // R-022 — REHEARSE. Bridge-owned so several browsers agree about which rows
+    // are interlocked, and every guard (on-air, not-loaded, mute-failed) lives
+    // bridge-side where no UI state can bypass it.
+    route(RehearseStateChannel, () => b.rehearseState()),
+    route(RehearseEnterChannel, (r: { itemId: string }) => b.enterRehearse(r.itemId)),
+    route(RehearseExitChannel, (r: { itemId: string }) => b.exitRehearse(r.itemId)),
 
     route(SettingsGetChannel, () => b.settingsGet()),
     route(SettingsSetChannel, (r: Partial<{ telemetry: never }>) => b.settingsSet(r)),

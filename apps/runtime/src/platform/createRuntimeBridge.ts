@@ -194,6 +194,11 @@ export function createMockBridge(): RuntimeBridge {
       remove: (req) => Promise.resolve(mock.templateRemove(req.templateId)),
       // R-028 (o1) — the catalogue push, mirrored by the mock's own emitter.
       onChanged: (handler) => mock.templatesChanged.subscribe(handler),
+      // R-022 — the mock retains no rendered page (it accepts and ignores `html`
+      // at import, per the note above), so it honestly holds none. The rehearsal
+      // panel renders its "unavailable in this browser" state rather than a blank
+      // box — which is the truthful answer in test mode, not a degradation.
+      html: () => Promise.resolve(null),
     },
 
     audit: {
@@ -227,6 +232,16 @@ export function createMockBridge(): RuntimeBridge {
       list: () => Promise.resolve(mock.delimitersList()),
       set: (req) => Promise.resolve(mock.delimitersSet(req.delimiters)),
       onChanged: (handler) => mock.delimitersChanged.subscribe(handler),
+    },
+
+    // R-022 — offline parity for REHEARSE. The mock holds the same interlock:
+    // `take` refuses a rehearsing item, so the guard is exercised in test mode
+    // rather than only against the real bridge.
+    rehearse: {
+      state: () => Promise.resolve(mock.rehearseState()),
+      enter: (req) => Promise.resolve(mock.enterRehearse(req.itemId)),
+      exit: (req) => Promise.resolve(mock.exitRehearse(req.itemId)),
+      onStateChanged: (handler) => mock.rehearseChanged.subscribe(handler),
     },
 
     // R-030 — offline parity for the channel raster, same shape and same reason
