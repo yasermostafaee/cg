@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 import { colors } from '../theme.js';
 import { Button } from './Button.js';
 import { Icon } from './Icon.js';
@@ -70,6 +70,14 @@ interface Props {
    * that role is what the E2E suite already addresses it by.
    */
   as?: 'section' | 'aside';
+  /**
+   * Show a CLOSE control and call this when it is pressed. Only for a panel that
+   * genuinely has a closed state — today that is the Inspector, whose openness is
+   * DERIVED from the selection, so closing means deselecting (see `App`). Omit it
+   * and no close button renders, which is right for the panels that are always
+   * present.
+   */
+  onClose?: (() => void) | undefined;
 }
 
 export function Panel({
@@ -80,6 +88,7 @@ export function Panel({
   children,
   style,
   as: Root = 'section',
+  onClose,
 }: Props): JSX.Element {
   const layout = useShellLayoutContext();
   const focused = layout.focus === id;
@@ -93,21 +102,46 @@ export function Panel({
           {/*
             FULLSCREEN — the affordance this primitive exists to guarantee.
 
-            Hidden while NARROW: below the breakpoint the Inspector is already an
-            overlay and the workspace is a single column, so "fullscreen" would
-            either do nothing visible or fight the overlay for the same space.
+            SHOWN AT EVERY WIDTH now, including narrow (owner request). It used to be
+            hidden below the breakpoint on the reasoning that the workspace is a single
+            column there, so fullscreen "would do nothing visible or fight the overlay".
+            That was true of the WORKSPACE panels and wrong about the Inspector: as a
+            right-pinned overlay it deliberately leaves the Layers list showing, so
+            there is real room to grow into, and on a phone a field editor at 82vw is
+            exactly where an operator wants the whole screen. The overlay honours it by
+            going full-width (see `App`).
           */}
-          {!layout.narrow && (
+          <Button
+            variant="ghost"
+            aria-label={focused ? `Exit fullscreen ${title}` : `Show ${title} fullscreen`}
+            aria-pressed={focused}
+            title={focused ? `Restore ${title} to the workspace` : `Give ${title} the whole shell`}
+            onClick={() => layout.setFocus(focused ? 'none' : id)}
+          >
+            <Icon icon={focused ? Minimize2 : Maximize2} />
+          </Button>
+          {/*
+            CLOSE — only for a panel that HAS a closed state (the Inspector). Rendered
+            last, so the destructive-ish action is not the one the thumb lands on by
+            accident, and after fullscreen so the control order never changes as the
+            panel's state does.
+
+            A closing panel must leave fullscreen behind it: a panel that is closed
+            AND still holds the shell's focus would leave the workspace hidden behind
+            nothing at all. That is handled here rather than in each caller, so no
+            caller can forget it.
+          */}
+          {onClose !== undefined && (
             <Button
               variant="ghost"
-              aria-label={focused ? `Exit fullscreen ${title}` : `Show ${title} fullscreen`}
-              aria-pressed={focused}
-              title={
-                focused ? `Restore ${title} to the workspace` : `Give ${title} the whole shell`
-              }
-              onClick={() => layout.setFocus(focused ? 'none' : id)}
+              aria-label={`Close ${title}`}
+              title={`Close ${title}`}
+              onClick={() => {
+                if (focused) layout.setFocus('none');
+                onClose();
+              }}
             >
-              <Icon icon={focused ? Minimize2 : Maximize2} />
+              <Icon icon={X} />
             </Button>
           )}
         </div>

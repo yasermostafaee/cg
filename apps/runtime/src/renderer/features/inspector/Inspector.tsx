@@ -58,6 +58,11 @@ interface Props {
   onApply: (itemId: string) => Promise<{ accepted: boolean }>;
   /** Discard the item's staged draft, reverting to applied values. */
   onDiscard: (itemId: string) => void;
+  /**
+   * Close the Inspector. Openness is DERIVED from the selection, so this deselects
+   * rather than hiding a still-selected row — the two can never disagree.
+   */
+  onClose?: (() => void) | undefined;
 }
 
 const styles = {
@@ -158,7 +163,7 @@ const styles = {
  * registry doesn't know the template we fall back to type inference so the
  * inspector is never empty.
  */
-export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
+export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Element {
   const [info, setInfo] = useState<TemplateInfo | null>(null);
   // Re-render on any draft change so dirty markers + the draft-or-applied
   // values stay live (a push to `item` also re-renders via props).
@@ -189,7 +194,7 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
 
   if (item === null) {
     return (
-      <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector">
+      <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
         <div className="cg-inspector-body" style={styles.scroll}>
           <p style={styles.empty}>Select a stack item to inspect its fields.</p>
         </div>
@@ -236,7 +241,7 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
   const label = info !== null ? templateDisplayName(info) : 'Unnamed template';
 
   return (
-    <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector">
+    <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
       <div style={styles.scroll}>
         <h3 style={styles.title} title={item.templateId}>
           {label}

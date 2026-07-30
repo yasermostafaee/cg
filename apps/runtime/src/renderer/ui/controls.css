@@ -875,6 +875,30 @@ input[type='checkbox']:disabled:checked {
     inset 0 0 0 4px rgba(56, 189, 248, 0.35);
 }
 
+/* ── Narrow-screen Inspector overlay ───────────────────────────────────── */
+
+/*
+ * THE OVERLAY'S PANEL MUST FILL IT — full viewport height, always (owner request).
+ *
+ * The wrapper is pinned `top: 0; bottom: 0`, so the OVERLAY was already full height.
+ * The panel INSIDE it was not, and that is the whole bug: the wrapper is a column
+ * flex container, height is therefore its MAIN axis, and a flex child sizes to its
+ * CONTENT on the main axis rather than stretching. So a short field list produced a
+ * short panel floating in a full-height box — measured at 800px in a 900px viewport.
+ *
+ * `flex: 1` on the child is the fix; `min-height: 0` alongside it is what keeps the
+ * panel's own body scrollable instead of letting a long field list push the panel
+ * past the viewport (the `layout.ts` page-never-scrolls invariant).
+ *
+ * Expressed as a child rule rather than a prop threaded through the Inspector,
+ * because it is a fact about THIS CONTAINER, not about the Inspector — anything
+ * placed in the overlay needs it.
+ */
+.cg-inspector-overlay > * {
+  flex: 1;
+  min-height: 0;
+}
+
 /* ── Shell divider (the drag handle between panels) ─────────────────────── */
 
 /*

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
@@ -79,7 +79,6 @@ export function App(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
   const layout = useShellLayout();
-  const [inspectorOverlayOpen, setInspectorOverlayOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const selected = useMemo(
@@ -127,16 +126,38 @@ export function App(): JSX.Element {
   // means.
   const monitorFocused = layout.focus === 'pgm' || layout.focus === 'pvw';
   const showWorkspace = layout.focus !== 'inspector';
-  const showInspectorColumn =
-    !layout.narrow && (layout.focus === 'none' || layout.focus === 'inspector');
-  const shellColumns =
-    layout.narrow || layout.focus !== 'none' ? '1fr' : `1fr 6px ${String(layout.inspectorPx)}px`;
 
-  // Selecting a row on a narrow screen brings the Inspector up — the operator
-  // asked to inspect something, so showing it is the point.
-  useEffect(() => {
-    if (layout.narrow && selectedId !== null) setInspectorOverlayOpen(true);
-  }, [layout.narrow, selectedId]);
+  /*
+   * THE INSPECTOR IS OPEN IF, AND ONLY IF, SOMETHING IS SELECTED.
+   *
+   * One derived predicate, at both widths, and it replaces a second piece of state
+   * (`inspectorOverlayOpen`) that used to track openness independently. That is what
+   * the owner's narrow-screen bug actually was: dismissing the overlay closed the
+   * PANEL and left the row SELECTED, so the console said "you are editing this" on
+   * the list while showing no editor — two states disagreeing about one fact.
+   *
+   * Deriving it means the bug cannot come back. There is no way to be open with
+   * nothing selected, or selected with nothing open, because there is only one
+   * boolean and it is computed. Every dismissal path — the scrim, the panel's close
+   * button, clicking the selected row again — is now the SAME operation: deselect.
+   *
+   * `closeInspector` is that one operation, named once so no caller invents a second
+   * way to close (which is how the two states drifted apart in the first place).
+   */
+  const inspectorOpen = selected !== null;
+  const closeInspector = useCallback(() => setSelectedId(null), []);
+
+  const showInspectorColumn =
+    !layout.narrow && inspectorOpen && (layout.focus === 'none' || layout.focus === 'inspector');
+  /*
+   * A CLOSED Inspector gives its width back to the workspace (owner request: the
+   * panel is closed when no layer is selected). The divider goes with it — a resize
+   * handle for a column that is not there would be a control that does nothing.
+   */
+  const shellColumns =
+    layout.narrow || layout.focus !== 'none' || !inspectorOpen
+      ? '1fr'
+      : `1fr 6px ${String(layout.inspectorPx)}px`;
 
   return (
     <ShellLayoutProvider layout={layout}>
@@ -219,8 +240,12 @@ export function App(): JSX.Element {
                       onSelectionChange={setSelectedId}
                       selectedId={selectedId}
                       layout={layout}
-                      inspectorOpen={inspectorOverlayOpen}
-                      onToggleInspector={() => setInspectorOverlayOpen((open) => !open)}
+                      inspectorOpen={inspectorOpen}
+                      /* The hamburger now toggles the SELECTION, because that is what
+                         openness is derived from. Closing deselects; there is nothing
+                         sensible for it to re-open, since an Inspector with no item is
+                         exactly the state the owner asked to be closed. */
+                      onToggleInspector={closeInspector}
                       onUpdate={(id) => {
                         const target = items.find((i) => i.itemId === id);
                         return target !== undefined
@@ -232,8 +257,9 @@ export function App(): JSX.Element {
                 )}
               </section>
             )}
-            {/* The divider only exists where there are two columns to divide. */}
-            {!layout.narrow && layout.focus === 'none' && (
+            {/* The divider only exists where there are two columns to divide — so it
+                goes away with a CLOSED Inspector, not just with a fullscreen one. */}
+            {!layout.narrow && layout.focus === 'none' && inspectorOpen && (
               <ShellDivider
                 orientation="vertical"
                 invert
@@ -244,6 +270,7 @@ export function App(): JSX.Element {
             )}
             {showInspectorColumn && (
               <Inspector
+                onClose={closeInspector}
                 item={selected}
                 onApply={(id) => {
                   const target = items.find((i) => i.itemId === id);
@@ -266,15 +293,36 @@ export function App(): JSX.Element {
         state would make the operator work blind. Dismissing is also a single
         action (the backdrop, or the same hamburger).
       */}
-        {layout.narrow && inspectorOverlayOpen && (
+        {layout.narrow && inspectorOpen && (
           <>
+            {/* The scrim DESELECTS rather than merely hiding — see `closeInspector`.
+                Dismissing the editor and letting go of the row are one act, so the
+                list can never keep claiming a selection with no editor behind it. */}
             <div
               style={styles.overlayScrim}
-              onClick={() => setInspectorOverlayOpen(false)}
+              onClick={closeInspector}
               aria-hidden="true"
+              // A stable hook for the E2E. The scrim is `aria-hidden` by design (it is
+              // a dismissal surface, not content), and every Icon in the app is too —
+              // so `[aria-hidden]` alone cannot address it.
+              data-inspector-scrim=""
             />
-            <div style={styles.overlayPanel}>
+            <div
+              className="cg-inspector-overlay"
+              style={{
+                ...styles.overlayPanel,
+                /* FULLSCREEN on a narrow screen means the whole width. The default
+                   right-pinned width deliberately leaves the Layers list visible so
+                   the operator can see what is ON AIR while editing it — but when they
+                   have explicitly asked for fullscreen, that trade is theirs to make,
+                   and a fullscreen that only grew to 24rem would be a control that
+                   visibly does almost nothing. Height is already the full viewport
+                   (`top: 0; bottom: 0`). */
+                ...(layout.focus === 'inspector' ? { width: '100%' } : {}),
+              }}
+            >
               <Inspector
+                onClose={closeInspector}
                 item={selected}
                 onApply={(id) => {
                   const target = items.find((i) => i.itemId === id);
