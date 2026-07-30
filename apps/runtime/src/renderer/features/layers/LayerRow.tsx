@@ -368,7 +368,23 @@ export function LayerRow({
 
   // The wire's occupancy report is no longer rendered as a column — `rowState` folds
   // it into the state cell's tooltip, reading the same canonical `occupancyLabel`.
-  const select = (): void => onSelect(item === null ? null : item.itemId);
+  /**
+   * TOGGLE select (owner request): clicking the selected row again DESELECTS it.
+   *
+   * This also settles a contradiction the row already carried — it renders
+   * `aria-pressed={selected}`, which announces a toggle to assistive tech, while a
+   * second click used to do nothing. The behaviour now matches what the row has been
+   * claiming about itself.
+   *
+   * Deselecting is a real operator need, not just symmetry: with nothing selected the
+   * Inspector returns to "Select a stack item", which is how you stop an accidental
+   * edit from being staged against a live graphic you did not mean to touch. On a
+   * narrow screen it is also how you dismiss the Inspector overlay from the row.
+   *
+   * An empty row still resolves to `null` — there is nothing to select, so a click is
+   * a deselect either way.
+   */
+  const select = (): void => onSelect(item === null || selected ? null : item.itemId);
 
   /**
    * The row's own tooltip and accessible name, and the reason the LAYER column

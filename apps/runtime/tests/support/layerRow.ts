@@ -103,6 +103,10 @@ export async function renderLayerRow(options: {
   link?: Link;
   dirty?: boolean;
   bankPosition?: number;
+  /** Render the row as already SELECTED (drives the toggle-select assertions). */
+  selected?: boolean;
+  /** Observe what a row click reports back to the panel. */
+  onSelect?: (itemId: string | null) => void;
   onUpdate?: (itemId: string) => Promise<{ accepted: boolean }>;
 }): Promise<RenderedRow> {
   const link = options.link ?? 'live';
@@ -129,9 +133,9 @@ export async function renderLayerRow(options: {
           // that care about the difference drive the panel, not one row.
           displayPosition: options.displayPosition ?? 1,
           bankPosition: options.bankPosition ?? 1,
-          selected: false,
+          selected: options.selected ?? false,
           dirty: options.dirty ?? false,
-          onSelect: () => undefined,
+          onSelect: options.onSelect ?? ((): void => undefined),
           onUpdate: options.onUpdate ?? stubs.update,
         }),
       ),

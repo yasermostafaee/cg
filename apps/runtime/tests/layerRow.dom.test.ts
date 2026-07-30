@@ -436,3 +436,76 @@ describe('LayerRow — slot/binding shape', () => {
     expect(rendered.buttons().get('LOAD')).toBe(true);
   });
 });
+
+/**
+ * Owner request: clicking a layer row is a TOGGLE — clicking the selected row again
+ * deselects it.
+ *
+ * This also settles a contradiction the row already carried: it renders
+ * `aria-pressed={selected}`, which announces a toggle to assistive tech, while a
+ * second click used to do nothing.
+ */
+describe('LayerRow — click is TOGGLE select', () => {
+  const clickRow = (el: HTMLElement): void => {
+    const row = el.querySelector<HTMLElement>('.cg-row');
+    if (row === null) throw new Error('row element missing');
+    row.click();
+  };
+
+  it('an UNSELECTED row with an item reports that item on click', async () => {
+    const seen: (string | null)[] = [];
+    rendered = await renderLayerRow({
+      item: itemWith('loaded'),
+      selected: false,
+      onSelect: (id) => seen.push(id),
+    });
+    clickRow(rendered.container);
+    expect(seen).toEqual([itemWith('loaded').itemId]);
+  });
+
+  it('a SELECTED row reports null on click — the toggle, and the whole request', async () => {
+    const seen: (string | null)[] = [];
+    rendered = await renderLayerRow({
+      item: itemWith('loaded'),
+      selected: true,
+      onSelect: (id) => seen.push(id),
+    });
+    clickRow(rendered.container);
+    expect(seen).toEqual([null]);
+  });
+
+  it('an on-air row toggles too — deselecting never touches air, it only closes the editor', async () => {
+    const seen: (string | null)[] = [];
+    rendered = await renderLayerRow({
+      item: itemWith('on-air'),
+      selected: true,
+      onSelect: (id) => seen.push(id),
+    });
+    clickRow(rendered.container);
+    expect(seen).toEqual([null]);
+  });
+
+  it('an EMPTY row reports null whether or not it reads selected — there is nothing to select', async () => {
+    for (const selected of [false, true]) {
+      const seen: (string | null)[] = [];
+      rendered = await renderLayerRow({
+        item: null,
+        template: null,
+        selected,
+        onSelect: (id) => seen.push(id),
+      });
+      clickRow(rendered.container);
+      expect(seen, `selected=${String(selected)}`).toEqual([null]);
+      // Unmount BETWEEN iterations, not just in `afterEach`: two mounted rows would
+      // both answer `.cg-row`, so the second click could land on the first row's
+      // element and the assertion would pass for the wrong reason.
+      await rendered.unmount();
+      rendered = null;
+    }
+  });
+
+  it('the row announces itself as a toggle (aria-pressed tracks selection)', async () => {
+    rendered = await renderLayerRow({ item: itemWith('loaded'), selected: true });
+    expect(rendered.container.querySelector('.cg-row')?.getAttribute('aria-pressed')).toBe('true');
+  });
+});
