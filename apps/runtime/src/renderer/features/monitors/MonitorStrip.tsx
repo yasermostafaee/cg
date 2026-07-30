@@ -28,7 +28,20 @@ export function MonitorStrip({ selectedId }: { selectedId: string | null }): JSX
   const showPgm = focus !== 'pvw';
 
   return (
-    <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minHeight: 0 }}>
+    /*
+      `minWidth: 0` IS LOad-BEARING, not defensive tidying.
+
+      The rehearsal iframe is sized to the CHANNEL RASTER (1920px) on purpose —
+      that is what makes the page inside compute its real on-air placement — and a
+      CSS `transform: scale()` shrinks how it LOOKS without changing what it
+      OCCUPIES. Without a floor of zero here the strip takes its width FROM that
+      1920px child instead of from its column, and two things follow: PROGRAM is
+      pushed off the right of the viewport, and `RehearsalStage` then measures its
+      fit against the blown-out box and computes a scale of ~1 — so the rehearsal
+      renders unscaled until some unrelated re-render happens to re-measure it
+      against a settled box. One missing floor, both symptoms.
+    */
+    <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minHeight: 0, minWidth: 0 }}>
       {/*
         The copy says what each output IS and why it is blank, in the operator's
         terms, naming no internal item number — the visible surface is not where

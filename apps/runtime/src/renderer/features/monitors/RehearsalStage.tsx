@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { Info } from 'lucide-react';
 import type { FieldValues } from '@cg/shared-schema';
 // The raster type comes from `@cg/shared-ipc` (`ChannelRaster`), not from
 // `@cg/template-runtime`'s structurally-identical `Raster`: the runtime app already
@@ -9,6 +10,7 @@ import type { FieldValues } from '@cg/shared-schema';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 
 /**
  * R-022 — the rehearsal render: the loaded graphic, with the operator's CURRENT
@@ -82,23 +84,81 @@ const styles = {
     justifyContent: 'center',
     background: '#000',
     overflow: 'hidden',
+    position: 'relative' as const,
+  },
+  /**
+   * The CHECKER, behind the frame — the SAME one the Designer's authoring
+   * surface and broadcast preview use (`#5b6075` on `#3d4253`, 24px), so a
+   * graphic looks the same in the two places an operator judges it.
+   *
+   * It is not decoration. These are KEYED graphics: they go to air over video,
+   * and the part of the frame that matters most is the part that is TRANSPARENT.
+   * Against the flat black this used to paint, transparent and black-filled are
+   * indistinguishable — an operator could not see that a lower-third's backing
+   * plate had gone opaque and would blank the shot behind it. The checker is what
+   * makes alpha visible, and it must be under the frame rather than on it.
+   */
+  checker: {
+    position: 'absolute' as const,
+    // Centred and sized to the SCALED FRAME by the caller — not `inset: 0`.
+    //
+    // Covering the whole fit box put the checker in the SURROUND, where there is
+    // no graphic, and left the frame itself reading flat white. The checker is a
+    // transparency backdrop: it belongs behind the RASTER and nowhere else, so
+    // that what shows through is the page's own alpha. The surround stays black,
+    // because black is the honest colour for "outside the frame".
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+    background: '#3d4253',
+    backgroundImage:
+      `linear-gradient(45deg, #5b6075 25%, transparent 25%),` +
+      `linear-gradient(-45deg, #5b6075 25%, transparent 25%),` +
+      `linear-gradient(45deg, transparent 75%, #5b6075 75%),` +
+      `linear-gradient(-45deg, transparent 75%, #5b6075 75%)`,
+    backgroundSize: '48px 48px',
+    backgroundPosition: '0 0, 0 24px, 24px -24px, -24px 0',
   },
   frame: {
     border: 0,
     display: 'block',
     transformOrigin: 'center center',
-    background: '#000',
+    // TRANSPARENT, not black — an opaque frame would hide the checker behind it
+    // and put the alpha back out of reach. The page inside is the retained
+    // self-contained one, which paints its own background where it has one.
+    background: 'transparent',
     flexShrink: 0,
+    position: 'relative' as const,
   },
+  /**
+   * The caveats, ON DEMAND. They used to be a permanent strip under the frame.
+   *
+   * R-022's acceptance requires these caveats to be stated IN the panel, so they
+   * are DISCLOSED, not deleted — the operator still reaches them without leaving
+   * the surface, and assistive tech reaches them through the toggle's
+   * `aria-expanded` pairing. What changed is that they no longer bill the monitor
+   * for permanent height: PVW is the smallest surface on this console and a fixed
+   * four-line footnote was taking that space from the thing being judged.
+   *
+   * OVERLAID rather than in flow, for the same reason — an in-flow panel would
+   * shrink the frame on open, so reading the note would change the geometry the
+   * note is ABOUT.
+   */
   caveats: {
-    flexShrink: 0,
-    padding: '0.3rem 0.5rem',
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: '0.45rem 0.6rem',
     fontSize: '0.65rem',
     lineHeight: 1.4,
     color: colors.textMuted,
     borderTop: `1px solid ${colors.border}`,
     background: colors.panelMuted,
+    zIndex: 2,
   },
+  /** Pushes the info toggle to the trailing end of the lifecycle bar. */
+  lifecycleSpacer: { flex: 1 },
   missing: {
     flex: 1,
     minHeight: 0,
@@ -124,8 +184,13 @@ const styles = {
 interface TemplateWindow {
   play?: (data?: string) => void;
   update?: (data?: string) => void;
+  /** `CG NEXT`'s entry point — a multi-step template's advance. */
+  next?: () => void;
   stop?: () => void;
 }
+
+/** Ties the caveats disclosure to its toggle for assistive tech. */
+const CAVEATS_ID = 'rehearsal-caveats';
 
 interface Props {
   /**
@@ -147,9 +212,25 @@ export function RehearsalStage({ html, raster, fields, rowName }: Props): JSX.El
   const fitRef = useRef<HTMLDivElement | null>(null);
   const [fit, setFit] = useState(1);
   const [ready, setReady] = useState(false);
+  // Collapsed by default: the caveats are a thing to CONSULT, not a thing to read
+  // every time. Deliberately not persisted — it costs one click and a remembered
+  // "open" would quietly re-introduce the permanent strip this replaced.
+  const [showCaveats, setShowCaveats] = useState(false);
 
   // The FIT scale — preview only. Measured rather than assumed, so the rehearsal
   // stays whole at any panel width, including mid divider-drag.
+  //
+  // `html` IS A DEPENDENCY, and leaving it out was a real defect rather than a
+  // missing optimisation. The fit box is only rendered once a page has arrived —
+  // the `html === null` branch below returns a different tree entirely — so on the
+  // first pass `fitRef.current` is null, this effect bails, and NO ResizeObserver
+  // is ever attached. With deps of raster alone nothing re-ran when the page
+  // landed, so `fit` stayed at its initial 1 and the rehearsal rendered UNSCALED,
+  // filling the panel. It looked self-correcting because any unrelated remount
+  // fixed it: `PreviewPanel` keys this component on the draft version, so typing a
+  // single character into any Inspector field remounted it — by which time `html`
+  // was already present and the observer attached. The bug was invisible in the
+  // one state an operator reaches by touching something.
   useEffect(() => {
     const box = fitRef.current;
     if (box === null) return;
@@ -165,7 +246,7 @@ export function RehearsalStage({ html, raster, fields, rowName }: Props): JSX.El
     return () => {
       observer.disconnect();
     };
-  }, [raster.width, raster.height]);
+  }, [raster.width, raster.height, html]);
 
   const templateWindow = useCallback((): TemplateWindow | null => {
     const frame = frameRef.current;
@@ -202,9 +283,17 @@ export function RehearsalStage({ html, raster, fields, rowName }: Props): JSX.El
   return (
     <>
       {/*
-        THE LIFECYCLE, driven locally. "See it before air" is only half of
+        THE TRANSPORT, driven locally. "See it before air" is only half of
         rehearse; the other half is assessing MOTION, which needs the intro, the
-        hold and the outro to actually run.
+        steps and the outro to actually run.
+
+        NAMED PLAY / NEXT / STOP — the same three words, in the same order, as the
+        row's own verbs. The buttons used to read PLAY INTRO / PLAY OUTRO, which
+        described the ANIMATION rather than the action and left the operator
+        translating between two vocabularies for one lifecycle. They drive the
+        very entry points `CG PLAY`, `CG NEXT` and `CG STOP` reach on air, so the
+        row's words are the accurate ones — and NEXT, which the template's
+        lifecycle has always had, had no control here at all.
       */}
       <div style={styles.lifecycle}>
         <Button
@@ -212,13 +301,48 @@ export function RehearsalStage({ html, raster, fields, rowName }: Props): JSX.El
           disabled={!ready}
           onClick={() => templateWindow()?.play?.(JSON.stringify(fields))}
         >
-          PLAY INTRO
+          PLAY
+        </Button>
+        <Button variant="secondary" disabled={!ready} onClick={() => templateWindow()?.next?.()}>
+          NEXT
         </Button>
         <Button variant="secondary" disabled={!ready} onClick={() => templateWindow()?.stop?.()}>
-          PLAY OUTRO
+          STOP
+        </Button>
+        <span style={styles.lifecycleSpacer} />
+        {/*
+          The caveats toggle. Trailing end of the lifecycle bar, away from the
+          transport buttons — this is a disclosure, and it must not sit where a
+          thumb reaching for STOP can land on it.
+        */}
+        <Button
+          variant="ghost"
+          aria-expanded={showCaveats}
+          aria-controls={CAVEATS_ID}
+          aria-label={
+            showCaveats ? 'Hide what rehearsal does not prove' : 'What rehearsal does not prove'
+          }
+          title="What rehearsal does not prove"
+          onClick={() => setShowCaveats((open) => !open)}
+        >
+          <Icon icon={Info} />
         </Button>
       </div>
       <div ref={fitRef} style={styles.fitBox}>
+        {/*
+          Sized to the frame AS DISPLAYED (raster × fit) rather than scaled with
+          it: a `transform: scale()` here would shrink the 24px squares too, and a
+          transparency checker whose squares change size with the panel stops
+          reading as a checker at all.
+        */}
+        <div
+          aria-hidden
+          style={{
+            ...styles.checker,
+            width: `${String(raster.width * fit)}px`,
+            height: `${String(raster.height * fit)}px`,
+          }}
+        />
         <iframe
           ref={frameRef}
           title={`${rowName} rehearsal preview`}
@@ -236,13 +360,15 @@ export function RehearsalStage({ html, raster, fields, rowName }: Props): JSX.El
             transform: `scale(${String(fit)})`,
           }}
         />
+        {showCaveats && (
+          <p id={CAVEATS_ID} style={styles.caveats}>
+            Rehearsal — rendered in this browser at {raster.width}×{raster.height}, not on air.
+            Faithful but <strong>not pixel-identical</strong> to the on-air render, and a Live
+            Source region shows as a labelled placeholder, not video. Use it to check values, layout
+            and motion — it is not an air check.
+          </p>
+        )}
       </div>
-      <p style={styles.caveats}>
-        Rehearsal — rendered in this browser at {raster.width}×{raster.height}, not on air. Faithful
-        but <strong>not pixel-identical</strong> to the on-air render, and a Live Source region
-        shows as a labelled placeholder, not video. Use it to check values, layout and motion — it
-        is not an air check.
-      </p>
     </>
   );
 }

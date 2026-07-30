@@ -211,12 +211,30 @@ export function App(): JSX.Element {
                   <>
                     <div
                       style={
+                        /*
+                          BOTH branches bound the width (`minWidth: 0` + a clip).
+                          The rehearsal iframe is a real 1920px box — `transform`
+                          scales its appearance, never its layout — so an unbounded
+                          wrapper sizes itself to the iframe rather than to the
+                          column. FULLSCREEN is not the safe case either: that is
+                          where it pushed the panel's own EXIT control past the
+                          right edge of the viewport, leaving no way back out of a
+                          fullscreen whose focus is persisted across reloads.
+                        */
                         monitorFocused
-                          ? { display: 'flex', flex: 1, minHeight: 0 }
+                          ? {
+                              display: 'flex',
+                              flex: 1,
+                              minHeight: 0,
+                              minWidth: 0,
+                              overflow: 'hidden',
+                            }
                           : {
                               display: 'flex',
                               height: `${String(layout.monitorPx)}px`,
                               flexShrink: 0,
+                              minWidth: 0,
+                              overflow: 'hidden',
                             }
                       }
                     >
