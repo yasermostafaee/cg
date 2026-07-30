@@ -11,29 +11,20 @@ import { positionQuery } from '@cg/shared-schema';
  * implementation to drift from air. It lives in its own module so that boundary
  * is visible, and so it can be asserted without a real iframe.
  *
- * ── A TRANSPARENT BASE WAS SPECIFIED HERE AND IS DELIBERATELY ABSENT ─────────
+ * ── NOTHING ABOUT THE WHITE 16:9 AREA BELONGS HERE ──────────────────────────
  *
- * The white 16:9 area in PVW was attributed to CasparCG's CEF having a
- * transparent base background where an ordinary Chrome document has an opaque
- * one, with the fix being to reproduce that base on this frame's document.
- * MEASURED, IT IS A NO-OP, so it is not here:
+ * A "reproduce CEF's transparent base on this document" pass was once written
+ * into this module, on the theory that the served page had an opaque base a
+ * browser imposed and CEF did not. It never shipped, and the theory was wrong:
+ * the white was an OPAQUE CANVAS, forced by the frame element and the document
+ * it embeds resolving different `color-scheme` values, and it is fixed one layer
+ * out — on the frame ELEMENT, in `RehearsalFrame`'s style object, where the
+ * embedder relationship that causes it actually lives.
  *
- *   - the exported page ALREADY declares it —
- *     `html,body{…;background:transparent;…}`, written by
- *     `exporter-single-file.ts`; and
- *   - Chrome does not paint an opaque base into a same-origin `srcdoc` frame
- *     anyway. Screenshotting the composited box with the page as-is, with an
- *     injected `html,body{background:transparent}`, and with the declaration
- *     REMOVED yields byte-identical images; only an explicitly OPAQUE page
- *     differs.
- *
- * So injecting the rule changes nothing that can be observed, and a caveat
- * claiming the preview "reproduces CasparCG's transparent base" would have been
- * a sentence on the surface that is not true of the code. The white area has
- * some other cause; `tests/e2e/rehearse-composite.spec.ts` now asserts by PIXEL
- * DIFFERENCE that the checker is genuinely visible through a loaded frame, so
- * whatever that cause turns out to be, this surface can no longer pass a test
- * while covering the backdrop. See DEBT.md.
+ * Recorded here as a boundary rather than as history: the pull toward "just set
+ * it on the inner document" is real, it also works, and taking it would put a
+ * preview-only mutation on the served page for a second time. Declared
+ * backgrounds have nothing to do with that bug in either direction — measured.
  */
 
 /**
@@ -69,8 +60,8 @@ export interface PageRuntimeWindow {
  * It cannot be fixed by giving the frame a URL that carries the query. A
  * `srcdoc` document has no URL to give, a blob URL cannot carry a query at all
  * (its store lookup is by exact serialisation), and the bridge's real served URL
- * is cross-origin — which would cost the lifecycle driving, the value pushes and
- * the transparent base above, i.e. the feature.
+ * is cross-origin — which would cost the lifecycle driving and the value pushes,
+ * i.e. the feature.
  *
  * So the override is handed to the page's OWN `applyOutputPosition` — the exact
  * function the on-air boot calls, from the page's own inlined runtime — with the

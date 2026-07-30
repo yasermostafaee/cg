@@ -10,65 +10,74 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
-### 🔴 THE WHITE 16:9 AREA IN PVW IS NOT EXPLAINED — the settled cause is measurably a NO-OP
+### ✅ CLOSED — the white 16:9 area was an OPAQUE CANVAS forced by a color-scheme mismatch
 
-**The most important open item in this entry, because a fix was specified, was written, and
-was then removed on evidence.** The owner's brief for `dev-pvw-composite` §3 stated the cause
-as settled and told the session not to re-investigate it: CasparCG's CEF has a TRANSPARENT
-base background, an ordinary Chrome document has an opaque WHITE one, so the same page is
-transparent on air and white-based in PVW's iframe. The prescribed fix was to reproduce that
-base on the frame's own document after load.
+Fixed in `dev-pvw-white`: `color-scheme: light` on the rehearsal frame ELEMENT
+(`RehearsalFrame.tsx`'s style object, so every frame gets it including ones created later).
 
-**It was implemented, then measured, and it changes nothing.** Two independent reasons, either
-one sufficient:
+**The cause, measured by the owner in the running app's devtools:**
 
-1. **The exported page ALREADY declares it.** `exporter-single-file.ts` emits
-   `html,body{width:${w}px;height:${h}px;background:transparent;overflow:hidden}` into every
-   served page. There is no opaque base to override.
-2. **Chrome does not paint an opaque base into a same-origin `srcdoc` frame anyway.** Probed
-   directly with Playwright against system Chrome, screenshotting the composited box:
+```
+getComputedStyle(iframe).colorScheme            → "dark"
+getComputedStyle(innerDoc.documentElement)      → "normal"
+getComputedStyle(parentRoot).colorScheme        → "dark"
+```
 
-   | frame content                                        | result                   |
-   | ---------------------------------------------------- | ------------------------ |
-   | exported page as-is (`background:transparent`)       | baseline                 |
-   | plus an injected `html,body{background:transparent}` | **byte-identical**       |
-   | page declaring NO background at all                  | **byte-identical**       |
-   | page declaring `html,body{background:#fff}`          | differs (opaque, covers) |
+CSS Color Adjust: **when the used color-scheme of an embedded document differs from its
+embedder's, the UA renders the embedded document's canvas OPAQUE.** The console's root declares
+`color-scheme: dark` (`packages/ui/src/theme.css:25`); the served page declares none, so it
+resolves `normal` → light. Every frame was a mismatch.
 
-   The parent's colour shows through in the first three. Only an explicitly opaque page covers.
+**One cause, both symptoms.** It also explains the composite reading as broken — owner's report:
+«با دستور play هر دو شروع می‌شوند ولی فقط لوگو دیده می‌شود». `dev-pvw-composite` WORKED; every
+frame was present and stacked in layer order, and the topmost frame's opaque canvas occluded
+every frame beneath it. **The composite was correct and invisible.** The one-word fix is what
+makes it deliver.
 
-So the injection was deleted rather than shipped, and — this is the part that mattered more —
-the caveats line claiming "the preview reproduces CasparCG's transparent base background" was
-deleted with it. Shipping it would have put a sentence on the operator's surface that is not
-true of the code, which is the honesty class this whole task was about.
+---
 
-**What replaced it, so the change is not merely a removal.** The E2E now asserts the property
-by PIXEL DIFFERENCE rather than by computed style — it screenshots the checker's box as it
-renders, forces the page inside the frame opaque, screenshots again, and requires the two to
-differ (`rehearse-composite.spec.ts`, "the checkerboard is NOT covered by a loaded frame"). The
-first draft of that test asserted `getComputedStyle(doc.documentElement).backgroundColor` was
-transparent, **and it passed with and without the fix** — it would have gone green while an
-operator stared at a white box. That is worth carrying on its own: a computed-style assertion
-about transparency is not an assertion about what is painted.
+**The previous session's entry here was WRONG, and it is worth keeping why rather than just
+deleting it.** It concluded "Chrome does not paint an opaque base" from this probe:
 
-**What is still owed, and it needs the owner's eyes because it cannot be reproduced here.**
-The white area is real — the owner sees it — and its cause is now unknown. The offline mock
-retains no rendered page (`templates.html` → `null`, deliberately), so no test in this repo can
-put the REAL exported page in a PVW frame; every spec stubs it. Candidates, in the order worth
-checking:
+| frame content                                        | result             |
+| ---------------------------------------------------- | ------------------ |
+| exported page as-is (`background:transparent`)       | baseline           |
+| plus an injected `html,body{background:transparent}` | **byte-identical** |
+| page declaring NO background at all                  | **byte-identical** |
+| page declaring `html,body{background:#fff}`          | differs            |
 
-- **the authored scene's own background.** `buildScene` sets `container.style.background =
-scene.background` on `.cg-stage` whenever it is not `'transparent'`, and the stage is
-  scene-resolution-sized — an opaque scene background is exactly a solid 16:9 area. Every
-  STARTER template declares `transparent`, so this would be a property of the owner's own
-  templates, and it would also show on air (which the owner says it does not — so either the
-  air-side template differs, or this is not it).
-- **the template's own inlined `cg.css`**, if it declares a body/stage background.
-- **something in the boot failing before `cg-pending` is removed**, leaving a state that paints.
+**Every measurement in that table is correct. The conclusion drawn from it is not.** All it
+established is that DECLARED backgrounds are irrelevant to this bug — which is true, because the
+opacity is forced by the embedder relationship and is independent of any declaration. The probe
+was run in a standalone Playwright page whose root had no `color-scheme`, so embedder and
+embedded MATCHED and there was no opacity to observe. **A probe that does not reproduce the
+condition under test cannot exonerate anything** — the same lesson as the voided CasparCG 2.5.0
+entry further down ("a control test that reaches a different implementation than the one under
+test is not a control test"), arriving through a different door: here the control test reached
+the right implementation in the wrong ENVIRONMENT.
 
-The first is a one-look check in the Designer: open the template that shows white in PVW and
-read its scene background. **Do not re-derive the CEF theory from scratch — it is measured
-false in a browser; start from what the specific template declares.**
+The two candidate causes that entry left for the owner to check — an opaque authored
+`scene.background` painting `.cg-stage`, and the template's own `cg.css` — are both DEAD, and
+were measured dead: `.cg-stage` reads `rgba(0, 0, 0, 0)` in the repro, and both scenes involved
+are authored `background: 'transparent'`. Nobody needs to open the Designer.
+
+**What the sequence cost, and the rule it earns.** Three tests in this project have now passed
+while the defect they were written for was fully present (a density test that only ran at the
+widest density, a draft spec exercising the one path that never unmounts, and that entry's own
+computed-background assertion). This one adds a fourth shape: **the canvas is not an element and
+no computed style reports it** — `html`, `body` and `.cg-stage` all measure fully transparent
+while the box renders white. The replacement tests therefore sample PIXELS
+(`tests/e2e/rehearse-canvas.spec.ts`), and both were confirmed RED against the unfixed code
+before being seen green. The superseded pixel-difference test in `rehearse-composite.spec.ts`
+was correct as far as it went and is kept.
+
+**Only one direction is implemented, deliberately.** Writing `colorScheme` onto the served
+document's root would also work and was NOT taken: it reaches into the page and edges toward a
+preview-only variant of it, which PVW's fidelity claim forbids. Two mechanisms for one effect is
+how the next person inherits a page that is transparent for a reason nobody can name. `light` is
+additionally the more faithful direction on its own terms — it is what a browser gives a document
+declaring no scheme, whereas the inherited `dark` was the operator console's theme leaking into
+the graphic's rendering environment.
 
 ### PVW composited N rehearsing rows, and the position override never reached the frame at all
 

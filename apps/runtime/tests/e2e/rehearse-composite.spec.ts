@@ -125,12 +125,12 @@ test('every rehearsing row gets a frame, stacked by the REAL CasparCG layer', as
  * what is actually painted: if the frame covered the checker either way, the two
  * images would be identical.
  *
- * The transparent-base injection this test was specified to accompany is NOT in
- * the code: measured, it is a no-op (the exported page already declares
- * `background:transparent`, and Chrome does not paint an opaque base into a
- * same-origin `srcdoc` frame regardless). This test stands on its own — it pins
- * the OBSERVABLE property, so whatever the white area's real cause turns out to
- * be, this surface can no longer pass while covering the backdrop.
+ * The cause is now known and fixed — an opaque canvas forced by a color-scheme
+ * mismatch between the frame and the page it embeds, see `RehearsalFrame`'s
+ * style object — and the tests that pin it by absolute colour are in
+ * `rehearse-canvas.spec.ts`. This one is kept because it asserts a different
+ * thing: not "the canvas is transparent" but "the frame does not cover what is
+ * behind it", which stays true and worth guarding whatever paints next.
  */
 test('the checkerboard is NOT covered by a loaded frame', async ({ app }) => {
   const page = app.page;

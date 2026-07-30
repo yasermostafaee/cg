@@ -80,7 +80,8 @@ import { frameZIndex, rehearsalCaption, type RehearsalSubject } from './rehearsa
  * the operator's placement would be expressed in panel pixels.
  *
  * The operator's placement OVERRIDE is delivered per frame — see
- * `RehearsalFrame`, which owns that and the transparent base.
+ * `RehearsalFrame`, which owns that and the `color-scheme` match that keeps each
+ * frame's canvas transparent (without which the top frame hides all the rest).
  *
  * `srcdoc` (not a blob URL) so each frame inherits this document's origin: that
  * is what lets the lifecycle be driven below. It is also sandbox-free BY
@@ -454,8 +455,11 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
             Faithful but <strong>not pixel-identical</strong> to the on-air render, and a Live
             Source region shows as a labelled placeholder, not video. Only{' '}
             <strong>rehearsing</strong> rows are shown, composited in channel layer order — nothing
-            that is on air is composited here. Use it to check values, layout and motion — it is not
-            an air check.
+            that is on air is composited here. CasparCG composites each template over a{' '}
+            <strong>transparent base</strong>; a browser instead forces an opaque canvas on an
+            embedded page whose colour scheme differs from the page embedding it, so this panel
+            matches the two — without that, every graphic would sit on flat white and hide the ones
+            below it. Use it to check values, layout and motion — it is not an air check.
             {unavailable > 0 && (
               <>
                 {' '}

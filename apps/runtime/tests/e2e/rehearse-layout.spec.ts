@@ -65,7 +65,15 @@ test('the rehearsal is SCALED TO FIT on first render — not only after an edit'
   await stubRetainedPage(page);
 
   await app.layerRow(layer).getByRole('button', { name: 'REHEARSE', exact: true }).click();
-  const frame = page.locator('iframe[title$="rehearsal preview"]');
+  // ONE row is rehearsing, so there is ONE frame — asserted rather than assumed.
+  // PVW composites every rehearsing row now, so `iframe[title$="rehearsal
+  // preview"]` is a PLURAL selector: `boundingBox()` on it is a strict-mode
+  // violation the moment a second row rehearses, and reading "the" frame would
+  // silently measure whichever came first. Pinning the count makes the
+  // singularity a claim this test makes, not an accident of the fixture.
+  const frames = page.locator('iframe[title$="rehearsal preview"]');
+  await expect(frames).toHaveCount(1);
+  const frame = frames.first();
   await expect(frame).toBeVisible();
 
   // The fit scale is MEASURED off the containing box. When that box was itself

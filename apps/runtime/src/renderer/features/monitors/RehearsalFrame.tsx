@@ -31,6 +31,53 @@ const styles = {
     // every frame below it in the composite, which is the entire point of
     // compositing. The page inside paints its own background where it has one.
     background: 'transparent',
+    /**
+     * ── THE OPAQUE CANVAS, AND WHY ONE WORD FIXES TWO SYMPTOMS ──────────────
+     *
+     * CSS Color Adjust: when the used `color-scheme` of an embedded document
+     * differs from its embedder's, the UA renders the embedded document's
+     * canvas OPAQUE. The console's root declares `color-scheme: dark`
+     * (`@cg/ui`'s `theme.css`); the served template page declares none, so it
+     * resolves `normal` → light. Every frame was a mismatch, and every frame
+     * therefore carried a white canvas.
+     *
+     * That single fact produced both reported defects:
+     *
+     *   1. the flat white 16:9 area, which hid the transparency checker the
+     *      operator judges alpha against;
+     *   2. the composite looking broken while being CORRECT — the frames were
+     *      all present and stacked in layer order, but the topmost one's opaque
+     *      canvas occluded every frame beneath it, so only the highest graphic
+     *      was ever visible.
+     *
+     * THE CANVAS IS NOT AN ELEMENT, which is why this took so long to see and
+     * why the tests for it sample pixels: with the bug fully present, `html`,
+     * `body` and `.cg-stage` all measure `rgba(0, 0, 0, 0)` while the box
+     * renders white. No computed style reports a canvas.
+     *
+     * `light` MATCHES THE FRAME TO THE PAGE, never the page to the frame. It is
+     * a property of the embedding ENVIRONMENT, set on an element this panel
+     * owns, because the opacity is imposed by the embedder relationship and not
+     * by the document — the alternative (writing `colorScheme` onto the served
+     * document's root) reaches into the page and edges toward a preview-only
+     * variant of it, which is exactly what PVW's fidelity claim forbids. Only
+     * one of the two directions is implemented, deliberately: two mechanisms
+     * for one effect is how the next person inherits a page that is transparent
+     * for a reason nobody can name.
+     *
+     * It is also the more faithful choice on its own terms. `light` is what a
+     * browser gives a document that declares no scheme — what this page gets
+     * standalone, and what CEF's transparent composite corresponds to. The
+     * `dark` it inherited was the OPERATOR CONSOLE's theme leaking into the
+     * graphic's rendering environment, which a broadcast preview must not do.
+     *
+     * ON THE STYLE OBJECT, not a post-load pass. Rows enter and leave rehearse
+     * at will and the composite builds one frame per rehearsing row, so a fix
+     * that swept the frames existing at some moment would be the same bug with
+     * a longer fuse. This is spread into every `<iframe>` this component
+     * renders, so it cannot miss one.
+     */
+    colorScheme: 'light',
   },
 } as const satisfies Record<string, CSSProperties>;
 
