@@ -875,6 +875,105 @@ input[type='checkbox']:disabled:checked {
     inset 0 0 0 4px rgba(56, 189, 248, 0.35);
 }
 
+/* ── Shell divider (the drag handle between panels) ─────────────────────── */
+
+/*
+ * IT MUST NOT LOOK LIKE A SCROLLBAR — the owner's report, and it did.
+ *
+ * The old handle was a 6px `border`-coloured bar with `border-radius: 3px`: a solid,
+ * rounded, full-height sliver, which is precisely the shape every scrollbar thumb in
+ * the app has. So operators read it as a scrollbar — something you drag to LOOK
+ * somewhere else — when it actually RESIZES the panels. It also had no hover and no
+ * dragging state, so nothing corrected the misreading on approach.
+ *
+ * The fix is a different SHAPE, not just a different colour: the track is now nearly
+ * invisible and the affordance is a short centred GRIP in the middle of the run. A
+ * scrollbar thumb is long and offset (its position means something); a grip is short
+ * and always centred (its position means nothing). That difference is legible at a
+ * glance even before the pointer arrives.
+ *
+ * HOVER AND DRAG ARE DISTINCT, and both use the INTERACTIVE accent (sky) — the colour
+ * this app already means "you are interacting with this". Never the on-air hue: a
+ * divider is not a transmission claim, and after on-air moved to green the separation
+ * matters more, not less, because sky and green sit closer together than sky and red
+ * did. Hover lengthens and lights the grip; DRAGGING fills the whole track, so the
+ * operator can see which divider is captured even with the pointer far away from it
+ * (the drag is tracked on the window, so the pointer usually is).
+ */
+.cg-divider {
+  position: relative;
+  flex-shrink: 0;
+  background: transparent;
+  transition:
+    background var(--r-dur-fast) ease,
+    opacity var(--r-dur-fast) ease;
+}
+
+/* The GRIP: short, centred, and the only thing visible at rest. */
+.cg-divider::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  background: var(--r-border-strong);
+  border-radius: var(--r-radius-full);
+  transition:
+    background var(--r-dur-fast) ease,
+    width var(--r-dur-fast) ease,
+    height var(--r-dur-fast) ease;
+}
+.cg-divider--vertical::after {
+  width: 2px;
+  height: 28px;
+}
+.cg-divider--horizontal::after {
+  width: 28px;
+  height: 2px;
+}
+
+.cg-divider:hover::after {
+  background: var(--r-accent);
+}
+/* The grip GROWS along the drag axis on hover — motion that says "this slides", and
+   a bigger target once the operator has committed to reaching for it. */
+.cg-divider--vertical:hover::after {
+  height: 56px;
+}
+.cg-divider--horizontal:hover::after {
+  width: 56px;
+}
+
+/* DRAGGING — the whole track lights, not just the grip, so the captured divider is
+   identifiable while the pointer is off somewhere else entirely. */
+.cg-divider.is-dragging {
+  background: rgba(56, 189, 248, 0.22);
+}
+.cg-divider.is-dragging::after {
+  background: var(--r-accent);
+}
+.cg-divider--vertical.is-dragging::after {
+  height: 100%;
+  border-radius: 0;
+}
+.cg-divider--horizontal.is-dragging::after {
+  width: 100%;
+  border-radius: 0;
+}
+
+/* Keyboard resize is a real feature here (arrow keys), so the focus ring has to be
+   as visible as any control's. */
+.cg-divider:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cg-divider,
+  .cg-divider::after {
+    transition: none;
+  }
+}
+
 /* ── Reduced motion: no spin / no transitions; static affordances only. ──── */
 
 @media (prefers-reduced-motion: reduce) {

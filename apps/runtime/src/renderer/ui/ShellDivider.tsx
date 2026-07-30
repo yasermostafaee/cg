@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { colors } from '../theme.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface Props {
   /** Which way the divider runs, and therefore which dimension it resizes. */
@@ -46,6 +45,14 @@ export function ShellDivider({
   const vertical = orientation === 'vertical';
   // Where the drag began, and the size it began from — the delta's origin.
   const drag = useRef<{ client: number; from: number } | null>(null);
+  /*
+   * The drag position itself stays in a REF (a re-render per mousemove would be
+   * wasteful and would fight the drag), but whether a drag is IN PROGRESS has to be
+   * state: it is the one thing that must reach the DOM as a class so CSS can paint
+   * the captured divider. The two are not redundant — one is per-pixel data, the
+   * other is a single boolean that changes twice per gesture.
+   */
+  const [dragging, setDragging] = useState(false);
 
   const applyFromClient = useCallback(
     (client: number) => {
@@ -65,6 +72,7 @@ export function ShellDivider({
     };
     const onUp = (): void => {
       drag.current = null;
+      setDragging(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
@@ -85,18 +93,29 @@ export function ShellDivider({
       aria-label={label}
       aria-valuenow={value}
       tabIndex={0}
+      /*
+       * The LOOK lives in `controls.css` (`.cg-divider`), not here: hover and the
+       * dragging state cannot be expressed as inline styles, and those two states are
+       * the whole reason this was mistaken for a scrollbar. Only the geometry and the
+       * cursor stay inline, because they depend on the orientation prop.
+       */
+      className={[
+        'cg-divider',
+        vertical ? 'cg-divider--vertical' : 'cg-divider--horizontal',
+        dragging ? 'is-dragging' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       style={{
         ...(vertical
           ? { width: '6px', alignSelf: 'stretch' }
           : { height: '6px', alignSelf: 'stretch', width: '100%' }),
         cursor,
-        background: colors.border,
-        flexShrink: 0,
-        borderRadius: '3px',
       }}
       onMouseDown={(e) => {
         e.preventDefault();
         drag.current = { client: vertical ? e.clientX : e.clientY, from: value };
+        setDragging(true);
         // Held on the BODY for the duration: without this the cursor flickers
         // back to default the moment the pointer leaves the 6px handle, which
         // during a drag is immediately.
