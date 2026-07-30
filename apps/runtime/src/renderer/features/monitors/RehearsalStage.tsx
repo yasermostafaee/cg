@@ -452,10 +452,10 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
           <p id={CAVEATS_ID} style={styles.caveats}>
             Rehearsal — rendered in this browser at {raster.width}×{raster.height}, not on air.
             Faithful but <strong>not pixel-identical</strong> to the on-air render, and a Live
-            Source region shows as a labelled placeholder, not video. The preview reproduces
-            CasparCG&rsquo;s <strong>transparent base background</strong>, which a browser does not
-            provide by default. Only rehearsing rows are shown — nothing that is on air is
-            composited here. Use it to check values, layout and motion — it is not an air check.
+            Source region shows as a labelled placeholder, not video. Only{' '}
+            <strong>rehearsing</strong> rows are shown, composited in channel layer order — nothing
+            that is on air is composited here. Use it to check values, layout and motion — it is not
+            an air check.
             {unavailable > 0 && (
               <>
                 {' '}

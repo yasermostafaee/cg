@@ -10,6 +10,104 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### 🔴 THE WHITE 16:9 AREA IN PVW IS NOT EXPLAINED — the settled cause is measurably a NO-OP
+
+**The most important open item in this entry, because a fix was specified, was written, and
+was then removed on evidence.** The owner's brief for `dev-pvw-composite` §3 stated the cause
+as settled and told the session not to re-investigate it: CasparCG's CEF has a TRANSPARENT
+base background, an ordinary Chrome document has an opaque WHITE one, so the same page is
+transparent on air and white-based in PVW's iframe. The prescribed fix was to reproduce that
+base on the frame's own document after load.
+
+**It was implemented, then measured, and it changes nothing.** Two independent reasons, either
+one sufficient:
+
+1. **The exported page ALREADY declares it.** `exporter-single-file.ts` emits
+   `html,body{width:${w}px;height:${h}px;background:transparent;overflow:hidden}` into every
+   served page. There is no opaque base to override.
+2. **Chrome does not paint an opaque base into a same-origin `srcdoc` frame anyway.** Probed
+   directly with Playwright against system Chrome, screenshotting the composited box:
+
+   | frame content                                        | result                   |
+   | ---------------------------------------------------- | ------------------------ |
+   | exported page as-is (`background:transparent`)       | baseline                 |
+   | plus an injected `html,body{background:transparent}` | **byte-identical**       |
+   | page declaring NO background at all                  | **byte-identical**       |
+   | page declaring `html,body{background:#fff}`          | differs (opaque, covers) |
+
+   The parent's colour shows through in the first three. Only an explicitly opaque page covers.
+
+So the injection was deleted rather than shipped, and — this is the part that mattered more —
+the caveats line claiming "the preview reproduces CasparCG's transparent base background" was
+deleted with it. Shipping it would have put a sentence on the operator's surface that is not
+true of the code, which is the honesty class this whole task was about.
+
+**What replaced it, so the change is not merely a removal.** The E2E now asserts the property
+by PIXEL DIFFERENCE rather than by computed style — it screenshots the checker's box as it
+renders, forces the page inside the frame opaque, screenshots again, and requires the two to
+differ (`rehearse-composite.spec.ts`, "the checkerboard is NOT covered by a loaded frame"). The
+first draft of that test asserted `getComputedStyle(doc.documentElement).backgroundColor` was
+transparent, **and it passed with and without the fix** — it would have gone green while an
+operator stared at a white box. That is worth carrying on its own: a computed-style assertion
+about transparency is not an assertion about what is painted.
+
+**What is still owed, and it needs the owner's eyes because it cannot be reproduced here.**
+The white area is real — the owner sees it — and its cause is now unknown. The offline mock
+retains no rendered page (`templates.html` → `null`, deliberately), so no test in this repo can
+put the REAL exported page in a PVW frame; every spec stubs it. Candidates, in the order worth
+checking:
+
+- **the authored scene's own background.** `buildScene` sets `container.style.background =
+scene.background` on `.cg-stage` whenever it is not `'transparent'`, and the stage is
+  scene-resolution-sized — an opaque scene background is exactly a solid 16:9 area. Every
+  STARTER template declares `transparent`, so this would be a property of the owner's own
+  templates, and it would also show on air (which the owner says it does not — so either the
+  air-side template differs, or this is not it).
+- **the template's own inlined `cg.css`**, if it declares a body/stage background.
+- **something in the boot failing before `cg-pending` is removed**, leaving a state that paints.
+
+The first is a one-look check in the Designer: open the template that shows white in PVW and
+read its scene background. **Do not re-derive the CEF theory from scratch — it is measured
+false in a browser; start from what the specific template declares.**
+
+### PVW composited N rehearsing rows, and the position override never reached the frame at all
+
+`dev-pvw-composite` §1 and §2, both shipped. Recorded because the §2 diagnosis answers a
+question wider than the fix.
+
+**§2 was cause 1 of the three offered — the override never reaches the frame — and it is
+STRUCTURAL, not a wiring slip.** On air the override rides the served URL's query and the boot
+reads `location.search`. PVW's frame is `srcdoc`, whose document URL is `about:srcdoc` and
+whose `location.search` is therefore ALWAYS empty, so `resolveOutputPosition` fell back to the
+authored position on every rehearsal, forever, no matter how many times Apply was pressed.
+Cause 3 (the control being gated) was checked and is NOT present: `isPositionLocked` reads
+`status`/`pending` only, and rehearse changes neither — now pinned by a test. Cause 2 (nothing
+re-renders) was real but secondary and is closed by the same fix: the per-frame effect depends
+on `[ready, position]`.
+
+**What that says beyond this fix, which is why the owner asked:** R-030's override path is
+wired end-to-end **only as far as CasparCG**. The bridge builds the query and CasparCG's page
+reads it; nothing else ever consumed it. PVW was the second consumer and the first to need it
+without a URL. The query-building is now ONE shared `positionQuery` in `@cg/shared-schema`,
+used by the bridge and by PVW and round-tripped against `parsePositionQuery` under test — but
+worth knowing: before this there was exactly one producer and one consumer, so no drift was
+possible and none was guarded against.
+
+**The mute/restore check the task asked for came back clean.** With N rows rehearsing, N layers
+are muted, and the restore is genuinely per row: `#rehearsing` is a Map keyed by item, each
+entry carrying its own slot and its own `muted` flag recorded AT ENTRY (the B-100 read-once
+rule), `exitRehearse` restores from that flag, and `#abortRehearsalsThatWentLive` iterates all
+of them. The startup re-assert `#reassertDeclaredVolumes` walks `start … start+count` of the
+declared bank and holds no rehearse state at all, so it cannot have the "only the last
+rehearsing row" bug. Two new integration tests pin both halves. **Nothing in this change touched
+the mute path** — the N-row case was already possible; PVW simply did not show it.
+
+**Left deliberately:** the transport (PLAY / NEXT / STOP) drives EVERY rehearsing frame rather
+than the selected one. A transport that ran one of three would be the same partial-surface
+defect one control along, and judging whether two graphics collide requires running them
+together. An operator who wants one lifecycle in isolation rehearses one row. If the owner
+wants per-row transport, it is a real design question and not a tweak.
+
 ### ⛔ `dev-r028-b5` (Inspector restyle) was NOT STARTED — the third task of this session
 
 Three task files arrived in one session: `dev-r022-rehearse`, `dev-r030-channel-raster`

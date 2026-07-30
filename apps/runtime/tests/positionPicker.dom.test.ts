@@ -131,6 +131,37 @@ describe('PositionPicker — R-011', () => {
       container = null;
     }
   });
+
+  /**
+   * R-022 — REHEARSING IS NOT ON AIR, and the lock must not treat it as though
+   * it were. Rehearse is the state in which a graphic CANNOT reach air, and
+   * position rehearsal is the whole reason `dev-r030-channel-raster` was run
+   * before `dev-r022-rehearse`: a control that locked itself in exactly the
+   * state it exists to serve would have made that ordering buy nothing.
+   *
+   * The lock is a function of the item's STATUS and `pending` only — rehearse
+   * changes neither, so this holds by construction. Asserted anyway, because
+   * "on air OR unsettled OR rehearsing" is a one-word edit away and the failure
+   * would be silent: the operator would simply find the button greyed out.
+   */
+  it('is ENABLED on a rehearsing row and DISABLED on an on-air row', async () => {
+    stubBridge();
+    // A rehearsing row is a LOADED row that the bridge has interlocked; its
+    // item status is untouched by rehearse.
+    const rehearsing = await render(item('loaded'));
+    expect(
+      rehearsing.querySelector<HTMLButtonElement>('button[aria-label="Apply position"]')?.disabled,
+    ).toBe(false);
+    expect(rehearsing.textContent).not.toContain('locked while on air');
+    container?.remove();
+    container = null;
+
+    const onAir = await render(item('on-air'));
+    expect(
+      onAir.querySelector<HTMLButtonElement>('button[aria-label="Apply position"]')?.disabled,
+    ).toBe(true);
+    expect(onAir.textContent).toContain('locked while on air');
+  });
 });
 
 /**

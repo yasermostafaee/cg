@@ -324,3 +324,88 @@ it('re-asserts every declared row’s volume at startup — a bridge that died m
   expect(mock.layerState({ channel: 1, layer: 70 })?.volume).toBe(1);
   expect(mock.layerState({ channel: 1, layer: 71 })?.volume).toBe(1);
 }, 30000);
+
+/**
+ * ── N ROWS REHEARSING AT ONCE — THE RESTORE MUST LAND ON EVERY ONE ──────────
+ *
+ * Rehearse is per-row and nothing stops the operator putting several rows into
+ * it, which is how the operator actually works. PVW now COMPOSITES all of them,
+ * so the multi-row case has gone from possible-but-invisible to the normal
+ * thing an operator sees — and that makes this suite's own premise sharper:
+ * with N rows rehearsing, N layers are muted, and a restore that lands for some
+ * rows and not others is silence on air that nobody notices until someone asks.
+ *
+ * The bookkeeping is genuinely per item (`#rehearsing` is a Map keyed by item,
+ * each entry carrying its OWN slot and its OWN `muted` flag recorded at entry),
+ * so this holds by construction. Asserted anyway, because "by construction" is
+ * exactly the claim that stops being true when someone hoists a field to make
+ * something simpler.
+ */
+it('mutes and restores EACH of several rehearsing rows independently', async () => {
+  await boot();
+  const ids = ['item1', 'item2', 'item3'];
+  for (const id of ids) {
+    expect((await runtime!.load(id, 'lower-third', {})).accepted).toBe(true);
+  }
+
+  // Each row lands on its OWN layer; the slots are what the restores must hit.
+  for (const id of ids) expect(await runtime!.enterRehearse(id)).toEqual({ ok: true });
+  const slots = new Map(
+    runtime!.rehearseState().map((r) => [r.itemId, { channel: r.channel, layer: r.layer }]),
+  );
+  expect(slots.size).toBe(ids.length);
+  expect(new Set([...slots.values()].map((s) => s.layer)).size).toBe(ids.length);
+  for (const slot of slots.values()) expect(mock!.layerState(slot)?.volume).toBe(0);
+
+  // Exit ONE. Only that row's layer comes back — the others are still rehearsing
+  // and must stay muted, or the composite would be claiming an interlock it no
+  // longer has.
+  expect((await runtime!.exitRehearse('item2')).ok).toBe(true);
+  expect(mock!.layerState(slots.get('item2')!)?.volume).toBe(1);
+  expect(mock!.layerState(slots.get('item1')!)?.volume).toBe(0);
+  expect(mock!.layerState(slots.get('item3')!)?.volume).toBe(0);
+
+  // Exit the rest — EVERY layer restored, none left silent.
+  expect((await runtime!.exitRehearse('item1')).ok).toBe(true);
+  expect((await runtime!.exitRehearse('item3')).ok).toBe(true);
+  for (const slot of slots.values()) expect(mock!.layerState(slot)?.volume).toBe(1);
+  expect(runtime!.rehearseState()).toEqual([]);
+}, 30000);
+
+/**
+ * The STARTUP re-assert covers every declared row, not only the row that was
+ * last rehearsing — the specific thing worth re-checking now that N rows can be
+ * muted at once. A bridge that died with three rows in rehearse leaves three
+ * muted layers, and a re-assert that walked a "last rehearsing" pointer would
+ * restore exactly one of them.
+ *
+ * `#reassertDeclaredVolumes` walks `start … start+count` of the declared bank
+ * and holds no rehearse state at all, which is why it cannot have that bug. The
+ * existing two-row case above proves the walk; this proves it does not degrade
+ * as the bank grows, and that it needs no surviving bookkeeping to work.
+ */
+it('the startup re-assert covers EVERY declared row, with no rehearse bookkeeping at all', async () => {
+  const oscPort = await freeUdpPort();
+  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
+  const bank = { channel: 1, start: 70, count: 6 };
+  const layers = Array.from({ length: bank.count }, (_, i) => bank.start + i);
+  // Every row muted, and nothing anywhere recording that — the state a crash
+  // mid-multi-row-rehearse leaves behind. Mixer state is CHANNEL state and
+  // outlives the process.
+  for (const layer of layers) mock.setLayerVolume({ channel: 1, layer }, 0);
+
+  runtime = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { sweepMs: 60, fixedBank: bank },
+  );
+  runtime.start();
+  await runtime.startServing();
+  await runtime.whenServerHealthy(HEALTH_MS);
+  await new Promise((resolve) => setTimeout(resolve, 800));
+
+  expect(runtime.rehearseState()).toEqual([]);
+  for (const layer of layers) {
+    expect(mock.layerState({ channel: 1, layer })?.volume).toBe(1);
+  }
+}, 30000);
