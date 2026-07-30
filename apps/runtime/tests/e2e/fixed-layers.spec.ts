@@ -40,14 +40,24 @@ test('no declared bank means no rows at all', async ({ app }) => {
 test('a seeded bank renders permanent rows with aliases and honest occupancy', async ({ app }) => {
   await expect(app.layers.locator('[data-layer]')).toHaveCount(18);
 
-  // The ALIAS is the row's primary label, and the REAL layer number is still on
-  // the row beside it as its own column — the vocabulary shared with the playout
-  // side. (The row also carries a row NUMBER, 1..n, which is why the layer number
-  // is addressed by its own cell rather than by matching bare digits.)
+  // The ALIAS is the row's primary label.
   await expect(app.layerRow(70)).toContainText('CLOCK');
-  await expect(app.layerNumberCell(1, 70)).toHaveText('70');
   await expect(app.layerRow(71)).toContainText('LOWER THIRD');
-  await expect(app.layerNumberCell(1, 73)).toHaveText('73');
+
+  /*
+    The REAL CasparCG layer number is no longer a COLUMN — the owner took it off the
+    row. What keeps that safe is asserted here: the row carries it in its own tooltip
+    and accessible name, so it is one hover or one keyboard focus away at every
+    density. It must not become reachable ONLY from the Inspector, which on a narrow
+    screen is an overlay behind a hamburger — i.e. hidden exactly while somebody is
+    troubleshooting, and the layer number is the vocabulary shared with the playout
+    side (the reservation is 60–69, not "rows 1–4").
+  */
+  for (const layer of [70, 73]) {
+    const { title, ariaLabel } = await app.layerNumberReachableOn(layer);
+    expect(title).toContain(`CasparCG layer 1-${String(layer)}`);
+    expect(ariaLabel).toContain(`CasparCG layer 1-${String(layer)}`);
+  }
 
   // Honest occupancy: unknown is explicit and NEVER reads as empty (B-094).
   //
@@ -91,7 +101,10 @@ test('the load gate is fail-closed: only an observably EMPTY row accepts a load'
       await expect(row.getByRole('button', { name: verb })).toBeVisible();
     }
   }
-  // …and an UNBOUND row can drive none of them: there is no item to act on.
+  // …and an UNBOUND row can drive none of them: there is no item to act on. That
+  // includes CLEAR, which is otherwise always enabled — with no bound item there is
+  // nothing for `stack.out` to address, so enabling it would be a no-op that reports
+  // success, which is worse than a disabled control.
   for (const layer of [71, 72, 73]) {
     for (const verb of ['PLAY', 'NEXT', 'STOP', 'CLEAR']) {
       await expect(app.layerRow(layer).getByRole('button', { name: verb })).toBeDisabled();
@@ -105,9 +118,21 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   const page = app.page;
   const row = app.layerRow(70);
 
-  // CLEAR destroys a LIVE producer, so it is offered only once the item is on
-  // air — a loaded-but-not-taken item has nothing on the output to clear.
-  await expect(row.getByRole('button', { name: 'CLEAR' })).toBeDisabled();
+  /*
+    CLEAR is available on a BOUND row before it is ever taken, and stays available
+    after — owner decision, and a deliberate departure from the fail-closed rule the
+    other verbs follow.
+
+    The asymmetry is the point: refusing LOAD when the state model is uncertain is
+    safe, because nothing happens. Refusing CLEAR strands a graphic on air with
+    nothing to remove it. The status is exactly what might be WRONG in that
+    situation, so it may not be what withholds the remedy.
+
+    (It stays disabled on a genuinely UNBOUND row — asserted in the load-gate test
+    above — because with no item there is nothing for `stack.out` to address, and a
+    button that no-ops while reporting success is worse than a disabled one.)
+  */
+  await expect(row.getByRole('button', { name: 'CLEAR' })).toBeEnabled();
   await row.getByRole('button', { name: 'PLAY' }).click();
   await expect(row.getByRole('button', { name: 'CLEAR' })).toBeEnabled();
 
@@ -141,8 +166,13 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   // CLEAR kills the producer but leaves the TEMPLATE on the row, so the
   // operator can play it again without re-importing.
   await expect(app.layerState(70)).toHaveAttribute('title', /reports: empty/);
-  await expect(row.getByRole('button', { name: 'CLEAR' })).toBeDisabled();
   await expect(row.getByRole('button', { name: 'PLAY' })).toBeEnabled();
+  // CLEAR stays ENABLED after a successful clear, because the item is still BOUND to
+  // the row — the producer is gone but the template is not. Pressing it again is a
+  // harmless re-send, and that is the trade the escape hatch makes deliberately: the
+  // alternative is trusting the state model to decide when the remedy is allowed,
+  // which is the trust that strands a graphic when the model is wrong.
+  await expect(row.getByRole('button', { name: 'CLEAR' })).toBeEnabled();
   // The ffmpeg neighbour is untouched.
   await expect(app.layerState(71)).toHaveAttribute('title', /occupied — ffmpeg producer/);
 });

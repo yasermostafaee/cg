@@ -61,7 +61,7 @@ test('the picker seeds from the manifest default, applies one override, and lock
   await expect(picker.getByRole('button', { name: 'Apply position' })).toBeDisabled();
   await expect(picker.getByText('locked while on air')).toBeVisible();
 
-  // OUT settles the item back to IDLE → editable again.
+  // OUT settles the item off air → editable again.
   // R-028 part B — CLEAR is confirm-gated on the layer row. The gate is attached
   // at the action's DECLARATION, so the button and its context-menu twin cannot
   // drift apart: a verb that takes a graphic off air with no outro asks first,
@@ -71,7 +71,11 @@ test('the picker seeds from the manifest default, applies one override, and lock
     .getByRole('dialog', { name: /^Clear / })
     .getByRole('button', { name: 'Clear layer', exact: true })
     .click();
-  await expect(row.getByText('IDLE')).toBeVisible({ timeout: 3000 });
+  // The row reads READY, not IDLE: `idle` and `loaded` are ONE presented state now
+  // (owner decision — the operator cannot perceive the difference, so showing two was
+  // false precision). The difference between them still exists and is carried in the
+  // state cell's tooltip, which is what stops a slow take reading as a bug.
+  await expect(row.getByText('READY')).toBeVisible({ timeout: 3000 });
   await expect(picker.getByRole('button', { name: 'Apply position' })).toBeEnabled();
 });
 

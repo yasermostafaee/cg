@@ -6,6 +6,7 @@ import { ConnectionBanner } from './features/status/ConnectionBanner.js';
 import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
 import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
+import { ChannelScope } from './features/channels/ChannelScope.js';
 import { MonitorStrip } from './features/monitors/MonitorStrip.js';
 import { ShellDivider } from './ui/ShellDivider.js';
 import { useShellLayout } from './hooks/useShellLayout.js';
@@ -160,92 +161,101 @@ export function App(): JSX.Element {
         and becomes an OVERLAY: on a small screen a squeezed Inspector makes
         both panels useless. See `useShellLayout` for why 900px.
       */}
-        <div style={{ ...styles.shell, gridTemplateColumns: shellColumns }}>
-          {/* R-028 — the Library panel is GONE, not hidden: a template is no
+        {/*
+          THE CHANNEL SCOPE wraps the WHOLE workspace — the layer list, PROGRAM,
+          PREVIEW and the Inspector — because all of them belong to the selected
+          channel. The strip used to live inside the Layers panel, which scoped it
+          to the layer list alone: selecting a second channel would have left the
+          monitors showing the first one while the tab claimed otherwise.
+        */}
+        <ChannelScope>
+          <div style={{ ...styles.shell, gridTemplateColumns: shellColumns }}>
+            {/* R-028 — the Library panel is GONE, not hidden: a template is no
             longer a thing parked in a side panel, so there is no side panel.
             Load lives on the row and does import+load in one action. */}
-          {showWorkspace && (
-            <section style={styles.workspace}>
-              {/* PGM / PREVIEW — reserved in their final positions, black and
+            {showWorkspace && (
+              <section style={styles.workspace}>
+                {/* PGM / PREVIEW — reserved in their final positions, black and
                 explicitly labelled NOT CONNECTED. Hidden only when the LAYER
                 LIST is the fullscreen panel; a fullscreen monitor is still the
                 strip, showing one box. */}
-              {layout.focus !== 'layers' && (
-                <>
-                  <div
-                    style={
-                      monitorFocused
-                        ? { display: 'flex', flex: 1, minHeight: 0 }
-                        : {
-                            display: 'flex',
-                            height: `${String(layout.monitorPx)}px`,
-                            flexShrink: 0,
-                          }
-                    }
-                  >
-                    <MonitorStrip />
-                  </div>
-                  {/* The strip's height is the operator's too — same clamped,
+                {layout.focus !== 'layers' && (
+                  <>
+                    <div
+                      style={
+                        monitorFocused
+                          ? { display: 'flex', flex: 1, minHeight: 0 }
+                          : {
+                              display: 'flex',
+                              height: `${String(layout.monitorPx)}px`,
+                              flexShrink: 0,
+                            }
+                      }
+                    >
+                      <MonitorStrip />
+                    </div>
+                    {/* The strip's height is the operator's too — same clamped,
                     persisted, keyboard-nudgeable treatment as the Inspector's
                     width. No divider while a monitor is fullscreen: there is
                     nothing below it to divide from. */}
-                  {!monitorFocused && (
-                    <ShellDivider
-                      orientation="horizontal"
-                      value={layout.monitorPx}
-                      onResize={layout.setMonitorPx}
-                      label="Resize the monitor strip"
-                    />
-                  )}
-                </>
-              )}
-              {!monitorFocused && (
-                <>
-                  <div style={styles.chrome}>
-                    <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
-                  </div>
-                  {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
+                    {!monitorFocused && (
+                      <ShellDivider
+                        orientation="horizontal"
+                        value={layout.monitorPx}
+                        onResize={layout.setMonitorPx}
+                        label="Resize the monitor strip"
+                      />
+                    )}
+                  </>
+                )}
+                {!monitorFocused && (
+                  <>
+                    <div style={styles.chrome}>
+                      <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
+                    </div>
+                    {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
                     Layers panels, with the playout system's layers on their own tab. */}
-                  <LayersPanel
-                    onSelectionChange={setSelectedId}
-                    selectedId={selectedId}
-                    layout={layout}
-                    inspectorOpen={inspectorOverlayOpen}
-                    onToggleInspector={() => setInspectorOverlayOpen((open) => !open)}
-                    onUpdate={(id) => {
-                      const target = items.find((i) => i.itemId === id);
-                      return target !== undefined
-                        ? applyDraft(target)
-                        : Promise.resolve({ accepted: false });
-                    }}
-                  />
-                </>
-              )}
-            </section>
-          )}
-          {/* The divider only exists where there are two columns to divide. */}
-          {!layout.narrow && layout.focus === 'none' && (
-            <ShellDivider
-              orientation="vertical"
-              invert
-              value={layout.inspectorPx}
-              onResize={layout.setInspectorPx}
-              label="Resize the Inspector"
-            />
-          )}
-          {showInspectorColumn && (
-            <Inspector
-              item={selected}
-              onApply={(id) => {
-                const target = items.find((i) => i.itemId === id);
-                return target !== undefined
-                  ? applyDraft(target)
-                  : Promise.resolve({ accepted: false });
-              }}
-              onDiscard={(id) => clearDraft(id)}
-            />
-          )}
-        </div>
+                    <LayersPanel
+                      onSelectionChange={setSelectedId}
+                      selectedId={selectedId}
+                      layout={layout}
+                      inspectorOpen={inspectorOverlayOpen}
+                      onToggleInspector={() => setInspectorOverlayOpen((open) => !open)}
+                      onUpdate={(id) => {
+                        const target = items.find((i) => i.itemId === id);
+                        return target !== undefined
+                          ? applyDraft(target)
+                          : Promise.resolve({ accepted: false });
+                      }}
+                    />
+                  </>
+                )}
+              </section>
+            )}
+            {/* The divider only exists where there are two columns to divide. */}
+            {!layout.narrow && layout.focus === 'none' && (
+              <ShellDivider
+                orientation="vertical"
+                invert
+                value={layout.inspectorPx}
+                onResize={layout.setInspectorPx}
+                label="Resize the Inspector"
+              />
+            )}
+            {showInspectorColumn && (
+              <Inspector
+                item={selected}
+                onApply={(id) => {
+                  const target = items.find((i) => i.itemId === id);
+                  return target !== undefined
+                    ? applyDraft(target)
+                    : Promise.resolve({ accepted: false });
+                }}
+                onDiscard={(id) => clearDraft(id)}
+              />
+            )}
+          </div>
+        </ChannelScope>
         {/*
         NARROW — the Inspector as an overlay.
 

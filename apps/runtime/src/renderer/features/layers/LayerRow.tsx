@@ -38,10 +38,16 @@ interface Props {
   /** The bound item's template, for the name and the `hasNext` bit. */
   template: TemplateInfo | null;
   /**
-   * The row's POSITION in the list, 1-based — the operator's primary handle on
-   * it. See the header comment for why this and not the layer number.
+   * The layer's 1-based position within its BANK, counting DOWN from the highest
+   * layer — the operator's stable handle on the row, and the number its default
+   * alias uses.
+   *
+   * Comes from the canonical `bankPosition` and is deliberately NOT the row's index
+   * in the rendered list: the list can be filtered, and a handle that renumbers when
+   * a row is hidden is worse than no handle. See the header comment, and
+   * `bankPosition`'s own, for why.
    */
-  rowNumber: number;
+  bankPosition: number;
   selected: boolean;
   dirty: boolean;
   /**
@@ -63,26 +69,31 @@ const styles = {
     minHeight: `${String(VERB_TARGET_PX + 10)}px`,
     borderBottom: `1px solid ${colors.border}`,
   },
-  /** Row number — LEFT-aligned, not centred (see the header comment). */
+  /** The bank position — LEFT-aligned, not centred (see the header comment). */
   rowNumber: {
-    fontSize: '0.9rem',
+    fontSize: '0.85rem',
     fontWeight: 700,
     fontVariantNumeric: 'tabular-nums' as const,
     color: colors.textMuted,
   },
-  state: { display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 },
+  state: { display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0 },
   stateLabel: {
-    fontSize: '0.7rem',
+    fontSize: '0.72rem',
     fontWeight: 700,
-    letterSpacing: '0.04em',
+    letterSpacing: '0.05em',
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   },
-  /** The ALIAS — the row's primary label, and the biggest text on it. */
+  /**
+   * The ALIAS — the row's primary label, and deliberately the biggest text on it.
+   * Sized up from the mock-up, where it clearly outranks the template name beside
+   * it rather than merely being bold.
+   */
   alias: {
-    fontSize: '0.95rem',
-    fontWeight: 700,
+    fontSize: '1.05rem',
+    fontWeight: 600,
+    color: colors.text,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
@@ -91,51 +102,74 @@ const styles = {
     gap: '0.4rem',
     minWidth: 0,
   },
+  /**
+   * The alias on an EMPTY row, dimmed to the dedicated empty-row grey.
+   *
+   * From the mock-up, and it earns its place: a row with nothing on it should not
+   * compete for attention with rows that do. The name is still there and still
+   * readable — it is the row's identity — just not shouting.
+   */
+  aliasEmpty: { color: colors.emptyRow, fontWeight: 500 },
   /** Secondary text columns — template name, description. */
   secondary: {
-    fontSize: '0.8rem',
+    fontSize: '0.85rem',
+    color: colors.text,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  /** The description column reads quieter than the template name beside it. */
+  description: {
+    fontSize: '0.85rem',
     color: colors.textMuted,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
   },
-  empty: { fontSize: '0.8rem', color: colors.textMuted, fontStyle: 'italic' as const },
-  /** The REAL CasparCG layer number — small, fixed-width, tabular. */
-  layer: {
-    fontSize: '0.78rem',
-    color: colors.textMuted,
-    fontVariantNumeric: 'tabular-nums' as const,
-    textAlign: 'end' as const,
-    whiteSpace: 'nowrap' as const,
-  },
+  empty: { fontSize: '0.85rem', color: colors.emptyRow, fontStyle: 'italic' as const },
+  /**
+   * EVERY text cell on an empty row takes the empty-row grey — the whole row recedes
+   * together, rather than one cell being dimmed while its neighbours stay bright.
+   */
+  onEmptyRow: { color: colors.emptyRow },
 } as const;
 
 /**
  * R-028 (4.1/4.2) — ONE layer row: the whole operator surface for one declared
  * layer, as a real table row under the list's sticky header.
  *
- * WHAT IDENTIFIES A ROW, and why it is BOTH numbers.
+ * WHAT IDENTIFIES A ROW — ONE number, shown twice, never two numbers.
  *
- * The primary handle is the ROW NUMBER (`1..n`, counted from the top of the list
- * as displayed). It is what an operator can point at and say out loud, it does
- * not change when the bank is reconfigured underneath them, and it is left-aligned
- * rather than centred — the old centred number stacked over a centred alias
- * unbalanced the row against the template name beside it.
+ * The handle is the layer's position in its BANK (`bankPosition`): 1-based,
+ * counting UP from the bank's first layer. It appears in the `#` column AND as the
+ * default alias (`Layer 1`, `Layer 2`, …), and both read the same canonical
+ * function so they cannot drift. That matters more than it sounds: two small
+ * integers on one row disagreeing about which row it is turns "fire layer 2" into a
+ * coin flip at 2 a.m.
  *
- * The REAL CasparCG layer number stays on the row as well, as a small fixed-width
- * secondary column. This is a deliberate softening of task 4.2's "REAL layer
- * number (always)", not an abandonment of it: layer numbers are the vocabulary
- * this station shares with the playout side — the reservation is *60–69*, not
- * *rows 1–4* — so an operator and a playout engineer need to be able to say the
- * same thing at 2 a.m. Moving it to the Inspector ALONE would also have collided
- * with a decision already made in this same surface: on a narrow screen the
- * Inspector is an overlay behind a hamburger, so the layer number would become
- * unreachable exactly while somebody is troubleshooting. It is therefore the
- * THIRD thing to drop as the panel narrows, and the Inspector carries it too.
+ * It counts DOWN FROM THE HIGHEST layer, so position 1 is the bank's top layer — the
+ * one that draws over the others, and therefore the one an operator means by
+ * "Layer 1". Because the list is displayed descending by layer (mirroring on-air
+ * z-order), position 1 is also the top ROW, and the `#` column reads 1, 2, 3, 4
+ * downwards.
+ *
+ * It is bound to the BANK, not to the rendered list. The list can be filtered, so an
+ * index-based number would renumber the moment a row was hidden — and a positional
+ * handle that silently renumbers is worse than none, because the person saying
+ * "layer 3" and the person reading the screen would mean different rows. A hidden row
+ * therefore leaves a GAP in the sequence, which is honest.
+ *
+ * THE REAL CasparCG LAYER NUMBER IS NOT A COLUMN. The owner took it off the row —
+ * it lives in the Inspector, and in this row's own tooltip and accessible name
+ * (`rowTitle`), so it stays one hover or one focus away at every density without
+ * spending a column. That mitigation is what made removing it safe: the layer
+ * number is the vocabulary shared with the playout side (the reservation is 60–69,
+ * not rows 1–4), and on a narrow screen the Inspector is an overlay behind a
+ * hamburger — so it must not be reachable ONLY there.
  *
  * WHAT THE ROW SHOWS, in the column order the header declares:
  *
- *   - the row number;
+ *   - the bank position;
  *   - the STATE, as icon + colour + word (`rowState`). This is where colour lives
  *     now that the verbs are neutral, and it is the one thing on the row allowed
  *     to shout;
@@ -161,7 +195,7 @@ export function LayerRow({
   slot,
   item,
   template,
-  rowNumber,
+  bankPosition,
   selected,
   dirty,
   density = 'full',
@@ -181,7 +215,15 @@ export function LayerRow({
   const spec = densitySpec(density);
 
   const layerName = `${String(slot.channel)}-${String(slot.layer)}`;
-  const rowName = slot.alias ?? `Layer ${String(slot.layer)}`;
+  /**
+   * The row's name. An operator-configured alias wins; otherwise the default is
+   * `Layer <bank position>` — the SAME number the `#` column shows, so the two can
+   * never disagree about which row this is.
+   *
+   * It used to default to the CasparCG layer number (`Layer 70`), which read as a
+   * name while actually being wire vocabulary, and now contradicts the `#` column.
+   */
+  const rowName = slot.alias ?? `Layer ${String(bankPosition)}`;
   const templateLabel =
     template !== null
       ? (displayLabel(template) ?? template.templateId)
@@ -282,14 +324,31 @@ export function LayerRow({
   const description = occupancyLabel(slot.observed, linkDown);
   const select = (): void => onSelect(item === null ? null : item.itemId);
 
+  /**
+   * The row's own tooltip and accessible name, and the reason the LAYER column
+   * could be removed.
+   *
+   * The owner took the real CasparCG layer number off the row — it lives in the
+   * Inspector. On its own that would have made it unreachable exactly when it is
+   * needed: on a narrow screen the Inspector is an overlay behind a hamburger, and
+   * the layer number is what an operator and a playout engineer say to each other
+   * at 2 a.m. ("clear one-seventy-one", not "clear row three"). Carrying it here
+   * costs no column and keeps it one hover or one keyboard focus away at every
+   * density — the same trade this surface already makes for the occupancy report
+   * and, now, for the READY distinction.
+   */
+  const rowTitle = `Row ${String(bankPosition)} · ${rowName} · CasparCG layer ${layerName}`;
+
   return (
     <div
-      className={`cg-row${selected ? ' is-selected' : ''}`}
+      // `has-template` lifts a row that holds something above the empty ones — a
+      // semantic difference, not a striping pattern (see `controls.css`).
+      className={`cg-row${item !== null ? ' has-template' : ''}${selected ? ' is-selected' : ''}`}
       style={{ ...styles.row, gridTemplateColumns: gridTemplateColumns(density) }}
       // The row's stable anchor is the LAYER NUMBER — the declared identity that
       // survives every load, unlike an itemId.
       data-layer={String(slot.layer)}
-      data-row-number={String(rowNumber)}
+      data-row-number={String(bankPosition)}
       {...(item !== null ? { 'data-item-id': item.itemId } : {})}
       {...(template !== null ? { 'data-template-id': template.templateId } : {})}
       onContextMenu={(e) => open(e, slot.layer)}
@@ -318,7 +377,10 @@ export function LayerRow({
       role="button"
       tabIndex={0}
       aria-pressed={selected}
-      aria-label={`Row ${String(rowNumber)} — ${rowName}, layer ${String(slot.layer)}, ${state.label}`}
+      // Both carry the real layer number now that its column is gone — the
+      // tooltip for a pointer, the accessible name for a screen reader.
+      title={rowTitle}
+      aria-label={`${rowTitle} · ${state.label}`}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         // Never swallow a key aimed at a control inside the row.
@@ -327,7 +389,11 @@ export function LayerRow({
         select();
       }}
     >
-      <span style={styles.rowNumber}>{rowNumber}</span>
+      <span
+        style={item === null ? { ...styles.rowNumber, ...styles.onEmptyRow } : styles.rowNumber}
+      >
+        {bankPosition}
+      </span>
       {/*
         THE STATE — icon + colour + word, the row's one loud signal now that the
         verbs are neutral. The icon carries a `title` so the longer explanation
@@ -352,36 +418,47 @@ export function LayerRow({
       >
         <Icon
           icon={state.icon}
-          size={18}
+          // 25px, per the owner. This mark is the row's one loud signal now that the
+          // verbs are neutral, and it has to be readable from across a gallery —
+          // bigger than any glyph on the row, including the verb icons.
+          size={25}
           {...(state.transient === true
             ? { style: { animation: 'cg-spin 1s linear infinite' } }
             : {})}
         />
         {spec.showStateLabel && <span style={styles.stateLabel}>{state.label}</span>}
       </span>
-      {/* THE ALIAS — primary. Falls back to the layer's own name when unaliased. */}
-      <span style={styles.alias} data-row-body="" title={rowName}>
+      {/* THE ALIAS — primary. Dimmed on a row with nothing on it, so occupied rows
+          own the attention. */}
+      <span
+        style={item === null ? { ...styles.alias, ...styles.aliasEmpty } : styles.alias}
+        data-row-body=""
+        title={rowName}
+      >
         {rowName}
         {dirty && <DraftChip label={`${rowName} has unapplied edits`} />}
       </span>
       {spec.showTemplate &&
         (templateLabel !== null ? (
-          <span style={styles.secondary} title={templateLabel}>
+          <span style={styles.secondary} title={templateLabel} dir="auto">
             {templateLabel}
           </span>
         ) : (
           <span style={styles.empty}>Empty</span>
         ))}
       {spec.showDescription && (
-        <span style={styles.secondary} title={description}>
+        <span
+          style={
+            item === null ? { ...styles.description, ...styles.onEmptyRow } : styles.description
+          }
+          title={description}
+        >
           {description}
         </span>
       )}
-      {spec.showLayer && (
-        <span style={styles.layer} title={`CasparCG layer ${layerName}`}>
-          {slot.layer}
-        </span>
-      )}
+      {/* There is no LAYER column any more — the real CasparCG layer number moved
+          to the Inspector, and to this row's own tooltip / accessible name so it
+          stays reachable at every density (see `rowTitle`). */}
       {/*
         The verb block. It needs no click handler of its own: the row's handler
         ignores anything that came from a control (see `onClick` above).

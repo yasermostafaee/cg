@@ -1,6 +1,9 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 import { colors } from '../theme.js';
+import { Button } from './Button.js';
+import { Icon } from './Icon.js';
 
 /**
  * The Runtime's modal primitive.
@@ -51,7 +54,15 @@ const styles = {
     maxHeight: '88vh',
     minHeight: 0,
   },
-  title: { fontSize: '1rem', fontWeight: 700, margin: 0, flexShrink: 0 },
+  /** The title row: heading on one side, the close affordance on the other. */
+  titleRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: '0.75rem',
+    flexShrink: 0,
+  },
+  title: { fontSize: '1rem', fontWeight: 700, margin: 0 },
   /**
    * The body SCROLLS; the title and the footer do not. A dialog that asks a
    * destructive question must keep its buttons visible however long the content
@@ -159,9 +170,35 @@ export function Modal({
         style={{ ...styles.dialog, width: WIDTHS[size] }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 style={styles.title}>{title}</h2>
+        <div style={styles.titleRow}>
+          <h2 style={styles.title}>{title}</h2>
+          {/*
+            THE CLOSE AFFORDANCE, in the primitive so EVERY modal has one.
+
+            Escape and a backdrop click already dismissed, but neither is visible: an
+            operator who does not know them had to find the Cancel button, and a dialog
+            with no obvious way out is one somebody force-reloads the console to escape.
+
+            It routes to `onClose`, which is the CANCEL path — the same one Escape and
+            the backdrop take. That is why it is safe for it to be the first focusable
+            element in the dialog (the focus-on-open below lands here now): the thing
+            focus lands on is the harmless one, which is exactly the invariant the
+            footer's "cancel first in DOM order" rule was protecting.
+          */}
+          <Button
+            variant="ghost"
+            aria-label="Close"
+            title="Close (Escape)"
+            onClick={onClose}
+            className="cg-modal-close"
+          >
+            <Icon icon={X} size={16} />
+          </Button>
+        </div>
         {children !== undefined && <div style={styles.body}>{children}</div>}
-        <div style={styles.footer}>{footer}</div>
+        <div style={styles.footer} className="cg-modal-footer">
+          {footer}
+        </div>
       </div>
     </div>,
     document.body,

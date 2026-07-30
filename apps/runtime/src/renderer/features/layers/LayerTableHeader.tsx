@@ -78,7 +78,6 @@ const styles = {
     whiteSpace: 'nowrap' as const,
   },
   cell: { overflow: 'hidden', textOverflow: 'ellipsis' },
-  layerCell: { overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'end' as const },
   verbHead: {
     textAlign: 'center' as const,
     overflow: 'hidden',
@@ -92,7 +91,10 @@ export function LayerTableHeader({ density }: { density: Density }): JSX.Element
   const spec = densitySpec(density);
   return (
     <div style={{ ...styles.header, gridTemplateColumns: gridTemplateColumns(density) }} role="row">
-      <span style={styles.cell} title="Row number — this row’s position in the list.">
+      <span
+        style={styles.cell}
+        title="The row’s position, counting down from the top — the highest CasparCG layer is 1, because it draws over the others. It is also the row’s default name, and it is fixed to the layer: hiding a row never renumbers the rest."
+      >
         #
       </span>
       <span
@@ -117,14 +119,8 @@ export function LayerTableHeader({ density }: { density: Density }): JSX.Element
           Description
         </span>
       )}
-      {spec.showLayer && (
-        <span
-          style={styles.layerCell}
-          title="The real CasparCG layer number — the one to quote to the playout side."
-        >
-          Layer
-        </span>
-      )}
+      {/* No LAYER column — the real CasparCG layer number is in the Inspector and
+          in each row's own tooltip / accessible name. */}
       <span style={VERBS_GRID}>
         {VERB_HEADS.map((verb) => (
           <span key={verb.label} style={styles.verbHead} title={verb.title}>

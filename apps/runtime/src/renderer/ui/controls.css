@@ -21,13 +21,17 @@
   --r-text-muted: #9ca3af;
   --r-accent: #38bdf8;
   --r-accent-strong: #0ea5e9;
-  --r-onair: #e11d48;
+  /* ON AIR — GREEN, and this hue may mean nothing else. Red is now errors and
+     destructive intent only. See `theme.ts`'s header for the decision and for
+     the R-006 / B-087 re-anchoring it owes. Mirrored from `cssVars`; a parity
+     test asserts the two match. */
+  --r-onair: rgb(44 255 122);
   --r-caution: #f59e0b;
   --r-danger: #dc2626;
   --r-danger-strong: #b91c1c;
   --r-success: #10b981;
   --r-dirty: #f59e0b;
-  --r-ready: #0ea5e9;
+  --r-ready: #38bdf8;
   --r-idle: #3f3f46;
   --r-offline: #94a3b8;
 
@@ -118,17 +122,21 @@
 /* C-012 — the ON-AIR family, subordinate to PLAY.
    UPDATE changes what is on air RIGHT NOW, so it must not read like the neutral
    staging controls (Load / Apply position / Add item) that touch nothing live. It
-   wears the on-air hue to say "this reaches air", as an OUTLINE so the SOLID red
+   wears the on-air hue to say "this reaches air", as an OUTLINE so the SOLID fill
    stays what it has always been: PLAY, the one control that puts a graphic on air.
-   The sacred-red rule is intact — solid `--r-onair` remains PLAY + ON AIR only. */
+   The sacred-air-colour rule is intact — solid `--r-onair` remains PLAY + ON AIR.
+
+   Retuned when on-air moved from red to green: the tint and text were hard-coded
+   rose (#fb7185 / rgba(225,29,72,…)), which after the palette change would have
+   left a RED control claiming to be the on-air family while red now means error. */
 .cg-btn--air {
   background: transparent;
   border-color: var(--r-onair);
-  color: #fb7185;
+  color: #6ee7b7;
   font-weight: var(--r-weight-bold);
 }
 .cg-btn--air:hover:not(:disabled) {
-  background: rgba(225, 29, 72, 0.16);
+  background: rgba(16, 185, 129, 0.16);
   color: #fff;
 }
 /* C-012 — the destructive half of the EXIT family.
@@ -214,27 +222,35 @@
  * border — a bare dimmed glyph. On an empty row the single enabled LOAD reads as
  * the only thing you can press, which is exactly true.
  */
-.cg-btn--verb {
-  /* The hit target floor. Mirrors `VERB_TARGET_PX` in `layerTable.ts`, which
-     budgets the verb column's width from the same number. */
-  min-width: 34px;
-  min-height: 34px;
-  padding: 0;
+/*
+ * THE NEUTRAL LOOK, shared by the icon-only row verbs and the text bulk verbs.
+ *
+ * Split from the geometry deliberately. `--verb` began as one class doing both, and
+ * when the bulk verbs were made neutral by reusing it they inherited `padding: 0`,
+ * a 36px square minimum and `width: 100%` — geometry meant for a glyph in a sized
+ * column — so their labels came out squashed against the borders. The LOOK is the
+ * shared thing; the SHAPE is not.
+ */
+.cg-btn--verb,
+.cg-btn--neutral {
   background: var(--r-surface-raised);
   border-color: var(--r-border-strong);
   color: var(--r-text);
 }
-.cg-btn--verb:hover:not(:disabled) {
+.cg-btn--verb:hover:not(:disabled),
+.cg-btn--neutral:hover:not(:disabled) {
   background: #2c3a4e;
   border-color: #64748b;
   box-shadow: var(--r-shadow-1);
   filter: none; /* the lifted fill IS the hover; brightness on top muddies it */
 }
-.cg-btn--verb:active:not(:disabled) {
+.cg-btn--verb:active:not(:disabled),
+.cg-btn--neutral:active:not(:disabled) {
   background: var(--r-surface-sunken);
   box-shadow: none;
 }
-.cg-btn--verb:disabled {
+.cg-btn--verb:disabled,
+.cg-btn--neutral:disabled {
   background: transparent;
   border-color: transparent;
   color: var(--r-text-muted);
@@ -242,6 +258,47 @@
   /* Higher than the shared 0.45: the glyph still has to be IDENTIFIABLE, because
      which verbs a row is offering is information even when they are inert. */
   opacity: 0.6;
+}
+
+/* The icon-only row verb adds only its GEOMETRY on top of the neutral look. */
+.cg-btn--verb {
+  /* The hit target floor. Mirrors `VERB_TARGET_PX` in `layerTable.ts`, which
+     budgets the verb column's width from the same number. */
+  min-width: 36px;
+  min-height: 36px;
+  /* Fill the column the header sized, so the word above sits over the button. */
+  width: 100%;
+  padding: 0;
+}
+
+/* A neutral TEXT button keeps the base `.cg-btn` padding; it only needs a floor on
+   its height so it matches the row verbs' weight in the same header. */
+.cg-btn--neutral {
+  min-height: 36px;
+  padding: 0.4rem 0.75rem;
+}
+
+/*
+ * MODAL CHROME — sized here, in the primitive's stylesheet, so every dialog in the app
+ * gets it rather than each one being dressed by hand.
+ *
+ * The footer rule exists because Cancel and Apply came out different sizes: Cancel was a
+ * `ghost` (tight padding, meant for an icon affordance) sitting beside a full-size
+ * `primary`, so the two read as different KINDS of control when they are peers — one
+ * dismisses, one commits, and both are equally reachable choices. A shared floor makes
+ * them a matched pair whatever variants a caller passes.
+ */
+.cg-modal-footer .cg-btn {
+  min-height: 36px;
+  padding: 0.4rem 0.9rem;
+}
+
+/* The close X: a square target, not a text button's rectangle. */
+.cg-modal-close.cg-btn {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 /* Busy + success + error states (driven by AsyncButton). No layout shift: while
@@ -329,6 +386,106 @@
 textarea.cg-field {
   resize: vertical;
   line-height: 1.4;
+}
+
+/* ── Checkbox ───────────────────────────────────────────────────────────── */
+
+/*
+ * THE app's checkbox, styled on the ELEMENT selector rather than behind a class.
+ *
+ * Deliberate: "for the whole app" means every checkbox that exists and every one added
+ * later inherits this without being wired to it — the same reasoning as the single
+ * global `Tooltip`. A `.cg-check` class would mean the next checkbox somebody adds is
+ * the one that silently still looks like Windows.
+ *
+ * It keeps the native `<input type="checkbox">` underneath (`appearance: none` only
+ * removes the painting), so the accessibility, the label association, the keyboard
+ * behaviour and the form semantics are all untouched — this is a re-skin, not a
+ * re-implementation.
+ *
+ * THE TICK IS A COLOUR-INDEPENDENT SHAPE. The checked state is a drawn checkmark, not
+ * merely a filled box, so it survives a monochrome display and any form of colour
+ * blindness — the same rule the row states follow. The fill is the interactive accent
+ * (sky), NEVER the on-air green: a checkbox is not an air claim, and after on-air
+ * moved to green that separation matters more, not less.
+ */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  /* 18px: comfortable to hit without dominating a dense config row. */
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--r-border-strong);
+  border-radius: var(--r-radius-sm);
+  background: var(--r-surface-raised);
+  cursor: pointer;
+  position: relative;
+  display: inline-grid;
+  place-content: center;
+  transition:
+    background var(--r-dur-fast) ease,
+    border-color var(--r-dur-fast) ease,
+    box-shadow var(--r-dur-fast) ease;
+}
+
+input[type='checkbox']:hover:not(:disabled) {
+  border-color: var(--r-accent);
+  background: #2c3a4e;
+}
+
+input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+
+input[type='checkbox']:checked {
+  background: var(--r-accent);
+  border-color: var(--r-accent);
+}
+
+/*
+ * Hovering a CHECKED box must not darken it.
+ *
+ * The unchecked hover fill is a dark lift, and `:hover:not(:disabled)` outranks
+ * `:checked` on specificity — so without this rule pointing at a ticked box replaced its
+ * accent fill with that dark colour and it read as unticking itself. A checked control
+ * brightens on hover instead; the state never changes appearance just because the
+ * pointer crossed it.
+ */
+input[type='checkbox']:checked:hover:not(:disabled) {
+  background: #6dd3fb;
+  border-color: #6dd3fb;
+}
+
+/* The checkmark: two borders of a rotated box, so it scales with the control and
+   needs no glyph font or SVG. */
+input[type='checkbox']:checked::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border: solid #04121f;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+
+input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* A checked-but-disabled box must still read as CHECKED — the state is information
+   even when it cannot be changed. */
+input[type='checkbox']:disabled:checked {
+  background: var(--r-border-strong);
+  border-color: var(--r-border-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input[type='checkbox'] {
+    transition: none;
+  }
 }
 
 /* ── Badge (stack status pill) ──────────────────────────────────────────── */
@@ -444,28 +601,74 @@ textarea.cg-field {
  */
 .cg-row {
   cursor: pointer;
-  /* The transparent bar reserves the space, so selecting a row never shifts its
-     content sideways — the buttons stay exactly where the finger expects. */
-  border-left: 4px solid transparent;
+  /* A transparent inset ring reserves the selected row's outline, so selecting a
+     row never shifts its content — the buttons stay exactly where the finger
+     expects. Replaces a 4px left bar, which the mock-up supersedes. */
+  box-shadow: inset 0 0 0 2px transparent;
   transition:
     background var(--r-dur-fast) ease,
-    border-color var(--r-dur-fast) ease;
+    box-shadow var(--r-dur-fast) ease;
 }
-.cg-row:hover {
+/*
+ * A ROW WITH A TEMPLATE ON IT sits slightly lifted from an empty one.
+ *
+ * NOT zebra striping — the owner corrected an earlier read of the mock-up on exactly
+ * this point, and the distinction matters. Alternating bands are decoration that
+ * happens to aid scanning; this is SEMANTIC: it separates the rows that can do
+ * something from the rows that are waiting to be filled, which is a real question an
+ * operator asks of the list at a glance.
+ *
+ * Deliberately faint. It must not register as a STATE — the state column owns that,
+ * and a background strong enough to compete would put two answers to "what is on
+ * this row?" on one row. It also must never be mistaken for the selection ring or an
+ * air claim, so it carries no hue at all, just a few percent of white.
+ */
+.cg-row.has-template {
+  /* Exact value specified by the owner. Opaque rather than a white overlay so it
+     does not compound with anything painted behind it. */
+  background: rgb(30 38 51);
+}
+/* Hover outranks both, and must beat `has-template`'s specificity. */
+.cg-row:hover,
+.cg-row.has-template:hover {
   background: var(--r-surface-raised);
 }
-.cg-row.is-selected {
-  background: var(--r-surface-raised);
-  border-left-color: var(--r-accent);
-  /* Lifts the selected row above a merely-hovered one, which shares the
-     background — without this the two are still indistinguishable. A dimmed
-     wash of `--r-accent` (#38BDF8); inline rather than a new token because it
-     is one decorative reinforcement, not a semantic role. */
-  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.28);
+
+/*
+ * SELECTION — a bright ring around the WHOLE row, per the mock-up.
+ *
+ * Two constraints it still has to satisfy, unchanged from the left-bar version it
+ * replaces:
+ *
+ *  1. NOT COLOUR ALONE. The cue is a continuous ring — a shape enclosing the row —
+ *     so it survives a monochrome display and any form of colour blindness. The
+ *     background lift is reinforcement, never the signal.
+ *  2. IT MUST NOT RESEMBLE ON AIR. Selection is about FOCUS; on air is about the
+ *     TRANSMISSION. The ring is the interactive accent (sky), which this app
+ *     already means "you are interacting with this" — never the sacred air colour
+ *     reserved for a graphic a real server confirmed. That separation got MORE
+ *     important, not less, when on-air moved to green: sky and green sit closer to
+ *     each other than sky and red did, so the ring is deliberately the bright,
+ *     saturated accent rather than anything softer.
+ *
+ * An enclosing ring also reads better than the old edge bar at a glance across a
+ * gallery, and it does not compete with the state column for the eye.
+ */
+/* The tint is a wash of the accent rather than the neutral raised surface, matching
+   the mock-up: it makes the selected row unmistakable even where the ring is clipped
+   by the scroll edge, and it cannot be confused with the has-template lift, which
+   carries no hue at all. Listed with `.has-template` so it wins on specificity. */
+.cg-row.is-selected,
+.cg-row.is-selected.has-template {
+  background: rgba(56, 189, 248, 0.1);
+  box-shadow: inset 0 0 0 2px var(--r-accent);
 }
 .cg-row:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 var(--r-focus-ring) var(--r-accent);
+  /* Focus and selection can coexist; the focus ring is inset further so both read. */
+  box-shadow:
+    inset 0 0 0 2px var(--r-accent),
+    inset 0 0 0 4px rgba(56, 189, 248, 0.35);
 }
 
 /* ── Reduced motion: no spin / no transitions; static affordances only. ──── */

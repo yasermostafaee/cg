@@ -10,10 +10,33 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
-### CasparCG 2.5.0 cannot load our templates at all — `CG ADD` with an http URL is refused
+### ⚠ VOID — the CasparCG 2.5.0 conclusion below is WRONG. 2.5.0 works.
 
-**This is the most important entry in this file. It is not a UI issue and it blocks
-on-air use on this machine.**
+**Struck through, not deleted, because the mistake is more instructive than the
+conclusion was.** Do not act on the entry that follows it.
+
+The real cause was that **CEF was dead in that CasparCG instance**
+(`cef_executor Could not post task`). Adding an `<html>` block with a writable
+`cache-path` to `casparcg.config` fixed it, and the same 2.5.0 now shows
+`occupied — html producer` rows and a row `ON AIR`. `CG ADD` with a bridge-served
+http URL is fine.
+
+**Why the probe misled, which is the part worth keeping.** The one result that looked
+like it exonerated the environment — bare `PLAY "<url>"` returning `202 OK` while both
+`[HTML]` forms returned `404` — was almost certainly the **ffmpeg** producer answering,
+because ffmpeg accepts http URLs too. That reading turned "the HTML producer is broken"
+into "CG ADD cannot take a URL", and the invented mechanism then sounded plausible
+enough to write up with a recommendation attached.
+
+The lesson is specific and worth carrying: **a control test that reaches a different
+implementation than the one under test is not a control test.** The probe needed to
+establish WHICH producer answered before drawing any conclusion from the fact that one
+form succeeded. Confidence came from the crispness of the table, not from its validity.
+
+### ~~CasparCG 2.5.0 cannot load our templates at all — `CG ADD` with an http URL is refused~~ (VOID — see above)
+
+**This entry is retained only as the record of a wrong diagnosis. Its conclusion and
+its recommendation are both void.**
 
 Observed 2026-07-30 against the CasparCG the owner has installed here
 (`D:\programs\casparcg\casparcg-server-v2.5.0-stable-windows`, `VERSION` → `2.5.0
@@ -69,6 +92,69 @@ lie — but this is the B-100 shape (a destructive step committed before the
 constructive step that repairs it is known to succeed) arriving via a NEW route: not a
 re-read boolean, but CasparCG rejecting the `ADD`. Worth deciding whether the load
 path should probe-then-clear, or restore on ADD failure.
+
+### CLEAR ALL is always ENABLED but is not always EFFECTIVE — a bridge change is owed
+
+**Found by the adversarial self-review that item 3 required, not by a test.** This is the
+most important open item in this file.
+
+The owner's decision was that CLEAR and CLEAR ALL are always enabled, because refusing
+the remedy when the state model is confused strands a graphic on air. The UI now does
+that. The two halves do not deliver it equally:
+
+- **The per-row CLEAR is genuinely effective.** `caspar-runtime.out(itemId)` requires
+  only that the item has a bound slot — it does NOT inspect the status — so pressing
+  CLEAR on a row sends `CLEAR <ch>-<layer>` whatever the status claims. The escape hatch
+  works where it matters most.
+- **CLEAR ALL is not.** `caspar-runtime.clearAll()` filters
+  `status !== 'idle' && status !== 'loaded'` before sending anything — i.e. it is gated on
+  precisely the statuses that might be WRONG in the situation the escape hatch exists
+  for. If every item wrongly reads `idle`, CLEAR ALL sends nothing and returns
+  `{ ok: true, cleared: 0 }`: a success report for a no-op, which is the failure mode
+  worse than a disabled button.
+
+**Not fixed here, deliberately.** Making the bulk verb a true escape hatch means changing
+`clearAll`'s predicate to "every item with a slot", which is on-air bridge behaviour and
+well outside a UI-review session's remit — and it needs a decision about whether
+Clear-All should hard-cut rows the model believes are merely loaded.
+
+**Mitigated in the meantime, honestly:** the confirm dialog no longer promises that
+everything comes off. When nothing reads as on air it says so, warns that the action may
+send no commands, and points the operator at the per-row CLEAR, which is not status-gated.
+The button stays available per the decision; only the false promise is gone.
+
+### R-006 and B-087 are anchored on "red" and on-air is now GREEN — PRD re-wording owed
+
+Owner decision this session: **on air is green, and red means error or destructive intent
+only.** The code and the tokens moved; the PRD wording did not.
+
+`R-006` is recorded as "a simulation may never wear the broadcast **red**" and `B-087`'s
+"a frozen air claim is demoted" sits beside it. Those sentences now protect nothing — they
+forbid wearing a colour the product no longer uses for air.
+
+**The trap, which is why this needs a human sweep rather than a test run:** the tests
+assert the ROLE (`data-row-state`, `cg-badge--onair`, `badgeTone`), not the hex. That is
+the more durable form and was kept deliberately — but it means every test stayed GREEN
+through a change that emptied the rule of meaning. A green suite is not evidence here.
+
+Owed: re-word R-006 and B-087 in `docs/prd/*` to name the air colour by role rather than
+by hue, and audit the surface for reds that no longer mean danger. Two were already caught
+and fixed in code this session (`.cg-btn--air`'s hard-coded rose tint and text, which would
+have left a red control claiming to be the on-air family). `theme.ts`'s header and
+`tests/theme.test.ts`'s prose were corrected in place; the PRD was not touched, per fast
+mode.
+
+### The `#` column and the default alias are ONE number by construction — keep it that way
+
+Recorded because the invariant is easy to break by accident. `#` and the default row name
+(`Layer 1`, `Layer 2`, …) both read `bankPosition` from `@cg/shared-ipc`, so they cannot
+disagree. Two derived integers on one row disagreeing about which row it is was the hazard
+the owner identified: "fire layer 2" becomes a coin flip.
+
+It is bound to the BANK, not to the rendered list — the owner's added constraint. Hiding a
+row leaves a GAP in the sequence rather than renumbering the rows past it, because a
+positional handle that silently renumbers is worse than none. There is no test on the
+gap-not-renumber property yet; worth one when the numbered items are filed.
 
 ### Item numbers were claimed on `dev` while fast mode forbids it
 
@@ -289,6 +375,47 @@ colour is also the more durable form. `StatusBadge` itself is untouched and its 
 test still passes; the `unverified` safety wording was extracted to
 `ui/airStateWording.ts` so the badge and the row share ONE copy.
 
+### CLEAR stays DISABLED on a genuinely unbound row — a narrowing of "always"
+
+The owner said CLEAR is always enabled, including when "the row looks empty". Implemented
+as: enabled whenever an ITEM is bound, whatever its status claims, and disabled on a row
+with no item at all.
+
+The reason is the one the decision itself rests on. With no item there is nothing for
+`stack.out` to address, so an enabled CLEAR would be a **no-op that reports success** —
+the outcome the owner's own argument rules out, and worse than a disabled control because
+it looks like it worked. `layers.clear` is no substitute: it refuses `'owned'` for our own
+layers by design, and `'foreign'` without a fresh html observation, so it is refused in
+exactly the cases this would need it. An unbound row the wire says is occupied is the R-009
+orphan case, which already has a surfaced banner with its own confirm-gated Clear, properly
+fenced (html-only, fresh observation, never the reserved range).
+
+Flagged rather than buried: if the owner wants a layer-scoped clear reachable from the row
+itself, that is a bridge capability, not a flag.
+
+### `#` and the default alias both count DOWN from the highest layer — and one edge case
+
+Owner's decision, corrected mid-session from an earlier "count up from the bottom" reading.
+Position 1 is the bank's HIGHEST CasparCG layer, because the higher layer draws over the
+others and is therefore the graphic an operator means by "Layer 1". The list is displayed
+descending, so `#` reads 1, 2, 3, 4 downwards and the default alias agrees on every row.
+
+**The edge case, resolved by taking the stability constraint as the stronger instruction.**
+The owner asked for `#` as "plain display order" AND for the alias to be bound to the
+layer's fixed place in the bank. Those two agree only while every row is visible: hide a
+row, and display order renumbers the rows past it while the alias does not — which
+reintroduces the exact contradiction the decision was made to remove.
+
+So BOTH read the fixed bank position. With all rows shown that is 1, 2, 3, 4 top-down
+exactly as specified; with a row hidden the sequence has a GAP rather than a lie. The
+owner's own stated reason ("`Layer 2` would mean different rows on different days") is an
+argument for stability over display-indexing, so this follows the reasoning rather than the
+narrower wording. **Worth confirming with him** — it is the one place this session chose
+between two of his sentences.
+
+There is no test yet on the gap-not-renumber property. Worth one when the numbered items
+are filed.
+
 ### The code landed as one commit
 
 The pieces are mutually dependent — the `Panel` primitive, the shell layout, the
@@ -299,6 +426,16 @@ own commit.
 ---
 
 ## Environment notes (this machine, not debt)
+
+- **The saved aliases on this machine now contradict the `#` column, and the fix is one
+  action in the UI.** `~/.cg-runtime/bridge-fixed-layers.json` holds explicit aliases
+  written under the earlier count-up-from-the-bottom numbering — layer 70 is stored as
+  `Layer 1`. After the direction flip, layer 70 is row `#4`, so that row displays `#4`
+  named `Layer 1`: the exact contradiction the correction was made to remove.
+  **Deliberately not rewritten** — it is the owner's stored config, and clearing names he
+  may have chosen is not this session's call. To restore the intended behaviour: open
+  Configure, clear the four Name fields, Apply. The placeholder then shows the correct
+  default (`Layer 1` = layer 73, the top row) and the rows track the bank automatically.
 
 - The bridge's fixed-layers bank did not exist here, which is why the panel read "No
   layers are declared". Created `~/.cg-runtime/bridge-fixed-layers.json` with channel

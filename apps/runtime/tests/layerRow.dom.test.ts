@@ -46,14 +46,23 @@ describe('LayerRow — verbs are present from the start, enabled by state (R-028
     expect(buttons.get('LOAD')).toBe(false);
     expect(buttons.get('PLAY')).toBe(true);
     expect(buttons.get('STOP')).toBe(true);
+    // CLEAR is the one always-enabled verb, but NOT here: with no item bound there
+    // is nothing for `stack.out` to address, so an enabled CLEAR would be a no-op —
+    // worse than a disabled one, because it looks like it worked. An unbound row
+    // the WIRE says is occupied is the orphan banner's job, not this button's.
     expect(buttons.get('CLEAR')).toBe(true);
   });
 
-  it('a LOADED row: PLAY enabled; STOP and CLEAR disabled; the toggle now reads REMOVE', async () => {
+  it('a LOADED row: PLAY enabled, STOP disabled — and CLEAR available anyway', async () => {
     const buttons = await buttonsFor({ item: itemWith('loaded') });
     expect(buttons.get('PLAY')).toBe(false);
     expect(buttons.get('STOP')).toBe(true);
-    expect(buttons.get('CLEAR')).toBe(true);
+    // CLEAR IS ENABLED even though this item's status says it is not on air.
+    // Deliberate, and the opposite of the fail-closed rule the other verbs follow:
+    // refusing LOAD when the state model is uncertain is safe (nothing happens),
+    // but refusing CLEAR strands a graphic on air with nothing to remove it. The
+    // status is exactly what might be wrong, so it may not gate the remedy.
+    expect(buttons.get('CLEAR')).toBe(false);
     // The LOAD/REMOVE toggle: one control in one position, flipped by state.
     // Re-binding an occupied row is still two explicit steps (REMOVE, then
     // LOAD) — the toggle is a visual pattern, never a compound verb.
@@ -71,11 +80,25 @@ describe('LayerRow — verbs are present from the start, enabled by state (R-028
     expect(buttons.get('CLEAR')).toBe(false);
   });
 
-  it('R-006 — DISCONNECTED disables every verb including LOAD', async () => {
+  it('R-006 — DISCONNECTED disables every verb except CLEAR, which is the escape hatch', async () => {
     const buttons = await buttonsFor({ item: itemWith('on-air'), link: 'disconnected' });
     for (const [label, disabled] of buttons) {
+      if (label === 'CLEAR') continue;
       expect(disabled, `${label} must be disabled with the bridge down`).toBe(true);
     }
+    /*
+      CLEAR stays ENABLED with the bridge reported down, and this assertion exists
+      to stop it being "fixed" back.
+
+      A WRONG `linkDown` is precisely the bug the escape hatch is for, and the two
+      costs are not comparable: enabling it when the bridge really is dead costs one
+      failed request and a toast, while disabling it when the flag is wrong costs a
+      graphic nobody can take off air. It carries the offline reason as its tooltip,
+      so the operator knows what to expect before pressing.
+    */
+    expect(buttons.get('CLEAR'), 'CLEAR is the escape hatch and must survive a dead link').toBe(
+      false,
+    );
   });
 
   it('TEST MODE keeps the verbs live — simulating them is the point', async () => {
@@ -160,18 +183,28 @@ describe('LayerRow — CLEAR and REMOVE stay distinct verbs (C-012)', () => {
 });
 
 describe('LayerRow — what the row says (4.2)', () => {
-  it('shows the alias as the primary label AND keeps the real layer number', async () => {
+  it('shows the alias as the primary label, and keeps the layer number reachable', async () => {
     rendered = await renderLayerRow({ item: itemWith('on-air') });
     const text = rendered.container.textContent ?? '';
-    // The ALIAS is what the operator thinks in, so it is the row's title now.
+    // The ALIAS is what the operator thinks in, so it is the row's title.
     expect(text).toContain('CLOCK');
-    // The real layer number STAYS on the row as a secondary column. It is the
-    // vocabulary shared with the playout side — the reservation is 60–69, not
-    // "rows 1–4" — and it is what an operator needs to clear a layer by hand
-    // over AMCP. It may sit beside the alias but never instead of it.
-    expect(rendered.container.querySelector('[title="CasparCG layer 1-70"]')?.textContent).toBe(
-      '70',
-    );
+
+    /*
+      The real CasparCG layer number is NO LONGER A COLUMN — owner decision, it lives
+      in the Inspector. What makes that safe is the mitigation asserted here: it is
+      carried by the ROW's own tooltip and accessible name, so it stays one hover or
+      one keyboard focus away at every density.
+
+      This has to keep holding. The layer number is the vocabulary shared with the
+      playout side (the reservation is 60–69, not "rows 1–4"), and on a narrow screen
+      the Inspector is an overlay behind a hamburger — so if the row stopped carrying
+      it, it would be unreachable exactly while somebody was troubleshooting.
+    */
+    const row = rendered.container.querySelector('[data-layer="70"]');
+    expect(row?.getAttribute('title')).toContain('CasparCG layer 1-70');
+    expect(row?.getAttribute('aria-label')).toContain('CasparCG layer 1-70');
+    // And it is NOT rendered as visible text any more.
+    expect(text).not.toContain('70');
   });
 
   it('an empty row says so instead of naming a template', async () => {
@@ -231,11 +264,23 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     }
   });
 
-  it('R-006 — with the link down the MENU is disabled too, not just the buttons', () => {
+  it('R-006 — with the link down the MENU is disabled too, with CLEAR exempt exactly as the button is', () => {
     const actions = actionsFor({ ...deps(itemWith('on-air'), true), linkDown: true });
     for (const item of toMenuItems(actions)) {
+      if (item.label === 'CLEAR') continue;
       expect(item.disabled, item.label).toBe(true);
     }
+    /*
+      The escape hatch has to reach BOTH surfaces or it is not an escape hatch. The
+      whole reason `rowAction` declares each verb once is that a gate must not exist
+      on one surface and not the other — so CLEAR's exemption from `linkDown`
+      propagates to the menu by construction, and this pins it. A right-click is
+      often the faster route under pressure.
+    */
+    const clear = toMenuItems(actions).find((m) => m.label === 'CLEAR');
+    expect(clear?.disabled, 'the menu twin of the escape hatch must survive a dead link').toBe(
+      false,
+    );
   });
 
   it('the menu carries the WHOLE list; buttons are the filtered subset (placement only)', () => {
@@ -318,15 +363,30 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     expect(empty.find((a) => a.key === 'load-remove')?.disabled).toBe(false);
   });
 
-  it('the toggle flips to REMOVE (danger) once the row is occupied, in the SAME position', () => {
+  it('the toggle flips to REMOVE once the row is occupied, in the SAME position', () => {
     const emptyActions = actionsFor(deps(null, false));
     const loadedActions = actionsFor(deps(itemWith('loaded'), false));
-    // Same index, same key — only the label, variant and handler change.
+    // Same index, same key — only the label and the handler change.
     expect(emptyActions[0]?.key).toBe('load-remove');
     expect(loadedActions[0]?.key).toBe('load-remove');
     expect(emptyActions[0]?.label).toBe('LOAD');
     expect(loadedActions[0]?.label).toBe('REMOVE');
-    expect(loadedActions[0]?.variant).toBe('danger');
+  });
+
+  it('declares EVERY verb neutral, so the right-click menu cannot colour them either', () => {
+    /*
+      The buttons render neutral regardless, but the MENU paints from this
+      declaration (`VARIANT_ACCENT`) — so if a verb still declared `play` or `danger`
+      here, the menu would be the one surface left colouring affordances. That got
+      sharper when on-air became green: a green PLAY menu item would be an affordance
+      wearing the one colour reserved for "this is on the output".
+    */
+    for (const action of [
+      ...actionsFor(deps(null, false)),
+      ...actionsFor(deps(itemWith('on-air'), false)),
+    ]) {
+      expect(action.variant, `${action.label} must be neutral`).toBe('verb');
+    }
   });
 });
 

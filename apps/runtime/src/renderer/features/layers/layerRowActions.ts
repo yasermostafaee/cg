@@ -124,10 +124,20 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    */
   const loadSafe = deps.observed.kind === 'empty';
 
+  /**
+   * Every row verb is declared NEUTRAL.
+   *
+   * The buttons render `variant="verb"` regardless, but the MENU paints from this
+   * declaration (`VARIANT_ACCENT`), so leaving the old per-verb hues here would
+   * have left the right-click menu as the one surface still colouring
+   * affordances — and after on-air moved to green, a green PLAY menu item would
+   * have been an affordance wearing the one colour reserved for "this is on the
+   * output". Declaring it once keeps button and menu in agreement by construction,
+   * which is the whole reason this list exists.
+   */
   const act = (
     key: string,
     label: string,
-    variant: RowAction['variant'],
     disabled: boolean,
     run: () => Promise<AsyncResult>,
     icon: RowAction['icon'],
@@ -135,7 +145,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   ): RowAction => ({
     key,
     label,
-    variant,
+    variant: 'verb',
     disabled: disabled || linkDown,
     ...(offlineReason !== undefined ? { title: offlineReason } : {}),
     run,
@@ -160,11 +170,10 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     // ONE key, so the list's shape is literally identical in both states and a
     // test can assert that: only the label, variant and handler flip.
     empty
-      ? act('load-remove', 'LOAD', 'secondary', !loadSafe, () => deps.load(), Download)
+      ? act('load-remove', 'LOAD', !loadSafe, () => deps.load(), Download)
       : act(
           'load-remove',
           'REMOVE',
-          'danger',
           false,
           () => (item === null ? noop() : deps.remove(item.itemId)),
           Trash2,
@@ -173,19 +182,10 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     // one-action import, and a second Load BUTTON beside it on every row would
     // make the operator choose between two similarly-named controls under time
     // pressure. Same gate, same row, one right-click away.
-    act(
-      'load-library',
-      'LOAD FROM LIBRARY',
-      'secondary',
-      !empty,
-      () => deps.loadFromLibrary(),
-      Library,
-      'menu',
-    ),
+    act('load-library', 'LOAD FROM LIBRARY', !empty, () => deps.loadFromLibrary(), Library, 'menu'),
     act(
       'play',
       'PLAY',
-      'play',
       empty || playing,
       () => (item === null ? noop() : deps.play(item.itemId)),
       Play,
@@ -198,7 +198,6 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     act(
       'next',
       'NEXT',
-      'secondary',
       empty || !onAir || !deps.hasNext,
       () => (item === null ? noop() : deps.next(item.itemId)),
       ArrowRightFromLine,
@@ -209,7 +208,6 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     act(
       'update',
       'UPDATE',
-      'air',
       empty || !onAir || !deps.dirty,
       () => (item === null ? noop() : deps.update(item.itemId)),
       RefreshCw,
@@ -218,19 +216,64 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     act(
       'stop',
       'STOP',
-      'caution',
       empty || !onAir,
       () => (item === null ? noop() : deps.stop(item.itemId)),
       CircleArrowOutDownRight,
     ),
-    act(
-      'clear',
-      'CLEAR',
-      'caution-strong',
-      empty || !onAir,
-      () => (item === null ? noop() : deps.clear(item.itemId)),
-      XSquare,
-    ),
+    /**
+     * CLEAR — THE ESCAPE HATCH, and the one verb that is not fail-closed.
+     *
+     * This is a DELIBERATE departure from the doctrine the rest of this surface
+     * follows, and it must not be "fixed" back. The asymmetry is the whole point:
+     *
+     *   - Refusing LOAD when occupancy is unknown is genuinely safe. Nothing
+     *     happens, and the layer keeps whatever is on it.
+     *   - Refusing CLEAR when the state model is confused is NOT safe. It strands
+     *     a graphic on air with no way to take it off — the worst outcome this
+     *     console has. "Fail closed" on a remedy is not fail-safe, it is
+     *     fail-stuck.
+     *
+     * So CLEAR is offered whenever there is an ITEM on the row, whatever its
+     * status claims — on air, idle, unconfirmed, unverified, errored — and even
+     * when the bridge link reads down. That last one is not an oversight: a WRONG
+     * `linkDown` is exactly the class of bug this exists for, and the costs are
+     * not comparable. Enabling it when the bridge really is dead costs one failed
+     * request and a toast; disabling it when the flag is wrong costs a graphic
+     * nobody can remove. It carries `offlineReason` as its tooltip so the operator
+     * knows what to expect before pressing.
+     *
+     * IT STAYS DISABLED ON A GENUINELY UNBOUND ROW, and that is not a hedge. With
+     * no item there is nothing for `stack.out` to address, so an enabled button
+     * would be a no-op — the one outcome worse than a disabled one, because it
+     * looks like it worked. An unbound row that the WIRE says is occupied is the
+     * R-009 orphan case, which has its own surfaced banner and its own
+     * confirm-gated Clear, correctly fenced (html-only, fresh observation, never
+     * the reserved range). `layers.clear` is no use here either: it refuses
+     * `'owned'` for our own layers by design.
+     *
+     * WHAT THIS DOES NOT WIDEN. `stack.out` is ITEM-scoped — it can only reach the
+     * layer its own item is bound to, and a bank item can never be bound to a
+     * reserved playout layer (the validator refuses an overlapping bank at config
+     * time). So this cannot address the playout range from any input, and the
+     * bridge's `layers.clear` reserved-range refusal, the orphan sweep's skip and
+     * the playout tab's html-only rule are all untouched.
+     */
+    // Built as a literal rather than through `act`, because `act` ORs `linkDown`
+    // into every verb and CLEAR is the one verb that must not inherit it. Spelling
+    // the object out keeps the exception visible where it is made, instead of
+    // adding an opt-out flag to a shared helper that every other verb would then
+    // have to be read against.
+    {
+      key: 'clear',
+      label: 'CLEAR',
+      variant: 'verb',
+      // The ONLY gate: is there an item to clear? See the block comment above.
+      disabled: empty,
+      ...(offlineReason !== undefined ? { title: offlineReason } : {}),
+      run: () => (item === null ? noop() : deps.clear(item.itemId)),
+      onError,
+      icon: XSquare,
+    },
   );
 
   return actions;

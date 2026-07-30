@@ -53,6 +53,42 @@ export function isLayerVisible(bank: FixedLayerBank, layer: number): boolean {
 }
 
 /**
+ * THE canonical position of a candidate layer within its bank: 1-based, counting
+ * DOWN from the bank's HIGHEST layer. For a 70–73 bank, layer 73 is 1 and layer 70
+ * is 4.
+ *
+ * WHY FROM THE TOP. The higher CasparCG layer draws OVER the ones beneath it, so it
+ * is the higher-priority graphic — and the operator's "Layer 1" should mean the most
+ * prominent one, not the bottom-most. The list is displayed descending by layer for
+ * the same reason (it mirrors on-air z-order), so position 1 is also the top row on
+ * screen: the `#` column reads 1, 2, 3, 4 downwards, which is what anyone expects a
+ * row number to do.
+ *
+ * ONE NUMBER, TWO SURFACES. The `#` column and the default alias (`Layer 1`,
+ * `Layer 2`, …) both derive from this function and must never compute it separately.
+ * Two derivations of one number is how they come to disagree, and a row carrying two
+ * small integers that each claim to identify it turns "fire layer 2" into a coin
+ * flip.
+ *
+ * IT IS BOUND TO THE BANK, NOT TO WHAT IS DISPLAYED, and this is the property that
+ * makes it safe to say out loud. Rows can be hidden (unticked) or filtered out;
+ * none of that may renumber anything. `Layer 1` is always the bank's highest layer
+ * whether or not it is currently shown. If hiding a row renumbered the rows past it,
+ * "check layer 2" would mean different rows on different days — worse than having no
+ * handle at all — so a hidden row leaves a GAP in the sequence. A gap is honest; a
+ * silent renumber is not, and it is also why `#` is NOT the row's index in the
+ * rendered list.
+ */
+export function bankPosition(bank: FixedLayerBank, layer: number): number {
+  return bank.start + bank.count - 1 - layer + 1;
+}
+
+/** The default display name for an unaliased candidate layer — `Layer 1`, `Layer 2`, … */
+export function defaultLayerAlias(bank: FixedLayerBank, layer: number): string {
+  return `Layer ${String(bankPosition(bank, layer))}`;
+}
+
+/**
  * R-028 / C-015 — the RESERVED playout layers: the layer numbers the
  * company's playout system owns (it binds templates to playlist videos and
  * drives them over AMCP directly). Declared as inclusive ranges in install

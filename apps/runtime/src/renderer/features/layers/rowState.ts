@@ -1,5 +1,4 @@
 import {
-  Circle,
   CircleAlert,
   CircleDashed,
   CircleDot,
@@ -14,7 +13,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { FixedSlotObservation } from '@cg/shared-ipc';
 import type { StackItemStatus } from '@cg/shared-schema';
-import { airStateVisual, badgeTone, colors, type BadgeTone } from '../../theme.js';
+import { airStateVisual, badgeTone, colors, readyDetail, type BadgeTone } from '../../theme.js';
 import { unverifiedTitle } from '../../ui/airStateWording.js';
 import { occupancyLabel } from '../fixedLayers/occupancyLabel.js';
 
@@ -73,7 +72,12 @@ function iconForStatus(status: StackItemStatus, pending: boolean): LucideIcon {
       return RefreshCw;
     case 'exiting':
       return CircleArrowOutDownRight;
+    // `loaded` and `idle` are ONE presented state — READY — so they must share the
+    // icon as well as the word and the colour. Showing two marks for a difference
+    // the operator cannot perceive is the false precision this merge removed; the
+    // real difference lives in `readyDetail`, in the tooltip.
     case 'loaded':
+    case 'idle':
       return CirclePlay;
     case 'unconfirmed':
       return CircleQuestionMark;
@@ -83,8 +87,6 @@ function iconForStatus(status: StackItemStatus, pending: boolean): LucideIcon {
       return TriangleAlert;
     case 'disconnected':
       return Unplug;
-    case 'idle':
-      return Circle;
   }
 }
 
@@ -185,7 +187,9 @@ export function rowState({
       case 'empty':
         return {
           icon: CircleDashed,
-          color: colors.textMuted,
+          // The dedicated empty-row grey, not `textMuted`: a free row recedes so the
+          // rows carrying something own the attention.
+          color: colors.emptyRow,
           label: 'EMPTY',
           tone: 'idle',
           title: withWire('This layer is free. Ready to load.', wire),
@@ -213,8 +217,13 @@ export function rowState({
     // ALWAYS a title on a bound row too, and this is the case that needed it: the
     // mark shows the ITEM's status, so without this the wire's own account of the
     // layer had nowhere to live once the Description column dropped.
+    //
+    // `readyDetail` is the second thing folded in here: `idle` and `loaded` both
+    // render as READY now, and the difference between them — whether PLAY has to
+    // build the producer first, which takes time and can fail — is what stops a
+    // slow take reading as a bug.
     title: withWire(
-      status === 'unverified' ? unverifiedTitle(oscBlind, linkDown) : undefined,
+      status === 'unverified' ? unverifiedTitle(oscBlind, linkDown) : readyDetail(status),
       wire,
     ),
     ...(tone === 'transient' ? { transient: true } : {}),

@@ -144,13 +144,26 @@ describe('StackPanel Clear-All', () => {
     expect(openDialog()).toBeNull();
   });
 
-  it('is hidden when nothing is on air — there would be nothing to clear', async () => {
-    // Remove-All still shows: the rows exist and can be dropped, they are just not on air.
+  it('stays PRESENT and enabled when nothing reads as on air — it is the escape hatch', async () => {
     stubBridge([item('a', 'loaded'), item('b', 'idle')]);
     const el = await renderPanel();
 
-    expect(clearAllButton(el)).toBeNull();
+    /*
+      Clear-All used to be HIDDEN here, on the reasoning that there would be nothing
+      to clear. Owner decision reversed that, and the reasoning is the same asymmetry
+      the row's CLEAR follows: the statuses saying "nothing is on air" are exactly
+      what might be wrong, so they may not be what withholds the remedy. If the state
+      model is confused, the operator must still be able to take everything off.
+
+      Its weight comes from the confirm gate, not from being hidden — always
+      AVAILABLE is not always IMMEDIATE.
+    */
+    const clear = clearAllButton(el);
+    expect(clear).not.toBeNull();
+    expect(clear?.disabled).toBe(false);
+    // Remove-All is present too, and enabled: the rows exist and can be dropped.
     expect(removeAllButton(el)).not.toBeNull();
+    expect(removeAllButton(el)?.disabled).toBe(false);
   });
 
   it('counts only the on-air items, not the whole stack', async () => {
@@ -174,21 +187,33 @@ describe('StackPanel Clear-All', () => {
     expect(removeAllButton(el)?.textContent).toBe('REMOVE ALL');
   });
 
-  it('colours each bulk action like its per-item counterpart', async () => {
-    // The clear family shares one treatment, the remove family another — and the destructive
-    // one (it drops the rows) is the red. Remove-All used to wear the same amber as Clear,
-    // which made the irreversible action look like the reversible one.
+  it('renders every bulk action NEUTRAL — colour belongs to state, not affordances', async () => {
     stubBridge([item('a', 'on-air')]);
     const el = await renderPanel();
 
-    // C-012 — the row's CLEAR is the FILLED amber (STOP took the outlined one), so the
-    // bulk action follows it. Asserted as an exact class, not a substring: with both
-    // `cg-btn--caution` and `cg-btn--caution-strong` in the vocabulary, a `toContain`
-    // would pass for either and stop distinguishing STOP's treatment from CLEAR's.
-    expect(clearAllButton(el)?.classList.contains('cg-btn--caution-strong')).toBe(true);
-    expect(clearAllButton(el)?.classList.contains('cg-btn--caution')).toBe(false);
-    expect(removeAllButton(el)?.className).toContain('cg-btn--danger'); // as the row's REMOVE
-    expect(removeAllButton(el)?.className).not.toContain('cg-btn--caution');
+    /*
+      These used to be amber (Clear) and red (Remove), matching their per-row
+      counterparts. Owner decision moved the row verbs to neutral and then extended
+      the same rule here: three permanently-coloured buttons above the list were
+      competing with the one ROW actually wearing the air colour, which is the first
+      thing a control room needs to find. Their distinctness now comes from their
+      icons, their words and their confirm gates.
+
+      Asserted as the exact neutral class plus the ABSENCE of every state hue, so
+      re-introducing colour on any of them fails here rather than being noticed on
+      air months later.
+    */
+    for (const button of [clearAllButton(el), removeAllButton(el)]) {
+      expect(button?.classList.contains('cg-btn--verb')).toBe(true);
+      for (const hue of [
+        'cg-btn--caution',
+        'cg-btn--caution-strong',
+        'cg-btn--danger',
+        'cg-btn--play',
+      ]) {
+        expect(button?.classList.contains(hue), `${hue} must not be on a bulk verb`).toBe(false);
+      }
+    }
   });
 
   it('sits both bulk actions together in one group, not spread across the header', async () => {
@@ -249,7 +274,21 @@ describe('StackPanel Clear-All', () => {
       await Promise.resolve();
     });
 
-    expect(clearAllButton(el)?.disabled).toBe(true);
+    /*
+      Remove-All follows R-006 and goes disabled: it is a bridge round-trip like any
+      other, and refusing it costs nothing — the rows stay exactly as they are.
+
+      Clear-All does NOT, and that exemption is the point of this assertion. A WRONG
+      `linkDown` is precisely the bug the escape hatch exists for, and the two costs
+      are not comparable: enabling it when the bridge really is dead costs one failed
+      request and a toast, while disabling it when the flag is wrong leaves every
+      on-air graphic with nothing that can take it off. It keeps its tooltip so the
+      operator knows what to expect before pressing.
+    */
     expect(removeAllButton(el)?.disabled).toBe(true);
+    expect(
+      clearAllButton(el)?.disabled,
+      'Clear-All is the escape hatch and must survive a dead link',
+    ).toBe(false);
   });
 });

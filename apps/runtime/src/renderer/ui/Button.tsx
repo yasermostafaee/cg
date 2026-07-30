@@ -11,6 +11,7 @@ export type ButtonVariant =
   | 'danger'
   | 'ghost'
   | 'verb'
+  | 'neutral'
   | 'default';
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
@@ -23,6 +24,7 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   danger: 'cg-btn--danger',
   ghost: 'cg-btn--ghost',
   verb: 'cg-btn--verb',
+  neutral: 'cg-btn--neutral',
   default: '',
 };
 
@@ -52,6 +54,8 @@ export const VARIANT_ACCENT: Record<ButtonVariant, string | undefined> = {
   // load-bearing part: the right-click menu paints from this table, so a menu
   // item mirroring a neutral button stays neutral too, without a second rule.
   verb: undefined,
+  // The same neutral contract for a TEXT button (the bulk verbs).
+  neutral: undefined,
   default: undefined,
 };
 

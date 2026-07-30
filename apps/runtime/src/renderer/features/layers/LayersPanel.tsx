@@ -14,7 +14,7 @@ import { useStack } from '../../hooks/useStack.js';
 import { useFixedBank, useFixedSlots } from '../../hooks/useFixedLayers.js';
 import { usePlayoutLayers } from '../../hooks/usePlayoutLayers.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
-import { isLayerVisible } from '@cg/shared-ipc';
+import { bankPosition, isLayerVisible } from '@cg/shared-ipc';
 import { isOnAir } from '../stack/onAir.js';
 import {
   draftsVersion,
@@ -95,14 +95,6 @@ export function LayersPanel({
   const [configOpen, setConfigOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
   /**
-   * Which CHANNEL's rows are shown. One channel for now — the bank declares
-   * exactly one — but the axis is real, so a second channel is a longer list here
-   * and nothing else.
-   */
-  const [activeChannel, setActiveChannel] = useState<string>(() =>
-    bank === null ? '1' : String(bank.channel),
-  );
-  /**
    * The table degrades on the width of the LIST, not the viewport: the operator
    * drags the Inspector divider and the viewport never moves. Until the first
    * measurement lands we assume the widest density — the alternative flashes a
@@ -160,9 +152,31 @@ export function LayersPanel({
   // still an on-air action. (Wording carried over verbatim from the stack
   // header it replaces — the distinction it draws is the point.)
   const clearAll = useCallback(async (): Promise<void> => {
+    /*
+      THE WORDING HAS TO MATCH WHAT THE BRIDGE ACTUALLY DOES, and that is narrower
+      than this button's availability suggests.
+
+      The button is always enabled (owner decision — Clear is the escape hatch). But
+      the bridge's `stack.clearAll` clears only items whose status is NOT `idle` or
+      `loaded`, which are exactly the statuses that might be WRONG in the situation
+      the escape hatch exists for. So when nothing currently reads as on air, this
+      bulk action would report success having sent nothing.
+
+      Rather than promise "everything comes off", the dialog says what will happen and
+      — when the count is zero — names the per-row CLEAR, which really is not
+      status-gated (`out()` needs only a bound slot). Recorded in DEBT.md: making the
+      bulk verb a true escape hatch is a BRIDGE change on an on-air path, not a
+      wording fix, and it is not this session's to make silently.
+    */
+    const body =
+      onAirCount > 0
+        ? `All ${String(onAirCount)} on-air item(s) come off air. They stay on the stack, idle, and can be taken again.`
+        : 'Nothing currently reads as on air, so this may send no commands at all. ' +
+          'If you believe a graphic is stuck on air, use CLEAR on its own row — that one ' +
+          'is not gated on the status.';
     const ok = await confirm({
-      title: 'Clear all on-air items?',
-      body: `All ${String(onAirCount)} on-air item(s) come off air. They stay on the stack, idle, and can be taken again.`,
+      title: onAirCount > 0 ? 'Clear all on-air items?' : 'Clear all — nothing reads as on air',
+      body,
       confirmLabel: 'Clear all',
       variant: 'caution-strong',
     });
@@ -220,13 +234,6 @@ export function LayersPanel({
   }, [confirm, items.length]);
 
   const playoutOccupied = hasPlayoutOccupant(playout);
-  const channelLabel = bank === null ? 'CHANNEL 1' : `CHANNEL ${String(bank.channel)}`;
-  /**
-   * The OUTER axis. Exactly one entry today (a bank declares one channel), and
-   * the strip is still rendered: it says which channel these rows belong to, and
-   * it means adding a second channel is a longer array rather than a new layout.
-   */
-  const channelTabs: TabSpec[] = [{ id: activeChannel, label: channelLabel }];
   const tabs: TabSpec[] = [
     { id: 'layers', label: 'LAYERS' },
     {
@@ -251,44 +258,60 @@ export function LayersPanel({
       style={{ flex: 1 }}
       actions={
         <>
-          {/* The two bulk ways OFF AIR, in C-012 order: graceful first, hard
-              second — so the softer option is the one nearest to hand. */}
-          {onAirCount > 0 && (
-            <Button
-              variant="caution"
-              disabled={linkDown}
-              aria-label="Stop all on-air items"
-              title="Every on-air graphic runs its own outro and stays loaded"
-              onClick={() => void stopAll()}
-            >
-              <Icon icon={CircleArrowOutDownRight} />
-              STOP ALL
-            </Button>
-          )}
-          {onAirCount > 0 && (
-            <Button
-              variant="caution-strong"
-              disabled={linkDown}
-              aria-label="Clear all on-air items"
-              title="Every on-air graphic is cut immediately, with no outro"
-              onClick={() => void clearAll()}
-            >
-              <Icon icon={XSquare} />
-              CLEAR ALL
-            </Button>
-          )}
-          {items.length > 0 && (
-            <Button
-              variant="danger"
-              disabled={linkDown}
-              aria-label="Remove all items"
-              title="Clears anything on air and empties every row"
-              onClick={() => void removeAll()}
-            >
-              <Icon icon={Trash2} />
-              REMOVE ALL
-            </Button>
-          )}
+          {/*
+            The bulk verbs, in C-012 order: graceful first, hard second — so the
+            softer option is the one nearest to hand.
+
+            NEUTRAL, like the row verbs. Item 10's rule applies to the header too:
+            colour belongs to STATE, not to affordances. Three coloured buttons
+            sitting permanently above the list were competing with the one row
+            actually wearing the air colour, which is the whole thing a control
+            room needs to find first.
+
+            ALWAYS RENDERED, present-but-disabled when they cannot act, rather than
+            appearing and disappearing with `onAirCount`. Same rule the row verbs
+            follow and for the same reason: controls that come and go move the
+            target under the operator's hand mid-reach. Their weight comes from
+            their confirm gates, not from being hidden.
+          */}
+          <Button
+            variant="verb"
+            disabled={linkDown || onAirCount === 0}
+            aria-label="Stop all on-air items"
+            title="Every on-air graphic runs its own outro and stays loaded"
+            onClick={() => void stopAll()}
+          >
+            <Icon icon={CircleArrowOutDownRight} />
+            STOP ALL
+          </Button>
+          {/*
+            CLEAR ALL is ALWAYS ENABLED — the bulk twin of the row's CLEAR escape
+            hatch, and the same reasoning applies: refusing the remedy when the
+            state model is confused strands graphics on air. Not even `linkDown`
+            disables it, because a wrong `linkDown` is exactly the bug it exists
+            for. It keeps its confirm gate — always AVAILABLE is not always
+            IMMEDIATE — and `stack.clearAll` only ever addresses this station's own
+            items, so it cannot reach the reserved playout range.
+          */}
+          <Button
+            variant="verb"
+            aria-label="Clear all on-air items"
+            title="Every on-air graphic is cut immediately, with no outro"
+            onClick={() => void clearAll()}
+          >
+            <Icon icon={XSquare} />
+            CLEAR ALL
+          </Button>
+          <Button
+            variant="verb"
+            disabled={linkDown || items.length === 0}
+            aria-label="Remove all items"
+            title="Clears anything on air and empties every row"
+            onClick={() => void removeAll()}
+          >
+            <Icon icon={Trash2} />
+            REMOVE ALL
+          </Button>
           {/*
             CONFIGURE — offered whether or not a bank exists.
 
@@ -299,8 +322,12 @@ export function LayersPanel({
             install), and says so in words rather than pointing at a control that
             is not there.
           */}
+          {/* `neutral`, not `ghost`: a ghost has an icon button's tight padding, so
+              beside the bulk verbs it read as a label rather than a control. Neutral is
+              not invisible — a control still needs a boundary, a hover and a focus
+              ring, whatever colour it has been denied. */}
           <Button
-            variant="ghost"
+            variant="neutral"
             title={
               bank === null
                 ? 'No candidate layers are declared yet — see what the bridge needs'
@@ -343,74 +370,65 @@ export function LayersPanel({
       }
     >
       {/*
-        CHANNEL is the OUTER axis; LAYERS / PLAYOUT sit INSIDE a channel.
+        LAYERS / PLAYOUT — the surfaces INSIDE the selected channel.
 
-        These are two different axes and must never share one strip: a single
-        "Channel 1 | Channel 2 | Playout" row cannot say WHOSE playout it means.
-        The reservation is per-channel too, so the playout tab's warning dot has
-        to be attributable to a channel — with one channel that ambiguity is
-        invisible, with two it is a correctness bug, and it is far cheaper to get
-        the axis right now than to unpick it later.
+        The CHANNEL strip is no longer here. It wraps the whole workspace now
+        (`ChannelScope` in `App`), because the channel owns PGM and PVW as well as
+        this list: a strip scoped to the layer panel would have left the monitors
+        showing channel 1 while the tab said channel 2. The two axes still never
+        share a strip — a single "Channel 1 | Channel 2 | Playout" row could not
+        say whose playout it meant — they are simply nested at the right levels.
       */}
-      <Tabs
-        tabs={channelTabs}
-        activeId={activeChannel}
-        onSelect={setActiveChannel}
-        ariaLabel="Channels"
-        idPrefix="channel"
-        level="outer"
-      >
-        <Tabs tabs={tabs} activeId={activeTab} onSelect={setActiveTab} ariaLabel="Layer surfaces">
-          {activeTab === 'layers' ? (
-            bank === null ? (
-              <div style={styles.empty}>
-                <strong style={{ color: colors.text }}>No candidate layers are declared.</strong>
-                <span>
-                  This station has no rows to load onto yet. The channel and the range of candidate
-                  layers are fixed at install: set them in the bridge&rsquo;s fixed-layers config
-                  file and restart it.
-                </span>
-                <span>
-                  Once a range exists, <strong>Configure</strong> is where you show or hide
-                  individual rows and give them names.
-                </span>
-                <Button variant="secondary" onClick={() => setConfigOpen(true)}>
-                  What the bridge needs
-                </Button>
-              </div>
-            ) : (
-              <div style={styles.list} ref={listRef}>
-                {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
-                <LayerTableHeader density={density} />
-                {rows.map((slot, index) => {
-                  const item =
-                    slot.binding !== null ? (itemById.get(slot.binding.itemId) ?? null) : null;
-                  const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
-                  return (
-                    <LayerRow
-                      key={slot.layer}
-                      slot={slot}
-                      item={item}
-                      template={template}
-                      // The row's POSITION as displayed, 1 at the top. Rows are
-                      // ordered by descending layer (the list mirrors on-air
-                      // z-order), so this is deliberately NOT the layer's offset
-                      // in the bank — it is the number an operator can point at.
-                      rowNumber={index + 1}
-                      density={density}
-                      selected={item !== null && item.itemId === selectedId}
-                      dirty={item !== null && isItemDirty(item.itemId, item.fields)}
-                      onSelect={onSelectionChange}
-                      onUpdate={onUpdate}
-                    />
-                  );
-                })}
-              </div>
-            )
+      <Tabs tabs={tabs} activeId={activeTab} onSelect={setActiveTab} ariaLabel="Layer surfaces">
+        {activeTab === 'layers' ? (
+          bank === null ? (
+            <div style={styles.empty}>
+              <strong style={{ color: colors.text }}>No candidate layers are declared.</strong>
+              <span>
+                This station has no rows to load onto yet. The channel and the range of candidate
+                layers are fixed at install: set them in the bridge&rsquo;s fixed-layers config file
+                and restart it.
+              </span>
+              <span>
+                Once a range exists, <strong>Configure</strong> is where you show or hide individual
+                rows and give them names.
+              </span>
+              <Button variant="secondary" onClick={() => setConfigOpen(true)}>
+                What the bridge needs
+              </Button>
+            </div>
           ) : (
-            <PlayoutPanel layers={playout} />
-          )}
-        </Tabs>
+            <div style={styles.list} ref={listRef}>
+              {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
+              <LayerTableHeader density={density} />
+              {rows.map((slot) => {
+                const item =
+                  slot.binding !== null ? (itemById.get(slot.binding.itemId) ?? null) : null;
+                const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
+                return (
+                  <LayerRow
+                    key={slot.layer}
+                    slot={slot}
+                    item={item}
+                    template={template}
+                    // The layer's FIXED position in the bank, counting down from the
+                    // highest layer — NOT its index in this (filtered) list. Hiding
+                    // a row must never renumber the others, or "check layer 3" stops
+                    // meaning one row. See `bankPosition` for the whole argument.
+                    bankPosition={bankPosition(bank, slot.layer)}
+                    density={density}
+                    selected={item !== null && item.itemId === selectedId}
+                    dirty={item !== null && isItemDirty(item.itemId, item.fields)}
+                    onSelect={onSelectionChange}
+                    onUpdate={onUpdate}
+                  />
+                );
+              })}
+            </div>
+          )
+        ) : (
+          <PlayoutPanel layers={playout} />
+        )}
       </Tabs>
       {configOpen && (
         <FixedBankConfigModal bank={bank} slots={slots} onClose={() => setConfigOpen(false)} />

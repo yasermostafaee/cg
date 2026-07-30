@@ -125,17 +125,21 @@ export class RuntimeApp {
     return this.layerRow(layer).locator('[data-row-state]');
   }
   /**
-   * The cell holding the REAL CasparCG layer number.
+   * WHERE THE REAL CasparCG LAYER NUMBER LIVES on the row, now that it has no column.
    *
-   * Anchored on its title rather than its text: the row also prints a ROW NUMBER
-   * (1..n), so a bare text match for "70" could find either. The row number is the
-   * operator's primary handle now and the real layer number is the secondary
-   * column beside it — see `LayerRow` for why both are on the row.
+   * The owner took it off the row (it is in the Inspector), and what made that safe is
+   * the mitigation this reads: the ROW carries it in its own `title` and accessible
+   * name, so it stays one hover or one keyboard focus away at every density. A spec
+   * asserting the operator can still find the layer number should assert THIS —
+   * matching visible text would be matching a column that no longer exists, and a bare
+   * "70" would in any case collide with the row's `#`.
    */
-  layerNumberCell(channel: number, layer: number): Locator {
-    return this.layerRow(layer).locator(
-      `[title="CasparCG layer ${String(channel)}-${String(layer)}"]`,
-    );
+  async layerNumberReachableOn(layer: number): Promise<{ title: string; ariaLabel: string }> {
+    const row = this.layerRow(layer);
+    return {
+      title: (await row.getAttribute('title')) ?? '',
+      ariaLabel: (await row.getAttribute('aria-label')) ?? '',
+    };
   }
   /**
    * A command / import ERROR, surfaced as the shared command TOAST (page-level, `role="alert"`

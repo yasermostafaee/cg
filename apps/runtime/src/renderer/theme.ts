@@ -3,9 +3,27 @@
  * palette comes from `@cg/ui` (kept in lockstep with the Designer, Phase 6
  * §1); the air-state colors stay here.
  *
- * The **air-state colors are sacred** — they're used in the stack rows + the
- * status bar's on-air indicator, and **nowhere else**. Decorative red is
- * forbidden anywhere in the UI to avoid confusion with "ON AIR".
+ * ON AIR IS GREEN, AND RED MEANS ERROR OR DANGER — NOTHING ELSE.
+ *
+ * Owner decision, taken deliberately over the tally convention (where red means
+ * live), because it follows the Cinegy reference the client already reads. It
+ * changes what the codebase's oldest colour rule is anchored to, so read this
+ * before touching either hue:
+ *
+ *  - The **air-state colour is still sacred**. It is used by the layer rows and
+ *    the status bar's on-air indicator and NOWHERE else. What changed is only
+ *    WHICH colour that is: decorative GREEN is now forbidden across the UI, for
+ *    exactly the reason decorative red was — nothing may imply "on air" but air.
+ *  - **Red is now single-purpose**: errors and destructive confirmations. That is
+ *    the payoff for moving on-air off it, and it is worth protecting — a red that
+ *    means two things means neither.
+ *
+ * `R-006` and `B-087` are written as "a simulation may never wear the broadcast
+ * RED" and "a frozen air claim is demoted [from red]". Those sentences protect
+ * nothing until they are re-anchored to green, and the tests will NOT catch the
+ * gap because they assert the badge's ROLE (`data-row-state`, `cg-badge--onair`)
+ * rather than a hex value — which is the more durable form, and precisely why the
+ * wording has to be updated by hand. Recorded in `DEBT.md` as a PRD edit owed.
  */
 
 import type { StackItemStatus } from '@cg/shared-schema';
@@ -22,12 +40,33 @@ export const colors = {
 
   // Air-state contract (Phase 6 §1)
   idle: '#3F3F46',
-  ready: '#0EA5E9',
+  /** READY. The brighter sky of the mock-up, not the deeper `--r-accent-strong`. */
+  ready: '#38BDF8',
   pending: '#F59E0B',
-  onAir: '#E11D48',
+  /**
+   * ON AIR. Green, per the owner's decision above — the ONE colour that may say a
+   * graphic is on the output, and forbidden everywhere else.
+   *
+   * The exact value the owner specified, and deliberately the most saturated thing
+   * in the palette: this is the mark an operator has to find from across a gallery,
+   * so it is the one place allowed to be loud. Nothing else may approach it —
+   * `--r-success` stays a softer emerald precisely so an ack flash on a button
+   * cannot be misread as an air claim.
+   */
+  onAir: 'rgb(44 255 122)',
   exit: '#F59E0B',
+  /** ERROR. Red, which now means only this and destructive intent. */
   error: '#991B1B',
   offline: '#94A3B8',
+  /**
+   * An EMPTY layer row — its mark and all of its text. Exact value from the owner.
+   *
+   * Dimmer than `textMuted`, deliberately: a row with nothing on it should recede so
+   * the rows that can actually do something own the attention. It is still a
+   * legible grey rather than a near-black, because the row's NAME is its identity and
+   * an operator has to be able to read which slot is free.
+   */
+  emptyRow: 'rgb(91 93 96)',
 } as const;
 
 /**
@@ -36,10 +75,16 @@ export const colors = {
  * they match). TS consumers (primitives, `airStateVisual`) read the same values
  * here so the stylesheet and the components never drift.
  *
- * The sacred air-state colors above are unchanged; the semantic roles below reuse
- * them (on-air red stays PLAY + ON AIR only) and add the interactive accent, the
- * caution/danger/success/dirty roles, and the spacing / radius / type / motion
- * scales. The look stays a calm dark broadcast console.
+ * The sacred air-state colour above is reused here (`--r-onair` stays ON AIR only)
+ * alongside the interactive accent, the caution/danger/success/dirty roles, and
+ * the spacing / radius / type / motion scales. The look stays a calm dark
+ * broadcast console.
+ *
+ * `--r-onair` and `--r-success` are both greens now, deliberately DIFFERENT ones:
+ * on-air is the vivid green of the mock-up because it is the mark an operator has
+ * to find from across a gallery, while success stays the softer emerald of an ack
+ * flash. Same family, different jobs — and they keep separate names so a tweak to
+ * one cannot silently move the other.
  */
 export const cssVars = {
   // Semantic colors
@@ -52,7 +97,7 @@ export const cssVars = {
   '--r-text-muted': chrome.textMuted,
   '--r-accent': '#38BDF8', // sky — interactive / secondary
   '--r-accent-strong': '#0EA5E9',
-  '--r-onair': colors.onAir, // sacred red — PLAY + ON AIR only
+  '--r-onair': colors.onAir, // sacred GREEN — ON AIR only (see the header)
   '--r-caution': '#F59E0B', // amber — Out / EXIT / UNCONFIRMED / dirty
   '--r-danger': '#DC2626', // Remove
   '--r-danger-strong': '#B91C1C',
@@ -107,11 +152,44 @@ export function badgeTone(status: StackItemStatus, pending: boolean): BadgeTone 
   if (status === 'updating') return 'transient';
   if (status === 'unconfirmed') return 'attention';
   // B-086 — link down, on-air claim unverifiable: muted grey (the health-UNKNOWN
-  // tone), NEVER the broadcast red and NEVER the amber of `unconfirmed`.
+  // tone), NEVER the broadcast air colour and NEVER the amber of `unconfirmed`.
   if (status === 'unverified') return 'idle';
   if (status === 'exiting') return 'exit';
-  if (status === 'loaded') return 'ready';
+  // `loaded` AND `idle` are both READY — see `airStateVisual` for why they were
+  // merged, and why the distinction lives in the tooltip instead.
+  if (status === 'loaded' || status === 'idle') return 'ready';
   return 'idle';
+}
+
+/**
+ * WHY a READY row still has two underlying states, and where the difference went.
+ *
+ * `idle` and `loaded` now render identically — same word, same icon, same colour —
+ * because an operator does not perceive the difference and showing two states for
+ * one perception is false precision.
+ *
+ * The difference is REAL, though, and it is about what pressing PLAY costs:
+ *
+ *  - `loaded` — the producer is already on the layer. PLAY plays it immediately.
+ *  - `idle` — a template is chosen but nothing is on the layer yet. PLAY must
+ *    reach CasparCG and build the producer FIRST, which takes time and can fail.
+ *
+ * That matters the moment a take fails: if both rows read READY and one of them
+ * fails to come up, it reads as a bug rather than as "that one had to load first".
+ * So the fact stays one hover away, in the tooltip — the same trade this surface
+ * makes for the occupancy report and the layer number.
+ */
+export function readyDetail(status: StackItemStatus): string | undefined {
+  if (status === 'loaded') {
+    return 'Loaded on the layer — PLAY takes it to air immediately.';
+  }
+  if (status === 'idle') {
+    return (
+      'A template is chosen but nothing is on the layer yet. PLAY has to build it on ' +
+      'CasparCG first, so this take is not instant and can fail.'
+    );
+  }
+  return undefined;
 }
 
 export interface AirStateVisual {
@@ -142,6 +220,12 @@ export function airStateVisual(status: StackItemStatus, pending: boolean): AirSt
   // lives in the row's tooltip. Restores to on-air or resets to idle on reconnect.
   if (status === 'unverified') return { color: colors.textMuted, icon: '◌', label: 'WAS ON AIR' };
   if (status === 'exiting') return { color: colors.exit, icon: '◐', label: 'EXIT' };
-  if (status === 'loaded') return { color: colors.ready, icon: '▸', label: 'READY' };
+  // `loaded` and `idle` are ONE presented state: READY. The operator cannot
+  // perceive the difference between "the producer is already up" and "it will be
+  // built when you press PLAY", so showing two states was false precision. The
+  // difference is preserved in `readyDetail`, which the row's tooltip carries.
+  if (status === 'loaded' || status === 'idle') {
+    return { color: colors.ready, icon: '▸', label: 'READY' };
+  }
   return { color: colors.idle, icon: '○', label: 'IDLE' };
 }

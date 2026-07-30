@@ -1,5 +1,11 @@
-import { useState } from 'react';
-import { isLayerVisible, type FixedLayerBank, type FixedSlotState } from '@cg/shared-ipc';
+import { Fragment, useState } from 'react';
+import {
+  bankPosition,
+  defaultLayerAlias,
+  isLayerVisible,
+  type FixedLayerBank,
+  type FixedSlotState,
+} from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Modal } from '../../ui/Modal.js';
@@ -38,19 +44,42 @@ const styles = {
    * declare and made a thirty-layer bank a keyhole — four is a config value, not
    * a design constraint.
    */
-  aliasList: { display: 'flex', flexDirection: 'column' as const, gap: '0.4rem' },
   /**
-   * A grid, not a flex row: at four layers a flex row looks fine, and at thirty
-   * every alias input starts at a different x because the layer labels differ in
-   * width. Same declared-columns reasoning as the Layers table itself.
+   * ONE grid for the WHOLE list, not a grid per row.
+   *
+   * Per-row grids were the bug: each row sized its own `auto` columns, so every alias
+   * input started at a different x, and a row with a bound template had five children
+   * in a four-column track and wrapped its Remove button onto a line of its own. The
+   * fix is the same discipline `layerTable.ts` uses for the Layers table — declared
+   * columns, one declaration, every row contributing exactly the same cells (an empty
+   * span where a value is absent).
    */
-  aliasRow: {
+  aliasGrid: {
     display: 'grid',
-    gridTemplateColumns: '5rem 5rem minmax(6rem, 1fr) auto',
+    gridTemplateColumns: '4.5rem 5.5rem minmax(8rem, 1fr) minmax(0, 11rem) auto',
     alignItems: 'center',
-    gap: '0.5rem',
+    columnGap: '0.6rem',
+    rowGap: '0.45rem',
   },
-  aliasLabel: { fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums' as const },
+  aliasLabel: {
+    fontSize: '0.85rem',
+    fontVariantNumeric: 'tabular-nums' as const,
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '0.35rem',
+    whiteSpace: 'nowrap' as const,
+  },
+  /** The real CasparCG layer, quieter than the position — same ranking as the row. */
+  aliasLayerHint: { fontSize: '0.72rem', color: colors.textMuted, whiteSpace: 'nowrap' as const },
+  /** Column headings for the grid, so each column says what it is exactly once. */
+  aliasHead: {
+    fontSize: '0.62rem',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
+    whiteSpace: 'nowrap' as const,
+  },
   needsConfig: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -69,14 +98,18 @@ const styles = {
     whiteSpace: 'pre' as const,
     overflowX: 'auto' as const,
   },
-  tick: { display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' },
+  // `gap` sets the space between the box and its word — 0.3rem left them crowded once
+  // the checkbox gained a real border and fill.
+  tick: { display: 'flex', alignItems: 'center', gap: '0.55rem', fontSize: '0.8rem' },
   bound: {
     fontSize: '0.8rem',
     color: colors.textMuted,
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    maxWidth: '10rem',
+    // No `maxWidth`: the grid column owns the width now. A local cap here would
+    // fight the declared track and reintroduce per-row sizing.
+    minWidth: 0,
   },
   refusal: {
     border: '1px solid #B45309',
@@ -202,8 +235,15 @@ function BankEditor({
   const stack = useStack();
   const linkDown = useLink() === 'disconnected';
 
+  /**
+   * The candidate layers, HIGHEST FIRST — the same order the Layers list uses.
+   *
+   * It used to ascend while the list descended, so the two disagreed about which
+   * row was "first" and an operator matching one against the other had to read both
+   * ends. Ordering is a correctness property here, not a preference.
+   */
   const layers: number[] = [];
-  for (let layer = bank.start; layer <= bank.start + bank.count - 1; layer++) layers.push(layer);
+  for (let layer = bank.start + bank.count - 1; layer >= bank.start; layer--) layers.push(layer);
 
   function apply(): void {
     // Empty alias inputs mean "no alias" — dropped, never sent as ''.
@@ -281,7 +321,9 @@ function BankEditor({
     // ON AIR sentence exists to prevent.
     const offAir = item !== undefined && (item.status === 'idle' || item.status === 'loaded');
     const onAir = item?.status === 'on-air' || item?.status === 'playing';
-    const rowName = slot.alias ?? `Layer ${String(slot.layer)}`;
+    // The row's name exactly as the Layers list shows it — same canonical default,
+    // so a confirm dialog can never name a row differently from the row itself.
+    const rowName = slot.alias ?? defaultLayerAlias(bank, slot.layer);
     const confirmed = await confirm({
       title: `Remove “${name}” from ${rowName}?`,
       body: onAir
@@ -315,7 +357,10 @@ function BankEditor({
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          {/* `neutral`, not `ghost` — Cancel and Apply are peers, so they must read as
+              the same KIND of control. The footer rule in `controls.css` holds both to
+              one size whatever variant a caller passes. */}
+          <Button variant="neutral" onClick={onClose}>
             Cancel
           </Button>
           <Button variant="primary" disabled={busy} onClick={apply}>
@@ -334,14 +379,35 @@ function BankEditor({
         until its template is removed.
       </div>
       <div style={styles.field}>
-        Candidate layers (tick = row shown; alias = display name)
-        <div style={styles.aliasList}>
+        Candidate layers, highest first — same order as the Layers list. Tick = row shown; the name
+        is what the row displays.
+        <div style={styles.aliasGrid}>
+          {/* Column headings once, so no row has to label its own cells. */}
+          <span style={styles.aliasHead}>Row</span>
+          <span style={styles.aliasHead}>Show</span>
+          <span style={styles.aliasHead}>Name</span>
+          <span style={styles.aliasHead}>Template</span>
+          <span />
           {layers.map((layer) => {
             const slot = slotFor(layer);
             const bound = slot?.binding ?? null;
+            // The SAME canonical position the `#` column and the row's default name
+            // use. Never recomputed locally — one number, one derivation.
+            const position = bankPosition(bank, layer);
+            // B-087 mask, same as the row: with the link down the frozen binding is a
+            // claim the wire cannot back, and Remove… could not reach the bridge
+            // anyway — neither is offered.
+            const showBinding = !linkDown && bound !== null;
             return (
-              <div key={layer} style={styles.aliasRow}>
-                <span style={styles.aliasLabel}>layer {String(layer)}</span>
+              // A FRAGMENT, not a wrapping div: the cells are direct children of the
+              // one grid, which is what makes every column line up across rows.
+              // EVERY row contributes all five cells — empty spans where a value is
+              // absent — so a bound row can never push a later cell onto its own line.
+              <Fragment key={layer}>
+                <span style={styles.aliasLabel}>
+                  <strong>{String(position)}</strong>
+                  <span style={styles.aliasLayerHint}>· {String(layer)}</span>
+                </span>
                 <label style={styles.tick}>
                   <input
                     type="checkbox"
@@ -351,41 +417,57 @@ function BankEditor({
                       setVisible({ ...visible, [String(layer)]: e.target.checked });
                     }}
                   />
-                  shown
+                  Show
                 </label>
+                {/*
+                  The name input shows the DEFAULT as a placeholder rather than
+                  pre-filling it. Pre-filling would persist `Layer 3` as an explicit
+                  alias the first time anything else on the dialog was applied, which
+                  then stops tracking the bank if the layer's position ever changes —
+                  and it would make "no name" unreachable without clearing text the
+                  operator never typed. A placeholder says what the row WILL be called
+                  while leaving the field genuinely empty.
+                */}
                 <input
                   className="cg-field"
                   type="text"
-                  aria-label={`Alias for layer ${String(layer)}`}
+                  dir="auto"
+                  aria-label={`Name for layer ${String(layer)} (row ${String(position)})`}
+                  placeholder={defaultLayerAlias(bank, layer)}
                   value={aliases[String(layer)] ?? ''}
                   onChange={(e) => {
                     setAliases({ ...aliases, [String(layer)]: e.target.value });
                   }}
                 />
-                {/* B-087 mask, same as the row: with the link down the frozen
-                    binding is a claim the wire cannot back, and Remove… could
-                    not reach the bridge anyway — neither is offered. */}
-                {!linkDown && bound !== null && (
-                  <>
-                    <span style={styles.bound} title={bound.templateId ?? bound.templateType}>
-                      {displayLabel({
-                        name: bound.templateName,
-                        sourceFileName: bound.sourceFileName,
-                      }) ??
-                        bound.templateId ??
-                        bound.templateType}
-                    </span>
-                    <Button
-                      variant="danger"
-                      onClick={() => {
-                        if (slot !== undefined) void removeTemplate(slot);
-                      }}
-                    >
-                      Remove…
-                    </Button>
-                  </>
+                {showBinding && bound !== null ? (
+                  <span
+                    style={styles.bound}
+                    dir="auto"
+                    title={bound.templateId ?? bound.templateType}
+                  >
+                    {displayLabel({
+                      name: bound.templateName,
+                      sourceFileName: bound.sourceFileName,
+                    }) ??
+                      bound.templateId ??
+                      bound.templateType}
+                  </span>
+                ) : (
+                  <span />
                 )}
-              </div>
+                {showBinding ? (
+                  <Button
+                    variant="danger"
+                    onClick={() => {
+                      if (slot !== undefined) void removeTemplate(slot);
+                    }}
+                  >
+                    Remove…
+                  </Button>
+                ) : (
+                  <span />
+                )}
+              </Fragment>
             );
           })}
         </div>

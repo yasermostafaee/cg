@@ -50,9 +50,12 @@ export function useConfirm(): {
         onClose={() => settle(false)}
         footer={
           <>
-            {/* Cancel is first: it takes the modal's initial focus, and it is the outcome
-                of Escape and of a backdrop click. The safe path is the default path. */}
-            <Button variant="ghost" onClick={() => settle(false)}>
+            {/* Cancel is first in DOM order, and it is the outcome of Escape, of the
+                backdrop and of the header's close X. The safe path is the default path.
+                `neutral`, not `ghost`: on a confirm dialog Cancel is a genuine peer of
+                the destructive action, so it must look like a control of the same kind
+                rather than a link beside a button. */}
+            <Button variant="neutral" onClick={() => settle(false)}>
               Cancel
             </Button>
             <Button variant={request.variant ?? 'danger'} onClick={() => settle(true)}>
@@ -113,7 +116,8 @@ export function usePrompt(): {
         onClose={() => settle(null)}
         footer={
           <>
-            <Button variant="ghost" onClick={() => settle(null)}>
+            {/* `neutral`, matching the confirm dialog — Cancel is a peer of Submit. */}
+            <Button variant="neutral" onClick={() => settle(null)}>
               Cancel
             </Button>
             <Button variant="primary" disabled={tooShort} onClick={() => settle(value)}>

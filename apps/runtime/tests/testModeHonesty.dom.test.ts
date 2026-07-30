@@ -77,7 +77,7 @@ function row(item: StackItemState): ReturnType<typeof createElement> {
     },
     item,
     template: { templateId: 'tpl-1', templateType: 'clock', fields: [] },
-    rowNumber: 1,
+    bankPosition: 1,
     selected: false,
     dirty: false,
     onSelect: () => undefined,

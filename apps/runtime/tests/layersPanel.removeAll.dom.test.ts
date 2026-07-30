@@ -148,10 +148,19 @@ describe('StackPanel Remove-All — R-010', () => {
     expect(openDialog()).toBeNull();
   });
 
-  it('is hidden when the stack is empty (nothing to destroy)', async () => {
+  it('is PRESENT but disabled when the stack is empty (nothing to destroy)', async () => {
     stubBridge([]);
     const el = await renderPanel();
-    expect(removeAllButton(el)).toBeNull();
+    /*
+      Present-but-disabled rather than absent. The bulk verbs follow the same rule the
+      row verbs already do ("THE SHAPE NEVER CHANGES"): a control that appears and
+      disappears moves the target under the operator's hand mid-reach, and with
+      Clear-All now permanently present a Remove-All that came and went would shift
+      the whole group sideways as items were added and dropped.
+    */
+    const remove = removeAllButton(el);
+    expect(remove).not.toBeNull();
+    expect(remove?.disabled).toBe(true);
   });
 
   it('is DISABLED while the CasparCG link is down — the stack is bridge-owned', async () => {

@@ -30,7 +30,7 @@
  * minimum and 2.5.5's 44px enhanced target: 34 is comfortable for a mouse in a
  * gallery while keeping ~30 rows scannable in one list.
  */
-export const VERB_TARGET_PX = 34;
+export const VERB_TARGET_PX = 36;
 
 /**
  * Width of one verb column, in px — WIDER than the hit-target floor, and set by
@@ -42,10 +42,22 @@ export const VERB_TARGET_PX = 34;
  * to the 34px button instead would have produced a header of clipped stumps —
  * which is the one thing that would make the icons unsafe again.
  */
-const VERB_COL_PX = 44;
+const VERB_COL_PX = 48;
 
-/** Gap between verb buttons, in px. */
-const VERB_GAP_PX = 4;
+/**
+ * Gap between verb buttons, in px.
+ *
+ * A SEPARATE failure mode from the hit target above, and it needs its own number.
+ * `VERB_TARGET_PX` stops the operator MISSING a button; this stops them hitting
+ * the NEIGHBOURING one. Adjacent targets pressed at speed still produce mis-clicks
+ * when they touch, and the neighbours here are PLAY, NEXT, STOP and CLEAR — every
+ * one an on-air action, and STOP and CLEAR mean opposite things in this product.
+ *
+ * 12px, read off the owner's mock-up, where the gap is visibly comparable to a
+ * quarter of the button. The 4px it replaces read as a seam in one control block
+ * rather than as five separate controls.
+ */
+const VERB_GAP_PX = 12;
 
 /** How many verbs get a BUTTON on the row (the rest are right-click only). */
 export const VERB_COUNT = 5;
@@ -54,19 +66,35 @@ export const VERB_COUNT = 5;
 const COL_GAP_PX = 12;
 const ROW_PAD_PX = 12;
 
+/**
+ * The row's VERTICAL padding, in px — above and below the tallest cell.
+ *
+ * Taken from the owner's mock-up, where a row is roughly twice its button's height.
+ * The first version had effectively none (content plus a 10px allowance), so the
+ * list read as a dense ledger rather than a set of separate rows. Padding is what
+ * makes a row a target the eye can land on and the hand can hit, which matters more
+ * on this surface than fitting a 31st row on screen — the list scrolls, and a
+ * mis-click does not.
+ */
+const ROW_PAD_Y_PX = 15;
+
 /** Fixed column widths in px. The `alias` column is the flexible one. */
 const W = {
   /** Row number — `1..n`, up to two digits plus breathing room. */
   rowNum: 34,
-  /** State: icon + word. Collapses to the icon alone at the tightest density. */
-  stateFull: 118,
-  stateIconOnly: 30,
+  /**
+   * State: icon + word. Collapses to the icon alone at the tightest density.
+   *
+   * Sized for the 25px mark plus the longest label the column has to hold without
+   * ellipsis — `NOT CONNECTED`. A column that clipped its own state word would
+   * defeat the point of pairing the colour with a word at all.
+   */
+  stateFull: 132,
+  stateIconOnly: 34,
   /** The alias — the row's primary label. Flexible, with a floor. */
   aliasMin: 96,
   template: 176,
   description: 200,
-  /** The REAL CasparCG layer number — small, fixed-width, secondary. */
-  layer: 52,
 } as const;
 
 /** The verb block's total width — fixed, because it is never allowed to reflow. */
@@ -86,15 +114,21 @@ export const VERBS_GRID = {
 
 /**
  * How much of the row's text is shown. Ordered widest-first; the drop order is
- * the one the review specified — description, then template name, then the real
- * layer number — and the ALIAS and the VERBS never drop at any density.
+ * the one the review specified — description, then the template name — and the
+ * ALIAS and the VERBS never drop at any density.
+ *
+ * There is no layer-number column any more. The owner took the real CasparCG
+ * layer number OFF the row: it lives in the Inspector, and — the cheap mitigation
+ * that made removing it safe — in the ROW's own tooltip and accessible name, so
+ * it stays one hover or one focus away at every density without spending a
+ * column. Same shape as the fix for the occupancy report: the glanceable layer
+ * gets simpler, the fact stays reachable.
  */
 export type Density = 'full' | 'mid' | 'compact' | 'tight';
 
 export interface DensitySpec {
   showDescription: boolean;
   showTemplate: boolean;
-  showLayer: boolean;
   /** The state's WORD. Its icon is never dropped — that is the signal. */
   showStateLabel: boolean;
   /**
@@ -115,28 +149,24 @@ const SPECS: Record<Density, DensitySpec> = {
   full: {
     showDescription: true,
     showTemplate: true,
-    showLayer: true,
     showStateLabel: true,
     aliasFloor: W.aliasMin,
   },
   mid: {
     showDescription: false,
     showTemplate: true,
-    showLayer: true,
     showStateLabel: true,
     aliasFloor: W.aliasMin,
   },
   compact: {
     showDescription: false,
     showTemplate: false,
-    showLayer: true,
     showStateLabel: true,
     aliasFloor: W.aliasMin,
   },
   tight: {
     showDescription: false,
     showTemplate: false,
-    showLayer: false,
     showStateLabel: false,
     aliasFloor: 0,
   },
@@ -158,7 +188,6 @@ function fixedWidth(density: Density): number {
     // The alias column is deliberately absent here — it is the `1fr`.
     ...(spec.showTemplate ? [W.template] : []),
     ...(spec.showDescription ? [W.description] : []),
-    ...(spec.showLayer ? [W.layer] : []),
     VERBS_WIDTH_PX,
   ];
   // Total columns is `columns.length + 1` (the alias), so the number of GAPS
@@ -205,7 +234,6 @@ export function gridTemplateColumns(density: Density): string {
     `minmax(${String(spec.aliasFloor)}px, 1fr)`,
     ...(spec.showTemplate ? [`${String(W.template)}px`] : []),
     ...(spec.showDescription ? [`${String(W.description)}px`] : []),
-    ...(spec.showLayer ? [`${String(W.layer)}px`] : []),
     `${String(VERBS_WIDTH_PX)}px`,
   ].join(' ');
 }
@@ -213,5 +241,7 @@ export function gridTemplateColumns(density: Density): string {
 /** Shared row geometry, so the header and the rows are padded identically. */
 export const ROW_GEOMETRY = {
   columnGap: `${String(COL_GAP_PX)}px`,
-  padding: `0 ${String(ROW_PAD_PX)}px`,
+  padding: `${String(ROW_PAD_Y_PX)}px ${String(ROW_PAD_PX)}px`,
+  /** The header keeps the horizontal padding but sets its own vertical rhythm. */
+  headerPaddingX: `${String(ROW_PAD_PX)}px`,
 } as const;
