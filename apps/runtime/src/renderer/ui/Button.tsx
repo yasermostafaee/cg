@@ -1,9 +1,15 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cssVars } from '../theme.js';
 
+/**
+ * NB there is deliberately no `air` variant. It existed for the Inspector's UPDATE
+ * (C-012: an outlined on-air hue meaning "this reaches air") and was removed when
+ * that button went neutral: colour belongs to STATE in this build, never to an
+ * affordance. Re-adding it would hand a transmission colour back to a control — do
+ * not. Solid `--r-onair` remains PLAY's alone.
+ */
 export type ButtonVariant =
   | 'play'
-  | 'air'
   | 'primary'
   | 'secondary'
   | 'caution'
@@ -16,7 +22,6 @@ export type ButtonVariant =
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   play: 'cg-btn--play',
-  air: 'cg-btn--air',
   primary: 'cg-btn--primary',
   secondary: 'cg-btn--secondary',
   caution: 'cg-btn--caution',
@@ -42,7 +47,6 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
  */
 export const VARIANT_ACCENT: Record<ButtonVariant, string | undefined> = {
   play: cssVars['--r-onair'],
-  air: cssVars['--r-onair'],
   primary: cssVars['--r-accent-strong'],
   secondary: cssVars['--r-accent'],
   caution: cssVars['--r-caution'],

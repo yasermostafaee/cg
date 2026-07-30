@@ -112,8 +112,14 @@ export function FromFileControl({
     return (
       <div style={styles.wrap}>
         <div style={styles.row}>
+          {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` (no fill, no border, muted
+              text) and read as static text under every text-carrying field — the most
+              PROPAGATED instance of that mistake in the app, since it renders once per
+              text / multiline / list field. `neutral` keeps it colourless while giving
+              it the boundary, hover and focus ring a control owes. See the `--ghost`
+              warning in `controls.css`. */}
           <Button
-            variant="ghost"
+            variant="neutral"
             aria-label={`Load ${fieldId} from file`}
             disabled={!supported}
             title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
@@ -176,8 +182,11 @@ export function FromFileControl({
             Reload
           </AsyncButton>
         )}
+        {/* `verb`, not `ghost`: the same neutral look as the row verbs plus their
+            square hit target, which an icon-only control needs and a ghost's tight
+            text padding never gave it. */}
         <Button
-          variant="ghost"
+          variant="verb"
           aria-label={`Detach ${fieldId} file source`}
           onClick={() => detachFileSource(item.itemId, path)}
         >

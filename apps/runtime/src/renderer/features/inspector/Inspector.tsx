@@ -194,21 +194,31 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
             no-op only SUPPRESSES the button's duplicate INLINE error — it does not
             re-report (which would double-toast) or change the wording. Exactly what
             `StackRow`'s UPDATE does, for exactly this reason. */}
-          {/* C-012 — the AIR family, same as the stack row's UPDATE. This is the SAME
-            action (both call `applyDraft`), so it must not read as one of the neutral
-            staging controls beside it — Discard, Apply position, Add item — which
-            touch nothing live. It pushes new values to a graphic that is on air right
-            now; the outlined on-air hue says so, while the SOLID red stays PLAY's. */}
+          {/* NEUTRAL, and this supersedes C-012's on-air outline for UPDATE.
+            C-012 gave this button the on-air hue to say "this reaches air". That
+            reasoning is retired: colour in this build belongs to STATE, not to
+            affordances — the row's state mark and the badges own it, and every verb
+            beside this one already went neutral. An outlined air-hue UPDATE put a
+            transmission colour on a control, which is the one thing the palette may
+            not do. The reasoning is unchanged by on-air having moved from red to
+            green: do NOT re-introduce colour here to signal importance. What UPDATE
+            reaches is said by the panel it sits in and by the toast it raises. */}
           <AsyncButton
-            variant="air"
+            variant="neutral"
             aria-label="Apply staged edits"
             run={() => onApply(itemId)}
             onError={() => undefined}
           >
             Update
           </AsyncButton>
+          {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` — transparent fill,
+            transparent border, muted text — and it read as a line of static text
+            rather than a control. Removing COLOUR from a control never removes its
+            need for an AFFORDANCE: it still owes a visible boundary, a hover state
+            and a focus ring. `neutral` is the variant that carries all three without
+            a hue. See the `--ghost` warning in `controls.css`. */}
           <Button
-            variant="ghost"
+            variant="neutral"
             aria-label="Discard staged edits"
             disabled={!dirty}
             onClick={() => onDiscard(itemId)}

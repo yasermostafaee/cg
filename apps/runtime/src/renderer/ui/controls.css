@@ -119,26 +119,11 @@
   color: #fff;
   font-weight: var(--r-weight-bold);
 }
-/* C-012 — the ON-AIR family, subordinate to PLAY.
-   UPDATE changes what is on air RIGHT NOW, so it must not read like the neutral
-   staging controls (Load / Apply position / Add item) that touch nothing live. It
-   wears the on-air hue to say "this reaches air", as an OUTLINE so the SOLID fill
-   stays what it has always been: PLAY, the one control that puts a graphic on air.
-   The sacred-air-colour rule is intact — solid `--r-onair` remains PLAY + ON AIR.
-
-   Retuned when on-air moved from red to green: the tint and text were hard-coded
-   rose (#fb7185 / rgba(225,29,72,…)), which after the palette change would have
-   left a RED control claiming to be the on-air family while red now means error. */
-.cg-btn--air {
-  background: transparent;
-  border-color: var(--r-onair);
-  color: #6ee7b7;
-  font-weight: var(--r-weight-bold);
-}
-.cg-btn--air:hover:not(:disabled) {
-  background: rgba(16, 185, 129, 0.16);
-  color: #fff;
-}
+/* `.cg-btn--air` IS GONE — do not bring it back.
+   C-012 gave the Inspector's UPDATE an outlined on-air hue to say "this reaches
+   air". That is retired: colour in this build belongs to STATE, and an outlined
+   air-hue control put a transmission colour on an affordance. UPDATE is `neutral`
+   now, like every other verb. Solid `--r-onair` remains PLAY's alone. */
 /* C-012 — the destructive half of the EXIT family.
    STOP and CLEAR both take a graphic off air and must not look alike: STOP leaves
    the producer resident (recoverable), CLEAR destroys it. Same amber hue so they
@@ -180,6 +165,24 @@
   background: var(--r-danger-strong);
   color: #fff;
 }
+/*
+ * GHOST — and the trap it is.
+ *
+ * NEUTRAL IS NOT INVISIBLE. Ghost has no fill, no border and muted text, so a ghost
+ * button standing on its own reads as a LINE OF STATIC TEXT, not a control. That is
+ * exactly what happened to the Inspector's Discard and "From file…": both were
+ * ghosts, and the operator could not tell either was pressable. A button nobody
+ * recognises as a button is worse than a coloured one.
+ *
+ * Dropping COLOUR from a control never drops its need for an AFFORDANCE — a visible
+ * boundary or fill, a hover state, and a focus ring. `--neutral` / `--verb` carry all
+ * three with no hue, which is why the neutral rule costs nothing legibility-wise; it
+ * only looks free if you reach for ghost instead.
+ *
+ * USE GHOST ONLY where surrounding chrome already frames the control and its position
+ * names it: a modal's close ✕, a panel-header affordance, a banner's dismiss. For a
+ * standalone verb in a panel body, use `neutral` (text) or `verb` (icon-only).
+ */
 .cg-btn--ghost {
   background: transparent;
   border-color: transparent;
