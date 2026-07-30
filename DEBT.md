@@ -187,6 +187,28 @@ Two constraints for whoever does it: **a 1080 channel must render byte-identical
 (scale 1.0, nothing shifts), and the **operator placement override** (R-011, bridge-appended)
 is what persists — never the authored scene position, which belongs to the Designer.
 
+### FLAKY (second one) — the Designer's multi-select group-drag spec times out under a loaded gate
+
+`apps/designer/tests/e2e/multi-select.spec.ts:271` (D-054, "group-drag keyframes an animated
+member at the playhead") failed one `gate:e2e` run with a 30 s timeout on
+`getByTestId('multi-select-box').first()` — the selection box never appeared after
+`clickCanvas` + `shiftClickCanvas`.
+
+**Not a regression, and nothing was changed to make it pass.** The diff in flight
+(`dev-pvw-white`) touches `apps/runtime/**` and `DEBT.md` and NOTHING else — no Designer file,
+no shared package — so the Designer cannot import a line of it. Re-running the spec alone:
+**7/7 green**. Re-running the whole gate: **22/22, 0 cached, Designer 231 passed, Runtime 52
+passed.**
+
+**Worth filing as the same class as the VP8 flake below, not as a bug.** It is a Konva canvas
+interaction (two synthetic clicks, then a bounding-box read) failing only inside the full
+~6-minute suite, which is the B-073/B-098 contention signature. Note what the repair rules
+forbid and what this entry therefore does NOT propose: raising the timeout. B-073 already tried
+a longer rope and B-098 is that bound blown in turn.
+
+If it recurs, the useful direction is why the selection box is slow to appear under load —
+`multiBoxes` is read immediately after the second click with no settle — not a bigger budget.
+
 ### FLAKY — the Designer's seek-fragile VP8+alpha canvas test
 
 `apps/designer/tests/e2e/video-canvas-render.spec.ts:146` failed one `gate:e2e` run with
