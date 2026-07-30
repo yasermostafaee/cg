@@ -30,6 +30,13 @@ const MESSAGES: Readonly<Record<string, string>> = {
     'That layer is not part of the fixed bank — only bank layers can be loaded this way.',
   'slot-bound':
     'That fixed layer already holds an item — Remove it first, then load. (Never one compound step.)',
+  // The BANK-SCOPED clear's two structural refusals. Both are guard verdicts rather
+  // than transient failures, so neither suggests retrying: the answer will not change
+  // until the CONFIG does.
+  'not-in-bank':
+    'That layer is not part of the declared operator bank — this clear is scoped to the bank and can address nothing else.',
+  reserved:
+    'That layer is inside the reserved playout range — the company’s playout system owns it, and it can never be cleared from this console.',
 };
 
 /** A human message for a refusal, or `null` when there is no code to explain. */

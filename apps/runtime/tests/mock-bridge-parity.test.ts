@@ -123,7 +123,20 @@ const BRIDGE_SURFACE: {
     // `playoutLayers` especially: it is a SAFETY surface, and a mock that
     // cleared where the bridge refuses would teach test mode a more dangerous
     // model than air.
-    fixedLayers: ['config', 'setConfig', 'load', 'state', 'onConfigChanged', 'onStateChanged'],
+    // `clearLayer` is the BANK-SCOPED clear, and it belongs in this guard for the
+    // same reason `playoutLayers.clear` does: it is a SAFETY surface. It asserts
+    // "I may clear this layer without knowing what is on it", so a mock that
+    // cleared where the bridge refuses — or vice versa — would teach test mode a
+    // different guard from the one air enforces.
+    fixedLayers: [
+      'config',
+      'setConfig',
+      'load',
+      'clearLayer',
+      'state',
+      'onConfigChanged',
+      'onStateChanged',
+    ],
     playoutLayers: ['state', 'clear', 'onStateChanged'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
     // R-028 (o1) — `onChanged`: the bridge-owned catalogue push.

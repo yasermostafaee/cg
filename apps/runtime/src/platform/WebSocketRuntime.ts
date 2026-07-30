@@ -50,6 +50,7 @@ import {
   UpdateStateChangedChannel,
   UpdateStateChannel,
   FixedLayersConfigChangedChannel,
+  FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
   FixedLayersLoadChannel,
   FixedLayersSetConfigChannel,
@@ -698,6 +699,10 @@ export class WebSocketRuntime implements RuntimeBridge {
     // down (the browser-local library is the only surface that works offline).
     load: (req: ChannelRequest<typeof FixedLayersLoadChannel>) =>
       this.#invoke(FixedLayersLoadChannel, req),
+    // The bank-scoped clear. Round-trips like every command; the two structural
+    // guards are held bridge-side.
+    clearLayer: (req: ChannelRequest<typeof FixedLayersClearLayerChannel>) =>
+      this.#invoke(FixedLayersClearLayerChannel, req),
     state: () => this.#invoke(FixedLayersStateChannel, undefined),
     onConfigChanged: (handler: (bank: FixedLayerBank | null) => void) =>
       this.#fixedConfigSubs.add(handler),

@@ -86,6 +86,14 @@ export interface LayerRowActionDeps {
   update: (itemId: string) => Promise<AsyncResult>;
   stop: (itemId: string) => Promise<AsyncResult>;
   clear: (itemId: string) => Promise<AsyncResult>;
+  /**
+   * The BANK-SCOPED clear for a row with NO item — addressed to the LAYER, permitted
+   * by structure (in the declared bank, not reserved) rather than by observation. This
+   * is what finally makes CLEAR always available: `stack.out` is item-scoped and has
+   * nothing to address on an unbound row, so without this the button could only be a
+   * no-op that reports success.
+   */
+  clearLayer: () => Promise<AsyncResult>;
   remove: (itemId: string) => Promise<AsyncResult>;
   onError: (message: string) => void;
 }
@@ -242,21 +250,28 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
      * nobody can remove. It carries `offlineReason` as its tooltip so the operator
      * knows what to expect before pressing.
      *
-     * IT STAYS DISABLED ON A GENUINELY UNBOUND ROW, and that is not a hedge. With
-     * no item there is nothing for `stack.out` to address, so an enabled button
-     * would be a no-op — the one outcome worse than a disabled one, because it
-     * looks like it worked. An unbound row that the WIRE says is occupied is the
-     * R-009 orphan case, which has its own surfaced banner and its own
-     * confirm-gated Clear, correctly fenced (html-only, fresh observation, never
-     * the reserved range). `layers.clear` is no use here either: it refuses
-     * `'owned'` for our own layers by design.
+     * IT IS NOW ENABLED ON AN UNBOUND ROW TOO, and that completes the decision
+     * rather than changing it. It used to be disabled there for a good reason: with
+     * no item there is nothing for `stack.out` to address, so an enabled button would
+     * have been a no-op that REPORTED SUCCESS — the one outcome worse than a disabled
+     * one, because it looks like it worked. The fix was never a flag; it was the
+     * missing capability, and it now exists:
      *
-     * WHAT THIS DOES NOT WIDEN. `stack.out` is ITEM-scoped — it can only reach the
-     * layer its own item is bound to, and a bank item can never be bound to a
-     * reserved playout layer (the validator refuses an overlapping bank at config
-     * time). So this cannot address the playout range from any input, and the
-     * bridge's `layers.clear` reserved-range refusal, the orphan sweep's skip and
-     * the playout tab's html-only rule are all untouched.
+     *   - bound row   → `stack.out` (unchanged, and it keeps the B-039 producer
+     *     bookkeeping the item state machine depends on);
+     *   - unbound row → the BANK-SCOPED layer clear, addressed to the LAYER and
+     *     permitted by STRUCTURE (in the declared bank AND not reserved) rather than
+     *     by observation — so it still works when occupancy reads `unknown`, which is
+     *     precisely the case the operator needs it for.
+     *
+     * WHAT THIS DOES NOT WIDEN. Both halves are fenced to layers the operator's own
+     * bank declares. `stack.out` is ITEM-scoped, and a bank item can never be bound to
+     * a reserved playout layer (the validator refuses an overlapping bank at config
+     * time, at boot and at every change). The new half re-checks the reservation
+     * itself, FIRST, so a reserved layer is refused even if the two sets ever
+     * overlapped. `layers.clear`'s reserved-range refusal, the orphan sweep's skip and
+     * the playout tab's html-only rule are ALL untouched — this adds a capability, it
+     * does not loosen an existing one.
      */
     // Built as a literal rather than through `act`, because `act` ORs `linkDown`
     // into every verb and CLEAR is the one verb that must not inherit it. Spelling
@@ -267,10 +282,11 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       key: 'clear',
       label: 'CLEAR',
       variant: 'verb',
-      // The ONLY gate: is there an item to clear? See the block comment above.
-      disabled: empty,
+      // NO gate at all now — the escape hatch is always available, on every row,
+      // whatever the status claims and whatever the link says. See above.
+      disabled: false,
       ...(offlineReason !== undefined ? { title: offlineReason } : {}),
-      run: () => (item === null ? noop() : deps.clear(item.itemId)),
+      run: () => (item === null ? deps.clearLayer() : deps.clear(item.itemId)),
       onError,
       icon: XSquare,
     },

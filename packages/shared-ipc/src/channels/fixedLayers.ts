@@ -300,6 +300,65 @@ export const FIXED_LAYERS_LOAD_REASONS = ['unknown-template', 'not-fixed', 'slot
  * the same C-012 verbs there, and is removed the same way — the fixed row is
  * an additional, permanent surface onto it, not a parallel item kind.
  */
+/**
+ * The refusal codes for the BANK-SCOPED layer clear, as ONE shared const (the
+ * `FIXED_LAYERS_SET_CONFIG_REASONS` pattern) so the wire contract, the bridge and the
+ * renderer cannot drift.
+ *
+ * - `not-in-bank` — the coordinate is not a layer of the DECLARED bank (on the bank's
+ *   channel). Also the answer when no bank is declared at all: with no bank, no layer
+ *   is in it. This is the guard that keeps the channel from becoming a
+ *   clear-anything door.
+ * - `reserved` — the layer is inside the reserved playout range. ABSOLUTE, and checked
+ *   FIRST so it wins even if a bank were ever to overlap the reservation.
+ * - `amcp-error` — the guard passed and CasparCG refused or the send failed.
+ */
+export const FIXED_LAYERS_CLEAR_LAYER_REASONS = ['not-in-bank', 'reserved', 'amcp-error'] as const;
+
+/**
+ * Clear ONE layer of the declared bank, addressed by LAYER and permitted by
+ * STRUCTURE — never by observation.
+ *
+ * WHY THIS EXISTS AS A THIRD DOOR. The owner's requirement is that a graphic can
+ * always be taken off, including when something is wrong in a way nobody predicted.
+ * Neither existing channel delivers that:
+ *
+ *   - `stack.out` is ITEM-scoped. With no bound item there is nothing to address, so
+ *     enabling it on an empty row produces a no-op that REPORTS SUCCESS — the exact
+ *     lie this capability exists to prevent.
+ *   - `layers.clear` refuses a `foreign` layer without a fresh `html` observation,
+ *     which is precisely the `unknown`-occupancy case being asked about. It declines
+ *     exactly when it is needed.
+ *
+ * So this one consults NEITHER occupancy NOR item status — that indifference is the
+ * whole point, because those are the things that may be wrong. Its permission comes
+ * from two structural facts, both required, both derived from CONFIG so no UI state
+ * can bypass them: the layer is in the declared bank, and it is not reserved.
+ *
+ * "DECLARED BANK" MEANS THE BANK AS CONFIGURED, NOT THE ROWS CURRENTLY SHOWN. A
+ * ticked/unticked row is a display concern; membership is not. Computing membership
+ * from visible rows would mean unticking a row silently removed it from the guard's
+ * world — so the predicate is the LayerManager's config-derived `isFixed`, which
+ * enumerates every declared layer regardless of its tick.
+ *
+ * THIS ADDS A CAPABILITY, IT DOES NOT WIDEN AN EXISTING ONE. `layers.clear` keeps
+ * refusing foreign layers, the orphan sweep keeps skipping the reservation, and the
+ * playout tab keeps its html-only rule. All three are untouched.
+ */
+export const FixedLayersClearLayerChannel = defineChannel(
+  'fixedLayers.clear-layer',
+  z.object({
+    channel: z.number().int().positive(),
+    layer: z.number().int().nonnegative(),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.enum(FIXED_LAYERS_CLEAR_LAYER_REASONS).optional(),
+    /** Human wording for the refusal, so the toast can name which guard fired. */
+    message: z.string().optional(),
+  }),
+);
+
 export const FixedLayersLoadChannel = defineChannel(
   'fixedLayers.load',
   z.object({

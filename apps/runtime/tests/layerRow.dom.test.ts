@@ -37,7 +37,7 @@ async function buttonsFor(
 }
 
 describe('LayerRow — verbs are present from the start, enabled by state (R-028 point 8)', () => {
-  it('an EMPTY row shows every verb, with only LOAD enabled', async () => {
+  it('an EMPTY row shows every verb, with LOAD and CLEAR enabled', async () => {
     const buttons = await buttonsFor({ item: null, template: null });
     // The owner's point 8: the buttons exist before a load, rendered disabled.
     // A disabled button is not the "enabled control that can only reject" that
@@ -46,11 +46,18 @@ describe('LayerRow — verbs are present from the start, enabled by state (R-028
     expect(buttons.get('LOAD')).toBe(false);
     expect(buttons.get('PLAY')).toBe(true);
     expect(buttons.get('STOP')).toBe(true);
-    // CLEAR is the one always-enabled verb, but NOT here: with no item bound there
-    // is nothing for `stack.out` to address, so an enabled CLEAR would be a no-op —
-    // worse than a disabled one, because it looks like it worked. An unbound row
-    // the WIRE says is occupied is the orphan banner's job, not this button's.
-    expect(buttons.get('CLEAR')).toBe(true);
+    // CLEAR IS ENABLED HERE NOW, and this assertion was flipped deliberately — it is
+    // the requirement, not a relaxation.
+    //
+    // It used to be disabled on an unbound row for a sound reason: `stack.out` is
+    // ITEM-scoped, so with nothing bound an enabled CLEAR would have been a no-op that
+    // REPORTED SUCCESS — worse than a disabled one, because it looks like it worked.
+    // The answer was never to enable the button; it was the missing capability, which
+    // now exists. An unbound row routes to the BANK-SCOPED layer clear, addressed to
+    // the layer and permitted by STRUCTURE (in the declared bank, not reserved) rather
+    // than by observation — so it does something real, and it works precisely when
+    // occupancy reads `unknown`.
+    expect(buttons.get('CLEAR')).toBe(false);
   });
 
   it('a LOADED row: PLAY enabled, STOP disabled — and CLEAR available anyway', async () => {
@@ -338,16 +345,18 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     }
   });
 
-  it('on an EMPTY row only the load affordances can act; every other verb is disabled', () => {
+  it('on an EMPTY row the load affordances AND CLEAR can act; every other verb is disabled', () => {
     const actions = actionsFor(deps(null, false));
     const toggle = actions.find((a) => a.key === 'load-remove');
     expect(toggle?.label).toBe('LOAD');
     for (const action of actions) {
-      if (action.key === 'load-remove' || action.key === 'load-library') {
-        expect(action.disabled, action.key).toBe(false);
-      } else {
-        expect(action.disabled, action.key).toBe(true);
-      }
+      // CLEAR joins the load affordances as enabled-on-an-empty-row: it routes to the
+      // BANK-SCOPED layer clear, which addresses the LAYER and needs no binding. Every
+      // OTHER verb is item-scoped and genuinely has nothing to act on, so those stay
+      // disabled — the fixed control set is unchanged, only CLEAR's gate is gone.
+      const canAct =
+        action.key === 'load-remove' || action.key === 'load-library' || action.key === 'clear';
+      expect(action.disabled, action.key).toBe(!canAct);
     }
   });
 

@@ -11,6 +11,7 @@ import {
   DEFAULT_BRIDGE_HOST,
   DEFAULT_BRIDGE_PORT,
   FixedLayersConfigChangedChannel,
+  FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
   FixedLayersLoadChannel,
   FixedLayersSetConfigChannel,
@@ -484,6 +485,13 @@ export function buildRoutes(
       FixedLayersLoadChannel,
       (r: { channel: number; layer: number; itemId: string; templateId: string; fields: never }) =>
         b.loadFixed({ channel: r.channel, layer: r.layer }, r.itemId, r.templateId, r.fields),
+    ),
+    // The BANK-SCOPED clear: permitted by STRUCTURE (in the declared bank, not
+    // reserved), never by occupancy — so it still works when occupancy is `unknown`,
+    // which is exactly when the operator needs it. The guard lives in
+    // `clearBankLayer`, bridge-side, so no UI state can bypass it.
+    route(FixedLayersClearLayerChannel, (r: { channel: number; layer: number }) =>
+      b.clearBankLayer(r.channel, r.layer),
     ),
 
     // R-028 part B — the declared playout layers + the operator's DELIBERATE,

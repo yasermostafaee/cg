@@ -1901,6 +1901,82 @@ export class CasparRuntime {
   }
 
   /**
+   * THE BANK-SCOPED LAYER CLEAR — the always-available escape hatch.
+   *
+   * The sentence this command asserts is a strong one: *"I may clear this layer
+   * without knowing what is on it."* Two structural facts license it, both required,
+   * and both derived from CONFIG so that no UI state, no stale bookkeeping and no
+   * silent OSC port can bypass them:
+   *
+   *   1. the layer is inside the DECLARED bank, and
+   *   2. the layer is NOT inside the reserved playout range.
+   *
+   * If both hold, the layer is ours and may be cleared whatever we currently believe
+   * is on it. That indifference is the entire point — it is what makes this work when
+   * occupancy reads `unknown`, and it is why the guard cannot depend on OSC.
+   *
+   * ORDER MATTERS AND IS DELIBERATE: reserved is checked FIRST. Boot already refuses a
+   * bank that overlaps the reservation (`validateFixedBank` throws before the
+   * WebSocket binds) and so does every live change, so the two sets cannot currently
+   * intersect — but if they ever did, the reserved refusal must WIN rather than being
+   * shadowed by a bank membership that happens to be true. Checking it first makes
+   * that outcome hold by construction instead of by a proof about another module.
+   *
+   * The reserved set is channel-AGNOSTIC (a layer NUMBER is reserved) while bank
+   * membership is channel-SPECIFIC. Both readings are kept exactly as they are
+   * elsewhere: the channel-agnostic reservation is the more conservative of the two,
+   * and this is not the place to narrow it.
+   *
+   * WHAT IT DELIBERATELY DOES **NOT** CONSULT: `#slots` (do we think we own it),
+   * the item's status, the occupancy tap, OSC freshness, or the row's visibility
+   * tick. Each of those is a thing that can be WRONG in the situation this exists
+   * for, so making any of them a precondition would reintroduce the failure.
+   *
+   * It is NOT a loosening of {@link clearLayer} or {@link playoutClear}: both keep
+   * every guard they have. This is a third, NARROWER door — it can only ever reach a
+   * layer the operator's own bank declares.
+   */
+  async clearBankLayer(
+    channel: number,
+    layer: number,
+  ): Promise<{
+    ok: boolean;
+    reason?: 'not-in-bank' | 'reserved' | 'amcp-error';
+    message?: string;
+  }> {
+    // GUARD 2 FIRST — see the ordering note above. Absolute, and channel-agnostic.
+    if (this.#reservedSet.has(layer)) {
+      return {
+        ok: false,
+        reason: 'reserved',
+        message:
+          `layer ${String(layer)} is inside the reserved playout range — the company's ` +
+          `playout system owns it, and clearing it would take playout output off air`,
+      };
+    }
+    // GUARD 1 — membership in the DECLARED bank, read from the LayerManager's
+    // config-derived fixed set. Channel-aware, and independent of visibility ticks:
+    // `bankSlots` enumerates every declared layer whether its row is shown or not, so
+    // unticking a row can never remove it from the guard's world.
+    if (!this.#layers.isFixed({ channel, layer })) {
+      return {
+        ok: false,
+        reason: 'not-in-bank',
+        message:
+          `${String(channel)}-${String(layer)} is not a layer of the declared operator ` +
+          `bank — this clear is scoped to the bank and can address nothing else`,
+      };
+    }
+    const slot: CommandSlot = { channel, layer };
+    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    // Adoption marking mirrors `clearLayer`: a CLEAR we executed on the current
+    // primary is an adoption, so the bookkeeping stays consistent with the other two
+    // clear paths. It is bookkeeping ONLY — it is never a precondition above.
+    if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+    return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };
+  }
+
+  /**
    * Explicit operator Clear of a surfaced (UNOWNED) layer: sends an urgent
    * `CLEAR <ch>-<layer>` through the adapter (mirror-sync fans it out so a
    * real pair clears everywhere). REFUSED for a layer the bridge owns —

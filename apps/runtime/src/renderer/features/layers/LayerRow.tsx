@@ -273,6 +273,17 @@ export function LayerRow({
     update: (itemId) => onUpdate(itemId),
     stop: (itemId) => window.cg.stack.stop({ itemId }),
     clear: (itemId) => window.cg.stack.out({ itemId }),
+    // The unbound half of CLEAR: addressed to the LAYER, not to an item. The
+    // channel answers `{ ok, reason?, message? }`; the row's verbs speak
+    // `AsyncResult`, so the guard's `reason` rides through as `errorCode` and
+    // `errorCodeMessage` gives it operator wording.
+    clearLayer: async () => {
+      const res = await window.cg.fixedLayers.clearLayer({
+        channel: coord.channel,
+        layer: coord.layer,
+      });
+      return { accepted: res.ok, ...(res.reason !== undefined ? { errorCode: res.reason } : {}) };
+    },
     remove: (itemId) => window.cg.stack.remove({ itemId }),
     onError: reportCommandError,
   }).map((action) => {
@@ -280,13 +291,31 @@ export function LayerRow({
     // CLEAR destroys a live producer; REMOVE additionally takes the item off the
     // row. Both name the row and say what reaches air.
     if (action.key === 'clear') {
+      // Two different acts behind one verb, so two different gates. The BOUND case
+      // knows what it is destroying and says so. The UNBOUND case must NOT pretend to:
+      // it is the escape hatch for exactly the situation where the console's model is
+      // wrong, so the wording promises only what is certain — the layer is cleared,
+      // whatever happens to be on it — and never implies we know it is empty.
       return withConfirm(action, () =>
-        confirm({
-          title: `Clear ${rowName}?`,
-          body: `Layer ${layerName} is cleared immediately — the graphic leaves air with no outro. The template stays on the row and can be played again.`,
-          confirmLabel: 'Clear layer',
-          variant: 'caution-strong',
-        }),
+        confirm(
+          item !== null
+            ? {
+                title: `Clear ${rowName}?`,
+                body: `Layer ${layerName} is cleared immediately — the graphic leaves air with no outro. The template stays on the row and can be played again.`,
+                confirmLabel: 'Clear layer',
+                variant: 'caution-strong',
+              }
+            : {
+                title: `Clear layer ${layerName}?`,
+                body:
+                  `This row holds no template, so this clears the LAYER itself: ` +
+                  `whatever is on ${layerName} leaves air immediately, with no outro. ` +
+                  `Use it when a layer is stuck or the console cannot tell you what is ` +
+                  `on it — it does not need to know in order to clear it.`,
+                confirmLabel: 'Clear layer',
+                variant: 'caution-strong',
+              },
+        ),
       );
     }
     // The LOAD/REMOVE toggle: only the REMOVE half is gated. A toggle

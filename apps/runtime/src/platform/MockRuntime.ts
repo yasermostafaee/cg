@@ -469,6 +469,55 @@ export class MockRuntime {
   }
 
   /**
+   * The BANK-SCOPED layer clear, with the bridge's guard modelled EXACTLY — because
+   * the guard is what the operator UI is built against, and a mock that cleared more
+   * freely than air would teach test mode a more dangerous mental model than the real
+   * thing.
+   *
+   * Permission is STRUCTURAL and comes from two facts, both required: the layer is in
+   * the DECLARED bank (`start`..`start+count-1` on the bank's channel — never the
+   * VISIBLE rows, since a tick is a display concern), and the layer is NOT reserved.
+   * Reserved is checked FIRST so it wins even if the two sets ever overlapped.
+   *
+   * It consults NO occupancy and NO binding, which is the whole point: those are the
+   * things that may be wrong when the operator needs this. So an `unknown` observation
+   * does not block it, and an unticked in-bank row is still clearable.
+   */
+  clearBankLayer(
+    channel: number,
+    layer: number,
+  ): { ok: boolean; reason?: 'not-in-bank' | 'reserved' | 'amcp-error'; message?: string } {
+    // The reserved set is channel-agnostic here exactly as it is on the bridge.
+    if (this.#playoutObservations.has(layer)) {
+      return {
+        ok: false,
+        reason: 'reserved',
+        message: `layer ${String(layer)} is inside the reserved playout range`,
+      };
+    }
+    const bank = this.#fixedBank;
+    const inBank =
+      bank !== null &&
+      channel === bank.channel &&
+      layer >= bank.start &&
+      layer < bank.start + bank.count;
+    if (!inBank) {
+      return {
+        ok: false,
+        reason: 'not-in-bank',
+        message: `${String(channel)}-${String(layer)} is not a layer of the declared bank`,
+      };
+    }
+    // A CLEAR destroys whatever was there. Offline that means: the observation
+    // becomes empty, and any binding on the layer is gone — the producer it named
+    // no longer exists, so keeping the binding would make the row lie.
+    this.#fixedObservations.set(layer, { kind: 'empty' });
+    this.#fixedBindings.delete(layer);
+    this.fixedStateChanged.emit(this.fixedLayersState());
+    return { ok: true };
+  }
+
+  /**
    * Per-slot state, offline: there is no OSC and no server, so occupancy is
    * honestly UNKNOWN for every slot (never 'empty' — the B-094 honesty rule).
    * The ONE exception is the e2e observation seed (`seedFixedObservations`) —

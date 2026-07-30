@@ -15,6 +15,7 @@ import type {
   ConnectionsFailoverChannel,
   ConnectionsSetConfigChannel,
   FixedLayerBank,
+  FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
   FixedLayersLoadChannel,
   FixedLayersSetConfigChannel,
@@ -192,6 +193,16 @@ export interface RuntimeBridge {
     load(
       req: ChannelRequest<typeof FixedLayersLoadChannel>,
     ): Promise<ChannelResponse<typeof FixedLayersLoadChannel>>;
+    /**
+     * Clear ONE layer of the declared bank, addressed by LAYER and permitted by
+     * STRUCTURE — in the declared bank AND not reserved — never by occupancy. The
+     * always-available escape hatch: it still works when occupancy reads `unknown`,
+     * which is exactly when the operator needs it. Refuses `not-in-bank` and
+     * `reserved`; the guard is bridge-side, so no UI state can bypass it.
+     */
+    clearLayer(
+      req: ChannelRequest<typeof FixedLayersClearLayerChannel>,
+    ): Promise<ChannelResponse<typeof FixedLayersClearLayerChannel>>;
     /** The current per-slot state ([] when no bank is declared). */
     state(): Promise<ChannelResponse<typeof FixedLayersStateChannel>>;
     onConfigChanged(handler: (bank: FixedLayerBank | null) => void): Unsubscribe;

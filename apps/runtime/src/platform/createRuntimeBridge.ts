@@ -162,6 +162,8 @@ export function createMockBridge(): RuntimeBridge {
         Promise.resolve(
           mock.loadFixed(req.channel, req.layer, req.itemId, req.templateId, req.fields),
         ),
+      // The bank-scoped clear (mock models the bridge's two structural guards).
+      clearLayer: (req) => Promise.resolve(mock.clearBankLayer(req.channel, req.layer)),
       state: () => Promise.resolve(mock.fixedLayersState()),
       onConfigChanged: (handler) => mock.fixedConfigChanged.subscribe(handler),
       onStateChanged: (handler) => mock.fixedStateChanged.subscribe(handler),

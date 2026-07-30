@@ -514,7 +514,84 @@ colour is also the more durable form. `StatusBadge` itself is untouched and its 
 test still passes; the `unverified` safety wording was extracted to
 `ui/airStateWording.ts` so the badge and the row share ONE copy.
 
-### CLEAR on an EMPTY row needs a layer-scoped bridge capability — NOT DONE, owner asked for it
+### ✅ DONE (`dev-clear-bank-scoped`) — CLEAR on an EMPTY row now has its layer-scoped capability
+
+**Closed.** The design below was implemented as specified; what follows is what shipped and
+what its guard is, so the entry stays useful rather than merely ticked.
+
+**The guard, which is the whole feature.** `CasparRuntime.clearBankLayer(channel, layer)`
+sends `CLEAR <ch>-<layer>` when TWO structural facts hold, both required, both
+config-derived so no UI state can bypass them:
+
+1. the layer is inside the DECLARED bank — `LayerManager.isFixed({channel, layer})`, which
+   is channel-aware and enumerated from `start`/`count`, **never from visibility ticks**
+   (the owner's constraint: a tick is a display concern, membership is not);
+2. the layer is NOT reserved — `#reservedSet`, channel-agnostic, as everywhere else.
+
+It consults NO occupancy, NO OSC freshness, NO item status and NO binding. That
+indifference is the point: those are the things that may be wrong when an operator reaches
+for this.
+
+**Reserved is checked FIRST, deliberately.** Boot already refuses a bank overlapping the
+reservation (`validateFixedBank` throws before the WebSocket binds) and so does every live
+change — so the two sets cannot currently intersect. Checking reserved first means the
+reservation would still WIN if they ever did, by construction rather than by a proof about
+another module. `clear-bank-scoped.integration.test.ts` asserts the ORDER by using a layer
+both halves would refuse and checking which reason comes back.
+
+**Wire:** `fixedLayers.clear-layer` (reasons `not-in-bank` / `reserved` / `amcp-error`),
+routed in `bridge.ts`, mirrored in `MockRuntime.clearBankLayer` with the same guard, and in
+the mock-bridge parity guard — it is a SAFETY surface, so a mock that cleared where the
+bridge refuses would teach test mode a more dangerous model than air.
+
+**Row:** CLEAR is now enabled on every row. Bound → `stack.out` (unchanged, keeps the B-039
+producer bookkeeping); unbound → the new layer clear. Its confirm gate is per-case: the
+bound wording says what is being destroyed, the unbound wording promises only what is
+certain and never implies the console knows the layer is empty.
+
+**8 integration tests**, covering the cases the owner named: one below the floor and one
+above the ceiling both refused; the same layer number on a DIFFERENT channel refused; a
+reserved layer refused with `reserved` rather than `not-in-bank`; an UNTICKED in-bank layer
+still clearable; `unknown` occupancy does NOT block (asserted directly — it is the
+requirement); no bank → everything refused; a bank overlapping the reservation cannot boot.
+Every refusal also asserts NOTHING reached the wire.
+
+#### What the required adversarial review found
+
+Three things, none of them a hole in the guard, all recorded rather than left implicit:
+
+1. **A bound-row race leaves STALE ITEM STATE (a real seam, not fixed).** The row routes on
+   `item === null` at click time. If an item is loaded onto a row in the instant between
+   render and click, the unbound branch sends a layer CLEAR that destroys the just-loaded
+   producer **without** going through `stack.out`, so the item's state machine still reads
+   `loaded` while the layer is empty. It is not a SAFETY hole — the layer is in the bank,
+   not reserved, and the operator asked for a clear — but the row will misreport until the
+   operator hits REMOVE. Refusing when the layer is owned was considered and REJECTED: that
+   reintroduces dependence on the very bookkeeping this exists to bypass. The proper fix is
+   to reconcile any item bound to the layer after a successful bank clear, which is on-air
+   bookkeeping and wanted its own diff. **Worth filing.**
+2. **With NO reservation declared, the bank is the only guard.** `reservedLayersPath`
+   pointing at an absent file means "nothing reserved", so a bank declared over real
+   playout layers would boot without complaint and those layers would be clearable. This is
+   PRE-EXISTING and identical for `layers.clear`, the orphan sweep and the playout tab — it
+   is a config-truth problem, not a guard bug, and this change does not widen it. Recorded
+   because the guard's strength is exactly the strength of the declared reservation.
+3. **The mock models "reserved" as an OBSERVATION map, not a config list.** `MockRuntime`
+   tests `#playoutObservations.has(layer)`, which is how `playoutClear` already decides
+   `not-reserved`. Unseeded there are no reserved layers at all, so offline every bank layer
+   clears freely — consistent with a bridge that has no reservation declared. Test-mode
+   only, and it matches the existing mock convention, but it is not a config-derived guard
+   the way the bridge's is.
+
+**What this does NOT close: `stack.clearAll` is still not a true escape hatch.** See "CLEAR
+ALL is always ENABLED but is not always EFFECTIVE" above — it still filters on
+`status !== 'idle' && status !== 'loaded'` before sending, so it can still return
+`{ ok: true, cleared: 0 }` when every item wrongly reads idle. The PER-ROW hatch is now
+complete; the BULK one is not, and that entry stays open.
+
+---
+
+**The original design note follows, retained because it records the reasoning.**
 
 **Open, and the owner has asked for it explicitly: "the Clear buttons must enable even for
 empty layers, for unknown errors and wrong occupied layers."** It is not done, and this
