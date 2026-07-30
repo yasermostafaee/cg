@@ -371,14 +371,16 @@ Per the fast-mode contract, all of this was deliberately not done.
   `@cg/shared-schema` `test` (**21 passed** in the touched file) and `build`. NOT run: the
   full turbo fan-out, `format:check` beyond what the pre-commit `lint-staged` prettier pass
   covers, and any uncached cross-workspace run.
-- **E2E NOT RUN AT ALL for b4** — neither Windows nor Linux. This is the biggest gap in the
-  task. It changes UI and layout, so a Linux `gate:e2e` is owed on CLAUDE.md's own terms,
-  and on top of that **three Designer E2E assertions were edited blind**
-  (`apps/designer/tests/e2e/sequence-composition-item-fields.spec.ts`) to match the new
-  `Sequence — item 1` label. Their new expected strings are derived from the changed
-  function and were verified against the shared-schema unit test that pins the same format,
-  but the Playwright specs themselves were never executed. **Run them before this reaches
-  `main`.** The em-dash in the expected text is the specific thing to watch.
+- **E2E: RUN and GREEN on Windows (superseding this entry's original "not run at all"), still
+  owed on Linux.** The committed Stop hook ran `pnpm gate:e2e` at turn end and it went RED,
+  which is how the b4 + clear-bank-scoped E2E debt actually got discharged — the gate found
+  exactly what this entry predicted it would. After the fix: **22/22 turbo tasks, 0 cached,
+  `@cg/runtime` 31 passed, `@cg/designer` 231 passed.**
+  - The **three Designer assertions edited blind** are now VERIFIED:
+    `sequence-composition-item-fields.spec.ts` passes against the new `Sequence — item 1`
+    label, so the em-dash concern is closed.
+  - Because b4 alters UI, layout and rendering, a **Linux `gate:e2e` is still owed** — a
+    green Windows run is a useful signal and never discharges that debt (`CLAUDE.md`).
 - **Item 6 is asserted in jsdom, which has NO bidi engine.** The tests pin what this repo
   controls — the attribute is `auto`, no editor pins a literal `rtl`/`ltr`, and values
   round-trip byte-identically — and deliberately do NOT claim to have verified the browser's
@@ -399,8 +401,14 @@ Per the fast-mode contract, all of this was deliberately not done.
   `@cg/caspar-bridge` `typecheck`, `lint` (`--max-warnings 0`, clean), `test`
   (**236 passed, 46 files**), `build`; `@cg/runtime` `typecheck`, `lint` (0 errors),
   `test` (**391 passed, 55 files**), `build`; `@cg/shared-ipc` `build`.
-- **NO E2E** for this change either, Windows or Linux. The row's CLEAR gate changed on
-  every row, which is user-facing, so an E2E is owed.
+- **E2E: RUN and GREEN on Windows; Linux still owed.** The row's CLEAR gate changed on every
+  row, and the Stop hook's `gate:e2e` caught the one spec that pinned the OLD behaviour:
+  `apps/runtime/tests/e2e/fixed-layers.spec.ts` asserted CLEAR was DISABLED on an unbound
+  row. Re-expressed rather than loosened — PLAY/NEXT/STOP are still asserted disabled there
+  (that half is unchanged), and CLEAR is now asserted ENABLED, which is STRONGER for the case
+  that matters: the fixture's row 73 has UNKNOWN occupancy, so the spec now pins that the
+  escape hatch is reachable exactly when the console cannot say what is on the layer. No
+  product code changed to make it pass.
 - **NOT VERIFIABLE ON AIR from this machine**, and this one matters more than usual: the
   whole point of the command is to send a real `CLEAR` to a real layer. The 8 integration
   tests assert it against `@cg/amcp-mock` (including reading the AMCP wire trace to prove
