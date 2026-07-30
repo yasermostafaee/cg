@@ -10,6 +10,50 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### ⛔ CHAIN STOPPED AFTER `dev-clear-bank-scoped` — two queued tasks are UNTOUCHED
+
+The owner queued four units to run unattended, in order. **Two are done and pushed; two
+were never started.** Stopped at a clean task boundary per the chain's own rule ("a clean
+stop after task 2 is a good outcome; a broken tree after 2½ tasks is not"), because neither
+remaining task can be done well in what was left — and both are on-air paths that REQUIRE an
+adversarial self-review, which is the one thing that must not be done badly.
+
+| #   | task                      | state                        |
+| --- | ------------------------- | ---------------------------- |
+| 1   | `dev-r028-b4`             | ✅ done, pushed (4 commits)  |
+| 2   | `dev-clear-bank-scoped`   | ✅ done, pushed              |
+| 3   | `dev-r022-rehearse`       | ⛔ **NOT STARTED** — no code |
+| 4   | `dev-r030-channel-raster` | ⛔ **NOT STARTED** — no code |
+
+Nothing was half-written for either: no files added, no signatures changed, no
+partially-wired channels. A later session starts from their prompts with a clean tree.
+
+### ⚠ A LIVE ON-AIR DEFECT IS NOW KNOWN AND STILL UNFIXED — non-1080 channels mis-place every graphic
+
+This is the most important thing in this entry, and it is worth filing as a BUG in its own
+right rather than only as the preview task it was bundled into. It was to be fixed by
+`dev-r030-channel-raster`, which was not started.
+
+`OUTPUT_FRAME` is hardcoded 1920×1080 at `packages/template-runtime/src/position.ts:25` (the
+comment above it already calls this future work), and `applyOutputPosition` forces
+`html`/`body` to that size at `:110-111`. **On a channel that is not 1080 the anchor maths
+computes against the wrong raster and the page overflows** — the owner reports this is
+exactly what the C-018 recon hit when it had to `scrollTo(0, 360)` on a 720p channel. It is
+an air defect, not a preview nicety.
+
+The fix is decided and recorded by the owner, so it does not need re-deriving: keep the
+reference frame at 1920×1080 and apply a UNIFORM SCALE `min(cw/rw, ch/rh)` to the root at
+play-out, leaving the whole anchor maths untouched. The seam already exists —
+`outputTranslate` takes a `frame` parameter with a default at `position.ts:80`. Non-16:9
+letterboxes (accepted edge case). **Reflow was explicitly REJECTED** (pixel-authored
+keyframes, line-breaking and kerning shift, air becomes non-deterministic and preview==air
+parity breaks). Geometry resolution order: the bridge's appended query first, then
+`window.innerWidth/innerHeight`, then a fallback.
+
+Two constraints for whoever does it: **a 1080 channel must render byte-identically to today**
+(scale 1.0, nothing shifts), and the **operator placement override** (R-011, bridge-appended)
+is what persists — never the authored scene position, which belongs to the Designer.
+
 ### b4 — two same-named sequences still produce IDENTICAL Inspector headings
 
 Found while answering b4 item 2, and now ASSERTED rather than assumed away
@@ -348,6 +392,24 @@ Per the fast-mode contract, all of this was deliberately not done.
   review requirement did not fire — with the one exception the task itself named, item 6,
   which was held to the editor/value separation and is covered by the round-trip test rather
   than by review.
+
+**`dev-clear-bank-scoped` specifically:**
+
+- **No `pnpm gate`.** Affected workspaces' own tasks, all green before hand-off:
+  `@cg/caspar-bridge` `typecheck`, `lint` (`--max-warnings 0`, clean), `test`
+  (**236 passed, 46 files**), `build`; `@cg/runtime` `typecheck`, `lint` (0 errors),
+  `test` (**391 passed, 55 files**), `build`; `@cg/shared-ipc` `build`.
+- **NO E2E** for this change either, Windows or Linux. The row's CLEAR gate changed on
+  every row, which is user-facing, so an E2E is owed.
+- **NOT VERIFIABLE ON AIR from this machine**, and this one matters more than usual: the
+  whole point of the command is to send a real `CLEAR` to a real layer. The 8 integration
+  tests assert it against `@cg/amcp-mock` (including reading the AMCP wire trace to prove
+  the command was or was not sent), which is a strong check of the GUARD but not of
+  CasparCG's response to it.
+- **The bound-row race seam is left open** (see the adversarial-review findings under the
+  DONE entry below) — worth filing as an item.
+- **No OpenSpec, no `docs/prd/*` edit, no item number claimed** for the new capability,
+  the new channel, or the two re-expressed row assertions.
 
 **Earlier tasks (b3 and before):**
 
