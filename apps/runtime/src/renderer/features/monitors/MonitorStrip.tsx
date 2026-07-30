@@ -22,7 +22,7 @@ import { PreviewPanel } from './PreviewPanel.js';
  * monitor: the shell's job is "the workspace is fullscreen-ing something", and
  * which box that is belongs here.
  */
-export function MonitorStrip({ selectedId }: { selectedId: string | null }): JSX.Element {
+export function MonitorStrip(): JSX.Element {
   const { focus } = useShellLayoutContext();
   const showPvw = focus !== 'pgm';
   const showPgm = focus !== 'pvw';
@@ -53,13 +53,18 @@ export function MonitorStrip({ selectedId }: { selectedId: string | null }): JSX
         not part of the design. Only PROGRAM is genuinely waiting for a feed.
       */}
       {/*
-        R-022 — PREVIEW is no longer a reserved empty box: it renders the rehearsal
-        for a row the operator has put into REHEARSE. It gets its own component
-        rather than props on `MonitorPanel`, because it now has behaviour (which
-        rehearsal to show, the retained page, the channel raster, the operator's
-        staged values) while PROGRAM is still genuinely awaiting a feed (C-016).
+        R-022 — PREVIEW is no longer a reserved empty box: it renders the
+        rehearsal for EVERY row the operator has put into REHEARSE, composited. It
+        gets its own component rather than props on `MonitorPanel`, because it now
+        has behaviour (the rehearsing set, the retained pages, the channel raster,
+        the operator's staged values) while PROGRAM is still genuinely awaiting a
+        feed (C-016).
+
+        It takes NO `selectedId`. It used to, to pick which single rehearsal to
+        show; now it shows all of them, and the selection's remaining job — which
+        row an edit applies to — belongs to the Inspector and never to this panel.
       */}
-      {showPvw && <PreviewPanel selectedId={selectedId} />}
+      {showPvw && <PreviewPanel />}
       {showPgm && (
         <MonitorPanel
           id="pgm"

@@ -12,6 +12,7 @@ import {
   type LayerSlot,
   type ServerLabel,
 } from '@cg/caspar-client';
+import { positionQuery } from '@cg/shared-schema';
 import type {
   AuditEntry,
   FieldValues,
@@ -3506,13 +3507,11 @@ export class CasparRuntime {
     if (this.#templateServer.listening) {
       const params: string[] = [];
       const position = this.#positions.get(itemId);
-      if (position !== undefined) {
-        params.push(
-          `pos=${position.anchor}`,
-          `dx=${String(position.offset.x)}`,
-          `dy=${String(position.offset.y)}`,
-        );
-      }
+      // `positionQuery` (@cg/shared-schema), never a local spelling: PVW's
+      // rehearsal frame now hands the SAME string to the page's own
+      // `applyOutputPosition`, and two spellings of one override is how a
+      // preview comes to place a graphic differently from air.
+      if (position !== undefined) params.push(positionQuery(position));
       // The raster is ALWAYS present (`rasterFor` falls back to the reference
       // frame), so the query is never empty and needs no emptiness guard — the
       // position half is the only optional part.

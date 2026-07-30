@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { PositionAnchorSchema, positionQuery } from '@cg/shared-schema';
 import type { Position, Scene } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
 import {
@@ -6,6 +7,7 @@ import {
   outputLetterbox,
   outputScale,
   parseChannelRasterQuery,
+  parsePositionQuery,
   resolveChannelRaster,
   resolveOutputPosition,
   REFERENCE_FRAME,
@@ -259,5 +261,50 @@ describe('Designer preview guard — createRuntime alone positions NOTHING', () 
     expect(stage().style.transform).toBe('');
     expect(document.body.style.width).toBe('');
     expect(document.documentElement.style.width).toBe('');
+  });
+});
+
+/**
+ * R-011 / R-022 — the override's WIRE SPELLING has exactly one builder
+ * (`positionQuery`, `@cg/shared-schema`) and exactly one parser
+ * (`parsePositionQuery`, here). Two things now deliver the same override to a
+ * page — the bridge onto CasparCG's served URL, and PVW into the rehearsal
+ * frame — so a spelling drift would make the preview place a graphic
+ * differently from air while looking authoritative.
+ *
+ * Asserted as a ROUND TRIP rather than against a literal string, because the
+ * property that matters is that the two halves agree, not that either matches
+ * a sentence in a test.
+ */
+describe('positionQuery ↔ parsePositionQuery — one spelling, round-tripped', () => {
+  const CASES: readonly Position[] = [
+    { anchor: 'center', offset: { x: 0, y: 0 } },
+    { anchor: 'top-left', offset: { x: 12, y: -34 } },
+    { anchor: 'bottom-right', offset: { x: -10.5, y: 20.25 } },
+    { anchor: 'mid-right', offset: { x: -960, y: 1e3 } },
+  ];
+
+  it('every anchor and offset survives the trip byte-for-byte in meaning', () => {
+    for (const position of CASES) {
+      expect(parsePositionQuery(`?${positionQuery(position)}`)).toEqual(position);
+    }
+  });
+
+  it('all NINE anchors are spelled in a form the parser accepts', () => {
+    // A builder that emitted an anchor token the parser rejects would not fail
+    // loudly: `parsePositionQuery` returns null and the page silently falls
+    // back to the AUTHORED position — an override that vanishes without a word.
+    for (const anchor of PositionAnchorSchema.options) {
+      const q = `?${positionQuery({ anchor, offset: { x: 1, y: 2 } })}`;
+      expect(parsePositionQuery(q)).toEqual({ anchor, offset: { x: 1, y: 2 } });
+    }
+  });
+
+  it('rides alongside the raster half without either disturbing the other', () => {
+    // The bridge joins both onto ONE query string; PVW sends only the position
+    // half and lets the frame's own box answer the raster. Both must parse.
+    const q = `?${positionQuery({ anchor: 'top-right', offset: { x: 5, y: 6 } })}&cw=1280&ch=720`;
+    expect(parsePositionQuery(q)).toEqual({ anchor: 'top-right', offset: { x: 5, y: 6 } });
+    expect(parseChannelRasterQuery(q)).toEqual({ width: 1280, height: 720 });
   });
 });

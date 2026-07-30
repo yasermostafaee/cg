@@ -240,6 +240,31 @@ export const PositionSchema = z.object({
 });
 export type Position = z.infer<typeof PositionSchema>;
 
+/**
+ * R-011 — THE serialisation of an operator override onto a page's query string:
+ * `pos=<anchor>&dx=<x>&dy=<y>`, with no leading `?` (the caller joins it with
+ * whatever else rides the same query).
+ *
+ * ONE builder, deliberately, because there are now TWO deliverers of the same
+ * override and they must not drift: the bridge appends it to the served
+ * `/template/<id>` URL for CasparCG, and the Runtime's PVW hands the identical
+ * string to the rehearsal frame's own `applyOutputPosition`. A preview that
+ * spelled the query differently from air would place the graphic differently
+ * from air while looking authoritative — the exact failure a rehearsal exists to
+ * prevent.
+ *
+ * It lives HERE, next to {@link PositionSchema}, because it is the only package
+ * all three sides already depend on. `@cg/template-runtime`'s
+ * `parsePositionQuery` is its inverse and round-trips against it under test.
+ */
+export function positionQuery(position: Position): string {
+  return [
+    `pos=${position.anchor}`,
+    `dx=${String(position.offset.x)}`,
+    `dy=${String(position.offset.y)}`,
+  ].join('&');
+}
+
 /** Scene — root of the editor's domain model. */
 export const SceneSchema = z
   .object({

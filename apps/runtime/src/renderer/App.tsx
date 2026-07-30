@@ -249,7 +249,7 @@ export function App(): JSX.Element {
                       {/* R-022 — PVW follows the selection when the selected row is
                         rehearsing, so the preview and the Inspector agree about
                         which graphic the operator is working on. */}
-                      <MonitorStrip selectedId={selectedId} />
+                      <MonitorStrip />
                     </div>
                     {/* The strip's height is the operator's too — same clamped,
                     persisted, keyboard-nudgeable treatment as the Inspector's
