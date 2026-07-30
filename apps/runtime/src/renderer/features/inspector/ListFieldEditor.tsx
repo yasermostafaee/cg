@@ -36,6 +36,14 @@ import {
  * field's full width at every panel width — including dragged-narrow and the
  * narrow-screen overlay, which the container query in `controls.css` covers.
  *
+ * THE CONTROLS ARE `icon`, NOT `verb` — a correction, and the reason is worth keeping.
+ * They were `verb` first, which carries `width: 100%` because a row verb fills a
+ * table column the sticky header sized. In this flex row that made three buttons each
+ * ask for the full width and come out STRETCHED (the owner's report). `icon` is the
+ * same neutral look with a small FIXED square and `flex: 0 0 auto`, so it neither
+ * grows nor shrinks: the text reflows around them, the controls never resize. That
+ * fixed-size-plus-reflow split is what makes the row responsive rather than fragile.
+ *
  * DRAG REORDER IS AN ADDITION, NOT A REPLACEMENT. The ↑/↓ buttons stay, because
  * drag is unreachable by keyboard and awkward under time pressure; drag is the
  * faster path for a pointer, and the buttons remain the complete one.
@@ -161,7 +169,7 @@ export function ListFieldEditor({
                 {n}
               </span>
               <Button
-                variant="verb"
+                variant="icon"
                 aria-label={`Move ${fieldId} item ${n} up`}
                 disabled={i === 0}
                 onClick={() => onStage(moveItem(items, i, i - 1))}
@@ -169,7 +177,7 @@ export function ListFieldEditor({
                 ↑
               </Button>
               <Button
-                variant="verb"
+                variant="icon"
                 aria-label={`Move ${fieldId} item ${n} down`}
                 disabled={i === items.length - 1}
                 onClick={() => onStage(moveItem(items, i, i + 1))}
@@ -178,7 +186,7 @@ export function ListFieldEditor({
               </Button>
               <span className="cg-list-item__spacer" />
               <Button
-                variant="verb"
+                variant="icon"
                 aria-label={`Remove ${fieldId} item ${n}`}
                 onClick={() => onStage(removeItem(items, i))}
               >

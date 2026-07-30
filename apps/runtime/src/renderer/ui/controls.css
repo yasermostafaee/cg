@@ -235,25 +235,29 @@
  * shared thing; the SHAPE is not.
  */
 .cg-btn--verb,
-.cg-btn--neutral {
+.cg-btn--neutral,
+.cg-btn--icon {
   background: var(--r-surface-raised);
   border-color: var(--r-border-strong);
   color: var(--r-text);
 }
 .cg-btn--verb:hover:not(:disabled),
-.cg-btn--neutral:hover:not(:disabled) {
+.cg-btn--neutral:hover:not(:disabled),
+.cg-btn--icon:hover:not(:disabled) {
   background: #2c3a4e;
   border-color: #64748b;
   box-shadow: var(--r-shadow-1);
   filter: none; /* the lifted fill IS the hover; brightness on top muddies it */
 }
 .cg-btn--verb:active:not(:disabled),
-.cg-btn--neutral:active:not(:disabled) {
+.cg-btn--neutral:active:not(:disabled),
+.cg-btn--icon:active:not(:disabled) {
   background: var(--r-surface-sunken);
   box-shadow: none;
 }
 .cg-btn--verb:disabled,
-.cg-btn--neutral:disabled {
+.cg-btn--neutral:disabled,
+.cg-btn--icon:disabled {
   background: transparent;
   border-color: transparent;
   color: var(--r-text-muted);
@@ -279,6 +283,37 @@
 .cg-btn--neutral {
   min-height: 36px;
   padding: 0.4rem 0.75rem;
+}
+
+/*
+ * THE THIRD SHAPE — a small, FIXED icon button for a free-standing control row.
+ *
+ * This exists because `--verb` was reused for its neutral LOOK and dragged its
+ * COLUMN GEOMETRY along with it: `width: 100%` is right for a glyph filling a
+ * table column the sticky header sized, and wrong everywhere else. Three of them
+ * in the Inspector's flex tools row each asked for the container's full width and
+ * came out STRETCHED — the owner's report, and precisely the trap the
+ * `--verb`/`--neutral` split above was written to warn about. The LOOK is the
+ * shared thing; the SHAPE is not, and there are three shapes, not two.
+ *
+ * `flex: 0 0 auto` is the load-bearing part: it makes the button refuse to grow
+ * AND refuse to shrink, so the size is genuinely fixed rather than a function of
+ * how much room the row happens to have. That is what keeps it responsive — the
+ * TEXT beside it reflows, the controls never resize.
+ *
+ * 28px, not 36px: the owner asked for smaller, and these sit in a dense field
+ * editor rather than a gallery-scanned table. It stays above the 24px WCAG 2.5.8
+ * floor, which is the reason not to shrink it further.
+ */
+.cg-btn--icon {
+  flex: 0 0 auto;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  font-size: var(--r-text-md);
+  line-height: 1;
 }
 
 /*
@@ -474,12 +509,24 @@ textarea.cg-field--autogrow {
   border-bottom: 2px solid transparent;
 }
 
-/* The controls' own line, BENEATH the textarea rather than beside it. */
+/*
+ * The controls' own line, BENEATH the textarea rather than beside it.
+ *
+ * Beneath, not beside, deliberately: beside is what starved the text to ~80px, and
+ * even now that the field is full-width a 3-button column would take ~100px of it at
+ * every panel size. Below, the text keeps the whole width and the controls keep a
+ * fixed size — the two stop competing.
+ *
+ * `flex-wrap` is the floor of the responsive behaviour: the buttons refuse to shrink
+ * (`--icon` is `flex: 0 0 auto`), so at a pathologically narrow panel they must be
+ * allowed to wrap onto a second line rather than overflow the panel.
+ */
 .cg-list-item__tools {
   display: flex;
   align-items: center;
   gap: 0.2rem;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 /* The item's display number — the operator's way of telling two identical-looking
@@ -509,8 +556,11 @@ textarea.cg-field--autogrow {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  min-height: 36px;
+  /* Matched to `--icon`'s 28px so the tools row is one consistent height rather than
+     being made taller by the one element that is not a button. */
+  flex: 0 0 auto;
+  min-width: 22px;
+  height: 28px;
   padding: 0;
   border: 0;
   background: transparent;

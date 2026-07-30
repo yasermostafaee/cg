@@ -182,11 +182,12 @@ export function FromFileControl({
             Reload
           </AsyncButton>
         )}
-        {/* `verb`, not `ghost`: the same neutral look as the row verbs plus their
-            square hit target, which an icon-only control needs and a ghost's tight
-            text padding never gave it. */}
+        {/* `icon`, not `ghost` and not `verb`: the neutral look with a SMALL FIXED
+            square. `verb` was the first attempt and it stretched — its `width: 100%`
+            is geometry for a sized table column, so in this flex row it fought the
+            file name for space. */}
         <Button
-          variant="verb"
+          variant="icon"
           aria-label={`Detach ${fieldId} file source`}
           onClick={() => detachFileSource(item.itemId, path)}
         >

@@ -83,3 +83,55 @@ test('a two-line item keeps its newline: Enter inserts a line break and the \\n 
   expect(items[0]?.text).toBe(twoLines);
   expect(items[1]?.text).toBe('اخبار فوری');
 });
+
+test('the item controls are a FIXED small square — they never stretch to fill the row', async ({
+  app,
+}) => {
+  // The owner's report: ↑/↓/× came out "خیلی کشیده" (badly stretched). The cause was
+  // reusing `variant="verb"`, whose `width: 100%` is geometry for a glyph filling a
+  // sized TABLE COLUMN — inside the Inspector's flex tools row that made each button
+  // ask for the container's whole width.
+  //
+  // This pins the fix by MEASURING, because that is the only thing that would have
+  // caught the original: every assertion in this file passed while the buttons were
+  // unusable, since none of them looked at a box.
+  const templateId = 'tpl-e2e-list-size';
+  await app.importVcg('list-size.vcg', await buildListFieldVcg(templateId));
+  await app.selectStackRow(templateId);
+
+  const names = [
+    'Move _tickerTexts item 1 up',
+    'Move _tickerTexts item 1 down',
+    'Remove _tickerTexts item 1',
+  ];
+  const boxes = [];
+  for (const name of names) {
+    const box = await app.inspector.getByRole('button', { name }).boundingBox();
+    expect(box, name).not.toBeNull();
+    boxes.push({ name, ...box! });
+  }
+
+  for (const b of boxes) {
+    // Square and SMALL. The old stretched state was many times wider than tall, so a
+    // near-1:1 ratio is the assertion that actually distinguishes the two.
+    expect(b.width, `${b.name} width`).toBeLessThanOrEqual(40);
+    expect(b.height, `${b.name} height`).toBeLessThanOrEqual(40);
+    // …and still a real hit target: above the 24px WCAG 2.5.8 floor, which is the
+    // reason not to shrink it further in a future "make it tidier" pass.
+    expect(b.width, `${b.name} width floor`).toBeGreaterThanOrEqual(24);
+    expect(b.height, `${b.name} height floor`).toBeGreaterThanOrEqual(24);
+    expect(Math.abs(b.width - b.height), `${b.name} is square`).toBeLessThanOrEqual(4);
+  }
+
+  // All three identical: a fixed size cannot depend on which glyph is inside it.
+  const widths = boxes.map((b) => Math.round(b.width));
+  expect(new Set(widths).size, `widths ${widths.join(',')}`).toBe(1);
+
+  // The TEXTAREA keeps the width instead — it is the thing that should flex. Well
+  // wider than the three controls put together, which is what went wrong originally.
+  const textarea = await app.inspector
+    .getByRole('textbox', { name: '_tickerTexts item 1' })
+    .boundingBox();
+  expect(textarea).not.toBeNull();
+  expect(textarea!.width).toBeGreaterThan(boxes.reduce((sum, b) => sum + b.width, 0));
+});

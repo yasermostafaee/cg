@@ -54,6 +54,38 @@ Two constraints for whoever does it: **a 1080 channel must render byte-identical
 (scale 1.0, nothing shifts), and the **operator placement override** (R-011, bridge-appended)
 is what persists — never the authored scene position, which belongs to the Designer.
 
+### b4 follow-up — `--verb`'s column geometry stretched the Inspector's icon buttons (fixed)
+
+Owner report: the ↑/↓/× buttons were "خیلی کشیده" — badly stretched. Measured at **286px
+wide** instead of 28px.
+
+Cause: b4 gave them `variant="verb"` for its neutral LOOK, and `--verb` carries
+`width: 100%` because a row verb fills a table column the sticky header sized. In the
+Inspector's flex tools row each button therefore asked for the container's whole width.
+**This is exactly the trap the `--verb`/`--neutral` split comment in `controls.css` was
+written to warn about** ("the LOOK is the shared thing; the SHAPE is not") — the same
+mistake, one variant later. There are three shapes, not two.
+
+Fixed with a third shape, `--icon`: the shared neutral look plus a small FIXED square
+(28px) and `flex: 0 0 auto`, so it neither grows nor shrinks. The responsive behaviour is
+the split — TEXT reflows, controls never resize — with `flex-wrap` on the tools row as the
+floor for a pathologically narrow panel. 28px is above the 24px WCAG 2.5.8 floor, which is
+the reason not to shrink it further in a later tidy-up. `FromFileControl`'s detach ✕ had
+the same defect and moved too.
+
+**Two process lessons, both worth more than the fix:**
+
+1. **No test looked at a box.** Every assertion in `inspect-list-field.spec.ts` passed
+   while the buttons were unusable, because they all checked values and labels. A geometry
+   assertion now pins width/height/squareness/equality and that the textarea is wider than
+   the three controls combined. Confirmed load-bearing: reverting to `verb` yields 286px
+   and fails it.
+2. **A stale `dist/` gave a FALSE PASS during that very check.** Reverting the source and
+   running `playwright test` directly reported green, because the E2E serves the BUILT app
+   and the build still contained the fix. `CLAUDE.md` warns about this explicitly. The
+   verification only became real after `pnpm --filter @cg/runtime build`. Anything invoking
+   Playwright without a build first is not evidence.
+
 ### b4 — two same-named sequences still produce IDENTICAL Inspector headings
 
 Found while answering b4 item 2, and now ASSERTED rather than assumed away

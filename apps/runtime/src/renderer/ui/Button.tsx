@@ -18,6 +18,7 @@ export type ButtonVariant =
   | 'ghost'
   | 'verb'
   | 'neutral'
+  | 'icon'
   | 'default';
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
@@ -30,6 +31,7 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   ghost: 'cg-btn--ghost',
   verb: 'cg-btn--verb',
   neutral: 'cg-btn--neutral',
+  icon: 'cg-btn--icon',
   default: '',
 };
 
@@ -60,6 +62,10 @@ export const VARIANT_ACCENT: Record<ButtonVariant, string | undefined> = {
   verb: undefined,
   // The same neutral contract for a TEXT button (the bulk verbs).
   neutral: undefined,
+  // …and for a SMALL FIXED icon button in a free-standing control row. Same look,
+  // third geometry — see `controls.css`: `--verb`'s `width: 100%` is column geometry
+  // and stretches anything that is not in a sized column.
+  icon: undefined,
   default: undefined,
 };
 
