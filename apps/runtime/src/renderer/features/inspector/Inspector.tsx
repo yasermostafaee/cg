@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
+  aggregateHasFields,
   isFieldNamespace,
   type CompositionFieldGroup,
   type DynamicField,
@@ -170,7 +171,22 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
 
   const itemId = item.itemId;
   const schema = info?.fields ?? null;
-  const groups = info?.groups ?? [];
+  /*
+   * Only groups that CARRY a field, at any depth.
+   *
+   * The owner's report: `ROTATOR[0]`, `ROTATOR[1]`, `ROTATOR[2]` are headings that mean
+   * nothing. Two different things were hiding behind that, and they get opposite answers:
+   *
+   *  - A group whose whole subtree declares NO field is a label over a void — nothing to
+   *    edit under it, so it is pure noise and it is dropped here.
+   *  - A group that DOES carry fields keeps its heading, because each stamped instance
+   *    holds INDEPENDENT values (verified: its own `name` key, its own sub-object, and
+   *    `@cg/template-runtime` applies each item's own namespace). Removing the grouping
+   *    would print the same field label two or three times with no way to tell which
+   *    instance is which. Those got a readable label instead — see
+   *    `sequenceItemNamespace`.
+   */
+  const groups = (info?.groups ?? []).filter((g) => aggregateHasFields(g.aggregate));
   // The schema-less fallback (registry doesn't know the template) stays FLAT: with no
   // schema there are no namespaces to infer, so every top-level VALUE is a field.
   const inferredRows: { field: DynamicField | null; key: string }[] = Object.keys(item.fields)
@@ -324,15 +340,18 @@ function FieldGroup({
           applied={valueAt(applied, [...path, f.id])}
         />
       ))}
-      {group.aggregate.groups.map((child) => (
-        <FieldGroup
-          key={`${itemId}-${[...path, child.name].join('/')}`}
-          group={child}
-          path={[...path, child.name]}
-          item={item}
-          applied={applied}
-        />
-      ))}
+      {/* Same field-less filter as the root: a noise heading is noise at every depth. */}
+      {group.aggregate.groups
+        .filter((child) => aggregateHasFields(child.aggregate))
+        .map((child) => (
+          <FieldGroup
+            key={`${itemId}-${[...path, child.name].join('/')}`}
+            group={child}
+            path={[...path, child.name]}
+            item={item}
+            applied={applied}
+          />
+        ))}
     </section>
   );
 }

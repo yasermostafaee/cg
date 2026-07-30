@@ -190,12 +190,42 @@ export function sequenceItemTextFieldIds(
 
 /**
  * D-083 — the friendly DISPLAY label for a composition sequence item's field group: the
- * sequence element's name plus the item's position, e.g. `Now/Next[1]`. This is shown in
- * the designer form + GDD; the stable value KEY is {@link sequenceItemInstanceId} (so two
- * same-named sequences can't collide and a rename never orphans values).
+ * sequence element's name plus the item's position, e.g. `Now/Next — item 2`. This is
+ * shown in the operator Inspector, the designer form + GDD; the stable value KEY is
+ * {@link sequenceItemInstanceId} (so two same-named sequences can't collide and a rename
+ * never orphans values).
+ *
+ * WHY IT IS NOT `Now/Next[1]` ANY MORE. Array-index syntax is programmer notation and
+ * 0-based, and the operator reading it in the Inspector is neither. `ROTATOR[0]`,
+ * `ROTATOR[1]`, `ROTATOR[2]` read as three meaningless headings — the owner's report.
+ *
+ * The heading itself has to STAY, though, and that is the load-bearing part: each
+ * stamped instance holds INDEPENDENT values (its own namespace key, its own sub-object
+ * in {@link defaultNestedValues}, its own application in `@cg/template-runtime`). Two
+ * instances of one child therefore expose the same field NAME twice with different
+ * values, so dropping the grouping would leave the operator with two identical labels
+ * and no way to tell which row he is editing. A better label is the fix; no label is
+ * not.
+ *
+ * 1-BASED, matching the display numbering the rest of the console uses for a
+ * human-facing position.
  */
 export function sequenceItemNamespace(sequenceName: string, index: number): string {
-  return `${sequenceName}[${String(index)}]`;
+  return `${sequenceName} — item ${String(index + 1)}`;
+}
+
+/**
+ * Does this aggregate carry ANY authored field, at any depth?
+ *
+ * The predicate behind hiding an empty group heading. A group whose whole subtree
+ * declares no field has nothing an operator can edit, so its heading is pure noise —
+ * a label over a void. One canonical definition rather than a local re-derivation per
+ * consumer (a second copy is how such a rule drifts).
+ */
+export function aggregateHasFields(aggregate: AggregatedFields): boolean {
+  return (
+    aggregate.fields.length > 0 || aggregate.groups.some((g) => aggregateHasFields(g.aggregate))
+  );
 }
 
 /**
