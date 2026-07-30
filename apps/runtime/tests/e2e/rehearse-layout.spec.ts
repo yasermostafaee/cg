@@ -66,12 +66,17 @@ test('the rehearsal is SCALED TO FIT on first render — not only after an edit'
 
   await app.layerRow(layer).getByRole('button', { name: 'REHEARSE', exact: true }).click();
   // ONE row is rehearsing, so there is ONE frame — asserted rather than assumed.
-  // PVW composites every rehearsing row now, so `iframe[title$="rehearsal
-  // preview"]` is a PLURAL selector: `boundingBox()` on it is a strict-mode
-  // violation the moment a second row rehearses, and reading "the" frame would
-  // silently measure whichever came first. Pinning the count makes the
-  // singularity a claim this test makes, not an accident of the fixture.
-  const frames = page.locator('iframe[title$="rehearsal preview"]');
+  // PVW composites every rehearsing row now, so this is a PLURAL selector:
+  // `boundingBox()` on it is a strict-mode violation the moment a second row
+  // rehearses, and reading "the" frame would silently measure whichever came
+  // first. Pinning the count makes the singularity a claim this test makes, not
+  // an accident of the fixture.
+  //
+  // Anchored on `data-rehearsal-frame`, the same stable handle the other specs
+  // use. It used to match on the frame's `title`, which is no longer there: a
+  // `title` on an iframe doubles as a native tooltip and popped up over the
+  // graphic, so the accessible name moved to `aria-label`.
+  const frames = page.locator('iframe[data-rehearsal-frame]');
   await expect(frames).toHaveCount(1);
   const frame = frames.first();
   await expect(frame).toBeVisible();

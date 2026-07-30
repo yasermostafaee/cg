@@ -186,11 +186,17 @@ describe('PreviewPanel — one frame per rehearsing row', () => {
       ],
       slots: [slot(99), slot(97, 'CLOCK')],
     });
-    const titles = frames(el).map((f) => f.title);
+    // The frame's ACCESSIBLE NAME, which is `aria-label` and not `title`: a
+    // `title` on an iframe doubles as a native tooltip, and the frames cover
+    // most of the panel, so it popped up over the graphic being judged.
+    const names = frames(el).map((f) => f.getAttribute('aria-label') ?? '');
     // Layer 99 is the bank's HIGHEST, so its default alias is `Layer 1`.
-    expect(titles).toContain('Layer 1 rehearsal preview');
-    expect(titles).toContain('CLOCK rehearsal preview');
-    expect(titles.join(' ')).not.toContain('Layer 99');
+    expect(names).toContain('Layer 1 rehearsal preview');
+    expect(names).toContain('CLOCK rehearsal preview');
+    expect(names.join(' ')).not.toContain('Layer 99');
+    // Named, but with NOTHING on hover — asserted so a later "just add a title
+    // for the tooltip" puts the popup back knowingly rather than by accident.
+    for (const f of frames(el)) expect(f.getAttribute('title')).toBeNull();
   });
 
   it('says how many rows it is compositing', async () => {

@@ -216,9 +216,22 @@ export function RehearsalFrame({
   }, [ready, placementKey]);
 
   return (
+    /*
+      NAMED BY `aria-label`, NOT BY `title`, and the difference is the whole
+      reason for the disable below: `title` on an iframe doubles as a NATIVE
+      TOOLTIP, and these frames cover most of the panel — so hovering anywhere
+      over the rehearsal popped up "Layer 1 rehearsal preview" on top of the
+      graphic being judged. `aria-label` gives the frame the same accessible
+      name with nothing on hover.
+
+      `jsx-a11y/iframe-has-title` matches on the `title` prop specifically. What
+      it is asking for is an accessible name, which this has; the rule simply
+      does not know the other spelling.
+    */
+    // eslint-disable-next-line jsx-a11y/iframe-has-title
     <iframe
       ref={frameRef}
-      title={`${rowName} rehearsal preview`}
+      aria-label={`${rowName} rehearsal preview`}
       data-rehearsal-frame={itemId}
       srcDoc={html}
       onLoad={() => {

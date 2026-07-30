@@ -119,7 +119,9 @@ describe('subjectsFor — EVERY rehearsing row, no cap and no quiet drop', () =>
 describe('rehearsalCaption — the panel says what it is showing, always', () => {
   it('names the count when everything rehearsing is on screen', () => {
     expect(rehearsalCaption(1, 1)).toBe('Rehearsing 1 row');
-    expect(rehearsalCaption(3, 3)).toContain('Rehearsing 3 rows');
+    // Just the count. It used to trail "— composited in channel layer order";
+    // the ordering is a property of the picture, not a label the picture needs.
+    expect(rehearsalCaption(3, 3)).toBe('Rehearsing 3 rows');
   });
 
   /**

@@ -95,7 +95,7 @@ export function rehearsalCaption(shown: number, rehearsing: number): string {
     return `Rehearsing ${String(rehearsing)} ${noun} — showing ${String(shown)} of ${String(rehearsing)}`;
   }
   if (rehearsing === 1) return 'Rehearsing 1 row';
-  return `Rehearsing ${String(rehearsing)} rows — composited in channel layer order`;
+  return `Rehearsing ${String(rehearsing)} rows`;
 }
 
 /** The rehearsals to render, newest contract first: EVERY one of them. */
