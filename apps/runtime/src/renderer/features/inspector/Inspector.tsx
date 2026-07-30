@@ -70,7 +70,10 @@ const styles = {
   scroll: {
     display: 'flex',
     flexDirection: 'column' as const,
-    padding: '0.75rem 1rem',
+    // No BOTTOM padding: the sticky commit bar owns the space down there, and a
+    // container pad would sit BELOW the stuck bar (sticky offsets resolve against
+    // the padding box), leaving a stripe of scrolling content under it.
+    padding: '0.75rem 1rem 0',
     gap: '0.5rem',
     minHeight: 0,
     flex: 1,
@@ -86,14 +89,38 @@ const styles = {
   empty: { color: colors.textMuted, fontSize: '0.9rem' },
   title: { fontSize: '1.1rem', fontWeight: 700, margin: 0, overflowWrap: 'anywhere' as const },
   meta: { color: colors.textMuted, fontSize: '0.85rem' },
-  // `flexWrap`: at a narrow panel width these three would otherwise push the row
-  // wider than the panel. They wrap onto a second line instead.
+  /*
+   * THE COMMIT BAR — sticky to the BOTTOM of the scrolling body (owner request).
+   *
+   * Why the bottom rather than the top. The field list is the long part of this
+   * panel, and the operator's sequence is "edit a field, then apply". With a
+   * scrolled list the Update button used to be somewhere above the viewport, so
+   * committing meant scrolling back up to find it — on a live graphic, under time
+   * pressure. A footer keeps it one glance and one click away wherever the list is
+   * scrolled to, and it leaves the identity block (template name, status, layer)
+   * intact at the top instead of covering it.
+   *
+   * `marginTop: auto` pins it past the end of short content; `position: sticky`
+   * holds it while the content is long. The negative horizontal margin plus
+   * matching padding let the background bleed to the panel edges so scrolled text
+   * cannot appear beside the bar.
+   *
+   * `flexWrap`: at a narrow panel width the three children would push the row wider
+   * than the panel; they wrap onto a second line instead.
+   */
   actions: {
     display: 'flex',
     gap: '0.5rem',
-    marginTop: '0.25rem',
     alignItems: 'center',
     flexWrap: 'wrap' as const,
+    position: 'sticky' as const,
+    bottom: 0,
+    marginTop: 'auto',
+    zIndex: 1,
+    background: colors.panel,
+    borderTop: `1px solid ${colors.border}`,
+    marginInline: '-1rem',
+    padding: '0.5rem 1rem',
   },
   fieldLabel: {
     color: colors.textMuted,
@@ -224,6 +251,50 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
           only when a slot existed, so it went blank exactly when the operator was trying to
           diagnose that. */}
         <div style={styles.meta}>{layerDetail(item.slot)}</div>
+        {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
+        <PositionPicker key={`pos-${itemId}`} item={item} />
+        <div
+          style={{
+            marginTop: '0.5rem',
+            borderTop: `1px solid ${colors.border}`,
+            paddingTop: '0.5rem',
+          }}
+        >
+          <h2 style={styles.heading}>FIELDS</h2>
+          {isEmpty ? (
+            <p style={styles.empty}>No fields.</p>
+          ) : (
+            <>
+              {rootFields.map((row) => (
+                // Key by item+path so switching stack items remounts the controls
+                // (each re-seeds from the new item's draft-or-applied value) — no
+                // uncontrolled DOM node is ever reused across items.
+                <FieldEditor
+                  key={`${itemId}-${row.key}`}
+                  field={row.field}
+                  path={[row.key]}
+                  item={item}
+                  applied={valueAt(item.fields, [row.key])}
+                />
+              ))}
+              {groups.map((group) => (
+                <FieldGroup
+                  key={`${itemId}-${group.name}`}
+                  group={group}
+                  path={[group.name]}
+                  item={item}
+                  applied={item.fields}
+                />
+              ))}
+            </>
+          )}
+        </div>
+        {/* THE COMMIT BAR, LAST IN THE DOM — not merely last visually.
+          A sticky footer could have been achieved with flex `order` while leaving this
+          block up beside the title, but DOM order is TAB order: that would have put
+          Update and Discard ahead of the fields they apply, so a keyboard operator
+          would reach the commit before the thing being committed. Fields first, then
+          commit, matches both the reading order and the actual sequence of the task. */}
         <div style={styles.actions}>
           {/* Apply stays enabled even with nothing staged — re-sending unchanged
             values is the operator's documented B-048 recovery path. */}
@@ -265,44 +336,6 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
             Discard
           </Button>
           {dirty && <DraftChip label="unapplied edits" />}
-        </div>
-        {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
-        <PositionPicker key={`pos-${itemId}`} item={item} />
-        <div
-          style={{
-            marginTop: '0.5rem',
-            borderTop: `1px solid ${colors.border}`,
-            paddingTop: '0.5rem',
-          }}
-        >
-          <h2 style={styles.heading}>FIELDS</h2>
-          {isEmpty ? (
-            <p style={styles.empty}>No fields.</p>
-          ) : (
-            <>
-              {rootFields.map((row) => (
-                // Key by item+path so switching stack items remounts the controls
-                // (each re-seeds from the new item's draft-or-applied value) — no
-                // uncontrolled DOM node is ever reused across items.
-                <FieldEditor
-                  key={`${itemId}-${row.key}`}
-                  field={row.field}
-                  path={[row.key]}
-                  item={item}
-                  applied={valueAt(item.fields, [row.key])}
-                />
-              ))}
-              {groups.map((group) => (
-                <FieldGroup
-                  key={`${itemId}-${group.name}`}
-                  group={group}
-                  path={[group.name]}
-                  item={item}
-                  applied={item.fields}
-                />
-              ))}
-            </>
-          )}
         </div>
       </div>
     </Panel>
@@ -553,10 +586,15 @@ function NumberField({
   // Arabic-Indic digits are accepted and commit as Latin. `step`/`min`/`max`
   // are not rendered any more: on the old `type="number"` they only drove the
   // spinner and the :invalid style — the staged value was never clamped.
+  // `scrub` — drag horizontally or press ↑/↓ to adjust, the Designer's feel (owner
+  // request). `step: 1` with Shift for tenths and Ctrl/Cmd for tens; no min/max,
+  // because a dynamic field's range is not declared here (R-020 removed the old
+  // `step`/`min`/`max` rendering precisely because they never clamped the value).
   return (
     <NumericInput
       className={fieldClass(dirty)}
       decimal
+      scrub={{ step: 1 }}
       value={text}
       onValueChange={(raw) => {
         setText(raw);

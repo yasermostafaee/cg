@@ -1,5 +1,6 @@
 import type { InputHTMLAttributes } from 'react';
 import { latinDigits } from '@cg/text-shaping';
+import { arrowStep, runScrubGesture } from './scrubGesture.js';
 
 /**
  * R-020 — Persian/Arabic-Indic digit input for the Runtime's numeric fields.
@@ -39,20 +40,71 @@ interface NumericInputProps extends Omit<
   onValueChange: (next: string) => void;
   /** Accept a decimal value: ٫ also normalizes to "." and the OSK offers one. */
   decimal?: boolean;
+  /**
+   * Opt IN to horizontal drag-to-adjust + arrow-key stepping — the Designer's
+   * feel, which the owner asked for on the Runtime's numeric and position fields.
+   *
+   * Opt-in rather than always-on because this primitive also serves fields that are
+   * NOT a continuous quantity — the lock PIN is the clear case: dragging or
+   * arrowing a PIN is meaningless, and grabbing digits by accident on a security
+   * control is worse than meaningless. A caller says when the value is a magnitude.
+   */
+  scrub?: { step?: number | undefined; min?: number | undefined; max?: number | undefined };
 }
 
 export function NumericInput({
   value,
   onValueChange,
   decimal = false,
+  scrub,
   ...rest
 }: NumericInputProps): JSX.Element {
+  // The gestures operate on a NUMBER while the input is controlled by a STRING (so
+  // "-", "1." and "" survive typing). A value that is not yet a number simply has
+  // no magnitude to adjust, so both gestures no-op rather than guessing at 0.
+  const numeric = scrub === undefined ? null : Number(value);
+  const current =
+    numeric !== null && value.trim() !== '' && Number.isFinite(numeric) ? numeric : null;
+  const emit = (next: number): void => onValueChange(String(next));
+
   return (
     <input
       {...rest}
       type="text"
       inputMode={decimal ? 'decimal' : 'numeric'}
       value={value}
+      // `ew-resize` is the affordance: it says "drag me sideways" before the
+      // operator tries. Only when scrubbing is actually enabled.
+      style={scrub !== undefined ? { cursor: 'ew-resize', ...rest.style } : rest.style}
+      onPointerDown={(e) => {
+        rest.onPointerDown?.(e);
+        if (scrub === undefined || current === null || e.button !== 0) return;
+        const el = e.currentTarget;
+        // Already editing? Let the click place the caret normally — a scrub would
+        // hijack an ordinary text interaction.
+        if (document.activeElement === el) return;
+        e.preventDefault(); // suppress the focus-on-mousedown so a drag is a drag
+        runScrubGesture({
+          startX: e.clientX,
+          value: current,
+          ...scrub,
+          onCommit: emit,
+          // A press that never travelled was a CLICK: focus for typing, which is
+          // what `preventDefault` above would otherwise have swallowed.
+          onEnd: (moved) => {
+            if (!moved) el.focus();
+          },
+        });
+      }}
+      onKeyDown={(e) => {
+        rest.onKeyDown?.(e);
+        if (scrub === undefined || current === null || e.defaultPrevented) return;
+        const next = arrowStep(e, { value: current, ...scrub });
+        if (next === null) return;
+        // Stop the caret from also jumping to the start/end of the text.
+        e.preventDefault();
+        emit(next);
+      }}
       onChange={(e) => {
         const el = e.currentTarget;
         const raw = el.value;

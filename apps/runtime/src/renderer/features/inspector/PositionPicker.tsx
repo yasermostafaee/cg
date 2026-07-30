@@ -111,11 +111,17 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
         ))}
       </div>
       <div style={styles.offsets}>
+        {/* `scrub` — the offsets are PIXEL magnitudes, which is exactly the value
+            kind a horizontal drag suits: the operator nudges a graphic and watches
+            the number move, rather than selecting text and retyping. Arrow keys give
+            the same adjustment a keyboard, and Shift/Ctrl give fine and coarse steps.
+            Matches the Designer's transform fields (owner request). */}
         <span style={styles.offsetLabel}>dx</span>
         <NumericInput
           className="cg-field"
           style={styles.offsetInput}
           decimal
+          scrub={{ step: 1 }}
           value={dx}
           disabled={locked}
           onValueChange={setDx}
@@ -126,6 +132,7 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
           className="cg-field"
           style={styles.offsetInput}
           decimal
+          scrub={{ step: 1 }}
           value={dy}
           disabled={locked}
           onValueChange={setDy}
