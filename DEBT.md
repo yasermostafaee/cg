@@ -462,6 +462,85 @@ name says. Pre-existing.
 
 ---
 
+### PATTERN (twice now): an observer effect that silently no-ops when its target is absent
+
+**Not an instance — a shape.** Recording it as a pattern because this is the second
+occurrence, both invisible in code review and obvious on screen, and both found by
+LOOKING rather than by a test.
+
+1. **PVW's white page** (`RehearsalStage`) — the `ResizeObserver` effect was keyed on
+   `[raster.width, raster.height]`, but the fit box is only rendered once `html` has
+   arrived. On the first pass `fitRef.current` was `null`, the effect returned early,
+   and **no observer was ever attached**. `fit` stayed at its initial `1`, so the
+   rehearsal rendered unscaled and filled the panel.
+2. **The b2 density bug** — an observer effect keyed on `[ref]` never re-ran because
+   `bank` was `null` on the first render.
+
+Both are the same shape: _the effect's target does not exist on the pass where the
+effect runs, and the early return is silent._ Both were also self-concealing — any
+unrelated remount fixed them, so the broken state is the one nobody reaches by
+touching anything. In PVW's case `PreviewPanel` keys the stage on the draft version,
+so typing a single character into any Inspector field repaired it.
+
+**The rule:** an effect that attaches an observer must not silently no-op when its
+target is absent. It either takes the thing that gates the target's existence into
+its DEPS (what the PVW fix did — added `html`), or it REPORTS that it did not attach.
+
+**Worth a shared hook or a lint rule when normal mode resumes** — two occurrences is
+enough. A `useObservedSize(ref)`-style hook that owns the attach/detach and cannot be
+keyed wrongly would make the class unrepresentable rather than merely known.
+
+---
+
+### OPEN BUG (not fixed, diagnosed): a panel fullscreen round-trip DESTROYS unapplied drafts
+
+**Reported by the owner:** with unsaved Inspector edits staged, maximising the
+Inspector — or maximising then restoring PGM/PVW — loses the draft.
+
+**Mechanism, and it is one mechanism for both paths.** `pruneDrafts(ids)` is called
+from an effect in `LayersPanel` (`LayersPanel.tsx:117`) whose job is to drop drafts
+for items no longer on the stack. But `LayersPanel` is UNMOUNTED by both transitions:
+`App.tsx` renders it under `{!monitorFocused && …}`, and the whole workspace under
+`showWorkspace = layout.focus !== 'inspector'`. On REMOUNT the effect runs against
+`useStack()`'s initial snapshot — which is empty until the bridge's first push
+arrives — so `pruneDrafts(∅)` treats every item as "no longer on the stack" and
+deletes every draft. `pruneFromFile(ids)` runs in the same pass and loses file
+attachments the same way.
+
+**Why the existing E2E did not catch it:** `stage-inspector-edits.spec.ts` asserts a
+draft survives _switching selection away and back_, which never unmounts the panel.
+The lossy path is a FULLSCREEN round-trip, which no spec exercises.
+
+**Fixing it well is not a one-liner, which is why it is recorded rather than rushed.**
+The prune is correct in intent and wrong in placement: it is stack-lifecycle
+housekeeping living inside a component with an unrelated mount lifetime. Candidates —
+(a) move the prune to where the stack snapshot itself is owned, so it runs once per
+real snapshot rather than once per mount of a view; (b) make it a no-op until the
+first non-initial snapshot has been seen, so an empty bootstrap can never prune. (a)
+is the honest fix; (b) alone would leave the same landmine for the next consumer.
+
+**Severity: operator data loss.** The drafts are typed-but-unapplied field values —
+exactly the work the Inspector's whole staging model exists to protect.
+
+---
+
+### UPGRADE (deliberately deferred): mute-before-ADD, so LOAD can run during rehearse
+
+Rehearse now refuses LOAD on a rehearsing row (fail closed) because LOAD on a cleared
+row is the one path that can put an UNMUTED producer under a row the UI shows as
+rehearsing. The better feature is to mute as part of the load instead of refusing.
+
+**The ordering constraint, written down because it is the whole difficulty:** on
+2.5.0 the volume must land **BEFORE** the `CG ADD`, not after. A bare `CG ADD` puts
+the template's audio on air (R-029), so an ADD-then-mute sequence is briefly audible
+on air — the exact leak the mute exists to prevent, just shorter.
+
+Not taken now because it puts a new ordering-sensitive path into the mute logic,
+which is the one path in this feature whose failure mode (a graphic that reaches air
+silent) nobody notices until someone asks why there is no sound.
+
+---
+
 ## Skipped process
 
 Per the fast-mode contract, all of this was deliberately not done.
