@@ -54,6 +54,51 @@ Two constraints for whoever does it: **a 1080 channel must render byte-identical
 (scale 1.0, nothing shifts), and the **operator placement override** (R-011, bridge-appended)
 is what persists — never the authored scene position, which belongs to the Designer.
 
+### FLAKY — the Designer's seek-fragile VP8+alpha canvas test
+
+`apps/designer/tests/e2e/video-canvas-render.spec.ts:146` failed one `gate:e2e` run with
+`PipelineStatus::PIPELINE_ERROR_DECODE`, and passed on immediate re-run and in the two
+gate runs before it (log lines 3530 and 7041 vs 10600 in
+`.gate-logs/8372aa2a-…log`).
+
+**Not a regression, and not touched.** The failing diff was entirely Runtime-app CSS/TSX
+plus a Runtime E2E spec; the Designer imports none of it (`apps/runtime/src/renderer/ui`
+has no consumers in `apps/designer/src`), and the Runtime suite was 32/32 green in the
+same run. The test's own name calls the clip "seek-fragile" and "the canvas-blank class",
+so a Chrome media-pipeline decode failure is the flake mode that fixture exists to probe.
+
+Worth filing as a flake to quarantine or stabilise rather than as a bug — an intermittent
+red in a shared gate trains people to re-run rather than to read, which is how a real
+failure gets waved through.
+
+### Owner UI review batch (post-b4) — six items, all shipped
+
+Recorded together because they came from one review pass and share one lesson. Items:
+numeric/position inputs scrub + arrow-key step; sticky Update/Discard; the divider that
+looked like a scrollbar; toggle-select on rows; tighter panel gutters; Inspector
+open/close + mobile overlay height and fullscreen.
+
+**Two findings from the batch worth carrying:**
+
+1. **The Inspector's openness was TWO states for one fact.** `inspectorOverlayOpen`
+   alongside `selectedId` meant dismissing the mobile overlay left the row selected —
+   the console claiming an edit target with no editor. Now DERIVED
+   (`inspectorOpen = selected !== null`), so the disagreement is unrepresentable rather
+   than merely fixed. Any future "just add a flag to keep it open" reintroduces the bug.
+2. **A flex child does not stretch on the MAIN axis.** The narrow overlay was pinned
+   top-to-bottom, so it looked correct, while the panel inside sized to its content —
+   800px in a 900px viewport. Only a MEASURING test caught it, which is the same lesson
+   as the stretched buttons below: none of the existing specs looked at a box.
+
+**`Panel.onClose` drops the shell focus before closing**, in the primitive rather than in
+each caller — a panel that is closed while still holding focus leaves the workspace hidden
+behind nothing. Structural, so a future closable panel cannot forget it.
+
+Still open from this batch: `Reload`/`Grant access` remain accent-coloured (below), and
+there is no E2E on the scrub DRAG itself — only on `arrowStep`, the pure half. The drag
+lives in window pointer listeners; a Playwright `mouse.move` sequence would cover it and
+is worth adding.
+
 ### b4 follow-up — `--verb`'s column geometry stretched the Inspector's icon buttons (fixed)
 
 Owner report: the ↑/↓/× buttons were "خیلی کشیده" — badly stretched. Measured at **286px
