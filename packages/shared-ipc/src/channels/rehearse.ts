@@ -21,8 +21,34 @@ import { definePublishChannel } from '../publish.js';
  * exactly like the template catalogue and the channel raster.
  *
  * THE GUARD IS BRIDGE-SIDE, NOT A HIDDEN BUTTON. Rehearse is refused for a row
- * that is on air or not loaded, and the refusal lives where no UI state can
- * bypass it — the doctrine this whole surface follows.
+ * that is on air, and the refusal lives where no UI state can bypass it — the
+ * doctrine this whole surface follows.
+ *
+ * WHAT REHEARSE NEEDS, AND WHAT IT DOES NOT. The render is the retained
+ * self-contained page in a same-origin iframe sized to the channel raster, with
+ * the operator's typed values. That needs three things — a BOUND TEMPLATE, the
+ * VALUES and the RASTER — and all three are bridge-owned. None of them is the
+ * CasparCG layer. So the entry precondition is that the row has a template
+ * bound, and nothing more.
+ *
+ * It used to also require a RESIDENT PRODUCER (`not-loaded`), which made a
+ * preview feature refuse to preview because of the state of a resource it does
+ * not use: a row that had been CLEARed could not be rehearsed while the same row
+ * after STOP could, and the operator experiences both as "close it". That
+ * precondition was protecting nothing and has been removed.
+ *
+ * THE MUTE IS A CONSEQUENCE, NOT A PREREQUISITE. On 2.5.0 a bare `CG ADD` puts
+ * the template's audio on air (R-029), so a producer that IS resident must be
+ * muted while the operator rehearses. That is a consequence of rehearsing a
+ * LOADED row — it was never a reason to refuse rehearsing an empty one. So the
+ * bridge branches on what is actually true of the layer:
+ *
+ *   - resident producer → `MIXER VOLUME 0` before entering, fail closed on
+ *     `mute-failed`, restore on exit / on take / at bridge start. Unchanged.
+ *   - empty layer → enter with NO AMCP TRAFFIC AT ALL. Nothing is on the layer,
+ *     so there is nothing to make safe — and the exit path MIRRORS the entry
+ *     path, sending no restore for a mute that never happened (a stray
+ *     `MIXER VOLUME` on a layer we do not own is not a harmless no-op).
  *
  * NOT AN AIR CHECK. What rehearse catches is wrong values, broken layouts and
  * bad motion. Browser rendering versus CasparCG's CEF 71 is faithful, NOT
@@ -43,15 +69,13 @@ import { definePublishChannel } from '../publish.js';
  *   NOT on air; entering it on a live one would mute a graphic that is airing.
  *   Fail closed, so `unconfirmed`/`pending` count as on air: an item whose true
  *   state is unknown must not be muted on a guess.
- * - `not-loaded` — there is no resident producer to rehearse. Rehearse renders
- *   locally, but it is a claim about a REAL layer that is held ready, and making
- *   that claim about a layer with nothing on it would be a lie the second
- *   operator reads off their screen.
  * - `mute-failed` — the guard passed but the layer could not be muted. REFUSED
  *   rather than entered, and this is the important one: entering rehearse without
  *   having established the mute would leave a resident producer unmuted while the
  *   UI claims it is safely rehearsing — on 2.5.0 that is audio on air. Never
- *   claim a mode whose safety condition failed to apply.
+ *   claim a mode whose safety condition failed to apply. Reachable ONLY on the
+ *   resident-producer branch: an empty layer sends no mute, so it has no mute to
+ *   fail.
  * - `busy` — another rehearse transition for this item is still in flight. Not a
  *   politeness: the mute and the un-mute are separate AMCP round trips, so two
  *   overlapping transitions can interleave such that a LATE un-mute lands after a
@@ -60,13 +84,7 @@ import { definePublishChannel } from '../publish.js';
  *   cannot reach air, which is the worst kind of wrong this feature can be. Serialising
  *   per item makes the interleaving unrepresentable rather than unlikely.
  */
-export const REHEARSE_ENTER_REASONS = [
-  'unknown-item',
-  'on-air',
-  'not-loaded',
-  'mute-failed',
-  'busy',
-] as const;
+export const REHEARSE_ENTER_REASONS = ['unknown-item', 'on-air', 'mute-failed', 'busy'] as const;
 
 /** Exit's refusals: no such rehearsal, or a transition already in flight. */
 export const REHEARSE_EXIT_REASONS = ['unknown-item', 'busy'] as const;

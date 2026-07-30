@@ -380,15 +380,23 @@ export interface RuntimeBridge {
   rehearse: {
     state(): Promise<ChannelResponse<typeof RehearseStateChannel>>;
     /**
-     * Enter rehearse. Refused `on-air` (rehearse mutes the layer; muting a live
-     * graphic is not on offer), `not-loaded` (no resident producer to rehearse)
-     * and `mute-failed` — the last being the important one: rehearse is never
-     * CLAIMED unless the mute that makes it safe actually landed.
+     * Enter rehearse. The precondition is that the row has a template BOUND —
+     * that is the whole test, because the local render needs the template, the
+     * values and the raster, and none of those is the CasparCG layer.
+     *
+     * Refused `on-air` (rehearse mutes the layer; muting a live graphic is not on
+     * offer) and `mute-failed` — the latter being the important one: rehearse is
+     * never CLAIMED unless the mute that makes it safe actually landed. It is
+     * reachable only when a producer IS resident; over an empty layer entry sends
+     * no AMCP at all, so there is no mute to fail.
      */
     enter(
       req: ChannelRequest<typeof RehearseEnterChannel>,
     ): Promise<ChannelResponse<typeof RehearseEnterChannel>>;
-    /** Leave rehearse and restore the layer's intended volume. */
+    /**
+     * Leave rehearse, restoring the layer's intended volume ONLY if entry muted
+     * it — the exit path mirrors the entry path rather than re-deriving it.
+     */
     exit(
       req: ChannelRequest<typeof RehearseExitChannel>,
     ): Promise<ChannelResponse<typeof RehearseExitChannel>>;

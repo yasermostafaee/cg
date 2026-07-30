@@ -432,8 +432,16 @@ export class CasparRuntime {
    * survive — the mute does not survive either (startup re-asserts every declared
    * row's volume), so a persisted rehearse flag would outlive the condition it
    * describes and interlock PLAY on a layer that is no longer muted.
+   *
+   * The value carries `muted` — whether ENTRY actually sent `MIXER VOLUME 0` —
+   * because the exit path must mirror the entry path exactly. A rehearsal
+   * entered over an EMPTY layer sends no mute, and so must send no restore: a
+   * `MIXER VOLUME` on a layer we never touched is not a harmless no-op, it is a
+   * command aimed at whatever occupies that layer NOW. It is internal state and
+   * never reaches the wire — {@link rehearseState} projects the `Rehearsal`
+   * shape the contract declares.
    */
-  readonly #rehearsing = new Map<string, Rehearsal>();
+  readonly #rehearsing = new Map<string, Rehearsal & { muted: boolean }>();
   /**
    * R-022 — items whose rehearse transition (mute or un-mute) is in flight. See
    * {@link BUSY_MESSAGE} for the interleaving this prevents; it is a correctness
@@ -1519,20 +1527,34 @@ export class CasparRuntime {
   }
 
   /**
-   * R-022 — enter REHEARSE for a loaded, not-on-air item.
+   * R-022 — enter REHEARSE for a not-on-air item with a template BOUND.
    *
-   * The producer STAYS RESIDENT and the layer is muted. The alternative —
-   * CLEAR then re-ADD — is exactly the sequence that failed in the field: the
-   * adopt-CLEAR succeeded, the `CG ADD` after it returned 404, and the layer was
-   * left empty on air. Rehearse must not depend on a path with a known failure
-   * mode (and this is R-029's recorded containment option 2, not a new
-   * invention).
+   * THE PRECONDITION IS THE BINDING, AND THAT IS THE WHOLE TEST. Rehearse renders
+   * the retained page locally, from the bound template, the operator's values and
+   * the channel raster — all bridge-owned, none of them the CasparCG layer. It
+   * used to additionally require a resident producer, which made a preview refuse
+   * to preview because of a resource it does not use: a CLEARed row could not be
+   * rehearsed while the same row after STOP could, and the operator experiences
+   * both as "close it".
    *
-   * Every guard is HERE, bridge-side, so no UI state can bypass it — and the mute
-   * is part of the guard, not a follow-up: if the layer cannot be muted, rehearse
-   * is REFUSED rather than entered. Entering it anyway would leave a resident
-   * producer unmuted while every browser shows the row as safely rehearsing,
-   * which on 2.5.0 is audio on air.
+   * WHAT REMAINS IS A BRANCH ON THE LAYER, NOT A GATE ON IT:
+   *
+   *   - RESIDENT PRODUCER → mute first, exactly as before. On 2.5.0 a bare
+   *     `CG ADD` puts the template's audio on air (R-029), so the mute IS the
+   *     safety condition and is part of the guard, not a follow-up: if it does
+   *     not land, rehearse is REFUSED. Entering anyway would leave a resident
+   *     producer unmuted while every browser shows the row as safely rehearsing.
+   *     The producer STAYS RESIDENT — the alternative, CLEAR then re-ADD, is the
+   *     sequence that failed in the field (adopt-`CLEAR` succeeded, the `CG ADD`
+   *     after it 404'd, the layer was left empty on air), and this is R-029's
+   *     recorded containment option 2.
+   *   - EMPTY LAYER → enter with NO AMCP TRAFFIC AT ALL. There is nothing on the
+   *     layer, so there is nothing to make safe, and a mute aimed at an empty
+   *     layer is a command with no subject.
+   *
+   * Every guard is still HERE, bridge-side, so no UI state can bypass it. The
+   * on-air refusal is UNCHANGED and still fails closed: rehearsing a live graphic
+   * would mute air.
    */
   async enterRehearse(itemId: string): Promise<{
     ok: boolean;
@@ -1562,13 +1584,24 @@ export class CasparRuntime {
           'rehearse mutes the layer, and muting a live graphic is not something this will do.',
       };
     }
-    if (!this.#loaded.has(itemId)) {
-      return {
-        ok: false,
-        reason: 'not-loaded',
-        message:
-          'Nothing is loaded on that layer, so there is no graphic held ready to rehearse. Load it first.',
-      };
+    // THE BRANCH. Read ONCE, here, and carried into the rehearsal record — the
+    // exit path must not re-derive it. Between entry and exit the layer can
+    // change under us (a take, another operator, the playout system), and a
+    // second read would decide the restore from a DIFFERENT fact than the one
+    // that decided the mute. That is the B-100 two-reads class: the constructive
+    // step and the step that undoes it must read the same evaluation.
+    const mustMute = this.#loaded.has(itemId);
+    if (!mustMute) {
+      // Nothing resident: no mute, no traffic, nothing to fail. `#rehearseBusy`
+      // is not taken either — it serialises AMCP round trips, and there are none.
+      this.#rehearsing.set(itemId, {
+        itemId,
+        channel: slot.channel,
+        layer: slot.layer,
+        muted: false,
+      });
+      this.rehearseChanged.emit(this.rehearseState());
+      return { ok: true };
     }
     // The mute IS the safety condition. Refuse if it does not land.
     this.#rehearseBusy.add(itemId);
@@ -1587,7 +1620,12 @@ export class CasparRuntime {
             'once the graphic genuinely cannot reach air.',
         };
       }
-      this.#rehearsing.set(itemId, { itemId, channel: slot.channel, layer: slot.layer });
+      this.#rehearsing.set(itemId, {
+        itemId,
+        channel: slot.channel,
+        layer: slot.layer,
+        muted: true,
+      });
       this.rehearseChanged.emit(this.rehearseState());
       return { ok: true };
     } finally {
@@ -1621,6 +1659,12 @@ export class CasparRuntime {
     // browsers otherwise.
     this.#rehearsing.delete(itemId);
     this.rehearseChanged.emit(this.rehearseState());
+    // EXIT MIRRORS ENTRY. A rehearsal that muted nothing restores nothing: the
+    // flag is the one recorded at entry, never a fresh read of `#loaded`. A
+    // producer loaded onto this layer DURING the rehearsal is not ours to
+    // re-volume on the way out — the restore would be aimed at a graphic this
+    // rehearsal never silenced.
+    if (!rehearsal.muted) return { ok: true };
     this.#rehearseBusy.add(itemId);
     try {
       const { ok } = await this.#send(
@@ -1643,11 +1687,19 @@ export class CasparRuntime {
     }
   }
 
-  /** R-022 — every row currently rehearsing. */
+  /**
+   * R-022 — every row currently rehearsing, PROJECTED to the wire contract.
+   *
+   * The internal record also carries `muted`, which is bridge bookkeeping about
+   * a command it sent; the contract is "facts only — the renderer derives its own
+   * row state", and a browser has no use for it. Projected explicitly rather than
+   * spread, so a field added to the internal record can never leak onto the wire
+   * by default.
+   */
   rehearseState(): Rehearsal[] {
-    return [...this.#rehearsing.values()].sort(
-      (a, b) => a.channel - b.channel || a.layer - b.layer,
-    );
+    return [...this.#rehearsing.values()]
+      .sort((a, b) => a.channel - b.channel || a.layer - b.layer)
+      .map(({ itemId, channel, layer }) => ({ itemId, channel, layer }));
   }
 
   /**

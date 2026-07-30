@@ -2,7 +2,7 @@ import * as dgram from 'node:dgram';
 import { afterEach, expect, it } from 'vitest';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { isRehearsing } from '@cg/shared-ipc';
-import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { createMock, type AmcpRequest, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS } from './support/harness.js';
 
@@ -155,12 +155,106 @@ it('refuses rehearse ON AIR, and fails closed on an UNSETTLED item', async () =>
   expect(runtime!.rehearseState()).toEqual([]);
 }, 30000);
 
-it('refuses rehearse for a row with NOTHING LOADED', async () => {
+it('refuses rehearse for an item that is not on the stack at all', async () => {
   await boot();
   const refused = await runtime!.enterRehearse('ghost');
   expect(refused.ok).toBe(false);
-  // No item at all reads `unknown-item`, not `not-loaded` — different facts.
+  // NOT BOUND is the one thing that still refuses. A row with no item has no
+  // template, and the template is the only input rehearse actually needs.
   expect(refused.reason).toBe('unknown-item');
+}, 30000);
+
+/**
+ * THE DECOUPLE. Rehearse used to require a RESIDENT PRODUCER, so a CLEARed row
+ * could not be rehearsed while the same row after STOP could — two actions the
+ * operator experiences as "close it", with different capabilities afterwards.
+ *
+ * The render needs the bound template, the operator's values and the channel
+ * raster. All three are bridge-owned; none of them is the CasparCG layer. So the
+ * precondition is the BINDING, and what is left is a BRANCH on the layer.
+ *
+ * These two tests assert on the WIRE, not the UI: the point is not that the call
+ * returns ok, it is that NOTHING was sent to CasparCG. A stray `MIXER VOLUME` on
+ * a layer we do not own is aimed at whatever occupies it now.
+ */
+it('enters over an EMPTY layer — the CLEARed row — and sends NO AMCP at all', async () => {
+  await boot();
+  expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
+  // CLEAR: the producer is destroyed, the item STAYS on the stack bound to the
+  // slot. This is exactly the state the owner could not rehearse.
+  expect((await runtime!.out('item1')).accepted).toBe(true);
+  // The CLEAR destroyed the producer — the layer is observably empty, and the
+  // row is still bound. That pair IS the state under test.
+  expect(mock!.layerState(SLOT)?.producer).toBe('empty');
+
+  const mixers: string[] = [];
+  mock!.setHandler('MIXER', (req: AmcpRequest) => {
+    mixers.push(req.args.join(' '));
+    return { kind: 'ok', code: 202, verb: 'MIXER' };
+  });
+
+  expect(await runtime!.enterRehearse('item1')).toEqual({ ok: true });
+  expect(isRehearsing(runtime!.rehearseState(), 'item1')).toBe(true);
+  // THE ASSERTION THAT MATTERS: nothing on the wire. There is nothing on the
+  // layer, so there is nothing to make safe.
+  expect(mixers).toEqual([]);
+}, 30000);
+
+it('exit after an empty-layer rehearse sends NO restore — exit mirrors entry', async () => {
+  await boot();
+  expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
+  expect((await runtime!.out('item1')).accepted).toBe(true);
+  expect(await runtime!.enterRehearse('item1')).toEqual({ ok: true });
+
+  const mixers: string[] = [];
+  mock!.setHandler('MIXER', (req: AmcpRequest) => {
+    mixers.push(req.args.join(' '));
+    return { kind: 'ok', code: 202, verb: 'MIXER' };
+  });
+
+  expect(await runtime!.exitRehearse('item1')).toEqual({ ok: true });
+  // A restore for a mute that never happened would be a `MIXER VOLUME` aimed at
+  // whatever occupies that layer NOW — not a harmless no-op.
+  expect(mixers).toEqual([]);
+  expect(isRehearsing(runtime!.rehearseState(), 'item1')).toBe(false);
+}, 30000);
+
+it('REFUSES on mute-failed when the layer IS occupied — the safety condition is unchanged', async () => {
+  await boot();
+  expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
+  expect(volume()).toBe(1);
+
+  // The mute cannot land. Entering anyway would leave a resident producer
+  // UNMUTED while every browser shows the row as safely rehearsing — on 2.5.0
+  // that is audio on air.
+  mock!.setHandler('MIXER', () => ({ kind: 'err', code: 501, verb: 'MIXER' }));
+
+  const refused = await runtime!.enterRehearse('item1');
+  expect(refused.ok).toBe(false);
+  expect(refused.reason).toBe('mute-failed');
+  // The mode is never CLAIMED when its safety condition failed to apply.
+  expect(runtime!.rehearseState()).toEqual([]);
+}, 30000);
+
+it('THE INTERLOCK holds on the EMPTY-layer branch too — a take is still refused', async () => {
+  await boot();
+  expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
+  expect((await runtime!.out('item1')).accepted).toBe(true);
+  expect(await runtime!.enterRehearse('item1')).toEqual({ ok: true });
+
+  // The interlock is not a property of the mute — it is a property of the MODE.
+  // A rehearsal that sent no AMCP must interlock exactly as hard as one that did.
+  const refused = await runtime!.take('item1');
+  expect(refused.accepted).toBe(false);
+  expect(refused.errorCode).toBe('rehearsing');
+  expect(mock!.layerState(SLOT)?.onAir).not.toBe(true);
+
+  // And leaving still hands the row back: the take re-ADDs (B-039) and plays.
+  expect(await runtime!.exitRehearse('item1')).toEqual({ ok: true });
+  expect((await runtime!.take('item1')).accepted).toBe(true);
+  expect(mock!.layerState(SLOT)?.onAir).toBe(true);
+  // The take's unconditional re-assert still runs, so air is never silent.
+  expect(volume()).toBe(1);
 }, 30000);
 
 it('THE INTERLOCK: a take is refused BRIDGE-SIDE while rehearsing, and nothing is sent', async () => {

@@ -1039,23 +1039,20 @@ export class MockRuntime {
           'rehearse mutes the layer, and muting a live graphic is not something this will do.',
       };
     }
-    if (!this.#loaded.has(itemId)) {
-      return {
-        ok: false,
-        reason: 'not-loaded',
-        message:
-          'Nothing is loaded on that layer, so there is no graphic held ready to rehearse. Load it first.',
-      };
-    }
+    // Bridge parity — a RESIDENT PRODUCER is no longer required. Rehearse renders
+    // the bound template locally; the layer is not an input to that render, and
+    // requiring it made a CLEARed row un-rehearsable while a STOPped one was fine.
+    // The mock sends no AMCP at all, so the bridge's mute branch has no analogue
+    // here: what it mirrors is the PRECONDITION, which is the binding.
     const slot = this.#slotFor(itemId);
     if (slot === null) {
-      // Unreachable in practice — the mock's `load` is the fixed-slot load, so
-      // anything in `#loaded` has a binding. Handled rather than asserted because
-      // inventing a layer number would put a false coordinate on the wire, which
-      // a second browser would then read as fact.
+      // The binding IS the precondition, so its absence is a real refusal — and it
+      // is `unknown-item`, matching the bridge's own missing-slot answer. Inventing
+      // a layer number would put a false coordinate on the wire, which a second
+      // browser would then read as fact.
       return {
         ok: false,
-        reason: 'not-loaded',
+        reason: 'unknown-item',
         message: 'That item is not bound to a layer, so there is nothing to rehearse.',
       };
     }

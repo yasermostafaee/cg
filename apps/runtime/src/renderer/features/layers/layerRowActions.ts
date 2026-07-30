@@ -225,9 +225,16 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
      *
      * Enabled only for a row with an item that is NOT on air, which mirrors the
      * bridge's guard rather than restating it loosely: the bridge refuses `on-air`
-     * (rehearse mutes the layer, and muting a live graphic is not on offer) and
-     * `not-loaded`. While rehearsing, the toggle stays enabled — leaving is always
-     * available, and it is the ONLY way back to a playable row.
+     * (rehearse mutes the layer, and muting a live graphic is not on offer).
+     *
+     * It does NOT gate on the layer carrying a resident producer, and that is now
+     * the whole of the agreement rather than a gap in it: the bridge's precondition
+     * is the BINDING. This gate was already the correct one — before the decouple
+     * it left the button enabled on a CLEARed row that the bridge then refused
+     * `not-loaded`, which is the mismatch the operator actually hit.
+     *
+     * While rehearsing, the toggle stays enabled — leaving is always available,
+     * and it is the ONLY way back to a playable row.
      */
     act(
       'rehearse',
