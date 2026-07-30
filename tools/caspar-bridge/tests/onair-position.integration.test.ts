@@ -47,6 +47,25 @@ const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سل
 const SLOT = { channel: 1, layer: 10 };
 const POSITION = { anchor: 'bottom-right', offset: { x: -10, y: -20 } } as const;
 const QUERY = '?pos=bottom-right&dx=-10&dy=-20';
+/**
+ * R-030 — the CHANNEL RASTER now rides EVERY served ADD URL, whether or not the
+ * operator has set a position override.
+ *
+ * That is why the "no override" cases below assert the absence of `pos=` rather
+ * than the absence of a query string, and it is a re-expression of the R-011
+ * property, not a relaxation of it: the property being protected is "an item
+ * with no operator override carries no POSITION in its URL", and that is exactly
+ * what `not.toContain('pos=')` says. Asserting no `?` at all conflated the
+ * override with the query, and the raster has to be there independently —
+ * gating it behind an override would leave every un-nudged graphic (the
+ * majority) computing its authored position against the wrong frame on a
+ * non-1080 channel, which is the C-018 defect surviving its own fix.
+ *
+ * 1920×1080 is the default a fresh install with no persisted channel settings
+ * gets, and it is deliberately the reference raster — so this suite's ADDs are
+ * scale-1 and byte-identical in placement to pre-R-030.
+ */
+const RASTER_QUERY = 'cw=1920&ch=1080';
 
 function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
   return {
@@ -69,11 +88,15 @@ async function boot(): Promise<void> {
 it('R-011: a stored position rides the ADD URL query; no override, no query; the take re-ADD inherits it; setConfig survives', async () => {
   await boot();
 
-  // 1. No override → the CG ADD URL carries NO position query.
+  // 1. No override → the CG ADD URL carries NO POSITION, and (R-030) the
+  //    channel raster regardless.
   expect((await runtime!.load('item1', 'lower-third', { headline: 'x' })).accepted).toBe(true);
   const bare = mock!.lastCgAdd(SLOT)?.template;
-  expect(bare).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third$/);
-  expect(bare).not.toContain('?');
+  expect(bare).toMatch(
+    new RegExp(`^http://127\\.0\\.0\\.1:\\d+/template/lower-third\\?${RASTER_QUERY}$`),
+  );
+  expect(bare).not.toContain('pos=');
+  expect(bare).not.toContain('dx=');
 
   // 2. set-position on the LOADED-not-taken item → an invisible re-ADD
   //    re-serves with the query on the RESOLVED URL — and it still RESOLVES
@@ -107,11 +130,13 @@ it('R-011: a stored position rides the ADD URL query; no override, no query; the
   expect((await runtime!.take('item1')).accepted).toBe(true);
   expect(mock!.lastCgAdd(SLOT)?.template).toContain(QUERY);
 
-  // 6. A second item with no override still ADDs query-free (per-item map).
+  // 6. A second item with no override still ADDs POSITION-free — the override
+  //    map is per item, and item1's placement must not leak onto item2. The
+  //    raster is shared because it is a property of the CHANNEL, not the item.
   expect((await runtime!.load('item2', 'lower-third', {})).accepted).toBe(true);
   const second = mock!.lastCgAdd({ channel: 1, layer: 11 })?.template;
-  expect(second).toMatch(/\/template\/lower-third$/);
-  expect(second).not.toContain('?');
+  expect(second).toMatch(new RegExp(`/template/lower-third\\?${RASTER_QUERY}$`));
+  expect(second).not.toContain('pos=');
 }, 30000);
 
 it('set-position on an unknown item is refused; a removed item drops its override', async () => {
@@ -130,7 +155,11 @@ it('set-position on an unknown item is refused; a removed item drops its overrid
   expect(mock!.lastCgAdd(SLOT)?.template).toContain(QUERY);
   expect((await runtime!.remove('item1')).accepted).toBe(true);
   expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
-  expect(mock!.lastCgAdd(SLOT)?.template).not.toContain('?');
+  // The override died with the item, not with the id — so no POSITION rides the
+  // fresh load. The raster still does (R-030): it belongs to the channel and was
+  // never the removed item's to drop.
+  expect(mock!.lastCgAdd(SLOT)?.template).not.toContain('pos=');
+  expect(mock!.lastCgAdd(SLOT)?.template).toContain(RASTER_QUERY);
 }, 30000);
 
 /**

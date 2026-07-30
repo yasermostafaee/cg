@@ -49,6 +49,9 @@ import {
   DelimitersChangedChannel,
   DelimitersListChannel,
   DelimitersSetChannel,
+  ChannelSettingsChangedChannel,
+  ChannelSettingsGetChannel,
+  ChannelSettingsSetChannel,
   TemplatesChangedChannel,
   TemplatesGetChannel,
   TemplatesImportChannel,
@@ -63,6 +66,7 @@ import {
   reservedLayerNumbers,
   type AnyChannel,
   type AnyPublishChannel,
+  type ChannelSettings,
   type ConnectionConfig,
   type FixedLayerBank,
   type ReservedLayers,
@@ -388,6 +392,8 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.playoutStateChanged.subscribe((s) => push(PlayoutLayersStateChangedChannel, s)),
     // R-034 — the shared delimiter list.
     backing.delimitersChanged.subscribe((d) => push(DelimitersChangedChannel, d)),
+    // R-030 — the per-channel raster + the configured-vs-real mode reading.
+    backing.channelSettingsChanged.subscribe((s) => push(ChannelSettingsChangedChannel, s)),
   ];
 }
 
@@ -530,6 +536,12 @@ export function buildRoutes(
     // R-034 — the station's delimiter list, bridge-owned so every browser sees one list.
     route(DelimitersListChannel, () => b.delimitersList()),
     route(DelimitersSetChannel, (r: { delimiters: never[] }) => b.delimitersSet(r.delimiters)),
+
+    // R-030 — the per-channel output raster, bridge-owned for the same reasons
+    // the template catalogue is: several browsers must not disagree about where
+    // graphics land, and it has to survive a bridge restart.
+    route(ChannelSettingsGetChannel, () => b.channelSettingsState()),
+    route(ChannelSettingsSetChannel, (r: ChannelSettings) => b.setChannelSettings(r)),
 
     route(SettingsGetChannel, () => b.settingsGet()),
     route(SettingsSetChannel, (r: Partial<{ telemetry: never }>) => b.settingsSet(r)),

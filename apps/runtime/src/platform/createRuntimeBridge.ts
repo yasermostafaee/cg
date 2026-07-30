@@ -228,5 +228,13 @@ export function createMockBridge(): RuntimeBridge {
       set: (req) => Promise.resolve(mock.delimitersSet(req.delimiters)),
       onChanged: (handler) => mock.delimitersChanged.subscribe(handler),
     },
+
+    // R-030 — offline parity for the channel raster, same shape and same reason
+    // as the delimiter list above.
+    channelSettings: {
+      get: () => Promise.resolve(mock.channelSettingsState()),
+      set: (req) => Promise.resolve(mock.setChannelSettings(req)),
+      onChanged: (handler) => mock.channelSettingsChanged.subscribe(handler),
+    },
   };
 }

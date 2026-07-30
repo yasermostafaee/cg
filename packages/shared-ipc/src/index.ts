@@ -48,3 +48,6 @@ export * from './channels/settings.js';
 export * from './channels/fixedLayers.js';
 export * from './channels/playoutLayers.js';
 export * from './channels/delimiters.js';
+// R-030 — the per-channel output raster (bridge-owned) + the configured-vs-real
+// video-mode verdict.
+export * from './channels/channelSettings.js';

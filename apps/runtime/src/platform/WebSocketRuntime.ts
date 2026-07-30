@@ -41,6 +41,10 @@ import {
   DelimitersListChannel,
   DelimitersSetChannel,
   type DelimiterOption,
+  ChannelSettingsChangedChannel,
+  ChannelSettingsGetChannel,
+  ChannelSettingsSetChannel,
+  type ChannelSettingsState,
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
@@ -237,6 +241,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #settingsSubs = new Subs<Settings>();
   /** R-034 — the bridge-owned delimiter list, pushed on every change. */
   readonly #delimiterSubs = new Subs<DelimiterOption[]>();
+  /** R-030 — the bridge-owned channel raster + video-mode reading. */
+  readonly #channelSettingsSubs = new Subs<ChannelSettingsState>();
   readonly #statusSubs = new Subs<BridgeLinkStatus>();
   // R-028 (o1) — the bridge-owned catalogue push.
   readonly #templatesSubs = new Subs<TemplateInfo[]>();
@@ -536,6 +542,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#delimiterSubs.emit(p.data);
         break;
       }
+      case ChannelSettingsChangedChannel.name: {
+        const p = ChannelSettingsChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#channelSettingsSubs.emit(p.data);
+        break;
+      }
       case SettingsChangedChannel.name: {
         const p = SettingsChangedChannel.payload.safeParse(payload);
         if (p.success) this.#settingsSubs.emit(p.data);
@@ -811,6 +822,15 @@ export class WebSocketRuntime implements RuntimeBridge {
     get: () => this.#invoke(SettingsGetChannel, undefined),
     set: (req: ChannelRequest<typeof SettingsSetChannel>) => this.#invoke(SettingsSetChannel, req),
     onChanged: (handler: (next: Settings) => void) => this.#settingsSubs.add(handler),
+  };
+
+  /** R-030 — the per-channel output raster, owned and disk-persisted by the bridge. */
+  readonly channelSettings = {
+    get: () => this.#invoke(ChannelSettingsGetChannel, undefined),
+    set: (req: ChannelRequest<typeof ChannelSettingsSetChannel>) =>
+      this.#invoke(ChannelSettingsSetChannel, req),
+    onChanged: (handler: (state: ChannelSettingsState) => void) =>
+      this.#channelSettingsSubs.add(handler),
   };
 
   /** R-034 — the station's delimiter list, owned and disk-persisted by the bridge. */

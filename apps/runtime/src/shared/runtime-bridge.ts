@@ -53,6 +53,9 @@ import type {
   DelimitersListChannel,
   DelimitersSetChannel,
   DelimiterOption,
+  ChannelSettingsGetChannel,
+  ChannelSettingsSetChannel,
+  ChannelSettingsState,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChannel,
@@ -315,6 +318,33 @@ export interface RuntimeBridge {
    * delimiter must find it from any browser in the gallery, and it must still
    * be there after a bridge restart. Persisted to disk beside the templates.
    */
+  /**
+   * R-030 — the per-channel output raster, and what the SERVER reports about it.
+   *
+   * On the BRIDGE for the same two reasons `templates` and `delimiters` are:
+   * several browsers share one bridge, and two operators disagreeing about the
+   * channel's raster would mean two different beliefs about where every graphic
+   * lands; and it is install config that must survive a bridge restart.
+   *
+   * `state.observed` is read off `INFO <channel>` and is deliberately NOT merged
+   * into `state.settings` — the mismatch verdict is the whole point, and it can
+   * only exist while the claim and the fact are held apart. Read the verdict with
+   * `rasterVerdict`, never by comparing the two locally.
+   */
+  channelSettings: {
+    get(): Promise<ChannelResponse<typeof ChannelSettingsGetChannel>>;
+    /**
+     * Apply a channel's raster. Refused `on-air-block` while anything is on air
+     * or unsettled (changing the raster re-scales every graphic on the channel)
+     * and `unknown-channel` for a channel this install never declared. Both
+     * guards are bridge-side, so no UI state can bypass them.
+     */
+    set(
+      req: ChannelRequest<typeof ChannelSettingsSetChannel>,
+    ): Promise<ChannelResponse<typeof ChannelSettingsSetChannel>>;
+    onChanged(handler: (state: ChannelSettingsState) => void): Unsubscribe;
+  };
+
   delimiters: {
     list(): Promise<ChannelResponse<typeof DelimitersListChannel>>;
     /**

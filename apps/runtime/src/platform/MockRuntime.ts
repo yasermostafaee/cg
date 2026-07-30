@@ -14,8 +14,21 @@ import type {
   Settings,
   TemplateInfo,
   DelimiterOption,
+  ChannelRaster,
+  ChannelSettings,
+  ChannelSettingsState,
+  CHANNEL_SETTINGS_SET_REASONS,
 } from '@cg/shared-ipc';
-import { DelimiterOptionSchema } from '@cg/shared-ipc';
+// R-030 — `videoModeRaster` is the ONE video-mode → raster map, shared with the
+// bridge. The mock must never carry a second copy: a mock that disagreed with the
+// bridge about what `1080i5000` means would show a mismatch that does not exist
+// on air.
+import {
+  ChannelRasterSchema,
+  DelimiterOptionSchema,
+  REFERENCE_RASTER,
+  videoModeRaster,
+} from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
 import { isLoopbackHost } from '../shared/loopback.js';
 import { seedConfig, seedHealth, seedStack, seedTemplates } from './seed.js';
@@ -27,6 +40,19 @@ type FieldValues = StackItemState['fields'];
 
 const SETTINGS_KEY = 'cg-runtime:settings';
 const DELIMITERS_KEY = 'cg-runtime:delimiters';
+const CHANNEL_SETTINGS_KEY = 'cg-runtime:channel-settings';
+
+/**
+ * R-030 parity — the channel the mock declares, matching `MOCK_BANK`'s.
+ *
+ * The mock reports the SAME video mode it configures, so test mode shows the
+ * `match` verdict rather than a permanent fake alarm. A simulated mismatch would
+ * be indistinguishable from a real one on the operator's screen, and R-006's
+ * whole doctrine is that the mock must never wear a signal that means a real
+ * server said something.
+ */
+const MOCK_CHANNEL = 1;
+const MOCK_VIDEO_MODE = '1080i5000';
 
 /** R-034 parity — the same shipped list the bridge starts a station with. */
 const DEFAULT_DELIMITERS: readonly DelimiterOption[] = [
@@ -67,6 +93,8 @@ export class MockRuntime {
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
   // R-034 parity — the shared delimiter list.
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
+  // R-030 parity — the per-channel output raster + the video-mode reading.
+  readonly channelSettingsChanged = new Emitter<ChannelSettingsState>();
 
   #stack: StackItemState[] = seedStack();
   #templates = new Map<string, TemplateInfo>(seedTemplates().map((t) => [t.templateId, t]));
@@ -872,6 +900,87 @@ export class MockRuntime {
       // Persistence lost, the session's list is not.
     }
     this.delimitersChanged.emit([...delimiters]);
+    return { ok: true };
+  }
+
+  /**
+   * R-030 parity — the channel raster. The bridge persists it to DISK; the
+   * offline mock has no disk, so it uses `localStorage`, exactly as the
+   * delimiter list does.
+   *
+   * `observed` reports the mode the mock itself is configured for, so the
+   * verdict reads `match`. That is not the mock flattering itself: a simulated
+   * MISMATCH would be pixel-identical on screen to a real server contradicting
+   * config, and R-006 forbids the mock wearing a signal that means a real server
+   * said something.
+   */
+  channelSettingsState(): ChannelSettingsState {
+    return {
+      settings: [{ channel: MOCK_CHANNEL, raster: this.#mockRaster() }],
+      observed: [
+        {
+          channel: MOCK_CHANNEL,
+          mode: MOCK_VIDEO_MODE,
+          raster: videoModeRaster(MOCK_VIDEO_MODE) ?? null,
+        },
+      ],
+    };
+  }
+
+  #mockRaster(): ChannelRaster {
+    try {
+      const raw = localStorage.getItem(CHANNEL_SETTINGS_KEY);
+      if (raw !== null) {
+        const parsed = ChannelRasterSchema.safeParse(JSON.parse(raw));
+        if (parsed.success) return parsed.data;
+      }
+    } catch {
+      // Unusable storage falls through to the reference raster — the same
+      // fallback the bridge's store uses, so the two never diverge on default.
+    }
+    return { ...REFERENCE_RASTER };
+  }
+
+  /** Mirrors the bridge's refusals exactly, so the UI meets one behaviour. */
+  setChannelSettings(settings: ChannelSettings): {
+    ok: boolean;
+    reason?: (typeof CHANNEL_SETTINGS_SET_REASONS)[number];
+    message?: string;
+  } {
+    // Same gate, same wording, same predicate shape as the bridge: changing the
+    // raster re-scales every graphic on the channel.
+    const unsettled = this.#stack.filter(
+      (i) =>
+        i.pending ||
+        i.status === 'playing' ||
+        i.status === 'on-air' ||
+        i.status === 'updating' ||
+        i.status === 'exiting' ||
+        i.status === 'unconfirmed',
+    ).length;
+    if (unsettled > 0) {
+      return {
+        ok: false,
+        reason: 'on-air-block',
+        message:
+          `${String(unsettled)} item(s) are on air or unsettled — changing the channel raster ` +
+          `re-scales every graphic on the channel, so it cannot be applied while anything is live. ` +
+          `Take them off air first.`,
+      };
+    }
+    if (settings.channel !== MOCK_CHANNEL) {
+      return {
+        ok: false,
+        reason: 'unknown-channel',
+        message: `Channel ${String(settings.channel)} is not declared by this install (declared: ${String(MOCK_CHANNEL)}).`,
+      };
+    }
+    try {
+      localStorage.setItem(CHANNEL_SETTINGS_KEY, JSON.stringify(settings.raster));
+    } catch {
+      // Persistence lost, the session's raster is not.
+    }
+    this.channelSettingsChanged.emit(this.channelSettingsState());
     return { ok: true };
   }
 

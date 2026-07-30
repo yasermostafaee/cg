@@ -76,9 +76,15 @@ it('serves the template URL, CG ADDs it with real Persian fields, and CG UPDATE 
   expect(mock.layerState(slot)?.producer).toBe('html');
 
   const add = mock.lastCgAdd(slot);
-  // The CG ADD template arg is the served /template/<id> URL the mock could fetch.
-  expect(add?.template).toBe(runtime.templateServeUrl('lower-third'));
-  expect(add?.template).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third$/);
+  // The CG ADD template arg is the served /template/<id> URL the mock could
+  // fetch, plus (R-030) the channel-geometry query the page needs to place
+  // itself. `templateServeUrl` stays the BASE url — it is the address of the
+  // resource, and the geometry is a per-ADD argument, not part of where the
+  // template lives.
+  expect(add?.template).toBe(`${String(runtime.templateServeUrl('lower-third'))}?cw=1920&ch=1080`);
+  expect(add?.template).toMatch(
+    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third\?cw=1920&ch=1080$/,
+  );
   // …and the data arg is the REAL field JSON (Persian intact), never "{}".
   expect(add?.data).not.toBe('{}');
   expect(JSON.parse(add?.data ?? '{}')).toEqual(fields);

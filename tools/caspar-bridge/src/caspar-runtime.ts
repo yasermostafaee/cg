@@ -21,6 +21,11 @@ import type {
 } from '@cg/shared-schema';
 import {
   isLayerVisible,
+  // R-030 — the video-mode token map lives in shared-ipc, not caspar-client, so
+  // the browser's MockRuntime can read the SAME map without dragging `node:net`
+  // into the SPA bundle (see channelSettings.ts for the full reasoning).
+  parseVideoModeFromInfo,
+  videoModeRaster,
   type PLAYOUT_CLEAR_REASONS,
   type PlayoutLayerState,
   type DelimiterOption,
@@ -36,7 +41,11 @@ import {
   type PendingUpdate,
   type Settings,
   type TemplateInfo,
+  type ChannelSettings,
+  type ChannelSettingsState,
+  type CHANNEL_SETTINGS_SET_REASONS,
 } from '@cg/shared-ipc';
+import { ChannelSettingsStore } from './channel-settings-store.js';
 import {
   validateFixedBank,
   validateFixedBankChange,
@@ -61,6 +70,9 @@ type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
 
 /** R-028 part B — a refused deliberate playout clear. */
 type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
+
+/** R-030 — a refused channel-settings change. */
+type ChannelSettingsSetReason = (typeof CHANNEL_SETTINGS_SET_REASONS)[number];
 
 /**
  * R-010 — where the OSC UDP ingest binds, derived from the declared server's
@@ -185,6 +197,13 @@ export class CasparRuntime {
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
   /** R-034 — emitted with the full delimiter list whenever a browser changes it. */
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
+  /**
+   * R-030 — emitted when a browser changes the channel raster AND when a fresh
+   * `INFO <channel>` reading lands. Both, because the mismatch verdict is a
+   * function of the two together: a new reading can turn a settled `match` into
+   * a `mismatch` without anybody touching config.
+   */
+  readonly channelSettingsChanged = new Emitter<ChannelSettingsState>();
 
   // R-010 — mutable: `setConfig` swaps the whole connection layer at runtime.
   #config: ConnectionConfig;
@@ -315,6 +334,27 @@ export class CasparRuntime {
   readonly #templates: TemplateRegistry;
   /** R-034 — the station's delimiter list, persisted beside the templates. */
   readonly #delimiters: DelimiterStore;
+  /** R-030 — the per-channel output raster + what `INFO` reports, persisted. */
+  readonly #channelSettings: ChannelSettingsStore;
+  /**
+   * R-030 — which server label produced the video-mode reading we hold for each
+   * channel.
+   *
+   * Keyed by server, not merely "have we read it once", because A and B are
+   * DIFFERENT MACHINES and can be configured with different video modes. A
+   * reading taken from A says nothing about the channel now that B is primary,
+   * so failover must re-read rather than keep quoting the old server's answer.
+   * This is the same "probe the axis you intend to judge" rule the CLAUDE.md
+   * golden rules state for liveness, applied to geometry.
+   */
+  readonly #modeReadFrom = new Map<number, ServerLabel>();
+  /**
+   * R-030 — channels whose raster mismatch has already been shouted, so a
+   * settled fault is announced on its TRANSITION and not on every publish.
+   * Without this, a mismatch that nobody has fixed yet would repeat on each
+   * reading and bury the next distinct problem in its own noise.
+   */
+  readonly #mismatchWarned = new Map<number, boolean>();
   /**
    * R-028 part B — ids this bridge REMOVED, so a reconnecting browser's
    * re-delivery cannot bring them back. Process-lifetime only, deliberately: a
@@ -419,6 +459,14 @@ export class CasparRuntime {
     // never hands a browser the defaults over the operator's own list.
     this.#delimiters = new DelimiterStore(options.templatesDir);
     this.#delimiters.hydrate();
+    // R-030 — same shape, same reason: the channel raster is read from disk
+    // before the WebSocket can answer a `channelSettings.get`, and before the
+    // first `CG ADD` can append a geometry query. Hydrating late would mean the
+    // first load of a session placed its graphic against a default raster and
+    // every later one against the configured raster — the kind of difference
+    // nobody would think to look for.
+    this.#channelSettings = new ChannelSettingsStore(options.templatesDir);
+    this.#channelSettings.hydrate(this.#declaredChannels());
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
@@ -1732,6 +1780,29 @@ export class CasparRuntime {
     this.#publishPlayoutStateIfChanged();
 
     const session = this.#adapter.primarySession;
+
+    // R-030 — piggyback the video-mode read on this tick rather than arming a
+    // second timer, and gate it so it is NOT one AMCP query every 5 s: a channel
+    // whose mode has already been read FROM THE CURRENT PRIMARY is not re-read.
+    // Failover re-arms it, because A and B are different machines that can carry
+    // different video modes — a reading from A is not evidence about B.
+    //
+    // DELIBERATELY BEFORE THE `healthy` GUARD BELOW, and gated on `isLiveState`
+    // instead. The video mode is an AMCP-AXIS question — it is answered by
+    // sending `INFO` and reading the reply — so OSC silence must not decide
+    // whether it can be asked (CLAUDE.md golden rules 6 and 8: probe the axis
+    // you intend to judge, and reuse the ONE canonical predicate). `degraded` is
+    // AMCP-up / OSC-silent and therefore REACHABLE. Sitting under the `healthy`
+    // guard, as the first cut of this did, meant every OSC-less install read no
+    // mode at all, reported `unreadable` forever, and so silently lost the
+    // mismatch check — on exactly the installs the C-018 recon was about.
+    if (isLiveState(session.state)) {
+      for (const channel of this.#declaredChannels()) {
+        if (this.#modeReadFrom.get(channel) === this.#adapter.currentPrimary) continue;
+        void this.#readChannelMode(channel);
+      }
+    }
+
     if (session.state !== 'healthy') return;
 
     // B-094 — re-publish health when the OSC-heard bit flips, so the operator's
@@ -2571,6 +2642,138 @@ export class CasparRuntime {
     return { ok: true };
   }
 
+  /**
+   * R-030 — the channels this install DECLARES.
+   *
+   * The fixed bank is the only channel authority the install has (the SPA's
+   * `ChannelScope` reads the same fact), and channel 1 is the documented default
+   * when no bank is declared — `FixedLayerBankSchema`'s own default, not a second
+   * guess invented here. When the channel list eventually arrives from an API,
+   * THIS is the one function that changes.
+   */
+  #declaredChannels(): number[] {
+    return [this.#fixedBank?.channel ?? DEFAULT_CHANNEL];
+  }
+
+  /** R-030 — the configured raster(s) plus what `INFO <channel>` reported. */
+  channelSettingsState(): ChannelSettingsState {
+    return this.#channelSettings.state();
+  }
+
+  /**
+   * R-030 — apply a channel's settings.
+   *
+   * The ON-AIR gate is HERE rather than in the store, because it needs the
+   * reconciler's view of what is live and the store has no business holding
+   * one. It reuses `#onAirCount` — the SAME predicate R-010's `setConfig` uses,
+   * never a second local copy of "what counts as on air" — and it is not
+   * politeness: changing the raster re-scales EVERY graphic on the channel, so
+   * applying it under a live graphic would move what is on air, mid-shot. Fail
+   * closed, so `unconfirmed`/`pending` count as on air.
+   */
+  setChannelSettings(settings: ChannelSettings): {
+    ok: boolean;
+    reason?: ChannelSettingsSetReason;
+    message?: string;
+  } {
+    const unsettled = this.#onAirCount();
+    if (unsettled > 0) {
+      return {
+        ok: false,
+        reason: 'on-air-block',
+        message:
+          `${String(unsettled)} item(s) are on air or unsettled — changing the channel raster ` +
+          `re-scales every graphic on the channel, so it cannot be applied while anything is live. ` +
+          `Take them off air first.`,
+      };
+    }
+    const refusal = this.#channelSettings.set(settings);
+    if (refusal !== null) return { ok: false, reason: refusal.reason, message: refusal.message };
+    this.#announceChannelSettings(settings.channel);
+    return { ok: true };
+  }
+
+  /**
+   * R-030 — publish the channel-settings state, and shout on stderr when a
+   * channel's raster BECOMES a mismatch.
+   *
+   * This is one function called from BOTH sides on purpose. The verdict is a
+   * function of config AND the server's reading, so either can create a
+   * mismatch: a new `INFO` reading can contradict settled config, and a config
+   * change can contradict a settled reading. Warning from only the reading path
+   * — which is what the first cut of this did — meant an operator who typed the
+   * wrong raster got silence, which is precisely the case they most need told
+   * about, because they have just formed a false belief about where graphics land.
+   *
+   * The warning fires on the TRANSITION, not on every publish: a mismatch that
+   * has already been announced is not re-announced until it clears, so a settled
+   * fault cannot bury the next one in repeats.
+   */
+  #announceChannelSettings(channel: number): void {
+    const warning = this.#channelSettings.mismatchWarning(channel);
+    if (warning !== null) {
+      if (this.#mismatchWarned.get(channel) !== true) {
+        this.#mismatchWarned.set(channel, true);
+        process.stderr.write(warning);
+      }
+    } else {
+      this.#mismatchWarned.set(channel, false);
+    }
+    this.channelSettingsChanged.emit(this.#channelSettings.state());
+  }
+
+  /**
+   * R-030 — read the channel's REAL video mode off the server and compare it
+   * with what config claims.
+   *
+   * The configured raster is a CLAIM; `INFO <channel>` is the fact. When they
+   * disagree every graphic on the channel is mis-placed, and silently, because
+   * nothing else in the system would notice — so the disagreement is shouted on
+   * stderr and pushed to every browser rather than logged at debug.
+   *
+   * Sends through the adapter directly, NOT through `#send`: that path settles a
+   * reconciler intent by `seq`, and this query has no intent to settle. It rides
+   * `low` priority so a diagnostic read can never delay an operator's take (the
+   * `CommandQueue` header's own classification of non-heartbeat `INFO`).
+   *
+   * Failure is SILENT here on purpose — a timeout or a 404 leaves `observed`
+   * absent, which `rasterVerdict` reports as `unreadable`, i.e. "the check could
+   * not be performed". Writing a scary line for an unreachable server would
+   * duplicate what connection health already says, and inventing an entry would
+   * turn a missing measurement into evidence.
+   */
+  async #readChannelMode(channel: number): Promise<void> {
+    try {
+      // `target: 'primary'` — the geometry that matters is the channel currently
+      // ON AIR, and under a mirror strategy the default `'both'` fans out and can
+      // return the BACKUP's reply as the winner. That would attribute B's video
+      // mode to the live channel, which is the wrong machine's answer to the
+      // question actually being asked.
+      const result = await this.#adapter.send(`INFO ${String(channel)}`, {
+        priority: 'low',
+        target: 'primary',
+      });
+      const response = result.response;
+      if (response.kind !== 'ok-multi') return;
+      const mode = parseVideoModeFromInfo(response.lines.join('\n'));
+      if (mode === null) return;
+      // Attributed to the server that actually ANSWERED, never to whoever was
+      // primary when the send started: a failover mid-flight would otherwise
+      // record the reading under the wrong label and suppress the re-read that
+      // the new primary needs.
+      this.#modeReadFrom.set(channel, result.winner);
+      const changed = this.#channelSettings.observe({
+        channel,
+        mode,
+        raster: videoModeRaster(mode) ?? null,
+      });
+      if (!changed) return;
+      this.#announceChannelSettings(channel);
+    } catch {
+      // See above: an unreadable mode stays absent, never guessed.
+    }
+  }
+
   settingsGet(): Settings {
     return this.#settings;
   }
@@ -2891,11 +3094,31 @@ export class CasparRuntime {
     // is NEVER given a query). Both load's ADD and take's B-039 re-ADD flow
     // through here, so both inherit the override. The position never touches
     // the data payload — the AMCP escape rule is unaffected.
-    const position = this.#positions.get(itemId);
-    if (position !== undefined && this.#templateServer.listening) {
-      templateArg +=
-        `?pos=${position.anchor}` +
-        `&dx=${String(position.offset.x)}&dy=${String(position.offset.y)}`;
+    //
+    // R-030 — the CHANNEL RASTER rides the same query, and note that it is
+    // appended INDEPENDENTLY of whether a position override exists. That
+    // independence is the whole point: a graphic with no operator override still
+    // has an authored position, and on a non-1080 channel that authored position
+    // is computed against the wrong frame unless the page is told the real
+    // geometry. Gating the raster behind `position !== undefined` would have
+    // left exactly the untouched-by-the-operator graphics — the majority —
+    // mis-placed, which is the C-018 defect surviving its own fix.
+    if (this.#templateServer.listening) {
+      const params: string[] = [];
+      const position = this.#positions.get(itemId);
+      if (position !== undefined) {
+        params.push(
+          `pos=${position.anchor}`,
+          `dx=${String(position.offset.x)}`,
+          `dy=${String(position.offset.y)}`,
+        );
+      }
+      // The raster is ALWAYS present (`rasterFor` falls back to the reference
+      // frame), so the query is never empty and needs no emptiness guard — the
+      // position half is the only optional part.
+      const raster = this.#channelSettings.rasterFor(slot.channel);
+      params.push(`cw=${String(raster.width)}`, `ch=${String(raster.height)}`);
+      templateArg += `?${params.join('&')}`;
     }
     const { ok } = await this.#send(this.#builder.load(slot, templateArg, fields), seq, 'normal');
     if (ok) this.#loaded.add(itemId);

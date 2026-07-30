@@ -3,6 +3,7 @@ import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
 import { ConnectionBanner } from './features/status/ConnectionBanner.js';
+import { RasterMismatchBanner } from './features/status/RasterMismatchBanner.js';
 import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
 import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
@@ -172,6 +173,12 @@ export function App(): JSX.Element {
           implication that a real server is out there, broken. The TEST MODE banner is the
           truth in that mode and supersedes it. */}
         {link !== 'offline-mock' && <FailoverBanner health={health} />}
+        {/* R-030 — a configured raster that contradicts the channel's real video mode
+          mis-places EVERY graphic on that channel, and does it silently: nothing else
+          in the app would notice, and it only looks wrong on air where nobody here can
+          see it. Renders nothing unless the two genuinely disagree — an UNREADABLE mode
+          is a gap in the check, not an alarm (see RasterMismatchBanner). */}
+        <RasterMismatchBanner />
         {/*
         R-028 part B — a RESIZABLE shell. The Inspector is a real column whose
         width the operator owns (dragged or nudged, clamped so neither side can
