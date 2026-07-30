@@ -1944,6 +1944,35 @@ export class CasparRuntime {
     reason?: 'not-in-bank' | 'reserved' | 'amcp-error';
     message?: string;
   }> {
+    // GUARD 0 — THE COORDINATE IS TWO INTEGERS, checked here rather than trusted.
+    //
+    // This is not defensive noise; it closes a real bypass in the guard below. Both
+    // subsequent checks mis-answer on a non-number, and they mis-answer in OPPOSITE
+    // directions, which is the dangerous combination:
+    //
+    //   - `#reservedSet` is a `Set<number>`, so `.has('55')` is FALSE — a string layer
+    //     slips past the reservation entirely;
+    //   - `isFixed` keys on `` `${String(channel)}:${String(layer)}` `` (see `keyOf`),
+    //     so `{channel:'1', layer:'70'}` produces the SAME key as the real slot and
+    //     MATCHES.
+    //
+    // Together those would mean a string-typed coordinate is treated as in-bank while
+    // being invisible to the reservation. The WebSocket boundary does reject such a
+    // payload today (`handleMessage` hands the handler `safeParse`d data, and
+    // `z.number()` does not coerce) — but that is a guarantee in ANOTHER module, and
+    // this method already has an in-process caller that skips it: `invokeRoute` in the
+    // wire tests calls `route.handle(req)` directly. A safety guard must not depend on
+    // every present and future caller having validated first, which is the same
+    // reasoning that puts the reservation check ahead of the membership check.
+    if (!Number.isInteger(channel) || !Number.isInteger(layer)) {
+      return {
+        ok: false,
+        reason: 'not-in-bank',
+        message:
+          `${String(channel)}-${String(layer)} is not a valid layer coordinate — a bank ` +
+          `layer is two integers, so this can be neither in the bank nor cleared`,
+      };
+    }
     // GUARD 2 FIRST — see the ordering note above. Absolute, and channel-agnostic.
     if (this.#reservedSet.has(layer)) {
       return {

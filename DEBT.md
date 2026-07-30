@@ -628,7 +628,40 @@ Every refusal also asserts NOTHING reached the wire.
 
 #### What the required adversarial review found
 
-Three things, none of them a hole in the guard, all recorded rather than left implicit:
+**A second pass, run when the owner asked what the review had attacked, found a real
+bypass and FIXED it — the one finding here that changed code.**
+
+**Type coercion could make a layer invisible to the reservation while still matching bank
+membership.** The two halves mis-answer on a non-number in OPPOSITE directions, which is
+what made it dangerous rather than merely untidy:
+
+- `#reservedSet` is a `Set<number>`, so `.has('55')` is **false** — a string layer slips
+  past the reservation entirely;
+- `isFixed` keys on `` `${String(channel)}:${String(layer)}` `` (`keyOf`,
+  `layer-manager.ts:452`), so `{channel:'1', layer:'70'}` builds the SAME key as the real
+  slot and **matches**.
+
+So a string-typed coordinate would have read as in-bank while the reservation never saw it.
+Verified in isolation: `new Set([55]).has('55') === false`, and the concat yields `"1:70"`.
+
+**Why it was not exploitable over the wire, and why that was not good enough.** The
+WebSocket boundary rejects such a payload — `handleMessage` hands the handler
+`safeParse`d data and `z.number()` does not coerce (confirmed against the built schema:
+strings, floats, negatives, `null` and missing keys are all rejected). But that is a
+guarantee in ANOTHER module, and this method already has an in-process caller that skips
+it: `invokeRoute` in `fixed-layers-wire.integration.test.ts` calls `route.handle(req)`
+directly, with no parse. A safety guard must not depend on every present and future caller
+having validated first — the same reasoning that already puts the reservation check ahead
+of the membership check.
+
+**Fixed:** a GUARD 0 in `clearBankLayer` refuses unless both coordinates are
+`Number.isInteger`, ahead of both other checks so they only ever see integers. Pinned by
+two tests — one driving coerced pairs (including the reserved `['1','55']`) and asserting
+nothing reaches the wire, one pinning the schema boundary so a future `z.coerce.number()`
+"convenience" cannot silently start feeding strings through. **Confirmed load-bearing** by
+temporarily neutering the check and watching the coercion test go red, then restoring it.
+
+The other three findings, none a hole in the guard, all recorded rather than left implicit:
 
 1. **A bound-row race leaves STALE ITEM STATE (a real seam, not fixed).** The row routes on
    `item === null` at click time. If an item is loaded onto a row in the instant between

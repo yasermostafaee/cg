@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type { ConnectionConfig } from '@cg/shared-ipc';
+import { FixedLayersClearLayerChannel, type ConnectionConfig } from '@cg/shared-ipc';
 import { createBridge, type BridgeHandle } from '../src/bridge.js';
 import { HEALTH_MS } from './support/harness.js';
 
@@ -206,6 +206,60 @@ it('with NO bank declared, every layer is refused — there is no bank to be in'
   }
   const lines = await recvLines(mock, tracePath);
   expect(lines.some((l) => /^CLEAR 1-\d+/.test(l))).toBe(false);
+});
+
+it('a COERCED coordinate cannot slip past the reservation — the guard validates its own inputs', async () => {
+  const b = await boot();
+  if (mock === null || tracePath === null) throw new Error('mock not booted');
+
+  // THE ATTACK. The two halves of the guard mis-answer on a non-number in OPPOSITE
+  // directions, which is what makes this worth a test rather than a comment:
+  //
+  //   - `#reservedSet` is a `Set<number>`, so `.has('55')` is FALSE — a string layer is
+  //     invisible to the reservation;
+  //   - `isFixed` keys on `` `${String(channel)}:${String(layer)}` ``, so a string pair
+  //     produces the SAME key as the real slot and MATCHES.
+  //
+  // Uncaught, a string-typed coordinate would therefore read as in-bank while the
+  // reservation never saw it. Both are refused up front instead.
+  const coerced: [unknown, unknown][] = [
+    ['1', '55'], // reserved, as strings — the dangerous one
+    ['1', '75'], // a real bank layer, as strings
+    [1, '75'],
+    [1, 75.5],
+    [1, Number.NaN],
+    [Number.POSITIVE_INFINITY, 75],
+  ];
+  for (const [ch, layer] of coerced) {
+    const res = await b.runtime.clearBankLayer(ch as number, layer as number);
+    expect(res.ok, `${String(ch)}-${String(layer)}`).toBe(false);
+    expect(res.reason, `${String(ch)}-${String(layer)}`).toBe('not-in-bank');
+  }
+
+  // Nothing reached CasparCG for any of them — in particular no `CLEAR 1-55`.
+  const lines = await recvLines(mock, tracePath);
+  expect(lines.some((l) => l.startsWith('CLEAR 1-55'))).toBe(false);
+  expect(lines.some((l) => /^CLEAR 1-75/.test(l))).toBe(false);
+});
+
+it('the WIRE boundary also rejects a malformed coordinate, so the handler only sees integers', async () => {
+  // The guard defends itself (above), and the schema is the OUTER layer — keep both.
+  // This pins the outer one so a future `z.coerce.number()` "convenience" cannot
+  // silently start feeding strings through to a guard that would then be relying
+  // entirely on its own check.
+  const req = FixedLayersClearLayerChannel.request;
+  expect(req.safeParse({ channel: 1, layer: 70 }).success).toBe(true);
+  for (const payload of [
+    { channel: '1', layer: '70' },
+    { channel: '1', layer: '55' },
+    { channel: 1, layer: 70.5 },
+    { channel: 1, layer: -1 },
+    { channel: 0, layer: 70 },
+    { channel: 1 },
+    { channel: 1, layer: null },
+  ]) {
+    expect(req.safeParse(payload).success, JSON.stringify(payload)).toBe(false);
+  }
 });
 
 it('a bank OVERLAPPING the reservation cannot boot at all — the two sets can never intersect', async () => {
