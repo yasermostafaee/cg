@@ -101,14 +101,30 @@ test('the load gate is fail-closed: only an observably EMPTY row accepts a load'
       await expect(row.getByRole('button', { name: verb })).toBeVisible();
     }
   }
-  // …and an UNBOUND row can drive none of them: there is no item to act on. That
-  // includes CLEAR, which is otherwise always enabled — with no bound item there is
-  // nothing for `stack.out` to address, so enabling it would be a no-op that reports
-  // success, which is worse than a disabled control.
+  // …and an UNBOUND row can drive none of the ITEM-scoped verbs: there is no item to
+  // act on.
   for (const layer of [71, 72, 73]) {
-    for (const verb of ['PLAY', 'NEXT', 'STOP', 'CLEAR']) {
+    for (const verb of ['PLAY', 'NEXT', 'STOP']) {
       await expect(app.layerRow(layer).getByRole('button', { name: verb })).toBeDisabled();
     }
+  }
+
+  // CLEAR IS THE EXCEPTION, and this assertion was flipped deliberately — it is the
+  // requirement, not a relaxation.
+  //
+  // It used to be disabled here for a sound reason: `stack.out` is ITEM-scoped, so with
+  // nothing bound an enabled CLEAR would have been a no-op that REPORTED SUCCESS —
+  // worse than a disabled control, because it looks like it worked. The answer was
+  // never to enable the button; it was the missing capability, which now exists. An
+  // unbound row routes to the BANK-SCOPED layer clear, addressed to the LAYER and
+  // permitted by STRUCTURE (in the declared bank AND not reserved) rather than by
+  // observation — so it does something real, and it works precisely when occupancy
+  // reads `unknown`, which is row 73 here.
+  //
+  // That is the whole point of the owner's rule that CLEAR is always available: a
+  // graphic must be removable even when the console cannot say what is on the layer.
+  for (const layer of [71, 72, 73]) {
+    await expect(app.layerRow(layer).getByRole('button', { name: 'CLEAR' })).toBeEnabled();
   }
 });
 
