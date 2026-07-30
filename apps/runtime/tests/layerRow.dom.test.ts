@@ -215,9 +215,8 @@ describe('LayerRow — what the row says (4.2)', () => {
   it('B-087 — with the bridge down the row reads unknown, never a frozen air claim', async () => {
     rendered = await renderLayerRow({ item: itemWith('on-air'), link: 'disconnected' });
     const text = rendered.container.textContent ?? '';
-    expect(text).toContain('unknown');
-    // The claim is DEMOTED to the muted "WAS ON AIR", and the sacred red tone is
-    // withheld — that class is reserved for a graphic a live wire confirms.
+    // The claim is DEMOTED to the muted "WAS ON AIR", and the sacred air-colour tone
+    // is withheld — that role is reserved for a graphic a live wire confirms.
     expect(text).toContain('WAS ON AIR');
     // The row's state cell carries its ROLE as a data attribute (the badge pill
     // was replaced by the state column when the verbs went neutral). Asserting
@@ -226,6 +225,15 @@ describe('LayerRow — what the row says (4.2)', () => {
     // saying nothing about it.
     const state = rendered.container.querySelector('[data-row-state]');
     expect(state?.getAttribute('data-row-state')).not.toBe('onair');
+    /*
+      And the occupancy still reads UNKNOWN — the B-094 claim that silence is never
+      emptiness. It is asserted on the state cell's TOOLTIP because the Description
+      column was removed from the row: the wire's report moved into that tooltip
+      rather than being dropped, which is precisely what made removing the column
+      safe. If this attribute ever stops carrying it, the row has gone quiet about
+      what CasparCG actually said, and that is the regression to catch.
+    */
+    expect(state?.getAttribute('title')).toContain('occupancy unknown');
   });
 });
 

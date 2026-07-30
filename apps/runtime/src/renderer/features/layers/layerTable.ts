@@ -91,10 +91,18 @@ const W = {
    */
   stateFull: 132,
   stateIconOnly: 34,
-  /** The alias — the row's primary label. Flexible, with a floor. */
-  aliasMin: 96,
-  template: 176,
-  description: 200,
+  /**
+   * The alias — the row's primary label. Flexible, with a floor.
+   *
+   * NARROWED, and it no longer takes all the slack. A row name is short by nature
+   * (`Layer 3`, `CLOCK`, `BREAKING`) while the template name is the longest text on
+   * the row — Persian programme titles — so giving the alias the whole `1fr` left it
+   * with dead space beside a template name that ellipsized. The two now SHARE the
+   * slack, weighted toward the template (see `gridTemplateColumns`).
+   */
+  aliasMin: 132,
+  /** The template name's floor. Flexible above it, and the wider of the two. */
+  templateMin: 160,
 } as const;
 
 /** The verb block's total width — fixed, because it is never allowed to reflow. */
@@ -113,21 +121,27 @@ export const VERBS_GRID = {
 } as const;
 
 /**
- * How much of the row's text is shown. Ordered widest-first; the drop order is
- * the one the review specified — description, then the template name — and the
- * ALIAS and the VERBS never drop at any density.
+ * How much of the row's text is shown. Ordered widest-first; the ALIAS and the
+ * VERBS never drop at any density.
  *
- * There is no layer-number column any more. The owner took the real CasparCG
- * layer number OFF the row: it lives in the Inspector, and — the cheap mitigation
- * that made removing it safe — in the ROW's own tooltip and accessible name, so
- * it stays one hover or one focus away at every density without spending a
- * column. Same shape as the fix for the occupancy report: the glanceable layer
- * gets simpler, the fact stays reachable.
+ * TWO COLUMNS HAVE BEEN REMOVED ALTOGETHER, both by owner decision, and both are
+ * safe for the same reason — the fact moved somewhere always reachable rather than
+ * being deleted:
+ *
+ *   - the real CasparCG LAYER NUMBER lives in the Inspector and in the ROW's own
+ *     tooltip and accessible name;
+ *   - the DESCRIPTION (what the wire reports about the layer) lives in the STATE
+ *     cell's tooltip, which always ends with CasparCG's own words for it.
+ *
+ * That second one is load-bearing, so it is worth being explicit: the occupancy
+ * report is the B-094 honesty class (`unknown` must never read as `empty`), and it
+ * would NOT have been safe to hide this column before the tooltip carried it. It
+ * does now — for bound rows too, which was the gap fixed earlier — so the glanceable
+ * layer gets simpler without the fact getting lost.
  */
-export type Density = 'full' | 'mid' | 'compact' | 'tight';
+export type Density = 'full' | 'compact' | 'tight';
 
 export interface DensitySpec {
-  showDescription: boolean;
   showTemplate: boolean;
   /** The state's WORD. Its icon is never dropped — that is the signal. */
   showStateLabel: boolean;
@@ -146,59 +160,34 @@ export interface DensitySpec {
 }
 
 const SPECS: Record<Density, DensitySpec> = {
-  full: {
-    showDescription: true,
-    showTemplate: true,
-    showStateLabel: true,
-    aliasFloor: W.aliasMin,
-  },
-  mid: {
-    showDescription: false,
-    showTemplate: true,
-    showStateLabel: true,
-    aliasFloor: W.aliasMin,
-  },
-  compact: {
-    showDescription: false,
-    showTemplate: false,
-    showStateLabel: true,
-    aliasFloor: W.aliasMin,
-  },
-  tight: {
-    showDescription: false,
-    showTemplate: false,
-    showStateLabel: false,
-    aliasFloor: 0,
-  },
+  full: { showTemplate: true, showStateLabel: true, aliasFloor: W.aliasMin },
+  compact: { showTemplate: false, showStateLabel: true, aliasFloor: W.aliasMin },
+  tight: { showTemplate: false, showStateLabel: false, aliasFloor: 0 },
 };
 
 /** Widest to narrowest — the order `resolveDensity` walks. */
-const ORDER: readonly Density[] = ['full', 'mid', 'compact', 'tight'];
+const ORDER: readonly Density[] = ['full', 'compact', 'tight'];
 
 export function densitySpec(density: Density): DensitySpec {
   return SPECS[density];
 }
 
-/** The fixed (non-flexible) px a density needs, excluding the alias column. */
-function fixedWidth(density: Density): number {
-  const spec = SPECS[density];
-  const columns = [
-    W.rowNum,
-    spec.showStateLabel ? W.stateFull : W.stateIconOnly,
-    // The alias column is deliberately absent here — it is the `1fr`.
-    ...(spec.showTemplate ? [W.template] : []),
-    ...(spec.showDescription ? [W.description] : []),
-    VERBS_WIDTH_PX,
-  ];
-  // Total columns is `columns.length + 1` (the alias), so the number of GAPS
-  // between them is `columns.length`.
-  const gaps = columns.length * COL_GAP_PX;
-  return columns.reduce((a, b) => a + b, 0) + gaps + ROW_PAD_PX * 2;
-}
-
-/** The narrowest panel a density is usable in — its fixed columns plus the alias floor. */
+/**
+ * The narrowest panel a density is usable in: its rigid columns, plus the FLOORS of
+ * the flexible ones, plus the gaps and the row's padding.
+ *
+ * Both flexible columns contribute a floor — the alias and, where it is shown, the
+ * template. Counting only one was the arithmetic slip that would let `resolveDensity`
+ * pick a density whose own minimum does not fit, which is how a verb block gets
+ * clipped again.
+ */
 export function minWidthFor(density: Density): number {
-  return fixedWidth(density) + SPECS[density].aliasFloor;
+  const spec = SPECS[density];
+  const rigid = [W.rowNum, spec.showStateLabel ? W.stateFull : W.stateIconOnly, VERBS_WIDTH_PX];
+  const flexFloors = [spec.aliasFloor, ...(spec.showTemplate ? [W.templateMin] : [])];
+  const columnCount = rigid.length + flexFloors.length;
+  const total = [...rigid, ...flexFloors].reduce((a, b) => a + b, 0);
+  return total + (columnCount - 1) * COL_GAP_PX + ROW_PAD_PX * 2;
 }
 
 /**
@@ -226,14 +215,17 @@ export function gridTemplateColumns(density: Density): string {
   return [
     `${String(W.rowNum)}px`,
     `${String(spec.showStateLabel ? W.stateFull : W.stateIconOnly)}px`,
-    // The one flexible column. `minmax(floor, 1fr)` rather than a bare `1fr`:
-    // a bare `1fr` still refuses to shrink below its CONTENT's intrinsic width,
-    // which is how a long template name used to push the verb block off the
-    // panel. An explicit floor (0 at the tightest density) makes the alias the
-    // thing that gives way.
+    // The FLEXIBLE columns. `minmax(floor, Nfr)` rather than a bare `fr`: a bare
+    // `fr` still refuses to shrink below its CONTENT's intrinsic width, which is
+    // how a long template name used to push the verb block off the panel. An
+    // explicit floor (0 for the alias at the tightest density) makes the text the
+    // thing that gives way, never a control.
+    //
+    // The TEMPLATE gets 2fr against the alias's 1fr — it holds the longest text on
+    // the row (Persian programme titles) while a row name is short by nature, so an
+    // even split left one ellipsizing beside the other's dead space.
     `minmax(${String(spec.aliasFloor)}px, 1fr)`,
-    ...(spec.showTemplate ? [`${String(W.template)}px`] : []),
-    ...(spec.showDescription ? [`${String(W.description)}px`] : []),
+    ...(spec.showTemplate ? [`minmax(${String(W.templateMin)}px, 2fr)`] : []),
     `${String(VERBS_WIDTH_PX)}px`,
   ].join(' ');
 }

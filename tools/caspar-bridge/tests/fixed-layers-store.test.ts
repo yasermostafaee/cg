@@ -7,6 +7,7 @@ import { FIXED_LAYERS_SET_CONFIG_REASONS, type FixedLayerBank } from '@cg/shared
 import {
   FixedLayersConfigError,
   FixedLayersFileError,
+  MAX_FIXED_LAYER,
   loadFixedLayerBank,
   saveFixedLayerBank,
   validateFixedBank,
@@ -77,13 +78,47 @@ describe('validateFixedBank', () => {
     expect(message).toContain('72, 73');
   });
 
-  it('T10 — start+count-1 beyond 89 is refused, naming the ceiling', () => {
+  it('T10 — start+count-1 beyond the ceiling is refused, naming it', () => {
+    // The ceiling MOVED from 89 to 99 (owner decision: the candidate bank is the full
+    // 70–99). `logo-bug`'s dynamic range moved out of 90–99 to 40–49 in the same
+    // change, so the space is genuinely free rather than merely re-declared free —
+    // T10b below is what pins that pairing.
     const { code, message } = codeOf(() =>
-      validateFixedBank(bank({ start: 75, count: 16 }), { policy: POLICY, reservedLayers: [] }),
+      validateFixedBank(bank({ start: 95, count: 10 }), { policy: POLICY, reservedLayers: [] }),
     );
     expect(code).toBe('exceeds-ceiling');
-    expect(message).toContain('89');
-    expect(message).toContain('75–90');
+    expect(message).toContain(String(MAX_FIXED_LAYER));
+    expect(message).toContain('95–104');
+  });
+
+  it('T10b — the FULL 70–99 bank is accepted, and every dynamic range stays disjoint', () => {
+    /*
+      The two constants had to move together, and this is the assertion that keeps them
+      that way. Raising the ceiling alone would leave a bank the validator accepts here
+      and then refuses on `overlaps-policy`; moving `logo-bug` alone would leave the
+      ceiling blocking the range it freed. Either half on its own is a config nobody can
+      boot with — and if someone "fixed" that by weakening the overlap check instead, the
+      bank would share layers with automatic allocation, which is the cross-subsystem
+      destruction the disjointness rules exist to prevent.
+    */
+    const slots = validateFixedBank(
+      { channel: 1, start: 70, count: 30 },
+      {
+        policy: DEFAULT_LAYER_POLICY,
+        reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
+      },
+    );
+    expect(slots).toHaveLength(30);
+    expect(slots[0]).toEqual({ channel: 1, layer: 70 });
+    expect(slots[29]).toEqual({ channel: 1, layer: 99 });
+    // Stated independently of the bank, so a future range edit that collides is caught
+    // here rather than by a bridge that will not start.
+    for (const [type, [low, high]] of Object.entries(DEFAULT_LAYER_POLICY)) {
+      expect(
+        high < 70 || low > 99,
+        `'${type}' ${String(low)}–${String(high)} must not overlap 70–99`,
+      ).toBe(true);
+    }
   });
 
   it('T11 — an alias key outside the bank is refused, naming the key', () => {

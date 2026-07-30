@@ -30,8 +30,24 @@ import { EventEmitter } from 'node:events';
  */
 export type LayerPolicy = Record<string, [low: number, high: number]>;
 
+/**
+ * The DYNAMIC allocation ranges, which must stay disjoint from the fixed candidate
+ * bank — the disjointness is validated loudly at config time (`overlaps-policy`), never
+ * adjudicated at Clear or allocation time.
+ *
+ * `logo-bug` MOVED FROM 90–99 TO 40–49. The operator's candidate bank grew to 70–99 by
+ * owner decision, and 90–99 was the only dynamic range inside it: leaving it there
+ * would have meant either a bank the bridge refuses to boot with, or a `logo-bug` whose
+ * every candidate layer is fenced by the bank and so can only ever raise
+ * `OutOfLayersError`. 40–49 was the one unused decade, so this keeps dynamic allocation
+ * working for the type rather than quietly retiring it.
+ *
+ * Nothing else moved, and the reserved playout range (60–69, from install config) is
+ * enforced separately by `reservedLayers` — a layer in a dynamic range can still be
+ * fenced off by the reservation.
+ */
 export const DEFAULT_LAYER_POLICY: LayerPolicy = {
-  'logo-bug': [90, 99],
+  'logo-bug': [40, 49],
   'lower-third': [10, 19],
   ticker: [20, 29],
   'breaking-news': [30, 39],

@@ -375,7 +375,44 @@ colour is also the more durable form. `StatusBadge` itself is untouched and its 
 test still passes; the `unverified` safety wording was extracted to
 `ui/airStateWording.ts` so the badge and the row share ONE copy.
 
-### CLEAR stays DISABLED on a genuinely unbound row — a narrowing of "always"
+### CLEAR on an EMPTY row needs a layer-scoped bridge capability — NOT DONE, owner asked for it
+
+**Open, and the owner has asked for it explicitly: "the Clear buttons must enable even for
+empty layers, for unknown errors and wrong occupied layers."** It is not done, and this
+entry says exactly what closing it takes so the next session does not have to re-derive it.
+
+Why it is not a flag. The row's CLEAR calls `stack.out(itemId)`, which is ITEM-scoped —
+with no bound item there is nothing to address, so simply enabling the button produces a
+no-op that reports success. That is the one outcome worse than a disabled control, and it
+is the failure the owner's own reasoning argues against.
+
+Why the existing channels cannot serve it:
+
+- **`layers.clear`** refuses `'foreign'` unless the occupancy tap has a FRESH `html`
+  observation, and `'owned'` for layers the bridge owns. So it is refused in the two cases
+  the owner named — `unknown` occupancy (no fresh observation at all) and, depending on
+  ownership bookkeeping, a declared bank layer. It would work for a wrongly-occupied row
+  with a live html observation and nothing else.
+- **`playoutLayers.clear`** is for the RESERVED range only, html-only, by design.
+
+**What it needs**, and the shape that keeps every current guarantee:
+
+1. A bridge method that sends `CLEAR <ch>-<layer>` for a layer in the DECLARED CANDIDATE
+   BANK, without consulting occupancy or item status — that indifference is the whole
+   point, since those are what may be wrong.
+2. TWO structural guards, both config-derived so no UI state can bypass them: the layer
+   must be IN the declared bank (`fixedSlots()`), and must NOT be in the reserved set. The
+   reserved refusal stays absolute.
+3. A `fixedLayers.clearLayer` channel, its route, the mock, and the browser client.
+4. The row then routes CLEAR by binding: bound item → `stack.out` (unchanged, keeps the
+   B-039 producer bookkeeping); no item → the new layer clear.
+
+It was NOT rushed into this commit because it is a new capability on the clear path — the
+one path this surface treats as on-air — and it deserves its own diff with its own
+adversarial review, not a late addition to a UI pass. Nothing about it is verifiable on air
+from this machine either.
+
+### CLEAR is DISABLED on a genuinely unbound row today — the interim state, not the intent
 
 The owner said CLEAR is always enabled, including when "the row looks empty". Implemented
 as: enabled whenever an ITEM is bound, whatever its status claims, and disabled on a row
@@ -393,28 +430,55 @@ fenced (html-only, fresh observation, never the reserved range).
 Flagged rather than buried: if the owner wants a layer-scoped clear reachable from the row
 itself, that is a bridge capability, not a flag.
 
-### `#` and the default alias both count DOWN from the highest layer — and one edge case
+### `#` is display order, the default alias is the layer's fixed bank place — they can diverge
 
-Owner's decision, corrected mid-session from an earlier "count up from the bottom" reading.
-Position 1 is the bank's HIGHEST CasparCG layer, because the higher layer draws over the
-others and is therefore the graphic an operator means by "Layer 1". The list is displayed
-descending, so `#` reads 1, 2, 3, 4 downwards and the default alias agrees on every row.
+Owner's final resolution, after two earlier readings were superseded. They are two different
+questions and they are answered separately:
 
-**The edge case, resolved by taking the stability constraint as the stronger instruction.**
-The owner asked for `#` as "plain display order" AND for the alias to be bound to the
-layer's fixed place in the bank. Those two agree only while every row is visible: hide a
-row, and display order renumbers the rows past it while the alias does not — which
-reintroduces the exact contradiction the decision was made to remove.
+- **`#` is plain DISPLAY ORDER** — 1 at the top of the rendered list, counting down.
+- **the default alias is `Layer <bankPosition>`** — the layer's FIXED place in the bank,
+  counting down from its highest layer, so `Layer 1` is always layer 99.
 
-So BOTH read the fixed bank position. With all rows shown that is 1, 2, 3, 4 top-down
-exactly as specified; with a row hidden the sequence has a GAP rather than a lie. The
-owner's own stated reason ("`Layer 2` would mean different rows on different days") is an
-argument for stability over display-indexing, so this follows the reasoning rather than the
-narrower wording. **Worth confirming with him** — it is the one place this session chose
-between two of his sentences.
+With the shipped bank (70–99 declared, the top five ticked) they read identically, because
+the shown rows are the top five in order: `#1` is layer 99 which is `Layer 1`.
 
-There is no test yet on the gap-not-renumber property. Worth one when the numbered items
-are filed.
+**They diverge if a NON-CONTIGUOUS set is ticked.** Untick 97 and the third visible row is
+`#3` while still being `Layer 4`. That is the accepted cost of the stability constraint the
+owner set explicitly — the alias must never renumber when rows are ticked or unticked,
+because "`Layer 2` would mean different rows on different days" — and it is worth knowing
+before someone reports it as a bug. There is no test on the divergence or on the
+stability property yet; both are worth one when the numbered items are filed.
+
+### The candidate bank is now 70–99, which required MOVING a dynamic allocation range
+
+Owner decision: the bank is layers 70–99 (thirty rows) with the top five ticked. It could
+not simply be configured, because the bridge refused it **twice** — and both refusals were
+correct:
+
+- `exceeds-ceiling` — `MAX_FIXED_LAYER` was 89, since design.md (e) recorded 70–89 as the
+  free space.
+- `overlaps-policy` — `DEFAULT_LAYER_POLICY['logo-bug']` held **90–99**, and the bank must
+  be disjoint from every dynamic allocation range.
+
+So two constants moved together: the ceiling to 99, and `logo-bug` to **40–49**, the one
+unused decade. Moving the range rather than deleting it keeps dynamic allocation working
+for that template type instead of quietly retiring it.
+
+**Why they had to move together, recorded because either half alone is a trap.** Raising the
+ceiling alone yields a bank the ceiling check accepts and the overlap check then refuses —
+a config nobody can boot with. Moving `logo-bug` alone leaves the ceiling blocking the space
+it just freed. And "fixing" the first case by weakening the overlap check would let the
+bank share layers with automatic allocation, which is exactly the cross-subsystem
+destruction the disjointness rules exist to prevent. `T10b` in
+`tools/caspar-bridge/tests/fixed-layers-store.test.ts` now pins the pairing, asserting the
+full 70–99 bank validates AND that no dynamic range overlaps 70–99.
+
+**This is an on-air-adjacent change and it is NOT verified on air.** It alters where
+dynamically-allocated `logo-bug` graphics land — 40–49 instead of 90–99 — on any install
+that uses dynamic allocation. Nothing on this machine could confirm that; a hardware pass is
+owed. One test moved with it (`layer-manager.test.ts`'s pinned-slot skip pinned layer 95 and
+expected an allocation at 90; both were inside the old range and neither is inside the new
+one, so the assertion had stopped testing the skip — it now pins 40 and expects 41).
 
 ### The code landed as one commit
 

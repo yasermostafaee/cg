@@ -125,8 +125,9 @@ export async function renderLayerRow(options: {
           slot,
           item,
           template,
-          // The layer's position in its bank. A standalone row is position 1; specs
-          // that care about numbering drive the panel, not one row.
+          // A standalone row is the first row AND the bank's first position; specs
+          // that care about the difference drive the panel, not one row.
+          displayPosition: options.displayPosition ?? 1,
           bankPosition: options.bankPosition ?? 1,
           selected: false,
           dirty: options.dirty ?? false,

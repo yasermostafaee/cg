@@ -19,7 +19,6 @@ import {
   loadTemplateOntoFixedSlot,
 } from '../fixedLayers/fixedSlotLoad.js';
 import { useTemplatePicker } from '../fixedLayers/useTemplatePicker.js';
-import { occupancyLabel } from '../fixedLayers/occupancyLabel.js';
 import { layerRowActions } from './layerRowActions.js';
 import { rowState } from './rowState.js';
 import {
@@ -38,14 +37,19 @@ interface Props {
   /** The bound item's template, for the name and the `hasNext` bit. */
   template: TemplateInfo | null;
   /**
-   * The layer's 1-based position within its BANK, counting DOWN from the highest
-   * layer — the operator's stable handle on the row, and the number its default
-   * alias uses.
+   * The row's position in the RENDERED list, 1 at the top — the `#` column.
    *
-   * Comes from the canonical `bankPosition` and is deliberately NOT the row's index
-   * in the rendered list: the list can be filtered, and a handle that renumbers when
-   * a row is hidden is worse than no handle. See the header comment, and
-   * `bankPosition`'s own, for why.
+   * Plain display order, by owner decision. Deliberately NOT the layer's place in the
+   * bank: that number belongs to the default ALIAS below.
+   */
+  displayPosition: number;
+  /**
+   * The layer's 1-based place within its BANK, counting DOWN from the highest layer —
+   * what the default alias (`Layer 1`, `Layer 2`, …) is built from.
+   *
+   * Comes from the canonical `bankPosition`, so it is fixed to the layer and survives
+   * ticking, unticking and filtering. See `bankPosition`'s own comment for why a
+   * handle that renumbers is worse than none.
    */
   bankPosition: number;
   selected: boolean;
@@ -110,13 +114,20 @@ const styles = {
    * readable — it is the row's identity — just not shouting.
    */
   aliasEmpty: { color: colors.emptyRow, fontWeight: 500 },
-  /** Secondary text columns — template name, description. */
+  /**
+   * The TEMPLATE column — the widest text column, and CENTRED per the owner.
+   *
+   * Centring works here because the column is wide and holds one value per row of
+   * comparable weight; it would be the wrong call for the alias, which is scanned
+   * down the list as a list of names and needs a common left edge to do that.
+   */
   secondary: {
     fontSize: '0.85rem',
     color: colors.text,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
+    textAlign: 'center' as const,
   },
   /** The description column reads quieter than the template name beside it. */
   description: {
@@ -126,7 +137,13 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
   },
-  empty: { fontSize: '0.85rem', color: colors.emptyRow, fontStyle: 'italic' as const },
+  empty: {
+    fontSize: '0.85rem',
+    color: colors.emptyRow,
+    fontStyle: 'italic' as const,
+    // Same column as the template name, so it takes the same alignment.
+    textAlign: 'center' as const,
+  },
   /**
    * EVERY text cell on an empty row takes the empty-row grey — the whole row recedes
    * together, rather than one cell being dimmed while its neighbours stay bright.
@@ -138,26 +155,24 @@ const styles = {
  * R-028 (4.1/4.2) — ONE layer row: the whole operator surface for one declared
  * layer, as a real table row under the list's sticky header.
  *
- * WHAT IDENTIFIES A ROW — ONE number, shown twice, never two numbers.
+ * WHAT IDENTIFIES A ROW — two numbers that answer two different questions, settled
+ * separately by the owner and normally reading the same.
  *
- * The handle is the layer's position in its BANK (`bankPosition`): 1-based,
- * counting UP from the bank's first layer. It appears in the `#` column AND as the
- * default alias (`Layer 1`, `Layer 2`, …), and both read the same canonical
- * function so they cannot drift. That matters more than it sounds: two small
- * integers on one row disagreeing about which row it is turns "fire layer 2" into a
- * coin flip at 2 a.m.
+ *   - `#` is PLAIN DISPLAY ORDER: 1 at the top of the rendered list, counting down.
+ *   - the default ALIAS is `Layer <bankPosition>`, the layer's FIXED place in the bank
+ *     counting down from its highest layer — so `Layer 1` is the top layer, the one
+ *     that draws over the others and therefore the one an operator means by it.
  *
- * It counts DOWN FROM THE HIGHEST layer, so position 1 is the bank's top layer — the
- * one that draws over the others, and therefore the one an operator means by
- * "Layer 1". Because the list is displayed descending by layer (mirroring on-air
- * z-order), position 1 is also the top ROW, and the `#` column reads 1, 2, 3, 4
- * downwards.
+ * With the shipped bank (70–99 declared, the top five ticked) these read identically:
+ * `#1` is layer 99, which is `Layer 1`. They diverge only if a NON-CONTIGUOUS set is
+ * ticked — untick 97 and the third visible row is `#3` while still being `Layer 4`.
+ * That is the accepted cost of the constraint below, taken knowingly.
  *
- * It is bound to the BANK, not to the rendered list. The list can be filtered, so an
- * index-based number would renumber the moment a row was hidden — and a positional
- * handle that silently renumbers is worse than none, because the person saying
- * "layer 3" and the person reading the screen would mean different rows. A hidden row
- * therefore leaves a GAP in the sequence, which is honest.
+ * THE ALIAS NUMBER IS BOUND TO THE BANK, not to what is displayed, and that is what
+ * makes it safe to say out loud. Ticking and unticking change what is shown; neither
+ * renumbers anything. `Layer 1` is always layer 99 whether or not it is ticked. If
+ * unticking renumbered the rows past it, "Layer 2" would mean different rows on
+ * different days — a positional handle that silently renumbers is worse than none.
  *
  * THE REAL CasparCG LAYER NUMBER IS NOT A COLUMN. The owner took it off the row —
  * it lives in the Inspector, and in this row's own tooltip and accessible name
@@ -169,7 +184,7 @@ const styles = {
  *
  * WHAT THE ROW SHOWS, in the column order the header declares:
  *
- *   - the bank position;
+ *   - `#`, the display position;
  *   - the STATE, as icon + colour + word (`rowState`). This is where colour lives
  *     now that the verbs are neutral, and it is the one thing on the row allowed
  *     to shout;
@@ -195,6 +210,7 @@ export function LayerRow({
   slot,
   item,
   template,
+  displayPosition,
   bankPosition,
   selected,
   dirty,
@@ -321,7 +337,8 @@ export function LayerRow({
     oscBlind,
   });
 
-  const description = occupancyLabel(slot.observed, linkDown);
+  // The wire's occupancy report is no longer rendered as a column — `rowState` folds
+  // it into the state cell's tooltip, reading the same canonical `occupancyLabel`.
   const select = (): void => onSelect(item === null ? null : item.itemId);
 
   /**
@@ -337,7 +354,7 @@ export function LayerRow({
    * density — the same trade this surface already makes for the occupancy report
    * and, now, for the READY distinction.
    */
-  const rowTitle = `Row ${String(bankPosition)} · ${rowName} · CasparCG layer ${layerName}`;
+  const rowTitle = `Row ${String(displayPosition)} · ${rowName} · CasparCG layer ${layerName}`;
 
   return (
     <div
@@ -348,7 +365,7 @@ export function LayerRow({
       // The row's stable anchor is the LAYER NUMBER — the declared identity that
       // survives every load, unlike an itemId.
       data-layer={String(slot.layer)}
-      data-row-number={String(bankPosition)}
+      data-row-number={String(displayPosition)}
       {...(item !== null ? { 'data-item-id': item.itemId } : {})}
       {...(template !== null ? { 'data-template-id': template.templateId } : {})}
       onContextMenu={(e) => open(e, slot.layer)}
@@ -392,7 +409,7 @@ export function LayerRow({
       <span
         style={item === null ? { ...styles.rowNumber, ...styles.onEmptyRow } : styles.rowNumber}
       >
-        {bankPosition}
+        {displayPosition}
       </span>
       {/*
         THE STATE — icon + colour + word, the row's one loud signal now that the
@@ -446,16 +463,10 @@ export function LayerRow({
         ) : (
           <span style={styles.empty}>Empty</span>
         ))}
-      {spec.showDescription && (
-        <span
-          style={
-            item === null ? { ...styles.description, ...styles.onEmptyRow } : styles.description
-          }
-          title={description}
-        >
-          {description}
-        </span>
-      )}
+      {/* No DESCRIPTION column — what the wire reports about this layer is carried by
+          the STATE cell's tooltip above, which always ends with CasparCG's own words
+          for it. That is what made removing the column safe: the occupancy report is
+          the B-094 honesty class, so it had to move rather than go. */}
       {/* There is no LAYER column any more — the real CasparCG layer number moved
           to the Inspector, and to this row's own tooltip / accessible name so it
           stays reachable at every density (see `rowTitle`). */}

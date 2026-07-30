@@ -64,20 +64,26 @@ export function isLayerVisible(bank: FixedLayerBank, layer: number): boolean {
  * screen: the `#` column reads 1, 2, 3, 4 downwards, which is what anyone expects a
  * row number to do.
  *
- * ONE NUMBER, TWO SURFACES. The `#` column and the default alias (`Layer 1`,
- * `Layer 2`, …) both derive from this function and must never compute it separately.
- * Two derivations of one number is how they come to disagree, and a row carrying two
- * small integers that each claim to identify it turns "fire layer 2" into a coin
- * flip.
+ * THIS IS THE ALIAS'S NUMBER, NOT THE `#` COLUMN'S. The two are different questions
+ * and the owner settled them separately:
  *
- * IT IS BOUND TO THE BANK, NOT TO WHAT IS DISPLAYED, and this is the property that
- * makes it safe to say out loud. Rows can be hidden (unticked) or filtered out;
- * none of that may renumber anything. `Layer 1` is always the bank's highest layer
- * whether or not it is currently shown. If hiding a row renumbered the rows past it,
- * "check layer 2" would mean different rows on different days — worse than having no
- * handle at all — so a hidden row leaves a GAP in the sequence. A gap is honest; a
- * silent renumber is not, and it is also why `#` is NOT the row's index in the
- * rendered list.
+ *   - the default alias (`Layer 1`, `Layer 2`, …) uses THIS — the layer's fixed place
+ *     in the bank;
+ *   - the `#` column is plain DISPLAY ORDER, 1 at the top of the rendered list.
+ *
+ * With the shipped bank (70–99 declared, the top five ticked) they read identically,
+ * because the shown rows are the top five in order: `#1` is layer 99, which is
+ * `Layer 1`. They can diverge only if a NON-CONTIGUOUS set is ticked — untick 97 and
+ * the third visible row is `#3` but still `Layer 4`. That is the accepted trade, and
+ * it falls out of the constraint below.
+ *
+ * IT IS BOUND TO THE BANK, NOT TO WHAT IS DISPLAYED, and that is the property that
+ * makes the alias safe to say out loud. Ticking and unticking change what is shown;
+ * neither may renumber anything. `Layer 1` is always the bank's highest layer whether
+ * or not it is currently ticked. If unticking a row renumbered the ones past it,
+ * "Layer 2" would mean different rows on different days — a positional handle that
+ * silently renumbers is worse than none at all. This matters more with thirty declared
+ * and five shown than it did with four of four.
  */
 export function bankPosition(bank: FixedLayerBank, layer: number): number {
   return bank.start + bank.count - 1 - layer + 1;

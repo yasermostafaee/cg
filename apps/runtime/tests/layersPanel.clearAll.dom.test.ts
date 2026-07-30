@@ -204,7 +204,11 @@ describe('StackPanel Clear-All', () => {
       air months later.
     */
     for (const button of [clearAllButton(el), removeAllButton(el)]) {
-      expect(button?.classList.contains('cg-btn--verb')).toBe(true);
+      // `--neutral`, the neutral TEXT variant — not `--verb`, which carries the row
+      // verb's icon-only geometry (`padding: 0`, square, full-width) and squashed
+      // these labels against their borders when it was first reused here.
+      expect(button?.classList.contains('cg-btn--neutral')).toBe(true);
+      expect(button?.classList.contains('cg-btn--verb')).toBe(false);
       for (const hue of [
         'cg-btn--caution',
         'cg-btn--caution-strong',

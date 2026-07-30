@@ -268,6 +268,12 @@ export function LayersPanel({
             actually wearing the air colour, which is the whole thing a control
             room needs to find first.
 
+            `neutral`, NOT `verb`. The first attempt reused the row verb's class to get
+            the neutral palette and inherited its GEOMETRY with it — `padding: 0` and
+            `width: 100%`, sized for a lone glyph inside a declared column — so these
+            text labels came out jammed against their borders. The LOOK is shared
+            between the two; the SHAPE is not (see `controls.css`).
+
             ALWAYS RENDERED, present-but-disabled when they cannot act, rather than
             appearing and disappearing with `onAirCount`. Same rule the row verbs
             follow and for the same reason: controls that come and go move the
@@ -275,7 +281,7 @@ export function LayersPanel({
             their confirm gates, not from being hidden.
           */}
           <Button
-            variant="verb"
+            variant="neutral"
             disabled={linkDown || onAirCount === 0}
             aria-label="Stop all on-air items"
             title="Every on-air graphic runs its own outro and stays loaded"
@@ -294,7 +300,7 @@ export function LayersPanel({
             items, so it cannot reach the reserved playout range.
           */}
           <Button
-            variant="verb"
+            variant="neutral"
             aria-label="Clear all on-air items"
             title="Every on-air graphic is cut immediately, with no outro"
             onClick={() => void clearAll()}
@@ -303,7 +309,7 @@ export function LayersPanel({
             CLEAR ALL
           </Button>
           <Button
-            variant="verb"
+            variant="neutral"
             disabled={linkDown || items.length === 0}
             aria-label="Remove all items"
             title="Clears anything on air and empties every row"
@@ -400,8 +406,8 @@ export function LayersPanel({
           ) : (
             <div style={styles.list} ref={listRef}>
               {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
-              <LayerTableHeader density={density} />
-              {rows.map((slot) => {
+              <LayerTableHeader density={density} onAirCount={onAirCount} />
+              {rows.map((slot, index) => {
                 const item =
                   slot.binding !== null ? (itemById.get(slot.binding.itemId) ?? null) : null;
                 const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
@@ -411,10 +417,11 @@ export function LayersPanel({
                     slot={slot}
                     item={item}
                     template={template}
-                    // The layer's FIXED position in the bank, counting down from the
-                    // highest layer — NOT its index in this (filtered) list. Hiding
-                    // a row must never renumber the others, or "check layer 3" stops
-                    // meaning one row. See `bankPosition` for the whole argument.
+                    // `#` — plain display order, 1 at the top of THIS list.
+                    displayPosition={index + 1}
+                    // The default alias's number — the layer's FIXED place in the
+                    // bank, which ticking and unticking must never renumber. See
+                    // `bankPosition` for why the two are deliberately separate.
                     bankPosition={bankPosition(bank, slot.layer)}
                     density={density}
                     selected={item !== null && item.itemId === selectedId}

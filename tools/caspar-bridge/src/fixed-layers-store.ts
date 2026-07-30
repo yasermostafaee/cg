@@ -40,8 +40,21 @@ import type { LayerPolicy, LayerSlot } from '@cg/caspar-client';
  * ("Fixed layers"), the C-009 operator-contract class.
  */
 
-/** The highest layer a bank may reach (design.md (e): 70–89 is the free space). */
-export const MAX_FIXED_LAYER = 89;
+/**
+ * The highest layer a bank may reach.
+ *
+ * RAISED FROM 89 TO 99 by owner decision, so the operator's candidate bank can be the
+ * full 70–99 (thirty rows). design.md (e) recorded 70–89 as the free space because
+ * `logo-bug` held 90–99 in the dynamic policy; that range MOVED to 40–49 in the same
+ * change (`DEFAULT_LAYER_POLICY`), so 90–99 is genuinely free now rather than merely
+ * declared free.
+ *
+ * The two had to move TOGETHER. Raising this alone would have produced a bank the
+ * validator accepts and then refuses on `overlaps-policy`, or — worse, if that check
+ * were also weakened — a bank sharing layers with automatic allocation, which is the
+ * cross-subsystem destruction the disjointness rules exist to prevent.
+ */
+export const MAX_FIXED_LAYER = 99;
 
 /**
  * R-021 stage 2a — DERIVED from the wire contract's shared const, so the
