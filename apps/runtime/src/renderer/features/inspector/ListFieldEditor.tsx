@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronUp, GripVertical, Plus, X } from 'lucide-react';
 import type { FieldValue, ListItem } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -80,18 +80,42 @@ const styles = {
     minWidth: 0,
   },
   empty: { color: colors.textMuted, fontSize: 'var(--r-text-sm)', margin: 0 },
-  addWrap: { alignSelf: 'flex-start' as const, marginTop: 'var(--r-space-1)' },
+  /*
+   * THE FIELD'S FOOTER — "Add item" and "From file…" on ONE row, per the mock.
+   *
+   * They are the field's two SOURCES of content (type one, or point at a file), so
+   * they belong side by side; stacked, the from-file affordance read as a separate
+   * thing that had drifted below the list. `flex-wrap` because that control grows a
+   * whole block once a file is attached (name, Reload, detach, split options) and
+   * must be allowed to take its own line then.
+   */
+  addWrap: {
+    display: 'flex',
+    alignItems: 'flex-start' as const,
+    gap: 'var(--r-space-2)',
+    flexWrap: 'wrap' as const,
+    marginTop: 'var(--r-space-1)',
+  },
 } as const;
 
 export function ListFieldEditor({
   fieldId,
   value,
   onStage,
+  footer,
 }: {
   fieldId: string;
   value: FieldValue | undefined;
   /** Stage the whole structured array. A `ListItem[]` is a valid `FieldValue`. */
   onStage: (next: ListItem[]) => void;
+  /**
+   * Rendered BESIDE "Add item", on the field's one footer row — the from-file
+   * affordance. It arrives as a slot rather than being imported here because the
+   * two are separate concerns (this editor knows nothing about file sources); the
+   * slot exists only so they can share a ROW, which is a layout fact and belongs
+   * to whoever owns the row.
+   */
+  footer?: ReactNode;
 }): JSX.Element {
   const items = toListItems(value);
   // Drag state is PURELY presentational (which row is lifted, where it would land).
@@ -252,6 +276,7 @@ export function ListFieldEditor({
           <Icon icon={Plus} />
           Add item
         </Button>
+        {footer}
       </div>
     </div>
   );

@@ -68,10 +68,24 @@ existing `--r-danger` / `#fca5a5` rather than the mock's `#5a3540` / `#e08a97`, 
 avoid a second red in the palette (§0's "if a token is within a shade, use the token");
 the `＋` glyph is lucide `Plus` through `Icon`, per the design system; input/button
 radius stays 4px rather than the mock's 6px, because `.cg-btn` is global and changing
-it would restyle all four panels and every dialog for no stated benefit. **Not done:**
-the mock puts "Add item" and "From file…" on ONE footer row; ours stacks them, because
-they are rendered by two different components (`ListFieldEditor` and `FromFileControl`)
-and joining them is a restructure rather than a restyle.
+it would restyle all four panels and every dialog for no stated benefit.
+
+**"Add item" + "From file…" on ONE footer row — done, after the owner's screenshots.**
+It needed a small restructure rather than CSS, because the two are rendered by
+different components: `ListFieldEditor` now takes a `footer` slot and `FieldEditor`
+routes `FromFileControl` into it for `list` kind only (every other kind still renders
+it beneath the control — a list is the only kind with a second footer control to share
+a row with). The control is built once and placed in one of two spots, so the two
+placements cannot drift into two differently-configured controls.
+
+**The item row must NOT wrap — caught by the owner's narrow screenshot.** My first pass
+gave the textarea `flex: 1 1 12rem`, so below ~460px of panel the row wrapped and put
+the controls on one line with the text on another: the OLD split layout re-created by
+accident, at the width the operator spends most of their time in. It passes any
+"is the cluster intact" assertion, because the cluster IS intact — what breaks is the
+cluster's relationship to its text. Now `flex: 1 1 auto; min-width: 0` with no wrap, so
+the text shrinks and the cluster holds, per the mock. Pinned by a new spec that measures
+vertical overlap between the textarea and the remove button at 1400 / 1100 / 900px.
 
 **§3 supersedes a recorded decision, which is noted because the old text was emphatic.**
 `Button.tsx`, `controls.css` and `Inspector.tsx` all asserted "colour belongs to STATE

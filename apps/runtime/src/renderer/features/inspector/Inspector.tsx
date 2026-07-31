@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
@@ -555,6 +555,12 @@ function FieldEditor({
   // R-018 — text-carrying fields can source their value from a text file.
   const fromFileKind =
     kind === 'text' || kind === 'multiline' || kind === 'list' ? kind : undefined;
+  // Built ONCE and placed in one of two spots (see below), so the two placements
+  // cannot drift into two differently-configured controls.
+  const fromFile =
+    fromFileKind === undefined ? null : (
+      <FromFileControl item={item} path={path} kind={fromFileKind} fieldId={fieldId} />
+    );
   return (
     <div className={isWideKind(kind) ? 'cg-field-row--wide' : 'cg-field-row'}>
       {/*
@@ -576,7 +582,9 @@ function FieldEditor({
           </span>
         )}
       </span>
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div
+        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--r-space-2)', minWidth: 0 }}
+      >
         <FieldControl
           kind={kind}
           field={field}
@@ -584,10 +592,14 @@ function FieldEditor({
           fieldId={fieldId}
           dirty={dirty}
           onStage={stage}
+          {...(fromFileKind !== undefined ? { fromFile } : {})}
         />
-        {fromFileKind !== undefined && (
-          <FromFileControl item={item} path={path} kind={fromFileKind} fieldId={fieldId} />
-        )}
+        {/* A LIST field's from-file control is rendered INSIDE the editor, beside
+            "Add item" on the field's one footer row (see `ListFieldEditor`'s
+            `footer` slot). Every other kind renders it here, beneath the control.
+            The difference is not cosmetic bookkeeping: a list is the only kind
+            with a second footer control to share a row with. */}
+        {fromFileKind !== undefined && kind !== 'list' && fromFile}
       </div>
     </div>
   );
@@ -600,6 +612,7 @@ function FieldControl({
   fieldId,
   dirty,
   onStage,
+  fromFile,
 }: {
   kind: DynamicField['type'] | 'unknown';
   field: DynamicField | null;
@@ -607,6 +620,8 @@ function FieldControl({
   fieldId: string;
   dirty: boolean;
   onStage: (next: FieldValue) => void;
+  /** Only a LIST consumes this — it shares its footer row with "Add item". */
+  fromFile?: ReactNode;
 }): JSX.Element {
   if (kind === 'boolean') {
     const v = typeof value === 'boolean' ? value : false;
@@ -685,7 +700,7 @@ function FieldControl({
   }
   if (kind === 'list') {
     // R-003 — the structured list editor stages its ops (no remount key).
-    return <ListFieldEditor fieldId={fieldId} value={value} onStage={onStage} />;
+    return <ListFieldEditor fieldId={fieldId} value={value} onStage={onStage} footer={fromFile} />;
   }
   // Default: text input (controlled — stages on change, no blur/Enter commit).
   const v = typeof value === 'string' ? value : value === undefined ? '' : String(value);

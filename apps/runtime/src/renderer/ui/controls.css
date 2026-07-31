@@ -1035,11 +1035,22 @@ textarea.cg-field--autogrow {
  * order all agree and no override is needed at all. A layout that needs no
  * `order` is the one to prefer; `order` is a repair, not a tool.
  */
+/*
+ * IT DOES NOT WRAP — the TEXT shrinks and the cluster holds its size.
+ *
+ * Verified against the owner's screenshots at ~420px: the item stays one line and
+ * the textarea narrows. An earlier `flex-wrap: wrap` with a 12rem basis pushed the
+ * cluster onto its own line at the default panel width, which is the OLD layout
+ * re-created by accident — controls on one line, text on another.
+ *
+ * This is the fixed-size-plus-reflow split doing its job: the cluster is
+ * `flex: 0 0 auto` so it never resizes, the text is `flex: 1 1 auto; min-width: 0`
+ * so it absorbs every change in width. One rule covers 320px and fullscreen.
+ */
 .cg-list-item {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  flex-wrap: wrap;
   gap: var(--r-space-2);
   min-width: 0;
   border-radius: var(--r-radius-sm);
@@ -1063,13 +1074,14 @@ textarea.cg-field--autogrow {
 }
 
 /*
- * The item's text. `flex: 1 1 12rem` is the responsive floor: it takes every
- * pixel the cluster does not, and once it cannot hold 12rem the whole row wraps
- * rather than crushing the text — which is the failure this layout replaced
- * (Persian breaking mid-word across three lines in an ~80px box).
+ * The item's text — it takes every pixel the cluster does not, at every width.
+ *
+ * `min-width: 0` is the load-bearing part: a flex item's default `min-width: auto`
+ * refuses to shrink below its content, which is how a long Persian headline would
+ * push the row wider than the panel instead of wrapping inside its own box.
  */
 .cg-list-item__text {
-  flex: 1 1 12rem;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 52px;
   line-height: 1.6;

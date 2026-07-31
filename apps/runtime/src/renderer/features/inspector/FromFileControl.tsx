@@ -33,7 +33,11 @@ import {
 } from './textFileSource.js';
 
 const styles = {
-  wrap: { display: 'flex', flexDirection: 'column' as const, gap: '0.25rem', marginTop: '0.2rem' },
+  // NO `marginTop`: the field's column (or, for a list, its footer ROW) owns the
+  // spacing around this control now, from the shared `--r-space-*` scale. A
+  // margin here fought the row's `align-items` and offset the button by ~3px
+  // against the "Add item" it sits beside.
+  wrap: { display: 'flex', flexDirection: 'column' as const, gap: 'var(--r-space-1)' },
   row: { display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' as const },
   fileName: {
     fontSize: '0.75rem',

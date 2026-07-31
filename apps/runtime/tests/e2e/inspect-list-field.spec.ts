@@ -205,3 +205,57 @@ test('AT FULLSCREEN the five controls for one item stay ONE cluster — they nev
   const tops = boxes.map((b) => Math.round(b.y));
   expect(Math.max(...tops) - Math.min(...tops), `tops ${tops.join(',')}`).toBeLessThanOrEqual(2);
 });
+
+test('the item row does NOT wrap as the panel narrows — the TEXT shrinks and the cluster holds', async ({
+  app,
+}) => {
+  /**
+   * The responsive half of the same rule, and the one an intermediate version of
+   * this layout got wrong in a way that looked fine in isolation.
+   *
+   * The textarea had `flex: 1 1 12rem`, so once the panel could not seat a 12rem
+   * basis beside the cluster the ROW wrapped — putting the controls on one line and
+   * the text on another. That is the OLD split layout re-created by accident, at
+   * exactly the panel width the operator spends most of their time in. It passes
+   * any assertion about the cluster being intact, because the cluster IS intact;
+   * what it breaks is the relationship between the cluster and its text.
+   *
+   * So the invariant is not "the cluster is together" — the sibling test covers
+   * that — but "the cluster is together WITH ITS TEXT, at every width". The
+   * fixed-size-plus-reflow split is what delivers it: the cluster never resizes,
+   * the text absorbs every change.
+   */
+  const templateId = 'tpl-e2e-list-narrow';
+  await app.importVcg('list-narrow.vcg', await buildListFieldVcg(templateId));
+  await app.selectStackRow(templateId);
+
+  // Docked, at the panel's ordinary width — no fullscreen. This is the case the
+  // 12rem basis broke.
+  const textarea = app.inspector.getByRole('textbox', { name: '_tickerTexts item 1' });
+  const remove = app.inspector.getByRole('button', { name: 'Remove _tickerTexts item 1' });
+
+  for (const width of [1400, 1100, 900]) {
+    await app.page.setViewportSize({ width, height: 900 });
+    // Settle: the layout is measured, so assert on the box only once it is stable.
+    await expect.poll(async () => (await textarea.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+
+    const text = await textarea.boundingBox();
+    const del = await remove.boundingBox();
+    expect(text, `textarea box at ${String(width)}`).not.toBeNull();
+    expect(del, `remove box at ${String(width)}`).not.toBeNull();
+
+    // SAME LINE as its text — the row did not wrap. Compared on vertical overlap
+    // rather than equal `y`, because the cluster is nudged 2px down to sit on the
+    // text's first line rather than on its border.
+    const overlap =
+      Math.min(text!.y + text!.height, del!.y + del!.height) - Math.max(text!.y, del!.y);
+    expect(
+      overlap,
+      `at ${String(width)}px the controls dropped off the text's line (overlap ${String(Math.round(overlap))}px)`,
+    ).toBeGreaterThan(del!.height / 2);
+
+    // …and the TEXT is what gave up the width, which is the other half of the rule.
+    // It stays the widest thing in the row at every one of these widths.
+    expect(text!.width, `textarea width at ${String(width)}`).toBeGreaterThan(del!.width * 2);
+  }
+});
