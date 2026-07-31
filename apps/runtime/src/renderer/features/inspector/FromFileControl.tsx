@@ -114,7 +114,7 @@ export function FromFileControl({
 
   if (state === undefined) {
     return (
-      <div style={styles.wrap}>
+      <div className="cg-from-file" style={styles.wrap}>
         <div style={styles.row}>
           {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` (no fill, no border, muted
               text) and read as static text under every text-carrying field — the most
@@ -155,7 +155,7 @@ export function FromFileControl({
   };
 
   return (
-    <div style={styles.wrap}>
+    <div className="cg-from-file" style={styles.wrap}>
       <div style={styles.row}>
         <span style={styles.fileName} title={state.source.name}>
           {state.source.name}

@@ -31,7 +31,14 @@ const styles = {
     alignItems: 'flex-start',
     flexWrap: 'wrap' as const,
   },
-  offsets: { display: 'flex', gap: 'var(--r-space-2)', alignItems: 'flex-start' },
+  /*
+   * The two nudge inputs AND "Apply position", bottom-aligned (the mock's
+   * `.nudge`). `flex-end` is the load-bearing bit: each nudge field is a label
+   * STACKED over its input, so aligning on the top would hang the button level
+   * with the 11px labels instead of with the boxes it acts on. Aligned on the
+   * baseline of the controls, the three read as one row of controls.
+   */
+  offsets: { display: 'flex', gap: 'var(--r-space-3)', alignItems: 'flex-end' },
   /** One nudge input with its own label ABOVE it, so the two never compete for a row. */
   offsetField: {
     display: 'flex',
@@ -45,13 +52,11 @@ const styles = {
     letterSpacing: '0.04em',
   },
   offsetInput: { width: '74px' },
-  lock: { color: colors.textMuted, fontSize: 'var(--r-text-sm)' },
-  /** Control→control is one step up from label→control inside the nudge fields. */
-  actions: {
-    display: 'flex',
-    gap: 'var(--r-space-3)',
-    alignItems: 'center',
-    marginTop: 'var(--r-space-4)',
+  lock: {
+    color: colors.textMuted,
+    fontSize: 'var(--r-text-sm)',
+    display: 'block',
+    marginTop: 'var(--r-space-2)',
   },
 } as const;
 
@@ -136,7 +141,7 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
             </Button>
           ))}
         </div>
-        <div style={styles.offsets}>
+        <div className="cg-position-row" style={styles.offsets}>
           {/* `scrub` — the offsets are PIXEL magnitudes, which is exactly the value
               kind a horizontal drag suits: the operator nudges a graphic and watches
               the number move, rather than selecting text and retyping. Arrow keys give
@@ -179,40 +184,46 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
               aria-label="Position offset Y"
             />
           </div>
+          {/* ONE OF THE THREE ACCENTED ACTIONS (owner request), with Add item and
+              Update — this is the action the POSITION section exists to perform.
+              See `.cg-btn--accent` in `controls.css` for why colour may mean
+              hierarchy here and must not on the layer table.
+
+              IN the nudge row, bottom-aligned with the two inputs, per the mock —
+              not on a line of its own below them. It commits what those boxes hold,
+              so it belongs beside them; on its own row it read as a section-level
+              action and left an empty band across the panel. */}
+          <AsyncButton
+            variant="accent"
+            aria-label="Apply position"
+            disabled={locked}
+            run={() =>
+              window.cg.stack
+                .setPosition({
+                  itemId: item.itemId,
+                  position: { anchor, offset: { x: offset(dx), y: offset(dy) } },
+                })
+                .then((r) => ({
+                  accepted: r.ok,
+                  ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
+                }))
+            }
+            // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
+            // control where its wrapped text bloated this narrow panel. `setPosition` does
+            // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
+            // The MESSAGE is unchanged: the button already mapped `r.reason` through
+            // `errorCodeMessage`, and the toast carries that same mapping — only its
+            // placement moves.
+            onError={reportCommandError}
+          >
+            Apply position
+          </AsyncButton>
         </div>
       </div>
-      <div style={styles.actions}>
-        {/* ONE OF THE THREE ACCENTED ACTIONS (owner request), with Add item and
-            Update — this is the action the POSITION section exists to perform.
-            See `.cg-btn--accent` in `controls.css` for why colour may mean
-            hierarchy here and must not on the layer table. */}
-        <AsyncButton
-          variant="accent"
-          aria-label="Apply position"
-          disabled={locked}
-          run={() =>
-            window.cg.stack
-              .setPosition({
-                itemId: item.itemId,
-                position: { anchor, offset: { x: offset(dx), y: offset(dy) } },
-              })
-              .then((r) => ({
-                accepted: r.ok,
-                ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
-              }))
-          }
-          // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
-          // control where its wrapped text bloated this narrow panel. `setPosition` does
-          // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
-          // The MESSAGE is unchanged: the button already mapped `r.reason` through
-          // `errorCodeMessage`, and the toast carries that same mapping — only its
-          // placement moves.
-          onError={reportCommandError}
-        >
-          Apply position
-        </AsyncButton>
-        {locked && <span style={styles.lock}>locked while on air</span>}
-      </div>
+      {/* BELOW the row, not inside it: it is a note about why the controls above are
+          inert, and a note that sits in the control row changes the row's height as
+          it appears and disappears. */}
+      {locked && <span style={styles.lock}>locked while on air</span>}
     </div>
   );
 }

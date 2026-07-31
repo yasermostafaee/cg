@@ -400,7 +400,12 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
           Update and Discard ahead of the fields they apply, so a keyboard operator
           would reach the commit before the thing being committed. Fields first, then
           commit, matches both the reading order and the actual sequence of the task. */}
-        <div style={styles.actions}>
+        {/* The class carries only the CONTROLS' height (32px, the panel's primary
+            action), so Update and Discard cannot come out at two heights from two
+            variants — `accent` takes its height from padding, `neutral` carries a
+            36px floor meant for the layer table's header. Same defect the field
+            footers had. Layout stays in `styles.actions`. */}
+        <div className="cg-inspector-actions" style={styles.actions}>
           {/* Apply stays enabled even with nothing staged — re-sending unchanged
             values is the operator's documented B-048 recovery path. */}
           {/* #334 — feedback goes to the command TOAST, never pinned inline in the panel.

@@ -89,13 +89,7 @@ const styles = {
    * whole block once a file is attached (name, Reload, detach, split options) and
    * must be allowed to take its own line then.
    */
-  addWrap: {
-    display: 'flex',
-    alignItems: 'flex-start' as const,
-    gap: 'var(--r-space-2)',
-    flexWrap: 'wrap' as const,
-    marginTop: 'var(--r-space-1)',
-  },
+  addWrap: { marginTop: 'var(--r-space-1)' },
 } as const;
 
 export function ListFieldEditor({
@@ -260,7 +254,10 @@ export function ListFieldEditor({
           </div>
         );
       })}
-      <div style={styles.addWrap}>
+      {/* `cg-field-foot` owns the row's layout AND its controls' height, so
+          "Add item" and "From file…" cannot arrive at two different heights from
+          two different variants — the owner's report. See `controls.css`. */}
+      <div className="cg-field-foot" style={styles.addWrap}>
         {/* ONE OF THE THREE ACCENTED ACTIONS (owner request), with Apply position
             and Update. This supersedes the `neutral` it briefly was: adding an item
             is what an operator opens a list field to do, and in the Inspector colour

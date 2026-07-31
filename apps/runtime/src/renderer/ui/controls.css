@@ -871,6 +871,51 @@ textarea.cg-field--autogrow {
   color: var(--r-text-muted);
 }
 
+/* ── Inspector control heights — a ROW decides, not the variants in it ──────
+ *
+ * Owner report: "the From file… button height is higher than Add item". It was —
+ * 36px against ~29px — and neither button was wrong on its own. `From file…` is
+ * `--neutral`, whose 36px floor exists to match the ROW VERBS' weight in the
+ * layer table's header; `Add item` is a plain `.cg-btn` and takes its height from
+ * its padding. Two variants chosen for their COLOUR, each dragging along a height
+ * meant for somewhere else.
+ *
+ * Same shape as the panel bar's problem one level up, and the same answer: the
+ * CONTAINER owns the height, so a control's variant decides what it looks like and
+ * never how tall it is. Two rows, two heights, deliberately — the field footers are
+ * secondary controls at 28px, the commit bar is the panel's primary action at 32px.
+ *
+ * Set on the ROW rather than per button, so a control added to either row later
+ * cannot arrive at a third height.
+ */
+.cg-field-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--r-space-2);
+  flex-wrap: wrap;
+}
+/* The from-file block is a COLUMN, not a footer row, so it takes the height rule
+   without the layout — its buttons are the same secondary controls whether they
+   sit beside "Add item" or under a text field. */
+.cg-field-foot .cg-btn,
+.cg-from-file .cg-btn {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
+}
+.cg-inspector-actions .cg-btn {
+  height: 32px;
+  min-height: 32px;
+  padding-block: 0;
+}
+/* "Apply position" sits IN the nudge row and must line up with the two number
+   boxes beside it, so it takes the field height rather than a button height. */
+.cg-position-row .cg-btn {
+  height: 32px;
+  min-height: 32px;
+  padding-block: 0;
+}
+
 /* ── Inspector metadata chips (status / layer / channel / server) ───────────
  *
  * These were two loose prose lines under the item's title. Two sentences read as
