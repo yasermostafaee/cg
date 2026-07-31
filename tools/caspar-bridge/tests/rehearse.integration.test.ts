@@ -409,3 +409,42 @@ it('the startup re-assert covers EVERY declared row, with no rehearse bookkeepin
     expect(mock.layerState({ channel: 1, layer })?.volume).toBe(1);
   }
 }, 30000);
+
+/**
+ * §5 — AN ERROR MUST NOT NAME A MECHANISM THAT DID NOT FAIL.
+ *
+ * `enterRehearse` reported a flat `mute-failed` whenever the mute did not land,
+ * including when the command never left because CasparCG was unreachable. That
+ * one wrong word cost this project an investigation into the mute interlock,
+ * 2.3.2-vs-2.5.0 audio behaviour, and whether AMCP policy should branch on server
+ * version — none of which was the problem.
+ *
+ * MEASURED ON THE PLANT (2.5.0 `69e8ad5`): `MIXER 1-88 VOLUME 0` answers
+ * `202 MIXER OK` on an empty layer, on an occupied one, and after `CG 1-88 STOP 0`.
+ * CasparCG does not refuse the mute, so `mute-failed` was describing something
+ * that had not happened.
+ *
+ * ASSERTED ON THE REPORTED CODE, because the code is what gets acted on.
+ */
+it('an UNREACHABLE server reports reachability, not a mute failure', async () => {
+  // THE OWNER'S ACTUAL SCENARIO, and it has to be staged in this order: the mute
+  // branch only runs when a producer is RESIDENT, so a server that was never
+  // reachable would take the zero-AMCP path and succeed. Load with the server up,
+  // then take it away.
+  await boot();
+  expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
+  expect(mock!.layerState(SLOT)?.producer).toBe('html');
+
+  await mock!.stop();
+  mock = null;
+
+  const result = await runtime!.enterRehearse('item1');
+  expect(result.ok).toBe(false);
+  // THE ASSERTION: the cause `#send` actually returned, surfaced rather than
+  // replaced. `mute-failed` here would be a guess wearing a mechanism's name.
+  expect(result.reason).toBe('unreachable');
+  expect(result.reason).not.toBe('mute-failed');
+  // …and the message says what is true: nothing was sent.
+  expect(result.message).toMatch(/could not be reached/i);
+  expect(result.message).toMatch(/nothing was sent/i);
+}, 30000);

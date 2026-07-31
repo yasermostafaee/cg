@@ -1687,18 +1687,40 @@ export class CasparRuntime {
     // The mute IS the safety condition. Refuse if it does not land.
     this.#rehearseBusy.add(itemId);
     try {
-      const { ok } = await this.#send(
+      const { ok, errorCode } = await this.#send(
         this.#builder.mixerVolume(slot, 0),
         this.#nextSeq(),
         'urgent',
       );
       if (!ok) {
+        /*
+         * THE REPORTED CAUSE IS THE ONE `#send` RETURNED — never a guess.
+         *
+         * This said a flat `mute-failed` and threw `errorCode` away, so a bridge
+         * that simply could not REACH CasparCG reported that CasparCG had refused
+         * the mute. Measured on the plant (2.5.0 `69e8ad5`), `MIXER … VOLUME 0`
+         * answers `202 MIXER OK` on an empty layer, on an occupied one, and after
+         * `CG STOP` — CasparCG never refuses it, so `mute-failed` was describing a
+         * mechanism that had not failed.
+         *
+         * The cost of the wrong word was not cosmetic: it sent this project into
+         * the mute interlock, 2.3.2-vs-2.5.0 audio behaviour, and whether AMCP
+         * policy should branch on server version. None of it was the problem.
+         *
+         * `amcp-send-failed` — the command never left — is reported as
+         * `unreachable`, which is what the operator can act on. Any other code is
+         * a real refusal from the server and keeps `mute-failed`. Context is
+         * added; the cause is not substituted.
+         */
+        const unreachable = errorCode === 'amcp-send-failed';
         return {
           ok: false,
-          reason: 'mute-failed',
-          message:
-            'The layer could not be muted, so rehearse was not started. Rehearse is only claimed ' +
-            'once the graphic genuinely cannot reach air.',
+          reason: unreachable ? 'unreachable' : 'mute-failed',
+          message: unreachable
+            ? 'CasparCG could not be reached, so the layer could not be muted and PVW was not ' +
+              'started. Nothing was sent.'
+            : 'CasparCG refused to mute the layer, so rehearse was not started. Rehearse is only ' +
+              'claimed once the graphic genuinely cannot reach air.',
         };
       }
       this.#rehearsing.set(itemId, {

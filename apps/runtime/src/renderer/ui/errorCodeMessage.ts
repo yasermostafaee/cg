@@ -32,6 +32,14 @@ const MESSAGES: Readonly<Record<string, string>> = {
     'That layer already has a graphic on it — CLEAR it first to put the same template back, or REMOVE the row to bind a different one. (Never one compound step.)',
   // R-022 — the LOAD interlock. Names the way out, because there always is one:
   // rehearse no longer needs the layer, so taking the row off PVW costs nothing.
+  // R-022 — PVW entry could not reach CasparCG. Named for REACHABILITY, not for
+  // the mute: the command never left, so saying the mute failed would blame a
+  // mechanism that did not run (measured: the server answers 202 MIXER OK in
+  // every layer state).
+  unreachable:
+    'CasparCG could not be reached, so PVW was not started. Nothing was sent — try again once the server is back.',
+  'mute-failed':
+    'CasparCG refused to mute the layer, so PVW was not started. PVW is only claimed once the graphic genuinely cannot reach air.',
   rehearsing:
     'That row is on PVW. Take it off PVW first — loading would put an unmuted graphic on the layer.',
   // The BANK-SCOPED clear's two structural refusals. Both are guard verdicts rather
