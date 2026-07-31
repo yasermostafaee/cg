@@ -10,6 +10,46 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### 🔴 The reachability gate disabled the entire console in TEST MODE — caught only by `gate:e2e`
+
+**Filed as a bug class, not a fix note.** Landed as `8613772`, the session after the gate itself.
+
+**What happened.** `useCasparReachable` answered from `useConnections()` alone. The offline mock
+reports a `disconnected` primary — `seedHealth` is `disconnected` DELIBERATELY, so test mode never
+wears a signal that means a real server said something (R-006), and `testModeHonesty.dom.test.ts`
+pins exactly that. So every AMCP verb in test mode went disabled behind _"CasparCG cannot be
+reached"_, while the mock stood ready to execute all of them. **14 E2E specs red** across
+`fixed-layers`, `inspect-list-field`, `nested-composition-fields`, `onair-position`,
+`rehearse-layout`, `server-settings`, `stage-inspector-edits` and `test-mode-honesty`.
+
+**The rule it violated is the one it was built to enforce**, in the other direction: _a control
+refusing when it would have succeeded_. The question a reachability gate asks is **"will this
+command be executed?"** — not "is a real CasparCG healthy?". In test mode the mock IS the executor.
+`offline-mock` was already the honest wire signal for "the simulator is the far end", so the hook
+reads the link as well as health, and test mode is reachable. **This is not an exception carved out
+of the rule; it is the rule stated correctly.**
+
+**The fix that would have been a lie.** Making the mock report a `healthy` primary also turns the
+suite green, and is an R-006 violation — the mock claiming a server it does not have. Worth naming
+because it is the _easier_ fix and it was one line away.
+
+**Why the unit suite missed it, which is the durable half.** The §0a migration pinned
+`testModeHonesty`'s stub to `both-up` — giving test mode a healthy primary it never has. The spec
+then asserted against a state that does not exist in the product, and passed. **A fixture that can
+disagree with the product it stands in for is worse than no fixture**, because it converts a real
+defect into a green tick. The health now DERIVES from the link (`offline-mock` → `test-mode`), so
+the two cannot be chosen independently. `Reachability` gained `test-mode` as a fifth state; its
+`healthFor` deliberately stays `disconnected`, or a spec asserting test mode keeps its verbs live
+could not prove the hook ignores health there.
+
+**The missing test that let it ship.** R-006 was read only as "may not lie"; its other half —
+**test mode must still WORK, simulating the take is the whole point** — had no test. Added, shown
+red first (`disabled: true`).
+
+**For the reconciliation sweep: `gate:e2e` was the only gate that caught this.** `pnpm gate` was
+green (82/82, `0 cached`, 458 unit tests) across both the broken and the fixed tree. Every affected
+surface is one only a real render exercises.
+
 ### ⛔ `dev-offline-ux` v8 — §0 §0a §1 §2 DONE; §1a §3 §4 §5 §6 §7 §8 §9 NOT STARTED
 
 Stopped at a clean boundary, gate green, pushed. **§1a (durable drafts) is the largest remaining
