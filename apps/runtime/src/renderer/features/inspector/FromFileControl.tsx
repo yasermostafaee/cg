@@ -39,12 +39,9 @@ const styles = {
   // against the "Add item" it sits beside.
   wrap: { display: 'flex', flexDirection: 'column' as const, gap: 'var(--r-space-1)' },
   row: { display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' as const },
-  fileName: {
-    fontSize: '0.75rem',
-    color: colors.textMuted,
-    overflowWrap: 'anywhere' as const,
-    minWidth: 0,
-  },
+  // `fileName` is GONE — the name lives in `.cg-file-chip__name` now, welded to
+  // its detach control. It was a bare muted span that wrapped and pushed the
+  // buttons around as the path grew.
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: 0 },
   error: { fontSize: '0.75rem', color: colors.error, margin: 0 },
   splitLabel: {
@@ -157,8 +154,24 @@ export function FromFileControl({
   return (
     <div className="cg-from-file" style={styles.wrap}>
       <div style={styles.row}>
-        <span style={styles.fileName} title={state.source.name}>
-          {state.source.name}
+        {/* THE FILE, as ONE control: its name and the way to detach it, welded
+            together. See `.cg-file-chip` — the short version is that a bare `✕`
+            here is the same glyph as the item-delete buttons one row up, doing
+            something else, and attaching it to the name is what stops the two
+            being confusable. */}
+        <span className="cg-file-chip">
+          <span className="cg-file-chip__name" title={state.source.name}>
+            {state.source.name}
+          </span>
+          <button
+            type="button"
+            className="cg-file-chip__detach"
+            aria-label={`Detach ${fieldId} file source`}
+            title={`Detach ${state.source.name}`}
+            onClick={() => detachFileSource(item.itemId, path)}
+          >
+            ×
+          </button>
         </span>
         {needsGrant ? (
           <AsyncButton
@@ -189,17 +202,10 @@ export function FromFileControl({
             Reload
           </AsyncButton>
         )}
-        {/* `icon`, not `ghost` and not `verb`: the neutral look with a SMALL FIXED
-            square. `verb` was the first attempt and it stretched — its `width: 100%`
-            is geometry for a sized table column, so in this flex row it fought the
-            file name for space. */}
-        <Button
-          variant="icon"
-          aria-label={`Detach ${fieldId} file source`}
-          onClick={() => detachFileSource(item.itemId, path)}
-        >
-          ×
-        </Button>
+        {/* THE DETACH `✕` MOVED INTO THE FILE CHIP ABOVE — it is part of the file
+            now, not a free-standing button at the end of the row. It stood here as
+            an `icon`: the same shape and the same glyph as the item-delete buttons
+            one row up, doing something else entirely. Do not put it back. */}
       </div>
       {kind === 'list' && (
         <div style={styles.row}>
