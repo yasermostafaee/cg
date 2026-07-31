@@ -37,7 +37,16 @@ const styles = {
   // spacing around this control now, from the shared `--r-space-*` scale. A
   // margin here fought the row's `align-items` and offset the button by ~3px
   // against the "Add item" it sits beside.
-  wrap: { display: 'flex', flexDirection: 'column' as const, gap: 'var(--r-space-1)' },
+  /*
+   * THE GAP BETWEEN THE TWO LINES — the controls row and the split row beneath it.
+   *
+   * One step on the scale (8px), not the smallest: 4px read as a single wrapped
+   * line and let the checkbox crowd the chip above it, while a larger step would
+   * separate two rows that belong to ONE control. It is the same step the field
+   * footer uses between its buttons, so the block reads as one cluster with two
+   * lines rather than two stacked clusters.
+   */
+  wrap: { display: 'flex', flexDirection: 'column' as const, gap: 'var(--r-space-2)' },
   row: { display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' as const },
   // `fileName` is GONE — the name lives in `.cg-file-chip__name` now, welded to
   // its detach control. It was a bare muted span that wrapped and pushed the

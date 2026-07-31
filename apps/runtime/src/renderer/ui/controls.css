@@ -928,9 +928,21 @@ textarea.cg-field--autogrow {
  * plus the ellipsis), so a long path can never move the buttons.
  */
 
+/*
+ * 28px — THE SAME HEIGHT AS THE BUTTONS IT SITS BETWEEN, which is the whole point
+ * of the row reading as one cluster. `Add item` and `Reload` take 28px from
+ * `.cg-field-foot`, so the chip states it explicitly rather than taking its height
+ * from the filename's line box: a chip sized by its text is a chip whose height
+ * changes with the font, and it was the odd one out in a row of three.
+ *
+ * `align-items: stretch` then makes the name and the detach exactly as tall as
+ * each other, so the seam between them runs the full height and the two halves
+ * read as one object rather than two things that happen to touch.
+ */
 .cg-file-chip {
   display: inline-flex;
   align-items: stretch;
+  height: 28px;
   min-width: 0;
   max-width: 100%;
   border-radius: var(--r-radius-sm);
@@ -951,8 +963,17 @@ textarea.cg-field--autogrow {
   font-size: var(--r-text-sm);
 }
 
-/* The detach half — joined, and deliberately NOT `--icon`: it must not look like
-   the item-delete buttons in the rows above, which are that shape. */
+/*
+ * The detach half — joined, and deliberately NOT `--icon`: it must not look like
+ * the item-delete buttons in the rows above, which are that shape.
+ *
+ * ITS FILL IS THE SEAM. A mid grey between the name's light panel and the dark
+ * surface behind the row: light enough to belong to the chip, dark enough that the
+ * boundary between "the file" and "remove the file" is unmistakable without a
+ * border. That contrast IS the affordance here — the two halves have no divider
+ * line, so if the fills converge the chip becomes one undifferentiated block and
+ * the operator cannot see there is a control in it.
+ */
 .cg-file-chip__detach {
   display: inline-flex;
   align-items: center;
