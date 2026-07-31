@@ -9,7 +9,7 @@ import { colors } from '../src/renderer/theme.js';
 
 function input(over: Partial<RowStateInput> = {}): RowStateInput {
   return {
-    status: 'loaded',
+    binding: { kind: 'bound', status: 'loaded' },
     pending: false,
     observed: { kind: 'producer', producer: 'html' },
     linkDown: false,
@@ -88,12 +88,16 @@ describe('rowState — REHEARSING', () => {
     // and a rehearse badge over a live graphic answers it wrongly. The bridge
     // withdraws the stale claim within one sweep; this is the honest reading for
     // the interval in between.
-    const onAir = rowState(input({ status: 'on-air', rehearsing: true }));
+    const onAir = rowState(
+      input({ binding: { kind: 'bound', status: 'on-air' }, rehearsing: true }),
+    );
     expect(onAir.label).toBe('ON AIR');
     expect(onAir.color).toBe(colors.onAir);
 
     // A take IN FLIGHT is a transition toward air, so it is excluded too.
-    const inFlight = rowState(input({ status: 'playing', pending: true, rehearsing: true }));
+    const inFlight = rowState(
+      input({ binding: { kind: 'bound', status: 'playing' }, pending: true, rehearsing: true }),
+    );
     expect(inFlight.label).not.toBe('ON PVW');
   });
 
@@ -101,7 +105,7 @@ describe('rowState — REHEARSING', () => {
     // The wire-only branch runs first and is unreachable for a rehearsing row (a
     // rehearsal requires a bound, loaded item), but the flag must not leak into it.
     const unbound = rowState(
-      input({ status: null, observed: { kind: 'empty' }, rehearsing: true }),
+      input({ binding: { kind: 'unbound' }, observed: { kind: 'empty' }, rehearsing: true }),
     );
     expect(unbound.label).toBe('EMPTY');
   });

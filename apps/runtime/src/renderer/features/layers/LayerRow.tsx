@@ -21,7 +21,7 @@ import {
 } from '../fixedLayers/fixedSlotLoad.js';
 import { useTemplatePicker } from '../fixedLayers/useTemplatePicker.js';
 import { layerRowActions, MISSING_TEMPLATE_REASON } from './layerRowActions.js';
-import { rowState } from './rowState.js';
+import { rowState, type RowBinding } from './rowState.js';
 import {
   ROW_GEOMETRY,
   VERBS_GRID,
@@ -35,6 +35,19 @@ interface Props {
   slot: FixedSlotState;
   /** The stack item bound to this row, or null when the row is empty. */
   item: StackItemState | null;
+  /**
+   * WHAT THIS ROW CARRIES, as the three-way fact — see `RowBinding`.
+   *
+   * Separate from `item` deliberately, and this is the whole fix: `item` is null
+   * for BOTH "no template bound" and "the stack has not arrived", and everything
+   * else on this row (the verbs, the template name, selection) is right to treat
+   * those alike — there is nothing to act on either way. Only the STATE CELL must
+   * tell them apart, because only it makes a CLAIM about the row.
+   *
+   * Passing the union instead of a `stackReady` boolean is what keeps the two from
+   * drifting: the row cannot compute a different answer from the panel's.
+   */
+  binding: RowBinding;
   /** The bound item's template, for the name and the `hasNext` bit. */
   template: TemplateInfo | null;
   /**
@@ -218,6 +231,7 @@ const styles = {
 export function LayerRow({
   slot,
   item,
+  binding,
   template,
   displayPosition,
   bankPosition,
@@ -449,8 +463,23 @@ export function LayerRow({
   // so the row reads it directly rather than taking a second subscription.
   const oscBlind = badgeStatus === 'unverified' && item?.errorCode === 'osc-unverifiable';
 
+  /**
+   * The panel's three-way fact, with this row's own air-confidence override
+   * folded into the BOUND case only.
+   *
+   * `badgeStatus` can rewrite a bound row's status to `unverified` when neither
+   * hop can back an air claim; it has nothing to say about a row whose item has
+   * not arrived, and nothing to say about an unbound one. Rebuilding the union
+   * here rather than threading `badgeStatus` into it keeps that scoping explicit —
+   * and `binding.kind` is still the panel's answer, never a second derivation.
+   */
+  const stateBinding: RowBinding =
+    binding.kind === 'bound' && badgeStatus !== null
+      ? { kind: 'bound', status: badgeStatus }
+      : binding;
+
   const state = rowState({
-    status: badgeStatus,
+    binding: stateBinding,
     pending: item?.pending === true,
     observed: slot.observed,
     linkDown,

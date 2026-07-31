@@ -12,7 +12,7 @@ import { useConfirm } from '../../ui/useDialog.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
-import { useStack } from '../../hooks/useStack.js';
+import { useStackSnapshot } from '../../hooks/useStack.js';
 import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { usePlayoutLayers } from '../../hooks/usePlayoutLayers.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
@@ -22,6 +22,7 @@ import { isOnAir } from '../stack/onAir.js';
 import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { LayerRow } from './LayerRow.js';
+import { resolveRowBinding } from './rowState.js';
 import { LayerTableHeader } from './LayerTableHeader.js';
 import { resolveDensity } from './layerTable.js';
 import { PlayoutPanel } from './PlayoutPanel.js';
@@ -102,7 +103,21 @@ export function LayersPanel({
   // R-022 — ONE rehearse snapshot for the whole table, from the bridge.
   const rehearsals = useRehearse();
   const playout = usePlayoutLayers();
-  const items = useStack();
+  /**
+   * THE STACK, WITH ITS READINESS — and this is the THIRD snapshot, which is the
+   * bug the `listReady` guard above did not reach.
+   *
+   * That guard protects the SET OF ROWS: an unready bank or slots can no longer
+   * render as a station with no rows. It says nothing about what each row CARRIES,
+   * and the stack is a separate snapshot that lands separately. `useStack()` hands
+   * back `[]` until its first answer — right for rendering a list, and wrong here,
+   * because a bound row then finds no item and was reported as EMPTY.
+   *
+   * So the operator saw every row present and every row empty, then the occupied
+   * ones appearing at once, on every startup and every reconnect. Three snapshots,
+   * two of them guarded.
+   */
+  const { items, ready: stackReady } = useStackSnapshot();
   const linkDown = useLink() === 'disconnected';
   // THE SECOND HOP — a live bridge says nothing about the playout machine.
   const casparReach = useCasparReach();
@@ -475,6 +490,22 @@ export function LayersPanel({
                 unverifiable={linkDown || casparReach === 'unreachable'}
               />
               {rows.map((slot, index) => {
+                /*
+                  THE `?? null` THAT USED TO BE HERE IS THE BUG, and it is worth
+                  naming because it reads as harmless: a bound slot whose item had
+                  not arrived became `null`, which is the SAME value an unbound
+                  slot produces — so the row could not tell "nothing is on this
+                  layer" from "we have not been told yet", and reported the first.
+
+                  `resolveRowBinding` is now the one place that decision is made,
+                  and it takes `stackReady` as a required argument so it cannot be
+                  made without considering it.
+                */
+                const binding = resolveRowBinding(
+                  slot.binding,
+                  slot.binding === null ? undefined : itemById.get(slot.binding.itemId),
+                  stackReady,
+                );
                 const item =
                   slot.binding !== null ? (itemById.get(slot.binding.itemId) ?? null) : null;
                 const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
@@ -483,6 +514,7 @@ export function LayersPanel({
                     key={slot.layer}
                     slot={slot}
                     item={item}
+                    binding={binding}
                     template={template}
                     // `#` — plain display order, 1 at the top of THIS list.
                     displayPosition={index + 1}

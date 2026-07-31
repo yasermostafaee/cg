@@ -86,6 +86,8 @@ function row(item: StackItemState): ReturnType<typeof createElement> {
       binding: { itemId: item.itemId, templateType: 'clock', templateId: item.templateId },
     },
     item,
+    // A settled panel: these specs are about how an ARRIVED status is badged.
+    binding: { kind: 'bound' as const, status: item.status },
     template: { templateId: 'tpl-1', templateType: 'clock', fields: [] },
     bankPosition: 1,
     selected: false,

@@ -10,6 +10,55 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### ✅ `dev-loading-row` — every row read EMPTY on startup and reconnect
+
+**The task's premise was directionally right and located one level too low.** It named
+`rowState`'s unbound branch returning `EMPTY` unconditionally. That branch is where the
+word comes from, but it is not where the two facts got confused: `rowState` was correct
+given its input, and its INPUT was lossy.
+
+**The actual conflation is `LayersPanel`'s `itemById.get(slot.binding.itemId) ?? null`.**
+A bound slot whose item had not arrived produced `null` — the identical value an
+UNBOUND slot produces — so the row could not tell "nothing is on this layer" from "we
+have not been told yet", and reported the first.
+
+**The missing guard is a THIRD snapshot.** `listReady` (the earlier fix) gates the bank
+and the slots, which protects the SET OF ROWS. The STACK is a separate snapshot that
+lands separately, and `useStack()` returns `[]` until its first answer — documented in
+`useStack.ts` as right for rendering and catastrophic for deletion, and it is equally
+wrong for deciding what a row IS. Three snapshots, two of them guarded. That is exactly
+the owner's symptom: rows all present, all EMPTY, then the occupied ones at once.
+
+**Made unrepresentable, not checked.** `rowState` now takes a `RowBinding` union
+(`unbound` | `awaiting` | `bound`) instead of `StackItemStatus | null`, built only by
+`resolveRowBinding`, which takes `stackReady` as a REQUIRED argument. A caller cannot
+reach `unbound` from a missing lookup, and cannot decide without considering readiness.
+Same move as `StackPruneInput`. The union is passed to `LayerRow` rather than a
+`stackReady` boolean, so the row cannot compute a different answer from the panel's.
+
+**The standing rule is not weakened.** An unbound row with a READY snapshot still reads
+`EMPTY`, still queries nothing, still in normal styling — asserted. And once the stack
+IS ready, a binding naming an item the stack does not have resolves to `unbound`, which
+preserves `LayerRow`'s existing "departed item renders as empty" behaviour.
+
+**Ran the new spec against the unfixed source and saw it red**, by stashing only the
+three source files and keeping the tests: 3 of 5 failed, with
+`expected '2EMPTYLayer 2clock…' not to contain 'EMPTY'` — the owner's symptom verbatim.
+The two that passed are the two that should: the EMPTY-preserved rule, and the
+adversarial stuck-in-LOADING check (vacuous when nothing ever says LOADING).
+
+**Adversarial direction covered:** a row stuck LOADING after its item arrived is the
+mirror bug and would read as a hung panel. Asserted by resolving the stack and then
+continuing to tick, so a row that drifted back would fail.
+
+**Follow-up not taken (out of scope — "do not change any gating condition").** During
+the awaiting window a bound row's VERBS render as an empty row's, because everything
+except the state cell still derives from `item === null`. That is not a regression (the
+row was fully EMPTY before, verbs included) and the state cell now warns, but an
+operator could press LOAD on a row that is about to turn out to be bound. **The
+principled fix is to gate the verbs on `binding.kind === 'awaiting'` too**, which is a
+gating change and belongs in its own task.
+
 ### ✅ `dev-r028-b5` — the Inspector restyle, three commits
 
 `6f0477c` (shared panel chrome) · `0d3b5b5` (Inspector content) · `d166bc5` (align to

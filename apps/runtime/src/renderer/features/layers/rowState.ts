@@ -108,9 +108,64 @@ function iconForStatus(status: StackItemStatus, pending: boolean): LucideIcon {
   }
 }
 
+/**
+ * WHAT THIS ROW CARRIES — and the reason it is a union rather than a nullable.
+ *
+ * `rowState` used to take `status: StackItemStatus | null`, and `null` was doing
+ * the work of TWO facts that are not the same fact:
+ *
+ *   - "this row has no template bound"     — ours, known, and EMPTY is honest.
+ *   - "we have not received the stack yet" — not a fact about the row at all.
+ *
+ * The caller collapsed them (`itemById.get(id) ?? null`) before `rowState` ever
+ * saw them, so every bound row read EMPTY for the whole bootstrap window and then
+ * filled in at once. `useStack()` hands back `[]` until the first snapshot lands,
+ * which is documented in `useStack.ts` and is exactly right for rendering a LIST —
+ * and wrong for deciding what a row IS.
+ *
+ * A nullable cannot express the difference, so this is a union: the AWAITING case
+ * has to be constructed deliberately, and `unbound` cannot be reached from a
+ * missing lookup. Same move as `StackPruneInput`, where `{ ready: false }` carries
+ * no ids at all — the guard is the TYPE, not a condition a future caller can
+ * forget to pass.
+ *
+ * Build it with {@link resolveRowBinding} and nowhere else; a second derivation is
+ * how the distinction comes back apart.
+ */
+export type RowBinding =
+  /** `slot.binding === null` — we have never put anything on this layer. */
+  | { kind: 'unbound' }
+  /** Bound, but the stack snapshot has not arrived. NOT a claim about the row. */
+  | { kind: 'awaiting' }
+  | { kind: 'bound'; status: StackItemStatus };
+
+/**
+ * THE one place a slot's binding plus the stack snapshot become a row's state.
+ *
+ * `stackReady` is a required argument rather than an optional flag precisely
+ * because the defect was a caller that never considered it. There is no default:
+ * a caller must say whether the snapshot has landed, and saying "yes" while
+ * holding an empty list is the only way back to the old behaviour — which is now
+ * a visible lie in the call site rather than an invisible `??`.
+ */
+export function resolveRowBinding(
+  slotBinding: { itemId: string } | null,
+  item: { status: StackItemStatus } | undefined,
+  stackReady: boolean,
+): RowBinding {
+  if (slotBinding === null) return { kind: 'unbound' };
+  if (item !== undefined) return { kind: 'bound', status: item.status };
+  // Bound, and no item for it. Two causes, and only one of them is knowable:
+  // the snapshot has not landed (wait), or it has and the binding names an item
+  // the stack does not have (a real inconsistency, which `LayerRow` already
+  // renders as an empty row — see its "departed item" test). Once the stack is
+  // READY, a missing item is an answer; before that it is silence.
+  return stackReady ? { kind: 'unbound' } : { kind: 'awaiting' };
+}
+
 export interface RowStateInput {
-  /** The bound item, or null when the row carries nothing of ours. */
-  status: StackItemStatus | null;
+  /** What this row carries — see {@link RowBinding}. Never a bare nullable. */
+  binding: RowBinding;
   pending: boolean;
   /** What the WIRE observes on this layer — the only source for an unbound row. */
   observed: FixedSlotObservation;
@@ -164,7 +219,7 @@ function withWire(explanation: string | undefined, wire: string): string {
 }
 
 export function rowState({
-  status,
+  binding,
   pending,
   observed,
   linkDown,
@@ -203,7 +258,7 @@ export function rowState({
   // knew, not saying "nothing here" when we genuinely have nothing. The word goes
   // on doing its work below for a row that IS bound and cannot be confirmed,
   // which is the only place it was ever earning its keep.
-  if (status === null) {
+  if (binding.kind === 'unbound') {
     return {
       icon: CircleDashed,
       // The dedicated empty-row grey, not `textMuted`: a free row recedes so the
@@ -217,7 +272,40 @@ export function rowState({
     };
   }
 
+  /**
+   * ── BOUND, BUT THE STACK SNAPSHOT HAS NOT ARRIVED ───────────────────────
+   *
+   * The row exists and carries something; we do not yet know WHAT. This is the
+   * third state the nullable could not express, and it is the operator's reported
+   * bug: every bound row read EMPTY for the bootstrap window and then filled in
+   * at once, so the rundown looked wiped on every startup and every reconnect.
+   *
+   * IT MUST NOT READ AS EMPTY, and it differs from EMPTY in all three channels
+   * this module insists on — a different SHAPE (a spinner, not a dashed ring), a
+   * different WORD, and a brighter ink where EMPTY deliberately recedes. It also
+   * MOVES, which nothing at rest on this table does. A faint placeholder here
+   * would undo the whole fix while looking tidier.
+   *
+   * `transient` is the honest tone: this is a transition, and it ends when the
+   * DATA arrives — `ready` latches on the first snapshot, a push, or a resolved
+   * pull. Never on a timer. A timer would either uncover a row too early or hold a
+   * real one back, and both are worse than the wait.
+   */
+  if (binding.kind === 'awaiting') {
+    return {
+      icon: LoaderCircle,
+      color: colors.textMuted,
+      label: 'LOADING',
+      tone: 'idle',
+      transient: true,
+      title:
+        'This row has a template bound, but the stack has not arrived from the bridge yet. ' +
+        'It fills in as soon as the bridge answers — this is not an empty row.',
+    };
+  }
+
   // ── A bound item: its reconciled status is the state. ─────────────────────
+  const status = binding.status;
   const visual = airStateVisual(status, pending);
   const tone = badgeTone(status, pending);
   const claimsAir = tone === 'onair';

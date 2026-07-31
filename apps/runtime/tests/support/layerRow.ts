@@ -7,6 +7,7 @@ import { vi } from 'vitest';
 import type { FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { LayerRow } from '../../src/renderer/features/layers/LayerRow.js';
+import { resolveRowBinding } from '../../src/renderer/features/layers/rowState.js';
 
 /**
  * R-028 part B — the shared harness for LayerRow DOM tests.
@@ -121,6 +122,15 @@ export async function renderLayerRow(options: {
    * there is no round trip to be waiting on and the row reports the nearer hop.
    */
   reach?: Reachability;
+  /**
+   * Has the STACK snapshot arrived? Defaults to TRUE, because every spec here
+   * except the loading ones is about a settled panel.
+   *
+   * It is threaded rather than hard-coded so the awaiting state is reachable from
+   * this harness at all: a bound slot plus `stackReady: false` is exactly the
+   * bootstrap window, and it is the one combination that must NOT read as EMPTY.
+   */
+  stackReady?: boolean;
 }): Promise<RenderedRow> {
   const link = options.link ?? 'live';
   const stubs = stubBridge(link, options.reach ?? 'both-up');
@@ -128,6 +138,13 @@ export async function renderLayerRow(options: {
   const slot =
     options.slot ??
     (item === null ? slotWith({ binding: null, observed: { kind: 'empty' } }) : slotWith());
+  // Built through the SAME resolver the panel uses, so the harness cannot express
+  // a binding the product could not produce.
+  const binding = resolveRowBinding(
+    slot.binding,
+    item === null ? undefined : item,
+    options.stackReady ?? true,
+  );
   const template = options.template === undefined ? templateWith() : options.template;
 
   const container = document.createElement('div');
@@ -141,6 +158,7 @@ export async function renderLayerRow(options: {
         createElement(LayerRow, {
           slot,
           item,
+          binding,
           template,
           // A standalone row is the first row AND the bank's first position; specs
           // that care about the difference drive the panel, not one row.
