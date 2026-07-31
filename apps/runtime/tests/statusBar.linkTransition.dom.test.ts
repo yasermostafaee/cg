@@ -174,16 +174,29 @@ function primaryPill(el: HTMLElement): string {
 }
 
 /**
- * The `#10B981` green that means "this server is fine" (`styles.ok`) — jsdom serializes it
- * to `rgb(...)`. B-081 is about a CLAIM, and the color makes the claim as loudly as the word:
- * a muted "UNKNOWN" beside a still-green ● dot would not be a fix.
+ * THE CONFIDENT-HEALTH TREATMENT (`styles.ok`) — what a pill wears when it is
+ * asserting that a server is fine.
+ *
+ * B-081 is about a CLAIM, and the treatment makes the claim as loudly as the word:
+ * a muted "UNKNOWN" beside a still-confident ● dot would not be a fix. That is
+ * unchanged and is what these assertions protect.
+ *
+ * WHAT CHANGED IS THE MECHANISM, NOT THE ASSERTION. Confident health used to be
+ * the emerald `#10B981`. The status bar may no longer borrow the on-air green or
+ * the ready sky at any weight — a glance at green in the footer reads as
+ * "something is on air", and those two hues already mean something on the layer
+ * table (owner's call; see `StatusBar`'s style block). Health is now the primary
+ * INK at bold weight against the bar's muted base text, so this matches on that
+ * instead. Deliberately still a POSITIVE match on the confident treatment rather
+ * than a weaker "not muted" check: the original would have gone green-blind, and
+ * so would a loosened rewrite.
  */
-const OK_GREEN = 'rgb(16, 185, 129)';
+const OK_INK = 'rgb(229, 231, 235)';
 
-function greensIn(scope: HTMLElement | undefined): string[] {
+function confidentIn(scope: HTMLElement | undefined): string[] {
   if (scope === undefined) return [];
   return [...scope.querySelectorAll<HTMLElement>('span')]
-    .filter((s) => s.style.color === OK_GREEN)
+    .filter((s) => s.style.color === OK_INK && s.style.fontWeight === '700')
     .map((s) => s.textContent ?? '');
 }
 
@@ -218,7 +231,7 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
     // StrictMode deliberately double-invokes the mount effect, so the absolute number is a
     // property of the harness, not of the hook.)
     expect(primaryPill(el)).toContain('HEALTHY');
-    expect(greensIn(pill(el, 'PRIMARY'))).not.toEqual([]);
+    expect(confidentIn(pill(el, 'PRIMARY'))).not.toEqual([]);
     const pullsWhileConnected = bridge.healthPulls();
     expect(pullsWhileConnected).toBeGreaterThan(0);
     const footerBefore = el.querySelector('footer');
@@ -231,8 +244,8 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
     expect(primaryPill(el)).toContain('UNKNOWN');
     expect(primaryPill(el)).not.toContain('HEALTHY');
     // Not just the word — nothing in the pill is still claiming green, ● dot included.
-    expect(greensIn(pill(el, 'PRIMARY'))).toEqual([]);
-    expect(greensIn(pill(el, 'BACKUP'))).toEqual([]);
+    expect(confidentIn(pill(el, 'PRIMARY'))).toEqual([]);
+    expect(confidentIn(pill(el, 'BACKUP'))).toEqual([]);
     // The last-known reading survives ONLY as an explicitly-stale tooltip.
     expect(pill(el, 'PRIMARY')?.title).toContain('Last known before the link dropped: HEALTHY');
     // And no read is fired at a link that refuses reads by design (R-006).
@@ -244,7 +257,7 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
     expect(bridge.healthPulls()).toBe(pullsWhileConnected + 1);
     expect(primaryPill(el)).toContain('HEALTHY');
     expect(primaryPill(el)).not.toContain('UNKNOWN');
-    expect(greensIn(pill(el, 'PRIMARY'))).not.toEqual([]);
+    expect(confidentIn(pill(el, 'PRIMARY'))).not.toEqual([]);
     expect(el.querySelector('footer')).toBe(footerBefore);
   });
 

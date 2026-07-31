@@ -283,6 +283,40 @@
  * gate into a dead button — the defect the gating was built to remove. 0.55
  * rather than the shared 0.45 for the same reason.
  */
+/*
+ * ── COMMIT — the Inspector's UPDATE, and only that ──────────────────────────
+ *
+ * Owner: «رنگ دکمه update مثل دکمه play بشه», then refined to these exact values:
+ * `--r-verb-play` for the fill and the line, `#10151f` for the ink.
+ *
+ * THE REFINEMENT IS THE POINT, AND IT RESOLVES THE RISK RATHER THAN ACCEPTING IT.
+ * The first pass gave this button `--r-onair` — literally PLAY's variant, one
+ * token, no drift. That worked and it put THE SACRED AIR GREEN on a control in a
+ * panel that also shows an on-air state dot, so the same hue meant "this is on
+ * air" and "press this" six inches apart. `--r-verb-play` is a DIFFERENT green —
+ * darker, and already the app's PLAY-verb colour — so UPDATE reads as the
+ * play-family action it is without ever wearing the hue that means a graphic is
+ * on the output. `--r-onair` stays PLAY's alone.
+ *
+ * A DARK INK, not white: `--r-verb-play` is a bright green and light text on it
+ * fails to separate. Same reason `--caution-strong` carries `#1c1207` and
+ * `--primary` carries `#04121f` — a filled bright control owes a dark foreground.
+ *
+ * SCOPE: the Inspector's UPDATE and nothing else. It is not a general "important
+ * button" colour, and it must not reach the layer table, whose verbs rest neutral.
+ */
+.cg-btn--commit {
+  background: var(--r-verb-play);
+  border-color: var(--r-verb-play);
+  color: #10151f;
+  font-weight: var(--r-weight-bold);
+}
+.cg-btn--commit:disabled {
+  /* Above the shared 0.45: this button carries its refusal REASON on `title`, and
+     a fail-closed control that dims into invisibility is a dead button. */
+  opacity: 0.55;
+}
+
 .cg-btn--accent {
   background: var(--r-accent-fill);
   border-color: var(--r-accent-line);
@@ -763,10 +797,16 @@ textarea.cg-field {
   resize: vertical;
   line-height: 1.4;
 }
-/* See `AutoGrowTextarea` — it owns the height, so the drag handle would only be
-   undone by the next keystroke. It scrolls internally past its cap instead. */
+/*
+ * THE GRIP IS REAL, and it wins. This was `resize: none` because auto-sizing
+ * would undo a drag on the next keystroke — a sound observation with the wrong
+ * conclusion: the fix is to stop undoing it, not to remove the handle. An operator
+ * working four headline items needs to open one up. `AutoGrowTextarea` latches on
+ * the first manual resize and never auto-sizes that element again; see its header
+ * for why the latch is per-element, per-mount, and never reaches the value.
+ */
 textarea.cg-field--autogrow {
-  resize: none;
+  resize: vertical;
   overflow-y: auto;
 }
 
@@ -928,11 +968,26 @@ textarea.cg-field--autogrow {
  * The words themselves are unchanged (`dev-offline-polish` owns wording).
  */
 
+/*
+ * THE CHIP ROW BELONGS TO THE TITLE ABOVE IT, NOT TO THE SECTION BELOW.
+ *
+ * The scale was applied to the FIELDS in the first pass and not to the panel's
+ * HEAD, so the title, the chips and the POSITION heading sat almost flush — the
+ * owner's report. The gap inside the head (title → chips) is a small step because
+ * they are one block: the chips are metadata ABOUT that title. The gap out of it
+ * (chips → the first section heading) is the largest step in the scale, because
+ * that is a SECTION boundary and must read as one.
+ *
+ * The ordering is the whole mechanism: small inside a group, large between
+ * groups. It is what lets this panel group things without a divider line between
+ * every pair.
+ */
 .cg-meta-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--r-space-1);
+  gap: var(--r-space-1) var(--r-space-2);
   align-items: center;
+  margin: 0 0 var(--r-space-8);
 }
 
 .cg-meta-chip {
@@ -1201,8 +1256,7 @@ textarea.cg-field--autogrow {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* Matched to the minis' 28px so the cluster is one consistent height rather than
-     being made taller by the one element that is not a button. */
+  /* Matched to the remove button's 28px so the cluster is one consistent height. */
   flex: 0 0 auto;
   width: 22px;
   min-width: 22px;
@@ -1213,9 +1267,22 @@ textarea.cg-field--autogrow {
   color: var(--r-text-muted);
   cursor: grab;
   line-height: 1;
+  font: inherit;
 }
 .cg-list-handle:hover {
   color: var(--r-text);
+}
+/*
+ * IT IS A REAL BUTTON NOW, so it owes a real focus ring — and this one is not
+ * cosmetic. With the ↑/↓ pair gone (owner request) this handle is the ONLY
+ * keyboard route to reordering: focus it and press ↑/↓. An operator who cannot
+ * see where focus is cannot use the only path there is.
+ */
+.cg-list-handle:focus-visible {
+  outline: none;
+  color: var(--r-text);
+  border-radius: var(--r-radius-sm);
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
 }
 .cg-list-item.is-dragging {
   opacity: 0.5;

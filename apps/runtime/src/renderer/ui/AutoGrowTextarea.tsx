@@ -15,10 +15,31 @@ import { EDITOR_DIR } from './editorTextDirection.js';
  * tall empty box. `MAX_H` caps it so one pathological item cannot take the whole
  * panel; past the cap the textarea scrolls internally.
  *
- * `resize: none` (via `cg-field--autogrow`) is deliberate and is NOT a loss of
- * control: a manual drag would be silently undone by the next keystroke, since this
- * re-measures on every value change. A handle that quietly stops working is worse
- * than no handle. The cap plus internal scrolling covers the long-content case.
+ * ── THE RESIZE GRIP, AND WHY IT TOOK A HANDOFF TO GET RIGHT ─────────────────
+ *
+ * This used to be `resize: none`, on the reasoning that a manual drag would be
+ * silently undone by the next keystroke — a handle that quietly stops working is
+ * worse than no handle. That reasoning was sound and the conclusion was wrong:
+ * the owner needs to open up one of four headline items, and the answer to "the
+ * drag gets undone" is to STOP UNDOING IT, not to remove the grip.
+ *
+ * So the grip is back (`resize: vertical`) and a drag WINS PERMANENTLY for that
+ * textarea: the first manual resize latches `manual`, and auto-sizing never runs
+ * on that element again. The operator has stated a height; nothing this component
+ * knows outranks that.
+ *
+ * The latch is per-ELEMENT and per-mount, deliberately. It is not persisted and
+ * not lifted into the draft — a box height is a view preference, not field
+ * content, and it must never reach the staged value or the scene. Switching stack
+ * items remounts these controls (the Inspector keys them by item+path), so a fresh
+ * item starts auto-sizing again, which is right: the height an operator chose for
+ * one headline is not a claim about the next one.
+ *
+ * DETECTED, NOT INTERCEPTED. There is no resize event on a textarea drag that
+ * distinguishes it from our own write, so this compares the element's height
+ * against the last height WE set: if they differ, something else moved it, and the
+ * only thing that can is the grip. That is why `lastSet` exists — without it we
+ * cannot tell our own effect from the operator.
  */
 
 /** Growth ceiling, ~9 lines at the field's line-height. Beyond this it scrolls. */
@@ -32,6 +53,10 @@ export function AutoGrowTextarea({
   value: string;
 } & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'rows'>): JSX.Element {
   const ref = useRef<HTMLTextAreaElement | null>(null);
+  /** The last height WE wrote — the only way to recognise a height we did not. */
+  const lastSet = useRef<string | null>(null);
+  /** The operator has dragged the grip. Auto-sizing is over for this element. */
+  const manual = useRef(false);
 
   // `useLayoutEffect`, not `useEffect`: the height must be right in the SAME frame
   // the new text paints, or every keystroke that adds a line shows a one-frame
@@ -40,10 +65,20 @@ export function AutoGrowTextarea({
   useLayoutEffect(() => {
     const el = ref.current;
     if (el === null) return;
+    // A HEIGHT WE DID NOT WRITE IS THE OPERATOR'S. Checked before the latch is
+    // read, so a drag is noticed on the very next keystroke rather than a frame
+    // later — otherwise that keystroke would stamp our height over theirs, which
+    // is the exact "handle that quietly stops working" this design rejects.
+    if (lastSet.current !== null && el.style.height !== lastSet.current) {
+      manual.current = true;
+    }
+    if (manual.current) return;
     // Collapse first: `scrollHeight` never reports LESS than the current height, so
     // without this the box could only ever grow.
     el.style.height = 'auto';
-    el.style.height = `${String(Math.min(el.scrollHeight, MAX_H))}px`;
+    const next = `${String(Math.min(el.scrollHeight, MAX_H))}px`;
+    el.style.height = next;
+    lastSet.current = next;
   }, [value]);
 
   return (

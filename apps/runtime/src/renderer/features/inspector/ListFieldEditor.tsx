@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronUp, GripVertical, Plus, X } from 'lucide-react';
+import { GripVertical, Plus, X } from 'lucide-react';
 import type { FieldValue, ListItem } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
@@ -66,9 +66,24 @@ import {
  * being its own kind of mess. `--icon:disabled` keeps a visible boundary for the same
  * reason (see `controls.css`).
  *
- * DRAG REORDER IS AN ADDITION, NOT A REPLACEMENT. The ↑/↓ buttons stay, because
- * drag is unreachable by keyboard and awkward under time pressure; drag is the
- * faster path for a pointer, and the buttons remain the complete one.
+ * REORDERING IS THE HANDLE ALONE NOW, AND THE HANDLE GREW A KEYBOARD.
+ *
+ * Owner: «آیکونهای بالا و پایین برای اینپوتها بهتره مخفی بشن با وجود آیکون درگ
+ * اونها دیگه نیاز نیستن و فقط فضا اشغال کردن» — with a drag handle the ↑/↓ pair
+ * is redundant and only costs space. True of a POINTER, and the previous design
+ * said the opposite for a reason that had to be dealt with rather than dropped:
+ * drag is unreachable by keyboard, so the buttons were the complete path and the
+ * handle was deliberately `aria-hidden` + `tabIndex={-1}` — announcing a control a
+ * screen-reader user cannot operate is worse than silence.
+ *
+ * Deleting the buttons and leaving that handle would have removed the only
+ * keyboard route to reordering. So the handle became a real focusable BUTTON with
+ * an accessible name, and ↑/↓ move the item while it holds focus. One control,
+ * both input methods, and the row gets its space back.
+ *
+ * `e.key` for the arrows, not `e.code`: Arrow keys are layout-stable, which is the
+ * documented exception to this repo's physical-key rule. `preventDefault` because
+ * an un-handled arrow scrolls the panel out from under the operator mid-reorder.
  */
 /* Spacing from the scale (`--r-space-*`): item→item is one step up from the gaps
    INSIDE an item's cluster, which is what makes each row read as one object. */
@@ -200,11 +215,11 @@ export function ListFieldEditor({
                 cannot use would be worse than silence — the ↑/↓ buttons beside it are
                 the labelled, complete, keyboard-reachable path to the same result.
               */}
-              <span
+              <button
+                type="button"
                 className="cg-list-handle"
-                aria-hidden="true"
-                tabIndex={-1}
-                title="Drag to reorder (or use the arrows)"
+                aria-label={`Reorder ${fieldId} item ${n}`}
+                title="Drag to reorder, or focus this and press ↑ / ↓"
                 onPointerDown={() => {
                   const el = rows.current.get(i);
                   if (el !== undefined) el.draggable = true;
@@ -213,9 +228,19 @@ export function ListFieldEditor({
                   const el = rows.current.get(i);
                   if (el !== undefined) el.draggable = false;
                 }}
+                onKeyDown={(e) => {
+                  // `e.key`, not `e.code`: Arrow keys are layout-STABLE, which is
+                  // the documented exception to the physical-key rule.
+                  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+                  const to = e.key === 'ArrowUp' ? i - 1 : i + 1;
+                  if (to < 0 || to >= items.length) return;
+                  // Or the browser scrolls the panel out from under the operator.
+                  e.preventDefault();
+                  onStage(moveItem(items, i, to));
+                }}
               >
                 <Icon icon={GripVertical} />
-              </span>
+              </button>
               {/* THE ITEM'S IDENTITY is this number, and it is the whole reason no
                   bracketed key is printed per row: the FIELD is named once in its
                   header, the ITEMS are numbered. `ROTATOR[0]` on every row named
@@ -223,22 +248,6 @@ export function ListFieldEditor({
               <span className="cg-list-item__index" aria-hidden="true">
                 {n}
               </span>
-              <Button
-                variant="icon"
-                aria-label={`Move ${fieldId} item ${n} up`}
-                disabled={i === 0}
-                onClick={() => onStage(moveItem(items, i, i - 1))}
-              >
-                <Icon icon={ChevronUp} />
-              </Button>
-              <Button
-                variant="icon"
-                aria-label={`Move ${fieldId} item ${n} down`}
-                disabled={i === items.length - 1}
-                onClick={() => onStage(moveItem(items, i, i + 1))}
-              >
-                <Icon icon={ChevronDown} />
-              </Button>
               {/* NEUTRAL AT REST, RED ON HOVER. The strip of glyphs still has to say
                   "this one is different in kind", but it says it under the pointer
                   now rather than by standing at the opposite end of the panel. */}

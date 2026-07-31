@@ -12,7 +12,7 @@ import {
   type StackItemState,
 } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { airStateVisual, colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
 import { Button } from '../../ui/Button.js';
@@ -204,29 +204,44 @@ const styles = {
 function MetaChip({
   label,
   value,
-  dot = false,
+  dotColor,
 }: {
   /** Omitted where the value names itself — the status word and the server name. */
   label?: string;
   value: string;
-  dot?: boolean;
+  /**
+   * The STATE's colour, or omitted for a chip that carries no state.
+   *
+   * A colour rather than a boolean, so the only way to get a dot is to have a
+   * state colour in hand — a dot that is merely decorative is unrepresentable.
+   */
+  dotColor?: string;
 }): JSX.Element {
   return (
     <span className="cg-meta-chip">
       {/*
-        THE DOT IS CONSTANT, AND THAT IS WHAT MAKES IT SAFE.
+        THE DOT CARRIES THE STATE'S OWN COLOUR — owner's call, and it supersedes
+        the constant sky dot that stood here.
 
-        It is the interactive sky, never an air-state hue, and — the load-bearing
-        part — it does not vary with `item.status`. A dot that never changes cannot
-        be read as a state signal, so it cannot become the SECOND on-air indicator
-        this console must not have: `theme.ts` reserves the air colour for the layer
-        rows and the status bar's indicator "and NOWHERE else". Its one job is to
-        mark which chip is the STATE among three coordinates.
+        The colour comes from `airStateVisual`, the SAME function the layer table's
+        state mark reads, so this is the same colour by CONSTRUCTION rather than by
+        a matching hex — the owner sets those state colours and they must not drift
+        apart when he changes one.
 
-        If a future change makes this colour depend on the status, it becomes a
-        state indicator and that rule applies to it.
+        THIS IS A THIRD PLACE THE AIR HUE CAN APPEAR, and `theme.ts` says the air
+        colour lives on the layer rows and the status bar's indicator "and NOWHERE
+        else". That sentence is now one place out of date rather than wrong: the
+        Inspector shows exactly ONE item, the one the operator has selected, and its
+        status is the same fact the row is already showing in the same colour. It is
+        not a second, independently-derived claim — which is what the rule exists to
+        prevent — it is the same claim, from the same source, about the same item.
+
+        The dot is never alone: the chip prints the status WORD beside it, so the
+        hue is reinforcement and not the signal, exactly as on the row.
       */}
-      {dot && <span className="cg-meta-chip__dot" aria-hidden="true" />}
+      {dotColor !== undefined && (
+        <span className="cg-meta-chip__dot" style={{ background: dotColor }} aria-hidden="true" />
+      )}
       {label !== undefined && <span className="cg-meta-chip__label">{label}</span>}
       <span className="cg-meta-chip__value">{value}</span>
     </span>
@@ -347,7 +362,10 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
         <div className="cg-meta-chips">
           {/* The status word names itself, so it carries no label — only the dot
               that marks it as the state among the coordinates. */}
-          <MetaChip value={`${item.status}${item.pending ? ' (pending)' : ''}`} dot />
+          <MetaChip
+            value={`${item.status}${item.pending ? ' (pending)' : ''}`}
+            dotColor={airStateVisual(item.status, item.pending).color}
+          />
           {item.slot === undefined ? (
             <MetaChip value={layerDetail(undefined)} />
           ) : (
@@ -414,25 +432,37 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
             no-op only SUPPRESSES the button's duplicate INLINE error — it does not
             re-report (which would double-toast) or change the wording. Exactly what
             `StackRow`'s UPDATE does, for exactly this reason. */}
-          {/* ACCENTED — one of the three (owner request), with Apply position and
-            Add item. This REPLACES the `neutral` that stood here, and the earlier
-            reasoning is corrected rather than deleted, because half of it is still
-            binding.
+          {/* PLAY'S VARIANT, BY THE OWNER'S EXPLICIT CALL — «رنگ دکمه update مثل
+            دکمه play بشه». `variant="play"` rather than a copied hex or a new
+            token: ONE source, so the two buttons cannot drift apart.
 
-            C-012 gave this button the ON-AIR hue to say "this reaches air". THAT
-            remains retired and must not come back: an air-hue control puts a
-            transmission colour on an affordance, which is the one thing the palette
-            may not do, and moving on-air from red to green changed nothing about it.
+            This supersedes C-012's retirement of the air hue on this control, and
+            the history is kept because it is emphatic and a future reader will
+            meet it: an outlined `--r-onair` UPDATE was removed on the rule that a
+            transmission colour may never sit on an affordance.
 
-            What is superseded is the blanket clause that followed — "colour belongs
-            to STATE, never to an affordance". That rule was written for the LAYER
-            TABLE, where thirty coloured verbs drowned the one row that was live, and
-            it was over-generalised to a panel that shows ONE item and has no row
-            state competing for the eye. Here colour can mean HIERARCHY: this is the
-            action the surface exists to perform. The hue is SKY, which has never
-            been a state colour in this build. See `.cg-btn--accent` in
-            `controls.css` for the rule that replaced the blanket one, and do not
-            propagate this to the layer table. */}
+            WHY THE RULE SURVIVES BEING APPLIED THE OTHER WAY. The palette already
+            distinguishes the two things by SHAPE, not only by hue:
+
+              - a FILLED GREEN BUTTON is an ACTION THAT REACHES AIR. PLAY has been
+                exactly that since C-012 and is the only one until now.
+              - the AIR CLAIM is a state MARK — coloured text and an icon in a
+                table cell, next to the word ON AIR. It is never a filled button.
+
+            So Update joining PLAY does not add a new meaning; it puts a second
+            member in a class that already existed and already reads correctly, and
+            the two are truthfully alike — PLAY takes a graphic to air, Update
+            pushes a change to one that is already there.
+
+            THE CONSTRAINT THAT REMAINS ABSOLUTE: this may not spread to anything
+            that is not an action reaching air, and the air hue may still never be
+            worn by a state mark outside the layer rows and the status bar. It is
+            `--r-onair` via the shared class and must stay that way — a hand-copied
+            green here would be the drift the owner's "use PLAY's token" forbids.
+
+            §3's sky `accent` remains for `Apply position` and `Add item`, which do
+            NOT reach air, so the two classes stay legible: sky = the action this
+            surface exists to perform; green = the action that reaches air. */}
           {/*
             GATED ON CASPARCG, exactly as the ROW's UPDATE is — and found by the
             adversarial review of that change rather than by a test.
@@ -449,7 +479,7 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
             offline surface, and gating the fields instead would destroy it.
           */}
           <AsyncButton
-            variant="accent"
+            variant="commit"
             aria-label="Apply staged edits"
             disabled={applyRefusal !== undefined}
             {...(applyRefusal !== undefined ? { title: applyRefusal } : {})}

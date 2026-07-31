@@ -80,9 +80,17 @@ test('the first reorder click lands immediately after editing another item (no r
 
   const item1 = app.inspector.getByRole('textbox', { name: '_tickerTexts item 1' });
   await expect(item1).toHaveValue('سلام دنیا');
-  // Edit item 1's text (stages a draft), then click item 2's move-up ONCE.
+  // Edit item 1's text (stages a draft), then reorder item 2 up with ONE gesture.
+  //
+  // RE-EXPRESSED, NOT LOOSENED. The ↑/↓ buttons are gone (owner: with a drag
+  // handle they only cost space), so the reorder now goes through the handle's
+  // KEYBOARD path — focus it and press ArrowUp. The claim under test is unchanged
+  // and is the whole point of the spec: the FIRST gesture after editing another
+  // item must land, with no remount swallowing it (the recorded R-003 hazard).
   await item1.fill('ویرایش شده');
-  await app.inspector.getByRole('button', { name: 'Move _tickerTexts item 2 up' }).click();
+  const handle = app.inspector.getByRole('button', { name: 'Reorder _tickerTexts item 2' });
+  await handle.focus();
+  await handle.press('ArrowUp');
 
   // The single click reordered: item 1 is now the former item 2, item 2 the edit.
   await expect(app.inspector.getByRole('textbox', { name: '_tickerTexts item 1' })).toHaveValue(

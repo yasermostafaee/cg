@@ -182,8 +182,19 @@ export const cssVars = {
    * product's.
    *
    * Deliberately DARK, so the shared `--r-text` stays legible on every one of
-   * them. Do not reuse these anywhere a control RESTS: that would be the neutral
-   * rule reopened, one surface at a time.
+   * them. Do not reuse these anywhere a control RESTS ON THE LAYER TABLE: that
+   * would be the neutral rule reopened, one surface at a time.
+   *
+   * ONE CARVE-OUT, and it is narrow by construction: `--r-verb-play` is also the
+   * Inspector's UPDATE at rest (`.cg-btn--commit`, owner's call). That does NOT
+   * reopen the rule, because the rule is about what an operator sees while
+   * SCANNING THIRTY ROWS — it exists so a table of coloured affordances cannot
+   * drown the one row that is live. The Inspector shows ONE item and has no such
+   * competition. The table's verbs are unchanged and still rest neutral.
+   *
+   * It is `--r-verb-play` rather than `--r-onair` on purpose: UPDATE reads as the
+   * play-family action it is without wearing the hue that means a graphic is
+   * actually on the output. `--r-onair` remains PLAY's alone.
    */
   '--r-verb-load': '#1AACD8',
   '--r-verb-remove': '#FF0000',

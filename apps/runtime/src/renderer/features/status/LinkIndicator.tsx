@@ -48,7 +48,18 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
     case 'live':
       if (reach === 'reachable') {
         return {
-          color: '#10B981',
+          /*
+            NO HUE — primary ink against the bar's muted base, and the weight in
+            `StatusBar` carries the rest. This was the emerald `#10B981`, which is
+            the ON-AIR green family at a different weight, and a glance at green in
+            the footer can read as "something is on air". Green means air on the
+            layer table and sky means READY; the status bar reports TRANSPORT
+            HEALTH and may borrow neither. See `StatusBar`'s style block for the
+            rule: nothing in this bar is coloured unless it needs attention.
+
+            The WORDING is untouched — only the colour vocabulary changes.
+          */
+          color: colors.text,
           // BRIDGE LIVE, never a bare LIVE. The subject is the thing that is live.
           text: 'BRIDGE LIVE',
           title:

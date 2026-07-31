@@ -20,6 +20,7 @@ export type ButtonVariant =
   | 'primary'
   | 'secondary'
   | 'accent'
+  | 'commit'
   | 'caution'
   | 'caution-strong'
   | 'danger'
@@ -34,6 +35,7 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   primary: 'cg-btn--primary',
   secondary: 'cg-btn--secondary',
   accent: 'cg-btn--accent',
+  commit: 'cg-btn--commit',
   caution: 'cg-btn--caution',
   'caution-strong': 'cg-btn--caution-strong',
   danger: 'cg-btn--danger',
@@ -63,6 +65,9 @@ export const VARIANT_ACCENT: Record<ButtonVariant, string | undefined> = {
   // THE ACCENTED ACTION — the sky the filled variant is built from, so a
   // right-click item mirroring one of these three reads as the same control.
   accent: cssVars['--r-accent'],
+  // COMMIT — the Inspector's UPDATE. `--r-verb-play`, deliberately NOT `--r-onair`:
+  // the play-family green without the hue that means a graphic is on the output.
+  commit: cssVars['--r-verb-play'],
   caution: cssVars['--r-caution'],
   'caution-strong': cssVars['--r-caution'],
   danger: cssVars['--r-danger'],

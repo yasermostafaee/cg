@@ -99,11 +99,7 @@ test('the item controls are a FIXED small square — they never stretch to fill 
   await app.importVcg('list-size.vcg', await buildListFieldVcg(templateId));
   await app.selectStackRow(templateId);
 
-  const names = [
-    'Move _tickerTexts item 1 up',
-    'Move _tickerTexts item 1 down',
-    'Remove _tickerTexts item 1',
-  ];
+  const names = ['Reorder _tickerTexts item 1', 'Remove _tickerTexts item 1'];
   const boxes = [];
   for (const name of names) {
     const box = await app.inspector.getByRole('button', { name }).boundingBox();
@@ -170,11 +166,7 @@ test('AT FULLSCREEN the five controls for one item stay ONE cluster — they nev
   // wide as it will ever be.
   await app.inspector.getByRole('button', { name: 'Show INSPECTOR fullscreen' }).click();
 
-  const names = [
-    'Move _tickerTexts item 1 up',
-    'Move _tickerTexts item 1 down',
-    'Remove _tickerTexts item 1',
-  ];
+  const names = ['Reorder _tickerTexts item 1', 'Remove _tickerTexts item 1'];
   const boxes = [];
   for (const name of names) {
     const box = await app.inspector.getByRole('button', { name }).boundingBox();

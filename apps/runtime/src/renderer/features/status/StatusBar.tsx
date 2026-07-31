@@ -28,11 +28,35 @@ const styles = {
     fontSize: '0.85rem',
     color: colors.textMuted,
   },
-  primary: { color: colors.ready },
+  /*
+   * ── THE STATUS BAR HAS ITS OWN COLOUR VOCABULARY, AND "HEALTHY" IS NOT A HUE ──
+   *
+   * Owner's call, and the reason is a collision across two surfaces rather than
+   * within one. This bar used to read `● BRIDGE LIVE` in a green and
+   * `● PRIMARY A HEALTHY` in the sky blue — but GREEN means ON AIR on the layer
+   * table and SKY means READY, and a glance at green in the footer can read as
+   * "something is on air". `theme.ts` reserves the air hue for the layer rows and
+   * the status bar's own indicator; this is the second half of that rule, applied
+   * ACROSS the two surfaces instead of within one.
+   *
+   * The healthy state therefore takes no hue at all: primary INK and WEIGHT
+   * against the bar's muted base text. The rule that falls out is easy to hold and
+   * easy to check — NOTHING IN THIS BAR IS COLOURED UNLESS IT NEEDS ATTENTION.
+   * Health is the absence of an alarm, which is exactly what it is.
+   *
+   * The fault tones are unchanged and are not borrowed from anywhere: muted grey
+   * for what we cannot verify, amber for a configuration problem, red for down.
+   * Those are role colours (`--r-caution`, `--r-danger`) rather than state
+   * colours, and neither is a hue the layer table uses to describe a row.
+   *
+   * DO NOT reintroduce green or sky here at any weight, including a lighter or
+   * darker one — "not the same hue at a different weight" is the constraint.
+   */
+  primary: { color: colors.text, fontWeight: 700 },
   backup: { color: colors.textMuted },
   failed: { color: colors.offline },
   failedHard: { color: colors.error },
-  ok: { color: '#10B981' },
+  ok: { color: colors.text, fontWeight: 700 },
   // B-081 — the look of health we CANNOT currently verify: muted, never a confident color.
   stale: { color: colors.textMuted },
   // B-094 — a CONFIGURATION problem on a server that is otherwise fine. Amber, the
