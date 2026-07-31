@@ -31,8 +31,14 @@ afterEach(() => {
 
 function stubLink(status: 'live' | 'disconnected' | 'offline-mock'): void {
   const noopAsync = (): Promise<{ accepted: boolean }> => Promise.resolve({ accepted: true });
-  // §0a — both hops up unless this spec is about being disconnected.
-  const reach: Reachability = 'both-up';
+  // The health MUST follow the link, not be chosen independently of it. Pinning
+  // this to `both-up` gave test mode a healthy primary the offline mock never
+  // reports (`seedHealth` is `disconnected`, deliberately, R-006) — so the unit
+  // suite exercised a state that does not exist while the real mock disabled
+  // every verb in the E2E run. A fixture that can disagree with the product it
+  // stands in for is worse than no fixture.
+  const reach: Reachability =
+    status === 'offline-mock' ? 'test-mode' : status === 'disconnected' ? 'bridge-down' : 'both-up';
   const stub = {
     link: { status: () => status, onStatusChanged: () => () => undefined },
     connections: connectionsStub(reach),
@@ -101,6 +107,33 @@ describe('test mode does not claim real air — R-006', () => {
     // The sacred red ROLE is RESERVED for a graphic a real server confirmed.
     expect(state?.getAttribute('data-row-state')).not.toBe('onair');
     expect(el.querySelector('[aria-label="status SIM ON AIR"]')).not.toBeNull();
+  });
+
+  /**
+   * THE OTHER HALF OF R-006, and the one that was missing.
+   *
+   * "May simulate but may not lie" has a second edge: test mode must still WORK.
+   * Simulating the take is the entire point of the mode, so every AMCP-emitting
+   * verb stays live there — the mock is the executor and it does execute.
+   *
+   * This is the test whose absence let a real regression ship. The reachability
+   * gate answered from `useConnections()` alone, the mock honestly reports
+   * `disconnected` (it has no server), and so every verb in test mode went
+   * disabled with "CasparCG cannot be reached" — a control refusing a command
+   * that would have succeeded. The unit suite did not notice, because its stub
+   * had been pinned to a healthy primary test mode never has; 14 E2E specs
+   * failed instead.
+   */
+  it('keeps the AMCP verbs LIVE — the mock is the executor, so the command does arrive', async () => {
+    stubLink('offline-mock');
+    const el = await render(row(ON_AIR));
+
+    // A row on air in test mode: STOP is the verb that must remain pressable.
+    const stop = el.querySelector('button[aria-label="STOP"]');
+    expect(stop).not.toBeNull();
+    expect((stop as HTMLButtonElement).disabled).toBe(false);
+    // …and it must not be wearing an unreachability excuse it cannot justify.
+    expect(stop?.getAttribute('title') ?? '').not.toContain('cannot be reached');
   });
 
   it('renders the identical item as real ON AIR when the link is live', async () => {

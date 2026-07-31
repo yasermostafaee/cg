@@ -21,11 +21,23 @@ import type { ConnectionHealth } from '@cg/shared-ipc';
  * would still be untested, just no longer noisy. Selecting a state by NAME makes
  * "which of the three is this spec about?" a question the spec has to answer.
  */
-export type Reachability = 'both-up' | 'caspar-down' | 'bridge-down' | 'unknown';
+export type Reachability = 'both-up' | 'caspar-down' | 'bridge-down' | 'unknown' | 'test-mode';
 
-/** The browser→bridge link, as `useLink()` reports it. */
-export function linkFor(state: Reachability): 'live' | 'disconnected' {
-  return state === 'bridge-down' ? 'disconnected' : 'live';
+/**
+ * The browser→bridge link, as `useLink()` reports it.
+ *
+ * `test-mode` is the OFFLINE MOCK, and it is a reachability state in its own
+ * right rather than a variant of `caspar-down`, because the two disagree about
+ * the only thing this fixture is for: in test mode a verb DOES reach an executor
+ * (the mock runs it), so every AMCP-emitting control stays live. Its health is
+ * honestly `disconnected` — the mock never claims a server it does not have
+ * (R-006) — which is precisely why a hook that answered from health alone
+ * disabled the entire console in test mode and turned 14 E2E specs red.
+ */
+export function linkFor(state: Reachability): 'live' | 'disconnected' | 'offline-mock' {
+  if (state === 'bridge-down') return 'disconnected';
+  if (state === 'test-mode') return 'offline-mock';
+  return 'live';
 }
 
 /**
@@ -42,6 +54,10 @@ export function linkFor(state: Reachability): 'live' | 'disconnected' {
  */
 export function healthFor(state: Reachability): ConnectionHealth | null {
   if (state === 'unknown' || state === 'bridge-down') return null;
+  // `test-mode` reports DISCONNECTED, matching the mock's own `seedHealth`. The
+  // fixture keeps that honest rather than convenient: a spec asserting that test
+  // mode keeps its verbs live must prove the hook ignores health there, which it
+  // cannot do against a health this fixture quietly made healthy.
   return {
     primary: {
       label: 'A',

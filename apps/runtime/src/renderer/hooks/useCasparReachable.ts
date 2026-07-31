@@ -1,5 +1,6 @@
 import { isServerReachable } from '@cg/shared-ipc';
 import { useConnections } from './useConnections.js';
+import { useLink } from './useLink.js';
 
 /**
  * Can a command reach CasparCG right now?
@@ -28,9 +29,30 @@ import { useConnections } from './useConnections.js';
  * error at the moment air needs it, while one briefly disabled costs a second of
  * waiting. This is B-094's rule pointed at controls rather than labels — silence
  * is not evidence of a working link.
+ *
+ * TEST MODE IS REACHABLE, AND THIS IS NOT AN EXCEPTION TO THE RULE — IT IS THE
+ * RULE. The question is "will this command be executed?", not "is a real
+ * CasparCG healthy?". In test mode the offline mock IS the executor: it runs
+ * every verb, simulates the take and moves the row to SIM ON AIR. So a command
+ * does arrive, and disabling the verb refuses one that would have succeeded —
+ * exactly the failure this direction of the gate is supposed to prevent.
+ *
+ * WHY IT IS NOT FIXED IN THE MOCK. The obvious alternative — have the mock
+ * report a `healthy` primary — is an R-006 violation: `seedHealth` reports
+ * `disconnected` DELIBERATELY, so test mode never wears a signal that means a
+ * real server said something, and `test-mode-honesty.spec.ts` pins exactly that.
+ * The mock is not lying about health; the hook was reading health to answer a
+ * question health does not answer. `offline-mock` is already the honest wire
+ * signal for "the simulator is the far end", so the branch reads it directly.
+ * The status surface is untouched: test mode still shows SIM and still claims
+ * no healthy server.
  */
 export function useCasparReachable(): boolean {
+  // Both hooks run unconditionally — the branch below is on their values, never
+  // on whether they are called.
+  const link = useLink();
   const health = useConnections();
+  if (link === 'offline-mock') return true;
   if (health === null) return false;
   return isServerReachable(health.primary.state);
 }
