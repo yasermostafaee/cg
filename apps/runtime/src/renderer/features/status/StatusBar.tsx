@@ -2,7 +2,7 @@ import { useConnections } from '../../hooks/useConnections.js';
 import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useLock } from '../../hooks/useLock.js';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { normalizeDigits } from '../../ui/NumericInput.js';
@@ -53,6 +53,20 @@ const styles = {
    * darker one — "not the same hue at a different weight" is the constraint.
    */
   primary: { color: colors.text, fontWeight: 700 },
+  /**
+   * THE HEALTH LED — the one thing in this bar that carries a hue while nothing
+   * is wrong (owner: «فقط دایره … رو سبز کن»).
+   *
+   * `--r-success`, the soft ack/healthy emerald, and NEVER `--r-onair`. `theme.ts`
+   * keeps the two greens under separate names for exactly this reason: the vivid
+   * air green is the mark an operator finds from across a gallery and may say only
+   * that a graphic is on the output.
+   *
+   * A dot and not a word, deliberately: the label stays uncoloured, so there is no
+   * green SENTENCE in the footer to be glanced at as an air claim. A 6px LED reads
+   * as "this light is on".
+   */
+  healthDot: { color: cssVars['--r-success'] },
   backup: { color: colors.textMuted },
   failed: { color: colors.offline },
   failedHard: { color: colors.error },
@@ -251,8 +265,23 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
                 ? { title: AMCP_ONLY_TITLE }
                 : {})}
           >
+            {/*
+              THE DOT IS THE ONLY THING THAT MAY BE GREEN (owner). The label keeps
+              the no-hue treatment; a 6px LED reads as "this light is on", where a
+              green WORD in the footer can be glanced at as an air claim.
+
+              `--r-success`, never `--r-onair` — the soft ack/healthy emerald, kept
+              under its own name in `theme.ts` precisely so a tweak to one cannot
+              move the other.
+
+              B-081 STILL HOLDS: while `stale` or AMCP-deaf the dot mutes WITH the
+              label, because a confident green light beside an UNKNOWN word is the
+              same contradiction this pill exists to end — "the green ● dot is a
+              claim too".
+            */}
+            <span style={stale || primaryDeaf ? styles.stale : styles.healthDot}>●</span>{' '}
             <span style={stale || primaryDeaf ? styles.stale : styles.primary}>
-              ● PRIMARY {health.primary.label}
+              PRIMARY {health.primary.label}
             </span>{' '}
             <span style={primary.style}>{primary.text}</span>
           </span>

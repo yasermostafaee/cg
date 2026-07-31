@@ -1,5 +1,5 @@
 import { useLink } from '../../hooks/useLink.js';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import type { BridgeLinkStatus } from '../../../shared/runtime-bridge.js';
 import type { CasparReach } from '../../ui/reachWording.js';
 
@@ -7,6 +7,12 @@ interface Visual {
   color: string;
   text: string;
   title: string;
+  /**
+   * The DOT's hue, where it differs from the label's. Omitted means "same as the
+   * label" — which is what every fault state wants, so a red DISCONNECTED cannot
+   * end up with a green light beside it.
+   */
+  dotColor?: string;
 }
 
 /**
@@ -60,6 +66,8 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
             The WORDING is untouched — only the colour vocabulary changes.
           */
           color: colors.text,
+          // The health LED is green; the WORDS are not. See the render below.
+          dotColor: cssVars['--r-success'],
           // BRIDGE LIVE, never a bare LIVE. The subject is the thing that is live.
           text: 'BRIDGE LIVE',
           title:
@@ -130,7 +138,22 @@ export function LinkIndicator({
   const v = visual(status, reach);
   return (
     <span className="cg-pill" role="status" aria-label="Bridge link" title={v.title}>
-      <span style={{ color: v.color }}>●</span>
+      {/*
+        THE DOT MAY CARRY A HUE THE LABEL MAY NOT (owner: «فقط دایره کنار bridge
+        live … رو سبز کن»). A green WORD in the footer is what could be glanced at
+        as an air claim — the label is long, it sits beside the layer table, and
+        green means ON AIR there. A 6px dot is a health LED: it reads as "this
+        light is on", not as a statement about the output.
+
+        `--r-success`, never `--r-onair`. They are deliberately different greens
+        and `theme.ts` keeps them under separate names for exactly this — the soft
+        emerald is the ack/healthy role, and the vivid air green stays the mark an
+        operator finds from across a gallery.
+
+        It falls back to the label's own colour, so the fault states keep a dot
+        that agrees with their words rather than a green one contradicting them.
+      */}
+      <span style={{ color: v.dotColor ?? v.color }}>●</span>
       <span style={{ color: v.color }}>{v.text}</span>
     </span>
   );

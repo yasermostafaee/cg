@@ -3,6 +3,7 @@ import type { PositionAnchor, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { reportCommandError } from '../status/commandFeedback.js';
@@ -107,9 +108,37 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
     return raw.trim() !== '' && Number.isFinite(n) ? n : 0;
   };
 
+  /**
+   * STAGED-BUT-UNAPPLIED, said the same way a dynamic field says it (owner
+   * request). Position was the one editable thing in this panel that changed
+   * silently: an operator could move the anchor, look away, and have no way to
+   * tell whether that had reached air — while every field beside it carries a
+   * dirty mark for exactly that question.
+   *
+   * COMPARED AGAINST THE SEED, which is the APPLIED value (`item.position`, the
+   * bridge's own published state) falling back to the manifest default — the same
+   * precedence B-072 established for what this picker displays. So this cannot
+   * drift from what Apply would overwrite: it is dirty exactly when pressing Apply
+   * would change something.
+   *
+   * It clears by ITSELF when the applied value catches up, because the seed is
+   * re-read from the item on every render. No local "clean" flag to get stuck.
+   */
+  const dirty =
+    anchor !== seed.anchor || offset(dx) !== seed.offset.x || offset(dy) !== seed.offset.y;
+
   return (
     <div className="cg-inspector-section" aria-label="On-air position">
-      <h2>POSITION</h2>
+      <h2>
+        POSITION
+        {/* The SAME mark a dirty field carries, from the same class — so "not
+            applied yet" looks identical wherever it appears in this panel. */}
+        {dirty && (
+          <span className="cg-dirty-dot" aria-label="Position has unapplied changes">
+            ●
+          </span>
+        )}
+      </h2>
       <div style={styles.placement}>
         {/*
           A GRID, not nine loose dots. It used to render as nine free-floating
@@ -218,6 +247,10 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
           >
             Apply position
           </AsyncButton>
+          {/* …and the same CHIP the commit bar shows for staged field edits, so the
+              two kinds of unapplied change read as one idea. Beside the button that
+              clears it, which is where an operator looks once they have noticed. */}
+          {dirty && !locked && <DraftChip label="unapplied position" />}
         </div>
       </div>
       {/* BELOW the row, not inside it: it is a note about why the controls above are
