@@ -68,9 +68,65 @@
   --r-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.35);
   --r-shadow-2: 0 4px 16px rgba(0, 0, 0, 0.4);
 
+  /* THE PANEL BAR'S HEIGHT — one number, so four panels cannot disagree.
+     See `.cg-panel-header` for why it is a fixed floor and not intrinsic. */
+  --r-panel-bar-h: 52px;
+
   --r-dur-fast: 120ms;
   --r-dur-med: 200ms;
   --r-dur-spin: 700ms;
+}
+
+/* ── Panel chrome — THE bar, shared by every panel ──────────────────────────
+ *
+ * Owner report: «هدر پنل Inspector باید با هدر بقیه پنل‌ها یکی باشه» — the
+ * Inspector's title bar did not match the others'. It was never a colour or a
+ * font difference, which is why reading either file found nothing: it was
+ * HEIGHT, and the height was INTRINSIC. Every bar was as tall as whatever
+ * happened to be inside it, so LAYERS — whose header carries `--neutral` bulk
+ * verbs with their 36px floor — stood ~52px while the Inspector, carrying only
+ * two small icon buttons, stood ~39px. Two bars beside each other, 13px apart,
+ * both "correct" on their own terms.
+ *
+ * `--r-panel-bar-h` is the fix and the reason it is a FLOOR rather than a
+ * computed value: a bar whose height is a function of its contents is a bar that
+ * disagrees with its neighbour the moment one of them gains a control. The
+ * number belongs to BEING A PANEL, not to what a given panel puts in its bar —
+ * same structural argument as the fullscreen affordance the primitive renders.
+ *
+ * These are classes rather than the primitive's old inline style objects for the
+ * usual reason (inline cannot express interaction states), and because a shared
+ * bar defined in ONE stylesheet rule is the thing that cannot be hand-matched
+ * into drifting.
+ */
+
+.cg-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--r-space-2);
+  min-height: var(--r-panel-bar-h);
+  box-sizing: border-box;
+  padding: var(--r-space-2) var(--r-space-4);
+  border-bottom: 1px solid var(--r-border);
+  font-size: var(--r-text-sm);
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.05em;
+  color: var(--r-text-muted);
+  flex-shrink: 0;
+}
+
+.cg-panel-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cg-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  flex-shrink: 0;
 }
 
 /* ── Button ─────────────────────────────────────────────────────────────── */
@@ -188,8 +244,21 @@
  * only looks free if you reach for ghost instead.
  *
  * USE GHOST ONLY where surrounding chrome already frames the control and its position
- * names it: a modal's close ✕, a panel-header affordance, a banner's dismiss. For a
- * standalone verb in a panel body, use `neutral` (text) or `verb` (icon-only).
+ * names it: a modal's close ✕, a banner's dismiss. For a standalone verb in a panel
+ * body, use `neutral` (text) or `verb` (icon-only); in a PANEL BAR, use `icon`.
+ *
+ * "A PANEL-HEADER AFFORDANCE" USED TO BE ON THAT LIST AND HAS BEEN REMOVED. Third
+ * occurrence of the same defect, and the one that finally names the flaw in the rule
+ * rather than in a caller: the owner could see the fullscreen control on LAYERS and
+ * not on the INSPECTOR. Both had it — `Panel` renders it for every panel — but
+ * "surrounding chrome already frames the control" is a property of THAT panel's bar,
+ * not of panel bars in general. Layers' bar is full of bordered bulk verbs, so a bare
+ * glyph beside them reads as one of the row; the Inspector's bar carries nothing else,
+ * so the same glyph sat alone in an empty strip.
+ *
+ * A condition a SHARED primitive cannot evaluate is not a condition it may depend on.
+ * The exception survives only where the frame is structural and unconditional — a
+ * modal's chrome is always there, a panel's neighbours are not.
  */
 .cg-btn--ghost {
   background: transparent;
@@ -455,6 +524,12 @@
  * 28px, not 36px: the owner asked for smaller, and these sit in a dense field
  * editor rather than a gallery-scanned table. It stays above the 24px WCAG 2.5.8
  * floor, which is the reason not to shrink it further.
+ *
+ * IT IS ALSO THE PANEL BAR'S SHAPE now (`Panel`'s fullscreen and close). Those were
+ * `ghost` and were invisible on a bar with nothing else on it — see the `--ghost`
+ * warning above. Reusing this rather than minting a `--panel-action` fifth geometry is
+ * deliberate: the bar wanted a small fixed neutral square, which is precisely what this
+ * already is, and a shape per site is how a design system stops being one.
  */
 .cg-btn--icon {
   flex: 0 0 auto;

@@ -193,6 +193,16 @@ export const cssVars = {
   '--r-focus-ring': '2px',
   '--r-shadow-1': '0 1px 3px rgba(0, 0, 0, 0.35)',
   '--r-shadow-2': '0 4px 16px rgba(0, 0, 0, 0.4)',
+  /**
+   * THE PANEL BAR'S HEIGHT — one number for all four panels.
+   *
+   * A FLOOR, not an intrinsic height, and that distinction is the whole fix: the
+   * bars used to be as tall as their contents, so LAYERS (36px bulk verbs) stood
+   * ~52px and the Inspector (small icon buttons only) stood ~39px. Neither was
+   * wrong on its own, which is exactly why nobody found it by reading a file.
+   * See `.cg-panel-header` in `controls.css`.
+   */
+  '--r-panel-bar-h': '52px',
   // Motion
   '--r-dur-fast': '120ms',
   '--r-dur-med': '200ms',
