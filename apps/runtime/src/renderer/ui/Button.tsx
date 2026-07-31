@@ -3,15 +3,23 @@ import { cssVars } from '../theme.js';
 
 /**
  * NB there is deliberately no `air` variant. It existed for the Inspector's UPDATE
- * (C-012: an outlined on-air hue meaning "this reaches air") and was removed when
- * that button went neutral: colour belongs to STATE in this build, never to an
- * affordance. Re-adding it would hand a transmission colour back to a control — do
- * not. Solid `--r-onair` remains PLAY's alone.
+ * (C-012: an outlined on-air hue meaning "this reaches air") and was removed
+ * because it put a TRANSMISSION colour on an affordance. Re-adding it would hand
+ * that colour back — do not. Solid `--r-onair` remains PLAY's alone.
+ *
+ * That ban is about the AIR HUE and it is unchanged. What HAS changed is the
+ * blanket "colour belongs to STATE, never to an affordance" this comment used to
+ * assert: `accent` (owner request) gives exactly three Inspector controls a SKY
+ * fill to mark the action a surface exists to perform. Sky is the interactive
+ * accent and has never been a state colour, and the Inspector has no row state
+ * competing for the eye. The rule that replaced the blanket one is written out at
+ * `.cg-btn--accent` in `controls.css`: ONE MEANING PER SURFACE.
  */
 export type ButtonVariant =
   | 'play'
   | 'primary'
   | 'secondary'
+  | 'accent'
   | 'caution'
   | 'caution-strong'
   | 'danger'
@@ -25,6 +33,7 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   play: 'cg-btn--play',
   primary: 'cg-btn--primary',
   secondary: 'cg-btn--secondary',
+  accent: 'cg-btn--accent',
   caution: 'cg-btn--caution',
   'caution-strong': 'cg-btn--caution-strong',
   danger: 'cg-btn--danger',
@@ -51,6 +60,9 @@ export const VARIANT_ACCENT: Record<ButtonVariant, string | undefined> = {
   play: cssVars['--r-onair'],
   primary: cssVars['--r-accent-strong'],
   secondary: cssVars['--r-accent'],
+  // THE ACCENTED ACTION — the sky the filled variant is built from, so a
+  // right-click item mirroring one of these three reads as the same control.
+  accent: cssVars['--r-accent'],
   caution: cssVars['--r-caution'],
   'caution-strong': cssVars['--r-caution'],
   danger: cssVars['--r-danger'],

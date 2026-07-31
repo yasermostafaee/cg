@@ -14,25 +14,54 @@ const ANCHOR_GRID: readonly (readonly PositionAnchor[])[] = [
   ['bottom-left', 'bottom-center', 'bottom-right'],
 ];
 
+/*
+ * Spacing from the scale (`--r-space-*`), and the ORDERING is what does the work:
+ * label→control is the smallest step, control→control one up, section→section the
+ * largest. That gradient is what makes the parts group without a divider line
+ * between every one of them.
+ *
+ * The GRID itself is in `controls.css` (`.cg-anchor-*`) — nine dots needed borders,
+ * a selected fill and a hover, and inline styles cannot express the last two.
+ */
 const styles = {
   section: {
-    marginTop: '0.5rem',
-    borderTop: `1px solid #2b3044`,
-    paddingTop: '0.5rem',
+    marginTop: 'var(--r-space-3)',
+    borderTop: `1px solid ${colors.border}`,
+    paddingTop: 'var(--r-space-3)',
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.4rem',
+    gap: 'var(--r-space-2)',
   },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 2rem)',
-    gap: '0.25rem',
+  /** The grid and the nudge inputs side by side — one control, read left to right. */
+  placement: {
+    display: 'flex',
+    gap: 'var(--r-space-4)',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap' as const,
   },
-  offsets: { display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.85rem' },
-  offsetLabel: { color: colors.textMuted },
-  offsetInput: { width: '5rem' },
-  lock: { color: colors.textMuted, fontSize: '0.8rem' },
-  actions: { display: 'flex', gap: '0.5rem', alignItems: 'center' },
+  offsets: { display: 'flex', gap: 'var(--r-space-2)', alignItems: 'flex-start' },
+  /** One nudge input with its own label ABOVE it, so the two never compete for a row. */
+  offsetField: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 'var(--r-space-1)',
+  },
+  offsetLabel: {
+    color: colors.textMuted,
+    fontSize: '11px',
+    fontWeight: 600,
+    letterSpacing: '0.04em',
+  },
+  offsetInput: { width: '74px' },
+  lock: { color: colors.textMuted, fontSize: 'var(--r-text-sm)' },
+  actions: { display: 'flex', gap: 'var(--r-space-3)', alignItems: 'center' },
+  heading: {
+    fontSize: 'var(--r-text-sm)',
+    fontWeight: 700,
+    color: colors.textMuted,
+    letterSpacing: '0.05em',
+    margin: 0,
+  },
 } as const;
 
 /** The on-air lock mirrors the bridge's set-position refusal predicate. */
@@ -84,64 +113,90 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
 
   return (
     <div style={styles.section} aria-label="On-air position">
-      <h2
-        style={{
-          fontSize: '0.85rem',
-          fontWeight: 700,
-          color: colors.textMuted,
-          letterSpacing: '0.05em',
-          margin: 0,
-        }}
-      >
-        POSITION
-      </h2>
-      <div style={styles.grid} role="group" aria-label="Position anchor">
-        {ANCHOR_GRID.flat().map((a) => (
-          <Button
-            key={a}
-            variant={a === anchor ? 'secondary' : 'ghost'}
-            aria-label={`Anchor ${a}`}
-            aria-pressed={a === anchor}
-            disabled={locked}
-            title={a}
-            onClick={() => setAnchor(a)}
-          >
-            {a === anchor ? '◉' : '·'}
-          </Button>
-        ))}
-      </div>
-      <div style={styles.offsets}>
-        {/* `scrub` — the offsets are PIXEL magnitudes, which is exactly the value
-            kind a horizontal drag suits: the operator nudges a graphic and watches
-            the number move, rather than selecting text and retyping. Arrow keys give
-            the same adjustment a keyboard, and Shift/Ctrl give fine and coarse steps.
-            Matches the Designer's transform fields (owner request). */}
-        <span style={styles.offsetLabel}>dx</span>
-        <NumericInput
-          className="cg-field"
-          style={styles.offsetInput}
-          decimal
-          scrub={{ step: 1 }}
-          value={dx}
-          disabled={locked}
-          onValueChange={setDx}
-          aria-label="Position offset X"
-        />
-        <span style={styles.offsetLabel}>dy</span>
-        <NumericInput
-          className="cg-field"
-          style={styles.offsetInput}
-          decimal
-          scrub={{ step: 1 }}
-          value={dy}
-          disabled={locked}
-          onValueChange={setDy}
-          aria-label="Position offset Y"
-        />
+      <h2 style={styles.heading}>POSITION</h2>
+      <div style={styles.placement}>
+        {/*
+          A GRID, not nine loose dots. It used to render as nine free-floating
+          glyphs in a bare `display: grid`, which communicated "here are nine
+          things" and never "pick a corner" — the shape of the control has to say
+          what the control is for, because a 3×3 of bordered cells IS a frame and
+          a scatter of dots is not.
+
+          The cells are BUTTONS still, so `aria-pressed`, the per-anchor
+          accessible name and the keyboard path are all unchanged. Only the
+          painting moves to `controls.css`, where a selected fill and a hover can
+          actually be expressed.
+        */}
+        <div className="cg-anchor-grid" role="group" aria-label="Position anchor">
+          {ANCHOR_GRID.flat().map((a) => (
+            <Button
+              key={a}
+              variant="default"
+              className="cg-anchor-cell"
+              aria-label={`Anchor ${a}`}
+              aria-pressed={a === anchor}
+              disabled={locked}
+              title={a}
+              onClick={() => setAnchor(a)}
+            >
+              {/* The anchor POINT inside its cell. The cell's border draws the
+                  frame; this marks where in the frame the graphic is pinned. */}
+              <span className="cg-anchor-cell__dot" aria-hidden="true" />
+            </Button>
+          ))}
+        </div>
+        <div style={styles.offsets}>
+          {/* `scrub` — the offsets are PIXEL magnitudes, which is exactly the value
+              kind a horizontal drag suits: the operator nudges a graphic and watches
+              the number move, rather than selecting text and retyping. Arrow keys give
+              the same adjustment a keyboard, and Shift/Ctrl give fine and coarse steps.
+              Matches the Designer's transform fields (owner request).
+
+              THE WIDTH CHANGED AND THE GESTURE DID NOT. `scrub` is opt-in precisely
+              because the same primitive serves the lock PIN, so it travels with the
+              drag cursor and the keyboard steps — a narrower box must not quietly
+              drop it, because an invisible gesture is one nobody uses. */}
+          {/* A plain wrapper, NOT a `<label>`. These inputs are named by
+              `aria-label` ("Position offset X"), which OUTRANKS a wrapping label —
+              so a `<label>` would leave the visible text ("dx") different from the
+              accessible name, the WCAG 2.5.3 mismatch, while adding no association
+              that was missing. The a11y contract here is unchanged by this pass;
+              only the stacking of the visible text is new. */}
+          <div style={styles.offsetField}>
+            <span style={styles.offsetLabel}>dx</span>
+            <NumericInput
+              className="cg-field"
+              style={styles.offsetInput}
+              decimal
+              scrub={{ step: 1 }}
+              value={dx}
+              disabled={locked}
+              onValueChange={setDx}
+              aria-label="Position offset X"
+            />
+          </div>
+          <div style={styles.offsetField}>
+            <span style={styles.offsetLabel}>dy</span>
+            <NumericInput
+              className="cg-field"
+              style={styles.offsetInput}
+              decimal
+              scrub={{ step: 1 }}
+              value={dy}
+              disabled={locked}
+              onValueChange={setDy}
+              aria-label="Position offset Y"
+            />
+          </div>
+        </div>
       </div>
       <div style={styles.actions}>
+        {/* ONE OF THE THREE ACCENTED ACTIONS (owner request), with Add item and
+            Update — this is the action the POSITION section exists to perform.
+            See `.cg-btn--accent` in `controls.css` for why colour may mean
+            hierarchy here and must not on the layer table. */}
         <AsyncButton
-          variant="secondary"
+          variant="accent"
           aria-label="Apply position"
           disabled={locked}
           run={() =>

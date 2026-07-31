@@ -81,22 +81,38 @@ const styles = {
     // No BOTTOM padding: the sticky commit bar owns the space down there, and a
     // container pad would sit BELOW the stuck bar (sticky offsets resolve against
     // the padding box), leaving a stripe of scrolling content under it.
-    padding: '0.75rem 1rem 0',
-    gap: '0.5rem',
+    padding: 'var(--r-space-3) var(--r-space-4) 0',
+    gap: 'var(--r-space-2)',
     minHeight: 0,
     flex: 1,
     overflowY: 'auto' as const,
   },
   heading: {
-    fontSize: '0.85rem',
+    fontSize: 'var(--r-text-sm)',
     fontWeight: 700,
     color: colors.textMuted,
     letterSpacing: '0.05em',
     margin: 0,
   },
-  empty: { color: colors.textMuted, fontSize: '0.9rem' },
-  title: { fontSize: '1.1rem', fontWeight: 700, margin: 0, overflowWrap: 'anywhere' as const },
-  meta: { color: colors.textMuted, fontSize: '0.85rem' },
+  empty: { color: colors.textMuted, fontSize: 'var(--r-text-md)' },
+  title: {
+    fontSize: 'var(--r-text-xl)',
+    fontWeight: 700,
+    margin: 0,
+    overflowWrap: 'anywhere' as const,
+  },
+  /** The item's own headline, under the template name — content, not metadata. */
+  contentTitle: { color: colors.text, fontSize: 'var(--r-text-md)' },
+  /*
+   * NO `max-width` HERE, AND NONE IS TO BE ADDED. Owner instruction, recorded
+   * because a cap looks like an improvement to anyone who meets this panel cold:
+   * «این یک پنله که عرض دیفالتش کوچیکه و این حالت فول اسکرینشه. وقتی اپراتور فول
+   * اسکرین میکنه یعنی میخواد که اینپوتها بزرگتر باشن.» The panel's default width
+   * is narrow; FULLSCREEN IS THE REQUEST FOR BIGGER INPUTS, so capping the
+   * content would defeat the control the operator just pressed. Fields fill the
+   * panel. What made the full-width layout look broken was never the width — it
+   * was the item controls drifting apart inside it (see `ListFieldEditor`).
+   */
   /*
    * THE COMMIT BAR — sticky to the BOTTOM of the scrolling body (owner request).
    *
@@ -118,7 +134,11 @@ const styles = {
    */
   actions: {
     display: 'flex',
-    gap: '0.5rem',
+    // CENTRED (owner request). Everything else about this bar — the sticky
+    // behaviour, the padding, the top border, the raised background and the DOM
+    // position — is unchanged and load-bearing; see the block comment above.
+    justifyContent: 'center',
+    gap: 'var(--r-space-3)',
     alignItems: 'center',
     flexWrap: 'wrap' as const,
     position: 'sticky' as const,
@@ -127,32 +147,86 @@ const styles = {
     zIndex: 1,
     background: colors.panel,
     borderTop: `1px solid ${colors.border}`,
-    marginInline: '-1rem',
-    padding: '0.5rem 1rem',
+    marginInline: 'calc(var(--r-space-4) * -1)',
+    padding: 'var(--r-space-2) var(--r-space-4)',
   },
+  /*
+   * THE FIELD HEADER — the authored name in PRIMARY ink, the binding key beside
+   * it as secondary.
+   *
+   * They used to compete: the label rendered in the MUTED ink at body size and
+   * the key was not shown at all, so a template whose author left the label
+   * unset printed its raw key as the only thing an operator had, in the same
+   * weight as everything around it. The operator thinks in the authored NAME;
+   * the key is for whoever wrote the template. So the name takes the primary ink
+   * and the key drops to the faintest at 11px — present for whoever needs to
+   * correlate a value with a binding, and out of the way for whoever does not.
+   */
   fieldLabel: {
-    color: colors.textMuted,
-    fontWeight: 500,
     display: 'flex',
-    gap: '0.3rem',
+    alignItems: 'baseline',
+    gap: 'var(--r-space-1)',
     minWidth: 0,
     overflowWrap: 'anywhere' as const,
   },
+  fieldName: { color: colors.text, fontWeight: 500 },
+  fieldKey: { color: colors.textMuted, fontSize: '11px', opacity: 0.75 },
   // B-067 — a nested composition's fields, indented under the instance's label.
   group: {
-    marginTop: '0.5rem',
-    paddingInlineStart: '0.5rem',
+    marginTop: 'var(--r-space-3)',
+    paddingInlineStart: 'var(--r-space-2)',
     borderInlineStart: `2px solid ${colors.border}`,
   },
   groupHeading: {
-    fontSize: '0.75rem',
+    fontSize: 'var(--r-text-xs)',
     fontWeight: 700,
     color: colors.textMuted,
     letterSpacing: '0.05em',
     textTransform: 'uppercase' as const,
-    margin: '0 0 0.25rem',
+    margin: '0 0 var(--r-space-1)',
   },
 } as const;
+
+/**
+ * §7 — THE IDENTITY BLOCK'S METADATA, as CHIPS.
+ *
+ * Status, layer, channel and server used to be two loose prose lines under the
+ * title (`Status: loaded`, `layer 10 · channel 1 · srv`). Two sentences read as an
+ * afterthought; four chips read as a STATUS LINE, which is what they are — and it
+ * is the line an operator comes to the Inspector to reconcile against what
+ * CasparCG reports.
+ *
+ * THE WORDS ARE UNCHANGED, deliberately. `dev-offline-polish` owns wording, states
+ * and gating; this pass owns appearance. The chip labels are the same words
+ * `layerDetail` prints, the status value is the same `item.status` string with the
+ * same `(pending)` suffix, and the no-layer case still says exactly "no layer"
+ * rather than being reworded into "none".
+ */
+function MetaChip({
+  label,
+  value,
+  dot = false,
+}: {
+  label: string;
+  value: string;
+  dot?: boolean;
+}): JSX.Element {
+  return (
+    <span className="cg-meta-chip">
+      {/*
+        THE DOT IS TYPOGRAPHY, NOT STATE, and that is not a compromise — it is the
+        one option the palette allows. A dot carrying the air-state hue would put a
+        SECOND on-air indicator on this console, and `theme.ts` is explicit that the
+        air colour lives on the layer rows and the status bar's indicator "and
+        NOWHERE else". So it inherits the label's dim ink and does one honest job:
+        marking which chip is the STATE among three coordinates.
+      */}
+      {dot && <span className="cg-meta-chip__dot" aria-hidden="true" />}
+      <span className="cg-meta-chip__label">{label}</span>
+      <span className="cg-meta-chip__value">{value}</span>
+    </span>
+  );
+}
 
 /**
  * Inspector pane (Phase 6 §4 / R-003). Fields now STAGE locally: every edit
@@ -259,16 +333,28 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
         <h3 style={styles.title} title={item.templateId}>
           {label}
         </h3>
-        {contentTitle !== '' && <div style={styles.meta}>{contentTitle}</div>}
-        <div style={styles.meta}>
-          Status: {item.status}
-          {item.pending ? ' (pending)' : ''}
-        </div>
-        {/* Always shown, including the empty case: "no layer" is not an absence of
+        {contentTitle !== '' && <div style={styles.contentTitle}>{contentTitle}</div>}
+        {/* ALWAYS SHOWN, including the no-layer case: "no layer" is not an absence of
           information, it is the answer to "why is this not on air?". The old line rendered
           only when a slot existed, so it went blank exactly when the operator was trying to
-          diagnose that. */}
-        <div style={styles.meta}>{layerDetail(item.slot)}</div>
+          diagnose that — and the chips keep that property. The words are `layerDetail`'s
+          own; only the shape changes. */}
+        <div className="cg-meta-chips">
+          <MetaChip
+            label="status"
+            value={`${item.status}${item.pending ? ' (pending)' : ''}`}
+            dot
+          />
+          {item.slot === undefined ? (
+            <MetaChip label="layer" value={layerDetail(undefined)} />
+          ) : (
+            <>
+              <MetaChip label="layer" value={String(item.slot.layer)} />
+              <MetaChip label="channel" value={String(item.slot.channel)} />
+              <MetaChip label="server" value={item.slot.server} />
+            </>
+          )}
+        </div>
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
         <PositionPicker key={`pos-${itemId}`} item={item} />
         <div
@@ -322,15 +408,25 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
             no-op only SUPPRESSES the button's duplicate INLINE error — it does not
             re-report (which would double-toast) or change the wording. Exactly what
             `StackRow`'s UPDATE does, for exactly this reason. */}
-          {/* NEUTRAL, and this supersedes C-012's on-air outline for UPDATE.
-            C-012 gave this button the on-air hue to say "this reaches air". That
-            reasoning is retired: colour in this build belongs to STATE, not to
-            affordances — the row's state mark and the badges own it, and every verb
-            beside this one already went neutral. An outlined air-hue UPDATE put a
-            transmission colour on a control, which is the one thing the palette may
-            not do. The reasoning is unchanged by on-air having moved from red to
-            green: do NOT re-introduce colour here to signal importance. What UPDATE
-            reaches is said by the panel it sits in and by the toast it raises. */}
+          {/* ACCENTED — one of the three (owner request), with Apply position and
+            Add item. This REPLACES the `neutral` that stood here, and the earlier
+            reasoning is corrected rather than deleted, because half of it is still
+            binding.
+
+            C-012 gave this button the ON-AIR hue to say "this reaches air". THAT
+            remains retired and must not come back: an air-hue control puts a
+            transmission colour on an affordance, which is the one thing the palette
+            may not do, and moving on-air from red to green changed nothing about it.
+
+            What is superseded is the blanket clause that followed — "colour belongs
+            to STATE, never to an affordance". That rule was written for the LAYER
+            TABLE, where thirty coloured verbs drowned the one row that was live, and
+            it was over-generalised to a panel that shows ONE item and has no row
+            state competing for the eye. Here colour can mean HIERARCHY: this is the
+            action the surface exists to perform. The hue is SKY, which has never
+            been a state colour in this build. See `.cg-btn--accent` in
+            `controls.css` for the rule that replaced the blanket one, and do not
+            propagate this to the layer table. */}
           {/*
             GATED ON CASPARCG, exactly as the ROW's UPDATE is — and found by the
             adversarial review of that change rather than by a test.
@@ -347,7 +443,7 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
             offline surface, and gating the fields instead would destroy it.
           */}
           <AsyncButton
-            variant="neutral"
+            variant="accent"
             aria-label="Apply staged edits"
             disabled={applyRefusal !== undefined}
             {...(applyRefusal !== undefined ? { title: applyRefusal } : {})}
@@ -361,7 +457,17 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
             rather than a control. Removing COLOUR from a control never removes its
             need for an AFFORDANCE: it still owes a visible boundary, a hover state
             and a focus ring. `neutral` is the variant that carries all three without
-            a hue. See the `--ghost` warning in `controls.css`. */}
+            a hue. See the `--ghost` warning in `controls.css`.
+
+            …AND NEITHER IS DISABLED, which is the half that was still missing.
+            `neutral:disabled` used to drop BOTH its fill and its border, so this
+            control vanished for exactly as long as there was nothing staged to
+            discard — i.e. every moment before the operator's first edit, which is
+            when they are learning where things are. An operator who cannot find how
+            to ABANDON an edit presses Update to get out of the panel, which is the
+            opposite of what they wanted and reaches air. `--neutral:disabled` keeps
+            its boundary now (`controls.css`); the row verbs' bare-glyph disabled
+            shape is untouched, because there a column of peers makes it legible. */}
           <Button
             variant="neutral"
             aria-label="Discard staged edits"
@@ -450,8 +556,19 @@ function FieldEditor({
     kind === 'text' || kind === 'multiline' || kind === 'list' ? kind : undefined;
   return (
     <div className={isWideKind(kind) ? 'cg-field-row--wide' : 'cg-field-row'}>
+      {/*
+        THE AUTHORED NAME IS PRIMARY; THE BINDING KEY IS SECONDARY — and the key is
+        printed ONLY when it differs from the name. A template whose author set no
+        label falls back to the key, and rendering both would print the same string
+        twice at two sizes, which is noise dressed as hierarchy.
+      */}
       <span style={styles.fieldLabel}>
-        {label}
+        <span style={styles.fieldName}>{label}</span>
+        {label !== fieldId && (
+          <span style={styles.fieldKey} title={fieldId}>
+            {fieldId}
+          </span>
+        )}
         {dirty && (
           <span className="cg-dirty-dot" aria-label={`${fieldId} has unapplied edits`}>
             ●

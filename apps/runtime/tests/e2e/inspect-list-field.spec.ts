@@ -135,3 +135,73 @@ test('the item controls are a FIXED small square — they never stretch to fill 
   expect(textarea).not.toBeNull();
   expect(textarea!.width).toBeGreaterThan(boxes.reduce((sum, b) => sum + b.width, 0));
 });
+
+test('AT FULLSCREEN the five controls for one item stay ONE cluster — they never split to opposite edges', async ({
+  app,
+}) => {
+  /**
+   * The owner's verdict on this panel was «بهم ریخته به نظر میاد», and this is the
+   * measurement behind most of it.
+   *
+   * The controls used to sit on their own full-width line under the textarea with a
+   * `flex: 1` spacer between the reorder pair and the delete button. At the panel's
+   * narrow default that looked fine — which is exactly why it survived. At
+   * FULLSCREEN the spacer expanded and put ↑/↓ at one edge and ✕ at the other,
+   * roughly 1800px apart: five controls acting on ONE item, scattered across a
+   * monitor.
+   *
+   * WHY THIS TEST IS AT FULLSCREEN AND MEASURES A SPAN. Every existing assertion in
+   * this file passed throughout the defect, including the sibling above that
+   * measures each button's own box: a split cluster's buttons are individually the
+   * right size. Only the DISTANCE BETWEEN them carries the bug, and only at a width
+   * the default panel never reaches. Run against the spacer layout this goes red on
+   * the span; run against a per-button assertion it goes green while unusable.
+   *
+   * It asserts COHESION, not pixel positions, because cohesion is the durable rule:
+   * the cluster may wrap onto its own line at a narrow width, it may be reordered,
+   * it may change icons. It may not come apart.
+   */
+  const templateId = 'tpl-e2e-list-cluster';
+  await app.importVcg('list-cluster.vcg', await buildListFieldVcg(templateId));
+  await app.selectStackRow(templateId);
+
+  // FULLSCREEN — the operator's request for bigger inputs, and the width at which
+  // the old layout failed. The Inspector fills the shell here, so the row is as
+  // wide as it will ever be.
+  await app.inspector.getByRole('button', { name: 'Show INSPECTOR fullscreen' }).click();
+
+  const names = [
+    'Move _tickerTexts item 1 up',
+    'Move _tickerTexts item 1 down',
+    'Remove _tickerTexts item 1',
+  ];
+  const boxes = [];
+  for (const name of names) {
+    const box = await app.inspector.getByRole('button', { name }).boundingBox();
+    expect(box, name).not.toBeNull();
+    boxes.push({ name, ...box! });
+  }
+
+  // THE SPAN: leading edge of the first control to trailing edge of the last. Three
+  // ~26px buttons with small gaps come to well under 150px however they are
+  // arranged; the split layout measured this in four figures.
+  const left = Math.min(...boxes.map((b) => b.x));
+  const right = Math.max(...boxes.map((b) => b.x + b.width));
+  const span = right - left;
+  expect(
+    span,
+    `the item's controls span ${String(Math.round(span))}px — they have come apart`,
+  ).toBeLessThanOrEqual(150);
+
+  // …and the panel really is wide, or the span above proves nothing: a cluster is
+  // trivially tight inside a 320px column. This is what makes the assertion a
+  // FULLSCREEN one rather than an accident of a narrow panel.
+  const panel = await app.inspector.boundingBox();
+  expect(panel).not.toBeNull();
+  expect(panel!.width, 'the Inspector did not actually go fullscreen').toBeGreaterThan(700);
+
+  // Every control on ONE line with its neighbours: same row, so the cluster has not
+  // been broken across lines internally either.
+  const tops = boxes.map((b) => Math.round(b.y));
+  expect(Math.max(...tops) - Math.min(...tops), `tops ${tops.join(',')}`).toBeLessThanOrEqual(2);
+});

@@ -21,6 +21,14 @@
   --r-text-muted: #9ca3af;
   --r-accent: #38bdf8;
   --r-accent-strong: #0ea5e9;
+  /* The ACCENTED ACTION's weights — the same sky as `--r-accent`, in the dark
+     fill / line / light ink a FILLED control needs. Three controls wear it, all
+     in the Inspector. See `theme.ts` and `.cg-btn--accent` below. */
+  --r-accent-fill: #153b56;
+  --r-accent-fill-hover: #1a4a6b;
+  --r-accent-line: #2f7ba8;
+  --r-accent-line-hover: #4aa8e0;
+  --r-accent-ink: #cfe8f8;
   /* ON AIR — GREEN, and this hue may mean nothing else. Red is now errors and
      destructive intent only. See `theme.ts`'s header for the decision and for
      the R-006 / B-087 re-anchoring it owes. Mirrored from `cssVars`; a parity
@@ -215,6 +223,54 @@
   border-color: var(--r-accent);
   color: var(--r-accent);
 }
+
+/*
+ * ── THE ACCENTED ACTION ─────────────────────────────────────────────────────
+ *
+ * Owner: «فقط از ایده تفاوت رنگ بین دکمه هاش استفاده کن. رنگ apply/update/add
+ * item متفاوته.» Exactly three controls wear this — Apply position, Add item,
+ * Update — and every other control in the Inspector stays neutral.
+ *
+ * ── ONE MEANING PER SURFACE; NEVER BOTH ON ONE ──────────────────────────────
+ *
+ * WRITE THIS DOWN OR A FUTURE SESSION WILL "FIX" ONE SURFACE TO MATCH THE OTHER.
+ *
+ * In the INSPECTOR, colour means HIERARCHY: "this is the action the surface
+ * exists to perform." That is available here only because the Inspector shows
+ * ONE item and has no row state competing for the eye.
+ *
+ * In the LAYER TABLE, colour means STATE. It has an on-air indicator to protect,
+ * and thirty coloured affordances are exactly what drowned it once already (see
+ * `--verb` below). Its verb and state colours are the owner's own and are
+ * SETTLED.
+ *
+ * So this variant does NOT spread to the table, and the table's colours are NOT
+ * to be unified with it. A surface that used colour for hierarchy AND state
+ * would communicate neither. Sky is also the safe hue for this precisely because
+ * it has never been a state colour: green is ON AIR and may mean nothing else,
+ * amber is caution, red is error, violet is rehearse.
+ *
+ * DISABLED KEEPS ITS FILL. `Update` renders disabled with the refusal reason on
+ * its `title`, and a control that dims into invisibility turns a fail-closed
+ * gate into a dead button — the defect the gating was built to remove. 0.55
+ * rather than the shared 0.45 for the same reason.
+ */
+.cg-btn--accent {
+  background: var(--r-accent-fill);
+  border-color: var(--r-accent-line);
+  color: var(--r-accent-ink);
+}
+.cg-btn--accent:hover:not(:disabled) {
+  background: var(--r-accent-fill-hover);
+  border-color: var(--r-accent-line-hover);
+  filter: none; /* the lifted fill IS the hover; brightness on top muddies it */
+}
+.cg-btn--accent:active:not(:disabled) {
+  background: var(--r-accent-fill);
+}
+.cg-btn--accent:disabled {
+  opacity: 0.55;
+}
 .cg-btn--caution {
   background: transparent;
   border-color: var(--r-caution);
@@ -343,15 +399,43 @@
   background: var(--r-surface-sunken);
   box-shadow: none;
 }
-.cg-btn--verb:disabled,
-.cg-btn--neutral:disabled,
-.cg-btn--icon:disabled {
+/*
+ * DISABLED — and the two shapes split here, which they did not used to.
+ *
+ * `--verb` (the LAYER TABLE's icon-only row verbs) loses its fill AND its border:
+ * enabled is a raised chip, disabled is a bare dimmed glyph, so the difference
+ * survives being read from across a gallery without colour. That is the decision
+ * documented above and it is deliberately untouched — on an empty row the single
+ * enabled LOAD reading as the only pressable thing is exactly true.
+ *
+ * `--neutral` and `--icon` KEEP their boundary, and that is the correction. They
+ * do not sit in a column of peers that makes a bare glyph legible; they stand
+ * alone in panel bodies and panel bars. The Inspector's DISCARD is the case that
+ * forced it: `neutral` and correct, it went fully transparent whenever there was
+ * nothing staged, so the control an operator reaches for to ABANDON an edit was
+ * invisible for as long as there was no edit to abandon — and an operator who
+ * cannot find Discard presses Update to get out, which is the opposite of what
+ * they wanted. The list-item minis are the same story: `↑` on the first row must
+ * stay IN PLACE and visible-but-inert, or the cluster reflows between rows.
+ *
+ * NEUTRAL IS NOT INVISIBLE — and neither is disabled. Removing a control's colour,
+ * or its availability, never removes its need to be FOUND.
+ */
+.cg-btn--verb:disabled {
   background: transparent;
   border-color: transparent;
   color: var(--r-text-muted);
   box-shadow: none;
   /* Higher than the shared 0.45: the glyph still has to be IDENTIFIABLE, because
      which verbs a row is offering is information even when they are inert. */
+  opacity: 0.6;
+}
+.cg-btn--neutral:disabled,
+.cg-btn--icon:disabled {
+  background: transparent;
+  border-color: var(--r-border);
+  color: var(--r-text-muted);
+  box-shadow: none;
   opacity: 0.6;
 }
 
@@ -722,12 +806,175 @@ textarea.cg-field--autogrow {
   }
 }
 
+/* ── Inspector metadata chips (status / layer / channel / server) ───────────
+ *
+ * These were two loose prose lines under the item's title. Two sentences read as
+ * an afterthought; a wrapping row of pills reads as a STATUS LINE, which is what
+ * they are — the line an operator comes to the Inspector to reconcile against
+ * what CasparCG reports.
+ *
+ * The LABEL is dim and the VALUE is primary and semibold, because the label is
+ * the same four words every time and the value is the only part that changes.
+ * The words themselves are unchanged (`dev-offline-polish` owns wording).
+ */
+
+.cg-meta-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r-space-1);
+  align-items: center;
+}
+
+.cg-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-1);
+  padding: 2px var(--r-space-2);
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--r-surface-raised);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-full);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.cg-meta-chip__label {
+  color: var(--r-text-muted);
+  white-space: nowrap;
+}
+
+.cg-meta-chip__value {
+  color: var(--r-text);
+  font-weight: var(--r-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The status chip's dot. TYPOGRAPHY, NOT STATE — it inherits the label's dim ink
+ * and never an air-state hue. `theme.ts` reserves the on-air colour for the layer
+ * rows and the status bar's indicator "and NOWHERE else", and a coloured dot here
+ * would be a second air indicator on the same console. Its job is to mark which
+ * chip is the STATE among three coordinates, and dim does that.
+ */
+.cg-meta-chip__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--r-radius-full);
+  background: var(--r-text-muted);
+}
+
+/* ── Inspector 3×3 anchor grid (the 9-point Position model) ─────────────────
+ *
+ * IT HAS TO READ AS A GRID. It used to be nine loose glyphs — a `·` per cell and a
+ * `◉` on the selected one — in a bare `display: grid` with no cell borders. That
+ * communicated "here are nine things" and never "pick a corner": the SHAPE of a
+ * control is what says what the control is for, and a 3×3 of bordered cells IS a
+ * frame while a scatter of dots is not.
+ *
+ * THE SELECTED CELL IS NOT JUST A FILL. `inset 0 0 0 2px var(--r-surface)` cuts a
+ * ring between the accent fill and the accent border, so the mark reads as a
+ * deliberate selection rather than as the hover it would otherwise be mistaken for
+ * — the two states are one hue apart and a fill alone cannot separate them.
+ *
+ * `aria-pressed` is what the CSS keys on, so the painting and the announcement can
+ * never disagree about which anchor is chosen.
+ */
+
+.cg-anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 30px);
+  grid-template-rows: repeat(3, 30px);
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.cg-btn.cg-anchor-cell {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 3px;
+  border: 1px solid var(--r-border-strong);
+  background: var(--r-surface-sunken);
+}
+
+.cg-anchor-cell__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: var(--r-radius-full);
+  background: var(--r-text-muted);
+}
+
+.cg-btn.cg-anchor-cell[aria-pressed='true'] {
+  background: var(--r-accent-fill);
+  border-color: var(--r-accent-line);
+  box-shadow: inset 0 0 0 2px var(--r-surface);
+}
+
+.cg-btn.cg-anchor-cell[aria-pressed='true'] .cg-anchor-cell__dot {
+  background: var(--r-accent-ink);
+  /* Larger as well as brighter — the chosen anchor must survive being read at a
+     glance by someone who cannot separate the two blues. */
+  width: 6px;
+  height: 6px;
+}
+
+.cg-btn.cg-anchor-cell:hover:not(:disabled) {
+  border-color: var(--r-accent);
+  filter: none;
+}
+
+.cg-btn.cg-anchor-cell:hover:not(:disabled) .cg-anchor-cell__dot {
+  background: var(--r-text);
+}
+
 /* ── Inspector list-field items (ticker / sequence rows) ────────────────────── */
 
+/*
+ * ONE ITEM = ONE ROW: the cluster, then the text it acts on.
+ *
+ * ── WHAT WAS ACTUALLY WRONG ─────────────────────────────────────────────────
+ *
+ * The controls used to be a full-width strip on their OWN LINE beneath the
+ * textarea, with a `flex: 1` spacer shoving the ✕ to the far end. At the panel's
+ * narrow default that looked reasonable. At FULLSCREEN it put the reorder arrows
+ * and the delete button roughly 1800px apart — five controls acting on one item,
+ * scattered across the width of a monitor, on a second line below the thing they
+ * act on. That is most of what "بهم ریخته به نظر میاد" was pointing at.
+ *
+ * The width was never the problem. The strip only looked broken at full width
+ * because the controls inside it had drifted apart.
+ *
+ * ── THE DURABLE RULE, WHICH OUTRANKS EVERY PIXEL BELOW ──────────────────────
+ *
+ * The five controls that act on ONE item stay together as ONE cluster, ALWAYS.
+ * At a narrow panel the cluster may wrap onto its own line — that is fine, and
+ * `flex-wrap` is what allows it. What must never happen again is the cluster
+ * SPLITTING, with some controls at one edge and others at the opposite edge. No
+ * spacer, no `justify-content: space-between`, no `margin-inline-start: auto`.
+ *
+ * ── WHY THE TEXTAREA IS FIRST IN THE DOM AND SECOND ON SCREEN ───────────────
+ *
+ * `order: -1` on the tools, and this is the one place in this panel where `order`
+ * is right — the commit bar's comment in `Inspector.tsx` rejects it for the
+ * opposite case, and the principle is the same in both: DOM ORDER IS TAB ORDER.
+ * There, DOM order and reading order agreed, so `order` would have put Update
+ * ahead of the fields it applies. Here they disagree: the operator's task is
+ * TYPING, so tabbing must reach an item's TEXT before its four controls, while
+ * the picture wants the cluster leading. `order` moves the picture and leaves tab
+ * order and the screen-reader sequence alone, which is exactly its job.
+ */
 .cg-list-item {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+  flex-direction: row;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--r-space-1);
   min-width: 0;
   border-radius: var(--r-radius-sm);
   /* Reserved so the drop indicator below never shifts the list as it moves. */
@@ -735,56 +982,90 @@ textarea.cg-field--autogrow {
   border-bottom: 2px solid transparent;
 }
 
-/*
- * The controls' own line, BENEATH the textarea rather than beside it.
- *
- * Beneath, not beside, deliberately: beside is what starved the text to ~80px, and
- * even now that the field is full-width a 3-button column would take ~100px of it at
- * every panel size. Below, the text keeps the whole width and the controls keep a
- * fixed size — the two stop competing.
- *
- * `flex-wrap` is the floor of the responsive behaviour: the buttons refuse to shrink
- * (`--icon` is `flex: 0 0 auto`), so at a pathologically narrow panel they must be
- * allowed to wrap onto a second line rather than overflow the panel.
- */
 .cg-list-item__tools {
   display: flex;
   align-items: center;
-  gap: 0.2rem;
+  /* Tighter than the spacing scale, deliberately: these five are ONE object, and
+     the scale's smallest step between them would read as five separate controls
+     that happen to be near each other. The scale governs the gaps BETWEEN
+     things; this is the gap INSIDE one thing. */
+  gap: 2px;
+  flex: 0 0 auto;
+  order: -1;
+  /* Aligned to the textarea's FIRST TEXT LINE rather than to its box top — a
+     cluster flush with the border sits visibly above the text it acts on. */
+  margin-top: 2px;
+}
+
+/*
+ * The item's text. `flex: 1 1 12rem` is the responsive floor: it takes every
+ * pixel the cluster does not, and once it cannot hold 12rem the whole row wraps
+ * rather than crushing the text — which is the failure this layout replaced
+ * (Persian breaking mid-word across three lines in an ~80px box).
+ */
+.cg-list-item__text {
+  flex: 1 1 12rem;
   min-width: 0;
-  flex-wrap: wrap;
+  min-height: 52px;
+  line-height: 1.6;
 }
 
 /* The item's display number — the operator's way of telling two identical-looking
-   rows apart, and it matches the 1-based numbering the rest of the console uses. */
+   rows apart, and it matches the 1-based numbering the rest of the console uses.
+   It is also what identifies an item now that no bracketed key is printed per row
+   (see `FieldEditor`): the FIELD is named once, the ITEMS are numbered. */
 .cg-list-item__index {
+  flex: 0 0 auto;
+  width: 20px;
+  text-align: center;
   font-size: var(--r-text-xs);
   font-weight: var(--r-weight-bold);
   color: var(--r-text-muted);
   font-variant-numeric: tabular-nums;
-  min-width: 1.5em;
 }
 
-/* Pushes the destructive ✕ away from the reorder pair, so the two kinds of action
-   are not one undifferentiated strip of glyphs. */
-.cg-list-item__spacer {
-  flex: 1;
-  min-width: 0;
+/* The minis. `--icon`'s neutral look, one notch narrower — five of them plus a
+   handle and an index have to fit beside the text at the panel's default width. */
+.cg-list-item__tools .cg-btn--icon {
+  width: 26px;
+  min-width: 26px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: var(--r-radius-sm);
+}
+
+/*
+ * DELETE: neutral at rest, RED ON HOVER ONLY.
+ *
+ * This replaced the `flex: 1` spacer that used to hold the ✕ away from the
+ * reorder pair. The spacer's job — "these are two different kinds of action" — is
+ * real and is kept; only the mechanism changes, from POSITION to hover colour,
+ * because position is what split the cluster across 1800px. The small leading gap
+ * is the residue of it: enough that a thumb reaching for ↓ does not land here,
+ * not enough to break the cluster into two objects.
+ */
+.cg-list-item__tools .cg-btn--icon.cg-list-remove {
+  margin-inline-start: var(--r-space-1);
+}
+.cg-btn--icon.cg-list-remove:hover:not(:disabled) {
+  border-color: var(--r-danger);
+  color: #fca5a5;
 }
 
 /*
  * THE DRAG HANDLE. Pointer-only by nature, which is exactly why the ↑/↓ buttons
  * stay: drag is unreachable by keyboard and awkward under time pressure, so it is
- * an ADDITION to them, never a replacement. `cursor: grab` and the grip glyph are
+ * an ADDITION to them, never a replacement. `cursor: grab` and the grip icon are
  * the whole affordance.
  */
 .cg-list-handle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* Matched to `--icon`'s 28px so the tools row is one consistent height rather than
+  /* Matched to the minis' 28px so the cluster is one consistent height rather than
      being made taller by the one element that is not a button. */
   flex: 0 0 auto;
+  width: 22px;
   min-width: 22px;
   height: 28px;
   padding: 0;
@@ -793,7 +1074,6 @@ textarea.cg-field--autogrow {
   color: var(--r-text-muted);
   cursor: grab;
   line-height: 1;
-  flex-shrink: 0;
 }
 .cg-list-handle:hover {
   color: var(--r-text);

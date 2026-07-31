@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
+import { ChevronDown, ChevronUp, GripVertical, X } from 'lucide-react';
 import type { FieldValue, ListItem } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
 import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import {
   addItem,
   dropTargetIndex,
@@ -29,12 +31,26 @@ import {
  * survives display AND apply (B-040); Enter inserts a newline — it never
  * commits or submits.
  *
- * THE LAYOUT, and why it changed. The reorder and delete buttons used to sit on the
- * SAME LINE as the textarea and took their width from it: inside a 320px Inspector
- * that left the text about 80px, in which Persian broke mid-word across three lines.
- * The controls now have their own line beneath the text, so the textarea gets the
- * field's full width at every panel width — including dragged-narrow and the
- * narrow-screen overlay, which the container query in `controls.css` covers.
+ * THE LAYOUT — ONE ITEM IS ONE ROW: a single control cluster, then its text.
+ *
+ * This supersedes the previous arrangement, whose reasoning is kept because half of
+ * it is still load-bearing. The controls once sat BESIDE the textarea and took their
+ * width from it: inside a 320px Inspector that left the text about 80px, in which
+ * Persian broke mid-word across three lines. The answer then was to give the controls
+ * their OWN LINE beneath the text — which fixed the narrow case and created the wide
+ * one. That line was full-width with a `flex: 1` spacer in it, so at FULLSCREEN the
+ * reorder arrows and the delete button ended up roughly 1800px apart: five controls
+ * acting on one item, scattered across a monitor, below the thing they act on.
+ *
+ * Both failures are the same failure — the controls sizing themselves from the row
+ * instead of from THEMSELVES. A fixed-size cluster that neither grows nor shrinks,
+ * with the text taking whatever is left, is right at BOTH widths, and the row wraps
+ * as a whole when even that will not fit. The width was never the problem.
+ *
+ * THE DURABLE RULE: the five controls that act on one item stay together as ONE
+ * cluster, always. Wrapping onto its own line is fine; SPLITTING is not. See
+ * `.cg-list-item` in `controls.css`, which also explains the `order: -1` that keeps
+ * the textarea first in the DOM (tab order) while the cluster leads on screen.
  *
  * THE CONTROLS ARE `icon`, NOT `verb` — a correction, and the reason is worth keeping.
  * They were `verb` first, which carries `width: 100%` because a row verb fills a
@@ -44,14 +60,27 @@ import {
  * grows nor shrinks: the text reflows around them, the controls never resize. That
  * fixed-size-plus-reflow split is what makes the row responsive rather than fragile.
  *
+ * A DISABLED MINI STAYS IN PLACE. `↑` on the first item and `↓` on the last render
+ * inert rather than absent: a control that vanishes changes the cluster's width, so
+ * the first, middle and last rows would each align differently — reflow between rows
+ * being its own kind of mess. `--icon:disabled` keeps a visible boundary for the same
+ * reason (see `controls.css`).
+ *
  * DRAG REORDER IS AN ADDITION, NOT A REPLACEMENT. The ↑/↓ buttons stay, because
  * drag is unreachable by keyboard and awkward under time pressure; drag is the
  * faster path for a pointer, and the buttons remain the complete one.
  */
+/* Spacing from the scale (`--r-space-*`): item→item is one step up from the gaps
+   INSIDE an item's cluster, which is what makes each row read as one object. */
 const styles = {
-  list: { display: 'flex', flexDirection: 'column' as const, gap: '0.35rem', minWidth: 0 },
-  empty: { color: colors.textMuted, fontSize: '0.8rem', margin: 0 },
-  addWrap: { alignSelf: 'flex-start' as const },
+  list: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 'var(--r-space-2)',
+    minWidth: 0,
+  },
+  empty: { color: colors.textMuted, fontSize: 'var(--r-text-sm)', margin: 0 },
+  addWrap: { alignSelf: 'flex-start' as const, marginTop: 'var(--r-space-1)' },
 } as const;
 
 export function ListFieldEditor({
@@ -136,7 +165,11 @@ export function ListFieldEditor({
               commitDrop(i, e.clientY < box.top + box.height / 2 ? 'before' : 'after');
             }}
           >
+            {/* FIRST IN THE DOM, SECOND ON SCREEN — see the header and
+                `.cg-list-item__tools`'s `order: -1`. Tab order reaches an item's
+                text before its controls; the picture puts the cluster first. */}
             <AutoGrowTextarea
+              className="cg-list-item__text"
               value={itemText(item)}
               aria-label={`${fieldId} item ${n}`}
               onChange={(e) => onStage(setItemText(items, i, e.target.value))}
@@ -163,8 +196,12 @@ export function ListFieldEditor({
                   if (el !== undefined) el.draggable = false;
                 }}
               >
-                ⠿
+                <Icon icon={GripVertical} />
               </span>
+              {/* THE ITEM'S IDENTITY is this number, and it is the whole reason no
+                  bracketed key is printed per row: the FIELD is named once in its
+                  header, the ITEMS are numbered. `ROTATOR[0]` on every row named
+                  the field three times and the item never. */}
               <span className="cg-list-item__index" aria-hidden="true">
                 {n}
               </span>
@@ -174,7 +211,7 @@ export function ListFieldEditor({
                 disabled={i === 0}
                 onClick={() => onStage(moveItem(items, i, i - 1))}
               >
-                ↑
+                <Icon icon={ChevronUp} />
               </Button>
               <Button
                 variant="icon"
@@ -182,25 +219,31 @@ export function ListFieldEditor({
                 disabled={i === items.length - 1}
                 onClick={() => onStage(moveItem(items, i, i + 1))}
               >
-                ↓
+                <Icon icon={ChevronDown} />
               </Button>
-              <span className="cg-list-item__spacer" />
+              {/* NEUTRAL AT REST, RED ON HOVER. The strip of glyphs still has to say
+                  "this one is different in kind", but it says it under the pointer
+                  now rather than by standing at the opposite end of the panel. */}
               <Button
                 variant="icon"
+                className="cg-list-remove"
                 aria-label={`Remove ${fieldId} item ${n}`}
                 onClick={() => onStage(removeItem(items, i))}
               >
-                ×
+                <Icon icon={X} />
               </Button>
             </div>
           </div>
         );
       })}
       <div style={styles.addWrap}>
-        {/* `neutral`, not the old accented `secondary`: colour belongs to STATE in
-            this build, and adding an item is an affordance like any other. */}
+        {/* ONE OF THE THREE ACCENTED ACTIONS (owner request), with Apply position
+            and Update. This supersedes the `neutral` it briefly was: adding an item
+            is what an operator opens a list field to do, and in the Inspector colour
+            marks HIERARCHY. It does not spread to the layer table, where colour
+            means STATE — the full rule is at `.cg-btn--accent` in `controls.css`. */}
         <Button
-          variant="neutral"
+          variant="accent"
           aria-label={`Add ${fieldId} item`}
           onClick={() => onStage(addItem(items, `item-${uuid()}`))}
         >

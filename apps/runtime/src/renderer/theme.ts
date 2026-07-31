@@ -119,6 +119,29 @@ export const cssVars = {
   '--r-text-muted': chrome.textMuted,
   '--r-accent': '#38BDF8', // sky — interactive / secondary
   '--r-accent-strong': '#0EA5E9',
+  /**
+   * THE ACCENTED ACTION — the same sky, in the weights a FILLED control needs.
+   *
+   * Owner: «فقط از ایده تفاوت رنگ بین دکمه هاش استفاده کن. رنگ apply/update/add
+   * item متفاوته.» Exactly three controls wear it — Apply position, Add item,
+   * Update — and every other control in the Inspector stays neutral.
+   *
+   * SAME HUE FAMILY AS `--r-accent`, deliberately, so this is one more weight of
+   * a colour the palette already speaks rather than a parallel palette beside it.
+   * `--r-accent` is a TEXT sky and makes an unreadable background; these are the
+   * dark fill, the line and the light ink that a filled control needs — the same
+   * two-weight split `--r-danger`/`--r-danger-strong` and
+   * `--r-rehearsing`/`--r-rehearsing-strong` already use.
+   *
+   * IT IS NOT A STATE COLOUR AND MUST NOT BECOME ONE. See `.cg-btn--accent` in
+   * `controls.css` for why this may live in the Inspector and may not spread to
+   * the layer table.
+   */
+  '--r-accent-fill': '#153B56',
+  '--r-accent-fill-hover': '#1A4A6B',
+  '--r-accent-line': '#2F7BA8',
+  '--r-accent-line-hover': '#4AA8E0',
+  '--r-accent-ink': '#CFE8F8',
   '--r-onair': colors.onAir, // sacred GREEN — ON AIR only (see the header)
   '--r-caution': '#F59E0B', // amber — Out / EXIT / UNCONFIRMED / dirty
   '--r-danger': '#DC2626', // Remove
