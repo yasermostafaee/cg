@@ -2340,14 +2340,39 @@ export class CasparRuntime {
     for (const slot of this.#slots.values()) {
       owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
     }
-    // R-021 stage 1 (task 4.2a) — fixed slots are excluded from the orphan
-    // surface: the fixed bank's PERMANENT row (stage 2) is its occupancy
-    // surface, and a bank fenced from allocation but still shouted about in the
-    // R-009 banner would be an incoherent intermediate state. The LayerManager
-    // is the single source of the bank — never a second local copy of the config.
-    for (const slot of this.#layers.fixedSlots()) {
-      owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
-    }
+    /*
+     * BANK LAYERS ARE NO LONGER EXCLUDED — the exclusion's own premise expired.
+     *
+     * It read: "fixed slots are excluded from the orphan surface: the fixed
+     * bank's PERMANENT row is its occupancy surface, and a bank fenced from
+     * allocation but still shouted about in the R-009 banner would be an
+     * incoherent intermediate state."
+     *
+     * THE ROW IS NO LONGER THAT SURFACE. An unbound bank row now reads `EMPTY`
+     * unconditionally and asks CasparCG nothing — the owner's rule, and it stays.
+     * So the two halves that used to cover this fact between them became zero:
+     * another system's live video on a declared bank layer was reported nowhere,
+     * while the row said "Nothing is loaded on this row" and offered LOAD.
+     *
+     * There is no double-talk left to avoid, because only one voice remains. And
+     * the banner already models this case properly — `html` gets the warning
+     * strip with a confirm-gated Clear (plausibly OUR graphic riding a dead
+     * session), `ffmpeg` gets the neutral "in use by other systems" strip. A
+     * second, narrower banner would be a second implementation of one fact.
+     *
+     * SCOPE: only UNBOUND bank layers can surface here. A bank layer carrying an
+     * item we bound is already in `owned` above via `#slots`, so this reports
+     * exactly "a producer on a bank layer that we did not put there" — ticked or
+     * unticked alike, because an unticked row with a producer is kept visible by
+     * the panel and tells the same lie.
+     *
+     * WHAT MUST NOT MOVE: the RESERVED playout range is still filtered out of
+     * `occupied` above, and that exclusion is a different rule with a different
+     * and still-valid reason — a playout `html` graphic is indistinguishable from
+     * ours on the wire, so surfacing it would invite the operator to clear the
+     * company's live automation output. It is pinned by its own test rather than
+     * left to this comment.
+     */
     const { changed } = this.#orphanTracker.update(occupied, owned);
     if (changed) this.orphansChanged.emit(this.orphans());
   }

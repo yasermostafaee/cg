@@ -82,7 +82,20 @@ async function bootMock(): Promise<{ oscPort: number }> {
   return { oscPort };
 }
 
-it('T16 — a valid bank: fixedSlots() matches, and a foreign producer on a fixed layer is neither orphan-surfaced nor allocatable', async () => {
+/**
+ * T16 — REVERSED IN PART, deliberately.
+ *
+ * A foreign producer on a bank layer used to be excluded from the orphan
+ * surface, because the bank ROW was its occupancy surface. The row no longer is
+ * — an unbound bank row reads `EMPTY` and asks CasparCG nothing — so excluding
+ * it here left another system’s live video on a declared layer reported
+ * NOWHERE. It surfaces now.
+ *
+ * THE ALLOCATION FENCE IS UNCHANGED and is still asserted: a bank layer is never
+ * handed out by dynamic allocation. That is a different property from being
+ * REPORTED, and conflating the two is what produced the gap.
+ */
+it('T16 — a valid bank: fixedSlots() matches; a foreign producer on a bank layer IS surfaced and still not allocatable', async () => {
   const { oscPort } = await bootMock();
   if (mock === null) throw new Error('mock not booted');
   bridge = await createBridge({
@@ -103,16 +116,19 @@ it('T16 — a valid bank: fixedSlots() matches, and a foreign producer on a fixe
   await foreignPlay(mock, 'PLAY 1-72 "program-feed.mov"');
   await foreignPlay(mock, 'PLAY 1-45 "other-feed.mov"');
 
-  // The non-fixed layer surfaces as an R-009 orphan (the control: the sweep
-  // ran and saw both) — the fixed layer NEVER does.
+  // BOTH surface now — the non-fixed layer as before, and the BANK layer too.
+  // The bank layer is the reversal: it is unbound, so a producer on it is one we
+  // did not put there, and it is reported rather than silently swallowed.
   await waitFor(() =>
     (bridge?.runtime.orphans() ?? []).some((o) => o.channel === 1 && o.layer === 45),
   );
-  expect(bridge.runtime.orphans().some((o) => o.layer === 72)).toBe(false);
+  await waitFor(() =>
+    (bridge?.runtime.orphans() ?? []).some((o) => o.channel === 1 && o.layer === 72),
+  );
 
-  // A few more sweeps: still excluded (not a timing artifact).
+  // Sustained across several sweeps, not a one-sample artifact.
   await new Promise((r) => setTimeout(r, SWEEP_MS * 3));
-  expect(bridge.runtime.orphans().some((o) => o.layer === 72)).toBe(false);
+  expect(bridge.runtime.orphans().some((o) => o.layer === 72)).toBe(true);
 });
 
 it('T17 — a conflicting bank throws BEFORE binding, and no port is left listening', async () => {
