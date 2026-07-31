@@ -87,6 +87,16 @@ export interface LayerRowActionDeps {
   hasNext: boolean;
   /** True when the SPA→bridge link is down: every verb is refused (R-006). */
   linkDown: boolean;
+  /**
+   * THE SECOND HOP — can the bridge reach CasparCG?
+   *
+   * Separate from `linkDown` because they are different questions with different
+   * answers: the bridge is ours and local and usually up, while the playout
+   * machine may be off for hours. A verb that only touches OUR LIST needs the
+   * first; a verb that emits AMCP needs both. Unknown counts as unreachable —
+   * see `useCasparReachable`.
+   */
+  casparReachable: boolean;
   /** Has the operator staged unapplied field edits for this item? */
   dirty: boolean;
   /**
@@ -150,6 +160,25 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   const offlineReason = linkDown
     ? 'Bridge disconnected — commands are refused until it reconnects.'
     : undefined;
+  /**
+   * THE GATE EVERY AMCP-EMITTING VERB CARRIES: both hops must be up.
+   *
+   * The bridge's refusals already exist — `update()` answers `disconnected`,
+   * `take()` the same — so nothing here makes the system safer. What it fixes is
+   * the CONTROL: today these verbs are enabled, send nothing, and report an error
+   * afterwards, which costs the operator the seconds in which he believes the
+   * command is on its way. The refusal was always right; the button was not.
+   */
+  const needsCaspar = linkDown || !deps.casparReachable;
+  /**
+   * …and it names the RIGHT HOP. Telling the operator "bridge disconnected" while
+   * the bridge is fine sends him to the wrong machine, so the two states get two
+   * sentences. `linkDown` wins when both are down: it is the nearer failure, and
+   * with it down CasparCG's state is not even knowable.
+   */
+  const needsCasparReason =
+    offlineReason ??
+    'CasparCG cannot be reached — this command would not arrive. It returns as soon as the playout server is back.';
   /**
    * ── TWO FACTS THAT USED TO BE ONE FLAG ──────────────────────────────────────
    *
@@ -350,10 +379,11 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         // reason rehearse is a mode rather than a pane. This disabled state is the
         // courtesy; the bridge's own refusal (`errorCode: 'rehearsing'`) is the
         // guarantee, and it is what holds when a second browser's snapshot is stale.
-        empty || playing || deps.rehearsing,
+        empty || playing || deps.rehearsing || needsCaspar,
         () => (item === null ? noop() : deps.play(item.itemId)),
         Play,
       ),
+      ...(needsCaspar ? { title: needsCasparReason } : {}),
       tone: 'play',
       // ENGAGED = the state this verb produces is already true, which for PLAY is
       // ON AIR. It is disabled in exactly that case, so the fill lands on a
@@ -421,10 +451,11 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       ...act(
         'next',
         'NEXT',
-        empty || !onAir || !deps.hasNext,
+        empty || !onAir || !deps.hasNext || needsCaspar,
         () => (item === null ? noop() : deps.next(item.itemId)),
         ArrowRightFromLine,
       ),
+      ...(needsCaspar ? { title: needsCasparReason } : {}),
       tone: 'next',
     },
     // UPDATE pushes staged field edits to a LIVE producer. Its primary surface
@@ -433,19 +464,23 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     act(
       'update',
       'UPDATE',
-      empty || !onAir || !deps.dirty,
+      empty || !onAir || !deps.dirty || needsCaspar,
       () => (item === null ? noop() : deps.update(item.itemId)),
       RefreshCw,
       'menu',
+      // UPDATE reaches air: on a row with a resident producer it sends
+      // `CG UPDATE` (measured). So it carries the same reason as the rest.
+      needsCaspar ? needsCasparReason : undefined,
     ),
     {
       ...act(
         'stop',
         'STOP',
-        empty || !onAir,
+        empty || !onAir || needsCaspar,
         () => (item === null ? noop() : deps.stop(item.itemId)),
         CircleArrowOutDownRight,
       ),
+      ...(needsCaspar ? { title: needsCasparReason } : {}),
       tone: 'stop',
     },
     /**
@@ -461,14 +496,22 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
      *     console has. "Fail closed" on a remedy is not fail-safe, it is
      *     fail-stuck.
      *
-     * So CLEAR is offered whenever there is an ITEM on the row, whatever its
-     * status claims — on air, idle, unconfirmed, unverified, errored — and even
-     * when the bridge link reads down. That last one is not an oversight: a WRONG
-     * `linkDown` is exactly the class of bug this exists for, and the costs are
-     * not comparable. Enabling it when the bridge really is dead costs one failed
-     * request and a toast; disabling it when the flag is wrong costs a graphic
-     * nobody can remove. It carries `offlineReason` as its tooltip so the operator
-     * knows what to expect before pressing.
+     * So CLEAR is offered whatever the row's STATUS claims — on air, idle,
+     * unconfirmed, unverified, errored. That half is unchanged and is the whole
+     * point of the escape hatch: the status is exactly what may be wrong when the
+     * operator reaches for it.
+     *
+     * IT IS NOW GATED ON REACHABILITY, ON BOTH HOPS, and that is a deliberate
+     * reversal of "even when the bridge link reads down". The two are not one
+     * rule. Never gating on LAYER STATE stands. Reachability is different: with
+     * either hop down the command does not leave, so the enabled button was not a
+     * remedy — only the appearance of one, and it costs the operator the seconds
+     * in which he believes the graphic is coming off.
+     *
+     * The earlier reasoning was that a WRONG `linkDown` would strand a graphic. It
+     * still would; what changed is that the command genuinely does not go. It
+     * returns the instant either hop does, which keeps this a gate rather than a
+     * removal of the hatch.
      *
      * IT IS NOW ENABLED ON AN UNBOUND ROW TOO, and that completes the decision
      * rather than changing it. It used to be disabled there for a good reason: with
@@ -502,10 +545,9 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       key: 'clear',
       label: 'CLEAR',
       variant: 'verb',
-      // NO gate at all now — the escape hatch is always available, on every row,
-      // whatever the status claims and whatever the link says. See above.
-      disabled: false,
-      ...(offlineReason !== undefined ? { title: offlineReason } : {}),
+      // Gated on REACHABILITY only — never on the row's status. See above.
+      disabled: needsCaspar,
+      ...(needsCaspar ? { title: needsCasparReason } : {}),
       run: () => (item === null ? deps.clearLayer() : deps.clear(item.itemId)),
       onError,
       icon: XSquare,

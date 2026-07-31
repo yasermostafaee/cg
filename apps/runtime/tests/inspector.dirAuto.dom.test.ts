@@ -10,6 +10,7 @@ import {
   __resetDraftsForTest,
   buildApplyPayload,
 } from '../src/renderer/features/inspector/draftStore.js';
+import { connectionsStub, linkFor } from './support/reachability.js';
 
 /**
  * dev-r028-b4 item 6 — the editor's text direction follows the value, and NOTHING ELSE
@@ -66,6 +67,10 @@ function item(): StackItemState {
 
 async function render(): Promise<HTMLDivElement> {
   const stub = {
+    // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
+    // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
+    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    connections: connectionsStub('both-up'),
     templates: { get: vi.fn(() => Promise.resolve(TEMPLATE)) },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };

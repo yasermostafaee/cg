@@ -10,6 +10,62 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### ⛔ `dev-offline-ux` v8 — §0 §0a §1 §2 DONE; §1a §3 §4 §5 §6 §7 §8 §9 NOT STARTED
+
+Stopped at a clean boundary, gate green, pushed. **§1a (durable drafts) is the largest remaining
+piece and the one the owner is waiting on** — it is untouched, as are §3–§9.
+
+**§0 — no rule forbade the stronger option.** `RENDERER_ONLY_PACKAGES` is `['@cg/ui']` only, so
+Main-tier `@cg/caspar-client` may depend on `@cg/shared-ipc` (the bridge already does), and there
+is no cycle. So the predicate is ONE implementation, not two pinned together: `isServerReachable`
+lives in `shared-ipc` beside the wire enum, and `caspar-client`'s `isLiveState` CALLS it. Drift is
+impossible rather than detected.
+
+**§0a — the fixture, and which specs moved onto it.** `tests/support/reachability.ts` names the
+four states (`both-up` · `caspar-down` · `bridge-down` · `unknown`) and exports `linkFor`,
+`healthFor`, `connectionsStub` and `UNREACHABLE_STATES`. Moved onto it: `support/layerRow.ts`
+(so every row spec inherits it), `layersPanel.clearAll`, `layersPanel.removeAll`,
+`testModeHonesty`, `inspector.dirAuto`, `inspector.nestedFields`, `inspector.offlineSchema`,
+`inspectorToast`, `numericInput`. **Nine files, of which five previously had NO
+`connections.health` at all.**
+
+Two things that fixture work surfaced, both worth keeping:
+
+1. **Adding `useCasparReachable` anywhere pulls `useLink` in transitively** (health rides
+   `useBridgeSnapshot`, which reads the link). Five Inspector-family stubs had neither, and only
+   failed once the Inspector's Update was gated. A stub that omits a channel does not fail — it
+   fails _later_, in whichever spec first renders a component that reaches for it.
+2. **`bridge-down` yields `null` health deliberately.** With no bridge there is nothing to ask
+   about CasparCG, and `null` is the honest answer rather than a guess in either direction.
+
+**§1/§2 — the gating.** `PLAY` · `NEXT` · `STOP` · `UPDATE` · `CLEAR` (row) and `STOP ALL` ·
+`CLEAR ALL` (header) are disabled while either hop is down, each with the reason for the RIGHT hop
+— "bridge disconnected" when the bridge is down, "CasparCG cannot be reached" when it is not.
+`LOAD`, `ON PVW`, `REMOVE` and field editing stay available, asserted in their own test so §1
+cannot over-reach.
+
+**🔴 THE ADVERSARIAL REVIEW FOUND A HOLE IN THIS DIFF, and it is the one worth recording.** The
+Inspector's `Update` button (`Inspector.tsx`) was `disabled={!dirty}` only, and it calls the SAME
+`applyDraft` as the row's `UPDATE` verb. Gating the row and not the Inspector would have been the
+label-and-action-resolved-in-two-places class again, one surface along: the row saying the command
+cannot go while the Inspector still offered it. Closed in the same commit.
+
+**Two AMCP surfaces are still NOT reachability-gated, and both are deliberate — recorded so the
+next reviewer does not have to re-derive it:**
+
+- `OrphanLayersBanner`'s Clear — calls `layers.clear`. Not gated. It should be, by the same rule;
+  it was simply not in §1's list and is left for the sweep that finishes §1.
+- `PlayoutPanel`'s Clear — carries an explicit comment saying it is deliberately NOT a disabled
+  button. That decision predates this task and was not revisited.
+
+**The other adversarial direction (refusing a verb that would have succeeded):** `degraded` stays
+REACHABLE via the shared predicate, so an OSC-less install is not disabled — the B-101 trap. The
+residual is the BOOT WINDOW: `useConnections()` is `null` until the bridge first answers, so the
+gated verbs are briefly disabled on every load and after every reconnect. That is the intended
+fail-closed reading of "unknown", it is self-correcting within one round trip, and the alternative
+(enabling on no evidence) fails at the moment air needs it. **Accepted, but it is the thing to
+watch if an operator reports a dead PLAY straight after a reload.**
+
 ### ⛔ `dev-offline-ux` v3 — §1 §4 §5 DONE; §2 §3 §6 §7 §8 §9 §10 NOT STARTED
 
 Stopped at a clean boundary, gate green, pushed. **The connection gating (§2, §3) is the largest

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import { LayersPanel } from '../src/renderer/features/layers/LayersPanel.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
+import { connectionsStub, type Reachability } from './support/reachability.js';
 
 /**
  * The stack header's Clear-All, beside Remove-All.
@@ -34,11 +35,13 @@ function item(itemId: string, status: StackItemState['status']): StackItemState 
 function stubBridge(
   stack: StackItemState[],
   link: 'live' | 'disconnected' = 'live',
+  reach: Reachability = 'both-up',
 ): { clearAll: Mock; removeAll: Mock } {
   const clearAll = vi.fn(() => Promise.resolve({ ok: true, cleared: 0 }));
   const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: stack.length }));
   const stub = {
     link: { status: () => link, onStatusChanged: () => () => undefined },
+    connections: connectionsStub(reach),
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     // R-028 â the merged panel also reads the declared layers and the playout tab.
     fixedLayers: {
@@ -47,6 +50,8 @@ function stubBridge(
       onConfigChanged: () => () => undefined,
       onStateChanged: () => () => undefined,
     },
+    // §0a — the second hop, selected BY NAME (support/reachability.ts).
+    connections: connectionsStub(reach),
     // R-022 — rehearse is bridge-owned, so the panel subscribes to it on mount.
     rehearse: {
       state: () => Promise.resolve([]),
@@ -241,6 +246,8 @@ describe('StackPanel Clear-All', () => {
     // bridge-owned, so a bulk action can no more reach CasparCG than a per-item one can.
     const listeners = new Set<(s: 'live' | 'disconnected') => void>();
     let status: 'live' | 'disconnected' = 'live';
+    // §0a — both hops up unless this spec is about being disconnected.
+    const reach: Reachability = 'both-up';
     const stub = {
       link: {
         status: () => status,
@@ -249,6 +256,8 @@ describe('StackPanel Clear-All', () => {
           return () => listeners.delete(h);
         },
       },
+      // §0a — the second hop, selected BY NAME (support/reachability.ts).
+      connections: connectionsStub(reach),
       templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
       // R-028 â the merged panel also reads the declared layers and the playout tab.
       fixedLayers: {
@@ -294,17 +303,22 @@ describe('StackPanel Clear-All', () => {
       Remove-All follows R-006 and goes disabled: it is a bridge round-trip like any
       other, and refusing it costs nothing â the rows stay exactly as they are.
 
-      Clear-All does NOT, and that exemption is the point of this assertion. A WRONG
-      `linkDown` is precisely the bug the escape hatch exists for, and the two costs
-      are not comparable: enabling it when the bridge really is dead costs one failed
-      request and a toast, while disabling it when the flag is wrong leaves every
-      on-air graphic with nothing that can take it off. It keeps its tooltip so the
-      operator knows what to expect before pressing.
+      CLEAR ALL NOW GOES WITH IT — this assertion is REVERSED deliberately.
+
+      The escape-hatch rule stands where it was aimed: Clear-All is never gated on
+      the STATE MODEL, on how many rows read as on air, because that model is
+      exactly what may be wrong when the operator reaches for it. Reachability is a
+      different question. With the bridge down the command does not leave, so the
+      enabled button was not a remedy, only the appearance of one — and it costs
+      the operator the seconds in which he believes the graphics are coming off.
+
+      It returns the instant the link does, which keeps this a gate rather than a
+      removal of the hatch.
     */
     expect(removeAllButton(el)?.disabled).toBe(true);
     expect(
       clearAllButton(el)?.disabled,
-      'Clear-All is the escape hatch and must survive a dead link',
-    ).toBe(false);
+      'Clear-All cannot act with the bridge down — gated on reachability, never on state',
+    ).toBe(true);
   });
 });

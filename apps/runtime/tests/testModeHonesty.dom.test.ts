@@ -8,6 +8,7 @@ import { LayerRow } from '../src/renderer/features/layers/LayerRow.js';
 import { ConnectionBanner } from '../src/renderer/features/status/ConnectionBanner.js';
 import { seedHealth } from '../src/platform/seed.js';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
+import { connectionsStub, type Reachability } from './support/reachability.js';
 
 /**
  * R-006 — test mode may SIMULATE, but it may not LIE.
@@ -30,8 +31,11 @@ afterEach(() => {
 
 function stubLink(status: 'live' | 'disconnected' | 'offline-mock'): void {
   const noopAsync = (): Promise<{ accepted: boolean }> => Promise.resolve({ accepted: true });
+  // §0a — both hops up unless this spec is about being disconnected.
+  const reach: Reachability = 'both-up';
   const stub = {
     link: { status: () => status, onStatusChanged: () => () => undefined },
+    connections: connectionsStub(reach),
     stack: { take: noopAsync, next: noopAsync, stop: noopAsync, out: noopAsync, remove: noopAsync },
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
   };

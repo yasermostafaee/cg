@@ -92,23 +92,25 @@ describe('LayerRow — verbs are present from the start, enabled by state (R-028
 
   it('R-006 — DISCONNECTED disables every verb except CLEAR, which is the escape hatch', async () => {
     const buttons = await buttonsFor({ item: itemWith('on-air'), link: 'disconnected' });
+    // EVERY verb, CLEAR INCLUDED — the exemption is reversed, see below.
     for (const [label, disabled] of buttons) {
-      if (label === 'CLEAR') continue;
       expect(disabled, `${label} must be disabled with the bridge down`).toBe(true);
     }
     /*
-      CLEAR stays ENABLED with the bridge reported down, and this assertion exists
-      to stop it being "fixed" back.
+      CLEAR IS NOW DISABLED WITH THE BRIDGE DOWN — this assertion is REVERSED
+      deliberately, not dropped.
 
-      A WRONG `linkDown` is precisely the bug the escape hatch is for, and the two
-      costs are not comparable: enabling it when the bridge really is dead costs one
-      failed request and a toast, while disabling it when the flag is wrong costs a
-      graphic nobody can take off air. It carries the offline reason as its tooltip,
-      so the operator knows what to expect before pressing.
+      The escape-hatch rule stands where it was aimed: CLEAR is never gated on the
+      row's STATUS, because the status is exactly what may be wrong when the
+      operator reaches for it. Reachability is a different question. With the
+      bridge down the command does not leave at all, so an enabled button was not
+      a remedy — only the appearance of one, and it costs the operator the seconds
+      in which he believes the graphic is coming off.
+
+      It returns the instant the link does, which is what keeps this a gate rather
+      than a removal of the hatch.
     */
-    expect(buttons.get('CLEAR'), 'CLEAR is the escape hatch and must survive a dead link').toBe(
-      false,
-    );
+    expect(buttons.get('CLEAR'), 'CLEAR cannot act with the bridge down').toBe(true);
   });
 
   it('TEST MODE keeps the verbs live — simulating them is the point', async () => {
@@ -272,6 +274,8 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     observed,
     hasNext,
     linkDown: false,
+    // §0a — both hops up unless the spec is about being disconnected.
+    casparReachable: true,
     dirty: true,
     // R-022 — not rehearsing by default; the interlock is exercised on its own below.
     rehearsing: false,
@@ -459,20 +463,16 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
   it('R-006 — with the link down the MENU is disabled too, with CLEAR exempt exactly as the button is', () => {
     const actions = actionsFor({ ...deps(itemWith('on-air'), true), linkDown: true });
     for (const item of toMenuItems(actions)) {
-      if (item.label === 'CLEAR') continue;
       expect(item.disabled, item.label).toBe(true);
     }
     /*
-      The escape hatch has to reach BOTH surfaces or it is not an escape hatch. The
-      whole reason `rowAction` declares each verb once is that a gate must not exist
-      on one surface and not the other — so CLEAR's exemption from `linkDown`
-      propagates to the menu by construction, and this pins it. A right-click is
-      often the faster route under pressure.
+      BOTH SURFACES AGREE — that is what this test is really about, and it is
+      unchanged: the row declares each verb once, so CLEAR's gate reaches the
+      button and its menu item identically. What flipped is the GATE (see the
+      button spec above); the menu followed by construction, not by a second edit.
     */
     const clear = toMenuItems(actions).find((m) => m.label === 'CLEAR');
-    expect(clear?.disabled, 'the menu twin of the escape hatch must survive a dead link').toBe(
-      false,
-    );
+    expect(clear?.disabled, 'the menu twin carries the same gate as the button').toBe(true);
   });
 
   it('the menu carries the WHOLE list; buttons are the filtered subset (placement only)', () => {
@@ -731,6 +731,7 @@ describe('LayerRow — the LOAD/REMOVE toggle splits binding from occupancy', ()
       observed: observedEmpty,
       hasNext: false,
       linkDown: false,
+      casparReachable: true,
       dirty: false,
       rehearsing: false,
       templateAvailable: true,
@@ -838,5 +839,110 @@ describe('LayerRow — the LOAD/REMOVE toggle splits binding from occupancy', ()
         }
       }
     }
+  });
+});
+
+/**
+ * §1/§2 — THE VERBS THAT NEED CASPARCG ARE DISABLED WHILE IT IS UNREACHABLE.
+ *
+ * The bridge already refuses these — `update()` answers `disconnected`, `take()`
+ * the same — so nothing here makes the system safer. What it fixes is the
+ * CONTROL: they were enabled, sent nothing on click, and reported an error
+ * afterwards, which costs the operator the seconds in which he believes the
+ * command is on its way. The refusal was always right; the button was not.
+ */
+describe('LayerRow — CasparCG reachability gates the AMCP verbs', () => {
+  /** A row's deps, both hops up, with an OCCUPIED layer unless stated. */
+  const deps = (
+    item: Parameters<typeof layerRowActions>[0]['item'],
+    hasNext: boolean,
+  ): Parameters<typeof layerRowActions>[0] => ({
+    item,
+    observed:
+      item === null ? { kind: 'empty' as const } : { kind: 'producer' as const, producer: 'html' },
+    hasNext,
+    linkDown: false,
+    casparReachable: true,
+    dirty: true,
+    rehearsing: false,
+    templateAvailable: true,
+    toggleRehearse: () => Promise.resolve({ accepted: true }),
+    load: () => Promise.resolve({ accepted: true }),
+    reload: () => Promise.resolve({ accepted: true }),
+    loadFromLibrary: () => Promise.resolve({ accepted: true }),
+    play: () => Promise.resolve({ accepted: true }),
+    next: () => Promise.resolve({ accepted: true }),
+    update: () => Promise.resolve({ accepted: true }),
+    stop: () => Promise.resolve({ accepted: true }),
+    clear: () => Promise.resolve({ accepted: true }),
+    clearLayer: () => Promise.resolve({ accepted: true }),
+    remove: () => Promise.resolve({ accepted: true }),
+    onError: () => undefined,
+  });
+  const onAirRow = () => ({ ...deps(itemWith('on-air'), true), casparReachable: false });
+
+  /**
+   * ASSERTED ACROSS BOTH UNREACHABLE STATES, because they must behave
+   * identically and a spec that checked only the first would pass while the
+   * second silently enabled a verb on no evidence at all. `casparReachable` is
+   * false for a KNOWN-down server and for an UNKNOWN one alike — the hook folds
+   * them together precisely so this cannot diverge.
+   */
+  it('disables PLAY, NEXT, STOP, UPDATE and CLEAR — with the reason on the control', () => {
+    const actions = layerRowActions(onAirRow());
+    for (const key of ['play', 'next', 'stop', 'update', 'clear']) {
+      const a = actions.find((x) => x.key === key);
+      expect(a?.disabled, `${key} must be disabled while CasparCG is unreachable`).toBe(true);
+      // THE REASON, not merely the refusal — a disabled button and a broken
+      // button look identical to a test that only asserts nothing was sent.
+      expect(a?.title, `${key} must say WHY`).toMatch(/CasparCG cannot be reached/i);
+    }
+  });
+
+  /**
+   * IT NAMES THE RIGHT HOP. "Bridge disconnected" while the bridge is fine would
+   * send the operator to the wrong machine, so the two states get two sentences
+   * and `linkDown` wins when both are down (it is the nearer failure, and with it
+   * down CasparCG's state is not even knowable).
+   */
+  it('names the BRIDGE when the bridge is what is down', () => {
+    const actions = layerRowActions({ ...onAirRow(), linkDown: true });
+    const play = actions.find((x) => x.key === 'play');
+    expect(play?.title).toMatch(/Bridge disconnected/i);
+    expect(play?.title).not.toMatch(/CasparCG cannot be reached/i);
+  });
+
+  /**
+   * THE HALF THAT STOPS §1 OVER-REACHING, and the half that gets left out.
+   *
+   * LOAD binds a template to OUR LIST and emits zero AMCP; ON PVW is local
+   * preview and sends nothing to the layer. Gating either on CasparCG would take
+   * away exactly what the operator needs while the playout machine is off — and
+   * would undo two changes that just landed.
+   */
+  it('leaves LOAD and ON PVW alone — they never touch the layer', () => {
+    const unbound = layerRowActions({ ...deps(null, false), casparReachable: false });
+    const load = unbound.find((a) => a.key === 'load-remove');
+    expect(load?.label).toBe('LOAD');
+    expect(load?.disabled, 'LOAD needs the bridge, never CasparCG').toBe(false);
+
+    const bound = layerRowActions({ ...deps(itemWith('loaded'), true), casparReachable: false });
+    expect(
+      bound.find((a) => a.key === 'rehearse')?.disabled,
+      'ON PVW is local preview and sends nothing',
+    ).toBe(false);
+    // …and REMOVE is a list action too: it unbinds, it does not command a layer.
+    expect(bound.find((a) => a.key === 'load-remove')?.label).toBe('REMOVE');
+  });
+
+  /** Everything returns the instant CasparCG does — this is a gate, not a removal. */
+  it('re-enables every gated verb once CasparCG is reachable again', () => {
+    const actions = layerRowActions({ ...deps(itemWith('on-air'), true), casparReachable: true });
+    for (const key of ['play', 'next', 'stop', 'clear']) {
+      const a = actions.find((x) => x.key === key);
+      expect(a?.title ?? '', `${key} must drop the reason`).not.toMatch(/cannot be reached/i);
+    }
+    expect(actions.find((x) => x.key === 'stop')?.disabled).toBe(false);
+    expect(actions.find((x) => x.key === 'clear')?.disabled).toBe(false);
   });
 });

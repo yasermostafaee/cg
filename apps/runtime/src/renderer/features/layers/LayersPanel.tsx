@@ -10,6 +10,7 @@ import type { ShellLayout } from '../../hooks/useShellLayout.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useCasparReachable, CASPAR_UNREACHABLE_REASON } from '../../hooks/useCasparReachable.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useFixedBank, useFixedSlots } from '../../hooks/useFixedLayers.js';
 import { usePlayoutLayers } from '../../hooks/usePlayoutLayers.js';
@@ -88,6 +89,13 @@ export function LayersPanel({
   const playout = usePlayoutLayers();
   const items = useStack();
   const linkDown = useLink() === 'disconnected';
+  // THE SECOND HOP — a live bridge says nothing about the playout machine.
+  const casparReachable = useCasparReachable();
+  /** Every AMCP-emitting bulk verb needs BOTH hops. Unknown fails closed. */
+  const needsCaspar = linkDown || !casparReachable;
+  const needsCasparReason = linkDown
+    ? 'Bridge disconnected — commands are refused until it reconnects.'
+    : CASPAR_UNREACHABLE_REASON;
   const [activeTab, setActiveTab] = useState('layers');
   const [configOpen, setConfigOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
@@ -276,10 +284,14 @@ export function LayersPanel({
           */}
           <Button
             variant="neutral"
-            disabled={linkDown || onAirCount === 0}
+            disabled={needsCaspar || onAirCount === 0}
             aria-label="Stop all on-air items"
             data-verb-tone="stop"
-            title="Every on-air graphic runs its own outro and stays loaded"
+            title={
+              needsCaspar
+                ? needsCasparReason
+                : 'Every on-air graphic runs its own outro and stays loaded'
+            }
             onClick={() => void stopAll()}
           >
             <Icon icon={CircleArrowOutDownRight} />
@@ -287,18 +299,28 @@ export function LayersPanel({
           </Button>
           {/*
             CLEAR ALL is ALWAYS ENABLED — the bulk twin of the row's CLEAR escape
-            hatch, and the same reasoning applies: refusing the remedy when the
-            state model is confused strands graphics on air. Not even `linkDown`
-            disables it, because a wrong `linkDown` is exactly the bug it exists
-            for. It keeps its confirm gate — always AVAILABLE is not always
+            hatch, and that half is unchanged: refusing the remedy because the
+            STATE MODEL is confused strands graphics on air, so it is never gated
+            on status. It keeps its confirm gate — always AVAILABLE is not always
             IMMEDIATE — and `stack.clearAll` only ever addresses this station's own
             items, so it cannot reach the reserved playout range.
+
+            IT IS NOW GATED ON REACHABILITY, on BOTH hops — a deliberate reversal
+            of "not even linkDown disables it". Never gating on layer state
+            stands; reachability is a different question. With either hop down the
+            command does not leave, so the button was not a remedy, only the
+            appearance of one. It returns the instant both hops do.
           */}
           <Button
             variant="neutral"
+            disabled={needsCaspar}
             aria-label="Clear all on-air items"
             data-verb-tone="clear"
-            title="Every on-air graphic is cut immediately, with no outro"
+            title={
+              needsCaspar
+                ? needsCasparReason
+                : 'Every on-air graphic is cut immediately, with no outro'
+            }
             onClick={() => void clearAll()}
           >
             <Icon icon={XSquare} />

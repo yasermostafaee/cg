@@ -15,6 +15,7 @@ import {
 import { LockOverlay } from '../src/renderer/features/lock/LockOverlay.js';
 import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
 import { NumericInput, normalizeDigits } from '../src/renderer/ui/NumericInput.js';
+import { connectionsStub, linkFor } from './support/reachability.js';
 
 /**
  * R-020 — Persian-keyboard digits accepted in numeric inputs, normalized to
@@ -157,6 +158,10 @@ describe('NumericInput — R-020', () => {
 describe('Inspector fields — R-020', () => {
   function stubInspectorBridge(): void {
     const stub = {
+      // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
+      // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
+      link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+      connections: connectionsStub('both-up'),
       templates: {
         get: vi.fn(() =>
           Promise.resolve({

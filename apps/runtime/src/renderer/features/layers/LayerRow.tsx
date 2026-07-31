@@ -11,6 +11,7 @@ import { useConfirm } from '../../ui/useDialog.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { pickFile } from '../../ui/pickFile.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useCasparReachable } from '../../hooks/useCasparReachable.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { displayLabel } from '../library/templateName.js';
 import { isOnAir } from '../stack/onAir.js';
@@ -229,6 +230,8 @@ export function LayerRow({
 }: Props): JSX.Element {
   const link = useLink();
   const linkDown = link === 'disconnected';
+  // THE SECOND HOP — a live bridge says nothing about the playout machine.
+  const casparReachable = useCasparReachable();
   const { confirm, confirmDialog } = useConfirm();
   const { pickTemplate, pickerDialog } = useTemplatePicker();
   const { menu, open, close } = useContextMenu<number>();
@@ -272,6 +275,7 @@ export function LayerRow({
     observed: slot.observed,
     hasNext: template?.hasNext === true,
     linkDown,
+    casparReachable,
     dirty,
     rehearsing,
     // R-022 — one toggle, both directions. The bridge answers

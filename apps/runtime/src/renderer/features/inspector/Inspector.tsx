@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useCasparReachable, CASPAR_UNREACHABLE_REASON } from '../../hooks/useCasparReachable.js';
 import {
   aggregateHasFields,
   isFieldNamespace,
@@ -165,6 +166,8 @@ const styles = {
  */
 export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Element {
   const [info, setInfo] = useState<TemplateInfo | null>(null);
+  // THE SECOND HOP — Update reaches air, so it needs CasparCG. Editing does not.
+  const casparReachable = useCasparReachable();
   // Re-render on any draft change so dirty markers + the draft-or-applied
   // values stay live (a push to `item` also re-renders via props).
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -318,9 +321,26 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
             not do. The reasoning is unchanged by on-air having moved from red to
             green: do NOT re-introduce colour here to signal importance. What UPDATE
             reaches is said by the panel it sits in and by the toast it raises. */}
+          {/*
+            GATED ON CASPARCG, exactly as the ROW's UPDATE is — and found by the
+            adversarial review of that change rather than by a test.
+
+            This button and the row's verb call the SAME `applyDraft`, so gating
+            one and not the other is the label-and-action-in-two-places class
+            again, one surface along: the row would say the command cannot go
+            while the Inspector still offered it. `update()` sends `CG UPDATE`
+            when a producer is resident (measured), so it needs CasparCG.
+
+            EDITING STAYS AVAILABLE. Only the APPLY is gated — the operator can go
+            on typing with the playout machine off, the edit stays a draft, and it
+            reaches air when the link returns. That is the whole point of the
+            offline surface, and gating the fields instead would destroy it.
+          */}
           <AsyncButton
             variant="neutral"
             aria-label="Apply staged edits"
+            disabled={!casparReachable}
+            {...(!casparReachable ? { title: CASPAR_UNREACHABLE_REASON } : {})}
             run={() => onApply(itemId)}
             onError={() => undefined}
           >

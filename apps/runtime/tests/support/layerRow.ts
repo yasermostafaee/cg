@@ -1,4 +1,5 @@
 import { StrictMode, createElement } from 'react';
+import { connectionsStub, type Reachability } from './reachability.js';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { vi } from 'vitest';
@@ -62,7 +63,7 @@ export function templateWith(over: Partial<TemplateInfo> = {}): TemplateInfo {
   };
 }
 
-export function stubBridge(link: Link): RowStubs {
+export function stubBridge(link: Link, reach: Reachability = 'both-up'): RowStubs {
   const stubs: RowStubs = {
     take: vi.fn(() => Promise.resolve({ accepted: true })),
     next: vi.fn(() => Promise.resolve({ accepted: true })),
@@ -74,6 +75,8 @@ export function stubBridge(link: Link): RowStubs {
   };
   const cg = {
     link: { status: () => link, onStatusChanged: () => () => undefined },
+    // §0a — the second hop, selected BY NAME. See `support/reachability.ts`.
+    connections: connectionsStub(reach),
     stack: {
       take: stubs.take,
       next: stubs.next,

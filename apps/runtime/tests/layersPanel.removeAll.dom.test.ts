@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import { LayersPanel } from '../src/renderer/features/layers/LayersPanel.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
+import { connectionsStub, type Reachability } from './support/reachability.js';
 
 /**
  * R-010 â the StackPanel header's Remove-All: confirm-gated (accept â one
@@ -39,9 +40,12 @@ function stubBridge(
   link: 'live' | 'disconnected' = 'live',
 ): { removeAll: Mock } {
   const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: stack.length }));
+  // §0a — both hops up unless this spec is about being disconnected.
+  const reach: Reachability = 'both-up';
   const stub = {
     // R-006 â StackRow + the header bulk actions mirror the connection refusal.
     link: { status: () => link, onStatusChanged: () => () => undefined },
+    connections: connectionsStub(reach),
     // R-004 â the panel joins each row against the registry to label its template.
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     // R-028 â the merged panel also reads the declared layers and the playout tab.
@@ -51,6 +55,8 @@ function stubBridge(
       onConfigChanged: () => () => undefined,
       onStateChanged: () => () => undefined,
     },
+    // §0a — the second hop, selected BY NAME (support/reachability.ts).
+    connections: connectionsStub(reach),
     // R-022 — rehearse is bridge-owned, so the panel subscribes to it on mount.
     rehearse: {
       state: () => Promise.resolve([]),
@@ -176,6 +182,8 @@ describe('StackPanel Remove-All â R-010', () => {
     const listeners = new Set<(s: 'live' | 'disconnected') => void>();
     let status: 'live' | 'disconnected' = 'live';
     const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: 2 }));
+    // §0a — both hops up unless this spec is about being disconnected.
+    const reach: Reachability = 'both-up';
     const stub = {
       link: {
         status: () => status,
@@ -184,6 +192,8 @@ describe('StackPanel Remove-All â R-010', () => {
           return () => listeners.delete(h);
         },
       },
+      // §0a — the second hop, selected BY NAME (support/reachability.ts).
+      connections: connectionsStub(reach),
       templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
       // R-028 â the merged panel also reads the declared layers and the playout tab.
       fixedLayers: {
