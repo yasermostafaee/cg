@@ -106,6 +106,25 @@ interface SessionLabel {
  */
 const UNKNOWN: SessionLabel = { text: 'UNKNOWN', style: styles.stale };
 
+/**
+ * THE DOT FOLLOWS ITS OWN SERVER'S STATE — it is an LED, not a decoration.
+ *
+ * The first version keyed the green on "not stale and not deaf", which is a
+ * different question and got the reported case exactly backwards: a server
+ * reporting `disconnected` is neither stale nor OSC-deaf, so `● PRIMARY A
+ * OFFLINE` rendered a GREEN light beside a red word. A light that says fine
+ * beside a label that says offline is the B-081 contradiction reintroduced on the
+ * one element that is hardest to read as text.
+ *
+ * So the dot is DERIVED FROM THE RESOLVED LABEL rather than computed beside it.
+ * Only a genuine HEALTHY gets the green LED; every other state — degraded,
+ * offline, unknown, stale, connecting — takes the label's own colour, so the two
+ * halves of the pill physically cannot disagree.
+ */
+function healthDotStyle(label: SessionLabel): { color: string } {
+  return label.style === styles.ok ? styles.healthDot : label.style;
+}
+
 function sessionLabel(state: string): SessionLabel {
   switch (state) {
     case 'healthy':
@@ -279,7 +298,7 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
               same contradiction this pill exists to end — "the green ● dot is a
               claim too".
             */}
-            <span style={stale || primaryDeaf ? styles.stale : styles.healthDot}>●</span>{' '}
+            <span style={healthDotStyle(primary)}>●</span>{' '}
             <span style={stale || primaryDeaf ? styles.stale : styles.primary}>
               PRIMARY {health.primary.label}
             </span>{' '}
@@ -294,7 +313,20 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
                   ? { title: AMCP_ONLY_TITLE }
                   : {})}
             >
-              <span style={styles.backup}>○ BACKUP {health.backup.label}</span>{' '}
+              {/*
+                THE BACKUP'S LED FOLLOWS ITS OWN STATE TOO (owner) — it used to be
+                permanently muted, so a backup that was DEFINED and OFFLINE showed
+                a neutral light beside a red word. Same defect as the primary's,
+                one pill along, and the same fix: `healthDotStyle` derives it from
+                the resolved label, so the light and the word cannot disagree.
+
+                The SHAPE stays `○` against the primary's `●`. That distinction is
+                which server is in charge, not how healthy it is, and it has to
+                survive the two now sharing a colour vocabulary — an operator must
+                be able to tell the pair apart without reading either word.
+              */}
+              <span style={healthDotStyle(backup)}>○</span>{' '}
+              <span style={styles.backup}>BACKUP {health.backup.label}</span>{' '}
               <span style={backup.style}>{backup.text}</span>
             </span>
           ) : (

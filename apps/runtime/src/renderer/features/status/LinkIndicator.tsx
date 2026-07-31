@@ -77,6 +77,8 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
       if (reach === 'connecting') {
         return {
           color: colors.textMuted,
+          // No green: the second hop is still unknown, and the LED is reserved for
+          // the state where BOTH are good. Same reasoning as `caspar-down` below.
           text: 'BRIDGE LIVE — CHECKING CASPARCG',
           title:
             'Connected to the CasparCG bridge. It has not yet said whether it can reach CasparCG.',
@@ -88,6 +90,17 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
         // duplicated claim in the opposite direction. This pill's job is to stop
         // saying "connected", not to start shouting.
         color: colors.textMuted,
+        /*
+          AND NO GREEN ON THE DOT EITHER (owner, explicitly). It was briefly given
+          one on the argument that the LED reports the LINK and the link is
+          genuinely up — but this pill's whole job in this state is to STOP SAYING
+          CONNECTED, and a green light is the loudest way to say it. Nothing
+          reaches air here, so nothing in this pill should read as reassuring.
+
+          The green LED is therefore reserved for the ONE state where both hops are
+          good. That also keeps the light binary and worth trusting: green means
+          commands go through, and it never means "partly".
+        */
         text: 'BRIDGE ONLY — NO CASPARCG',
         title:
           'Connected to the CasparCG bridge, but the bridge cannot reach CasparCG — nothing reaches air. The server pill says which one is down.',
