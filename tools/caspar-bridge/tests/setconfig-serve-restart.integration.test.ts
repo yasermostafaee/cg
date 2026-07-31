@@ -313,3 +313,60 @@ it('REGRESSION loud-failure contract: serve down while desired → apply-failed 
   expect(after?.template).toBe(before?.template); // no new ADD…
   expect(after?.template.startsWith('http://')).toBe(true); // …and never a bare id
 }, 30000);
+
+/**
+ * §8 — THE ERROR-NAMING SWEEP, at the site where a wrapper replaced the cause.
+ *
+ * `take()`'s B-039 pre-roll calls `#sendAdd`, which used to answer a bare
+ * `boolean` — so BOTH of its failures arrived as `false` and were re-labelled
+ * `amcp-error`. That name is a claim: it says CasparCG was involved. When the
+ * BRIDGE's own template server is down, CasparCG was never contacted at all, and
+ * the operator reads the toast and walks to the playout machine.
+ *
+ * This is the `mute-failed` shape exactly — one wrong word that cost this project
+ * an investigation into mute scope and 2.3.2-versus-2.5.0 audio. A wrapper may add
+ * context; it may not replace the cause.
+ */
+it('§8 — a take whose pre-roll ADD fails names template-serve-down, never amcp-error', async () => {
+  const failing = new FailingRestartServer(() => '<!doctype html><html><body>served</body></html>');
+  const { goodOsc } = await boot({ templateServer: failing });
+
+  // A real, served load — then CLEAR it, so the producer is gone and the next
+  // take must re-ADD (the B-039 pre-roll, which is the path under test).
+  expect((await runtime!.load('item-preroll', 'lower-third', {})).accepted).toBe(true);
+  expect(await mock!.waitForCgAddResolution(SLOT)).toBe('resolved');
+  expect((await runtime!.out('item-preroll')).accepted).toBe(true);
+
+  // Now lose the serve, exactly as the loud-failure spec above does.
+  expect((await runtime!.setConfig(config(mock!.amcpPort, goodOsc))).ok).toBe(false);
+  expect(runtime!.templateServe).toBeNull();
+  await runtime!.whenServerHealthy(HEALTH_MS);
+
+  const took = await runtime!.take('item-preroll');
+  expect(took.accepted).toBe(false);
+  // THE ASSERTION. `amcp-error` would send the operator to the playout server for
+  // a fault on this machine.
+  expect(took.errorCode).toBe('template-serve-down');
+  expect(took.errorCode).not.toBe('amcp-error');
+  // …and the item's own reconciled reason agrees, so the row and the toast
+  // cannot name two different faults for one cause.
+  expect(runtime!.stackSnapshot().find((i) => i.itemId === 'item-preroll')?.errorCode).toBe(
+    'template-serve-down',
+  );
+}, 30000);
+
+/**
+ * The same rule at the CHANNEL boundary: `load()` knew the reason and answered
+ * only `{ accepted: false }`, so the reason existed on the item but never reached
+ * the caller that raises the toast.
+ */
+it('§8 — load() returns the reason it already knew, not just a refusal', async () => {
+  const failing = new FailingRestartServer(() => '<!doctype html><html><body>served</body></html>');
+  const { goodOsc } = await boot({ templateServer: failing });
+  expect((await runtime!.setConfig(config(mock!.amcpPort, goodOsc))).ok).toBe(false);
+  await runtime!.whenServerHealthy(HEALTH_MS);
+
+  const load = await runtime!.load('item-load-reason', 'lower-third', {});
+  expect(load.accepted).toBe(false);
+  expect(load.errorCode).toBe('template-serve-down');
+}, 30000);

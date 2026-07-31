@@ -1117,8 +1117,12 @@ export class CasparRuntime {
 
     // B-039 — `CG ADD` only (play-on-load OFF in the builder): the producer is
     // loaded, NOT playing. The operator's take issues the `CG PLAY`.
-    const ok = await this.#sendAdd(itemId, slot, templateId, fields, seq);
-    return { accepted: ok };
+    // §8 — the ADD's own reason reaches the operator instead of a bare refusal.
+    const added = await this.#sendAdd(itemId, slot, templateId, fields, seq);
+    return {
+      accepted: added.ok,
+      ...(added.errorCode !== undefined && { errorCode: added.errorCode }),
+    };
   }
 
   /**
@@ -1356,7 +1360,10 @@ export class CasparRuntime {
     const pending = [...this.#pendingRestore];
     this.#pendingRestore.clear();
 
-    const adds: Promise<boolean>[] = [];
+    // The restore pass does not report per-item reasons anywhere (it is a bulk
+    // rebuild with no operator waiting on it), so it takes `#sendAdd`'s result
+    // whole and looks at neither half.
+    const adds: Promise<{ ok: boolean; errorCode?: string }>[] = [];
     for (const [itemId, { slot, templateId, fields }] of pending) {
       // A remove landed between the restore and this decision — the item is
       // gone; its slot was already released by remove(). Nothing to do.
@@ -1540,16 +1547,28 @@ export class CasparRuntime {
         this.#reconciler.applyAck(seq, false, 'unknown-template');
         return { accepted: false, errorCode: 'unknown-template' };
       }
-      const addedOk = await this.#sendAdd(
+      const added = await this.#sendAdd(
         itemId,
         slot,
         templateId,
         item?.fields ?? {},
         this.#nextSeq(),
       );
-      if (!addedOk) {
-        this.#reconciler.applyAck(seq, false, 'amcp-error');
-        return { accepted: false, errorCode: 'amcp-error' };
+      if (!added.ok) {
+        /*
+          §8 — THE PRE-ROLL'S OWN REASON, not a re-labelling of it.
+
+          This said `amcp-error` for every failure of the B-039 re-ADD, including
+          the one where the bridge's OWN template server is down and CasparCG was
+          never contacted. `amcp-error` asserts CasparCG was involved; the
+          operator reads it and goes to the playout machine.
+
+          The fallback stays `amcp-error` only for the case where the ADD really
+          did fail at the wire with no code to quote.
+        */
+        const code = added.errorCode ?? 'amcp-error';
+        this.#reconciler.applyAck(seq, false, code);
+        return { accepted: false, errorCode: code };
       }
     }
 
@@ -1603,8 +1622,12 @@ export class CasparRuntime {
     // update and out only, so a take whose ack never settled rested on its optimistic
     // playing/on-air claim forever, with nothing to bound it.
     this.#armExpiry(seq);
-    const { ok } = await this.#send(this.#builder.take(slot), seq, 'normal');
-    return ok ? { accepted: true } : { accepted: false, errorCode: 'amcp-error' };
+    // §8 — the PLAY's own code rides out: `amcp-send-failed` (the command never
+    // left this process) and `amcp-404` (CasparCG refused it) are different facts
+    // pointing at different machines, and flattening both to `amcp-error` told the
+    // operator neither.
+    const { ok, errorCode } = await this.#send(this.#builder.take(slot), seq, 'normal');
+    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
   }
 
   /**
@@ -1937,8 +1960,12 @@ export class CasparRuntime {
     this.#reconciler.applyIntent({ kind: 'stop', itemId }, seq);
     this.#armExpiry(seq);
     // Urgent lane, like out(): an air-affecting verb does not queue behind loads.
-    const { ok } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
-    return { accepted: ok };
+    // §8 — and the code comes with it. A refused STOP used to answer a bare
+    // `{ accepted: false }`, which the toast could only render as "Not accepted."
+    // — the operator told that a graphic did not come off air, and nothing about
+    // whether the command reached CasparCG at all.
+    const { ok, errorCode } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
+    return { accepted: ok, ...(!ok && errorCode !== undefined && { errorCode }) };
   }
 
   /**
@@ -1982,7 +2009,7 @@ export class CasparRuntime {
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'out', itemId }, seq);
     this.#armExpiry(seq);
-    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), seq, 'urgent');
+    const { ok, onPrimary, errorCode } = await this.#send(this.#builder.out(slot), seq, 'urgent');
     // B-039 — `CLEAR` DESTROYS the producer: record that no producer exists on the
     // slot so a subsequent take re-ADDs (instead of `CG PLAY`-ing an empty layer).
     // The slot stays RESERVED (the item is still on the stack, idle) until remove —
@@ -1993,7 +2020,11 @@ export class CasparRuntime {
     // — and provably resolves any B-056 owned-slot warning; a backup-only out
     // leaves the warning standing (the primary's orphan may still be live).
     if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
-    return { accepted: ok };
+    // §8 — CLEAR is the escape hatch, so it is the verb where "the command never
+    // left" versus "CasparCG refused it" matters MOST: the first is fixed by
+    // waiting for the link, the second means the graphic is still on air and
+    // needs another route off. It answered a bare `{ accepted: false }`.
+    return { accepted: ok, ...(!ok && errorCode !== undefined && { errorCode }) };
   }
 
   // ── R-009: orphan-layer sweep + explicit per-layer Clear ────────────
@@ -3595,13 +3626,28 @@ export class CasparRuntime {
    * `take` re-ADD path. Uses the SERVED `/template/<id>` URL when the HTTP server is
    * up (B-038 Phase 3), else the bare id (isolated unit tests).
    */
+  /*
+    §8 — IT RETURNS THE REASON, NOT JUST A BOOLEAN, AND THAT IS THE POINT.
+
+    It used to answer `boolean`, so both of its failures — the bridge's own
+    template server being down (`template-serve-down`) and whatever `#send`
+    reported (an AMCP refusal code, or `amcp-send-failed` when the command never
+    left) — arrived at the caller as `false` and were re-labelled `amcp-error`.
+    `amcp-error` NAMES A MECHANISM: it says CasparCG was involved. When the local
+    HTTP server is down, CasparCG was not involved at all, and the operator is
+    sent to the wrong machine.
+
+    That is the `mute-failed` class exactly, and it cost this project an
+    investigation into mute scope and 2.3.2-versus-2.5.0 audio. A wrapper may add
+    context; it may not replace the cause.
+  */
   async #sendAdd(
     itemId: string,
     slot: CommandSlot,
     templateId: string,
     fields: FieldValues,
     seq: number,
-  ): Promise<boolean> {
+  ): Promise<{ ok: boolean; errorCode?: string }> {
     // fix-setconfig-serve-restart — the loud-failure contract: when serving
     // is INTENDED for this process but the server is down, a load must fail
     // with a clear reason (mirroring the unknown-template guard) — NEVER
@@ -3609,7 +3655,7 @@ export class CasparRuntime {
     // The bare-id fallback survives ONLY for the never-served unit-test path.
     if (!this.#templateServer.listening && this.#servingDesired) {
       this.#reconciler.applyAck(seq, false, 'template-serve-down');
-      return false;
+      return { ok: false, errorCode: 'template-serve-down' };
     }
     let templateArg = this.#templateServer.listening
       ? this.#templateServer.urlFor(templateId)
@@ -3644,9 +3690,13 @@ export class CasparRuntime {
       params.push(`cw=${String(raster.width)}`, `ch=${String(raster.height)}`);
       templateArg += `?${params.join('&')}`;
     }
-    const { ok } = await this.#send(this.#builder.load(slot, templateArg, fields), seq, 'normal');
+    const { ok, errorCode } = await this.#send(
+      this.#builder.load(slot, templateArg, fields),
+      seq,
+      'normal',
+    );
     if (ok) this.#loaded.add(itemId);
-    return ok;
+    return { ok, ...(errorCode !== undefined && { errorCode }) };
   }
 
   /**

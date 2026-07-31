@@ -14,6 +14,28 @@ const MESSAGES: Readonly<Record<string, string>> = {
   'unknown-item': 'That item is no longer on the stack.',
   'unknown-template': 'That template is not registered with the bridge — re-import it.',
   'amcp-send-failed': 'The command never reached CasparCG — check the server link.',
+  /*
+    §8 — THE ONE CODE THAT MUST SAY "UNKNOWN", AND MUST BE SEEN RARELY.
+
+    `amcp-error` is the bridge's fallback when a send failed with no code to
+    quote. It had no sentence at all, so it rendered as "Not accepted
+    (amcp-error)." — which reads as a diagnosis (AMCP, therefore CasparCG,
+    therefore go to the playout machine) while being the absence of one.
+
+    Naming the wrong mechanism is worse than naming none, because a wrong name
+    gets acted on. So this says plainly that the cause is not known, and points at
+    the two places it could be. The bridge now threads the REAL code wherever it
+    has one (`amcp-404`, `amcp-send-failed`, `template-serve-down`), so this
+    should be genuinely rare — if an operator sees it often, that is the bug.
+  */
+  'amcp-error':
+    'The command failed and the reason was not reported — it is not known whether CasparCG refused it or it never arrived. Check the layer on the output before assuming either.',
+  // fix-setconfig-serve-restart — the bridge's OWN template HTTP server is down,
+  // so the page could not be handed to CasparCG. Named separately because the
+  // remedy is on THIS machine: it used to surface as `amcp-error` and sent the
+  // operator to the playout box for a fault that was never there.
+  'template-serve-down':
+    'The bridge could not serve the template to CasparCG — its template server is down. This is the bridge machine, not the playout server; restart the bridge.',
   // R-006 — refused BEFORE the send, because the server is not connected. Say plainly that
   // nothing was queued: the operator must reissue it, or they will believe it is pending.
   disconnected:

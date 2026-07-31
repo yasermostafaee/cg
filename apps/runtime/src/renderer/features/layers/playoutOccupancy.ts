@@ -135,7 +135,19 @@ export function playoutClearRefusal(reason: string | undefined, observedProducer
     return 'Refused — that layer is not a declared playout layer.';
   }
   if (reason === 'amcp-error') {
-    return 'The clear reached CasparCG but failed. The layer may still be on air.';
+    /*
+      §8 — IT USED TO SAY "the clear REACHED CasparCG but failed", WHICH IT DOES
+      NOT KNOW.
+
+      `amcp-error` is the bridge's fallback for a send that failed with no code to
+      quote, and the commonest way to get there is a send that never left this
+      process at all. Asserting it arrived is a claim about the far end made from
+      the absence of evidence — the `mute-failed` shape, one channel along.
+
+      What IS certain is the part the operator must act on: the layer may still be
+      on air. That is said; the mechanism is not guessed at.
+    */
+    return 'The clear failed, and the reason was not reported — it is not known whether CasparCG refused it or it never arrived. The layer may still be on air.';
   }
   return 'Not accepted.';
 }
