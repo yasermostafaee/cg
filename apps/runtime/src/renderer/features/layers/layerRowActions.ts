@@ -7,7 +7,6 @@ import {
   RefreshCw,
   Trash2,
   XSquare,
-  Library,
 } from 'lucide-react';
 import type { FixedSlotState } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
@@ -67,15 +66,19 @@ import { isOnAir } from '../stack/onAir.js';
  */
 
 /**
- * What a bound row says when its template is not in this browser's library.
+ * What a bound row says when its template is not held by this browser.
  *
  * Exported so the ROW can show it as well as the button: a bound row pointing at
  * a template that is not here is a fact the operator needs to see while
  * scanning, not something they discover by hovering the one control that is
  * still enabled. The two surfaces read the same string by construction.
+ *
+ * §6 — it no longer says "library". That word named a PANEL, and the panel is
+ * gone, so it sent the operator looking for a surface that does not exist. The
+ * fact is the same and is stated directly.
  */
 export const MISSING_TEMPLATE_REASON =
-  'This row’s template is not in this browser’s library, so it cannot be put back on the layer. Re-import it, or REMOVE the row.';
+  'This browser does not have this row’s template, so it cannot be put back on the layer. Re-import it, or REMOVE the row.';
 
 export interface LayerRowActionDeps {
   /** The stack item bound to this row, if any (the row's whole verb state). */
@@ -119,7 +122,16 @@ export interface LayerRowActionDeps {
   rehearsing: boolean;
   /** Enter or leave rehearse — one toggle in a fixed slot, like LOAD/REMOVE. */
   toggleRehearse: (itemId: string) => Promise<AsyncResult>;
-  /** The one-action chain: pick a `.vcg`, import it, bind it to THIS row. */
+  /**
+   * §6 — the row's ONE load: open the template picker, then bind what it returns
+   * to THIS row.
+   *
+   * It was "pick a `.vcg`, import it, bind it" — the file chooser, with the
+   * already-imported path exiled to a context-menu entry named after a panel that
+   * no longer exists. Both paths now live behind this one verb, and the choice
+   * between them happens in a dialog the operator can read rather than in a
+   * right-click menu they have to know about.
+   */
   load: () => Promise<AsyncResult>;
   /**
    * Put this row's ALREADY-BOUND template back on its layer, with no picking.
@@ -130,10 +142,8 @@ export interface LayerRowActionDeps {
    * made the reported defect tedious rather than merely wrong.
    */
   reload: () => Promise<AsyncResult>;
-  /** Load a template already in the library onto this row (the picker path). */
-  loadFromLibrary: () => Promise<AsyncResult>;
   /**
-   * Is the row's bound template present in this browser's library?
+   * Does this browser hold the row's bound template?
    *
    * `false` means it cannot be re-loaded, so the toggle must offer the way OUT
    * rather than a load that would be refused — and the row has to say why.
@@ -365,19 +375,21 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
           // sitting under the cursor when the menu opens.
           menuLast: true,
         },
-    // The already-imported path. Menu-placed: the owner's primary Load is the
-    // one-action import, and a second Load BUTTON beside it on every row would
-    // make the operator choose between two similarly-named controls under time
-    // pressure. Same gate, same row, one right-click away.
-    //
-    // NOT REMOVED, pending the owner's call. The request was to take it out of
-    // the context menu; this is the only place it can live. `loadFromLibrary`
-    // binds a SPECIFIC row (`Load onto ${rowName}` → `loadTemplateOntoFixedSlot`
-    // with that row's coord), so there is no row-less surface — a panel-header
-    // entry would have nothing to bind to. Deleting the item therefore deletes
-    // the capability, and takes the template PICKER with it, and R-005's
-    // remove-from-library lives inside that picker.
-    act('load-library', 'LOAD FROM LIBRARY', !empty, () => deps.loadFromLibrary(), Library, 'menu'),
+    /*
+      §6 — `LOAD FROM LIBRARY` IS GONE FROM THIS LIST, and what it reached is not.
+
+      The Library stopped being a surface when R-028 folded it into the stack, so a
+      control naming it pointed at nothing the operator could see. The previous note
+      here was right that deleting the ENTRY would delete the CAPABILITY — the
+      picker, and R-005's remove-a-template inside it — which is why the picker
+      MOVED instead: `LOAD` opens it, and importing a `.vcg` is one option in it
+      rather than the whole of it (see `useTemplatePicker`).
+
+      That also retires the reason this had to be menu-placed. There is no longer a
+      second, similarly-named control to choose between under time pressure: there
+      is ONE `LOAD`, and the choice between "one I already have" and "a new file"
+      happens after it, in a dialog, where it can be read.
+    */
     {
       ...act(
         'play',

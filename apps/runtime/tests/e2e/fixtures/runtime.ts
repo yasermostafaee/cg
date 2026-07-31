@@ -28,14 +28,15 @@ import { pack } from '@cg/vcg-format';
 const FIRST_LOADABLE_LAYER = 74;
 
 /**
- * The row `openLibraryPicker` uses when the caller does not name one.
+ * The row `openTemplatePicker` uses when the caller does not name one.
  *
- * Reading the library means opening a row's context menu, and LOAD FROM LIBRARY
- * is disabled on a row that is already filled — so a probe row that specs also
- * load onto would silently stop working partway through a spec. This one is
- * seeded empty and `#nextLayer` never reaches it.
+ * §6 — the picker is reached through a row's `LOAD`, and a row that already holds
+ * something shows REMOVE instead. So a probe row that specs also load onto would
+ * silently stop working partway through a spec. This one is seeded empty and
+ * `#nextLayer` never reaches it. (The same constraint held before, when the entry
+ * point was a context menu item disabled on a filled row.)
  */
-const LIBRARY_PROBE_LAYER = 85;
+const TEMPLATE_PROBE_LAYER = 85;
 
 export class RuntimeApp {
   constructor(readonly page: Page) {}
@@ -53,10 +54,10 @@ export class RuntimeApp {
    */
   #nextLayer = FIRST_LOADABLE_LAYER;
 
-  /** Take the next free row, refusing to encroach on the library probe row. */
+  /** Take the next free row, refusing to encroach on the picker probe row. */
   #takeLayer(): number {
     const layer = this.#nextLayer++;
-    if (layer >= LIBRARY_PROBE_LAYER) {
+    if (layer >= TEMPLATE_PROBE_LAYER) {
       throw new Error(
         `E2E fixture ran out of loadable rows (reached ${String(layer)}). Widen the seeded bank in MockRuntime.seedFixedBank.`,
       );
@@ -159,22 +160,26 @@ export class RuntimeApp {
   // ── actions ───────────────────────────────────────────────────────────────
 
   /**
-   * R-028 — import a `.vcg` AND load it onto a row, in ONE action.
+   * R-028 — import a `.vcg` AND load it onto a row, in ONE operator flow.
    *
-   * This is the operator's real flow now: the Library panel is gone, and a
-   * row's LOAD does pick → import → bind-to-this-exact-slot as a single
-   * gesture. The old fixture had `importVcg` (register only) and
-   * `loadTemplate` (put it on the stack) as two steps because the product did;
-   * it no longer does, so a fixture that kept them apart would be testing a
-   * flow that does not exist.
+   * §6 — `LOAD` now opens the TEMPLATE PICKER, and importing a new file is one
+   * option inside it rather than the whole of it. So this is LOAD → "Import a
+   * .vcg…" → the file chooser, which is the flow the operator actually performs;
+   * the row still ends bound to the exact slot in one gesture.
+   *
+   * The extra click is the point of the change, not overhead: the other option in
+   * that dialog — re-using a template already imported — used to be reachable only
+   * through a context-menu entry named after a panel that no longer exists.
    *
    * With no `layer`, takes the next free one (see `#nextLayer`) and returns it.
    */
   async importVcg(filename: string, bytes: Uint8Array, layer?: number): Promise<number> {
     const target = layer ?? this.#takeLayer();
     const before = await this.templateCount();
-    const chooser = this.page.waitForEvent('filechooser');
     await this.layerRow(target).getByRole('button', { name: 'LOAD' }).click();
+    await expect(this.templatePicker).toBeVisible();
+    const chooser = this.page.waitForEvent('filechooser');
+    await this.templatePicker.getByRole('button', { name: 'Import a .vcg…' }).click();
     await (
       await chooser
     ).setFiles({
@@ -201,15 +206,16 @@ export class RuntimeApp {
   }
 
   /**
-   * Open the LIBRARY picker from a row's context menu.
+   * Open the TEMPLATE PICKER from a row's `LOAD`.
    *
-   * R-028 part B — the Library PANEL is deleted; this dialog is the only
-   * template list the product still has, so every "what is in the library?"
-   * assertion is made here now.
+   * §6 — re-pointed, not deleted. Its subject survives; only its entry point
+   * moved: the picker used to open from a context-menu item called LOAD FROM
+   * LIBRARY, which named a panel R-028 had already deleted. This dialog is still
+   * the only template list the product has, so every "what does this browser
+   * hold?" assertion is made here.
    */
-  async openLibraryPicker(layer = LIBRARY_PROBE_LAYER): Promise<void> {
-    await this.layerRow(layer).click({ button: 'right' });
-    await this.page.getByRole('menuitem', { name: 'LOAD FROM LIBRARY' }).click();
+  async openTemplatePicker(layer = TEMPLATE_PROBE_LAYER): Promise<void> {
+    await this.layerRow(layer).getByRole('button', { name: 'LOAD' }).click();
     await expect(this.templatePicker).toBeVisible();
   }
 
@@ -247,12 +253,12 @@ export class RuntimeApp {
   }
 
   /**
-   * Load an ALREADY-IMPORTED template onto a row, via the row's menu-placed
-   * "LOAD FROM LIBRARY" and the picker it opens.
+   * Load an ALREADY-IMPORTED template onto a row, via the row's `LOAD` and the
+   * picker it opens.
    */
   async loadTemplate(templateId: string, layer?: number): Promise<number> {
     const target = layer ?? this.#takeLayer();
-    await this.openLibraryPicker(target);
+    await this.openTemplatePicker(target);
     await this.templateRow(templateId)
       .getByRole('button', { name: /^Load / })
       .click();

@@ -8,27 +8,43 @@ import { reportCommandError, reportCommandSuccess } from '../status/commandFeedb
 import { templateDisplayName } from '../library/templateName.js';
 
 /**
- * R-021 stage 3 — the Load-from-library picker, shaped like `useConfirm`: a
+ * R-021 stage 3 — the template picker, shaped like `useConfirm`: a
  * promise-returning `pickTemplate()` plus the dialog element to render. That
- * shape is what lets the whole Load-from-library variant be ONE `RowAction`
- * whose `run` resolves when the operator has chosen — so the button and its
+ * shape is what lets the whole choose-then-load flow be ONE `RowAction` whose
+ * `run` resolves when the operator has chosen — so the button and its
  * context-menu twin share the affordance by construction, instead of the menu
  * needing its own copy of "open a picker, then load".
  *
- * The list is pulled at OPEN time rather than subscribed: the library is
- * browser-local (B-085) and the dialog is short-lived, so a snapshot taken when
- * it opens is exactly what the operator is choosing from. An empty library says
- * so and offers only Cancel — never a dialog that looks broken.
+ * ── §6 — IT IS WHAT A ROW'S `LOAD` OPENS NOW ────────────────────────────────
+ *
+ * It used to be reachable only through a context-menu entry called LOAD FROM
+ * LIBRARY, while `LOAD` went straight to a file chooser. The Library no longer
+ * exists as a surface — R-028 folded it into the stack — so a control naming it
+ * pointed at nothing the operator could see, and the menu entry went.
+ *
+ * DELETING THE ENTRY WITHOUT MOVING THE PICKER WOULD HAVE DELETED THREE
+ * CAPABILITIES, which is why the picker moved rather than followed: re-using an
+ * already-imported template, R-005's remove-a-template (this is the only list it
+ * has), and simply SEEING what this browser holds. The entry was one entry point,
+ * not the picker's reason to exist.
+ *
+ * So `LOAD` opens this, and IMPORT IS AN OPTION INSIDE IT rather than the whole of
+ * it. That is the part that cannot be dropped: on a fresh install the list is
+ * empty, and a picker whose only advice is "import a .vcg first" while being the
+ * one thing standing between the operator and importing would be a dead end.
+ * `pickTemplate` therefore has THREE outcomes, not two — a template, `'import'`,
+ * or a dismissal — and the caller owns the file chain exactly as before.
+ *
+ * The list is pulled at OPEN time rather than subscribed: it is browser-local
+ * (B-085) and the dialog is short-lived, so a snapshot taken when it opens is
+ * exactly what the operator is choosing from.
  *
  * A dismissal (Cancel / Escape / backdrop, all of which route through the
  * Modal's safe path) resolves `null`, which the caller reports as the
  * operator's own "no": no success flash, no error toast.
  *
- * R-028 part B — this dialog is now the ONLY template list in the product (the
- * Library panel was deleted), so R-005's REMOVE lives here too. It is a
- * re-homing of a shipped capability, not a new one: without it, deleting the
- * panel would have silently taken away the operator's only way to remove a
- * template. The bridge stays authoritative for the refusal
+ * R-028 part B — this dialog is the ONLY template list in the product, so
+ * R-005's REMOVE lives here too. The bridge stays authoritative for the refusal
  * (refuse-while-referenced) and the wording is surfaced verbatim.
  */
 
@@ -51,17 +67,27 @@ interface PickRequest {
   templates: readonly TemplateInfo[];
 }
 
+/**
+ * What the operator chose.
+ *
+ * `'import'` is a real answer, not an error path: "none of these — I want to bring
+ * in a new `.vcg`". It is returned rather than handled here because the import
+ * chain needs the ROW's hidden file input and its exact slot, both of which belong
+ * to the caller (see `LayerRow`).
+ */
+export type TemplateChoice = TemplateInfo | 'import' | null;
+
 export function useTemplatePicker(): {
-  pickTemplate: (title: string) => Promise<TemplateInfo | null>;
+  pickTemplate: (title: string) => Promise<TemplateChoice>;
   pickerDialog: JSX.Element | null;
 } {
   const [request, setRequest] = useState<PickRequest | null>(null);
-  const resolver = useRef<((template: TemplateInfo | null) => void) | null>(null);
+  const resolver = useRef<((choice: TemplateChoice) => void) | null>(null);
   const { confirm, confirmDialog } = useConfirm();
 
-  const pickTemplate = useCallback(async (title: string): Promise<TemplateInfo | null> => {
+  const pickTemplate = useCallback(async (title: string): Promise<TemplateChoice> => {
     const templates = await window.cg.templates.list();
-    return new Promise<TemplateInfo | null>((resolve) => {
+    return new Promise<TemplateChoice>((resolve) => {
       resolver.current = resolve;
       setRequest({ title, templates });
     });
@@ -77,7 +103,10 @@ export function useTemplatePicker(): {
       const label = templateDisplayName(template);
       const ok = await confirm({
         title: 'Remove this template?',
-        body: `“${label}” is removed from the library for every browser. This cannot be undone — the .vcg must be re-imported.`,
+        // §6 — the word "library" named a panel that no longer exists. What is
+        // true, and what the operator needs to know, is the SCOPE: this is not a
+        // local tidy-up, it removes the template everywhere.
+        body: `“${label}” is removed for every browser. This cannot be undone — the .vcg must be re-imported.`,
         confirmLabel: 'Remove',
       });
       if (!ok) return;
@@ -97,11 +126,11 @@ export function useTemplatePicker(): {
     [confirm],
   );
 
-  const settle = useCallback((template: TemplateInfo | null): void => {
+  const settle = useCallback((choice: TemplateChoice): void => {
     setRequest(null);
     const resolve = resolver.current;
     resolver.current = null;
-    resolve?.(template);
+    resolve?.(choice);
   }, []);
 
   const pickerDialog =
@@ -110,19 +139,33 @@ export function useTemplatePicker(): {
         title={request.title}
         onClose={() => settle(null)}
         footer={
-          <Button variant="ghost" onClick={() => settle(null)}>
-            Cancel
-          </Button>
+          <>
+            {/*
+              §6 — IMPORT LIVES IN HERE, and it is not a convenience.
+
+              `LOAD` opens this dialog, so if importing were not offered inside it
+              the operator on a fresh install would meet an empty list telling him
+              to import a `.vcg` with no way to do so. It is the first control in
+              the footer for the same reason: on a station with nothing loaded yet
+              it is the only one that can do anything.
+            */}
+            <Button variant="secondary" onClick={() => settle('import')}>
+              Import a .vcg…
+            </Button>
+            <Button variant="ghost" onClick={() => settle(null)}>
+              Cancel
+            </Button>
+          </>
         }
       >
         {request.templates.length === 0 ? (
           <p style={styles.empty}>
-            The library is empty — import a <code>.vcg</code> first.
+            No templates in this browser yet — <strong>Import a .vcg…</strong> to bring one in.
           </p>
         ) : (
           <div style={styles.list}>
-            {/* Newest first, the Library panel's own order: the template the
-                operator most recently imported is the one they are looking for. */}
+            {/* Newest first: the template the operator most recently imported is
+                the one they are looking for. */}
             {[...request.templates].reverse().map((t) => {
               const label = templateDisplayName(t);
               return (

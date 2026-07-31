@@ -14,9 +14,12 @@ import { test, expect, buildValidVcg } from './fixtures/runtime.js';
  *  - The Library and Stack panels are DELETED and merged into this one list, so
  *    "is it in the library?" is now read from the picker dialog and "is it on
  *    the stack?" is read from the row itself.
- *  - `IMPORT + LOAD` and `LOAD…` collapsed into ONE `LOAD` (import and load are
- *    a single operator action now), which flips to `REMOVE` once the row is
- *    filled. The already-imported path moved to the row's context menu.
+ *  - `IMPORT + LOAD` and `LOAD…` collapsed into ONE `LOAD`, which flips to
+ *    `REMOVE` once the row is filled. §6 — that `LOAD` now opens the TEMPLATE
+ *    PICKER, where the operator either re-uses a template this browser already
+ *    holds or imports a new `.vcg`; both paths bind the exact row. The
+ *    already-imported path used to sit in a context-menu entry called LOAD FROM
+ *    LIBRARY, naming a panel this same change had deleted.
  *  - **The verb set never changes shape.** R-021 stage 2b rendered NO buttons on
  *    a row that could not act; part B renders the SAME buttons on every row and
  *    disables the ones that cannot act. Controls that appear and vanish move
@@ -198,7 +201,7 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   await expect(app.layerState(71)).toHaveText('EMPTY');
 });
 
-test('import+load lands on the EXACT row, and the template stays in the library', async ({
+test('import+load lands on the EXACT row, and the template stays available for reuse', async ({
   app,
 }) => {
   const before = await app.templateCount();
@@ -211,7 +214,7 @@ test('import+load lands on the EXACT row, and the template stays in the library'
   //    whole task exists for. The row names it; no other row does.
   await expect(app.layerRow(74)).toContainText('clock');
 
-  // 2. The template went into the SHARED library — and STAYS there for reuse.
+  // 2. The template went into the SHARED registry — and STAYS there for reuse.
   await expect.poll(() => app.templateCount()).toBe(before + 1);
   await expect(app.layers.locator('[data-template-id="tpl-fixed-e2e"]')).toHaveCount(1);
 
@@ -221,16 +224,21 @@ test('import+load lands on the EXACT row, and the template stays in the library'
   await expect(app.layerRow(74).getByRole('button', { name: 'LOAD' })).toHaveCount(0);
 });
 
-test('Load-from-library binds the same exact row, without a second import', async ({ app }) => {
+// §6 — the picker is now reached through the row's own LOAD, not a context-menu
+// entry named after a deleted panel. The SUBJECT is unchanged: re-using a template
+// this browser already holds binds the exact row and imports nothing.
+test('picking an already-imported template binds the same exact row, without a second import', async ({
+  app,
+}) => {
   await app.importVcg('lower-third.vcg', await buildValidVcg('tpl-lib-e2e'), 74);
   await expect(app.layerRow(74)).toContainText('lower third');
-  const librarySize = await app.templateCount();
+  const registrySize = await app.templateCount();
 
   await app.loadTemplate('tpl-lib-e2e', 75);
 
   // The row is headed by the FILE the operator imported, humanised — never the
   // raw id and never the scene's internal name.
   await expect(app.layerRow(75)).toContainText('lower third');
-  // Nothing was imported — the library is exactly as it was.
-  await expect.poll(() => app.templateCount()).toBe(librarySize);
+  // Nothing was imported — the registry is exactly as it was.
+  await expect.poll(() => app.templateCount()).toBe(registrySize);
 });

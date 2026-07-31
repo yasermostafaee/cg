@@ -290,7 +290,25 @@ export function LayerRow({
         : await window.cg.rehearse.enter({ itemId });
       return { accepted: res.ok, ...(res.reason !== undefined ? { errorCode: res.reason } : {}) };
     },
+    /**
+     * §6 — LOAD OPENS THE PICKER, and importing is one option inside it.
+     *
+     * It used to go straight to the file chooser, with "use one I already have"
+     * exiled to a context-menu entry called LOAD FROM LIBRARY — a control naming a
+     * panel R-028 deleted. Deleting that entry alone would have deleted the picker
+     * with it, and R-005's remove-a-template inside the picker, so the picker moved
+     * here instead.
+     *
+     * BOTH OUTCOMES END IN THE SAME BINDING. `importAndLoadOntoFixedSlot` and
+     * `loadTemplateOntoFixedSlot` were already the two halves of one flow (the
+     * first calls the second once the bytes are registered), so this is one verb
+     * with two sources for the template, not two loads sharing a button.
+     */
     load: async () => {
+      const chosen = await pickTemplate(`Load onto ${rowName}`);
+      // The operator's own dismissal: not a success, not a refusal to report.
+      if (chosen === null) return { accepted: false, cancelled: true };
+      if (chosen !== 'import') return loadTemplateOntoFixedSlot(coord, chosen);
       const input = fileRef.current;
       if (input === null) return { accepted: false };
       return importAndLoadOntoFixedSlot(coord, () => pickFile(input));
@@ -314,12 +332,6 @@ export function LayerRow({
     // A bound row can only be re-loaded if this browser still holds its
     // template. `true` on an unbound row, where the question is meaningless.
     templateAvailable: item === null || template !== null,
-    loadFromLibrary: async () => {
-      const template = await pickTemplate(`Load onto ${rowName}`);
-      // The operator's own dismissal: not a success, not a refusal to report.
-      if (template === null) return { accepted: false, cancelled: true };
-      return loadTemplateOntoFixedSlot(coord, template);
-    },
     play: (itemId) => window.cg.stack.take({ itemId }),
     next: (itemId) => window.cg.stack.next({ itemId }),
     update: (itemId) => onUpdate(itemId),
@@ -398,7 +410,9 @@ export function LayerRow({
           title: `Remove “${templateLabel ?? rowName}” from ${rowName}?`,
           body: onAirNow
             ? `This item is ON AIR. Removing it CLEARS layer ${layerName} — the graphic leaves the output immediately, with no outro.`
-            : `The item leaves the row and layer ${layerName} is cleared. Loading again is a fresh import or a pick from the library.`,
+            : // §6 — "a pick from the library" named a panel that no longer exists.
+              // LOAD opens the picker, which is where both paths now are.
+              `The item leaves the row and layer ${layerName} is cleared. Loading again means pressing LOAD and choosing a template, or importing a new .vcg.`,
           confirmLabel: onAirNow ? 'Remove and clear (ON AIR)' : 'Remove',
           tone: 'remove',
           variant: 'danger',
@@ -675,5 +689,5 @@ export function LayerRow({
   );
 }
 
-/** Load a library template onto this row (the picker path), for reuse by tests. */
+/** Load an already-imported template onto this row (the picker path), for reuse by tests. */
 export { loadTemplateOntoFixedSlot };

@@ -283,7 +283,6 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     load: () => Promise.resolve({ accepted: true }),
     reload: () => Promise.resolve({ accepted: true }),
     templateAvailable: true,
-    loadFromLibrary: () => Promise.resolve({ accepted: true }),
     play: () => Promise.resolve({ accepted: true }),
     next: () => Promise.resolve({ accepted: true }),
     update: () => Promise.resolve({ accepted: true }),
@@ -483,8 +482,13 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     expect(menuLabels).toContain('UPDATE');
     const buttonLabels = actions.filter((a) => a.surface !== 'menu').map((a) => a.label);
     expect(buttonLabels).not.toContain('UPDATE');
-    expect(menuLabels).toContain('LOAD FROM LIBRARY');
+    // §6 — LOAD FROM LIBRARY is gone from BOTH surfaces. It named a panel R-028
+    // deleted, and what it reached (the picker, and R-005's remove inside it) did
+    // not go with it: `LOAD` opens the picker now, with importing a `.vcg` as one
+    // option in it.
+    expect(menuLabels).not.toContain('LOAD FROM LIBRARY');
     expect(buttonLabels).not.toContain('LOAD FROM LIBRARY');
+    expect(menuLabels.some((l) => l.includes('LIBRARY'))).toBe(false);
     // …and every button is also in the menu: the menu is a superset, never a
     // separate list.
     for (const label of buttonLabels) expect(menuLabels).toContain(label);
@@ -510,8 +514,9 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     // assertion keeps its meaning and the control never moves under the
     // operator's finger.
     const SHAPE = [
+      // §6 — 'load-library' is GONE: LOAD opens the picker, so there is no second
+      // similarly-named entry point to keep in the shape.
       'load-remove',
-      'load-library',
       'play',
       'rehearse',
       'next',
@@ -544,8 +549,7 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
       // BANK-SCOPED layer clear, which addresses the LAYER and needs no binding. Every
       // OTHER verb is item-scoped and genuinely has nothing to act on, so those stay
       // disabled — the fixed control set is unchanged, only CLEAR's gate is gone.
-      const canAct =
-        action.key === 'load-remove' || action.key === 'load-library' || action.key === 'clear';
+      const canAct = action.key === 'load-remove' || action.key === 'clear';
       expect(action.disabled, action.key).toBe(!canAct);
     }
   });
@@ -738,7 +742,6 @@ describe('LayerRow — the LOAD/REMOVE toggle splits binding from occupancy', ()
       toggleRehearse: () => Promise.resolve({ accepted: true }),
       load: () => Promise.resolve({ accepted: true }),
       reload: () => Promise.resolve({ accepted: true }),
-      loadFromLibrary: () => Promise.resolve({ accepted: true }),
       play: () => Promise.resolve({ accepted: true }),
       next: () => Promise.resolve({ accepted: true }),
       update: () => Promise.resolve({ accepted: true }),
@@ -786,7 +789,11 @@ describe('LayerRow — the LOAD/REMOVE toggle splits binding from occupancy', ()
     // …and it states the reason rather than leaving the operator to guess why
     // the row cannot be put back.
     expect(t.title).toBe(MISSING_TEMPLATE_REASON);
-    expect(t.title).toMatch(/not in this browser/i);
+    // §6 — the fact is the same; the word "library" is not, because it named a
+    // panel R-028 deleted and sent the operator looking for a surface that is
+    // not there.
+    expect(t.title).toMatch(/this browser does not have/i);
+    expect(t.title).not.toMatch(/library/i);
   });
 
   /**
@@ -869,7 +876,6 @@ describe('LayerRow — CasparCG reachability gates the AMCP verbs', () => {
     toggleRehearse: () => Promise.resolve({ accepted: true }),
     load: () => Promise.resolve({ accepted: true }),
     reload: () => Promise.resolve({ accepted: true }),
-    loadFromLibrary: () => Promise.resolve({ accepted: true }),
     play: () => Promise.resolve({ accepted: true }),
     next: () => Promise.resolve({ accepted: true }),
     update: () => Promise.resolve({ accepted: true }),
