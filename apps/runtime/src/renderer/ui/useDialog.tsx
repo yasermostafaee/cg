@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { Button, type ButtonVariant } from './Button.js';
+import type { VerbTone } from './rowAction.js';
 import { Modal } from './Modal.js';
 
 /**
@@ -18,6 +19,17 @@ interface ConfirmRequest {
   confirmLabel: string;
   /** Destructive acts are `danger`; on-air-clearing ones are `caution`. */
   variant?: ButtonVariant;
+  /**
+   * The VERB this dialog is confirming, so its confirm button hovers to the same
+   * colour as the button that opened it (`--r-verb-*`).
+   *
+   * The resting `variant` is untouched and stays the safety signal — a confirm
+   * dialog is the one place a destructive control SHOULD read destructive at
+   * rest. This only makes the hover match the palette, so the operator's eye
+   * follows one colour from the row verb, through the bulk verb, to the button
+   * that actually commits.
+   */
+  tone?: VerbTone;
 }
 
 export function useConfirm(): {
@@ -58,7 +70,11 @@ export function useConfirm(): {
             <Button variant="neutral" onClick={() => settle(false)}>
               Cancel
             </Button>
-            <Button variant={request.variant ?? 'danger'} onClick={() => settle(true)}>
+            <Button
+              variant={request.variant ?? 'danger'}
+              {...(request.tone !== undefined ? { 'data-verb-tone': request.tone } : {})}
+              onClick={() => settle(true)}
+            >
               {request.confirmLabel}
             </Button>
           </>

@@ -25,7 +25,7 @@ describe('rowState — REHEARSING', () => {
     const ready = rowState(input());
     const rehearsing = rowState(input({ rehearsing: true }));
 
-    expect(rehearsing.label).toBe('REHEARSING');
+    expect(rehearsing.label).toBe('ON PVW');
     expect(rehearsing.color).toBe(colors.rehearsing);
     // All three channels differ from READY — the state a row was in immediately
     // before rehearse, and therefore the one it most needs to be distinguishable
@@ -46,17 +46,39 @@ describe('rowState — REHEARSING', () => {
     expect(rehearsing.tone).toBe('idle');
   });
 
-  it('states the fidelity caveats and the interlock in its tooltip', () => {
+  /**
+   * The row's tooltip states what is true of the LAYER, briefly.
+   *
+   * IT NO LONGER CARRIES THE FIDELITY CAVEATS, and that is a deliberate change
+   * rather than a lost assertion (owner: "the tooltip of REHEARSING on the layer
+   * is too long"). It used to run six lines — the interlock, the mute, the
+   * pixel-fidelity caveat and the Live Source placeholder — which is a paragraph
+   * on a hover that nobody reads under time pressure, and it pushed the wire's own
+   * report, the reason this tooltip exists at all, off the end.
+   *
+   * R-022's acceptance is unaffected: it requires the caveats to be stated IN THE
+   * PANEL, which is where they are (`RehearsalStage`'s caveats strip, asserted in
+   * `tests/e2e/rehearse-layout.spec.ts`). They are about the PICTURE, so they
+   * belong where the picture is; saying them twice is what made the row's copy the
+   * one nobody finished.
+   */
+  it('states the interlock and the wire report, and stays SHORT', () => {
     const title = rowState(input({ rehearsing: true })).title ?? '';
-    // R-022's acceptance: the caveats are stated where the operator meets the
-    // feature, not only in the docs.
-    expect(title).toContain('NOT pixel-identical');
-    expect(title).toContain('placeholder');
-    expect(title).toContain('not an air check');
-    // And what the mode actually guarantees.
+    // What the mode actually guarantees about this layer.
     expect(title).toContain('PLAY to air is refused');
-    // The wire's own account of the layer still rides along, as on every row.
+    expect(title).toContain('muted');
+    // The wire's own account of the layer still rides along, as on every row —
+    // this is the B-094 honesty class and it must not be crowded out again.
     expect(title).toContain('CasparCG reports');
+
+    // The caveats moved to the panel and must NOT creep back here.
+    expect(title).not.toContain('pixel-identical');
+    expect(title).not.toContain('placeholder');
+
+    // A LENGTH BOUND, because "too long" is the defect and prose grows back. The
+    // wire's report is appended by `withWire`, so this budgets the authored half.
+    const authored = title.split('CasparCG reports')[0] ?? '';
+    expect(authored.length, `row tooltip is prose again:\n${authored}`).toBeLessThan(200);
   });
 
   it('an AIR claim OUTRANKS the rehearse claim — the urgent question wins', () => {
@@ -71,7 +93,7 @@ describe('rowState — REHEARSING', () => {
 
     // A take IN FLIGHT is a transition toward air, so it is excluded too.
     const inFlight = rowState(input({ status: 'playing', pending: true, rehearsing: true }));
-    expect(inFlight.label).not.toBe('REHEARSING');
+    expect(inFlight.label).not.toBe('ON PVW');
   });
 
   it('an UNBOUND row never reads as rehearsing — there is nothing of ours on it', () => {

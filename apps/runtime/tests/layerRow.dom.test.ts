@@ -276,14 +276,14 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     // Not rehearsing: PLAY is available, the toggle offers REHEARSE.
     const idle = layerRowActions(loaded);
     expect(idle.find((a) => a.key === 'play')?.disabled).toBe(false);
-    expect(idle.find((a) => a.key === 'rehearse')?.label).toBe('REHEARSE');
+    expect(idle.find((a) => a.key === 'rehearse')?.label).toBe('ON PVW');
     expect(idle.find((a) => a.key === 'rehearse')?.disabled).toBe(false);
 
     // Rehearsing: PLAY is interlocked off and the toggle offers the way back.
     // (The GUARANTEE is the bridge's own refusal — this is the courtesy half.)
     const rehearsing = layerRowActions({ ...loaded, rehearsing: true });
     expect(rehearsing.find((a) => a.key === 'play')?.disabled).toBe(true);
-    expect(rehearsing.find((a) => a.key === 'rehearse')?.label).toBe('END REHEARSE');
+    expect(rehearsing.find((a) => a.key === 'rehearse')?.label).toBe('OFF PVW');
     // Leaving must ALWAYS be available — it is the only route back to a playable row.
     expect(rehearsing.find((a) => a.key === 'rehearse')?.disabled).toBe(false);
     // CLEAR is the escape hatch and rehearse is precisely a state where the model
@@ -315,6 +315,38 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
    * because thirty coloured affordances drowned the state signal; a lit toggle is
    * not an affordance advertising what it COULD do, it is a mode saying it IS on.
    */
+  /**
+   * The per-verb HOVER tones. Every verb that has a colour declares it, and the
+   * LOAD/REMOVE toggle — one key, one slot — declares a DIFFERENT one per half,
+   * which is the case that could not have worked off the key alone.
+   *
+   * Asserted on the declaration, not on a hex: the values live in `--r-verb-*`
+   * and `tokenParity` already pins those against `theme.ts`. What can break here
+   * is a verb losing its tone in a refactor, or the toggle's two halves collapsing
+   * onto one colour.
+   */
+  it('every coloured verb declares its hover tone, and LOAD/REMOVE differ', () => {
+    const onEmpty = layerRowActions(deps(null, false));
+    expect(onEmpty.find((a) => a.key === 'load-remove')?.tone).toBe('load');
+
+    const onBound = layerRowActions(deps(itemWith('loaded'), true));
+    // Same key, same slot, different verb — and therefore a different colour.
+    expect(onBound.find((a) => a.key === 'load-remove')?.tone).toBe('remove');
+
+    for (const [key, tone] of [
+      ['play', 'play'],
+      ['next', 'next'],
+      ['stop', 'stop'],
+      ['clear', 'clear'],
+    ] as const) {
+      expect(onBound.find((a) => a.key === key)?.tone, `${key} lost its hover tone`).toBe(tone);
+    }
+
+    // REHEARSE/ON PVW deliberately has NO hover tone: it owns the violet `.is-on`
+    // fill instead, and a second colour on the same control would fight it.
+    expect(onBound.find((a) => a.key === 'rehearse')?.tone).toBeUndefined();
+  });
+
   it('R-022 — only the REHEARSE toggle lights, only while rehearsing', () => {
     const loaded = deps(itemWith('loaded'), true);
 
@@ -326,10 +358,10 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
 
     // The fill and the WORD read the same flag, so they cannot disagree about
     // which mode the row is in — a lit button labelled REHEARSE would be a lie.
-    expect(rehearsing.find((a) => a.key === 'rehearse')?.label).toBe('END REHEARSE');
+    expect(rehearsing.find((a) => a.key === 'rehearse')?.label).toBe('OFF PVW');
 
-    // NO OTHER VERB lights, in either state. This is the neutral rule still
-    // holding, asserted rather than assumed.
+    // NO OTHER VERB lights on a row that is not on air. This is the neutral rule
+    // still holding, asserted rather than assumed.
     for (const actions of [idle, rehearsing]) {
       for (const action of actions.filter((a) => a.key !== 'rehearse')) {
         expect(action.active ?? false, `${action.key} must stay neutral`).toBe(false);
@@ -337,16 +369,71 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     }
   });
 
+  /**
+   * PLAY lights GREEN on an on-air row — the second and only other use of the
+   * engaged fill. `active` means the same thing for both verbs: the state this
+   * verb produces is already true. For REHEARSE that is "rehearsing"; for PLAY it
+   * is "on air", which is also exactly why PLAY is disabled there.
+   */
+  it('PLAY is engaged (and disabled) on an on-air row, and on nothing else', () => {
+    const onAir = layerRowActions(deps(itemWith('on-air'), true));
+    const play = onAir.find((a) => a.key === 'play');
+    expect(play?.active).toBe(true);
+    // Lit BECAUSE it cannot be pressed — the two must agree, or the fill would be
+    // advertising an action that is on offer.
+    expect(play?.disabled).toBe(true);
+
+    // Not on a merely-loaded row.
+    expect(
+      layerRowActions(deps(itemWith('loaded'), true)).find((a) => a.key === 'play')?.active,
+    ).toBe(false);
+
+    // AND NOT ON `unconfirmed`, where the air result is UNKNOWN. Painting the air
+    // colour on a guess is what B-087 exists to prevent, and PLAY stays ENABLED
+    // there precisely because the take may still be needed.
+    const unconfirmed = layerRowActions(deps(itemWith('unconfirmed'), true)).find(
+      (a) => a.key === 'play',
+    );
+    expect(unconfirmed?.active).toBe(false);
+    expect(unconfirmed?.disabled).toBe(false);
+  });
+
   it('every menu item is disabled exactly when its declaration is — no second door', () => {
     for (const status of ['idle', 'loaded', 'on-air', 'playing'] as const) {
       const actions = actionsFor(deps(itemWith(status), true));
       const menu = toMenuItems(actions);
       expect(menu).toHaveLength(actions.length);
-      actions.forEach((action, i) => {
-        expect(menu[i]?.label, status).toBe(action.label);
-        expect(menu[i]?.disabled, `${status} ${action.label}`).toBe(action.disabled);
-      });
+      // Matched by LABEL rather than by index: the menu may REORDER (REMOVE is
+      // rendered last there while its button keeps the fixed first slot), and
+      // what this test is about is that no item reaches the menu with a
+      // different gate from its declaration.
+      for (const action of actions) {
+        const item = menu.find((m) => m.label === action.label);
+        expect(item, `${status} ${action.label} missing from the menu`).toBeDefined();
+        expect(item?.disabled, `${status} ${action.label}`).toBe(action.disabled);
+      }
     }
+  });
+
+  /**
+   * REMOVE is LAST in the menu and FIRST in the button row, deliberately (owner
+   * request). The button row's order is fixed by the sticky header printing one
+   * word per glyph, so it cannot move; a top-to-bottom menu has no such
+   * constraint, and the destructive verb should not be the thing under the
+   * cursor the instant the menu opens.
+   */
+  it('REMOVE renders LAST in the menu while its button keeps the first slot', () => {
+    const actions = actionsFor(deps(itemWith('loaded'), true));
+    const menuLabels = toMenuItems(actions).map((m) => m.label);
+    expect(menuLabels[menuLabels.length - 1]).toBe('REMOVE');
+
+    // The BUTTON row is untouched — the header word above it must still land on it.
+    const buttonLabels = actions.filter((a) => a.surface !== 'menu').map((a) => a.label);
+    expect(buttonLabels[0]).toBe('REMOVE');
+
+    // Reordering must not lose or duplicate anything.
+    expect(menuLabels).toHaveLength(actions.length);
+    expect(new Set(menuLabels).size).toBe(menuLabels.length);
   });
 
   it('R-006 — with the link down the MENU is disabled too, with CLEAR exempt exactly as the button is', () => {
@@ -371,12 +458,12 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
   it('the menu carries the WHOLE list; buttons are the filtered subset (placement only)', () => {
     const actions = actionsFor(deps(itemWith('on-air'), true));
     const menuLabels = toMenuItems(actions).map((m) => m.label);
-    // UPDATE and LOAD FROM LIBRARY are menu-placed — present in the menu,
-    // withheld from the button row so thirty rows do not carry 210 controls.
+    // UPDATE is menu-placed — present in the menu, withheld from the button row
+    // so thirty rows do not carry 210 controls.
     expect(menuLabels).toContain('UPDATE');
-    expect(menuLabels).toContain('LOAD FROM LIBRARY');
     const buttonLabels = actions.filter((a) => a.surface !== 'menu').map((a) => a.label);
     expect(buttonLabels).not.toContain('UPDATE');
+    expect(menuLabels).toContain('LOAD FROM LIBRARY');
     expect(buttonLabels).not.toContain('LOAD FROM LIBRARY');
     // …and every button is also in the menu: the menu is a superset, never a
     // separate list.
@@ -398,9 +485,9 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     // `load-remove` is ONE control in ONE position whose label flips (LOAD on an
     // empty row, REMOVE on an occupied one) — the owner's toggle. Its KEY is
     // stable, which is what keeps the shape assertion meaningful.
-    // R-022 added `rehearse` as a TOGGLE in a fixed slot (label flips REHEARSE /
-    // END REHEARSE), exactly like `load-remove`: one key, one position, so the
-    // shape assertion keeps its meaning and the control never moves under the
+    // R-022 added `rehearse` as a TOGGLE in a fixed slot (label flips ON PVW /
+    // OFF PVW), exactly like `load-remove`: one key, one position, so the shape
+    // assertion keeps its meaning and the control never moves under the
     // operator's finger.
     const SHAPE = [
       'load-remove',

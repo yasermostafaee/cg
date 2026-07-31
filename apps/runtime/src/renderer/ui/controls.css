@@ -36,6 +36,12 @@
   --r-offline: #94a3b8;
   --r-rehearsing: #a78bfa;
   --r-rehearsing-strong: #7c3aed;
+  --r-verb-load: #127694;
+  --r-verb-remove: #9d0000;
+  --r-verb-play: #017801;
+  --r-verb-next: #1b7853;
+  --r-verb-stop: #7a6011;
+  --r-verb-clear: #8d3404;
 
   --r-space-1: 4px;
   --r-space-2: 8px;
@@ -206,12 +212,23 @@
  * row's STATE mark (`rowState.ts`), which is the only thing on the row entitled
  * to it.
  *
- * HOVER USES NO HUE FROM THE STATE PALETTE. This is not fastidiousness: if
- * hovering PLAY turned it the red that means ON AIR, the cursor would flash a
- * false air signal as it crossed the row — a control that lies about
- * transmission while merely being pointed at. Hover is therefore ELEVATION and
- * BRIGHTNESS only (a lifted fill, a stronger border, a shadow), which is a
- * change no state colour can be confused with.
+ * HOVER NOW CARRIES A PER-VERB HUE (owner decision) — this paragraph used to say
+ * the opposite and is corrected rather than deleted, because the concern it
+ * raised is still live and the next reader should meet it.
+ *
+ * It argued that no hover hue may come from the STATE palette: if hovering PLAY
+ * turned it the colour that means ON AIR, the cursor would flash a false air
+ * signal as it crossed the row. The verbs now hover to their own colours
+ * (`--r-verb-*`, see the block further down), and ONE of them lands close to that
+ * warning: PLAY hovers to a dark green, and green is the air family. What keeps
+ * them apart is weight and state — the air MARK is bright `--r-onair` text on the
+ * state cell, while a hovered PLAY is a dark fill under the pointer, and an
+ * actually-on-air PLAY is that same dark fill DISABLED and dimmed. Worth watching
+ * on the real surface: if an operator ever reads a hovered PLAY as "this is on
+ * air", the fix is PLAY's hover hue, not the mechanism.
+ *
+ * The rest of hover is still ELEVATION and BRIGHTNESS (a lifted fill, a stronger
+ * border, a shadow).
  *
  * DESTRUCTIVE VERBS ARE NEUTRAL TOO, and that is safe. CLEAR and REMOVE get
  * their weight from a confirm gate that names the layer and says ON AIR in words
@@ -270,6 +287,57 @@
 }
 
 /*
+ * PER-VERB HOVER FILLS. The verb keeps its neutral resting look and takes its own
+ * colour only under the pointer.
+ *
+ * This does not reopen "row verbs are neutral": that rule is about what the
+ * operator sees while SCANNING thirty rows, and a hover fill is on one button at a
+ * time, under the pointer they are already looking at. What it buys is
+ * disambiguation at the moment of the click — and on this surface that is worth
+ * paying for, because STOP (graceful) and CLEAR (hard kill) mean the OPPOSITE of
+ * the reference product's, so the verb an operator is about to press is exactly the
+ * thing they must not misread.
+ *
+ * Keyed on `data-verb-tone`, which the ACTION declares, so LOAD and REMOVE — one
+ * key, one slot, two verbs — get their own colours without the CSS having to know
+ * which half of the toggle is showing.
+ *
+ * `:not(:disabled)` on every rule: an inert verb must not light up. The attribute
+ * selector also outranks the neutral hover above (0,4,0 vs 0,3,0), which is what
+ * lets these override it without `!important`.
+ */
+.cg-btn[data-verb-tone]:hover:not(:disabled) {
+  /* One shared shape; the fill itself comes from the per-tone rules below. */
+  box-shadow: var(--r-shadow-1);
+  filter: none;
+  color: var(--r-text);
+}
+.cg-btn[data-verb-tone='load']:hover:not(:disabled) {
+  background: var(--r-verb-load);
+  border-color: var(--r-verb-load);
+}
+.cg-btn[data-verb-tone='remove']:hover:not(:disabled) {
+  background: var(--r-verb-remove);
+  border-color: var(--r-verb-remove);
+}
+.cg-btn[data-verb-tone='play']:hover:not(:disabled) {
+  background: var(--r-verb-play);
+  border-color: var(--r-verb-play);
+}
+.cg-btn[data-verb-tone='next']:hover:not(:disabled) {
+  background: var(--r-verb-next);
+  border-color: var(--r-verb-next);
+}
+.cg-btn[data-verb-tone='stop']:hover:not(:disabled) {
+  background: var(--r-verb-stop);
+  border-color: var(--r-verb-stop);
+}
+.cg-btn[data-verb-tone='clear']:hover:not(:disabled) {
+  background: var(--r-verb-clear);
+  border-color: var(--r-verb-clear);
+}
+
+/*
  * `.is-on` — a TOGGLE that is currently ENGAGED, filled in its mode's own hue.
  *
  * Only REHEARSE uses it today, and the hue is the row's own REHEARSING violet, so
@@ -287,19 +355,40 @@
  * meant for TEXT, and filling a button with it leaves white unreadable. Same
  * two-weight split as `--r-accent-strong` and `--r-danger-strong`.
  *
- * EVERY rule here carries `:not(:disabled)`, and that is a correctness guard rather
- * than tidiness. This block sits after the `:disabled` block and matches at the
- * same specificity, so without it the fill would win and a REHEARSE toggle would
- * still look live while the link is down and every verb is inert — the one moment
- * an operator most needs to see that a control is not going to do anything.
- * Reachable: a bridge drop disables all verbs on a row that is already rehearsing.
+ * IT FILLS EVEN WHEN DISABLED, and that is required rather than incidental: PLAY
+ * on an on-air row is disabled BECAUSE its state is already true, so a rule that
+ * skipped disabled buttons would drop the fill in exactly the case that most needs
+ * it. The shared `:disabled` opacity above still applies — it sets a different
+ * property — so an engaged-and-inert control reads as both: coloured by its state,
+ * dimmed because it cannot be pressed. This block sits after `:disabled` and
+ * matches at the same specificity, which is what lets the fill through.
+ *
+ * (An earlier draft carried `:not(:disabled)` here so a link drop would grey a
+ * rehearsing toggle. That was wrong twice over: the row IS still rehearsing, so
+ * hiding it was the less honest reading, and it would have blocked the on-air PLAY
+ * fill outright.)
  */
-.cg-btn--verb.is-on:not(:disabled),
-.cg-btn--neutral.is-on:not(:disabled),
-.cg-btn--icon.is-on:not(:disabled) {
+.cg-btn--verb.is-on,
+.cg-btn--neutral.is-on,
+.cg-btn--icon.is-on {
   background: var(--r-rehearsing-strong);
   border-color: var(--r-rehearsing-strong);
   color: #fff;
+}
+
+/*
+ * …and the fill takes the VERB'S OWN colour where it has one. PLAY engaged means
+ * ON AIR, so it wears PLAY's green rather than the rehearse violet — the button
+ * and the row's state mark then say the same thing about the same row.
+ *
+ * The DARK weight (`--r-verb-play`), not the bright `--r-onair`: that one is a
+ * TEXT colour for the state mark and is unreadable as a background. Same
+ * two-weight split as the rehearse pair — one hue, one weight to write with and
+ * one to fill with.
+ */
+.cg-btn[data-verb-tone='play'].is-on {
+  background: var(--r-verb-play);
+  border-color: var(--r-verb-play);
 }
 .cg-btn--verb.is-on:hover:not(:disabled),
 .cg-btn--neutral.is-on:hover:not(:disabled),

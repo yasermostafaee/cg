@@ -234,17 +234,28 @@ export function rowState({
       // rehearse is.
       icon: MonitorPlay,
       color: colors.rehearsing,
-      label: 'REHEARSING',
+      // ON PVW — the same words as the verb that turns it on, so the button and
+      // the state it produces read as one thing.
+      label: 'ON PVW',
       // `idle` and not `attention`: rehearse is a deliberate, safe operator choice,
       // not something to go and look at. Amber here would cry wolf.
       tone: 'idle',
+      /*
+        SHORT ON PURPOSE. This was six lines covering the interlock, the mute, the
+        pixel-fidelity caveat and the Live Source placeholder — a paragraph on a
+        hover, which an operator under time pressure does not read, and which
+        pushed the wire's own report (the part `withWire` appends, and the reason
+        this tooltip exists at all) off the bottom.
+
+        The two facts that belong on a ROW are what is true of the LAYER: it is on
+        preview, and it cannot reach air. The fidelity caveats are about the
+        PICTURE, so they live where the picture is — the PVW panel's own caveats
+        strip, which R-022's acceptance already requires and which is one click
+        away. Saying them twice made the row's version the one nobody finished.
+      */
       title: withWire(
-        'Rehearsing: this graphic is rendering in PREVIEW inside this browser, and PLAY to air ' +
-          'is refused by the bridge while it is. The CasparCG layer is held ready and muted — ' +
-          'nothing is being sent to air. Preview is faithful but NOT pixel-identical to the ' +
-          'on-air render, and a Live Source region shows as a labelled placeholder rather than ' +
-          'video, so this catches wrong values, broken layouts and bad motion — it is not an ' +
-          'air check.',
+        'On PVW: rendering in PREVIEW inside this browser. PLAY to air is refused while it is, ' +
+          'and the layer is held ready and muted.',
         wire,
       ),
     };

@@ -146,6 +146,28 @@ export const cssVars = {
    */
   '--r-rehearsing': colors.rehearsing,
   '--r-rehearsing-strong': '#7C3AED',
+  /**
+   * PER-VERB HOVER FILLS (owner-specified) — used on HOVER AND NOWHERE ELSE.
+   *
+   * The row verbs rest neutral and that decision is unchanged: colour was taken
+   * off them because thirty coloured affordances drowned the state signal, which
+   * is a statement about what the operator sees while SCANNING the table. A hover
+   * fill is on at most one button at a time, under the pointer the operator is
+   * already looking at, and it disambiguates a column of icon-only glyphs at the
+   * moment of the click — which is the moment this product can least afford a
+   * mis-click, since its STOP and CLEAR mean the opposite of the reference
+   * product's.
+   *
+   * Deliberately DARK, so the shared `--r-text` stays legible on every one of
+   * them. Do not reuse these anywhere a control RESTS: that would be the neutral
+   * rule reopened, one surface at a time.
+   */
+  '--r-verb-load': '#127694',
+  '--r-verb-remove': '#9D0000',
+  '--r-verb-play': '#017801',
+  '--r-verb-next': '#1B7853',
+  '--r-verb-stop': '#7A6011',
+  '--r-verb-clear': '#8D3404',
   // Spacing (4px base)
   '--r-space-1': '4px',
   '--r-space-2': '8px',

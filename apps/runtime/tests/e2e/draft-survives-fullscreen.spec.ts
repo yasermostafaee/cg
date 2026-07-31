@@ -33,9 +33,9 @@ test('a draft survives a MONITOR fullscreen round-trip', async ({ app }) => {
   await field.blur();
 
   // PGM fullscreen unmounts the whole workspace below the strip, LayersPanel included.
-  await page.getByRole('button', { name: 'Show PROGRAM fullscreen' }).click();
+  await page.getByRole('button', { name: 'Show PROGRAM (PGM) fullscreen' }).click();
   await expect(page.getByRole('region', { name: 'Layers' })).toBeHidden();
-  await page.getByRole('button', { name: 'Exit fullscreen PROGRAM' }).click();
+  await page.getByRole('button', { name: 'Exit fullscreen PROGRAM (PGM)' }).click();
   await expect(page.getByRole('region', { name: 'Layers' })).toBeVisible();
 
   // No re-select: the selection lives in `App`, which never unmounted, so the

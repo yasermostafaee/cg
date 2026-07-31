@@ -90,7 +90,7 @@ function frames(page: Page): Locator {
 async function rehearseRow(page: Page, layer: number): Promise<void> {
   await page
     .locator(`[data-layer="${String(layer)}"]`)
-    .getByRole('button', { name: 'REHEARSE', exact: true })
+    .getByRole('button', { name: 'ON PVW', exact: true })
     .click();
 }
 

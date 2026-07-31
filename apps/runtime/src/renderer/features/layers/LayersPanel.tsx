@@ -169,6 +169,7 @@ export function LayersPanel({
       title: onAirCount > 0 ? 'Clear all on-air items?' : 'Clear all — nothing reads as on air',
       body,
       confirmLabel: 'Clear all',
+      tone: 'clear',
       variant: 'caution-strong',
     });
     if (!ok) return;
@@ -194,6 +195,7 @@ export function LayersPanel({
       title: 'Stop all on-air items?',
       body: `All ${String(onAirCount)} on-air item(s) run their own outro and come off air gracefully. They stay loaded and can be taken again.`,
       confirmLabel: 'Stop all',
+      tone: 'stop',
       variant: 'caution',
     });
     if (!ok) return;
@@ -215,6 +217,7 @@ export function LayersPanel({
       title: 'Remove all items?',
       body: `This clears anything on air and empties the stack — all ${String(items.length)} item(s).`,
       confirmLabel: 'Remove all',
+      tone: 'remove',
     });
     if (!ok) return;
     try {
@@ -275,6 +278,7 @@ export function LayersPanel({
             variant="neutral"
             disabled={linkDown || onAirCount === 0}
             aria-label="Stop all on-air items"
+            data-verb-tone="stop"
             title="Every on-air graphic runs its own outro and stays loaded"
             onClick={() => void stopAll()}
           >
@@ -293,6 +297,7 @@ export function LayersPanel({
           <Button
             variant="neutral"
             aria-label="Clear all on-air items"
+            data-verb-tone="clear"
             title="Every on-air graphic is cut immediately, with no outro"
             onClick={() => void clearAll()}
           >
@@ -303,6 +308,7 @@ export function LayersPanel({
             variant="neutral"
             disabled={linkDown || items.length === 0}
             aria-label="Remove all items"
+            data-verb-tone="remove"
             title="Clears anything on air and empties every row"
             onClick={() => void removeAll()}
           >

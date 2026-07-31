@@ -68,7 +68,7 @@ export function MonitorStrip(): JSX.Element {
       {showPgm && (
         <MonitorPanel
           id="pgm"
-          title="PROGRAM"
+          title="PROGRAM (PGM)"
           icon={MonitorOff}
           emptyLabel="No program return"
           detail="This will show what is on air, returned from the playout server. No return feed is arriving yet."

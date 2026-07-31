@@ -48,9 +48,11 @@ const VERB_HEADS: readonly { label: string; title: string }[] = [
     // R-022 — emitted by `layerRowActions` BETWEEN play and next, so it is
     // declared here in that position. Its absence did not merely omit a word: it
     // shifted every head to its right onto the wrong glyph.
-    label: 'REHEARSE',
+    // ON PVW / OFF PVW on the button; the head names the constructive half, the
+    // same rule the LOAD/REMOVE head above follows.
+    label: 'ON PVW',
     title:
-      'Render this row’s graphic locally in PREVIEW, with PLAY interlocked off. Nothing is sent to CasparCG.',
+      'Render this row’s graphic locally in PREVIEW (PVW), with PLAY interlocked off. Nothing is sent to CasparCG. The button reads OFF PVW while the row is showing.',
   },
   { label: 'NEXT', title: 'Advance a multi-step template to its next step.' },
   {

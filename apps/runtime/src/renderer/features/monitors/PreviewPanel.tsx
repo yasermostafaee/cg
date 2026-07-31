@@ -141,7 +141,7 @@ export function PreviewPanel(): JSX.Element {
     channelSettings.settings.find((s) => s.channel === channel)?.raster ?? REFERENCE_RASTER;
 
   return (
-    <Panel id="pvw" title="PREVIEW" style={{ flex: 1, minWidth: 0 }}>
+    <Panel id="pvw" title="PREVIEW (PVW)" style={{ flex: 1, minWidth: 0 }}>
       {subjects.length === 0 ? (
         <div
           style={styles.screen}

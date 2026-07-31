@@ -190,30 +190,62 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     // ONE key, so the list's shape is literally identical in both states and a
     // test can assert that: only the label, variant and handler flip.
     empty
-      ? act('load-remove', 'LOAD', !loadSafe, () => deps.load(), Download)
-      : act(
-          'load-remove',
-          'REMOVE',
-          false,
-          () => (item === null ? noop() : deps.remove(item.itemId)),
-          Trash2,
-        ),
+      ? { ...act('load-remove', 'LOAD', !loadSafe, () => deps.load(), Download), tone: 'load' }
+      : {
+          ...act(
+            'load-remove',
+            'REMOVE',
+            false,
+            () => (item === null ? noop() : deps.remove(item.itemId)),
+            Trash2,
+          ),
+          // The two halves of ONE slot, and the reason `tone` is its own field:
+          // they share a key, so only an explicit declaration can give them
+          // different hover colours.
+          tone: 'remove',
+          // Last in the CONTEXT MENU (owner request). The button keeps its fixed
+          // first slot — the header word above it cannot move — but in a
+          // top-to-bottom list the destructive verb should not be the thing
+          // sitting under the cursor when the menu opens.
+          menuLast: true,
+        },
     // The already-imported path. Menu-placed: the owner's primary Load is the
     // one-action import, and a second Load BUTTON beside it on every row would
     // make the operator choose between two similarly-named controls under time
     // pressure. Same gate, same row, one right-click away.
+    //
+    // NOT REMOVED, pending the owner's call. The request was to take it out of
+    // the context menu; this is the only place it can live. `loadFromLibrary`
+    // binds a SPECIFIC row (`Load onto ${rowName}` → `loadTemplateOntoFixedSlot`
+    // with that row's coord), so there is no row-less surface — a panel-header
+    // entry would have nothing to bind to. Deleting the item therefore deletes
+    // the capability, and takes the template PICKER with it, and R-005's
+    // remove-from-library lives inside that picker.
     act('load-library', 'LOAD FROM LIBRARY', !empty, () => deps.loadFromLibrary(), Library, 'menu'),
-    act(
-      'play',
-      'PLAY',
-      // R-022 — a rehearsing row cannot be taken to air. THE INTERLOCK, and the
-      // reason rehearse is a mode rather than a pane. This disabled state is the
-      // courtesy; the bridge's own refusal (`errorCode: 'rehearsing'`) is the
-      // guarantee, and it is what holds when a second browser's snapshot is stale.
-      empty || playing || deps.rehearsing,
-      () => (item === null ? noop() : deps.play(item.itemId)),
-      Play,
-    ),
+    {
+      ...act(
+        'play',
+        'PLAY',
+        // R-022 — a rehearsing row cannot be taken to air. THE INTERLOCK, and the
+        // reason rehearse is a mode rather than a pane. This disabled state is the
+        // courtesy; the bridge's own refusal (`errorCode: 'rehearsing'`) is the
+        // guarantee, and it is what holds when a second browser's snapshot is stale.
+        empty || playing || deps.rehearsing,
+        () => (item === null ? noop() : deps.play(item.itemId)),
+        Play,
+      ),
+      tone: 'play',
+      // ENGAGED = the state this verb produces is already true, which for PLAY is
+      // ON AIR. It is disabled in exactly that case, so the fill lands on a
+      // control the operator cannot press — which is the point: a green PLAY says
+      // "this row is the one on air", the same claim the row's state mark makes.
+      //
+      // `playing` and not the wider `isOnAir`: that set includes `unconfirmed`,
+      // where the air result is UNKNOWN, and painting the air colour on a guess is
+      // exactly what B-087 forbids. It is also PLAY's own disabled gate, so the
+      // fill and the disabling cannot disagree about why.
+      active: playing,
+    },
     /**
      * R-022 — REHEARSE, a TOGGLE in a fixed slot, exactly like LOAD/REMOVE.
      *
@@ -247,7 +279,13 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     {
       ...act(
         'rehearse',
-        deps.rehearsing ? 'END REHEARSE' : 'REHEARSE',
+        // ON PVW / OFF PVW (owner's wording). It replaces REHEARSE / END
+        // REHEARSE, and it says the same thing in the operator's own terms: what
+        // the verb DOES is put this row's graphic on the PVW monitor. The KEY
+        // stays `rehearse` — the bridge channel, the row state and this whole
+        // feature are R-022's rehearse, and renaming the identity to match a
+        // label would be renaming the thing to match its caption.
+        deps.rehearsing ? 'OFF PVW' : 'ON PVW',
         empty || (!deps.rehearsing && onAir),
         () => (item === null ? noop() : deps.toggleRehearse(item.itemId)),
         MonitorPlay,
@@ -259,13 +297,16 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   actions.push(
     // NEXT — ALWAYS present (the shape never changes), enabled only when the
     // template actually has a step to advance to and the item is on air.
-    act(
-      'next',
-      'NEXT',
-      empty || !onAir || !deps.hasNext,
-      () => (item === null ? noop() : deps.next(item.itemId)),
-      ArrowRightFromLine,
-    ),
+    {
+      ...act(
+        'next',
+        'NEXT',
+        empty || !onAir || !deps.hasNext,
+        () => (item === null ? noop() : deps.next(item.itemId)),
+        ArrowRightFromLine,
+      ),
+      tone: 'next',
+    },
     // UPDATE pushes staged field edits to a LIVE producer. Its primary surface
     // is the Inspector's Apply; on the row it is a menu-placed convenience, so
     // thirty rows do not carry thirty near-duplicate buttons.
@@ -277,13 +318,16 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       RefreshCw,
       'menu',
     ),
-    act(
-      'stop',
-      'STOP',
-      empty || !onAir,
-      () => (item === null ? noop() : deps.stop(item.itemId)),
-      CircleArrowOutDownRight,
-    ),
+    {
+      ...act(
+        'stop',
+        'STOP',
+        empty || !onAir,
+        () => (item === null ? noop() : deps.stop(item.itemId)),
+        CircleArrowOutDownRight,
+      ),
+      tone: 'stop',
+    },
     /**
      * CLEAR — THE ESCAPE HATCH, and the one verb that is not fail-closed.
      *
@@ -345,6 +389,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       run: () => (item === null ? deps.clearLayer() : deps.clear(item.itemId)),
       onError,
       icon: XSquare,
+      tone: 'clear',
     },
   );
 

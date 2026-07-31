@@ -321,6 +321,7 @@ export function LayerRow({
                 title: `Clear ${rowName}?`,
                 body: `Layer ${layerName} is cleared immediately — the graphic leaves air with no outro. The template stays on the row and can be played again.`,
                 confirmLabel: 'Clear layer',
+                tone: 'clear',
                 variant: 'caution-strong',
               }
             : {
@@ -331,6 +332,7 @@ export function LayerRow({
                   `Use it when a layer is stuck or the console cannot tell you what is ` +
                   `on it — it does not need to know in order to clear it.`,
                 confirmLabel: 'Clear layer',
+                tone: 'clear',
                 variant: 'caution-strong',
               },
         ),
@@ -350,6 +352,7 @@ export function LayerRow({
             ? `This item is ON AIR. Removing it CLEARS layer ${layerName} — the graphic leaves the output immediately, with no outro.`
             : `The item leaves the row and layer ${layerName} is cleared. Loading again is a fresh import or a pick from the library.`,
           confirmLabel: onAirNow ? 'Remove and clear (ON AIR)' : 'Remove',
+          tone: 'remove',
           variant: 'danger',
         }),
       );
@@ -551,6 +554,10 @@ export function LayerRow({
             // rehearsing). Read from the action's own declaration so the button and
             // its right-click twin cannot disagree.
             active={action.active === true}
+            // The per-verb HOVER fill (`--r-verb-*`). An attribute rather than a
+            // class so the six colours live entirely in `controls.css` and the
+            // renderer never names one.
+            {...(action.tone !== undefined ? { 'data-verb-tone': action.tone } : {})}
             aria-label={action.label}
             // The tooltip. `title` is why-disabled when the action is refused,
             // and otherwise the verb itself — an icon-only control must say what

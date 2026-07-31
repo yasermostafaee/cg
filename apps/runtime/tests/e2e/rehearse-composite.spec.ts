@@ -64,7 +64,7 @@ function frames(page: Page) {
 async function rehearseRow(page: Page, layer: number): Promise<void> {
   await page
     .locator(`[data-layer="${String(layer)}"]`)
-    .getByRole('button', { name: 'REHEARSE', exact: true })
+    .getByRole('button', { name: 'ON PVW', exact: true })
     .click();
 }
 
@@ -280,7 +280,7 @@ test('re-entering rehearse re-arms the transport rather than inheriting stale re
   // slot, so its word flips to END REHEARSE while the row is rehearsing.
   await page
     .locator(`[data-layer="${String(b)}"]`)
-    .getByRole('button', { name: 'END REHEARSE', exact: true })
+    .getByRole('button', { name: 'OFF PVW', exact: true })
     .click();
   await expect(frames(page)).toHaveCount(1);
   await rehearseRow(page, b);
