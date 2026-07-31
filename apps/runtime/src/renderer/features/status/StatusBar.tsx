@@ -1,4 +1,5 @@
 import { useConnections } from '../../hooks/useConnections.js';
+import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useLock } from '../../hooks/useLock.js';
 import { colors } from '../../theme.js';
@@ -152,13 +153,20 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
   const simulated = link === 'offline-mock';
   // B-081 — the link that DELIVERS health is down, so every reading below is unverifiable.
   const stale = link === 'disconnected';
+  /**
+   * §7 — the link pill's second hop, resolved HERE from the health this component
+   * already holds, and handed down. One subscription, one reading: the pill saying
+   * "bridge only" and the pills saying "PRIMARY A OFFLINE" are now two views of one
+   * value rather than two answers to one question.
+   */
+  const casparReach = resolveCasparReach(link, health);
   // Above the loading early return: a hook cannot be called conditionally.
   const { prompt, promptDialog } = usePrompt();
 
   if (health === null) {
     return (
       <footer style={styles.bar} aria-label="Status bar">
-        <LinkIndicator />
+        <LinkIndicator reach={casparReach} />
         {/* Nothing has answered yet. While the link is down that is not "loading" — there
             is nobody to load from (B-080/B-081). */}
         <span className="cg-pill" style={stale ? styles.stale : undefined}>
@@ -200,7 +208,7 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
 
   return (
     <footer style={styles.bar} aria-label="Status bar">
-      <LinkIndicator />
+      <LinkIndicator reach={casparReach} />
       {simulated ? (
         // R-006 — in test mode there is no server to describe. The per-server pills used to
         // read "PRIMARY A HEALTHY" in green here, straight from the mock's seed, which is

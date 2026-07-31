@@ -1,4 +1,5 @@
-import { isServerReachable } from '@cg/shared-ipc';
+import { isServerReachable, type ConnectionHealth } from '@cg/shared-ipc';
+import type { BridgeLinkStatus } from '../../shared/runtime-bridge.js';
 import type { CasparReach } from '../ui/reachWording.js';
 import { useConnections } from './useConnections.js';
 import { useLink } from './useLink.js';
@@ -72,10 +73,26 @@ export function useCasparReachable(): boolean {
  * reports the NEARER hop instead (`casparRefusalReason` puts `linkDown` first).
  */
 export function useCasparReach(): CasparReach {
-  // Both hooks run unconditionally — the branches below are on their values,
+  // Both hooks run unconditionally — the resolver below is on their values,
   // never on whether they are called.
-  const link = useLink();
-  const health = useConnections();
+  return resolveCasparReach(useLink(), useConnections());
+}
+
+/**
+ * The same answer as a PURE function, for a caller that already holds both
+ * inputs.
+ *
+ * `StatusBar` is the one: it reads health for its own pills, and having its link
+ * indicator take the hook as well would open a SECOND `useConnections`
+ * subscription in the same component — a duplicate pull on every reconnect, and,
+ * worse, two independent readings of one fact in one footer, which is the shape
+ * this whole surface exists to stop. It passes the resolved value down instead,
+ * so the pill and the pills cannot come to disagree.
+ */
+export function resolveCasparReach(
+  link: BridgeLinkStatus,
+  health: ConnectionHealth | null,
+): CasparReach {
   if (link === 'offline-mock') return 'reachable';
   if (health === null) return link === 'disconnected' ? 'unreachable' : 'connecting';
   return isServerReachable(health.primary.state) ? 'reachable' : 'unreachable';
