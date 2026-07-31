@@ -178,28 +178,11 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    * answer, and every consumer below decides for itself which way to fail. The
    * one thing none of them may do is treat silence as a fact (B-101).
    */
-  const layerOccupied = deps.observed.kind === 'producer';
-  const layerKnownEmpty = deps.observed.kind === 'empty';
   const onAir = item !== null && isOnAir(item);
   // PLAY's own gate is narrower than `isOnAir`: an item already playing has
   // nothing to take. Kept as the stack row had it so the two never disagree
   // about what "already on air" means for THIS verb.
   const playing = item?.status === 'on-air' || item?.status === 'playing';
-
-  /**
-   * May an UNBOUND row accept a load?
-   *
-   * Only when the wire says the layer is EMPTY. An unbound row is not
-   * necessarily an unoccupied one: a producer can survive a bridge restart
-   * (task 3.3's honest-unknown case is exactly this), and the load chain issues
-   * an adopt-CLEAR before its `CG ADD` — so a single un-gated click on a row
-   * that merely LOOKS free would destroy a live graphic nobody has claimed.
-   *
-   * `unknown` is refused with the same fail-closed reasoning as part A's
-   * untick: silence is evidence of nothing, and this gate's failure mode is
-   * something leaving air.
-   */
-  const loadSafe = deps.observed.kind === 'empty';
 
   /**
    * The bound template is not in THIS browser's library.
@@ -213,27 +196,25 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   const templateMissing = hasBinding && deps.templateAvailable === false;
 
   /**
-   * Does the toggle show LOAD? See the table at the control itself.
+   * ── THE TOGGLE IS DECIDED BY ONE THING: IS A TEMPLATE BOUND? ───────────────
    *
-   * An unbound row always offers LOAD (disabled unless the layer is known
-   * empty — unchanged). A BOUND row offers it only when the layer is KNOWN
-   * empty and the template is available; anything else, including `unknown`
-   * occupancy, shows REMOVE.
-   */
-  const showLoad = !hasBinding || (layerKnownEmpty && !layerOccupied && !templateMissing);
-
-  /**
-   * Why LOAD is refused, when it is — surfaced as the button's tooltip so the
-   * control is never silently dead.
+   *   no binding  → LOAD
+   *   binding     → REMOVE
    *
-   * REHEARSE FIRST, because it is the one refusal the operator can act on
-   * immediately and the one with an on-air consequence behind it: LOAD is the
-   * path that can put an UNMUTED producer under a row the UI says is rehearsing.
+   * LAYER OCCUPANCY DOES NOT ENTER THIS CONTROL. It used to — a bound row on an
+   * empty layer showed LOAD so the operator could re-ADD after a CLEAR — and that
+   * is now wrong twice over. `CLEAR` empties the layer and the binding survives,
+   * so the row must go on saying REMOVE; and nothing needs re-loading anyway,
+   * because PLAY re-ADDs on its way to air (R-028 decision 5).
+   *
+   * ONE EXPRESSION, BOTH CONSUMERS. The label used to come from here while the
+   * confirm dialog was chosen in `LayerRow` from its own `item !== null` test —
+   * two independent answers to one question, which is why the row could read LOAD
+   * and open the REMOVE modal. `LayerRow` now keys the confirm off this action's
+   * own `tone`, set by the same branch that sets the label, so the two cannot
+   * disagree. The label was only the symptom; the second resolution was the bug.
    */
-  const loadRefusal =
-    hasBinding && deps.rehearsing
-      ? 'This row is on PVW. Take it off PVW first — loading would put an unmuted graphic on the layer.'
-      : offlineReason;
+  const showLoad = !hasBinding;
 
   /**
    * Every row verb is declared NEUTRAL.
@@ -299,36 +280,34 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     //   no      | empty                       | LOAD  — pick + import + load
     //   yes     | occupied                    | REMOVE
     //   yes     | empty (post-CLEAR)          | LOAD  — re-ADD the bound template
-    //   yes     | empty, template MISSING     | REMOVE, and the row says why
-    //   yes     | unknown                     | REMOVE (fail closed)
-    //
-    // The third row is the defect: after CLEAR the item survives, so the toggle
-    // read REMOVE and the operator had to remove-and-re-pick to get the same
-    // graphic back. It re-ADDs WITHOUT PICKING — `stack.reload`'s behaviour
-    // reached through the control already in that position, rather than a new
-    // verb or a menu entry.
-    //
-    // The fourth row is what stops a row STRANDING. A bound row whose template
-    // has left this browser's library cannot load, so it must still be able to
-    // unbind — and it has to SAY the template is gone regardless, because a row
-    // pointing at nothing is a fact the operator needs, not a label edge case.
-    //
-    // `unknown` occupancy shows REMOVE deliberately: offering a re-ADD onto a
-    // layer we cannot vouch for would issue an adopt-CLEAR against a graphic
-    // nobody has claimed. Silence is not evidence of an empty layer (B-101).
     showLoad
       ? {
           ...act(
             'load-remove',
             'LOAD',
-            // The re-ADD half needs no `loadSafe`: the layer is KNOWN empty on
-            // that branch, which is the same fact `loadSafe` tests.
-            hasBinding ? deps.rehearsing : !loadSafe,
-            () => (hasBinding ? deps.reload() : deps.load()),
+            // NOT GATED ON LAYER OCCUPANCY, and deleting that gate is the fix for
+            // the owner's report that LOAD renders dim while the playout server
+            // is offline.
+            //
+            // It required an observably EMPTY layer, because the load path issued
+            // an adopt-CLEAR that could destroy an unclaimed graphic. LOAD emits
+            // ZERO AMCP now, so it can destroy nothing and has nothing to be
+            // careful about — while with CasparCG unreachable the occupancy reads
+            // `unknown`, which is exactly when the operator is building his
+            // rundown and needs this control most.
+            //
+            // Nor on rehearse: LOAD cannot reach a layer, so it cannot put an
+            // unmuted producer under a row that is on PVW.
+            //
+            // `act` still ORs `linkDown` in, and THAT one is right: LOAD needs the
+            // BRIDGE to import the template into the store it serves from. The
+            // bridge is ours and local; CasparCG is neither. Two different states,
+            // two different reasons, and only one of them belongs to this button.
+            false,
+            () => deps.load(),
             Download,
           ),
           tone: 'load',
-          ...(loadRefusal !== undefined ? { title: loadRefusal } : {}),
         }
       : {
           ...act(

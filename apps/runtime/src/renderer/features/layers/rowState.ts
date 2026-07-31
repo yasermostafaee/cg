@@ -1,5 +1,4 @@
 import {
-  CircleAlert,
   CircleDashed,
   CircleDot,
   CirclePlay,
@@ -151,62 +150,37 @@ export function rowState({
 }: RowStateInput): RowStateVisual {
   const wire = occupancyLabel(observed, linkDown);
 
-  // ── No item of ours on this row: the WIRE is the only witness. ─────────────
+  // ── NO TEMPLATE BOUND TO THIS ROW: it is EMPTY. Always. ─────────────────
+  //
+  // We have never put anything on that layer, so there is nothing to ask
+  // CasparCG about — and a question mark carrying no information is not caution,
+  // it is noise. The owner saw four of eight rows reading UNKNOWN, all four
+  // empty, while the ONE row that genuinely warranted attention carried its own
+  // WAS ON AIR label and was lost among them. An `unknown` that is always on is
+  // how a real `unknown` stops being read.
+  //
+  // THERE IS NO CONDITION UNDER WHICH AN UNBOUND ROW SAYS ANYTHING ELSE — not
+  // while disconnected, not during startup, not while a snapshot settles. There
+  // is deliberately NO readiness qualifier: readiness would matter if we were
+  // reading a snapshot for these rows, and we do not read one at all.
+  //
+  // B-094 IS NOT WEAKENED. Its rule is that `unknown` must never read as `empty`
+  // for a layer we have reason to ask about — it forbids FORGETTING something we
+  // knew, not saying "nothing here" when we genuinely have nothing. The word goes
+  // on doing its work below for a row that IS bound and cannot be confirmed,
+  // which is the only place it was ever earning its keep.
   if (status === null) {
-    if (linkDown) {
-      return {
-        icon: Unplug,
-        color: colors.offline,
-        label: 'NOT CONNECTED',
-        tone: 'idle',
-        title: withWire(
-          'The bridge connection is down, so this layer cannot be read at all. ' +
-            'Occupancy is unknown — not empty.',
-          wire,
-        ),
-      };
-    }
-    switch (observed.kind) {
-      case 'producer':
-        // Something IS on this layer and it is not ours — a producer that
-        // outlived a bridge restart, or one another system put there. Loading
-        // here would issue an adopt-CLEAR and destroy it, so this reads as
-        // attention, never as free space.
-        return {
-          icon: CircleAlert,
-          color: colors.pending,
-          label: 'OCCUPIED',
-          tone: 'attention',
-          title: withWire(
-            `A ${observed.producer} producer is on this layer and this station does not own it. ` +
-              'Loading here would clear it first — check the output before you do.',
-            wire,
-          ),
-        };
-      case 'unknown':
-        return {
-          icon: CircleQuestionMark,
-          color: colors.pending,
-          label: 'UNKNOWN',
-          tone: 'attention',
-          title: withWire(
-            'No signal from CasparCG for this layer, so its occupancy is UNKNOWN — which is ' +
-              'not the same as empty. Something may be on air here. Loading is refused until ' +
-              'the wire says the layer is free.',
-            wire,
-          ),
-        };
-      case 'empty':
-        return {
-          icon: CircleDashed,
-          // The dedicated empty-row grey, not `textMuted`: a free row recedes so the
-          // rows carrying something own the attention.
-          color: colors.emptyRow,
-          label: 'EMPTY',
-          tone: 'idle',
-          title: withWire('This layer is free. Ready to load.', wire),
-        };
-    }
+    return {
+      icon: CircleDashed,
+      // The dedicated empty-row grey, not `textMuted`: a free row recedes so the
+      // rows carrying something own the attention.
+      color: colors.emptyRow,
+      label: 'EMPTY',
+      tone: 'idle',
+      title:
+        'Nothing is loaded on this row. LOAD binds a template to it; PLAY puts that ' +
+        'template on the CasparCG layer.',
+    };
   }
 
   // ── A bound item: its reconciled status is the state. ─────────────────────

@@ -550,24 +550,27 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     }
   });
 
-  it('LOAD is REFUSED on an unbound row the wire says is occupied or unverifiable', () => {
-    // The load chain adopt-CLEARs the layer before its CG ADD, so a row that
-    // merely LOOKS free (no binding) but carries a live producer — one that
-    // survived a bridge restart, or one the playout side put there — must not
-    // accept a single un-gated click.
-    const occupied = layerRowActions({
-      ...deps(null, false),
-      observed: { kind: 'producer', producer: 'html' },
-    });
-    expect(occupied.find((a) => a.key === 'load-remove')?.disabled).toBe(true);
-
-    // Unknown fails closed for the same reason part A's untick does.
-    const unknown = layerRowActions({ ...deps(null, false), observed: { kind: 'unknown' } });
-    expect(unknown.find((a) => a.key === 'load-remove')?.disabled).toBe(true);
-
-    // …and a provably empty layer still loads.
-    const empty = layerRowActions({ ...deps(null, false), observed: { kind: 'empty' } });
-    expect(empty.find((a) => a.key === 'load-remove')?.disabled).toBe(false);
+  /**
+   * REVERSED, and this is the fix for the owner’s report that LOAD renders dim
+   * while the playout server is offline.
+   *
+   * LOAD was gated on an observably EMPTY layer, so `producer` and `unknown`
+   * both refused it — and with CasparCG unreachable every row reads `unknown`,
+   * which is exactly when the rundown is being built. The gate existed for the
+   * adopt-CLEAR that LOAD no longer issues.
+   */
+  it('LOAD is ENABLED on an unbound row whatever the wire says about the layer', () => {
+    for (const observed of [
+      { kind: 'producer' as const, producer: 'html' },
+      { kind: 'unknown' as const },
+      { kind: 'empty' as const },
+    ]) {
+      const actions = layerRowActions({ ...deps(null, false), observed });
+      expect(
+        actions.find((a) => a.key === 'load-remove')?.disabled,
+        `occupancy ${observed.kind} must not gate LOAD`,
+      ).toBe(false);
+    }
   });
 
   it('the toggle flips to REMOVE once the row is occupied, in the SAME position', () => {
@@ -614,16 +617,22 @@ describe('LayerRow — slot/binding shape', () => {
     expect(buttons.get('PLAY')).toBe(true);
   });
 
-  it('an unbound row still SHOWING a producer refuses LOAD — the graphic survived a restart', async () => {
-    // Exactly task 3.3's honest-unknown case in the wild: the bridge restarted,
-    // the producer is still on air, and no binding names it. Loading here would
-    // adopt-CLEAR a live graphic on one un-gated click.
+  /**
+   * REVERSED: LOAD is ENABLED on an unbound row that is showing a producer.
+   *
+   * It used to be refused because the load chain adopt-CLEARed the layer before
+   * its `CG ADD`, so one un-gated click could destroy a graphic that survived a
+   * bridge restart. LOAD emits ZERO AMCP now — it binds a template to OUR list
+   * and touches no layer — so there is nothing to destroy and nothing to gate.
+   * PLAY is the only path to a layer, and it is where that care belongs.
+   */
+  it('an unbound row showing a producer still accepts LOAD — LOAD touches no layer', async () => {
     rendered = await renderLayerRow({
       item: null,
       template: null,
       slot: slotWith({ binding: null, observed: { kind: 'producer', producer: 'html' } }),
     });
-    expect(rendered.buttons().get('LOAD')).toBe(true);
+    expect(rendered.buttons().get('LOAD')).toBe(false);
   });
 });
 
@@ -754,32 +763,19 @@ describe('LayerRow — the LOAD/REMOVE toggle splits binding from occupancy', ()
     expect(toggle({ observed: observedProducer }).label).toBe('REMOVE');
   });
 
-  /** THE REPORTED DEFECT. This read REMOVE before the split. */
-  it('binding + EMPTY layer (post-CLEAR) → LOAD, and it RE-ADDs without picking', async () => {
-    let reloaded = 0;
-    let picked = 0;
-    const t = toggle({
-      observed: observedEmpty,
-      reload: () => {
-        reloaded += 1;
-        return Promise.resolve({ accepted: true });
-      },
-      load: () => {
-        picked += 1;
-        return Promise.resolve({ accepted: true });
-      },
-    });
-    expect(t.label).toBe('LOAD');
-    expect(t.disabled).toBe(false);
-
-    // …and it is the RE-ADD, not the file picker. Asserted on which handler ran,
-    // because both halves render the same word: a LOAD that opened a chooser
-    // would look identical and be the defect the operator complained about.
-    await t.run();
-    expect(reloaded).toBe(1);
-    expect(picked).toBe(0);
+  /**
+   * REVERSED FROM THE PREVIOUS TASK, DELIBERATELY.
+   *
+   * This used to assert LOAD + a re-ADD after CLEAR. The toggle is decided by
+   * the BINDING alone now: CLEAR empties the layer, the binding survives, and
+   * the row goes on offering the way out. Nothing needs re-loading because PLAY
+   * re-ADDs on its way to air.
+   */
+  it('binding + EMPTY layer (post-CLEAR) → still REMOVE, never LOAD', () => {
+    const t = toggle({ observed: observedEmpty });
+    expect(t.label).toBe('REMOVE');
+    expect(t.tone).toBe('remove');
   });
-
   it('binding + EMPTY layer + template MISSING → REMOVE, and it says why', () => {
     const t = toggle({ observed: observedEmpty, templateAvailable: false });
     expect(t.label).toBe('REMOVE');
@@ -802,20 +798,30 @@ describe('LayerRow — the LOAD/REMOVE toggle splits binding from occupancy', ()
   });
 
   /**
-   * THE GUARD. Once LOAD works on a cleared row it becomes the one path that can
-   * put an UNMUTED producer under a row the UI says is on PVW. Fail closed —
-   * and SAY SO, because a silently dead button is the failure mode this whole
-   * surface is built to avoid.
+   * THE PVW GUARD ON LOAD IS GONE, and its absence is asserted rather than
+   * merely unmentioned: LOAD emits zero AMCP, so it cannot put an unmuted
+   * producer under a row that is on PVW. A guard that protects nothing would
+   * only refuse a load the operator is entitled to.
    */
-  it('LOAD is REFUSED while the row is on PVW, with the reason stated', () => {
-    const t = toggle({ observed: observedEmpty, rehearsing: true });
+  it('LOAD is NOT refused by PVW — it cannot reach a layer at all', () => {
+    const t = toggle({ item: null, observed: observedEmpty, rehearsing: true });
     expect(t.label).toBe('LOAD');
-    expect(t.disabled).toBe(true);
-    // The REASON, not merely the refusal — and it names the way out.
-    expect(t.title).toMatch(/on PVW/i);
-    expect(t.title).toMatch(/unmuted/i);
+    expect(t.disabled).toBe(false);
   });
 
+  /**
+   * AND LOAD IS NOT GATED ON LAYER OCCUPANCY — the owner’s report that LOAD
+   * renders dim while the playout server is offline. With CasparCG unreachable
+   * the occupancy is `unknown`, which is exactly when the rundown is being
+   * built. LOAD needs the BRIDGE, never CasparCG.
+   */
+  it('LOAD is ENABLED on an unbound row whatever the layer says', () => {
+    for (const observed of [observedEmpty, observedProducer, observedUnknown]) {
+      const t = toggle({ item: null, observed });
+      expect(t.label).toBe('LOAD');
+      expect(t.disabled, `occupancy ${observed.kind} must not gate LOAD`).toBe(false);
+    }
+  });
   /** An UNBOUND row is unaffected by rehearse: there is nothing rehearsing on it. */
   it('an unbound row is not refused by the PVW guard', () => {
     expect(toggle({ item: null, observed: observedEmpty, rehearsing: true }).disabled).toBe(false);

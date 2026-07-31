@@ -10,6 +10,48 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### ⛔ `dev-list-vs-layer` v3 — §3 and §4 DONE, §5 §6 §7 §8 NOT STARTED
+
+Stopped at a clean boundary, both gates green, pushed. **§5 (remove `Load from library`), §6's
+seven-verb connection gating, §7 (error naming) and §8 (the `LIVE` indicator) are untouched.**
+
+**§4 — why the previous task's test did not catch the LOAD/REMOVE modal bug, in one sentence:**
+the test asserted the resolved verb out of `layerRowActions`, which was the right thing — and the
+confirm dialog was never chosen there; `LayerRow` picked it from its own `item !== null` test, one
+layer away. Two independent answers to one question. The dialog now keys off the action's own
+`tone`, set by the same branch that sets the label, so the label and the action come from one
+resolution and cannot drift. **Fourth appearance of "the test asserted the right thing about the
+wrong layer".**
+
+**§4 — the toggle is now binding-only.** `showLoad = !hasBinding`. Occupancy, template
+availability and rehearse all left the control. The column header is still `LOAD` and **is not
+fixed** — it needs the neutral name §4 asks for.
+
+**§3 — an unbound row reads `EMPTY`, always.** No wire branch, no readiness qualifier (there is no
+snapshot to be unready about when we never query). `unknown` still does its work for a BOUND row.
+
+**🔴 THE COST OF §3, and it is a real loss to weigh:** an unbound row carrying a FOREIGN producer —
+someone else's live video on a declared layer — now reads `EMPTY` instead of `OCCUPIED`. The
+`OCCUPIED` warning existed because LOAD adopt-CLEARed the layer, and LOAD no longer touches a
+layer, so the warning's original purpose is gone. **But the fact itself is still true and is now
+unsurfaced on the row.** `OrphanLayersBanner` may still carry it; **that was not verified** and it
+should be, because if it does not, a live foreign graphic on a bank layer is now invisible on this
+panel. Two E2E assertions that pinned it were re-expressed rather than deleted, so the change is
+on record.
+
+**§6 — LOAD's occupancy gate is deleted, which is the owner's dim-LOAD report.** `loadSafe`
+(`observed.kind === 'empty'`) disabled LOAD on `producer` AND `unknown` — and with CasparCG
+unreachable every row reads `unknown`, so LOAD was dim exactly when the rundown is being built.
+It existed for the adopt-CLEAR that §1 removed. `act` still ORs `linkDown` in, and that is correct
+and different: LOAD needs the BRIDGE, never CasparCG.
+
+**Still owed from §6:** the seven verbs (`STOP` `CLEAR` `NEXT` `PLAY` `UPDATE` `STOP ALL`
+`CLEAR ALL`) are still gated on the BRIDGE link only, not on CasparCG reachability, and unknown
+connection state is not treated as unreachable. That is the larger half of §6 and it is not done.
+
+**No adversarial review was performed** — the diff does not add an AMCP path (it removes gates on
+a control that emits none), but the review was required and is owed with §6's gating.
+
 ### ⛔ `dev-list-vs-layer` — §1 DONE, §2–§6 NOT STARTED
 
 Stopped at a clean boundary with §1 complete, gate-green and pushed. **§2, §3, §4, §5's fix, and

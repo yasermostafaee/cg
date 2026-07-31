@@ -66,32 +66,36 @@ test('a seeded bank renders permanent rows with aliases and honest occupancy', a
   // would only hold at the widest density and would say nothing about what the
   // operator can see at 1280px. The state's LABEL is always visible and its
   // tooltip always carries CasparCG's report verbatim, so both are checked.
-  await expect(app.layerState(73)).toHaveText('UNKNOWN');
-  await expect(app.layerState(73)).toHaveAttribute('title', /no signal — occupancy unknown/);
-  // `unknown` must never READ as empty anywhere on the row.
-  await expect(app.layerRow(73)).not.toContainText('EMPTY');
-  // …while the genuinely-empty slot says so, and producers name their kind.
-  await expect(app.layerState(72)).toHaveText('EMPTY');
-  await expect(app.layerState(72)).toHaveAttribute('title', /reports: empty/);
-  await expect(app.layerState(70)).toHaveAttribute('title', /occupied — html producer/);
-  await expect(app.layerState(71)).toHaveAttribute('title', /occupied — ffmpeg producer/);
-  // An unbound row carrying somebody else's producer says OCCUPIED — never free.
-  await expect(app.layerState(71)).toHaveText('OCCUPIED');
+  // REVERSED: AN UNBOUND ROW READS `EMPTY`, WHATEVER THE WIRE SAYS.
+  //
+  // We have never put anything on those layers, so there is nothing to ask
+  // CasparCG about, and a question mark carrying no information is noise rather
+  // than caution — four of eight rows read UNKNOWN while the one row that
+  // warranted attention was lost among them.
+  //
+  // B-094 is NOT weakened: its rule is that `unknown` must never read as `empty`
+  // for a layer we have reason to ask about. It forbids forgetting something we
+  // knew, not saying "nothing here" when we genuinely have nothing. The word goes
+  // on doing its work for a BOUND row that cannot be confirmed — asserted below.
+  for (const layer of [71, 72, 73]) {
+    await expect(app.layerState(layer)).toHaveText('EMPTY');
+  }
 });
 
-test('the load gate is fail-closed: only an observably EMPTY row accepts a load', async ({
-  app,
-}) => {
-  // The empty row is the one case where the load's adopt-CLEAR has nothing to
-  // destroy — so it is the only one LOAD is offered on.
-  await expect(app.layerRow(72).getByRole('button', { name: 'LOAD' })).toBeEnabled();
-
-  // A foreign producer: someone's live video. Refused.
-  await expect(app.layerRow(71).getByRole('button', { name: 'LOAD' })).toBeDisabled();
-
-  // Unknown is NOT empty — silence is evidence of nothing, and this gate's
-  // failure mode is a graphic leaving air (B-093/B-094, fail closed).
-  await expect(app.layerRow(73).getByRole('button', { name: 'LOAD' })).toBeDisabled();
+test('LOAD is offered on every unbound row — it touches no layer', async ({ app }) => {
+  // REVERSED: LOAD is offered on EVERY unbound row, whatever the wire says.
+  //
+  // The gate existed because the load chain adopt-CLEARed the layer before its
+  // CG ADD, so a row carrying an unclaimed graphic had to refuse. LOAD emits
+  // ZERO AMCP now — it binds a template to OUR list and touches no layer — so
+  // there is nothing to destroy and nothing to fail closed about. PLAY is the
+  // only path to a layer and is where that care lives.
+  //
+  // This is also the owner's report: with CasparCG unreachable every row reads
+  // 'unknown', so the old gate dimmed LOAD exactly when the rundown is built.
+  for (const layer of [71, 72, 73]) {
+    await expect(app.layerRow(layer).getByRole('button', { name: 'LOAD' })).toBeEnabled();
+  }
 
   // The shape is identical on every row — the buttons are present, just
   // disabled. This is the assertion that pins "the verb set never changes".
@@ -189,8 +193,9 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   // alternative is trusting the state model to decide when the remedy is allowed,
   // which is the trust that strands a graphic when the model is wrong.
   await expect(row.getByRole('button', { name: 'CLEAR' })).toBeEnabled();
-  // The ffmpeg neighbour is untouched.
-  await expect(app.layerState(71)).toHaveAttribute('title', /occupied — ffmpeg producer/);
+  // The unbound ffmpeg neighbour is untouched — and reads EMPTY, because no
+  // template of ours is bound to it (see the occupancy test above).
+  await expect(app.layerState(71)).toHaveText('EMPTY');
 });
 
 test('import+load lands on the EXACT row, and the template stays in the library', async ({

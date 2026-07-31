@@ -371,7 +371,21 @@ export function LayerRow({
     // takes the item off the row and CLEARS the layer, which for an on-air
     // graphic means it leaves the output. So the gate says that in words, and
     // says ON AIR plainly when the item is (part A's rule, kept).
-    if (action.key === 'load-remove' && item !== null) {
+    /*
+      KEYED ON THE ACTION'S OWN `tone`, NOT ON A SECOND READ OF THE ROW.
+
+      This said `action.key === 'load-remove' && item !== null` — the key is the
+      same for both halves of the toggle, so `item !== null` was a SECOND,
+      independent answer to "is this the REMOVE half?" sitting one layer away
+      from the one that picks the label. When the two disagreed, the row read
+      LOAD and opened the REMOVE modal.
+
+      `tone` is set by the same branch that sets the label, so the dialog and the
+      word now come from one resolution and cannot drift. This is also why the
+      previous task's test did not catch it: it asserted the resolved verb out of
+      `layerRowActions`, which was right — and the modal was never chosen there.
+    */
+    if (action.key === 'load-remove' && action.tone === 'remove' && item !== null) {
       const onAirNow = isOnAir(item);
       return withConfirm(action, () =>
         confirm({
