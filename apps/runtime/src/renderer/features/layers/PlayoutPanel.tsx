@@ -3,6 +3,8 @@ import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useCasparReach } from '../../hooks/useCasparReachable.js';
+import { casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import {
   playoutClearRefusal,
@@ -80,9 +82,33 @@ const styles = {
  */
 export function PlayoutPanel({ layers }: Props): JSX.Element {
   const linkDown = useLink() === 'disconnected';
+  const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
 
   const clearable = clearablePlayoutLayers(layers, linkDown);
+
+  /**
+   * ── REACHABILITY IS NOT WHAT THE "DELIBERATELY NOT A DISABLED BUTTON" COMMENT
+   *    BELOW IS ABOUT, AND THE TWO MUST NOT BE CONFLATED ──────────────────────
+   *
+   * That comment governs the LAYER-STATE gate: a non-html occupant, an
+   * unverifiable occupancy, an empty layer. There, no control at all is right —
+   * the reason is a permanent property of what is on the layer, it is printed in
+   * the row beside it, and a disabled button would invite the operator to keep
+   * trying at something that will never become available.
+   *
+   * REACHABILITY is the opposite kind of fact: transient, nothing to do with this
+   * layer, and it returns the instant the link does. So the control stays PRESENT
+   * and goes DISABLED with the reason — the same treatment every other
+   * AMCP-emitting verb gets, and the same reason it exists: with either hop down
+   * the command never leaves, so an enabled button is not a capability, it is the
+   * appearance of one, and it costs the operator the seconds in which he believes
+   * another system's graphic is coming off air.
+   *
+   * The layer-state gate is untouched: a control that `playoutOccupancy` refuses
+   * to offer is still ABSENT, not disabled, whatever this says.
+   */
+  const clearRefusal = casparRefusalReason(linkDown, casparReach);
 
   /**
    * Clear ONE playout layer.
@@ -196,6 +222,8 @@ export function PlayoutPanel({ layers }: Props): JSX.Element {
             variant="caution-strong"
             run={clearAll}
             onError={reportCommandError}
+            disabled={clearRefusal !== undefined}
+            {...(clearRefusal !== undefined ? { title: clearRefusal } : {})}
             aria-label={`Clear all ${String(clearable.length)} clearable playout layers`}
           >
             CLEAR ALL
@@ -217,6 +245,8 @@ export function PlayoutPanel({ layers }: Props): JSX.Element {
                   variant="caution-strong"
                   run={() => confirmAndClearOne(layer)}
                   onError={reportCommandError}
+                  disabled={clearRefusal !== undefined}
+                  {...(clearRefusal !== undefined ? { title: clearRefusal } : {})}
                   aria-label={`Clear playout layer ${String(layer.layer)}`}
                 >
                   CLEAR

@@ -12,6 +12,7 @@ import {
 } from '../src/renderer/features/layers/playoutOccupancy.js';
 import { onCommandError } from '../src/renderer/features/status/commandFeedback.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import { connectionsStub, type Reachability } from './support/reachability.js';
 
 /**
  * R-028 part B — the PLAYOUT tab, and above all its CLEAR GATE.
@@ -56,12 +57,17 @@ const EMPTY_LAYER: PlayoutLayerState = { channel: 1, layer: 63, observed: { kind
 function stubBridge(
   link: 'live' | 'disconnected',
   clearResult: unknown = { ok: true },
+  reach: Reachability = 'both-up',
 ): {
   clear: ReturnType<typeof vi.fn>;
 } {
   const clear = vi.fn(() => Promise.resolve(clearResult));
   const stub = {
     link: { status: () => link, onStatusChanged: () => () => undefined },
+    // §1 — the panel reads the SECOND hop now, so the stub must answer it. A stub
+    // that omits a channel does not fail where it is written; it fails in
+    // whichever spec first renders a component that reaches for it.
+    connections: connectionsStub(reach),
     playoutLayers: {
       clear,
       state: () => Promise.resolve([]),
@@ -76,8 +82,9 @@ async function render(
   layers: PlayoutLayerState[],
   link: 'live' | 'disconnected' = 'live',
   clearResult: unknown = { ok: true },
+  reach: Reachability = 'both-up',
 ): Promise<{ el: HTMLDivElement; clear: ReturnType<typeof vi.fn> }> {
-  const { clear } = stubBridge(link, clearResult);
+  const { clear } = stubBridge(link, clearResult, reach);
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -135,6 +142,54 @@ describe('the playout tab offers CLEAR for exactly one occupant kind', () => {
     expect(clearButtonFor(el, 61)).toBeUndefined();
     // A frozen snapshot is a claim the wire can no longer back.
     expect(el.textContent).toContain('Not connected');
+  });
+});
+
+/**
+ * §1 — THE OTHER CLEAR THE GATE MISSED, and the comment that had to be read
+ * before touching it.
+ *
+ * `PlayoutPanel` carries an explicit "deliberately NOT a disabled button". It
+ * governs the LAYER-STATE gate — a video occupant, an unverifiable occupancy, an
+ * empty layer — where the reason is permanent, printed in the row, and a disabled
+ * control would invite the operator to keep trying. That decision is UNCHANGED and
+ * is re-pinned by the specs above: those cases still have NO control at all.
+ *
+ * Reachability is a different fact: transient, nothing to do with this layer, and
+ * gone the instant the link returns. There the control stays present and goes
+ * DISABLED with the reason, because a clear that cannot leave the browser is a
+ * dead button whatever the policy — and this one takes ANOTHER system's graphic
+ * off air, so believing it worked is expensive.
+ */
+describe('the playout CLEAR is gated on reachability — present but disabled, never absent', () => {
+  it('with CasparCG unreachable the control is still THERE, disabled, and says why', async () => {
+    const { el } = await render([HTML_LAYER], 'live', { ok: true }, 'caspar-down');
+    const btn = clearButtonFor(el, 60);
+    // PRESENT — this is the distinction from the layer-state gate above.
+    expect(btn).toBeDefined();
+    expect(btn?.disabled).toBe(true);
+    expect(btn?.title).toMatch(/CasparCG cannot be reached/i);
+  });
+
+  it('CLEAR ALL is gated the same way, and for the same reason', async () => {
+    const { el } = await render([HTML_LAYER], 'live', { ok: true }, 'caspar-down');
+    const all = [...el.querySelectorAll('button')].find((b) => b.textContent === 'CLEAR ALL');
+    expect(all).toBeDefined();
+    expect(all?.disabled).toBe(true);
+    expect(all?.title).toMatch(/CasparCG cannot be reached/i);
+  });
+
+  it('the BOOT WINDOW says connecting, not a playout server nothing reported down', async () => {
+    const { el } = await render([HTML_LAYER], 'live', { ok: true }, 'unknown');
+    const btn = clearButtonFor(el, 60);
+    expect(btn?.disabled).toBe(true);
+    expect(btn?.title).toMatch(/connecting/i);
+    expect(btn?.title).not.toMatch(/cannot be reached/i);
+  });
+
+  it('and with both hops up it is enabled again — a gate, not a removal', async () => {
+    const { el } = await render([HTML_LAYER]);
+    expect(clearButtonFor(el, 60)?.disabled).toBe(false);
   });
 });
 
