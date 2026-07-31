@@ -466,7 +466,14 @@ export function LayersPanel({
           ) : (
             <div style={styles.list} ref={listRef}>
               {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
-              <LayerTableHeader density={density} onAirCount={onAirCount} />
+              <LayerTableHeader
+                density={density}
+                onAirCount={onAirCount}
+                // §4 — `unreachable` only, never the boot window: a count that
+                // greyed itself for the first second of every reload would teach
+                // the operator to stop reading the grey.
+                unverifiable={linkDown || casparReach === 'unreachable'}
+              />
               {rows.map((slot, index) => {
                 const item =
                   slot.binding !== null ? (itemById.get(slot.binding.itemId) ?? null) : null;

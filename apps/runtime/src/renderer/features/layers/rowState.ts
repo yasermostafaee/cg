@@ -63,6 +63,19 @@ export interface RowStateVisual {
   title?: string;
   /** True while this state is mid-transition (drives the spin animation). */
   transient?: boolean;
+  /**
+   * §4 — THIS LABEL IS NOT CURRENTLY BACKED BY THE WIRE.
+   *
+   * Set for a BOUND row while neither hop can confirm what is on its layer. It is
+   * a claim about our CONFIDENCE, never about the state — which is exactly why it
+   * is its own field rather than another `tone`: the role stays what it is
+   * (`ready` stays `ready`), and only its confidence is withdrawn.
+   *
+   * Exported as a stable attribute so a test can assert "greyed" without matching
+   * a hex value — the same reason `tone` exists rather than a colour assertion
+   * (see `LayerRow`'s `data-row-state` note).
+   */
+  unverifiable?: boolean;
 }
 
 /** The mark for a bound item's status. Shape first; the hue reinforces it. */
@@ -103,6 +116,17 @@ export interface RowStateInput {
   observed: FixedSlotObservation;
   /** The SPA↔bridge link is down: every observation is a claim it cannot back. */
   linkDown: boolean;
+  /**
+   * §4 — THE SECOND HOP IS KNOWN DOWN, so neither is the wire's account of this
+   * layer.
+   *
+   * KNOWN down, never merely unheard-from: the boot window (`connecting`) must NOT
+   * arrive here, or every reload would flash the grey and the past tense on a row
+   * that is perfectly on air. The gate on the VERBS fails closed on unknown
+   * because refusing costs a second; a LABEL that fails closed on unknown lies
+   * twice a day, and a label nobody believes is worse than none.
+   */
+  casparUnreachable: boolean;
   /** Test mode: an air claim may be simulated, and must never wear the real red. */
   simulated: boolean;
   /** B-093 — this `unverified` came from a blind occupancy tap, not a dead link. */
@@ -144,11 +168,21 @@ export function rowState({
   pending,
   observed,
   linkDown,
+  casparUnreachable,
   simulated,
   oscBlind,
   rehearsing,
 }: RowStateInput): RowStateVisual {
   const wire = occupancyLabel(observed, linkDown);
+  /**
+   * §4 — NOTHING ABOUT A BOUND ROW'S LAYER IS CONFIRMABLE RIGHT NOW.
+   *
+   * Both hops produce it, because it is one fact: the wire cannot back what this
+   * row says. It drives the GREY and nothing else — no label is renamed by it (the
+   * one rename, ON AIR → WAS ON AIR, comes from the item's own `unverified`
+   * status, and is deliberately NOT generalised).
+   */
+  const unverifiable = linkDown || casparUnreachable;
 
   // ── NO TEMPLATE BOUND TO THIS ROW: it is EMPTY. Always. ─────────────────
   //
@@ -242,11 +276,30 @@ export function rowState({
   // confirmed a graphic is on air.
   const label = simulated && claimsAir ? `SIM ${baseLabel}` : baseLabel;
 
+  /**
+   * READY STAYS READY, AND IS ONLY GREYED — the owner's decision, and the reason
+   * for it is a fact about the product rather than a preference about words.
+   *
+   * «was ready مناسب نیست و همون ready بمونه بهتره، چون برای تمپلیتی که در حالت
+   * قطعی اضافه می‌کنیم بی‌معنیه، فقط رنگش خاکستری بشه.»
+   *
+   * A row can be BOUND while CasparCG is unreachable — building the rundown with
+   * the playout machine off is the normal case, not an edge one — and such a row
+   * was never ready in the PAST. It is ready NOW: the binding is ours, it is a
+   * fact about our list, and it survives the link. What we cannot currently back
+   * is the acting on it, so the word stands and only the confidence goes.
+   *
+   * That is why this is a COLOUR change and not a `tone` change: the role is still
+   * `ready`, and `data-row-state` goes on saying so.
+   */
+  const greyed = unverifiable && tone === 'ready';
+
   return {
     icon: iconForStatus(status, pending),
-    color: simulated && claimsAir ? colors.pending : visual.color,
+    color: greyed ? colors.textMuted : simulated && claimsAir ? colors.pending : visual.color,
     label,
     tone: simulated && claimsAir ? 'attention' : tone,
+    ...(unverifiable ? { unverifiable: true } : {}),
     // ALWAYS a title on a bound row too, and this is the case that needed it: the
     // mark shows the ITEM's status, so without this the wire's own account of the
     // layer had nowhere to live once the Description column dropped.

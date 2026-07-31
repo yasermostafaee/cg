@@ -107,6 +107,12 @@ const styles = {
     fontSize: '14px',
     lineHeight: 1,
   },
+  /**
+   * …and the same number with its confidence withdrawn (§4). Muted, keeping its
+   * size and its parentheses — the count is unchanged, only the claim that a
+   * server is confirming it. B-081's tone, reused rather than a new grey.
+   */
+  onAirCountStale: { color: colors.textMuted },
   verbHead: {
     textAlign: 'center' as const,
     overflow: 'hidden',
@@ -119,10 +125,22 @@ const styles = {
 export function LayerTableHeader({
   density,
   onAirCount,
+  unverifiable = false,
 }: {
   density: Density;
   /** How many rows are ON AIR right now — shown beside `State`, in the air colour. */
   onAirCount: number;
+  /**
+   * §4 — neither hop can back that count right now, so it stops wearing the air
+   * colour.
+   *
+   * IT IS NOT RENAMED and it is not hidden. It remains a count of what our list
+   * says is on air, which is still the most useful number on the screen and still
+   * true of our model; what it can no longer do is assert that a server confirmed
+   * it. This is the sacred air colour's own rule — B-081's "the look of health we
+   * cannot currently verify" — applied to the one other place entitled to wear it.
+   */
+  unverifiable?: boolean;
 }): JSX.Element {
   const spec = densitySpec(density);
   return (
@@ -153,7 +171,19 @@ export function LayerTableHeader({
       >
         State
         {onAirCount > 0 && (
-          <span style={styles.onAirCount} aria-label={`${String(onAirCount)} items on air`}>
+          <span
+            style={
+              unverifiable ? { ...styles.onAirCount, ...styles.onAirCountStale } : styles.onAirCount
+            }
+            aria-label={`${String(onAirCount)} items on air`}
+            {...(unverifiable ? { 'data-unverifiable': '' } : {})}
+            {...(unverifiable
+              ? {
+                  title:
+                    'What this console believes is on air. CasparCG cannot be reached, so nothing is confirming it right now.',
+                }
+              : {})}
+          >
             {' '}
             ({onAirCount})
           </span>

@@ -420,8 +420,17 @@ export function LayerRow({
   // the last snapshot, so without this the row would keep rendering the sacred
   // red the wire can no longer back. Display mask only — reconnect re-pulls the
   // authoritative status and it lifts on its own.
+  //
+  // §4 — AND THE SECOND HOP DOES THE SAME, for the same reason one hop along. An
+  // air claim we cannot confirm is an air claim we may not wear, and with the
+  // playout server unreachable the bridge's own reconciler demotion cannot reach
+  // us either. `unreachable` ONLY, never `connecting`: greying and past-tensing a
+  // live row for the first second of every reload would train the operator to
+  // ignore the very signal this exists to give him.
+  const casparUnreachable = casparReach === 'unreachable';
+  const airUnbackable = linkDown || casparUnreachable;
   const badgeStatus: StackItemStatus | null =
-    item === null ? null : linkDown && onAirClaim ? 'unverified' : item.status;
+    item === null ? null : airUnbackable && onAirClaim ? 'unverified' : item.status;
   // B-093 — WHY unverified? The bridge publishes the cause on the item itself,
   // so the row reads it directly rather than taking a second subscription.
   const oscBlind = badgeStatus === 'unverified' && item?.errorCode === 'osc-unverifiable';
@@ -431,6 +440,7 @@ export function LayerRow({
     pending: item?.pending === true,
     observed: slot.observed,
     linkDown,
+    casparUnreachable,
     simulated,
     oscBlind,
     rehearsing,
@@ -547,6 +557,17 @@ export function LayerRow({
           while saying nothing about the property that matters.
         */
         data-row-state={state.tone}
+        /*
+          §4 — "this label is not currently backed by the wire", as a hook that is
+          not a hex value.
+
+          It sits BESIDE `data-row-state` rather than replacing a value in it,
+          because the two say different things and the operator needs both: the
+          ROLE is unchanged (a READY row is still ready, a bound row is still
+          bound) and only the CONFIDENCE is withdrawn. Collapsing them into a
+          single "unknown" role would be the rename the owner explicitly refused.
+        */
+        {...(state.unverifiable === true ? { 'data-unverifiable': '' } : {})}
       >
         <Icon
           icon={state.icon}

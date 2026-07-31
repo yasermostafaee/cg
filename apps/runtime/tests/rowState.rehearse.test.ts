@@ -13,6 +13,7 @@ function input(over: Partial<RowStateInput> = {}): RowStateInput {
     pending: false,
     observed: { kind: 'producer', producer: 'html' },
     linkDown: false,
+    casparUnreachable: false,
     simulated: false,
     oscBlind: false,
     rehearsing: false,
