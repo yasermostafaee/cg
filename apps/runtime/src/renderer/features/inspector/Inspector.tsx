@@ -81,28 +81,25 @@ const styles = {
     // No BOTTOM padding: the sticky commit bar owns the space down there, and a
     // container pad would sit BELOW the stuck bar (sticky offsets resolve against
     // the padding box), leaving a stripe of scrolling content under it.
-    padding: 'var(--r-space-3) var(--r-space-4) 0',
-    gap: 'var(--r-space-2)',
+    padding: 'var(--r-space-6) var(--r-space-4) 0',
     minHeight: 0,
     flex: 1,
     overflowY: 'auto' as const,
   },
-  heading: {
-    fontSize: 'var(--r-text-sm)',
-    fontWeight: 700,
-    color: colors.textMuted,
-    letterSpacing: '0.05em',
-    margin: 0,
-  },
   empty: { color: colors.textMuted, fontSize: 'var(--r-text-md)' },
   title: {
-    fontSize: 'var(--r-text-xl)',
-    fontWeight: 700,
-    margin: 0,
+    fontSize: '15px',
+    fontWeight: 600,
+    lineHeight: 1.35,
+    margin: '0 0 var(--r-space-3)',
     overflowWrap: 'anywhere' as const,
   },
   /** The item's own headline, under the template name — content, not metadata. */
-  contentTitle: { color: colors.text, fontSize: 'var(--r-text-md)' },
+  contentTitle: {
+    color: colors.text,
+    fontSize: 'var(--r-text-md)',
+    margin: '0 0 var(--r-space-3)',
+  },
   /*
    * NO `max-width` HERE, AND NONE IS TO BE ADDED. Owner instruction, recorded
    * because a cap looks like an improvement to anyone who meets this panel cold:
@@ -145,10 +142,12 @@ const styles = {
     bottom: 0,
     marginTop: 'auto',
     zIndex: 1,
-    background: colors.panel,
+    // RAISED, matching the panel bar at the other end — the two pieces of chrome
+    // that are not content read as the same kind of thing.
+    background: colors.panelMuted,
     borderTop: `1px solid ${colors.border}`,
     marginInline: 'calc(var(--r-space-4) * -1)',
-    padding: 'var(--r-space-2) var(--r-space-4)',
+    padding: 'var(--r-space-3) var(--r-space-4)',
   },
   /*
    * THE FIELD HEADER — the authored name in PRIMARY ink, the binding key beside
@@ -207,22 +206,28 @@ function MetaChip({
   value,
   dot = false,
 }: {
-  label: string;
+  /** Omitted where the value names itself — the status word and the server name. */
+  label?: string;
   value: string;
   dot?: boolean;
 }): JSX.Element {
   return (
     <span className="cg-meta-chip">
       {/*
-        THE DOT IS TYPOGRAPHY, NOT STATE, and that is not a compromise — it is the
-        one option the palette allows. A dot carrying the air-state hue would put a
-        SECOND on-air indicator on this console, and `theme.ts` is explicit that the
-        air colour lives on the layer rows and the status bar's indicator "and
-        NOWHERE else". So it inherits the label's dim ink and does one honest job:
-        marking which chip is the STATE among three coordinates.
+        THE DOT IS CONSTANT, AND THAT IS WHAT MAKES IT SAFE.
+
+        It is the interactive sky, never an air-state hue, and — the load-bearing
+        part — it does not vary with `item.status`. A dot that never changes cannot
+        be read as a state signal, so it cannot become the SECOND on-air indicator
+        this console must not have: `theme.ts` reserves the air colour for the layer
+        rows and the status bar's indicator "and NOWHERE else". Its one job is to
+        mark which chip is the STATE among three coordinates.
+
+        If a future change makes this colour depend on the status, it becomes a
+        state indicator and that rule applies to it.
       */}
       {dot && <span className="cg-meta-chip__dot" aria-hidden="true" />}
-      <span className="cg-meta-chip__label">{label}</span>
+      {label !== undefined && <span className="cg-meta-chip__label">{label}</span>}
       <span className="cg-meta-chip__value">{value}</span>
     </span>
   );
@@ -340,31 +345,27 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
           diagnose that — and the chips keep that property. The words are `layerDetail`'s
           own; only the shape changes. */}
         <div className="cg-meta-chips">
-          <MetaChip
-            label="status"
-            value={`${item.status}${item.pending ? ' (pending)' : ''}`}
-            dot
-          />
+          {/* The status word names itself, so it carries no label — only the dot
+              that marks it as the state among the coordinates. */}
+          <MetaChip value={`${item.status}${item.pending ? ' (pending)' : ''}`} dot />
           {item.slot === undefined ? (
-            <MetaChip label="layer" value={layerDetail(undefined)} />
+            <MetaChip value={layerDetail(undefined)} />
           ) : (
             <>
               <MetaChip label="layer" value={String(item.slot.layer)} />
               <MetaChip label="channel" value={String(item.slot.channel)} />
-              <MetaChip label="server" value={item.slot.server} />
+              {/* The server name names itself too. */}
+              <MetaChip value={item.slot.server} />
             </>
           )}
         </div>
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
         <PositionPicker key={`pos-${itemId}`} item={item} />
-        <div
-          style={{
-            marginTop: '0.5rem',
-            borderTop: `1px solid ${colors.border}`,
-            paddingTop: '0.5rem',
-          }}
-        >
-          <h2 style={styles.heading}>FIELDS</h2>
+        {/* `cg-inspector-section` carries the shared rhythm — the heading's rule,
+            its tracking, and the largest gap in the gradient beneath it. Same
+            class as POSITION, so the two sections cannot drift apart. */}
+        <div className="cg-inspector-section">
+          <h2>FIELDS</h2>
           {isEmpty ? (
             <p style={styles.empty}>No fields.</p>
           ) : (

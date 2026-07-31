@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, GripVertical, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, GripVertical, Plus, X } from 'lucide-react';
 import type { FieldValue, ListItem } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
@@ -247,6 +247,9 @@ export function ListFieldEditor({
           aria-label={`Add ${fieldId} item`}
           onClick={() => onStage(addItem(items, `item-${uuid()}`))}
         >
+          {/* lucide, not the mock's `＋` glyph — the design system routes every icon
+              through `Icon` so it inherits `currentColor` and one size. */}
+          <Icon icon={Plus} />
           Add item
         </Button>
       </div>

@@ -24,14 +24,6 @@ const ANCHOR_GRID: readonly (readonly PositionAnchor[])[] = [
  * a selected fill and a hover, and inline styles cannot express the last two.
  */
 const styles = {
-  section: {
-    marginTop: 'var(--r-space-3)',
-    borderTop: `1px solid ${colors.border}`,
-    paddingTop: 'var(--r-space-3)',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 'var(--r-space-2)',
-  },
   /** The grid and the nudge inputs side by side — one control, read left to right. */
   placement: {
     display: 'flex',
@@ -54,13 +46,12 @@ const styles = {
   },
   offsetInput: { width: '74px' },
   lock: { color: colors.textMuted, fontSize: 'var(--r-text-sm)' },
-  actions: { display: 'flex', gap: 'var(--r-space-3)', alignItems: 'center' },
-  heading: {
-    fontSize: 'var(--r-text-sm)',
-    fontWeight: 700,
-    color: colors.textMuted,
-    letterSpacing: '0.05em',
-    margin: 0,
+  /** Control→control is one step up from label→control inside the nudge fields. */
+  actions: {
+    display: 'flex',
+    gap: 'var(--r-space-3)',
+    alignItems: 'center',
+    marginTop: 'var(--r-space-4)',
   },
 } as const;
 
@@ -112,8 +103,8 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
   };
 
   return (
-    <div style={styles.section} aria-label="On-air position">
-      <h2 style={styles.heading}>POSITION</h2>
+    <div className="cg-inspector-section" aria-label="On-air position">
+      <h2>POSITION</h2>
       <div style={styles.placement}>
         {/*
           A GRID, not nine loose dots. It used to render as nine free-floating
