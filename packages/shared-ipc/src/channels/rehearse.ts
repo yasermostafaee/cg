@@ -83,21 +83,15 @@ import { definePublishChannel } from '../publish.js';
  *   actually muted. On 2.5.0 that is audio on air behind a UI saying the graphic
  *   cannot reach air, which is the worst kind of wrong this feature can be. Serialising
  *   per item makes the interleaving unrepresentable rather than unlikely.
- * - `unreachable` — CasparCG could not be reached, so the mute command never
- *   left and PVW was not started. DISTINCT from `mute-failed` on purpose: that
- *   one says the server REFUSED the mute, and reporting it for a send that never
- *   happened names a mechanism that did not fail. Measured on the plant,
- *   `MIXER … VOLUME` answers `202 MIXER OK` on an empty layer, on an occupied
- *   one and after `CG STOP`, so a genuine refusal is rare and an unreachable
- *   server is the common cause — the two must not wear one word.
+ *
+ * NOTE — `mute-failed` CURRENTLY HAS NO PRODUCER, and that is deliberate rather
+ * than an oversight. Entry no longer refuses when the mute does not land (the
+ * mute is best-effort; see `enterRehearse`), because refusing made ON PVW behave
+ * differently on a STOPped row and a CLEARed row. It is kept in the contract
+ * because a future decision to fail closed on a genuine server REFUSAL would use
+ * exactly this word — and because removing it would silently narrow the wire.
  */
-export const REHEARSE_ENTER_REASONS = [
-  'unknown-item',
-  'on-air',
-  'mute-failed',
-  'unreachable',
-  'busy',
-] as const;
+export const REHEARSE_ENTER_REASONS = ['unknown-item', 'on-air', 'mute-failed', 'busy'] as const;
 
 /** Exit's refusals: no such rehearsal, or a transition already in flight. */
 export const REHEARSE_EXIT_REASONS = ['unknown-item', 'busy'] as const;

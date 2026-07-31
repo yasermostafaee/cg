@@ -1684,50 +1684,48 @@ export class CasparRuntime {
       this.rehearseChanged.emit(this.rehearseState());
       return { ok: true };
     }
-    // The mute IS the safety condition. Refuse if it does not land.
+    // A producer is resident, so mute it — BEST EFFORT. See the note below for
+    // why entry no longer refuses when it does not land.
     this.#rehearseBusy.add(itemId);
     try {
-      const { ok, errorCode } = await this.#send(
+      const { ok } = await this.#send(
         this.#builder.mixerVolume(slot, 0),
         this.#nextSeq(),
         'urgent',
       );
-      if (!ok) {
-        /*
-         * THE REPORTED CAUSE IS THE ONE `#send` RETURNED — never a guess.
-         *
-         * This said a flat `mute-failed` and threw `errorCode` away, so a bridge
-         * that simply could not REACH CasparCG reported that CasparCG had refused
-         * the mute. Measured on the plant (2.5.0 `69e8ad5`), `MIXER … VOLUME 0`
-         * answers `202 MIXER OK` on an empty layer, on an occupied one, and after
-         * `CG STOP` — CasparCG never refuses it, so `mute-failed` was describing a
-         * mechanism that had not failed.
-         *
-         * The cost of the wrong word was not cosmetic: it sent this project into
-         * the mute interlock, 2.3.2-vs-2.5.0 audio behaviour, and whether AMCP
-         * policy should branch on server version. None of it was the problem.
-         *
-         * `amcp-send-failed` — the command never left — is reported as
-         * `unreachable`, which is what the operator can act on. Any other code is
-         * a real refusal from the server and keeps `mute-failed`. Context is
-         * added; the cause is not substituted.
-         */
-        const unreachable = errorCode === 'amcp-send-failed';
-        return {
-          ok: false,
-          reason: unreachable ? 'unreachable' : 'mute-failed',
-          message: unreachable
-            ? 'CasparCG could not be reached, so the layer could not be muted and PVW was not ' +
-              'started. Nothing was sent.'
-            : 'CasparCG refused to mute the layer, so rehearse was not started. Rehearse is only ' +
-              'claimed once the graphic genuinely cannot reach air.',
-        };
-      }
+      /*
+       * §4 — THE MUTE IS BEST-EFFORT. ENTRY NEVER FAILS ON IT.
+       *
+       * It used to refuse, which made ON PVW behave differently on two rows the
+       * operator considers identical: a row closed with STOP keeps its producer,
+       * so `#loaded` still held it and the mute branch ran and failed; a row
+       * closed with CLEAR had `#loaded` deleted by `out()`, took the zero-AMCP
+       * path, and succeeded. Two ways of closing a graphic, two different answers.
+       *
+       * That is the last thing `dev-rehearse-decouple` left behind. It removed the
+       * PRECONDITION — rehearse no longer requires a resident producer — but kept
+       * this CONSEQUENCE branch, and the branch reads `#loaded`, which is exactly
+       * "what is on the CasparCG layer". The standing decision is that entry does
+       * not depend on that, so it no longer does.
+       *
+       * WHAT IS GIVEN UP, stated rather than buried: with the mute unlanded, a
+       * resident producer stays unmuted while the row claims PVW, and on 2.5.0 a
+       * resident producer's audio can be on air (R-029). The exchange is
+       * deliberate — PVW sends nothing to the layer, so entering changes nothing
+       * that was not already true, and the common case for a failed mute is an
+       * unreachable server, where nothing we do reaches air anyway.
+       *
+       * The failure is RECORDED, not swallowed: `muted` carries whether the mute
+       * actually landed, and exit mirrors it — a rehearsal that muted nothing
+       * restores nothing, which is the B-100 read-once pairing this branch has
+       * always kept.
+       */
       this.#rehearsing.set(itemId, {
         itemId,
         channel: slot.channel,
         layer: slot.layer,
-        muted: true,
+        // What ACTUALLY happened, not what was intended — exit mirrors this.
+        muted: ok,
       });
       this.rehearseChanged.emit(this.rehearseState());
       return { ok: true };

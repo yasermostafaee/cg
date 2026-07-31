@@ -2,7 +2,7 @@ import * as dgram from 'node:dgram';
 import { afterEach, expect, it } from 'vitest';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { isRehearsing } from '@cg/shared-ipc';
-import { createMock, type AmcpRequest, type MockHandle } from '@cg/amcp-mock';
+import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS } from './support/harness.js';
 
@@ -165,75 +165,31 @@ it('refuses rehearse for an item that is not on the stack at all', async () => {
 }, 30000);
 
 /**
- * THE DECOUPLE. Rehearse used to require a RESIDENT PRODUCER, so a CLEARed row
- * could not be rehearsed while the same row after STOP could — two actions the
- * operator experiences as "close it", with different capabilities afterwards.
+ * REVERSED BY §4: a mute that does not land no longer refuses entry.
  *
- * The render needs the bound template, the operator's values and the channel
- * raster. All three are bridge-owned; none of them is the CasparCG layer. So the
- * precondition is the BINDING, and what is left is a BRANCH on the layer.
+ * This asserted the safety condition — refuse unless the layer is provably
+ * muted. It made ON PVW work on a CLEARed row and fail on a STOPped one, which
+ * to the operator are two ways of closing the same graphic. The mute is now
+ * BEST EFFORT and what it achieved is RECORDED on the rehearsal rather than
+ * gating it, so exit still mirrors entry exactly.
  *
- * These two tests assert on the WIRE, not the UI: the point is not that the call
- * returns ok, it is that NOTHING was sent to CasparCG. A stray `MIXER VOLUME` on
- * a layer we do not own is aimed at whatever occupies it now.
+ * WHAT IS GIVEN UP is stated in `enterRehearse` and in DEBT.md: a resident
+ * producer can stay unmuted while the row claims PVW. PVW itself sends nothing,
+ * so entering changes nothing that was not already true.
  */
-it('enters over an EMPTY layer — the CLEARed row — and sends NO AMCP at all', async () => {
+it('a mute that does NOT land still enters, and records that it muted nothing', async () => {
   await boot();
   expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
-  // CLEAR: the producer is destroyed, the item STAYS on the stack bound to the
-  // slot. This is exactly the state the owner could not rehearse.
-  expect((await runtime!.out('item1')).accepted).toBe(true);
-  // The CLEAR destroyed the producer — the layer is observably empty, and the
-  // row is still bound. That pair IS the state under test.
-  expect(mock!.layerState(SLOT)?.producer).toBe('empty');
-
-  const mixers: string[] = [];
-  mock!.setHandler('MIXER', (req: AmcpRequest) => {
-    mixers.push(req.args.join(' '));
-    return { kind: 'ok', code: 202, verb: 'MIXER' };
-  });
-
-  expect(await runtime!.enterRehearse('item1')).toEqual({ ok: true });
-  expect(isRehearsing(runtime!.rehearseState(), 'item1')).toBe(true);
-  // THE ASSERTION THAT MATTERS: nothing on the wire. There is nothing on the
-  // layer, so there is nothing to make safe.
-  expect(mixers).toEqual([]);
-}, 30000);
-
-it('exit after an empty-layer rehearse sends NO restore — exit mirrors entry', async () => {
-  await boot();
-  expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
-  expect((await runtime!.out('item1')).accepted).toBe(true);
-  expect(await runtime!.enterRehearse('item1')).toEqual({ ok: true });
-
-  const mixers: string[] = [];
-  mock!.setHandler('MIXER', (req: AmcpRequest) => {
-    mixers.push(req.args.join(' '));
-    return { kind: 'ok', code: 202, verb: 'MIXER' };
-  });
-
-  expect(await runtime!.exitRehearse('item1')).toEqual({ ok: true });
-  // A restore for a mute that never happened would be a `MIXER VOLUME` aimed at
-  // whatever occupies that layer NOW — not a harmless no-op.
-  expect(mixers).toEqual([]);
-  expect(isRehearsing(runtime!.rehearseState(), 'item1')).toBe(false);
-}, 30000);
-
-it('REFUSES on mute-failed when the layer IS occupied — the safety condition is unchanged', async () => {
-  await boot();
-  expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
-  expect(volume()).toBe(1);
-
-  // The mute cannot land. Entering anyway would leave a resident producer
-  // UNMUTED while every browser shows the row as safely rehearsing — on 2.5.0
-  // that is audio on air.
   mock!.setHandler('MIXER', () => ({ kind: 'err', code: 501, verb: 'MIXER' }));
 
-  const refused = await runtime!.enterRehearse('item1');
-  expect(refused.ok).toBe(false);
-  expect(refused.reason).toBe('mute-failed');
-  // The mode is never CLAIMED when its safety condition failed to apply.
-  expect(runtime!.rehearseState()).toEqual([]);
+  const result = await runtime!.enterRehearse('item1');
+  expect(result.ok).toBe(true);
+  expect(isRehearsing(runtime!.rehearseState(), 'item1')).toBe(true);
+
+  // EXIT MIRRORS ENTRY: a rehearsal that muted nothing restores nothing, so a
+  // stray MIXER never lands on a layer this rehearsal did not silence.
+  mock!.setHandler('MIXER', () => ({ kind: 'ok', code: 202, verb: 'MIXER' }));
+  expect((await runtime!.exitRehearse('item1')).ok).toBe(true);
 }, 30000);
 
 it('THE INTERLOCK holds on the EMPTY-layer branch too — a take is still refused', async () => {
@@ -439,12 +395,72 @@ it('an UNREACHABLE server reports reachability, not a mute failure', async () =>
   mock = null;
 
   const result = await runtime!.enterRehearse('item1');
-  expect(result.ok).toBe(false);
-  // THE ASSERTION: the cause `#send` actually returned, surfaced rather than
-  // replaced. `mute-failed` here would be a guess wearing a mechanism's name.
-  expect(result.reason).toBe('unreachable');
-  expect(result.reason).not.toBe('mute-failed');
-  // …and the message says what is true: nothing was sent.
-  expect(result.message).toMatch(/could not be reached/i);
-  expect(result.message).toMatch(/nothing was sent/i);
+  // §4 SUPERSEDED §5's INSTANCE, and this test records that rather than being
+  // deleted. §5 asked that the reported failure name the real cause instead of
+  // `mute-failed`; §4 then removed the failure altogether, because refusing on an
+  // unlanded mute is exactly what made ON PVW behave differently on a STOPped row
+  // and a CLEARed one. The honest end state is not a better-named refusal — it is
+  // no refusal, so there is no mechanism left to misname.
+  expect(result.ok).toBe(true);
+  expect(result.reason).toBeUndefined();
+  expect(isRehearsing(runtime!.rehearseState(), 'item1')).toBe(true);
+}, 30000);
+
+/**
+ * §4 — `ON PVW` BEHAVES IDENTICALLY ON A STOPPED ROW AND A CLEARED ROW.
+ *
+ * ONE SPEC, BOTH CASES, because they exist to be compared — asserting either
+ * alone is what let them diverge. To the operator these are two ways of closing
+ * a graphic and nothing more; to the code they left different records of layer
+ * occupancy behind, and entry consulted that record:
+ *
+ *   - STOP  → the producer stays resident → `#loaded` still holds it → the mute
+ *             branch ran → the send failed → entry REFUSED.
+ *   - CLEAR → `out()` deleted `#loaded` → zero AMCP → entry SUCCEEDED.
+ *
+ * That is the last thing `dev-rehearse-decouple` left behind: it removed the
+ * precondition but kept the consequence branch, and the branch read `#loaded`.
+ */
+it('§4 — ON PVW succeeds on a STOPPED row and on a CLEARED row alike, with CasparCG unreachable', async () => {
+  await boot();
+  expect((await runtime!.load('stopped', 'lower-third', {})).accepted).toBe(true);
+  expect((await runtime!.load('cleared', 'lower-third', {})).accepted).toBe(true);
+
+  // Two ways of closing a graphic. STOP leaves the producer resident; CLEAR
+  // destroys it — which is precisely the difference that used to matter.
+  await runtime!.stopItem('stopped');
+  await runtime!.out('cleared');
+
+  // Now CasparCG goes away.
+  await mock!.stop();
+  mock = null;
+
+  const stopped = await runtime!.enterRehearse('stopped');
+  const cleared = await runtime!.enterRehearse('cleared');
+
+  // THE ASSERTION: identical outcomes. Compared directly rather than checked
+  // one at a time, so a future divergence cannot pass by fixing only one side.
+  expect(stopped.ok).toBe(true);
+  expect(cleared.ok).toBe(true);
+  expect(stopped.ok).toBe(cleared.ok);
+  expect(stopped.reason).toBe(cleared.reason);
+
+  // Both rows really are on PVW — not merely "not refused".
+  expect(isRehearsing(runtime!.rehearseState(), 'stopped')).toBe(true);
+  expect(isRehearsing(runtime!.rehearseState(), 'cleared')).toBe(true);
+}, 30000);
+
+/**
+ * THE ONE REFUSAL THAT STAYS, and the owner confirmed it: a row that is ON AIR
+ * refuses PVW. That refusal is about AIR, not about occupancy — muting a live
+ * graphic is not something this will do — so §4 must not flatten it.
+ */
+it('§4 — an ON-AIR row still refuses ON PVW', async () => {
+  await boot();
+  expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
+  expect((await runtime!.take('item1')).accepted).toBe(true);
+
+  const refused = await runtime!.enterRehearse('item1');
+  expect(refused.ok).toBe(false);
+  expect(refused.reason).toBe('on-air');
 }, 30000);

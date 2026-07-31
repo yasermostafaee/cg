@@ -10,6 +10,50 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### ⛔ `dev-offline-ux` v3 — §1 §4 §5 DONE; §2 §3 §6 §7 §8 §9 §10 NOT STARTED
+
+Stopped at a clean boundary, gate green, pushed. **The connection gating (§2, §3) is the largest
+outstanding piece and is untouched**, along with §6 labels, §7 loading state, §8 header, §9 library
+copy and §10 status bar.
+
+**§4 — what survived `dev-rehearse-decouple`, exactly:** `const mustMute = this.#loaded.has(itemId)`.
+The decouple removed the PRECONDITION (rehearse no longer requires a resident producer — the
+`not-loaded` refusal went) but kept the CONSEQUENCE branch, and that branch reads `#loaded`, which
+is precisely "what is on the CasparCG layer". STOP leaves it set → mute branch → send fails →
+refused; CLEAR deletes it → zero AMCP → succeeds. Two ways of closing a graphic, two answers.
+
+Fixed by making the mute BEST EFFORT: entry never fails on it, and `muted` records what actually
+landed so exit still mirrors entry (a rehearsal that muted nothing restores nothing — B-100's
+read-once pairing is intact).
+
+**🔴 WHAT §4 GIVES UP, and it is a real trade, not a tidy-up:** a resident producer can stay
+UNMUTED while the row claims PVW, and on 2.5.0 a resident producer's audio can be on air (R-029).
+Accepted because PVW sends nothing to the layer — entering changes nothing that was not already
+true — and because the common cause of an unlanded mute is an unreachable server, where nothing
+reaches air anyway. **The residual risk is a server that is reachable and genuinely REFUSES the
+mute.** Measured, that does not happen on this plant (`202 MIXER OK` in every layer state), but if
+it ever does, the row will claim PVW over an audible graphic. `mute-failed` is kept in the wire
+contract with no producer precisely so that failing closed on a genuine refusal remains a one-line
+decision rather than a re-design.
+
+**§5 was SUPERSEDED BY §4 within this session, and the sequence is worth keeping.** §5's fix landed
+first (`8bb46fc`): report `unreachable` instead of a flat `mute-failed`, since the command never
+left. §4 then removed the refusal altogether — so the better-named failure had no producer, and the
+honest end state is not a better-named refusal but NO refusal, with no mechanism left to misname.
+The `unreachable` reason added in `8bb46fc` was removed again in the same batch. **§5's SWEEP — every
+other place that catches a specific failure and reports a generic or differently-named one — was NOT
+done and is still owed.**
+
+**§1 — scope, as asked:** the orphan sweep now reports any UNBOUND bank layer carrying a producer,
+ticked or unticked alike (an unticked row with a producer is kept visible by `LayersPanel:133` and
+told the same lie). A bank layer carrying an item we bound is already `owned` via `#slots`, so what
+surfaces is exactly "a producer we did not put there". If it turns out to be permanently on against
+this plant, that is information about the plant — do not filter it away.
+
+**No adversarial review was performed.** It is owed from last session and is owed again: this batch
+changes when a rehearsal may be claimed over a resident producer. It should be done with §2/§3,
+which is where the AMCP gating actually lands.
+
 ### ⛔ `dev-list-vs-layer` v3 — §3 and §4 DONE, §5 §6 §7 §8 NOT STARTED
 
 Stopped at a clean boundary, both gates green, pushed. **§5 (remove `Load from library`), §6's
