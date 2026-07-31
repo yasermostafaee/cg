@@ -168,7 +168,9 @@ const styles = {
     minWidth: 0,
     overflowWrap: 'anywhere' as const,
   },
-  fieldName: { color: colors.text, fontWeight: 500 },
+  // 13px (owner) — a notch under the body scale, so a field's NAME sits between
+  // the panel's content text and the 11px binding key beside it.
+  fieldName: { color: colors.text, fontWeight: 500, fontSize: '13px' },
   fieldKey: { color: colors.textMuted, fontSize: '11px', opacity: 0.75 },
   // B-067 — a nested composition's fields, indented under the instance's label.
   group: {

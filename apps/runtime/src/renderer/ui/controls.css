@@ -29,6 +29,12 @@
   --r-accent-line: #2f7ba8;
   --r-accent-line-hover: #4aa8e0;
   --r-accent-ink: #cfe8f8;
+  /* THE INPUT SURFACE — one background and one line for every field in the app.
+     See `theme.ts` and `.cg-field`: an input is a well sunk into the panel, not a
+     raised chip, and ONE pair is what stops the dx/dy boxes from drifting away
+     from the text inputs. */
+  --r-field-bg: #0e1822;
+  --r-field-line: #2d4150;
   /* ON AIR — GREEN, and this hue may mean nothing else. Red is now errors and
      destructive intent only. See `theme.ts`'s header for the decision and for
      the R-006 / B-087 re-anchoring it owes. Mirrored from `cssVars`; a parity
@@ -763,10 +769,25 @@
 
 /* ── Fields (text / textarea / number / select) ─────────────────────────── */
 
+/*
+ * ONE INPUT SURFACE FOR THE WHOLE APP — owner's report was that the dx/dy numeric
+ * boxes rendered differently from the text inputs and textareas.
+ *
+ * The finding: they did NOT have a second style. `NumericInput` passes `className`
+ * straight through and every caller gives it `.cg-field`, so all of them were
+ * already on this one rule — what differed was that this rule painted a RAISED
+ * chip (`--r-surface-raised`) while the mock's fields are a WELL sunk into the
+ * panel. At 74px beside a full-width input that difference reads as two kinds of
+ * control rather than one control at two widths.
+ *
+ * So the fix stays a SINGLE rule and changes what it paints, rather than adding a
+ * variant for the small ones. Two surfaces tuned to match are two surfaces that
+ * drift at the next change.
+ */
 .cg-field {
-  background: var(--r-surface-raised);
+  background: var(--r-field-bg);
   color: var(--r-text);
-  border: 1px solid var(--r-border);
+  border: 1px solid var(--r-field-line);
   border-radius: var(--r-radius-sm);
   padding: 0.3rem 0.5rem;
   font: inherit;

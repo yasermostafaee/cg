@@ -142,6 +142,21 @@ export const cssVars = {
   '--r-accent-line': '#2F7BA8',
   '--r-accent-line-hover': '#4AA8E0',
   '--r-accent-ink': '#CFE8F8',
+  /**
+   * THE INPUT SURFACE — one background and one line for every field in the app.
+   *
+   * Owner-specified. It is its own pair rather than `--r-surface-*` because an
+   * input is not a panel: it reads as a well SUNK INTO the surface it sits on, and
+   * `--r-surface-raised` made the fields sit slightly proud of the panel instead.
+   *
+   * ONE PAIR, ON `.cg-field`, so the text inputs, the textareas, the selects and
+   * `NumericInput` cannot diverge — the owner's report was that the dx/dy boxes
+   * rendered differently from the text inputs, and the durable answer is a single
+   * surface rather than a second one tuned to look close. Two surfaces tuned to
+   * match are two surfaces that drift at the next change.
+   */
+  '--r-field-bg': '#0E1822',
+  '--r-field-line': '#2D4150',
   '--r-onair': colors.onAir, // sacred GREEN — ON AIR only (see the header)
   '--r-caution': '#F59E0B', // amber — Out / EXIT / UNCONFIRMED / dirty
   '--r-danger': '#DC2626', // Remove
