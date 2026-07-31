@@ -29,7 +29,11 @@ const MESSAGES: Readonly<Record<string, string>> = {
   'not-fixed':
     'That layer is not part of the fixed bank — only bank layers can be loaded this way.',
   'slot-bound':
-    'That fixed layer already holds an item — Remove it first, then load. (Never one compound step.)',
+    'That layer already has a graphic on it — CLEAR it first to put the same template back, or REMOVE the row to bind a different one. (Never one compound step.)',
+  // R-022 — the LOAD interlock. Names the way out, because there always is one:
+  // rehearse no longer needs the layer, so taking the row off PVW costs nothing.
+  rehearsing:
+    'That row is on PVW. Take it off PVW first — loading would put an unmuted graphic on the layer.',
   // The BANK-SCOPED clear's two structural refusals. Both are guard verdicts rather
   // than transient failures, so neither suggests retrying: the answer will not change
   // until the CONFIG does.

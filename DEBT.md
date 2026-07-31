@@ -10,6 +10,86 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### The CLEARed-row sweep — what every layer-acting verb does, and the one residual
+
+`dev-cleared-row-state`. Recorded because the sweep is the deliverable as much as the fix
+is, and because one finding is left OPEN by design.
+
+**THE MEASUREMENT THE TASK REQUIRED, first: `PLAY` on a cleared row REACHES AIR.** The design
+(R-028 decision 5) is implemented, not merely intended — `take()`'s B-039 pre-roll re-ADDs
+when `#loaded` has no producer, and the new integration test asserts the `CG ADD` on the wire
+and `onAir === true` on the mock, not the absence of an error. Nothing to fix there.
+
+**The full sweep, one decision per verb, all asserted in
+`tools/caspar-bridge/tests/cleared-row-verbs.integration.test.ts`:**
+
+| verb          | on a cleared row                       | decided                                                                     |
+| ------------- | -------------------------------------- | --------------------------------------------------------------------------- |
+| `PLAY`        | re-ADDs, then plays                    | do the work first (R-028 d5)                                                |
+| `STOP`        | no-op, no producer created             | an implicit ADD inside STOP would put a graphic ON the layer to take it off |
+| `UPDATE`      | commits fields, sends nothing (B-070)  | the next take's re-ADD carries them — asserted end to end                   |
+| `NEXT`        | no-op, no producer created             | advancing a step must not be a door to air                                  |
+| `CLEAR` again | safe, stays empty                      | the escape hatch is never state-gated                                       |
+| `LOAD`        | re-ADDs the bound template, no picking | the reported defect                                                         |
+
+**A test that passed for the wrong reason, caught while writing it.** The first STOP case called
+`r.stop('item-clock')` — which is the runtime's own **shutdown** method, taking no arguments. It
+went green because the layer was empty either way. The per-item verbs are `stopItem` / `nextItem`.
+Exactly the class this task warned about, and it survived only because the assertion was on the
+layer rather than on the call.
+
+**🔴 THE RESIDUAL, left open deliberately: `PLAY` is enabled on a row whose template is GONE.**
+The verb is gated on `empty || playing || rehearsing` and knows nothing about whether the template
+can still be resolved, so on a bound row whose template has left the registry PLAY invites a take
+that `take()` will refuse with `unknown-template`. It is NOT silent — the refusal surfaces as the
+command toast — and this change makes the row say so visibly (the template cell reads
+"(not in this browser)"). But it is still the dangerous direction the task names: the operator is
+told the row will reach air, and finds out otherwise at the moment air needs it.
+
+Not fixed here because the honest fix is a decision, not a patch: either PLAY gates on template
+availability (which re-opens "do not gate PLAY on occupancy-adjacent facts", and the renderer's
+view of the registry is not the bridge's), or the row refuses earlier and louder. **Worth an item.**
+
+### Every `CG ADD` call site, and whether the rehearse guard covers it
+
+Requested by `dev-cleared-row-state`, and the answer changed during the task.
+
+| #   | site (`caspar-runtime.ts`)    | what it is                                   | rehearse-guarded?                         |
+| --- | ----------------------------- | -------------------------------------------- | ----------------------------------------- |
+| 1   | `#loadOnto` (via `loadFixed`) | the operator's LOAD                          | **YES — added by this task**              |
+| 2   | reconnect reconciliation      | a silent layer re-ADDed after a bridge blip  | **NO — see below**                        |
+| 3   | `setPosition`                 | re-ADD so the new `?pos=` query takes effect | NO, and it is safe — see below            |
+| 4   | `take()` B-039 pre-roll       | PLAY's implicit ADD on a cleared row         | YES — `take()` refuses `rehearsing` first |
+
+**Site 1 was the finding.** The task asked for the LOAD guard; the first cut put it in the
+RENDERER only, which is precisely the shape R-022's own `take()` comment rejects — "a greyed-out
+PLAY is a request, not a guarantee". A second browser with a stale rehearse snapshot, or any
+direct channel call, reached `loadFixed` with the button's opinion nowhere in sight, and with LOAD
+now working on a cleared row that is one click away rather than hypothetical. The refusal is now
+bridge-side (`rehearsing`, a new `FIXED_LAYERS_LOAD_REASONS` member) and keys on the item BOUND TO
+THE SLOT, not the incoming id — a load arriving with a fresh item id is exactly what an
+incoming-id check would wave through onto the same rehearsing row.
+
+**Site 3 is safe and it is worth writing down WHY, because it looks unsafe.** `setPosition`
+re-ADDs on a rehearsing row (it refuses on-air/unsettled, not on rehearse). A bare `CG ADD` is
+audible on 2.5.0 — but `MIXER VOLUME` is LAYER state, not producer state, so the mute the rehearse
+entry set is still in force when the new producer arrives. The audio does not leak. This is the
+same property the whole rehearse design rests on and it holds here by construction, not by luck.
+
+**Site 2 is NOT guarded, and this is the one to decide.** Reconnect reconciliation re-ADDs a
+producer onto a layer whose graphic did not survive the bridge restart — including a layer whose
+row a browser still believes is rehearsing. The rehearse set is bridge-owned SESSION state, so a
+bridge that restarted has no rehearsals at all and the case cannot arise; a bridge that merely lost
+its SOCKET keeps them, and then this path re-ADDs unmuted under a rehearsing row. **Deliberately
+not fixed in this task** — the task said to report the conflict rather than quietly extend the
+guard, and the right answer is probably the `mute-before-ADD` upgrade below rather than another
+refusal, because refusing reconciliation would leave a layer black instead of merely audible.
+
+**And the upgrade this all points at is already recorded.** `mute-before-ADD` (further down) has
+the ordering constraint that matters at EVERY site in this table, not just the obvious one: on
+2.5.0 the volume must land BEFORE the `CG ADD`. Four ADD sites is four places that constraint has
+to hold once it is built.
+
 ### ✅ CLOSED — the white 16:9 area was an OPAQUE CANVAS forced by a color-scheme mismatch
 
 Fixed in `dev-pvw-white`: `color-scheme: light` on the rehearsal frame ELEMENT

@@ -2,7 +2,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react-dom/test-utils';
 import { toMenuItems } from '../src/renderer/ui/rowAction.js';
-import { layerRowActions } from '../src/renderer/features/layers/layerRowActions.js';
+import {
+  layerRowActions,
+  MISSING_TEMPLATE_REASON,
+} from '../src/renderer/features/layers/layerRowActions.js';
 import {
   itemWith,
   renderLayerRow,
@@ -248,11 +251,25 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
   /** The row's action list, built the way the row builds it. */
   const actionsFor = (over: Parameters<typeof layerRowActions>[0]) => layerRowActions(over);
 
-  const deps = (item: Parameters<typeof layerRowActions>[0]['item'], hasNext: boolean) => ({
+  /**
+   * `observed` DEFAULTS TO AN OCCUPIED LAYER for a BOUND row and an empty one
+   * otherwise — i.e. to the state each row is normally in.
+   *
+   * It used to be hardcoded empty, which was harmless while the toggle read
+   * `item === null`. Once binding and occupancy became separate facts, a bound
+   * row on an EMPTY layer is the post-CLEAR state and correctly shows LOAD, so a
+   * test that wanted the REMOVE half had to say which layer it meant. Callers
+   * that are ABOUT occupancy pass it explicitly.
+   */
+  const deps = (
+    item: Parameters<typeof layerRowActions>[0]['item'],
+    hasNext: boolean,
+    observed: Parameters<typeof layerRowActions>[0]['observed'] = item === null
+      ? { kind: 'empty' as const }
+      : { kind: 'producer' as const, producer: 'html' },
+  ) => ({
     item,
-    // An EMPTY layer, so LOAD is safe — the occupancy gate is exercised
-    // separately below.
-    observed: { kind: 'empty' as const },
+    observed,
     hasNext,
     linkDown: false,
     dirty: true,
@@ -260,12 +277,15 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     rehearsing: false,
     toggleRehearse: () => Promise.resolve({ accepted: true }),
     load: () => Promise.resolve({ accepted: true }),
+    reload: () => Promise.resolve({ accepted: true }),
+    templateAvailable: true,
     loadFromLibrary: () => Promise.resolve({ accepted: true }),
     play: () => Promise.resolve({ accepted: true }),
     next: () => Promise.resolve({ accepted: true }),
     update: () => Promise.resolve({ accepted: true }),
     stop: () => Promise.resolve({ accepted: true }),
     clear: () => Promise.resolve({ accepted: true }),
+    clearLayer: () => Promise.resolve({ accepted: true }),
     remove: () => Promise.resolve({ accepted: true }),
     onError: () => undefined,
   });
@@ -677,5 +697,140 @@ describe('LayerRow — click is TOGGLE select', () => {
   it('the row announces itself as a toggle (aria-pressed tracks selection)', async () => {
     rendered = await renderLayerRow({ item: itemWith('loaded'), selected: true });
     expect(rendered.container.querySelector('.cg-row')?.getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+/**
+ * THE LOAD/REMOVE TOGGLE, once BINDING and OCCUPANCY are separate facts.
+ *
+ * The reported defect: after CLEAR the item survives and the producer does not,
+ * so a flag meaning `item === null` answered "is a template bound?" for a control
+ * whose real question is "is the LAYER empty?". The toggle went on showing REMOVE
+ * and the operator had to remove-and-re-pick to get the same graphic back.
+ *
+ * Asserted on the RESOLVED VERB (the action's `key` + `label` + which handler it
+ * calls), never on rendered text.
+ */
+describe('LayerRow — the LOAD/REMOVE toggle splits binding from occupancy', () => {
+  const observedEmpty = { kind: 'empty' as const };
+  const observedProducer = { kind: 'producer' as const, producer: 'html' };
+  const observedUnknown = { kind: 'unknown' as const };
+
+  function toggle(over: Partial<Parameters<typeof layerRowActions>[0]>) {
+    const actions = layerRowActions({
+      item: itemWith('loaded'),
+      observed: observedEmpty,
+      hasNext: false,
+      linkDown: false,
+      dirty: false,
+      rehearsing: false,
+      templateAvailable: true,
+      toggleRehearse: () => Promise.resolve({ accepted: true }),
+      load: () => Promise.resolve({ accepted: true }),
+      reload: () => Promise.resolve({ accepted: true }),
+      loadFromLibrary: () => Promise.resolve({ accepted: true }),
+      play: () => Promise.resolve({ accepted: true }),
+      next: () => Promise.resolve({ accepted: true }),
+      update: () => Promise.resolve({ accepted: true }),
+      stop: () => Promise.resolve({ accepted: true }),
+      clear: () => Promise.resolve({ accepted: true }),
+      clearLayer: () => Promise.resolve({ accepted: true }),
+      remove: () => Promise.resolve({ accepted: true }),
+      onError: () => undefined,
+      ...over,
+    });
+    const action = actions.find((a) => a.key === 'load-remove');
+    if (action === undefined) throw new Error('the toggle must always exist');
+    return action;
+  }
+
+  it('NO binding + EMPTY layer → LOAD', () => {
+    const t = toggle({ item: null, observed: observedEmpty });
+    expect(t.label).toBe('LOAD');
+    expect(t.disabled).toBe(false);
+  });
+
+  it('binding + OCCUPIED layer → REMOVE', () => {
+    expect(toggle({ observed: observedProducer }).label).toBe('REMOVE');
+  });
+
+  /** THE REPORTED DEFECT. This read REMOVE before the split. */
+  it('binding + EMPTY layer (post-CLEAR) → LOAD, and it RE-ADDs without picking', async () => {
+    let reloaded = 0;
+    let picked = 0;
+    const t = toggle({
+      observed: observedEmpty,
+      reload: () => {
+        reloaded += 1;
+        return Promise.resolve({ accepted: true });
+      },
+      load: () => {
+        picked += 1;
+        return Promise.resolve({ accepted: true });
+      },
+    });
+    expect(t.label).toBe('LOAD');
+    expect(t.disabled).toBe(false);
+
+    // …and it is the RE-ADD, not the file picker. Asserted on which handler ran,
+    // because both halves render the same word: a LOAD that opened a chooser
+    // would look identical and be the defect the operator complained about.
+    await t.run();
+    expect(reloaded).toBe(1);
+    expect(picked).toBe(0);
+  });
+
+  it('binding + EMPTY layer + template MISSING → REMOVE, and it says why', () => {
+    const t = toggle({ observed: observedEmpty, templateAvailable: false });
+    expect(t.label).toBe('REMOVE');
+    // The row must be able to UNBIND, or it is stranded: it cannot load (no
+    // template) and could not remove (the toggle showed LOAD).
+    expect(t.disabled).toBe(false);
+    // …and it states the reason rather than leaving the operator to guess why
+    // the row cannot be put back.
+    expect(t.title).toBe(MISSING_TEMPLATE_REASON);
+    expect(t.title).toMatch(/not in this browser/i);
+  });
+
+  /**
+   * UNKNOWN occupancy shows REMOVE, fail-closed. A re-ADD onto a layer we cannot
+   * vouch for would issue an adopt-CLEAR against a graphic nobody has claimed,
+   * and OSC silence is not evidence of an empty layer (B-101).
+   */
+  it('binding + UNKNOWN occupancy → REMOVE, never a speculative re-ADD', () => {
+    expect(toggle({ observed: observedUnknown }).label).toBe('REMOVE');
+  });
+
+  /**
+   * THE GUARD. Once LOAD works on a cleared row it becomes the one path that can
+   * put an UNMUTED producer under a row the UI says is on PVW. Fail closed —
+   * and SAY SO, because a silently dead button is the failure mode this whole
+   * surface is built to avoid.
+   */
+  it('LOAD is REFUSED while the row is on PVW, with the reason stated', () => {
+    const t = toggle({ observed: observedEmpty, rehearsing: true });
+    expect(t.label).toBe('LOAD');
+    expect(t.disabled).toBe(true);
+    // The REASON, not merely the refusal — and it names the way out.
+    expect(t.title).toMatch(/on PVW/i);
+    expect(t.title).toMatch(/unmuted/i);
+  });
+
+  /** An UNBOUND row is unaffected by rehearse: there is nothing rehearsing on it. */
+  it('an unbound row is not refused by the PVW guard', () => {
+    expect(toggle({ item: null, observed: observedEmpty, rehearsing: true }).disabled).toBe(false);
+  });
+
+  /** The shape never changes: one key, one slot, in every one of these states. */
+  it('is ONE key in ONE position across every combination above', () => {
+    for (const item of [null, itemWith('loaded')]) {
+      for (const observed of [observedEmpty, observedProducer, observedUnknown]) {
+        for (const templateAvailable of [true, false]) {
+          const t = toggle({ item, observed, templateAvailable });
+          expect(t.key).toBe('load-remove');
+          expect(['LOAD', 'REMOVE']).toContain(t.label);
+        }
+      }
+    }
   });
 });

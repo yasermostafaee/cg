@@ -480,6 +480,13 @@ export class MockRuntime {
    * Remove-then-load, two explicit steps). An unregistered template refuses
    * with the same `unknown-template` the bridge answers.
    *
+   * `slot-bound` MIRRORS THE BRIDGE'S OCCUPANCY RULE, not the old binding one.
+   * A CLEARed row keeps its binding and loses its producer, and putting the
+   * row's own template back is exactly the load that must succeed there — so a
+   * mock that refused it would teach test mode the defect this change removes.
+   * Rebinding to a DIFFERENT item is still refused whatever the layer says.
+   * `#loaded` is the producer signal here as it is bridge-side.
+   *
    * On acceptance the item joins the stack exactly as `load()` builds it — the
    * fixed row is a second surface onto an ORDINARY stack item, never a parallel
    * item kind — and the per-slot state republishes so the row names it.
@@ -500,7 +507,22 @@ export class MockRuntime {
       layer >= bank.start &&
       layer < bank.start + bank.count;
     if (!inBank) return { accepted: false, errorCode: 'not-fixed' };
-    if (this.#fixedBindings.has(layer)) return { accepted: false, errorCode: 'slot-bound' };
+    const bound = this.#fixedBindings.get(layer);
+    // R-022 parity — the LOAD interlock, and the mock must hold it for the same
+    // reason it holds `take`'s: if test mode allowed a load the real bridge
+    // refuses, the interlock would be exercised nowhere in the suite and the UI
+    // would be built against semantics the bridge does not have.
+    if (bound !== undefined && this.#rehearsing.has(bound.itemId)) {
+      return { accepted: false, errorCode: 'rehearsing' };
+    }
+    // A different item may never take a bound row — Remove-then-load, two steps.
+    if (bound !== undefined && bound.itemId !== itemId) {
+      return { accepted: false, errorCode: 'slot-bound' };
+    }
+    // The same item may not re-load over its OWN live producer; CLEAR first.
+    if (bound !== undefined && this.#loaded.has(itemId)) {
+      return { accepted: false, errorCode: 'slot-bound' };
+    }
 
     this.#fixedBindings.set(layer, { itemId, templateType: template.templateType, templateId });
     this.load(itemId, templateId, fields);

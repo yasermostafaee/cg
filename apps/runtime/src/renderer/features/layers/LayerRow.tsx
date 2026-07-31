@@ -19,7 +19,7 @@ import {
   loadTemplateOntoFixedSlot,
 } from '../fixedLayers/fixedSlotLoad.js';
 import { useTemplatePicker } from '../fixedLayers/useTemplatePicker.js';
-import { layerRowActions } from './layerRowActions.js';
+import { layerRowActions, MISSING_TEMPLATE_REASON } from './layerRowActions.js';
 import { rowState } from './rowState.js';
 import {
   ROW_GEOMETRY,
@@ -155,6 +155,8 @@ const styles = {
    * together, rather than one cell being dimmed while its neighbours stay bright.
    */
   onEmptyRow: { color: colors.emptyRow },
+  /** The 'template is not here' marker, quieter than the name it qualifies. */
+  missingTemplate: { color: colors.textMuted, fontStyle: 'italic' as const },
 } as const;
 
 /**
@@ -257,6 +259,13 @@ export function LayerRow({
           }) ?? slot.binding.templateType)
         : null;
 
+  /**
+   * The row is bound, but this browser does not hold the template. It cannot be
+   * put back on the layer, so the toggle offers the way OUT — and the row says
+   * why, in the template cell as well as on the control.
+   */
+  const templateMissing = item !== null && template === null;
+
   const coord = { channel: slot.channel, layer: slot.layer };
   const actions = layerRowActions({
     item,
@@ -280,6 +289,25 @@ export function LayerRow({
       if (input === null) return { accepted: false };
       return importAndLoadOntoFixedSlot(coord, () => pickFile(input));
     },
+    /**
+     * The post-CLEAR re-ADD: put the row's OWN bound template back, no picking.
+     *
+     * It goes through `loadTemplateOntoFixedSlot` — the SAME function the library
+     * picker uses once a template is chosen — so the re-ADD cannot drift from the
+     * ordinary load path. The only difference is where the template comes from:
+     * the row already knows it, so the operator is not asked.
+     *
+     * `template === null` is refused rather than guessed at. The toggle does not
+     * offer LOAD in that state (it shows REMOVE and says why), so this is the
+     * belt to that braces — reachable only if the two ever disagreed.
+     */
+    reload: async () => {
+      if (template === null) return { accepted: false, errorCode: 'unknown-template' };
+      return loadTemplateOntoFixedSlot(coord, template);
+    },
+    // A bound row can only be re-loaded if this browser still holds its
+    // template. `true` on an unbound row, where the question is meaningless.
+    templateAvailable: item === null || template !== null,
     loadFromLibrary: async () => {
       const template = await pickTemplate(`Load onto ${rowName}`);
       // The operator's own dismissal: not a success, not a refusal to report.
@@ -524,8 +552,23 @@ export function LayerRow({
       </span>
       {spec.showTemplate &&
         (templateLabel !== null ? (
-          <span style={styles.secondary} title={templateLabel} dir="auto">
+          <span
+            style={styles.secondary}
+            /*
+              A BOUND ROW WHOSE TEMPLATE IS NOT IN THIS BROWSER SAYS SO, visibly.
+              It is not a label edge case: the row is pointing at something that
+              is not here, which means it cannot be put back on the layer, and an
+              operator scanning the table has no other way to learn that. The
+              same string the LOAD/REMOVE toggle uses, so the cell and the
+              control cannot describe the row differently.
+            */
+            title={
+              templateMissing ? `${templateLabel} — ${MISSING_TEMPLATE_REASON}` : templateLabel
+            }
+            dir="auto"
+          >
             {templateLabel}
+            {templateMissing && <span style={styles.missingTemplate}> (not in this browser)</span>}
           </span>
         ) : (
           <span style={styles.empty}>Empty</span>

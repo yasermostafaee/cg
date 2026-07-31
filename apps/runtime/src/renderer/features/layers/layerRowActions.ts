@@ -61,6 +61,17 @@ import { isOnAir } from '../stack/onAir.js';
  * than trusted to agree.
  */
 
+/**
+ * What a bound row says when its template is not in this browser's library.
+ *
+ * Exported so the ROW can show it as well as the button: a bound row pointing at
+ * a template that is not here is a fact the operator needs to see while
+ * scanning, not something they discover by hovering the one control that is
+ * still enabled. The two surfaces read the same string by construction.
+ */
+export const MISSING_TEMPLATE_REASON =
+  'This row’s template is not in this browser’s library, so it cannot be put back on the layer. Re-import it, or REMOVE the row.';
+
 export interface LayerRowActionDeps {
   /** The stack item bound to this row, if any (the row's whole verb state). */
   item: StackItemState | null;
@@ -91,8 +102,25 @@ export interface LayerRowActionDeps {
   toggleRehearse: (itemId: string) => Promise<AsyncResult>;
   /** The one-action chain: pick a `.vcg`, import it, bind it to THIS row. */
   load: () => Promise<AsyncResult>;
+  /**
+   * Put this row's ALREADY-BOUND template back on its layer, with no picking.
+   *
+   * The post-CLEAR path. Distinct from `load` because the operator is doing a
+   * different thing — restoring what the row already holds, not choosing what it
+   * should hold — and because the file picker in `load` is exactly the step that
+   * made the reported defect tedious rather than merely wrong.
+   */
+  reload: () => Promise<AsyncResult>;
   /** Load a template already in the library onto this row (the picker path). */
   loadFromLibrary: () => Promise<AsyncResult>;
+  /**
+   * Is the row's bound template present in this browser's library?
+   *
+   * `false` means it cannot be re-loaded, so the toggle must offer the way OUT
+   * rather than a load that would be refused — and the row has to say why.
+   * Meaningless on an unbound row; callers pass `true` there.
+   */
+  templateAvailable: boolean;
   play: (itemId: string) => Promise<AsyncResult>;
   next: (itemId: string) => Promise<AsyncResult>;
   update: (itemId: string) => Promise<AsyncResult>;
@@ -122,7 +150,36 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   const offlineReason = linkDown
     ? 'Bridge disconnected — commands are refused until it reconnects.'
     : undefined;
-  const empty = item === null;
+  /**
+   * ── TWO FACTS THAT USED TO BE ONE FLAG ──────────────────────────────────────
+   *
+   * `empty` meant `item === null` and was read by controls that needed two
+   * different questions answered:
+   *
+   *   - HAS THIS ROW A TEMPLATE BOUND?  (`hasBinding`)
+   *   - IS THERE A PRODUCER ON THE LAYER? (`layerOccupied`)
+   *
+   * They agree until CLEAR, which destroys the producer and KEEPS the item — so
+   * the row stayed "not empty", the LOAD/REMOVE toggle went on showing REMOVE,
+   * and the operator could not put the template back without removing it and
+   * picking it again. That is the reported defect, and it is a conflation rather
+   * than a missing branch, so it is fixed by splitting the fact and naming which
+   * one each consumer means.
+   *
+   * `empty` survives ONLY as "no binding" for the verbs whose question really is
+   * that, and is renamed to say so.
+   */
+  const hasBinding = item !== null;
+  const empty = !hasBinding;
+  /**
+   * Is a producer resident on the layer?
+   *
+   * `unknown` is deliberately NOT occupied and NOT empty: it is the third
+   * answer, and every consumer below decides for itself which way to fail. The
+   * one thing none of them may do is treat silence as a fact (B-101).
+   */
+  const layerOccupied = deps.observed.kind === 'producer';
+  const layerKnownEmpty = deps.observed.kind === 'empty';
   const onAir = item !== null && isOnAir(item);
   // PLAY's own gate is narrower than `isOnAir`: an item already playing has
   // nothing to take. Kept as the stack row had it so the two never disagree
@@ -145,6 +202,40 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   const loadSafe = deps.observed.kind === 'empty';
 
   /**
+   * The bound template is not in THIS browser's library.
+   *
+   * Read as "cannot confirm the template is available", which is the fail-closed
+   * reading and the right one: the identity can also be absent transiently (the
+   * bridge cannot resolve it after ITS restart until the item is reloaded), and
+   * offering a re-ADD that the load path will refuse is worse than offering the
+   * way out. Either way the row must SAY so — see `MISSING_TEMPLATE_REASON`.
+   */
+  const templateMissing = hasBinding && deps.templateAvailable === false;
+
+  /**
+   * Does the toggle show LOAD? See the table at the control itself.
+   *
+   * An unbound row always offers LOAD (disabled unless the layer is known
+   * empty — unchanged). A BOUND row offers it only when the layer is KNOWN
+   * empty and the template is available; anything else, including `unknown`
+   * occupancy, shows REMOVE.
+   */
+  const showLoad = !hasBinding || (layerKnownEmpty && !layerOccupied && !templateMissing);
+
+  /**
+   * Why LOAD is refused, when it is — surfaced as the button's tooltip so the
+   * control is never silently dead.
+   *
+   * REHEARSE FIRST, because it is the one refusal the operator can act on
+   * immediately and the one with an on-air consequence behind it: LOAD is the
+   * path that can put an UNMUTED producer under a row the UI says is rehearsing.
+   */
+  const loadRefusal =
+    hasBinding && deps.rehearsing
+      ? 'This row is on PVW. Take it off PVW first — loading would put an unmuted graphic on the layer.'
+      : offlineReason;
+
+  /**
    * Every row verb is declared NEUTRAL.
    *
    * The buttons render `variant="verb"` regardless, but the MENU paints from this
@@ -162,12 +253,23 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     run: () => Promise<AsyncResult>,
     icon: RowAction['icon'],
     surface?: 'menu',
+    /**
+     * Override the tooltip. `offlineReason` is the default because "the bridge
+     * is down" is why almost every verb is refused — but a verb with a more
+     * specific reason must be able to say it, and a tooltip that explained the
+     * wrong refusal would be worse than none.
+     */
+    title?: string,
   ): RowAction => ({
     key,
     label,
     variant: 'verb',
     disabled: disabled || linkDown,
-    ...(offlineReason !== undefined ? { title: offlineReason } : {}),
+    ...(title !== undefined
+      ? { title }
+      : offlineReason !== undefined
+        ? { title: offlineReason }
+        : {}),
     run,
     onError,
     ...(icon !== undefined ? { icon } : {}),
@@ -189,8 +291,45 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     // that hides a destructive step behind a constructive label.
     // ONE key, so the list's shape is literally identical in both states and a
     // test can assert that: only the label, variant and handler flip.
-    empty
-      ? { ...act('load-remove', 'LOAD', !loadSafe, () => deps.load(), Download), tone: 'load' }
+    //
+    // ── WHICH HALF SHOWS, NOW THAT BINDING AND OCCUPANCY ARE SEPARATE ────────
+    //
+    //   binding | layer                       | shows
+    //   --------|-----------------------------|---------------------------------
+    //   no      | empty                       | LOAD  — pick + import + load
+    //   yes     | occupied                    | REMOVE
+    //   yes     | empty (post-CLEAR)          | LOAD  — re-ADD the bound template
+    //   yes     | empty, template MISSING     | REMOVE, and the row says why
+    //   yes     | unknown                     | REMOVE (fail closed)
+    //
+    // The third row is the defect: after CLEAR the item survives, so the toggle
+    // read REMOVE and the operator had to remove-and-re-pick to get the same
+    // graphic back. It re-ADDs WITHOUT PICKING — `stack.reload`'s behaviour
+    // reached through the control already in that position, rather than a new
+    // verb or a menu entry.
+    //
+    // The fourth row is what stops a row STRANDING. A bound row whose template
+    // has left this browser's library cannot load, so it must still be able to
+    // unbind — and it has to SAY the template is gone regardless, because a row
+    // pointing at nothing is a fact the operator needs, not a label edge case.
+    //
+    // `unknown` occupancy shows REMOVE deliberately: offering a re-ADD onto a
+    // layer we cannot vouch for would issue an adopt-CLEAR against a graphic
+    // nobody has claimed. Silence is not evidence of an empty layer (B-101).
+    showLoad
+      ? {
+          ...act(
+            'load-remove',
+            'LOAD',
+            // The re-ADD half needs no `loadSafe`: the layer is KNOWN empty on
+            // that branch, which is the same fact `loadSafe` tests.
+            hasBinding ? deps.rehearsing : !loadSafe,
+            () => (hasBinding ? deps.reload() : deps.load()),
+            Download,
+          ),
+          tone: 'load',
+          ...(loadRefusal !== undefined ? { title: loadRefusal } : {}),
+        }
       : {
           ...act(
             'load-remove',
@@ -198,6 +337,8 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
             false,
             () => (item === null ? noop() : deps.remove(item.itemId)),
             Trash2,
+            undefined,
+            templateMissing ? MISSING_TEMPLATE_REASON : undefined,
           ),
           // The two halves of ONE slot, and the reason `tone` is its own field:
           // they share a key, so only an explicit declaration can give them

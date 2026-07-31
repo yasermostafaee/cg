@@ -278,11 +278,24 @@ export const FixedLayersStateChangedChannel = definePublishChannel(
  *   exact-slot path is for the OPERATOR BANK only; a dynamic layer is
  *   `stack.load`'s business and this channel must never become a second,
  *   unfenced door onto an arbitrary layer.
- * - `slot-bound` — that fixed slot already carries an item. Rebinding is
- *   Remove-then-load, two explicit operator steps (the d1 rule: a compound
- *   verb must never hide a destructive step behind a constructive label).
+ * - `slot-bound` — the slot's layer already carries a producer, or the slot is
+ *   bound to a DIFFERENT item. Rebinding is Remove-then-load, two explicit
+ *   operator steps (the d1 rule: a compound verb must never hide a destructive
+ *   step behind a constructive label). It refuses on OCCUPANCY rather than on the
+ *   binding alone, so a row that has been CLEARed can take its own template back
+ *   — the producer is gone even though the item is not.
+ * - `rehearsing` — the row is on PVW. A load would put an UNMUTED producer under
+ *   a row the UI says cannot reach air, so it is refused HERE and not only by a
+ *   disabled button: a greyed control is a request, and a second browser with a
+ *   stale snapshot reaches this method with that opinion nowhere in sight. Same
+ *   spelling and same reasoning as `stack.take`'s interlock.
  */
-export const FIXED_LAYERS_LOAD_REASONS = ['unknown-template', 'not-fixed', 'slot-bound'] as const;
+export const FIXED_LAYERS_LOAD_REASONS = [
+  'unknown-template',
+  'not-fixed',
+  'slot-bound',
+  'rehearsing',
+] as const;
 
 /**
  * R-021 stage 3 — create an item bound to an EXACT fixed slot and pre-roll it

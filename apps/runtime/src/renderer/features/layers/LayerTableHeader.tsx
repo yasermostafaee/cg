@@ -78,7 +78,11 @@ const styles = {
     top: 0,
     zIndex: 2,
     // Opaque: rows scroll UNDER this, so any transparency shows them through it.
-    background: colors.panelMuted,
+    // Exact value specified by the owner, and a literal rather than a token
+    // because it is this header's own colour — it is deliberately lighter than
+    // both row backgrounds so the sticky band reads as a lid on the list rather
+    // than as one more row of it.
+    background: 'rgb(45 55 69)',
     borderBottom: `1px solid ${colors.border}`,
     fontSize: '0.62rem',
     fontWeight: 700,

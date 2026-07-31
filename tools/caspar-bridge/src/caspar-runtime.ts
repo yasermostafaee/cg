@@ -937,10 +937,78 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, false, 'not-fixed');
       return { accepted: false, errorCode: 'not-fixed' };
     }
+    /**
+     * R-022 — THE LOAD INTERLOCK, and it lives here for the reason `take()`'s
+     * does: a disabled button is a request, not a guarantee.
+     *
+     * A load puts a producer on the layer, and a bare `CG ADD` is audible on air
+     * on 2.5.0 (R-029) — so loading under a row the UI says is on PVW is exactly
+     * the unmuted-producer-under-a-rehearsing-row case rehearse exists to
+     * prevent. Once LOAD works on a CLEARED row, this became reachable in one
+     * click, which is why the guard arrives with that fix rather than after it.
+     *
+     * The renderer disables the button and says why; this is what holds when the
+     * button's opinion is absent — a second browser with a stale rehearse
+     * snapshot, a client that reconnected mid-rehearse, or a direct channel call.
+     *
+     * Refused rather than silently exiting rehearse and loading: leaving the mode
+     * is the operator's decision, and a LOAD that dropped the interlock would be
+     * a compound verb hiding a mode change behind a load — the same objection
+     * that keeps re-binding a row two explicit steps.
+     *
+     * Keyed on the ITEM ALREADY BOUND to the slot, not on the incoming `itemId`:
+     * what must be protected is the row that is on PVW, and a load arriving with
+     * a fresh item id is precisely the case a check on the incoming id would miss.
+     */
+    const rehearsingHere = this.#itemBoundToSlot(slot);
+    if (rehearsingHere !== undefined && this.#rehearsing.has(rehearsingHere)) {
+      this.#reconciler.applyAck(seq, false, 'rehearsing');
+      return { accepted: false, errorCode: 'rehearsing' };
+    }
     // The registry's OWN templateType — the LayerManager records what is bound,
     // and the per-slot publish reads it straight back out, so the row names the
     // template kind the operator recognises rather than an internal id.
     const templateType = this.#templates.get(templateId)?.templateType ?? templateId;
+    /**
+     * `slot-bound` NOW REFUSES ON OCCUPANCY, NOT ON THE BINDING.
+     *
+     * It used to be `!bindFixed(...)`, which is false whenever the slot carries
+     * ANY binding — and a CLEARed row still carries one, because `out()` destroys
+     * the producer and leaves the item. So the layer refused the one load that
+     * should always work: putting the row's OWN already-bound template back after
+     * a CLEAR. That is the second half of the reported defect; the row's toggle
+     * was the half the operator could see.
+     *
+     * The two facts are separated here:
+     *
+     *   - REBINDING A ROW TO A DIFFERENT ITEM stays refused whatever the layer
+     *     says. Remove-then-load is two explicit steps by decision, and nothing
+     *     about an empty layer makes silently moving a row's binding acceptable.
+     *   - THE SAME ITEM RE-LOADING is refused only while a producer is actually
+     *     RESIDENT. With one there, this would be a reload of a live layer, which
+     *     the operator reaches through CLEAR first; with none, it is the re-ADD.
+     *
+     * `#loaded` IS the occupancy signal, deliberately, and not OSC. It is the
+     * bridge's own producer record — exactly what `out()` deletes and exactly what
+     * `take()`'s B-039 pre-roll reads to decide whether to re-ADD — so the load
+     * path and the take path cannot disagree about whether a producer exists. OSC
+     * would have been the wrong axis twice over: it is absent on OSC-less installs
+     * (B-101 — silence is not evidence), and a wire that cannot be heard would
+     * then refuse every re-ADD on precisely the plants this fixes.
+     */
+    const boundItemId = this.#itemBoundToSlot(slot);
+    if (boundItemId !== undefined && boundItemId !== itemId) {
+      this.#reconciler.applyAck(seq, false, 'slot-bound');
+      return { accepted: false, errorCode: 'slot-bound' };
+    }
+    if (boundItemId === itemId && this.#loaded.has(itemId)) {
+      this.#reconciler.applyAck(seq, false, 'slot-bound');
+      return { accepted: false, errorCode: 'slot-bound' };
+    }
+    // Re-binding the SAME item onto its own empty row: drop the stale binding so
+    // `bindFixed` can record it again. `unbindFixed` keeps the slot fenced out of
+    // the dynamic pool, so this cannot leak a fixed layer into allocation.
+    if (boundItemId === itemId) this.#layers.unbindFixed(slot);
     if (!this.#layers.bindFixed(slot, templateType)) {
       this.#reconciler.applyAck(seq, false, 'slot-bound');
       return { accepted: false, errorCode: 'slot-bound' };
@@ -3522,6 +3590,21 @@ export class CasparRuntime {
     const { ok } = await this.#send(this.#builder.load(slot, templateArg, fields), seq, 'normal');
     if (ok) this.#loaded.add(itemId);
     return ok;
+  }
+
+  /**
+   * The item currently bound to a slot, or undefined when the slot is free.
+   *
+   * `#slots` is itemId → slot, so this is its inverse. Kept as one helper rather
+   * than an inline scan at each site because `loadFixed`'s refusal now depends on
+   * WHICH item is bound, and a second copy of "who is on this layer" is how the
+   * binding/occupancy conflation this method exists to resolve got started.
+   */
+  #itemBoundToSlot(slot: CommandSlot): string | undefined {
+    for (const [itemId, s] of this.#slots) {
+      if (s.channel === slot.channel && s.layer === slot.layer) return itemId;
+    }
+    return undefined;
   }
 
   #markDirty(itemId: string): void {

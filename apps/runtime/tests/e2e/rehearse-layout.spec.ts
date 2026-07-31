@@ -173,11 +173,11 @@ test('row verbs rest neutral, tint on hover, and only the engaged toggle stays f
   // the click, which matters most on this surface because its STOP and CLEAR mean
   // the OPPOSITE of the reference product's.
   await row.getByRole('button', { name: 'CLEAR', exact: true }).hover();
-  await expectBg('CLEAR', 'rgb(141, 52, 4)'); // --r-verb-clear #8D3404
+  await expectBg('CLEAR', 'rgb(222, 81, 5)'); // --r-verb-clear #DE5105
   await row.getByRole('button', { name: 'PLAY', exact: true }).hover();
-  await expectBg('PLAY', 'rgb(1, 120, 1)'); // --r-verb-play #017801
+  await expectBg('PLAY', 'rgb(34, 221, 122)'); // --r-verb-play #22DD7A
   await row.getByRole('button', { name: 'REMOVE', exact: true }).hover();
-  await expectBg('REMOVE', 'rgb(157, 0, 0)'); // --r-verb-remove #9D0000
+  await expectBg('REMOVE', 'rgb(255, 0, 0)'); // --r-verb-remove #FF0000
 
   // A DISABLED verb does not light up. STOP is disabled on a loaded-not-aired
   // row, and every hover rule carries `:not(:disabled)` precisely so an inert
@@ -217,7 +217,7 @@ test('row verbs rest neutral, tint on hover, and only the engaged toggle stays f
 
   const play = row.getByRole('button', { name: 'PLAY', exact: true });
   await expect(play).toBeDisabled();
-  await expectBg('PLAY', 'rgb(1, 120, 1)'); // --r-verb-play #017801
+  await expectBg('PLAY', 'rgb(34, 221, 122)'); // --r-verb-play #22DD7A
 });
 
 test('the transport reads PLAY / NEXT / STOP, and the caveats cost no permanent height', async ({

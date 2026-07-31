@@ -162,12 +162,12 @@ export const cssVars = {
    * them. Do not reuse these anywhere a control RESTS: that would be the neutral
    * rule reopened, one surface at a time.
    */
-  '--r-verb-load': '#127694',
-  '--r-verb-remove': '#9D0000',
-  '--r-verb-play': '#017801',
-  '--r-verb-next': '#1B7853',
-  '--r-verb-stop': '#7A6011',
-  '--r-verb-clear': '#8D3404',
+  '--r-verb-load': '#1AACD8',
+  '--r-verb-remove': '#FF0000',
+  '--r-verb-play': '#22DD7A',
+  '--r-verb-next': '#2EBEA1',
+  '--r-verb-stop': '#B38D18',
+  '--r-verb-clear': '#DE5105',
   // Spacing (4px base)
   '--r-space-1': '4px',
   '--r-space-2': '8px',

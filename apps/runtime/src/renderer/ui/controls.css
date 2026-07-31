@@ -36,12 +36,12 @@
   --r-offline: #94a3b8;
   --r-rehearsing: #a78bfa;
   --r-rehearsing-strong: #7c3aed;
-  --r-verb-load: #127694;
-  --r-verb-remove: #9d0000;
-  --r-verb-play: #017801;
-  --r-verb-next: #1b7853;
-  --r-verb-stop: #7a6011;
-  --r-verb-clear: #8d3404;
+  --r-verb-load: #1aacd8;
+  --r-verb-remove: #ff0000;
+  --r-verb-play: #22dd7a;
+  --r-verb-next: #2ebea1;
+  --r-verb-stop: #b38d18;
+  --r-verb-clear: #de5105;
 
   --r-space-1: 4px;
   --r-space-2: 8px;
@@ -310,7 +310,15 @@
   /* One shared shape; the fill itself comes from the per-tone rules below. */
   box-shadow: var(--r-shadow-1);
   filter: none;
-  color: var(--r-text);
+  /*
+   * A DARK foreground, not the surface's light `--r-text`, and it flipped when
+   * the palette got brighter. Against this set of hover fills every one is a
+   * mid-to-light colour: light text on `#22dd7a` measures about 1.5:1 and on
+   * `#2ebea1` about 2:1 — unreadable, and below the 3:1 WCAG 1.4.11 floor these
+   * glyphs need as non-text content. Near-black clears ~4.4:1 on the darkest of
+   * the six and ~9:1 on the lightest, so ONE foreground serves all of them.
+   */
+  color: #10151f;
 }
 .cg-btn[data-verb-tone='load']:hover:not(:disabled) {
   background: var(--r-verb-load);
@@ -381,14 +389,18 @@
  * ON AIR, so it wears PLAY's green rather than the rehearse violet — the button
  * and the row's state mark then say the same thing about the same row.
  *
- * The DARK weight (`--r-verb-play`), not the bright `--r-onair`: that one is a
- * TEXT colour for the state mark and is unreadable as a background. Same
- * two-weight split as the rehearse pair — one hue, one weight to write with and
- * one to fill with.
+ * `--r-verb-play`, PLAY's own green, rather than the state mark's `--r-onair`:
+ * one hue, two weights, the same split the rehearse pair uses.
+ *
+ * The FOREGROUND is near-black here for the reason the hover block above gives —
+ * this green is light, and the white the other `.is-on` fills use would leave the
+ * glyph at about 1.5:1. It is repeated rather than inherited because `.is-on`'s
+ * base rule sets `color: #fff` for the violet, and only the play tone overrides it.
  */
 .cg-btn[data-verb-tone='play'].is-on {
   background: var(--r-verb-play);
   border-color: var(--r-verb-play);
+  color: #10151f;
 }
 .cg-btn--verb.is-on:hover:not(:disabled),
 .cg-btn--neutral.is-on:hover:not(:disabled),
@@ -975,6 +987,31 @@ input[type='checkbox']:disabled:checked {
 .cg-row:hover,
 .cg-row.has-template:hover {
   background: var(--r-surface-raised);
+}
+
+/*
+ * AN EMPTY ROW IS NOT INTERACTIVE, and now stops claiming to be.
+ *
+ * It carried `cursor: pointer` and a hover fill because both live on `.cg-row`,
+ * which is every row — so a row with nothing on it invited a click that does
+ * nothing. Not merely cosmetic: clicking an empty row already reports `null`
+ * (there is no item to select, and `layerRow.dom.test.ts` pins exactly that), so
+ * the affordance was advertising an action the row cannot perform. Thirty rows of
+ * false affordance is also thirty rows of hover noise while the eye travels to
+ * the one row that matters.
+ *
+ * Its VERBS keep their own cursors and hovers — LOAD is real on an empty row, and
+ * this rule is about the row SURFACE, not the controls sitting on it.
+ *
+ * `:not(.has-template)` rather than a new class: `has-template` already carries
+ * "this row has something on it", and a second flag for the same fact is how the
+ * two come to disagree.
+ */
+.cg-row:not(.has-template) {
+  cursor: default;
+}
+.cg-row:not(.has-template):hover {
+  background: transparent;
 }
 
 /*
