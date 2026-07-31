@@ -13,7 +13,7 @@ import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
 import { useStack } from '../../hooks/useStack.js';
-import { useFixedBank, useFixedSlots } from '../../hooks/useFixedLayers.js';
+import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { usePlayoutLayers } from '../../hooks/usePlayoutLayers.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { bankPosition, isLayerVisible, isRehearsing } from '@cg/shared-ipc';
@@ -83,8 +83,22 @@ export function LayersPanel({
   inspectorOpen,
   onToggleInspector,
 }: Props): JSX.Element {
-  const bank = useFixedBank();
-  const slots = useFixedSlots();
+  /**
+   * §3 — THE LIST AND WHETHER IT HAS ARRIVED, never the list alone.
+   *
+   * Both snapshots are read in their `{ value, ready }` form so an UNREADY list
+   * cannot render as an EMPTY one. Before this, a Runtime opened before the bridge
+   * was up showed the operator "No candidate layers are declared" — a paragraph
+   * telling him his station has no rows — and then quietly filled in seconds
+   * later. He had no way to know it was about to.
+   *
+   * They are two independent snapshots and BOTH must have landed: a ready bank
+   * over unready slots renders the declared range as a list with nothing on it,
+   * which is the same lie one snapshot along.
+   */
+  const { bank, ready: bankReady } = useFixedBankState();
+  const { slots, ready: slotsReady } = useFixedSlotsState();
+  const listReady = bankReady && slotsReady;
   // R-022 — ONE rehearse snapshot for the whole table, from the bridge.
   const rehearsals = useRehearse();
   const playout = usePlayoutLayers();
@@ -408,7 +422,32 @@ export function LayersPanel({
       */}
       <Tabs tabs={tabs} activeId={activeTab} onSelect={setActiveTab} ariaLabel="Layer surfaces">
         {activeTab === 'layers' ? (
-          bank === null ? (
+          !listReady ? (
+            /*
+              §3 — WAITING, said in a way that cannot be read as EMPTY.
+
+              It ends when the DATA arrives — `ready` latches on the first snapshot,
+              a push or a resolved pull — never on a timer and never on a guess. A
+              timer would either uncover an empty list too early or hold a real one
+              back, and both are worse than the wait itself.
+
+              `role="status"` and not `alert`: nothing is wrong. This is the
+              ordinary first second of a page, and the operator is being told what
+              the console is doing rather than warned about it.
+
+              NO CONFLICT WITH THE UNBOUND-ROW RULE. "This row has no template
+              bound" is a fact about our list and reads EMPTY on the row. "We have
+              not received the list yet" is not a fact about any row, so it is not
+              said on one.
+            */
+            <div style={styles.empty} role="status" data-layers-loading="">
+              <strong style={{ color: colors.text }}>Loading the layer list…</strong>
+              <span>
+                Waiting for the bridge to send the declared rows. This is not an empty list — the
+                rows appear as soon as it answers.
+              </span>
+            </div>
+          ) : bank === null ? (
             <div style={styles.empty}>
               <strong style={{ color: colors.text }}>No candidate layers are declared.</strong>
               <span>
