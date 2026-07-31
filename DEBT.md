@@ -10,6 +10,116 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### ✅ `dev-offline-polish` — ALL EIGHT ITEMS DONE, one commit each
+
+`dev-offline-ux` is CLOSED and superseded; discard every version of it. Eight commits,
+`520a969`…`39077e7`. What follows is the two REPORTS the task asked for, plus the
+findings worth carrying.
+
+**§1 — the `PlayoutPanel` comment did NOT mean reachability, and the reading is worth
+recording.** It sits on the `else` branch of `state.clearable` and says "an operator must
+not be left wondering whether the control would work if they tried harder. No control at
+all, and the reason is in the row." That governs the LAYER-STATE gate — a video occupant,
+an unverifiable occupancy, an empty layer — where the reason is a PERMANENT property of
+what is on the layer and printed beside it. Reachability is the opposite kind of fact:
+transient, nothing to do with that layer, gone the instant the link returns. So the
+layer-state gate is untouched (those controls are still ABSENT, still pinned by the specs
+above it) and reachability disables a control that IS offered. Two different rules on one
+button; conflating them would have deleted a decision nobody revisited.
+
+**§4 — EVERY OTHER STATE LABEL, and which of the three treatments it falls into.**
+Requested by the task; only the four it names are implemented, the rest are classified:
+
+| label                   | source                   | treatment                                                                                                    |
+| ----------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `EMPTY`                 | unbound row              | **Normal** — a fact about OUR list. Implemented.                                                             |
+| `READY`                 | `loaded` / `idle`        | **Grey, no rename.** Implemented.                                                                            |
+| `ON AIR` → `WAS ON AIR` | `unverified`             | **Past tense + grey.** Implemented (the air mask now fires on the second hop too).                           |
+| header `(n)`            | on-air tally             | **Grey, no rename.** Implemented.                                                                            |
+| `ON PVW`                | rehearse                 | **Normal** — local preview, still true and still actionable; the row branch returns before the grey.         |
+| `TAKING` / `UPDATING`   | transient                | **Normal** — a transition, not a claim; it resolves to `unverified` or `error` within one bounded expiry.    |
+| `EXIT`                  | `exiting`                | **Normal**, same reason.                                                                                     |
+| `UNCONFIRMED`           | B-044 timeout            | **Normal** — already amber and already means "the air result is unknown". Greying it would soften a warning. |
+| `ON AIR?`               | B-093 blind tap          | **Normal** — an open QUESTION whose whole point is that the graphic is probably still burning.               |
+| `ERROR` / `OFFLINE`     | `error` / `disconnected` | **Normal** — greying a fault hides it. Red here means "go and look", which is still true.                    |
+
+Only `READY` and the count were changed, per the owner. The `unverifiable` flag IS set on
+every bound row while a hop is down (it is the honest fact), but it only changes a COLOUR
+where the rule says so — so extending the grey later is a one-line decision, not a redesign.
+
+**§8 — THE ERROR-NAMING SWEEP, in full, including the sites judged fine.**
+
+_Named the wrong mechanism — FIXED:_
+
+| site                                 | said                                        | was                                                           |
+| ------------------------------------ | ------------------------------------------- | ------------------------------------------------------------- |
+| `#sendAdd` → `take()` B-039 pre-roll | `amcp-error`                                | `template-serve-down` (OUR http server) or the real AMCP code |
+| `take()` final `CG PLAY`             | `amcp-error`                                | `amcp-send-failed` (never left) or `amcp-<code>`              |
+| `playoutClearRefusal('amcp-error')`  | "the clear REACHED CasparCG"                | it does not know that; the commonest cause never left         |
+| `errorCodeMessage('amcp-error')`     | _(no entry)_ → "Not accepted (amcp-error)." | reads as a diagnosis while being the absence of one           |
+
+_Dropped a reason it already had — FIXED:_ `stopItem()` and `out()` both destructured only
+`{ ok }` from `#send` and answered a bare `{ accepted: false }`. `out()` is the worse one:
+CLEAR is the escape hatch, and "never left" (wait for the link) versus "CasparCG refused"
+(the graphic is still on air, find another route) is the whole decision the operator has to
+make. `load()` knew `template-serve-down` and did not return it — the code existed on the
+ITEM but never reached the caller that raises the toast.
+
+_Judged FINE, and why:_
+
+- `update()` and `nextItem()` already did `errorCode ?? 'amcp-error'`. Correct as written.
+- `mute-failed`'s sentence still says "CasparCG refused to mute the layer". It has NO
+  PRODUCER (recorded in `shared-ipc/channels/rehearse.ts`), deliberately kept so that
+  failing closed on a genuine refusal stays a one-line decision. An unreachable string
+  cannot mislead; deleting it would cost the option.
+- `fixedLayersReasonMessage`'s ten codes are all GUARD VERDICTS (`untick-occupied`,
+  `renumber-refused`, …). They name a rule, not a mechanism, and the rule is what fired.
+- `errorCodeMessage`'s `disconnected`, `no-layer*`, `not-fixed`, `slot-bound`, `not-in-bank`,
+  `reserved`, `rehearsing` — same class, all pre-send refusals that know exactly why.
+- The `amcp-<code>` passthrough (`amcp-404` → "CasparCG refused the command (AMCP 404)")
+  is the one place the mechanism IS known, and it says so precisely. Asserted, so the
+  honesty fix above cannot be "tidied" into making every failure vague.
+
+_NOT fixed, and it needs a schema decision:_ `layers.clear`, `fixedLayers.clearLayer` and
+`playoutLayers.clear` all narrow their failure to the literal `'amcp-error'` in a **Zod enum**
+(`FIXED_LAYERS_CLEAR_LAYER_REASONS` et al), so the real code cannot ride out even though
+`#send` has it. The WORDING is now honest ("it is not known whether…"), which was the part a
+words-and-states batch could fix; widening the enums to carry `amcp-send-failed` /
+`amcp-<code>` is a `@cg/shared-ipc` change on three channels and belongs with the numbered
+filing.
+
+**Other things worth carrying:**
+
+- **`useCasparReach` is three-valued, and the third value is a WORDING distinction only.**
+  `connecting` (health not yet answered) still REFUSES exactly as `unreachable` does — unknown
+  fails closed — and `useCasparReachable` folds them back into one boolean so no caller can
+  read "not told yet" as permission. The split exists because the boot window was telling the
+  operator _"CasparCG cannot be reached"_ on every load, and a warning that fires twice a day
+  on a healthy plant is one nobody reads on the day it is true. The same rule is why §4's grey
+  and past tense fire on `unreachable` ONLY.
+- **The adversarial review found the Inspector naming the wrong hop.** `Apply` was
+  `disabled={!casparReachable}` with `CASPAR_UNREACHABLE_REASON` — and a DEAD BRIDGE looks
+  identical from there (health absent), so the one control the operator reaches for after
+  typing an edit sent him to the playout machine. It reads the link now and resolves through
+  the shared `casparRefusalReason`.
+- **`StatusBar` resolves the second hop ONCE and hands it down.** Giving `LinkIndicator` the
+  hook opened a second `useConnections` subscription inside the same component — a duplicate
+  pull on every reconnect (caught by `statusBar.linkTransition`'s pull COUNT, which is the only
+  test in the repo that would have) and, worse, two independent readings of one fact in one
+  footer, which is the shape §7 exists to end. Note the pre-existing cost this does NOT fix:
+  every `LayerRow` calls the hook, so a thirty-row table holds thirty health subscriptions.
+- **§6 required the picker to gain an IMPORT control, and that is not scope creep.** `LOAD`
+  opens the picker now; on a fresh install the list is empty, so a picker that was the only
+  route to importing while advising the operator to "import a .vcg first" would be a dead end.
+  `pickTemplate` therefore has three outcomes (`TemplateInfo | 'import' | null`).
+- **THE FIXTURE TRAP DID NOT RECUR, and two stubs had to be extended for it.**
+  `orphanLayersBanner` and `playoutPanel` had NO `connections` and (the first) no `link` at
+  all — adding `useCasparReach` pulls `useLink` in transitively. Both now select a state BY
+  NAME from `tests/support/reachability.ts`, and every new spec sweeps `caspar-down`,
+  `unknown`, `bridge-down` and `test-mode` rather than one of them.
+- **`renderLayerRow` gained a `reach` option** (defaulting `both-up`), because the §2 boot
+  window is only reachable through the real hook reading a `null` health on a LIVE link.
+
 ### 🔴 The reachability gate disabled the entire console in TEST MODE — caught only by `gate:e2e`
 
 **Filed as a bug class, not a fix note.** Landed as `8613772`, the session after the gate itself.
