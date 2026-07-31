@@ -119,6 +119,50 @@ test('a fullscreen PREVIEW keeps its own EXIT control on screen', async ({ app }
   await expect(page.getByRole('region', { name: 'PROGRAM' })).toBeVisible();
 });
 
+/**
+ * R-022 — the REHEARSE toggle is FILLED while its mode is engaged, in the row's
+ * own REHEARSING violet, and it is the only row verb that wears a colour.
+ *
+ * Asserted on the PAINTED colour in a real browser rather than on a class name:
+ * the class landing and the fill rendering are two different claims, and it is
+ * the second one the operator sees. The row verbs are otherwise neutral by
+ * decision, so the second half of this test is the rule still holding.
+ */
+test('the engaged REHEARSE toggle is filled violet; every other verb stays neutral', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const layer = await app.importVcg('valid.vcg', await buildValidVcg('tpl-e2e-1'));
+  const row = app.layerRow(layer);
+
+  const bg = (name: string): Promise<string> =>
+    row
+      .getByRole('button', { name, exact: true })
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+
+  // Before: the toggle is neutral like every other verb.
+  const restingRehearse = await bg('REHEARSE');
+  const restingClear = await bg('CLEAR');
+  expect(restingRehearse).toBe(restingClear);
+
+  await row.getByRole('button', { name: 'REHEARSE', exact: true }).click();
+  await expect(row.getByRole('button', { name: 'END REHEARSE', exact: true })).toBeVisible();
+  // Park the pointer off the row. A `click()` leaves the mouse ON the button, so
+  // reading the colour straight after samples the HOVER fill (#8B5CF6) — which is
+  // a real rule and not the one this test is about. Without this the assertion
+  // pins the hover shade and the resting fill goes unchecked.
+  await page.mouse.move(0, 0);
+
+  // After: filled with `--r-rehearsing-strong` (#7C3AED).
+  expect(await bg('END REHEARSE')).toBe('rgb(124, 58, 237)');
+
+  // …and NOTHING else on the row changed colour. Colour came off the row verbs
+  // because thirty coloured affordances drowned the state signal; a lit toggle
+  // says a MODE IS ON, which is a different claim, and it must stay the only one.
+  expect(await bg('CLEAR')).toBe(restingClear);
+});
+
 test('the transport reads PLAY / NEXT / STOP, and the caveats cost no permanent height', async ({
   app,
 }) => {

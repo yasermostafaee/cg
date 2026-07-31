@@ -300,6 +300,43 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     expect(empty.find((a) => a.key === 'rehearse')?.disabled).toBe(true);
   });
 
+  /**
+   * R-022 — the ENGAGED toggle is the ONE row verb that wears a colour, and it
+   * wears the row's own REHEARSING violet.
+   *
+   * Asserted on the DECLARATION rather than on a hex, like every other colour
+   * claim in this suite: the value lives in `--r-rehearsing-strong` and the
+   * declaration is what the button and its right-click twin both read, so this
+   * pins the property that can actually break — the fill following the mode, and
+   * following it on the rehearsing row ONLY.
+   *
+   * The neutral rule is unaffected and that is the point of the second half: every
+   * other verb stays colourless in both states. Colour on a row verb was removed
+   * because thirty coloured affordances drowned the state signal; a lit toggle is
+   * not an affordance advertising what it COULD do, it is a mode saying it IS on.
+   */
+  it('R-022 — only the REHEARSE toggle lights, only while rehearsing', () => {
+    const loaded = deps(itemWith('loaded'), true);
+
+    const idle = layerRowActions(loaded);
+    expect(idle.find((a) => a.key === 'rehearse')?.active).toBe(false);
+
+    const rehearsing = layerRowActions({ ...loaded, rehearsing: true });
+    expect(rehearsing.find((a) => a.key === 'rehearse')?.active).toBe(true);
+
+    // The fill and the WORD read the same flag, so they cannot disagree about
+    // which mode the row is in — a lit button labelled REHEARSE would be a lie.
+    expect(rehearsing.find((a) => a.key === 'rehearse')?.label).toBe('END REHEARSE');
+
+    // NO OTHER VERB lights, in either state. This is the neutral rule still
+    // holding, asserted rather than assumed.
+    for (const actions of [idle, rehearsing]) {
+      for (const action of actions.filter((a) => a.key !== 'rehearse')) {
+        expect(action.active ?? false, `${action.key} must stay neutral`).toBe(false);
+      }
+    }
+  });
+
   it('every menu item is disabled exactly when its declaration is — no second door', () => {
     for (const status of ['idle', 'loaded', 'on-air', 'playing'] as const) {
       const actions = actionsFor(deps(itemWith(status), true));

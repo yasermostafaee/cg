@@ -81,15 +81,39 @@ export function buttonClass(variant: ButtonVariant = 'default', extra = ''): str
  */
 export function Button({
   variant = 'default',
+  active,
   className,
   children,
   ...rest
 }: {
   variant?: ButtonVariant;
+  /**
+   * This control is a TOGGLE and it is currently ENGAGED — paints the `.is-on`
+   * fill from `controls.css`.
+   *
+   * A prop on the primitive rather than a class name callers pass, for the reason
+   * every other state here is: `is-on` is one typo away from silently doing
+   * nothing, and a renderer that hand-spells control classes is the ad-hoc styling
+   * the design system forbids.
+   *
+   * NO `aria-pressed`, deliberately. The only toggle using this flips its LABEL
+   * (REHEARSE ↔ END REHEARSE), and a changing label plus `aria-pressed` announces
+   * the state twice and contradictorily — "END REHEARSE, pressed". The label
+   * already carries the state for assistive tech; this prop is the VISUAL half.
+   * A future toggle with a STATIC label should pass `aria-pressed` itself.
+   */
+  active?: boolean;
   children: ReactNode;
 } & ButtonHTMLAttributes<HTMLButtonElement>): JSX.Element {
   return (
-    <button type="button" className={buttonClass(variant, className)} {...rest}>
+    <button
+      type="button"
+      className={buttonClass(
+        variant,
+        [active === true ? 'is-on' : '', className].filter(Boolean).join(' '),
+      )}
+      {...rest}
+    >
       {children}
     </button>
   );

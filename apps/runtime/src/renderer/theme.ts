@@ -128,6 +128,24 @@ export const cssVars = {
   '--r-ready': colors.ready,
   '--r-idle': colors.idle,
   '--r-offline': colors.offline,
+  /**
+   * R-022 — the REHEARSE hue, in the two weights a hue needs on this surface.
+   *
+   * `--r-rehearsing` is the state colour itself, as worn by the row's REHEARSING
+   * mark. `--r-rehearsing-strong` is the darker weight a FILL needs so light text
+   * on it stays legible — the same two-weight split `--r-accent`/`--r-accent-strong`
+   * and `--r-danger`/`--r-danger-strong` already use, and for the same reason: the
+   * light state hue is a text colour and makes an unreadable background.
+   *
+   * The ONLY control allowed to wear this is the REHEARSE toggle while rehearse is
+   * ENGAGED. That is not a hole in the "row verbs are neutral" rule, it is the
+   * other side of it: neutral bans colour used to advertise AVAILABILITY (which is
+   * what drowned the state signal across thirty rows), and this says a MODE IS ON
+   * — the same thing the row's own state mark says, in the same colour, so the two
+   * cannot disagree about which row is rehearsing.
+   */
+  '--r-rehearsing': colors.rehearsing,
+  '--r-rehearsing-strong': '#7C3AED',
   // Spacing (4px base)
   '--r-space-1': '4px',
   '--r-space-2': '8px',

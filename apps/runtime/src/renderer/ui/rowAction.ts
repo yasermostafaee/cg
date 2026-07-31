@@ -67,6 +67,16 @@ export interface RowAction {
    * to know which one they are about to press.
    */
   icon?: LucideIcon | undefined;
+  /**
+   * R-022 — this action is a TOGGLE and its mode is currently ENGAGED. Renders the
+   * button filled in that mode's hue (`.is-on`, `controls.css`).
+   *
+   * Declared HERE with the label, the icon and the variant for the reason the rest
+   * of this interface exists: the row's button and its right-click twin are built
+   * from one declaration, so a lit toggle cannot end up lit in one surface and
+   * plain in the other. Absent/false is the ordinary case.
+   */
+  active?: boolean | undefined;
 }
 
 /**

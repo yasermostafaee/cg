@@ -235,14 +235,25 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
      *
      * While rehearsing, the toggle stays enabled — leaving is always available,
      * and it is the ONLY way back to a playable row.
+     *
+     * ENGAGED, IT IS THE ONE ROW VERB THAT WEARS A COLOUR (`active`), filled in the
+     * same violet the row's REHEARSING mark uses. The verbs are otherwise neutral
+     * on purpose — thirty rows of coloured affordances drowned the state signal —
+     * and this does not reopen that: neutral bans colour advertising what a control
+     * COULD do, whereas a lit toggle says a mode IS ON, which is the state cell's
+     * own statement in the state cell's own hue. Reading `deps.rehearsing`, the
+     * same flag that flips the label, so the fill and the word cannot disagree.
      */
-    act(
-      'rehearse',
-      deps.rehearsing ? 'END REHEARSE' : 'REHEARSE',
-      empty || (!deps.rehearsing && onAir),
-      () => (item === null ? noop() : deps.toggleRehearse(item.itemId)),
-      MonitorPlay,
-    ),
+    {
+      ...act(
+        'rehearse',
+        deps.rehearsing ? 'END REHEARSE' : 'REHEARSE',
+        empty || (!deps.rehearsing && onAir),
+        () => (item === null ? noop() : deps.toggleRehearse(item.itemId)),
+        MonitorPlay,
+      ),
+      active: deps.rehearsing,
+    },
   ];
 
   actions.push(

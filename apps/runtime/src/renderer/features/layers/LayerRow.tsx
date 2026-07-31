@@ -547,6 +547,10 @@ export function LayerRow({
             disabled={action.disabled}
             onError={action.onError}
             iconOnly
+            // R-022 — a TOGGLE whose mode is engaged paints filled (REHEARSE while
+            // rehearsing). Read from the action's own declaration so the button and
+            // its right-click twin cannot disagree.
+            active={action.active === true}
             aria-label={action.label}
             // The tooltip. `title` is why-disabled when the action is refused,
             // and otherwise the verb itself — an icon-only control must say what

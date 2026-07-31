@@ -34,6 +34,8 @@
   --r-ready: #38bdf8;
   --r-idle: #3f3f46;
   --r-offline: #94a3b8;
+  --r-rehearsing: #a78bfa;
+  --r-rehearsing-strong: #7c3aed;
 
   --r-space-1: 4px;
   --r-space-2: 8px;
@@ -265,6 +267,54 @@
   /* Higher than the shared 0.45: the glyph still has to be IDENTIFIABLE, because
      which verbs a row is offering is information even when they are inert. */
   opacity: 0.6;
+}
+
+/*
+ * `.is-on` — a TOGGLE that is currently ENGAGED, filled in its mode's own hue.
+ *
+ * Only REHEARSE uses it today, and the hue is the row's own REHEARSING violet, so
+ * the lit button and the state mark on the same row cannot disagree about which
+ * mode that row is in.
+ *
+ * WHY THIS IS NOT A HOLE IN "ROW VERBS ARE NEUTRAL". That rule bans colour used to
+ * advertise AVAILABILITY — thirty rows of coloured affordances drowned the state
+ * signal, which is why the verbs went neutral in the first place. `.is-on` says
+ * something else: this mode is ACTIVE right now, on this row. It is the same
+ * statement the state cell makes, in the same colour, and it appears on at most the
+ * handful of rows actually rehearsing.
+ *
+ * `--r-rehearsing-strong`, not `--r-rehearsing`: the state hue is a light violet
+ * meant for TEXT, and filling a button with it leaves white unreadable. Same
+ * two-weight split as `--r-accent-strong` and `--r-danger-strong`.
+ *
+ * EVERY rule here carries `:not(:disabled)`, and that is a correctness guard rather
+ * than tidiness. This block sits after the `:disabled` block and matches at the
+ * same specificity, so without it the fill would win and a REHEARSE toggle would
+ * still look live while the link is down and every verb is inert — the one moment
+ * an operator most needs to see that a control is not going to do anything.
+ * Reachable: a bridge drop disables all verbs on a row that is already rehearsing.
+ */
+.cg-btn--verb.is-on:not(:disabled),
+.cg-btn--neutral.is-on:not(:disabled),
+.cg-btn--icon.is-on:not(:disabled) {
+  background: var(--r-rehearsing-strong);
+  border-color: var(--r-rehearsing-strong);
+  color: #fff;
+}
+.cg-btn--verb.is-on:hover:not(:disabled),
+.cg-btn--neutral.is-on:hover:not(:disabled),
+.cg-btn--icon.is-on:hover:not(:disabled) {
+  /* Lift the fill rather than swapping to the neutral hover, which would make an
+     engaged toggle look like it had switched off under the pointer. */
+  background: #8b5cf6;
+  border-color: #a78bfa;
+  box-shadow: var(--r-shadow-1);
+}
+.cg-btn--verb.is-on:active:not(:disabled),
+.cg-btn--neutral.is-on:active:not(:disabled),
+.cg-btn--icon.is-on:active:not(:disabled) {
+  background: #6d28d9;
+  box-shadow: none;
 }
 
 /* The icon-only row verb adds only its GEOMETRY on top of the neutral look. */

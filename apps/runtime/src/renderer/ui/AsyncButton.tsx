@@ -58,6 +58,13 @@ type Props = {
    * operator must never have to decode a symbol to tell them apart.
    */
   iconOnly?: boolean;
+  /**
+   * This control is a TOGGLE and it is currently ENGAGED — paints the `.is-on`
+   * fill from `controls.css`. See {@link Button}'s copy of this prop for why it is
+   * a prop rather than a class name, and why it deliberately sets no
+   * `aria-pressed`.
+   */
+  active?: boolean;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'type' | 'onError'>;
 
 /**
@@ -70,6 +77,7 @@ type Props = {
 export function AsyncButton({
   run,
   variant = 'default',
+  active,
   className,
   children,
   disabled,
@@ -107,6 +115,9 @@ export function AsyncButton({
 
   const stateClass = [
     className,
+    // The ENGAGED fill sits first so the transient phases below can paint over it:
+    // a success flash or an error ring on an engaged toggle must still be visible.
+    active === true ? 'is-on' : '',
     view.phase === 'success' ? 'is-success' : '',
     view.phase === 'error' ? 'is-error' : '',
   ]
