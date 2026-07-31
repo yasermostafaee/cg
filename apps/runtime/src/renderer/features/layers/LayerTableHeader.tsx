@@ -36,12 +36,29 @@ import {
 /** The word above each verb glyph, in the order `layerRowActions` emits buttons. */
 const VERB_HEADS: readonly { label: string; title: string }[] = [
   {
-    // The first column is the LOAD/REMOVE toggle: LOAD on an empty row, REMOVE
-    // once something is on it. One header word cannot name both, so it names the
-    // constructive half and the tooltip states the toggle outright — each button
-    // still names ITSELF exactly, through its own label and tooltip.
-    label: 'LOAD',
-    title: 'LOAD on an empty row; once a template is on the row this button becomes REMOVE.',
+    /*
+      §5 — THE ONE HEAD THAT NAMES ITS COLUMN RATHER THAN A VERB.
+
+      The first column is the LOAD/REMOVE toggle, and the head cannot be per-row:
+      it is one word above thirty buttons, half of which are the other half. It
+      read `LOAD`, so on every bound row a TRASH glyph sat under the word LOAD —
+      the exact misreading the header exists to prevent, printed by the header
+      itself.
+
+      Naming the other verb would be the same defect mirrored, and naming both
+      does not fit a 44px column. So it names the COLUMN: what this column is
+      about is the row's ITEM — putting one on the row, or taking it off. The
+      word is the product's own vocabulary (the confirm dialogs say "on-air
+      item(s)", "Remove all items?"), it is true of both halves, and it is true
+      of neither verb in particular, which is the point.
+
+      Nothing is lost by it, because the head was never the only channel: each
+      button still names ITSELF exactly through its own `aria-label` and tooltip,
+      and the tooltip here states the toggle outright.
+    */
+    label: 'ITEM',
+    title:
+      'What is on this row: LOAD binds a template to an empty row, and once one is on it this button becomes REMOVE.',
   },
   { label: 'PLAY', title: 'Take the row’s graphic to air.' },
   {
