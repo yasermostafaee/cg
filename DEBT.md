@@ -10,6 +10,76 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### ✅ `dev-r028-b5` — the Inspector restyle, three commits
+
+`6f0477c` (shared panel chrome) · `0d3b5b5` (Inspector content) · `d166bc5` (align to
+the owner's `inspectormock.html`, which arrived mid-task). Styling only — no handler,
+store action, IPC call, gating condition or label wording was touched.
+
+**§0.7 — the primitive already existed and all four panels already consumed it.** No
+panel hand-rolls a bar (`LayersPanel`, `Inspector`, `MonitorPanel`, `PreviewPanel` all
+import `ui/Panel`); the only `<header>` outside the primitive is `ServerSettingsPanel`,
+which is a settings dialog and not a workspace panel. So the finding was not a bypass.
+Two real defects were IN the primitive:
+
+- **The bar's height was INTRINSIC.** Measured: LAYERS 61px, PGM/PVW/INSPECTOR 53px
+  after the first fix, 39px before it. `min-height: var(--r-panel-bar-h)` alone was
+  only a floor and left LAYERS exactly as tall as its 36px bulk verbs — the original
+  defect surviving in the one panel the owner was comparing against. The bar now also
+  fixes its controls' height (28px), so the height belongs to being a panel rather
+  than to the contents. **All four bars now measure 53px.**
+- **§8 case: PRESENT BUT INVISIBLE**, not absent and not bypassed. `ghost` gives
+  transparent fill, transparent border and muted text; `controls.css` permits that
+  only "where surrounding chrome already frames the control", which held on LAYERS
+  (a bar full of bordered bulk verbs) and not on the INSPECTOR (a bar with nothing
+  else in it). The panel-header exemption is struck from the `--ghost` warning: a
+  condition a shared primitive cannot evaluate is not one it may depend on. Measured
+  after: `background rgb(31,41,55)`, `border rgb(75,85,99)`, 28×28 — visible at rest.
+
+**§0.6 — the PVW iframe box, measured before and after.** `1920 × 1080` in both, docked
+and fullscreen. Not merely equal: the box is set from the raster in `RehearsalFrame`
+and the fit is a CSS transform, so chrome cannot reach it by construction. Ran the new
+`pvw-frame-box.spec.ts` against the PRE-CHANGE source (checked the seven touched files
+out at `839ebd0`, rebuilt) and it passed there too, which is the honest form of the
+before/after claim. `color-scheme: light`, the checkerboard and its `rgb(61,66,83)`
+pixel assertion, and the caveats overlay are all untouched.
+
+**§8.5 — re-verified on the running UI, not by reading code.** Across panel widths
+1589 → 849px: verb count 6 at every width (never dropped), buttons on 1 line at every
+width (never wrapped), smallest target 48×36 (above the 44×34 floor). The density
+effect genuinely re-runs — the grid goes 5 columns → 4 at ~849px as the template
+column drops — so the b2 frozen-observer defect has not resurfaced.
+
+**§8's second item was already done** and needed no change: `dir="auto"` is on every
+text input and textarea, and `AutoGrowTextarea` applies it AFTER `{...rest}` so no
+caller can pin a direction. Pinned by `inspector.dirAuto.dom.test.ts`.
+
+**The one place the mock was NOT followed, deliberately — `resize: vertical`.** §2 and
+the mock both specify it on the item textarea. Ours is `AutoGrowTextarea`, which owns
+its height and re-measures on every value change, so a manual drag would be silently
+undone by the next keystroke — a handle that quietly stops working is worse than no
+handle. Kept `resize: none` + autogrow and adopted the rest (`min-height: 52px`,
+`line-height: 1.6`). **To reconcile:** either accept autogrow as the better behaviour
+and amend the mock, or make a user drag pin the height and disable autogrow for that
+item from then on — which is a BEHAVIOUR change and was out of scope here.
+
+**Smaller deviations from the mock, all deliberate:** the delete-on-hover red uses the
+existing `--r-danger` / `#fca5a5` rather than the mock's `#5a3540` / `#e08a97`, to
+avoid a second red in the palette (§0's "if a token is within a shade, use the token");
+the `＋` glyph is lucide `Plus` through `Icon`, per the design system; input/button
+radius stays 4px rather than the mock's 6px, because `.cg-btn` is global and changing
+it would restyle all four panels and every dialog for no stated benefit. **Not done:**
+the mock puts "Add item" and "From file…" on ONE footer row; ours stacks them, because
+they are rendered by two different components (`ListFieldEditor` and `FromFileControl`)
+and joining them is a restructure rather than a restyle.
+
+**§3 supersedes a recorded decision, which is noted because the old text was emphatic.**
+`Button.tsx`, `controls.css` and `Inspector.tsx` all asserted "colour belongs to STATE
+in this build, never to an affordance". That rule was written for the layer table and
+over-generalised. It is replaced in all three places by ONE MEANING PER SURFACE
+(hierarchy in the Inspector, state in the table) and the layer table's colours are
+untouched. The AIR-HUE ban is unchanged and unrelated — the new variant is sky.
+
 ### ✅ `dev-offline-polish` — ALL EIGHT ITEMS DONE, one commit each
 
 `dev-offline-ux` is CLOSED and superseded; discard every version of it. Eight commits,

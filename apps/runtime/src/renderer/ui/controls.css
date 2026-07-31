@@ -143,6 +143,28 @@
   flex-shrink: 0;
 }
 
+/*
+ * THE BAR DECIDES ITS CONTROLS' HEIGHT — not the other way round, which is the
+ * whole point and was the half the first attempt missed.
+ *
+ * `min-height: var(--r-panel-bar-h)` alone is only a FLOOR, so LAYERS — whose bar
+ * carries `--neutral` bulk verbs with their own 36px minimum — still stood 61px
+ * beside the other three at 53px. The floor made the SHORT bars agree and left
+ * the tall one exactly as tall as its contents, which is the original defect
+ * surviving in the one panel the owner was comparing against.
+ *
+ * A height that belongs to BEING A PANEL cannot be a function of what a given
+ * panel happens to put in its bar. So every control in a panel bar takes the same
+ * 28px square-ish geometry (what `--icon` already is), and the bar's height stops
+ * depending on which panel it belongs to. 36px is the ROW-VERB floor — a
+ * gallery-scanned table target — and a piece of panel chrome is not that.
+ */
+.cg-panel-header .cg-btn {
+  min-height: 28px;
+  height: 28px;
+  padding-block: 0;
+}
+
 /* ── Button ─────────────────────────────────────────────────────────────── */
 
 .cg-btn {
