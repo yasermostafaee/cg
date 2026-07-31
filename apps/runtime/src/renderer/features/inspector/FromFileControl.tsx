@@ -173,10 +173,13 @@ export function FromFileControl({
             Grant access
           </AsyncButton>
         ) : (
-          /* Reload re-reads and RE-APPLIES this field (the same stack.update path
-             as Update, scoped to this field). Failures are toasted + shown in the
-             inline error line below, so the button's own inline error is a
-             duplicate — suppressed, the #334 pattern. */
+          /* Reload RE-READS the file and STAGES it — it does not apply. It used to
+             apply, which made a read-verb button perform a write that reached the
+             graphic on air (owner's report); see `reloadFromFile`. The operator
+             commits with Update, exactly as they do after choosing the file.
+             Failures are toasted + shown in the inline error line below, so the
+             button's own inline error is a duplicate — suppressed, the #334
+             pattern. */
           <AsyncButton
             variant="secondary"
             aria-label={`Reload ${fieldId} from file`}

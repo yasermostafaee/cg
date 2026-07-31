@@ -1,6 +1,5 @@
 import type { FieldValue, StackItemState } from '@cg/shared-schema';
 import { reportCommandError } from '../status/commandFeedback.js';
-import { applyFieldValue } from './applyDraft.js';
 import { stageField, type FieldPath } from './draftStore.js';
 import { contentToFieldValue, type FromFileFieldKind } from './fromFileContent.js';
 import { fromFileState, setFromFileError } from './fromFileStore.js';
@@ -59,17 +58,37 @@ export async function stageFromFile(
 }
 
 /**
- * RELOAD: re-read the file and RE-APPLY the field through the normal
- * field-update path (`applyFieldValue` — the same `stack.update` the Update
- * button sends, scoped to this field). A failed read applies nothing and
- * keeps the current value.
+ * RELOAD: re-read the file and STAGE the value — exactly like choosing the file
+ * did, and exactly like a hand edit. The operator applies it with Update.
+ *
+ * ── IT USED TO APPLY, AND THAT WAS A HIDDEN TAKE TO AIR ─────────────────────
+ *
+ * Owner's report: after choosing a file the input correctly sits in draft, but
+ * pressing Reload sent an update by itself. It called `applyFieldValue` — the same
+ * `stack.update` the Update button sends, scoped to this field — so a button
+ * labelled with a READ verb performed a WRITE that reached the graphic on air.
+ *
+ * Nothing on the surface said so. The operator's mental model is set by the
+ * choose-a-file path, which stages and waits; Reload looked like the same gesture
+ * repeated and was not. That is the label-and-action-in-two-places class: the word
+ * "Reload" describes re-reading the source, and re-reading is all it may do.
+ *
+ * It also restores this module's own stated rule — the file is "just an input
+ * method, never a second content pipeline". An input method that commits is a
+ * second pipeline, and it bypassed the one gate (Update) that the offline surface
+ * is built around, including its reachability check.
+ *
+ * A failed read stages nothing and keeps the current value, as before.
+ *
+ * The `{ accepted }` shape is kept because `AsyncButton` drives its busy/success
+ * states from it; `accepted` now means "the file was read and staged", which is
+ * the whole of what this operation claims to do.
  */
 export async function reloadFromFile(
   item: StackItemState,
   path: FieldPath,
   kind: FromFileFieldKind,
 ): Promise<{ accepted: boolean }> {
-  const value = await readCurrentValue(item, path, kind);
-  if (value === null) return { accepted: false };
-  return applyFieldValue(item, path, value);
+  const staged = await stageFromFile(item, path, kind);
+  return { accepted: staged };
 }
