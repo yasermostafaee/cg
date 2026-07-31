@@ -10,6 +10,92 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### ⛔ `dev-list-vs-layer` — §1 DONE, §2–§6 NOT STARTED
+
+Stopped at a clean boundary with §1 complete, gate-green and pushed. **§2, §3, §4, §5's fix, and
+§6 are untouched — not a file of them.** Each is substantial, several are on-air paths that the
+task itself requires an adversarial review of, and half-doing five sections on the surface that
+decides when AMCP may be emitted is the one thing worth less than stopping.
+
+**What §1 delivered:** `loadFixed` → `#loadOnto(..., listOnly: true)`. The operator's LOAD binds
+the row and emits ZERO AMCP — no adopt-CLEAR, no pre-roll `CG ADD`. Expressed as a third reason
+for B-100's single `reachable` boolean to be false rather than as a new branch, so the rule that
+the destructive CLEAR and the constructive ADD are gated by ONE read is preserved by construction.
+
+**The rehearse guard on LOAD is deleted, and its deletion is the stronger form.** It existed
+because a bare `CG ADD` is audible on 2.5.0 and LOAD could put an unmuted producer under a
+rehearsing row. LOAD cannot reach a layer at all now. Replaced by assertions that LOAD emits zero
+AMCP **including on a rehearsing row**, which hold in every state rather than the states somebody
+remembered to enumerate.
+
+**Three tests were re-expressed or deleted deliberately, never loosened:** the exact-slot load
+spec now asserts NO `CG ADD` reached ANY layer (its exact-slot property is proved by the binding);
+`loadThenClear` reaches a resident producer through PLAY, because that is now the only way one
+gets there; and the two specs pinning last task's re-ADD-on-CLEAR and slot-bound-on-occupancy
+rules are gone, their subject removed rather than their assertions weakened.
+
+**THE COST, stated because it will not announce itself:** no row is ever pre-`ADD`ed, so **every
+take is now a slow take that can fail**. That is exactly the case R-028 decision 5's tooltip was
+written for — both states read `READY` and only the tooltip says one must load first. **That
+tooltip is now load-bearing. Do not weaken it.**
+
+**The principled alternative, and it is BLOCKED not open:** a separate `ADD` button beside LOAD.
+On 2.5.0 `CG ADD` without `PLAY` puts audio on the channel, so an explicit ADD button is a button
+that puts a graphic on air before the take. **Blocked on `mute-before-ADD`** (recorded below);
+it is not an idea awaiting a decision.
+
+### 🔴 MEASURED — `mute-failed` is not a mute failing. CasparCG never refuses `MIXER VOLUME`.
+
+§5's measurement, taken against the owner's own plant (`127.0.0.1:5250`, `2.5.0 69e8ad5 Stable`),
+raw AMCP, layer 1-88 (outside the bank and outside the reservation, cleared afterwards):
+
+| command                                            | response       |
+| -------------------------------------------------- | -------------- |
+| `MIXER 1-88 VOLUME 0` — **empty layer**            | `202 MIXER OK` |
+| `MIXER 1-88 VOLUME 1` — empty layer                | `202 MIXER OK` |
+| `MIXER 1-88 VOLUME 0` — **producer resident**      | `202 MIXER OK` |
+| `MIXER 1-88 VOLUME 0` — **after `CG 1-88 STOP 0`** | `202 MIXER OK` |
+
+`INFO` confirms the producer is still resident after `CG STOP` (`<producer>html</producer>` with
+the `<file>` gone), which is the exact state the owner's failing path is in.
+
+**So the command is never rejected — which leaves the task's other branch: it is never SENT.**
+`#send` returns `{ ok: false, errorCode: 'amcp-send-failed' }` when the adapter throws, and
+`enterRehearse` DISCARDS that code and reports a flat `mute-failed`. The name says CasparCG
+refused the mute; the fact is the bridge could not reach CasparCG.
+
+**This also explains the branching the owner saw, with no second cause.** After `STOP` the
+producer is resident → the mute-first branch runs → the send fails → refused. After `CLEAR` the
+layer is empty → zero AMCP → nothing to fail. Same root cause, opposite outcomes.
+
+**Owed, and NOT done here:** `enterRehearse` must surface the real reason instead of collapsing it
+to `mute-failed` — "CasparCG unreachable" and "CasparCG refused the mute" are different facts and
+only one of them is actionable. It is a small change and it is genuinely §3's territory, because
+the honest fix is to disable `ON PVW` while CasparCG is unreachable rather than to let it fail
+with a better word.
+
+**And the observation the task asked for, kept separate from the measurement:** on **2.3.2** a
+stopped-but-resident producer is silent (the same issue #669 that makes `CG ADD` inaudible), so on
+that plant the mute is protecting an audio path that does not exist while closing `ON PVW` in the
+operator's most common state. **This plant is 2.5.0, where that does not hold.** Scoping the mute
+interlock by server version is a decision to take once and explicitly — not inside a bug fix.
+
+### §4's `unknown` — INFERRED, not measured, and the difference matters
+
+The task asked whether CasparCG was connected when the owner saw `unknown`. **I could not observe
+the owner's session, so this is inference and is labelled as such.**
+
+The §5 measurement makes one reading much more likely: `MIXER VOLUME` succeeds in every state on
+this plant, so `mute-failed` can only have come from an unreachable server — and an unreachable
+server is also exactly what makes the occupancy tap silent and every slot read `unknown`. **One
+root cause, both symptoms.** If that holds, §4's rule ("show `unknown` only when we have positive
+reason to believe the layer may be occupied") fixes the display and nothing else is owed.
+
+**The alternative the task names — connected, occupancy reported unoccupied, and still displayed
+`unknown` — is NOT ruled out and would be a second defect the rule would mask rather than fix.**
+Deciding between them needs one observation from the owner's running app that I cannot take:
+whether the link indicator read LIVE at that moment.
+
 ### The CLEARed-row sweep — what every layer-acting verb does, and the one residual
 
 `dev-cleared-row-state`. Recorded because the sweep is the deliverable as much as the fix

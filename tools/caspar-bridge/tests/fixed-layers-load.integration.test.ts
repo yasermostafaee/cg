@@ -94,9 +94,12 @@ it('an exact-slot load lands the CG ADD on THAT layer and publishes the binding'
   const result = await r.loadFixed({ channel: 1, layer: 72 }, 'item-clock', 'tpl-clock', {});
   expect(result).toEqual({ accepted: true });
 
-  // THE assertion: the wire's CG ADD went to 1-72 — the row's own layer.
-  expect(mock?.lastCgAdd({ channel: 1, layer: 72 })).toBeDefined();
-  for (const layer of [70, 71, 73]) {
+  // THE assertion USED TO BE "the CG ADD went to 1-72" — the row's own layer.
+  // It is now the opposite, and that inversion is the point: LOAD is LIST-ONLY
+  // and emits NO AMCP at all, so the exact-slot property is proved by the
+  // BINDING below rather than by which layer a wire command addressed. Nothing
+  // reached ANY layer.
+  for (const layer of [70, 71, 72, 73]) {
     expect(mock?.lastCgAdd({ channel: 1, layer })).toBeUndefined();
   }
 

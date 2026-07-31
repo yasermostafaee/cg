@@ -38,6 +38,20 @@ const FIXED_SLOTS = [
 ];
 const SLOT = { channel: 1, layer: 72 };
 
+/**
+ * The producer on the slot, treating a layer the mock has never recorded as
+ * EMPTY — which it is.
+ *
+ * LOAD no longer touches a layer, so an UNTOUCHED layer is now the ordinary
+ * state after a load rather than an impossible one, and `layerState()` returns
+ * undefined for one nothing has ever addressed. Collapsing that to `'empty'`
+ * here keeps every assertion below reading as a statement about the LAYER
+ * instead of about the mock's bookkeeping.
+ */
+function producerOn(): string {
+  return mock?.layerState(SLOT)?.producer ?? 'empty';
+}
+
 afterEach(async () => {
   await runtime?.stop();
   runtime = null;
@@ -81,13 +95,27 @@ async function boot(): Promise<CasparRuntime> {
   return runtime;
 }
 
-/** Load onto the row and CLEAR it — the state every test below starts from. */
+/**
+ * Get a producer onto the row and then CLEAR it — the state every test below
+ * starts from.
+ *
+ * IT GOES THROUGH PLAY, and it has to now: LOAD is LIST-ONLY and puts nothing on
+ * a layer, so `take()`'s implicit `CG ADD` is the only way a producer gets there.
+ * This helper used to be load-then-clear and asserted a producer straight after
+ * the load — which is precisely the behaviour that was deleted, so the whole file
+ * went red until it was re-expressed. That is the right kind of red: the tests
+ * were pinning the old path, not merely mentioning it.
+ */
 async function loadThenClear(r: CasparRuntime): Promise<void> {
   expect(await r.loadFixed(SLOT, 'item-clock', 'tpl-clock', {})).toEqual({ accepted: true });
-  expect(mock?.layerState(SLOT)?.producer).toBe('html');
+  // The LIST half only — nothing on the layer yet.
+  expect(producerOn()).toBe('empty');
+  // PLAY is what reaches the layer (B-039 / R-028 decision 5).
+  expect(await r.take('item-clock')).toEqual({ accepted: true });
+  expect(producerOn()).toBe('html');
   expect(await r.out('item-clock')).toEqual({ accepted: true });
   // THE STATE UNDER TEST: producer gone, item still bound.
-  expect(mock?.layerState(SLOT)?.producer).toBe('empty');
+  expect(producerOn()).toBe('empty');
   expect(r.stackSnapshot().find((i) => i.itemId === 'item-clock')).toBeDefined();
   expect(r.fixedLayersState().find((s) => s.layer === SLOT.layer)?.binding).not.toBeNull();
 }
@@ -119,7 +147,7 @@ it('PLAY on a CLEARED row re-ADDs and reaches air (R-028 decision 5)', async () 
   // mock's `onAir` is set by `CG PLAY` ONLY when a producer is loaded, so PLAY
   // on an empty layer would leave it false — which is exactly the silent
   // failure this is written to catch.
-  expect(mock?.layerState(SLOT)?.producer).toBe('html');
+  expect(producerOn()).toBe('html');
   expect(mock?.layerState(SLOT)?.onAir).toBe(true);
   expect(mock?.lastCgAdd(SLOT)).toBeDefined();
 });
@@ -141,7 +169,7 @@ it('STOP on a cleared row is a no-op that does not resurrect a producer', async 
   // there, STOP's is to remove it, and an implicit ADD inside STOP would put a
   // graphic ON the layer in order to take it off.
   expect(await r.stopItem('item-clock')).toMatchObject({ accepted: expect.any(Boolean) });
-  expect(mock?.layerState(SLOT)?.producer).toBe('empty');
+  expect(producerOn()).toBe('empty');
   expect(mock?.layerState(SLOT)?.onAir).toBe(false);
 });
 
@@ -156,11 +184,11 @@ it('UPDATE on a cleared row COMMITS the fields and sends nothing (B-070)', async
   expect(await r.update('item-clock', { headline: 'after clear' }, 'merge')).toEqual({
     accepted: true,
   });
-  expect(mock?.layerState(SLOT)?.producer).toBe('empty');
+  expect(producerOn()).toBe('empty');
 
   // The committed value survives to air through PLAY's implicit ADD.
   expect(await r.take('item-clock')).toEqual({ accepted: true });
-  expect(mock?.layerState(SLOT)?.producer).toBe('html');
+  expect(producerOn()).toBe('html');
   expect(mock?.lastCgAdd(SLOT)?.data).toContain('after clear');
 });
 
@@ -173,7 +201,7 @@ it('NEXT on a cleared row does not resurrect a producer', async () => {
   // air as a side effect of a step command — the compound-verb hazard the row's
   // whole design refuses.
   expect(await r.nextItem('item-clock')).toMatchObject({ accepted: expect.any(Boolean) });
-  expect(mock?.layerState(SLOT)?.producer).toBe('empty');
+  expect(producerOn()).toBe('empty');
   expect(mock?.layerState(SLOT)?.onAir).toBe(false);
 });
 
@@ -184,7 +212,7 @@ it('CLEAR again on an already-cleared row is safe and stays empty', async () => 
   // DECIDED: CLEAR is the escape hatch and is never gated on state — pressing it
   // twice must be harmless rather than an error the operator has to think about.
   expect(await r.out('item-clock')).toEqual({ accepted: true });
-  expect(mock?.layerState(SLOT)?.producer).toBe('empty');
+  expect(producerOn()).toBe('empty');
 });
 
 /**
@@ -199,31 +227,21 @@ it('CLEAR again on an already-cleared row is safe and stays empty', async () => 
  * protection this must not lose is that rebinding a row to a DIFFERENT item
  * stays two explicit steps.
  */
-it('the SAME item re-loads onto its own CLEARED row — the re-ADD the toggle now offers', async () => {
-  const r = await boot();
-  await loadThenClear(r);
-
-  // This is the call the row's LOAD half makes after a CLEAR: same item, same
-  // template, same slot, no picking. Before the split it answered `slot-bound`.
-  expect(await r.loadFixed(SLOT, 'item-clock', 'tpl-clock', {})).toEqual({ accepted: true });
-  expect(mock?.layerState(SLOT)?.producer).toBe('html');
-  expect(r.fixedLayersState().find((s) => s.layer === SLOT.layer)?.binding).toMatchObject({
-    itemId: 'item-clock',
-  });
-});
-
-it('the SAME item is REFUSED while its own producer is still resident — CLEAR first', async () => {
-  const r = await boot();
-  expect(await r.loadFixed(SLOT, 'item-clock', 'tpl-clock', {})).toEqual({ accepted: true });
-
-  // Occupancy, not the binding, is what refuses here: a reload over a live
-  // producer is a replace, and the operator reaches that through CLEAR.
-  expect(await r.loadFixed(SLOT, 'item-clock', 'tpl-clock', {})).toEqual({
-    accepted: false,
-    errorCode: 'slot-bound',
-  });
-});
-
+/*
+ * DELETED HERE, DELIBERATELY: two tests that pinned the previous task-s rule.
+ *
+ *   - -the SAME item re-loads onto its own CLEARED row- asserted that LOAD
+ *     re-ADDs the bound template. LOAD emits no AMCP now, so there is nothing
+ *     to re-ADD; PLAY does that work, and its own test above asserts it.
+ *   - -the SAME item is REFUSED while its producer is resident- asserted a
+ *     slot-bound refusal on occupancy. LOAD cannot reach a layer, so occupancy
+ *     is not its business any more.
+ *
+ * Both were correct for a LOAD that touched the layer. Their subject is gone,
+ * not their assertion loosened — the boundary they guarded is now carried by
+ * the ZERO-AMCP tests below, which are stronger because they hold in every
+ * state rather than in the states somebody remembered to enumerate.
+ */
 it('a DIFFERENT item is refused even on a CLEARED row — rebinding stays two steps', async () => {
   const r = await boot();
   await loadThenClear(r);
@@ -242,52 +260,78 @@ it('a DIFFERENT item is refused even on a CLEARED row — rebinding stays two st
 });
 
 /**
- * ── THE LOAD INTERLOCK, BRIDGE-SIDE ─────────────────────────────────────────
+ * ── LOAD IS LIST-ONLY: IT EMITS ZERO AMCP ───────────────────────────────────
  *
- * Found by attacking this change's own diff rather than by a report. The task
- * required LOAD to be refused while the row is on PVW, and the first cut put
- * that guard in the RENDERER only — which is the exact shape R-022's `take()`
- * comment already rejects: "a greyed-out PLAY is a request, not a guarantee".
+ * "The list is ours. The layer is CasparCG's." The operator's LOAD picks a
+ * template, imports it into the bridge's store and binds it to a row. It touches
+ * NO layer — no adopt-CLEAR, no pre-roll `CG ADD`, nothing on the wire.
  *
- * A second browser with a stale rehearse snapshot, a client that reconnected
- * mid-rehearse, or any direct channel call reaches `loadFixed` with the button's
- * opinion nowhere in sight — and with LOAD now working on a cleared row, that is
- * one click away rather than hypothetical.
+ * THESE ASSERTIONS CARRY A DELETED GUARD'S WEIGHT, which is why they are on the
+ * wire rather than on a return value. `loadFixed` used to refuse a load onto a
+ * rehearsing row, because a bare `CG ADD` is audible on 2.5.0 and would have put
+ * an unmuted producer under a row the UI says cannot reach air. That guard is
+ * GONE — not loosened: the path it protected no longer exists, and a path that
+ * cannot exist beats a check that has to be remembered. What replaces it is the
+ * rehearsing case below, asserting that nothing reaches the layer.
  */
-it('LOAD is refused bridge-side while the row is on PVW, and nothing reaches the layer', async () => {
+it('LOAD emits ZERO AMCP — the layer is untouched and stays empty', async () => {
   const r = await boot();
-  await loadThenClear(r);
-  expect(await r.enterRehearse('item-clock')).toEqual({ ok: true });
 
-  // The re-ADD that the toggle offers on a cleared row — but the row is on PVW.
-  const result = await r.loadFixed(SLOT, 'item-clock', 'tpl-clock', {});
-  expect(result).toEqual({ accepted: false, errorCode: 'rehearsing' });
-
-  // NOTHING was put on the layer. This is the assertion that matters: the
-  // refusal is worth nothing if a producer landed on the way to reporting it.
-  expect(mock?.layerState(SLOT)?.producer).toBe('empty');
-  expect(r.rehearseState().some((x) => x.itemId === 'item-clock')).toBe(true);
-
-  // …and taking the row off PVW makes the same call succeed. The interlock is a
-  // gate, not a dead end — which is what makes refusing (rather than silently
-  // exiting rehearse) the honest choice.
-  expect(await r.exitRehearse('item-clock')).toEqual({ ok: true });
   expect(await r.loadFixed(SLOT, 'item-clock', 'tpl-clock', {})).toEqual({ accepted: true });
-  expect(mock?.layerState(SLOT)?.producer).toBe('html');
+
+  // THE ASSERTION: no producer, and no `CG ADD` ever went out for this layer.
+  expect(producerOn()).toBe('empty');
+  expect(mock?.lastCgAdd(SLOT)).toBeUndefined();
+
+  // …and the LIST half really happened: the row is bound and the item exists.
+  expect(r.fixedLayersState().find((s) => s.layer === SLOT.layer)?.binding).toMatchObject({
+    itemId: 'item-clock',
+  });
+  expect(r.stackSnapshot().find((i) => i.itemId === 'item-clock')).toBeDefined();
 });
 
 /**
- * The guard keys on the item BOUND TO THE SLOT, not on the incoming id — a load
- * arriving with a fresh item id is precisely what a check on the incoming id
- * would wave through, and it is the same layer under the same rehearsing row.
+ * THE CASE THE DELETED GUARD EXISTED FOR. A load onto a row that is on PVW used
+ * to be refused; it is now simply harmless, and this asserts the harmlessness
+ * directly rather than trusting the refusal to still be there.
  */
-it('a load with a DIFFERENT item id cannot slip under a rehearsing row either', async () => {
+it('LOAD onto a row that is ON PVW reaches no layer — the guard is unnecessary, not skipped', async () => {
   const r = await boot();
-  await loadThenClear(r);
+  expect(await r.loadFixed(SLOT, 'item-clock', 'tpl-clock', {})).toEqual({ accepted: true });
   expect(await r.enterRehearse('item-clock')).toEqual({ ok: true });
 
-  const result = await r.loadFixed(SLOT, 'item-intruder', 'tpl-clock', {});
-  expect(result.accepted).toBe(false);
-  expect(result.errorCode).toBe('rehearsing');
-  expect(mock?.layerState(SLOT)?.producer).toBe('empty');
+  // Accepted — there is nothing to refuse — and still nothing on the layer.
+  expect((await r.loadFixed(SLOT, 'item-clock', 'tpl-clock', {})).accepted).toBe(true);
+  expect(producerOn()).toBe('empty');
+  expect(mock?.lastCgAdd(SLOT)).toBeUndefined();
+  // The row is still on PVW: a load did not disturb the mode.
+  expect(r.rehearseState().some((x) => x.itemId === 'item-clock')).toBe(true);
+});
+
+/**
+ * THE OWNER'S ACTUAL NEED: build the whole rundown with CasparCG unreachable.
+ *
+ * Not a manual check. The bridge is ours and local; CasparCG is remote and may be
+ * down while the bridge is fine — and a list action must not need it.
+ */
+it('a rundown can be built with CasparCG UNREACHABLE — import and bind both succeed', async () => {
+  const oscPort = await freeUdpPort();
+  // No mock at all: nothing is listening on the AMCP port.
+  runtime = new CasparRuntime(
+    singleServer(65_501, oscPort),
+    {},
+    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS, fixedSlots: FIXED_SLOTS, fixedBank: BANK },
+  );
+  runtime.start();
+  await runtime.startServing();
+  runtime.templateImport({ templateId: 'tpl-clock', templateType: 'clock', fields: [] }, HTML);
+
+  // Bind three rows with no server anywhere. Each is a LIST action.
+  for (const [i, layer] of [70, 71, 72].entries()) {
+    expect(
+      await runtime.loadFixed({ channel: 1, layer }, `item-${String(i)}`, 'tpl-clock', {}),
+    ).toEqual({ accepted: true });
+  }
+  expect(runtime.stackSnapshot()).toHaveLength(3);
+  expect(runtime.fixedLayersState().filter((s) => s.binding !== null)).toHaveLength(3);
 });

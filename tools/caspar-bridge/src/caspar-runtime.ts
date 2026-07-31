@@ -937,34 +937,23 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, false, 'not-fixed');
       return { accepted: false, errorCode: 'not-fixed' };
     }
-    /**
-     * R-022 — THE LOAD INTERLOCK, and it lives here for the reason `take()`'s
-     * does: a disabled button is a request, not a guarantee.
+    /*
+     * THE REHEARSE INTERLOCK ON LOAD IS GONE, AND ITS ABSENCE IS THE STRONGER
+     * FORM — do not add it back.
      *
-     * A load puts a producer on the layer, and a bare `CG ADD` is audible on air
-     * on 2.5.0 (R-029) — so loading under a row the UI says is on PVW is exactly
-     * the unmuted-producer-under-a-rehearsing-row case rehearse exists to
-     * prevent. Once LOAD works on a CLEARED row, this became reachable in one
-     * click, which is why the guard arrives with that fix rather than after it.
+     * It was added one task ago because LOAD could put an unmuted producer under
+     * a rehearsing row: `#loadOnto` issued a `CG ADD`, and a bare ADD is audible
+     * on 2.5.0 (R-029). LOAD is now LIST-ONLY and emits no AMCP at all, so there
+     * is no producer to put anywhere and nothing for the guard to protect.
      *
-     * The renderer disables the button and says why; this is what holds when the
-     * button's opinion is absent — a second browser with a stale rehearse
-     * snapshot, a client that reconnected mid-rehearse, or a direct channel call.
+     * Replaced by a test rather than deleted quietly: `cleared-row-verbs`
+     * asserts LOAD emits ZERO AMCP in every state INCLUDING a rehearsing row.
+     * A path that cannot exist beats a guard that has to be remembered — the
+     * same move as `StackPruneInput`, where the bad call became unrepresentable
+     * instead of merely checked.
      *
-     * Refused rather than silently exiting rehearse and loading: leaving the mode
-     * is the operator's decision, and a LOAD that dropped the interlock would be
-     * a compound verb hiding a mode change behind a load — the same objection
-     * that keeps re-binding a row two explicit steps.
-     *
-     * Keyed on the ITEM ALREADY BOUND to the slot, not on the incoming `itemId`:
-     * what must be protected is the row that is on PVW, and a load arriving with
-     * a fresh item id is precisely the case a check on the incoming id would miss.
+     * If LOAD is ever given a wire step again, the guard comes back WITH it.
      */
-    const rehearsingHere = this.#itemBoundToSlot(slot);
-    if (rehearsingHere !== undefined && this.#rehearsing.has(rehearsingHere)) {
-      this.#reconciler.applyAck(seq, false, 'rehearsing');
-      return { accepted: false, errorCode: 'rehearsing' };
-    }
     // The registry's OWN templateType — the LayerManager records what is bound,
     // and the per-slot publish reads it straight back out, so the row names the
     // template kind the operator recognises rather than an internal id.
@@ -1017,7 +1006,11 @@ export class CasparRuntime {
     // set. A publish HERE would find only half the binding (the LayerManager's
     // template type, no itemId yet) and so publish `null` — the honest
     // both-halves rule in `#computeFixedState`.
-    return this.#loadOnto(itemId, templateId, fields, slot, seq);
+    //
+    // LIST-ONLY: the operator's LOAD binds the row and touches NO LAYER. See
+    // `#loadOnto`'s `listOnly` note for why, and for why it rides the same
+    // single boolean that B-100 pairs the CLEAR and the ADD on.
+    return this.#loadOnto(itemId, templateId, fields, slot, seq, true);
   }
 
   /**
@@ -1033,6 +1026,25 @@ export class CasparRuntime {
     fields: FieldValues,
     slot: CommandSlot,
     seq: number,
+    /**
+     * LIST-ONLY: bind the row and touch NO LAYER — no adopt-CLEAR, no pre-roll
+     * `CG ADD`, no AMCP of any kind.
+     *
+     * "The list is ours, the layer is CasparCG's." The operator's LOAD is a
+     * LIST action — pick a template, import it into the bridge's store, bind it
+     * to a row — and it must work with CasparCG unreachable, because building a
+     * rundown before the playout machine is up is ordinary. Nothing is lost by
+     * not pre-rolling: `take()` re-ADDs on the way to air (B-039 / R-028
+     * decision 5), which is the path a disconnected load has always taken.
+     *
+     * It is expressed as a THIRD REASON for `reachable` to be false rather than
+     * as a branch of its own, and that is deliberate. B-100's rule is that ONE
+     * boolean gates both the destructive adopt-CLEAR and the constructive ADD
+     * that repairs it; a separate "skip the ADD" flag would be a second read and
+     * could leave a layer cleared-and-empty. Here the pairing is preserved by
+     * construction: list-only means neither, never one.
+     */
+    listOnly = false,
   ): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-100 — evaluate reachability ONCE, here, and gate BOTH the destructive
     // adopt-CLEAR and the constructive pre-roll ADD on this single value. The two
@@ -1040,7 +1052,7 @@ export class CasparRuntime {
     // a session slipping state in the gap could land the CLEAR yet skip the ADD —
     // CLEAR-then-nothing, a BLACK layer. One evaluation makes the pairing structural:
     // if the CLEAR can reach the wire, the ADD is attempted; neither, or both.
-    const reachable = !this.#noServerReachable();
+    const reachable = !listOnly && !this.#noServerReachable();
 
     // Reconnect-reconciliation — adopt the layer BEFORE binding the slot/OSC
     // interest: destroy any producer a previous bridge session orphaned there,
