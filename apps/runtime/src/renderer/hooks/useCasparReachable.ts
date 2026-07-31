@@ -1,4 +1,5 @@
 import { isServerReachable } from '@cg/shared-ipc';
+import type { CasparReach } from '../ui/reachWording.js';
 import { useConnections } from './useConnections.js';
 import { useLink } from './useLink.js';
 
@@ -30,6 +31,11 @@ import { useLink } from './useLink.js';
  * waiting. This is B-094's rule pointed at controls rather than labels — silence
  * is not evidence of a working link.
  *
+ * …BUT IT MUST NOT BE *DESCRIBED* AS UNREACHABLE. The boolean is the permission
+ * answer and it is right; it is not the wording answer. See {@link useCasparReach}
+ * — during that window the console used to name a fault ("CasparCG cannot be
+ * reached") that nothing had yet reported, on every load and every reconnect.
+ *
  * TEST MODE IS REACHABLE, AND THIS IS NOT AN EXCEPTION TO THE RULE — IT IS THE
  * RULE. The question is "will this command be executed?", not "is a real
  * CasparCG healthy?". In test mode the offline mock IS the executor: it runs
@@ -48,20 +54,29 @@ import { useLink } from './useLink.js';
  * no healthy server.
  */
 export function useCasparReachable(): boolean {
-  // Both hooks run unconditionally — the branch below is on their values, never
-  // on whether they are called.
-  const link = useLink();
-  const health = useConnections();
-  if (link === 'offline-mock') return true;
-  if (health === null) return false;
-  return isServerReachable(health.primary.state);
+  return useCasparReach() === 'reachable';
 }
 
 /**
- * Why a CasparCG-bound verb is refused, for the control's tooltip.
+ * The same question, THREE-VALUED — for anything that has to say WHY.
  *
- * It names the RIGHT HOP. "Bridge disconnected" while the bridge is fine would
- * send the operator to the wrong machine, so the two states get two sentences.
+ * `connecting` is the boot/reconnect window: the bridge has not answered yet, so
+ * nothing is known. It is separated from `unreachable` for one reason only, and it
+ * is a wording reason — see `reachWording.ts`. Both still refuse the command;
+ * `useCasparReachable` above folds them together precisely so no caller can
+ * accidentally treat "we have not been told yet" as permission.
+ *
+ * WHY `connecting` IS NOT REPORTED WHILE THE BRIDGE IS DOWN. With the link down
+ * there is no round trip in flight and nothing to wait for, so "connecting…" would
+ * be a promise nobody is keeping. That case is `unreachable`, and its caller
+ * reports the NEARER hop instead (`casparRefusalReason` puts `linkDown` first).
  */
-export const CASPAR_UNREACHABLE_REASON =
-  'CasparCG cannot be reached — this command would not arrive. It returns as soon as the playout server is back.';
+export function useCasparReach(): CasparReach {
+  // Both hooks run unconditionally — the branches below are on their values,
+  // never on whether they are called.
+  const link = useLink();
+  const health = useConnections();
+  if (link === 'offline-mock') return 'reachable';
+  if (health === null) return link === 'disconnected' ? 'unreachable' : 'connecting';
+  return isServerReachable(health.primary.state) ? 'reachable' : 'unreachable';
+}

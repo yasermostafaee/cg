@@ -13,6 +13,11 @@ import type { FixedSlotState } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import type { RowAction } from '../../ui/rowAction.js';
 import type { AsyncResult } from '../../ui/asyncButtonController.js';
+import {
+  BRIDGE_DOWN_REASON,
+  casparRefusalReason,
+  type CasparReach,
+} from '../../ui/reachWording.js';
 import { isOnAir } from '../stack/onAir.js';
 
 /**
@@ -93,10 +98,14 @@ export interface LayerRowActionDeps {
    * Separate from `linkDown` because they are different questions with different
    * answers: the bridge is ours and local and usually up, while the playout
    * machine may be off for hours. A verb that only touches OUR LIST needs the
-   * first; a verb that emits AMCP needs both. Unknown counts as unreachable —
-   * see `useCasparReachable`.
+   * first; a verb that emits AMCP needs both.
+   *
+   * THREE-VALUED, and only the WORDING branches on the third. `connecting` (the
+   * bridge has not answered yet) refuses exactly as `unreachable` does — unknown
+   * fails closed — but it may not be described as a playout server that is down,
+   * because nothing has said so. See `useCasparReach` / `reachWording`.
    */
-  casparReachable: boolean;
+  casparReach: CasparReach;
   /** Has the operator staged unapplied field edits for this item? */
   dirty: boolean;
   /**
@@ -157,9 +166,7 @@ export interface LayerRowActionDeps {
  */
 export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   const { item, linkDown, onError } = deps;
-  const offlineReason = linkDown
-    ? 'Bridge disconnected — commands are refused until it reconnects.'
-    : undefined;
+  const offlineReason = linkDown ? BRIDGE_DOWN_REASON : undefined;
   /**
    * THE GATE EVERY AMCP-EMITTING VERB CARRIES: both hops must be up.
    *
@@ -169,16 +176,16 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    * afterwards, which costs the operator the seconds in which he believes the
    * command is on its way. The refusal was always right; the button was not.
    */
-  const needsCaspar = linkDown || !deps.casparReachable;
+  const needsCaspar = linkDown || deps.casparReach !== 'reachable';
   /**
-   * …and it names the RIGHT HOP. Telling the operator "bridge disconnected" while
-   * the bridge is fine sends him to the wrong machine, so the two states get two
-   * sentences. `linkDown` wins when both are down: it is the nearer failure, and
-   * with it down CasparCG's state is not even knowable.
+   * …and it names the RIGHT HOP, and the right STATE of that hop. Telling the
+   * operator "bridge disconnected" while the bridge is fine sends him to the wrong
+   * machine; telling him CasparCG cannot be reached before anything has said so
+   * invents a fault. `linkDown` wins when both are down: it is the nearer failure,
+   * and with it down CasparCG's state is not even knowable. One shared resolution
+   * (`casparRefusalReason`), never a local copy of the sentence.
    */
-  const needsCasparReason =
-    offlineReason ??
-    'CasparCG cannot be reached — this command would not arrive. It returns as soon as the playout server is back.';
+  const needsCasparReason = casparRefusalReason(linkDown, deps.casparReach) ?? BRIDGE_DOWN_REASON;
   /**
    * ── TWO FACTS THAT USED TO BE ONE FLAG ──────────────────────────────────────
    *

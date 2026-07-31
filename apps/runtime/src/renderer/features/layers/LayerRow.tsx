@@ -11,7 +11,7 @@ import { useConfirm } from '../../ui/useDialog.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { pickFile } from '../../ui/pickFile.js';
 import { useLink } from '../../hooks/useLink.js';
-import { useCasparReachable } from '../../hooks/useCasparReachable.js';
+import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { displayLabel } from '../library/templateName.js';
 import { isOnAir } from '../stack/onAir.js';
@@ -231,7 +231,9 @@ export function LayerRow({
   const link = useLink();
   const linkDown = link === 'disconnected';
   // THE SECOND HOP — a live bridge says nothing about the playout machine.
-  const casparReachable = useCasparReachable();
+  // Three-valued: `connecting` refuses like `unreachable` but is worded as the
+  // wait it is, not as a fault nothing has reported (see `reachWording`).
+  const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
   const { pickTemplate, pickerDialog } = useTemplatePicker();
   const { menu, open, close } = useContextMenu<number>();
@@ -275,7 +277,7 @@ export function LayerRow({
     observed: slot.observed,
     hasNext: template?.hasNext === true,
     linkDown,
-    casparReachable,
+    casparReach,
     dirty,
     rehearsing,
     // R-022 — one toggle, both directions. The bridge answers

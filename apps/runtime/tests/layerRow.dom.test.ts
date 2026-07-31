@@ -275,7 +275,7 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     hasNext,
     linkDown: false,
     // §0a — both hops up unless the spec is about being disconnected.
-    casparReachable: true,
+    casparReach: 'reachable' as const,
     dirty: true,
     // R-022 — not rehearsing by default; the interlock is exercised on its own below.
     rehearsing: false,
@@ -862,7 +862,7 @@ describe('LayerRow — CasparCG reachability gates the AMCP verbs', () => {
       item === null ? { kind: 'empty' as const } : { kind: 'producer' as const, producer: 'html' },
     hasNext,
     linkDown: false,
-    casparReachable: true,
+    casparReach: 'reachable' as const,
     dirty: true,
     rehearsing: false,
     templateAvailable: true,
@@ -879,7 +879,10 @@ describe('LayerRow — CasparCG reachability gates the AMCP verbs', () => {
     remove: () => Promise.resolve({ accepted: true }),
     onError: () => undefined,
   });
-  const onAirRow = () => ({ ...deps(itemWith('on-air'), true), casparReachable: false });
+  const onAirRow = () => ({
+    ...deps(itemWith('on-air'), true),
+    casparReach: 'unreachable' as const,
+  });
 
   /**
    * ASSERTED ACROSS BOTH UNREACHABLE STATES, because they must behave
@@ -921,12 +924,15 @@ describe('LayerRow — CasparCG reachability gates the AMCP verbs', () => {
    * would undo two changes that just landed.
    */
   it('leaves LOAD and ON PVW alone — they never touch the layer', () => {
-    const unbound = layerRowActions({ ...deps(null, false), casparReachable: false });
+    const unbound = layerRowActions({ ...deps(null, false), casparReach: 'unreachable' as const });
     const load = unbound.find((a) => a.key === 'load-remove');
     expect(load?.label).toBe('LOAD');
     expect(load?.disabled, 'LOAD needs the bridge, never CasparCG').toBe(false);
 
-    const bound = layerRowActions({ ...deps(itemWith('loaded'), true), casparReachable: false });
+    const bound = layerRowActions({
+      ...deps(itemWith('loaded'), true),
+      casparReach: 'unreachable' as const,
+    });
     expect(
       bound.find((a) => a.key === 'rehearse')?.disabled,
       'ON PVW is local preview and sends nothing',
@@ -937,7 +943,10 @@ describe('LayerRow — CasparCG reachability gates the AMCP verbs', () => {
 
   /** Everything returns the instant CasparCG does — this is a gate, not a removal. */
   it('re-enables every gated verb once CasparCG is reachable again', () => {
-    const actions = layerRowActions({ ...deps(itemWith('on-air'), true), casparReachable: true });
+    const actions = layerRowActions({
+      ...deps(itemWith('on-air'), true),
+      casparReach: 'reachable' as const,
+    });
     for (const key of ['play', 'next', 'stop', 'clear']) {
       const a = actions.find((x) => x.key === key);
       expect(a?.title ?? '', `${key} must drop the reason`).not.toMatch(/cannot be reached/i);

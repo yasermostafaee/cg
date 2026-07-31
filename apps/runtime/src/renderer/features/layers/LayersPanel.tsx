@@ -10,7 +10,8 @@ import type { ShellLayout } from '../../hooks/useShellLayout.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useLink } from '../../hooks/useLink.js';
-import { useCasparReachable, CASPAR_UNREACHABLE_REASON } from '../../hooks/useCasparReachable.js';
+import { useCasparReach } from '../../hooks/useCasparReachable.js';
+import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useFixedBank, useFixedSlots } from '../../hooks/useFixedLayers.js';
 import { usePlayoutLayers } from '../../hooks/usePlayoutLayers.js';
@@ -90,12 +91,13 @@ export function LayersPanel({
   const items = useStack();
   const linkDown = useLink() === 'disconnected';
   // THE SECOND HOP — a live bridge says nothing about the playout machine.
-  const casparReachable = useCasparReachable();
+  const casparReach = useCasparReach();
   /** Every AMCP-emitting bulk verb needs BOTH hops. Unknown fails closed. */
-  const needsCaspar = linkDown || !casparReachable;
-  const needsCasparReason = linkDown
-    ? 'Bridge disconnected — commands are refused until it reconnects.'
-    : CASPAR_UNREACHABLE_REASON;
+  const needsCaspar = linkDown || casparReach !== 'reachable';
+  // …and says which hop, and whether we KNOW it is down or have merely not heard
+  // yet. One shared resolution, so the header cannot word a refusal differently
+  // from the row verbs refusing for the identical reason.
+  const needsCasparReason = casparRefusalReason(linkDown, casparReach) ?? BRIDGE_DOWN_REASON;
   const [activeTab, setActiveTab] = useState('layers');
   const [configOpen, setConfigOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirm();

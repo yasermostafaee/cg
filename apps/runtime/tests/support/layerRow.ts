@@ -1,5 +1,6 @@
 import { StrictMode, createElement } from 'react';
 import { connectionsStub, type Reachability } from './reachability.js';
+export type { Reachability };
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { vi } from 'vitest';
@@ -111,9 +112,18 @@ export async function renderLayerRow(options: {
   /** Observe what a row click reports back to the panel. */
   onSelect?: (itemId: string | null) => void;
   onUpdate?: (itemId: string) => Promise<{ accepted: boolean }>;
+  /**
+   * THE SECOND HOP, selected by name (see `support/reachability.ts`).
+   *
+   * Defaults to `both-up`. A spec about the BOOT WINDOW passes `unknown`, which
+   * is the state `useConnections()` is genuinely in until the bridge first
+   * answers — and it must be paired with a LIVE link, because with the link down
+   * there is no round trip to be waiting on and the row reports the nearer hop.
+   */
+  reach?: Reachability;
 }): Promise<RenderedRow> {
   const link = options.link ?? 'live';
-  const stubs = stubBridge(link);
+  const stubs = stubBridge(link, options.reach ?? 'both-up');
   const item = options.item === undefined ? itemWith('loaded') : options.item;
   const slot =
     options.slot ??

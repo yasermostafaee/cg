@@ -1,5 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { useCasparReachable, CASPAR_UNREACHABLE_REASON } from '../../hooks/useCasparReachable.js';
+import { useCasparReach } from '../../hooks/useCasparReachable.js';
+import { useLink } from '../../hooks/useLink.js';
+import { casparRefusalReason } from '../../ui/reachWording.js';
 import {
   aggregateHasFields,
   isFieldNamespace,
@@ -167,7 +169,15 @@ const styles = {
 export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Element {
   const [info, setInfo] = useState<TemplateInfo | null>(null);
   // THE SECOND HOP — Update reaches air, so it needs CasparCG. Editing does not.
-  const casparReachable = useCasparReachable();
+  const casparReach = useCasparReach();
+  const linkDown = useLink() === 'disconnected';
+  /**
+   * …and it names the RIGHT HOP, like every other refused verb. Apply used to say
+   * "CasparCG cannot be reached" whenever health was absent — which is also what a
+   * DEAD BRIDGE looks like from here, so the one control the operator reaches for
+   * after typing an edit sent him to the wrong machine.
+   */
+  const applyRefusal = casparRefusalReason(linkDown, casparReach);
   // Re-render on any draft change so dirty markers + the draft-or-applied
   // values stay live (a push to `item` also re-renders via props).
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -339,8 +349,8 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
           <AsyncButton
             variant="neutral"
             aria-label="Apply staged edits"
-            disabled={!casparReachable}
-            {...(!casparReachable ? { title: CASPAR_UNREACHABLE_REASON } : {})}
+            disabled={applyRefusal !== undefined}
+            {...(applyRefusal !== undefined ? { title: applyRefusal } : {})}
             run={() => onApply(itemId)}
             onError={() => undefined}
           >
