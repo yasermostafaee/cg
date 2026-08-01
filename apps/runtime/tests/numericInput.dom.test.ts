@@ -16,6 +16,7 @@ import { LockOverlay } from '../src/renderer/features/lock/LockOverlay.js';
 import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
 import { NumericInput, normalizeDigits } from '../src/renderer/ui/NumericInput.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
+import { clearPortals, openDialog } from './support/dialog.js';
 
 /**
  * R-020 — Persian-keyboard digits accepted in numeric inputs, normalized to
@@ -38,6 +39,9 @@ beforeEach(() => {
 afterEach(() => {
   container?.remove();
   container = null;
+  // `ServerSettingsPanel` is a portalled `Modal` now — clear the scrim so it cannot
+  // leak into the next spec's queries.
+  clearPortals();
   vi.restoreAllMocks();
 });
 
@@ -273,9 +277,11 @@ describe('ServerSettingsPanel ports — R-020 (B-077 interaction)', () => {
 
   it('a Persian-typed port passes the numeric validation and submits canonical', async () => {
     const { setConfig } = stubBridge();
-    const el = await render(
-      createElement(ServerSettingsPanel, { open: true, onClose: () => undefined }),
-    );
+    await render(createElement(ServerSettingsPanel, { open: true, onClose: () => undefined }));
+    // The panel is built on the shared `Modal` now, which PORTALS to `document.body`,
+    // so the fields are not inside the mount container. Query the dialog itself.
+    const el = openDialog();
+    if (el === null) throw new Error('the server settings dialog did not open');
     await setInput(inputByLabel(el, 'Primary AMCP port'), '۵۲۵۱');
     // The /^\d+$/ port rule sees Latin digits — no "must be an integer" refusal.
     expect(el.textContent).not.toContain('AMCP port must be an integer');

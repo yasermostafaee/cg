@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { ServerSettingsPanel } from '../src/renderer/features/connections/ServerSettingsPanel.js';
+import { clearPortals, openDialog } from './support/dialog.js';
 
 /**
  * R-010 — the server settings panel: loads the current config, mirrors the
@@ -19,6 +20,9 @@ let container: HTMLDivElement | null = null;
 afterEach(() => {
   container?.remove();
   container = null;
+  // The panel is a `Modal` now, so it renders into a PORTAL on `document.body`
+  // rather than into the container — a leaked scrim would be found by the next test.
+  clearPortals();
 });
 
 function item(status: StackItemState['status'], pending = false): StackItemState {
@@ -58,7 +62,7 @@ function stubBridge(
   return { setConfig };
 }
 
-async function renderPanel(): Promise<HTMLDivElement> {
+async function renderPanel(): Promise<HTMLElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -72,7 +76,12 @@ async function renderPanel(): Promise<HTMLDivElement> {
     );
     await Promise.resolve();
   });
-  return container;
+  // The DIALOG, not the mount container: this panel is built on the shared `Modal`
+  // primitive now, which portals to `document.body`. Every query below is scoped to
+  // the dialog, which is also what an operator can actually see and reach.
+  const dialog = openDialog();
+  if (dialog === null) throw new Error('the server settings dialog did not open');
+  return dialog;
 }
 
 function applyButton(el: HTMLElement): HTMLButtonElement {
