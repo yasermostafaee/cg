@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { FixedSlotObservation } from '@cg/shared-ipc';
-import type { StackItemStatus } from '@cg/shared-schema';
+import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { airStateVisual, badgeTone, colors, readyDetail, type BadgeTone } from '../../theme.js';
 import { unverifiedTitle } from '../../ui/airStateWording.js';
 import { occupancyLabel } from '../fixedLayers/occupancyLabel.js';
@@ -131,13 +131,28 @@ function iconForStatus(status: StackItemStatus, pending: boolean): LucideIcon {
  *
  * Build it with {@link resolveRowBinding} and nowhere else; a second derivation is
  * how the distinction comes back apart.
+ *
+ * ── THE BOUND CASE CARRIES THE WHOLE ITEM, NOT JUST ITS STATUS ──────────────
+ *
+ * It carried `status` while only the STATE CELL read the union, and everything
+ * else on the row — the verbs above all — went on deriving from a separate
+ * `item: StackItemState | null` prop. That left the exact conflation this union
+ * exists to abolish alive one layer over: `item === null` is STILL the same value
+ * for "unbound" and "awaiting", so a bound row rendered an empty row's verbs for
+ * the whole bootstrap window and offered `LOAD` on a row it could not yet see the
+ * binding of.
+ *
+ * Carrying the item makes the second source impossible rather than merely wrong:
+ * there is no `item` beside the binding to ask, so a verb's availability CANNOT be
+ * computed from a nullable any more. Consumers that want the item take it out of
+ * the `bound` arm, which is the only place it exists.
  */
 export type RowBinding =
   /** `slot.binding === null` — we have never put anything on this layer. */
   | { kind: 'unbound' }
   /** Bound, but the stack snapshot has not arrived. NOT a claim about the row. */
   | { kind: 'awaiting' }
-  | { kind: 'bound'; status: StackItemStatus };
+  | { kind: 'bound'; item: StackItemState };
 
 /**
  * THE one place a slot's binding plus the stack snapshot become a row's state.
@@ -150,11 +165,11 @@ export type RowBinding =
  */
 export function resolveRowBinding(
   slotBinding: { itemId: string } | null,
-  item: { status: StackItemStatus } | undefined,
+  item: StackItemState | undefined,
   stackReady: boolean,
 ): RowBinding {
   if (slotBinding === null) return { kind: 'unbound' };
-  if (item !== undefined) return { kind: 'bound', status: item.status };
+  if (item !== undefined) return { kind: 'bound', item };
   // Bound, and no item for it. Two causes, and only one of them is knowable:
   // the snapshot has not landed (wait), or it has and the binding names an item
   // the stack does not have (a real inconsistency, which `LayerRow` already
@@ -305,7 +320,7 @@ export function rowState({
   }
 
   // ── A bound item: its reconciled status is the state. ─────────────────────
-  const status = binding.status;
+  const status = binding.item.status;
   const visual = airStateVisual(status, pending);
   const tone = badgeTone(status, pending);
   const claimsAir = tone === 'onair';

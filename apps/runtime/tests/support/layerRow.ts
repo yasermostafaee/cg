@@ -7,7 +7,8 @@ import { vi } from 'vitest';
 import type { FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { LayerRow } from '../../src/renderer/features/layers/LayerRow.js';
-import { resolveRowBinding } from '../../src/renderer/features/layers/rowState.js';
+import { resolveRowBinding, type RowBinding } from '../../src/renderer/features/layers/rowState.js';
+import type { LayerRowActionDeps } from '../../src/renderer/features/layers/layerRowActions.js';
 
 /**
  * R-028 part B — the shared harness for LayerRow DOM tests.
@@ -51,6 +52,55 @@ export function slotWith(over: Partial<FixedSlotState> = {}): FixedSlotState {
     alias: 'CLOCK',
     observed: { kind: 'producer', producer: 'html' },
     binding: { itemId: 'item-1', templateType: 'clock', templateId: 'tpl-1' },
+    ...over,
+  };
+}
+
+/**
+ * The row's three-way fact, built the way the PANEL builds it.
+ *
+ * Specs used to hand `layerRowActions` an `item: StackItemState | null`, and that
+ * nullable is exactly what the union replaced: it cannot tell "no template bound"
+ * from "the stack has not arrived", and those two must offer opposite verbs. A spec
+ * that still expressed a row as a nullable could not describe the `awaiting` window
+ * at all — so this helper is the only way a spec names a row's binding, and the
+ * third case is reachable by name rather than by omission.
+ */
+export function bindingFor(item: StackItemState | null): RowBinding {
+  return item === null ? { kind: 'unbound' } : { kind: 'bound', item };
+}
+
+/** The row does not yet know what it carries — the bootstrap/reconnect window. */
+export const AWAITING: RowBinding = { kind: 'awaiting' };
+
+/**
+ * The deps for one row's verbs, defaulted — so a spec states only what it is about.
+ *
+ * Every field is overridable; `binding` is the one a spec almost always sets, and
+ * it is the ONLY input to what the row offers.
+ */
+export function rowDeps(over: Partial<LayerRowActionDeps> = {}): LayerRowActionDeps {
+  const binding = over.binding ?? bindingFor(itemWith('loaded'));
+  return {
+    binding,
+    observed: binding.kind === 'bound' ? { kind: 'producer', producer: 'html' } : { kind: 'empty' },
+    hasNext: false,
+    linkDown: false,
+    casparReach: 'reachable',
+    dirty: false,
+    rehearsing: false,
+    templateAvailable: true,
+    toggleRehearse: () => Promise.resolve({ accepted: true }),
+    load: () => Promise.resolve({ accepted: true }),
+    reload: () => Promise.resolve({ accepted: true }),
+    play: () => Promise.resolve({ accepted: true }),
+    next: () => Promise.resolve({ accepted: true }),
+    update: () => Promise.resolve({ accepted: true }),
+    stop: () => Promise.resolve({ accepted: true }),
+    clear: () => Promise.resolve({ accepted: true }),
+    clearLayer: () => Promise.resolve({ accepted: true }),
+    remove: () => Promise.resolve({ accepted: true }),
+    onError: () => undefined,
     ...over,
   };
 }
@@ -157,7 +207,8 @@ export async function renderLayerRow(options: {
         null,
         createElement(LayerRow, {
           slot,
-          item,
+          // The row takes its item OUT of the binding now — there is no `item` prop
+          // to pass, which is what stops a verb asking a nullable what it carries.
           binding,
           template,
           // A standalone row is the first row AND the bank's first position; specs

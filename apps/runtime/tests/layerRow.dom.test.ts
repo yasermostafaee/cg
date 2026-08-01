@@ -6,9 +6,12 @@ import {
   layerRowActions,
   MISSING_TEMPLATE_REASON,
 } from '../src/renderer/features/layers/layerRowActions.js';
+import type { StackItemState } from '@cg/shared-schema';
 import {
+  bindingFor,
   itemWith,
   renderLayerRow,
+  rowDeps,
   slotWith,
   templateWith,
   type RenderedRow,
@@ -264,13 +267,16 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
    * that are ABOUT occupancy pass it explicitly.
    */
   const deps = (
-    item: Parameters<typeof layerRowActions>[0]['item'],
+    item: StackItemState | null,
     hasNext: boolean,
     observed: Parameters<typeof layerRowActions>[0]['observed'] = item === null
       ? { kind: 'empty' as const }
       : { kind: 'producer' as const, producer: 'html' },
   ) => ({
-    item,
+    // A spec still names a row by its item, and `bindingFor` turns that into the
+    // union the verbs actually read. `null` here means UNBOUND and only unbound —
+    // the third case (`awaiting`) is named, never reached by passing nothing.
+    binding: bindingFor(item),
     observed,
     hasNext,
     linkDown: false,
@@ -729,28 +735,25 @@ describe('LayerRow — the LOAD/REMOVE toggle splits binding from occupancy', ()
   const observedProducer = { kind: 'producer' as const, producer: 'html' };
   const observedUnknown = { kind: 'unknown' as const };
 
-  function toggle(over: Partial<Parameters<typeof layerRowActions>[0]>) {
+  /**
+   * The toggle for one row. A spec still says which ITEM the row holds — `null`
+   * meaning UNBOUND — and `bindingFor` turns that into the union the verbs read.
+   * A spec about the `awaiting` window passes `binding` directly instead.
+   */
+  function toggle(
+    over: Partial<Omit<Parameters<typeof layerRowActions>[0], 'binding'>> & {
+      item?: StackItemState | null;
+      binding?: Parameters<typeof layerRowActions>[0]['binding'];
+    },
+  ) {
+    const { item, ...rest } = over;
     const actions = layerRowActions({
-      item: itemWith('loaded'),
-      observed: observedEmpty,
-      hasNext: false,
-      linkDown: false,
-      casparReachable: true,
-      dirty: false,
-      rehearsing: false,
-      templateAvailable: true,
-      toggleRehearse: () => Promise.resolve({ accepted: true }),
-      load: () => Promise.resolve({ accepted: true }),
-      reload: () => Promise.resolve({ accepted: true }),
-      play: () => Promise.resolve({ accepted: true }),
-      next: () => Promise.resolve({ accepted: true }),
-      update: () => Promise.resolve({ accepted: true }),
-      stop: () => Promise.resolve({ accepted: true }),
-      clear: () => Promise.resolve({ accepted: true }),
-      clearLayer: () => Promise.resolve({ accepted: true }),
-      remove: () => Promise.resolve({ accepted: true }),
-      onError: () => undefined,
-      ...over,
+      ...rowDeps({
+        binding: over.binding ?? bindingFor(item === undefined ? itemWith('loaded') : item),
+        observed: observedEmpty,
+        dirty: false,
+      }),
+      ...rest,
     });
     const action = actions.find((a) => a.key === 'load-remove');
     if (action === undefined) throw new Error('the toggle must always exist');
@@ -861,30 +864,10 @@ describe('LayerRow — the LOAD/REMOVE toggle splits binding from occupancy', ()
 describe('LayerRow — CasparCG reachability gates the AMCP verbs', () => {
   /** A row's deps, both hops up, with an OCCUPIED layer unless stated. */
   const deps = (
-    item: Parameters<typeof layerRowActions>[0]['item'],
+    item: StackItemState | null,
     hasNext: boolean,
-  ): Parameters<typeof layerRowActions>[0] => ({
-    item,
-    observed:
-      item === null ? { kind: 'empty' as const } : { kind: 'producer' as const, producer: 'html' },
-    hasNext,
-    linkDown: false,
-    casparReach: 'reachable' as const,
-    dirty: true,
-    rehearsing: false,
-    templateAvailable: true,
-    toggleRehearse: () => Promise.resolve({ accepted: true }),
-    load: () => Promise.resolve({ accepted: true }),
-    reload: () => Promise.resolve({ accepted: true }),
-    play: () => Promise.resolve({ accepted: true }),
-    next: () => Promise.resolve({ accepted: true }),
-    update: () => Promise.resolve({ accepted: true }),
-    stop: () => Promise.resolve({ accepted: true }),
-    clear: () => Promise.resolve({ accepted: true }),
-    clearLayer: () => Promise.resolve({ accepted: true }),
-    remove: () => Promise.resolve({ accepted: true }),
-    onError: () => undefined,
-  });
+  ): Parameters<typeof layerRowActions>[0] =>
+    rowDeps({ binding: bindingFor(item), hasNext, dirty: true });
   const onAirRow = () => ({
     ...deps(itemWith('on-air'), true),
     casparReach: 'unreachable' as const,

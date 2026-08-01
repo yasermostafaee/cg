@@ -85,9 +85,10 @@ function row(item: StackItemState): ReturnType<typeof createElement> {
       observed: { kind: 'producer' as const, producer: 'html' },
       binding: { itemId: item.itemId, templateType: 'clock', templateId: item.templateId },
     },
-    item,
-    // A settled panel: these specs are about how an ARRIVED status is badged.
-    binding: { kind: 'bound' as const, status: item.status },
+    // A settled panel: these specs are about how an ARRIVED status is badged. The
+    // union's `bound` arm carries the item, so there is no separate `item` prop —
+    // see `RowBinding`.
+    binding: { kind: 'bound' as const, item },
     template: { templateId: 'tpl-1', templateType: 'clock', fields: [] },
     bankPosition: 1,
     selected: false,

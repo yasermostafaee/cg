@@ -67,9 +67,86 @@ caught it.
 - **A NEW BUG REPORTED AND NOT YET INVESTIGATED:** removing backup B leaves primary A
   stuck in `connecting`. Bridge/connections behaviour, not styling — it needs its own
   task.
-- **The b5 carry-over still stands:** during the loading window a bound row's VERBS
-  render as an empty row's, because everything but the state cell derives from
-  `item === null`. Gating them on `binding.kind === 'awaiting'` is a gating change.
+- ~~The b5 carry-over: during the loading window a bound row's VERBS render as an
+  empty row's.~~ **CLOSED by `dev-awaiting-verbs` below.**
+
+### ✅ `dev-awaiting-verbs` — the verbs, and one panel-level notice
+
+**§1 — the hazard was real and it is closed.** During the awaiting window a bound
+row's verbs rendered an empty row's, because everything except the state cell still
+derived from `item === null`. `LOAD` is a LIST action, so it survived every
+reachability gate and stayed ENABLED — on rows that were already bound. Pressing it
+there rebinds the row over the binding the panel has not yet shown him.
+
+**Made unrepresentable rather than checked, one level deeper than last time.**
+`RowBinding`'s `bound` arm now carries the whole `StackItemState` instead of a bare
+status, and `LayerRow` lost its `item` prop entirely — it takes the item OUT of that
+arm. `layerRowActions` takes `binding: RowBinding` and has no nullable to ask. The
+previous task made the union the state cell's only input and left `item` beside it
+for everyone else; that leftover nullable is exactly where the bug survived.
+
+**The load-bearing assertion is structural, not behavioural.** `awaiting` and
+`unbound` both have NO item, so if any verb still read the nullable the two would be
+indistinguishable — and every behavioural assertion would pass for the wrong reason.
+The spec pins the difference itself: same absent item, opposite offers.
+
+**Ran it against the unfixed gating and saw it red** (union plumbing kept, the three
+`awaiting` gates reverted): 5 of 9 failed, headline
+`expected Map{...} to not deeply equal Map{...}` — the two states collapsing into
+one, the conflation proven — plus `load-remove was actionable while the row was
+unknown`. The 4 that passed are the ones that should: the bound-row regression
+fences and the unbound-unchanged fence.
+
+**Precedence, because three refusals can be true at once:** `linkDown` >
+`awaiting` > CasparCG. A dead bridge outranks the waiting sentence deliberately —
+"it returns as soon as it answers" is a promise nothing is keeping when the bridge
+is what is down, and it would send the operator away from the machine he needs.
+`awaiting` outranks CasparCG so the boot window never names a machine nothing has
+accused. Asserted across all three reach states.
+
+**🔴 CLEAR IS NOW HELD IN THIS WINDOW — a real narrowing of a deliberately
+unguarded verb, and the one thing here worth the owner's eye.** The doctrine is that
+refusing CLEAR because the STATE MODEL is confused is fail-stuck, not fail-safe.
+`awaiting` is not that case: it is not knowing WHICH COMMAND the button is. Bound,
+CLEAR is `stack.out(itemId)` and keeps the B-039 producer bookkeeping; unbound it is
+the bank-scoped `clearLayer()`. With no itemId it would have to guess, and guessing
+`clearLayer` on a row that turns out to be bound clears the layer out from under a
+live item — a second bug reachable by a button. The window is one bridge round trip,
+it ends on the DATA, and `CLEAR ALL` in the panel header is NOT held by it. The
+task's wording ("verbs that act on the row are disabled"; "the row offers nothing
+until it knows") decides this; it is recorded because it is the sort of narrowing
+that should not pass unnoticed.
+
+**The `awaiting` toggle shows LOAD, disabled** — not REMOVE. REMOVE is not merely
+unwise there, it is unperformable: no itemId to send, and its confirm gate names the
+template and says whether the item is ON AIR, neither of which we know. The
+fixed-shape rule requires a control in the slot; a disabled one invites nothing.
+
+**§0 — the notice is driven by the same array as the rows, not by a second scan.**
+`rowBindings` resolves every row's binding once; the notice counts entries in it and
+each row is handed its own. The specs assert AGREEMENT at every tick rather than
+mere presence — a notice on its own readiness flag would pass a presence test and is
+exactly how "not known" comes to sit above thirty rows claiming EMPTY.
+
+**Layout stability cost, taken knowingly.** The strip is ALWAYS rendered at a fixed
+`height`, so nothing shifts when the notice goes — which is the second the operator
+is reaching for a row. The cost is a reserved ~1.65rem band above the table when
+there is nothing to say. The alternative (overlaying the sticky column header) shifts
+nothing either but hides the words each verb glyph stands for, and those are the
+icon-only buttons' only labels.
+
+**Adversarial review — the mirror bug is structurally impossible, and I checked
+rather than assumed.** A row stuck offering nothing reads as a dead panel.
+`useBridgeSnapshotState`'s `ready` **latches on the first arrival and never clears**
+("a later disconnect does not make that knowledge un-arrive"), and the stack pulls
+even while disconnected (B-092, browser-local intent), so the window cannot persist.
+Asserted anyway, verb by verb, against what a bound row offered before the task.
+
+**One residual, not a defect but worth knowing:** `ready` is component state, so a
+`LayersPanel` REMOUNT (the fullscreen round-trip that `App` does — see the
+`pruneDrafts` note) re-opens the window until the pull resolves. The rows already
+flashed LOADING there; now the verbs are held for that instant too. Bounded by the
+pull, ends on the data.
 
 ### ✅ `dev-loading-row` — every row read EMPTY on startup and reconnect
 
@@ -112,13 +189,11 @@ adversarial stuck-in-LOADING check (vacuous when nothing ever says LOADING).
 mirror bug and would read as a hung panel. Asserted by resolving the stack and then
 continuing to tick, so a row that drifted back would fail.
 
-**Follow-up not taken (out of scope — "do not change any gating condition").** During
-the awaiting window a bound row's VERBS render as an empty row's, because everything
-except the state cell still derives from `item === null`. That is not a regression (the
-row was fully EMPTY before, verbs included) and the state cell now warns, but an
-operator could press LOAD on a row that is about to turn out to be bound. **The
-principled fix is to gate the verbs on `binding.kind === 'awaiting'` too**, which is a
-gating change and belongs in its own task.
+**Follow-up not taken here (out of scope — "do not change any gating condition"), and
+now DONE.** During the awaiting window a bound row's VERBS rendered an empty row's,
+because everything except the state cell still derived from `item === null`. Closed by
+`dev-awaiting-verbs` above, which gates on `binding.kind` and removes the nullable that
+made the conflation expressible.
 
 ### ✅ `dev-r028-b5` — the Inspector restyle, three commits
 
@@ -1364,6 +1439,22 @@ silent) nobody notices until someone asks why there is no sound.
 
 Per the fast-mode contract, all of this was deliberately not done.
 
+**`dev-awaiting-verbs` (overnight run, 2026-08-01):**
+
+- **No OpenSpec change artifacts and no PRD item.** No `openspec/changes/` dir, no
+  `[~]` flip. The verb-availability rule and the panel notice are both spec-worthy —
+  the `awaiting` case is now a THIRD row state with its own offers, and `CLEAR`'s
+  narrowing (above) is a documented decision reversal that belongs in a spec delta.
+- **No E2E spec added.** The `awaiting` window is a transient bootstrap state that
+  Playwright cannot reliably hold open against the real bridge — the DOM specs
+  reproduce it by DEFERRING the stack snapshot, which is not available at the E2E
+  layer. **A Linux `gate:e2e` is still owed**: the panel gained a reserved strip above
+  the layer table, which is a layout change.
+- **`AWAITING_ROW_REASON` is not in the shared `reachWording` module.** It lives with
+  the verbs (`layerRowActions`), like `MISSING_TEMPLATE_REASON`. If a second surface
+  ever needs to say it, that is the moment to move it — the drift risk is real but no
+  second consumer exists yet.
+
 **`dev-r030-channel-raster` + `dev-r022-rehearse` (this session):**
 
 - **No OpenSpec change artifacts.** Both features shipped straight to code. `R-030` and
@@ -1494,6 +1585,23 @@ Per the fast-mode contract, all of this was deliberately not done.
 ---
 
 ## Decisions taken fast
+
+### `dev-awaiting-verbs` — the three that were genuinely open
+
+1. **The `awaiting` toggle shows LOAD, disabled.** The task forbids REMOVE and requires
+   the row to offer nothing; the fixed-shape rule requires a control in the slot. LOAD
+   is the toggle's default face and disabled invites nothing, so this is the only
+   remaining option rather than a preference. Reversible in one line if the owner wants
+   a third label.
+2. **The notice strip reserves its height permanently.** The requirement is zero layout
+   shift, and in-flow that means always-reserved. The cost is a ~1.65rem band above the
+   table when idle. The alternative — overlaying the sticky column header — also shifts
+   nothing but hides the words the icon-only verb buttons depend on. Reversible; it is
+   one `styles.awaitingStrip` rule.
+3. **`linkDown` outranks `awaiting` in the refusal wording.** Both are true on a cold
+   start with a dead bridge. The waiting sentence promises a bounded wait, which is
+   false there, so the nearer failure wins — the same rule `casparRefusalReason` already
+   follows between the bridge and CasparCG.
 
 ### r030 + r022 — POSITION REHEARSAL: which of the two "positions" is written
 

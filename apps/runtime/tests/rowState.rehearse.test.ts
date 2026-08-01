@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { rowState, type RowStateInput } from '../src/renderer/features/layers/rowState.js';
 import { colors } from '../src/renderer/theme.js';
 
@@ -7,9 +8,31 @@ import { colors } from '../src/renderer/theme.js';
  * colour is never the only channel, and colour never lies about air.
  */
 
+/**
+ * A BOUND binding at a given status.
+ *
+ * The union's `bound` arm carries the whole item rather than a bare status, so the
+ * VERBS can read the same union the state cell does — see `RowBinding`. Built here
+ * rather than imported from `support/layerRow`, which pulls in react-dom: this spec
+ * is pure and must stay runnable without a DOM.
+ */
+function bound(status: StackItemStatus): { kind: 'bound'; item: StackItemState } {
+  return {
+    kind: 'bound',
+    item: {
+      itemId: 'item-1',
+      templateId: 'tpl-1',
+      fields: {},
+      status,
+      pending: false,
+      slot: { channel: 1, layer: 70, server: 'primary' },
+    },
+  };
+}
+
 function input(over: Partial<RowStateInput> = {}): RowStateInput {
   return {
-    binding: { kind: 'bound', status: 'loaded' },
+    binding: bound('loaded'),
     pending: false,
     observed: { kind: 'producer', producer: 'html' },
     linkDown: false,
@@ -88,15 +111,13 @@ describe('rowState — REHEARSING', () => {
     // and a rehearse badge over a live graphic answers it wrongly. The bridge
     // withdraws the stale claim within one sweep; this is the honest reading for
     // the interval in between.
-    const onAir = rowState(
-      input({ binding: { kind: 'bound', status: 'on-air' }, rehearsing: true }),
-    );
+    const onAir = rowState(input({ binding: bound('on-air'), rehearsing: true }));
     expect(onAir.label).toBe('ON AIR');
     expect(onAir.color).toBe(colors.onAir);
 
     // A take IN FLIGHT is a transition toward air, so it is excluded too.
     const inFlight = rowState(
-      input({ binding: { kind: 'bound', status: 'playing' }, pending: true, rehearsing: true }),
+      input({ binding: bound('playing'), pending: true, rehearsing: true }),
     );
     expect(inFlight.label).not.toBe('ON PVW');
   });

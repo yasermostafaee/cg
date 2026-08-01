@@ -18,6 +18,7 @@ import {
   type CasparReach,
 } from '../../ui/reachWording.js';
 import { isOnAir } from '../stack/onAir.js';
+import type { RowBinding } from './rowState.js';
 
 /**
  * R-028 (5.1/5.2/5.4) — the ONE verb list for a layer row.
@@ -80,9 +81,40 @@ import { isOnAir } from '../stack/onAir.js';
 export const MISSING_TEMPLATE_REASON =
   'This browser does not have this row’s template, so it cannot be put back on the layer. Re-import it, or REMOVE the row.';
 
+/**
+ * WHY EVERY VERB IS HELD WHILE THE ROW'S CONTENTS HAVE NOT ARRIVED.
+ *
+ * It NAMES NO FAULT, and in particular it never names CasparCG — nothing has said
+ * anything about the playout server in this window, and the row is not waiting on
+ * it. What has not arrived is the STACK SNAPSHOT, one hop nearer. Naming the wrong
+ * machine here is the same defect `CASPAR_CONNECTING_REASON` was written to fix,
+ * and it would send an operator to a rack over a snapshot that lands in a second.
+ *
+ * Same shape as that sentence deliberately — "held", "returns as soon as it
+ * answers" — because it is the same PROMISE: a bounded wait that ends on the data,
+ * never on a timer, and never on the operator doing anything.
+ */
+export const AWAITING_ROW_REASON =
+  'Connecting… this row’s contents have not arrived from the bridge yet, so its actions are held. They return as soon as it answers.';
+
 export interface LayerRowActionDeps {
-  /** The stack item bound to this row, if any (the row's whole verb state). */
-  item: StackItemState | null;
+  /**
+   * WHAT THIS ROW CARRIES — the union, and the ONLY input to what this row offers.
+   *
+   * It was `item: StackItemState | null`, and that nullable is the whole bug this
+   * argument exists to close: `null` meant BOTH "no template bound" (ours, known —
+   * `LOAD` is honest) and "the stack has not arrived" (not a fact about the row at
+   * all), so for the whole bootstrap window a BOUND row offered an empty row's
+   * verbs. `LOAD` is a list action and therefore ENABLED in that window, which
+   * invites the operator to rebind a row that already has a binding — the one he
+   * cannot see yet. Offering an action on a state we have not been told is exactly
+   * the class the `EMPTY` label fix closed, on a control instead of a word.
+   *
+   * Taking the union rather than a nullable plus a flag is what makes the mistake
+   * unrepresentable: there is no `item` to compare against `null`, so no verb's
+   * availability CAN be derived from one.
+   */
+  binding: RowBinding;
   /**
    * What the WIRE observes on this row's layer, independent of whether we have
    * an item bound to it. Load reads this, not just `item`: an unbound row can
@@ -170,13 +202,45 @@ export interface LayerRowActionDeps {
 /**
  * The verbs for one row, in operator order.
  *
- * `item === null` is the EMPTY row: only LOAD can do anything, and every other
- * verb is present-but-disabled. With the link down everything is disabled
- * including LOAD — an exact-slot load commands CasparCG.
+ * `unbound` is the EMPTY row: only LOAD can do anything, and every other verb is
+ * present-but-disabled. With the link down everything is disabled including LOAD —
+ * an exact-slot load commands CasparCG.
+ *
+ * `awaiting` offers NOTHING, and that is the third case the old nullable could not
+ * express. See {@link AWAITING_ROW_REASON} and the `awaiting` note below.
  */
 export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
-  const { item, linkDown, onError } = deps;
-  const offlineReason = linkDown ? BRIDGE_DOWN_REASON : undefined;
+  const { binding, linkDown, onError } = deps;
+  /**
+   * ── THE THREE-WAY FACT, UNPACKED ONCE ─────────────────────────────────────
+   *
+   * `item` is derived here and is used ONLY for the itemId a handler must send and
+   * for the status a gate must read — never to decide whether a verb is offered.
+   * Every availability question below asks `binding.kind`, because `item === null`
+   * cannot tell `unbound` from `awaiting` and those two must offer opposite things.
+   *
+   * `empty` is therefore `kind === 'unbound'` and NOT `!hasBinding`. That
+   * distinction is the fix: with `!hasBinding`, `awaiting` would fall into the
+   * EMPTY branch and light LOAD up again — the bug, restored by a negation.
+   *
+   * `empty` GOES ON MEANING "NO BINDING" AND NEVER "THE LAYER IS FREE". That split
+   * is load-bearing and predates this change: CLEAR destroys the producer and KEEPS
+   * the item, so a row can be bound over an empty layer. Reading `empty` as layer
+   * occupancy is what once left the toggle stuck on REMOVE after a CLEAR, with no
+   * way to put the template back short of removing it and picking it again.
+   */
+  const item = binding.kind === 'bound' ? binding.item : null;
+  const hasBinding = binding.kind === 'bound';
+  const empty = binding.kind === 'unbound';
+  /**
+   * WE HAVE NOT BEEN TOLD WHAT IS ON THIS ROW.
+   *
+   * Not a state of the row — a state of our KNOWLEDGE of it, and it ends on the
+   * DATA (`ready` latches on the first snapshot, a push, or a resolved pull), never
+   * on a timer. A timer would either uncover a row before its binding is known or
+   * hold a settled one back, and both are worse than the wait.
+   */
+  const awaiting = binding.kind === 'awaiting';
   /**
    * THE GATE EVERY AMCP-EMITTING VERB CARRIES: both hops must be up.
    *
@@ -197,26 +261,33 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    */
   const needsCasparReason = casparRefusalReason(linkDown, deps.casparReach) ?? BRIDGE_DOWN_REASON;
   /**
-   * ── TWO FACTS THAT USED TO BE ONE FLAG ──────────────────────────────────────
+   * ── WHY A VERB IS REFUSED, IN PRECEDENCE ORDER: THE NEARER UNKNOWN WINS ────
    *
-   * `empty` meant `item === null` and was read by controls that needed two
-   * different questions answered:
+   * Three things can hold a verb, and when more than one is true the operator must
+   * be told the one he can ACT on:
    *
-   *   - HAS THIS ROW A TEMPLATE BOUND?  (`hasBinding`)
-   *   - IS THERE A PRODUCER ON THE LAYER? (`layerOccupied`)
+   *   1. `linkDown` — the bridge is down. It wins over everything, unchanged: with
+   *      no bridge the stack cannot arrive either, so "connecting…, it returns as
+   *      soon as it answers" would be a promise nothing is keeping. This is also
+   *      why a cold start with a dead bridge reads BRIDGE DISCONNECTED and not the
+   *      waiting sentence — the wait is not bounded in that case.
+   *   2. `awaiting` — the bridge is up and has not yet said what this row holds.
+   *      Nearer than CasparCG and strictly more informative: we cannot even name
+   *      what the verb would act on, so whether the command could be DELIVERED is a
+   *      question we have not reached yet.
+   *   3. the CasparCG hop, worded by the shared `casparRefusalReason`.
    *
-   * They agree until CLEAR, which destroys the producer and KEEPS the item — so
-   * the row stayed "not empty", the LOAD/REMOVE toggle went on showing REMOVE,
-   * and the operator could not put the template back without removing it and
-   * picking it again. That is the reported defect, and it is a conflation rather
-   * than a missing branch, so it is fixed by splitting the fact and naming which
-   * one each consumer means.
-   *
-   * `empty` survives ONLY as "no binding" for the verbs whose question really is
-   * that, and is renamed to say so.
+   * Ordering 2 above 3 is also what keeps the boot window from naming a machine
+   * nothing has accused: a row whose stack has not landed must never explain itself
+   * with "CasparCG cannot be reached".
    */
-  const hasBinding = item !== null;
-  const empty = !hasBinding;
+  const rowRefusalReason: string | undefined = linkDown
+    ? BRIDGE_DOWN_REASON
+    : awaiting
+      ? AWAITING_ROW_REASON
+      : undefined;
+  /** The reason for an AMCP-emitting verb, with the two nearer unknowns first. */
+  const casparVerbReason = rowRefusalReason ?? needsCasparReason;
   /**
    * Is a producer resident on the layer?
    *
@@ -259,6 +330,21 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    * and open the REMOVE modal. `LayerRow` now keys the confirm off this action's
    * own `tone`, set by the same branch that sets the label, so the two cannot
    * disagree. The label was only the symptom; the second resolution was the bug.
+   *
+   * ── AND WHAT `awaiting` SHOWS IN THIS SLOT ─────────────────────────────────
+   *
+   * The LOAD face, DISABLED. Not REMOVE: REMOVE is not merely unwise here, it is
+   * unperformable — `remove(itemId)` has no itemId to send, and its confirm gate
+   * names the template and says whether the item is ON AIR, neither of which we
+   * know. Showing it would be the console asserting a binding it has not been told
+   * about, which is the very claim this window exists to withhold.
+   *
+   * So the slot keeps its default face and offers nothing through it. The SHAPE
+   * rule forces a control to be here — every row declares the same verbs in the
+   * same order, always — and a disabled control invites nothing, which is exactly
+   * the distinction R-021 stage 2b actually draws. The word LOAD is not a claim
+   * that the row is empty; the state cell says LOADING beside it, and the tooltip
+   * says why it is held.
    */
   const showLoad = !hasBinding;
 
@@ -291,11 +377,18 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     key,
     label,
     variant: 'verb',
-    disabled: disabled || linkDown,
+    /*
+      `awaiting` IS OR-ED IN HERE, CENTRALLY, for the same reason `linkDown` is:
+      every verb built through this helper inherits it, so a verb cannot be added
+      later that forgets the window. The two exceptions are spelled out where they
+      are made — CLEAR is a literal below (it must escape `linkDown`, and it does
+      NOT escape this one), and nothing escapes `awaiting`.
+    */
+    disabled: disabled || linkDown || awaiting,
     ...(title !== undefined
       ? { title }
-      : offlineReason !== undefined
-        ? { title: offlineReason }
+      : rowRefusalReason !== undefined
+        ? { title: rowRefusalReason }
         : {}),
     run,
     onError,
@@ -326,6 +419,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     //   no      | empty                       | LOAD  — pick + import + load
     //   yes     | occupied                    | REMOVE
     //   yes     | empty (post-CLEAR)          | LOAD  — re-ADD the bound template
+    //   NOT YET KNOWN (`awaiting`)            | LOAD, DISABLED — offers nothing
     showLoad
       ? {
           ...act(
@@ -349,6 +443,14 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
             // BRIDGE to import the template into the store it serves from. The
             // bridge is ours and local; CasparCG is neither. Two different states,
             // two different reasons, and only one of them belongs to this button.
+            //
+            // `act` ALSO ORs `awaiting` in, and that is the point of this task.
+            // LOAD is a LIST action, so it survived every reachability gate above
+            // and stayed lit through the whole bootstrap window — on rows that were
+            // already bound. Pressing it there rebinds a row over a binding the
+            // panel has not yet been told about: the operator overwrites the one
+            // thing he cannot see. Passing `false` here means "this verb adds no
+            // gate of its own", never "this verb is always available".
             false,
             () => deps.load(),
             Download,
@@ -402,7 +504,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         () => (item === null ? noop() : deps.play(item.itemId)),
         Play,
       ),
-      ...(needsCaspar ? { title: needsCasparReason } : {}),
+      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
       tone: 'play',
       // ENGAGED = the state this verb produces is already true, which for PLAY is
       // ON AIR. It is disabled in exactly that case, so the fill lands on a
@@ -474,7 +576,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         () => (item === null ? noop() : deps.next(item.itemId)),
         ArrowRightFromLine,
       ),
-      ...(needsCaspar ? { title: needsCasparReason } : {}),
+      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
       tone: 'next',
     },
     // UPDATE pushes staged field edits to a LIVE producer. Its primary surface
@@ -489,7 +591,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       'menu',
       // UPDATE reaches air: on a row with a resident producer it sends
       // `CG UPDATE` (measured). So it carries the same reason as the rest.
-      needsCaspar ? needsCasparReason : undefined,
+      needsCaspar ? casparVerbReason : undefined,
     ),
     {
       ...act(
@@ -499,7 +601,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         () => (item === null ? noop() : deps.stop(item.itemId)),
         CircleArrowOutDownRight,
       ),
-      ...(needsCaspar ? { title: needsCasparReason } : {}),
+      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
       tone: 'stop',
     },
     /**
@@ -564,9 +666,38 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       key: 'clear',
       label: 'CLEAR',
       variant: 'verb',
-      // Gated on REACHABILITY only — never on the row's status. See above.
-      disabled: needsCaspar,
-      ...(needsCaspar ? { title: needsCasparReason } : {}),
+      /*
+        Gated on REACHABILITY, and — the one addition — on `awaiting`. Never on the
+        row's STATUS. See above.
+
+        ── WHY THE ESCAPE HATCH IS HELD IN THIS ONE WINDOW ────────────────────
+
+        This is a real narrowing of a deliberately-unguarded verb, so it is argued
+        rather than asserted. The doctrine above says refusing CLEAR because the
+        STATE MODEL is confused is fail-STUCK, not fail-safe: the status is exactly
+        what may be wrong when the operator reaches for it. That still stands, and
+        `awaiting` is not that case.
+
+        `awaiting` is not a doubtful status — it is not knowing WHICH COMMAND this
+        button is. CLEAR is two different acts behind one word: `stack.out(itemId)`
+        on a bound row, which keeps the B-039 producer bookkeeping the item state
+        machine depends on, and the bank-scoped `clearLayer()` on an unbound one.
+        Enabled here, it would have to guess between them with no itemId to send —
+        and guessing `clearLayer` on a row that turns out to be bound clears the
+        layer OUT FROM UNDER the item, leaving the stack believing a producer is
+        resident that no longer is. That is not an escape hatch, it is a second bug
+        reachable by a button.
+
+        The wait is also bounded by the DATA and is short: it ends on the first
+        snapshot, a push, or a resolved pull. A graphic genuinely stuck on air is
+        stuck for minutes; this window is one bridge round trip, and CLEAR ALL in
+        the panel header is not held by it. What is NOT acceptable — and is what the
+        precedence order prevents — is this window being confused with a dead
+        bridge: `linkDown` reads BRIDGE DISCONNECTED, because that wait is not
+        bounded and the operator has somewhere to go.
+      */
+      disabled: needsCaspar || awaiting,
+      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
       run: () => (item === null ? deps.clearLayer() : deps.clear(item.itemId)),
       onError,
       icon: XSquare,

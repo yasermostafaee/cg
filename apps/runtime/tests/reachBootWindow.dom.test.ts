@@ -6,7 +6,7 @@ import {
   CASPAR_UNREACHABLE_REASON,
   casparRefusalReason,
 } from '../src/renderer/ui/reachWording.js';
-import { itemWith, renderLayerRow } from './support/layerRow.js';
+import { bindingFor, itemWith, renderLayerRow, rowDeps } from './support/layerRow.js';
 
 /**
  * §2 — THE BOOT WINDOW TELLS THE WRONG REASON.
@@ -31,28 +31,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const baseDeps = (): Parameters<typeof layerRowActions>[0] => ({
-  item: itemWith('on-air'),
-  observed: { kind: 'producer', producer: 'html' },
-  hasNext: true,
-  linkDown: false,
-  casparReach: 'connecting',
-  dirty: true,
-  rehearsing: false,
-  templateAvailable: true,
-  toggleRehearse: () => Promise.resolve({ accepted: true }),
-  load: () => Promise.resolve({ accepted: true }),
-  reload: () => Promise.resolve({ accepted: true }),
-  loadFromLibrary: () => Promise.resolve({ accepted: true }),
-  play: () => Promise.resolve({ accepted: true }),
-  next: () => Promise.resolve({ accepted: true }),
-  update: () => Promise.resolve({ accepted: true }),
-  stop: () => Promise.resolve({ accepted: true }),
-  clear: () => Promise.resolve({ accepted: true }),
-  clearLayer: () => Promise.resolve({ accepted: true }),
-  remove: () => Promise.resolve({ accepted: true }),
-  onError: () => undefined,
-});
+const baseDeps = (): Parameters<typeof layerRowActions>[0] =>
+  rowDeps({
+    binding: bindingFor(itemWith('on-air')),
+    hasNext: true,
+    casparReach: 'connecting',
+    dirty: true,
+  });
 
 describe('§2 — while the bridge has not answered, the verbs say CONNECTING, not UNREACHABLE', () => {
   it('every CasparCG-bound verb is still refused — unknown fails closed', () => {

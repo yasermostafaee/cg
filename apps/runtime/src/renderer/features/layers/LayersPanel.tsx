@@ -1,6 +1,13 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
-import { CircleArrowOutDownRight, PanelRight, RotateCcw, Trash2, XSquare } from 'lucide-react';
+import {
+  CircleArrowOutDownRight,
+  LoaderCircle,
+  PanelRight,
+  RotateCcw,
+  Trash2,
+  XSquare,
+} from 'lucide-react';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -40,6 +47,21 @@ interface Props {
   onToggleInspector: () => void;
 }
 
+/**
+ * §0 — what the panel says while the row states are not in yet.
+ *
+ * ONE LINE, and it makes the claim at PANEL level that the rows make individually:
+ * the states have not arrived. It names no fault and no machine — nothing has said
+ * anything is wrong, and this is the ordinary first second of a page.
+ *
+ * It says "not arrived yet" rather than "loading", because the operator's question
+ * is not what the console is busy with but whether he can trust what he is looking
+ * at. Kept short enough to survive the strip's fixed height at a narrow width; the
+ * element's `title` carries it in full if it ever ellipsises.
+ */
+const AWAITING_PANEL_NOTICE =
+  'Layer states have not arrived yet — rows fill in as soon as the bridge answers.';
+
 const styles = {
   /**
    * The channel's scroll area. The STICKY column header lives INSIDE it (below
@@ -47,6 +69,38 @@ const styles = {
    * the header scrolling away with them.
    */
   list: { overflowY: 'auto' as const, minHeight: 0, flex: 1 },
+  /**
+   * §0 — THE PANEL-LEVEL NOTICE, AND ITS PERMANENTLY RESERVED HEIGHT.
+   *
+   * The strip is ALWAYS rendered and always this tall, whether or not it has
+   * anything to say. That is the whole reason it is a fixed `height` and not a
+   * `minHeight`, and it is not a styling preference: the notice appears at mount
+   * and goes when the data lands, which is precisely the second the operator is
+   * reaching for a row. A strip that took its height from its content would move
+   * every row up under his cursor at that exact moment.
+   *
+   * The cost is a reserved band above the table when there is nothing to say. It
+   * was taken deliberately over the alternative — overlaying the notice on the
+   * sticky column header — which shifts nothing but hides the words each verb glyph
+   * stands for, and those are the row's only labels (the buttons are icon-only).
+   *
+   * `nowrap` + ellipsis for the same reason: a message that wrapped to two lines at
+   * a narrow width would defeat the fixed height. The full sentence stays reachable
+   * through the element's own `title`.
+   */
+  awaitingStrip: {
+    height: '1.65rem',
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.4rem',
+    padding: '0 0.6rem',
+    fontSize: '0.78rem',
+    color: colors.textMuted,
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
   empty: {
     padding: '1rem',
     fontSize: '0.85rem',
@@ -173,6 +227,35 @@ export function LayersPanel({
       )
       .sort((a, b) => b.layer - a.layer);
   }, [bank, slots]);
+
+  /**
+   * EVERY ROW'S BINDING, RESOLVED ONCE — the panel notice and the rows read THIS.
+   *
+   * §0 asks for a panel-level notice "driven by the same `awaiting` condition" as
+   * the rows, and this is what makes that literally true rather than merely
+   * intended: there is ONE array, the notice counts entries in it and each row is
+   * handed its own entry. A second `some(...)` scan over the slots would be a
+   * second derivation of the same fact — the exact shape that let the state cell
+   * and the verbs disagree in the first place — and it could drift the moment
+   * either side grew a condition.
+   *
+   * That is also what the notice's test asserts: not that a notice exists, but that
+   * it is present exactly when a row is waiting and absent exactly when none is.
+   */
+  const rowBindings = useMemo(
+    () =>
+      rows.map((slot) => ({
+        slot,
+        binding: resolveRowBinding(
+          slot.binding,
+          slot.binding === null ? undefined : itemById.get(slot.binding.itemId),
+          stackReady,
+        ),
+      })),
+    [rows, itemById, stackReady],
+  );
+  /** How many rows do not yet know what they carry. Zero hides the notice. */
+  const awaitingRows = rowBindings.filter((r) => r.binding.kind === 'awaiting').length;
 
   const onAirCount = items.filter(isOnAir).length;
 
@@ -479,64 +562,106 @@ export function LayersPanel({
               </Button>
             </div>
           ) : (
-            <div style={styles.list} ref={listRef}>
-              {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
-              <LayerTableHeader
-                density={density}
-                onAirCount={onAirCount}
-                // §4 — `unreachable` only, never the boot window: a count that
-                // greyed itself for the first second of every reload would teach
-                // the operator to stop reading the grey.
-                unverifiable={linkDown || casparReach === 'unreachable'}
-              />
-              {rows.map((slot, index) => {
-                /*
-                  THE `?? null` THAT USED TO BE HERE IS THE BUG, and it is worth
-                  naming because it reads as harmless: a bound slot whose item had
-                  not arrived became `null`, which is the SAME value an unbound
-                  slot produces — so the row could not tell "nothing is on this
-                  layer" from "we have not been told yet", and reported the first.
+            <>
+              {/*
+                §0 — ONE PANEL-LEVEL NOTICE, because thirty subtle signals are worse
+                than one clear one.
 
-                  `resolveRowBinding` is now the one place that decision is made,
-                  and it takes `stackReady` as a required argument so it cannot be
-                  made without considering it.
-                */
-                const binding = resolveRowBinding(
-                  slot.binding,
-                  slot.binding === null ? undefined : itemById.get(slot.binding.itemId),
-                  stackReady,
-                );
-                const item =
-                  slot.binding !== null ? (itemById.get(slot.binding.itemId) ?? null) : null;
-                const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
-                return (
-                  <LayerRow
-                    key={slot.layer}
-                    slot={slot}
-                    item={item}
-                    binding={binding}
-                    template={template}
-                    // `#` — plain display order, 1 at the top of THIS list.
-                    displayPosition={index + 1}
-                    // The default alias's number — the layer's FIXED place in the
-                    // bank, which ticking and unticking must never renumber. See
-                    // `bankPosition` for why the two are deliberately separate.
-                    bankPosition={bankPosition(bank, slot.layer)}
-                    density={density}
-                    selected={item !== null && item.itemId === selectedId}
-                    dirty={item !== null && isItemDirty(item.itemId, item.fields)}
-                    // R-022 — read through the canonical `isRehearsing`, never a
-                    // local `.some()`: the bridge refuses PLAY on the same
-                    // predicate, and if the two ever disagreed the UI would offer a
-                    // take the bridge rejects — or worse, allow one it thought was
-                    // interlocked off.
-                    rehearsing={item !== null && isRehearsing(rehearsals, item.itemId)}
-                    onSelect={onSelectionChange}
-                    onUpdate={onUpdate}
-                  />
-                );
-              })}
-            </div>
+                The rows each say LOADING and each hold their verbs, honestly and
+                individually. This is the signal the operator's EYE catches: one
+                line, at the top, saying plainly that the layer states are not in
+                yet — rather than thirty rows he has to read one at a time.
+
+                IT COMPLEMENTS THE ROWS AND REPLACES NOTHING. A notice saying "not
+                known" over thirty rows each claiming EMPTY would be two sources
+                disagreeing, which is the shape this panel keeps paying for. The
+                rows stopped lying first; this is what gets NOTICED.
+
+                `role="status"` sits on the ALWAYS-PRESENT wrapper, not on the
+                message: a live region has to exist in the DOM before its content
+                changes or the change is never announced. `status` and not `alert` —
+                nothing is wrong, this is the ordinary first second of a page.
+              */}
+              <div style={styles.awaitingStrip} role="status">
+                {awaitingRows > 0 && (
+                  <>
+                    {/* The same mark the waiting ROWS wear, and it MOVES — the one
+                        thing at rest on this table never does. Shape before colour,
+                        as everywhere else on this surface. */}
+                    <Icon
+                      icon={LoaderCircle}
+                      size={13}
+                      style={{ animation: 'cg-spin 1s linear infinite' }}
+                    />
+                    <span
+                      data-layers-awaiting=""
+                      title={AWAITING_PANEL_NOTICE}
+                      style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    >
+                      {AWAITING_PANEL_NOTICE}
+                    </span>
+                  </>
+                )}
+              </div>
+              <div style={styles.list} ref={listRef}>
+                {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
+                <LayerTableHeader
+                  density={density}
+                  onAirCount={onAirCount}
+                  // §4 — `unreachable` only, never the boot window: a count that
+                  // greyed itself for the first second of every reload would teach
+                  // the operator to stop reading the grey.
+                  unverifiable={linkDown || casparReach === 'unreachable'}
+                />
+                {rowBindings.map(({ slot, binding }, index) => {
+                  /*
+                    THE `?? null` THAT USED TO BE HERE IS THE BUG, and it is worth
+                    naming because it reads as harmless: a bound slot whose item had
+                    not arrived became `null`, which is the SAME value an unbound
+                    slot produces — so the row could not tell "nothing is on this
+                    layer" from "we have not been told yet", and reported the first.
+
+                    `resolveRowBinding` is now the one place that decision is made,
+                    and it takes `stackReady` as a required argument so it cannot be
+                    made without considering it. It is resolved ONCE for the whole
+                    table, in `rowBindings`, so the panel notice above and these rows
+                    are reading the same array rather than agreeing by coincidence.
+
+                    The row is no longer handed an `item` beside its binding: it takes
+                    one out of the `bound` arm. A nullable next to the union is what
+                    let the VERBS go on conflating "unbound" with "not yet known"
+                    after the state cell had stopped.
+                  */
+                  const item = binding.kind === 'bound' ? binding.item : null;
+                  const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
+                  return (
+                    <LayerRow
+                      key={slot.layer}
+                      slot={slot}
+                      binding={binding}
+                      template={template}
+                      // `#` — plain display order, 1 at the top of THIS list.
+                      displayPosition={index + 1}
+                      // The default alias's number — the layer's FIXED place in the
+                      // bank, which ticking and unticking must never renumber. See
+                      // `bankPosition` for why the two are deliberately separate.
+                      bankPosition={bankPosition(bank, slot.layer)}
+                      density={density}
+                      selected={item !== null && item.itemId === selectedId}
+                      dirty={item !== null && isItemDirty(item.itemId, item.fields)}
+                      // R-022 — read through the canonical `isRehearsing`, never a
+                      // local `.some()`: the bridge refuses PLAY on the same
+                      // predicate, and if the two ever disagreed the UI would offer a
+                      // take the bridge rejects — or worse, allow one it thought was
+                      // interlocked off.
+                      rehearsing={item !== null && isRehearsing(rehearsals, item.itemId)}
+                      onSelect={onSelectionChange}
+                      onUpdate={onUpdate}
+                    />
+                  );
+                })}
+              </div>
+            </>
           )
         ) : (
           <PlayoutPanel layers={playout} />

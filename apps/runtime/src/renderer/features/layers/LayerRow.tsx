@@ -33,19 +33,22 @@ import {
 
 interface Props {
   slot: FixedSlotState;
-  /** The stack item bound to this row, or null when the row is empty. */
-  item: StackItemState | null;
   /**
-   * WHAT THIS ROW CARRIES, as the three-way fact — see `RowBinding`.
+   * WHAT THIS ROW CARRIES, as the three-way fact — see `RowBinding`. THE ROW'S ONE
+   * SOURCE, and there is deliberately no `item` prop beside it any more.
    *
-   * Separate from `item` deliberately, and this is the whole fix: `item` is null
-   * for BOTH "no template bound" and "the stack has not arrived", and everything
-   * else on this row (the verbs, the template name, selection) is right to treat
-   * those alike — there is nothing to act on either way. Only the STATE CELL must
-   * tell them apart, because only it makes a CLAIM about the row.
+   * There was, and the note here used to argue that everything except the state
+   * cell was RIGHT to treat "no template bound" and "the stack has not arrived"
+   * alike, because there is nothing to act on either way. That is true of what the
+   * row can DO and false of what it may OFFER: `LOAD` is a list action, so it
+   * survived every gate and stayed enabled through the whole bootstrap window on
+   * rows that were already bound. Offering it there invites the operator to rebind
+   * a row over a binding the panel has not yet been told about.
    *
-   * Passing the union instead of a `stackReady` boolean is what keeps the two from
-   * drifting: the row cannot compute a different answer from the panel's.
+   * So `item` is now taken OUT of the union's `bound` arm rather than passed
+   * alongside it. The row cannot compute a different answer from the panel's — that
+   * was already true — and it can no longer ask the question that conflates the two
+   * facts, because there is no nullable left to ask it of.
    */
   binding: RowBinding;
   /** The bound item's template, for the name and the `hasNext` bit. */
@@ -230,7 +233,6 @@ const styles = {
  */
 export function LayerRow({
   slot,
-  item,
   binding,
   template,
   displayPosition,
@@ -257,6 +259,18 @@ export function LayerRow({
   // undeclared `onChange`.
   const fileRef = useRef<HTMLInputElement>(null);
   const spec = densitySpec(density);
+
+  /**
+   * The row's item, taken out of the union's ONE arm that has one.
+   *
+   * Everything below that reads `item` is asking about a row we KNOW is bound —
+   * its name, its selection target, its data attributes, its confirm wording. What
+   * must NOT be asked of it is whether a verb is offered: `null` here still covers
+   * both `unbound` and `awaiting`, and those two offer opposite things. That
+   * question is settled from `binding.kind` inside `layerRowActions`, which is why
+   * the binding and not this value is what gets passed to it.
+   */
+  const item: StackItemState | null = binding.kind === 'bound' ? binding.item : null;
 
   const layerName = `${String(slot.channel)}-${String(slot.layer)}`;
   /**
@@ -287,7 +301,9 @@ export function LayerRow({
 
   const coord = { channel: slot.channel, layer: slot.layer };
   const actions = layerRowActions({
-    item,
+    // THE UNION, not `item`. See the `binding` prop's note: this is the whole of
+    // the fix, and passing `item` here again is exactly how it would come undone.
+    binding,
     observed: slot.observed,
     hasNext: template?.hasNext === true,
     linkDown,
@@ -475,7 +491,7 @@ export function LayerRow({
    */
   const stateBinding: RowBinding =
     binding.kind === 'bound' && badgeStatus !== null
-      ? { kind: 'bound', status: badgeStatus }
+      ? { kind: 'bound', item: { ...binding.item, status: badgeStatus } }
       : binding;
 
   const state = rowState({
