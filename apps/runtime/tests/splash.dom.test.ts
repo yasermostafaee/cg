@@ -265,11 +265,23 @@ describe('the test-suite door', () => {
   it('the bypass global removes the splash outright — no clock, no timers, no hold', () => {
     (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;
 
-    // Read BEFORE and AFTER, asserted separately, so a future failure says WHICH defect it
-    // is rather than leaving it to be guessed: a non-zero `before` is a test-isolation
-    // leak, a non-zero `after` is the bypass path actually scheduling something.
-    expect(vi.getTimerCount(), 'a previous test leaked a pending timer into this one').toBe(0);
-
+    /**
+     * A SPY OVER THE SCRIPT, not a reading of `vi.getTimerCount()`.
+     *
+     * The counter was the wrong instrument and that is why this was green on Windows and
+     * red on Linux CI. It counts everything the fake clock owns — `requestAnimationFrame`
+     * included (probed: one rAF makes it read 1, while microtasks and MutationObserver
+     * deliveries do not) — so it was asserting "nothing anywhere in this environment is
+     * pending". That was never the claim, and it is not something this test controls: on
+     * the Linux runner it already read 1 BEFORE the splash script had run at all.
+     *
+     * What the bypass actually promises is that IT schedules nothing. A spy across the
+     * call measures exactly that, absolutely rather than relatively, and cannot be moved
+     * by anything else sharing the environment. `is off by default` below is its positive
+     * control — the same spy MUST catch the normal path arming its ceiling, so this
+     * assertion cannot pass by simply failing to observe.
+     */
+    const scheduled = vi.spyOn(globalThis, 'setTimeout');
     runSplashScript();
 
     expect(splashEl()).toBeNull();
@@ -277,15 +289,28 @@ describe('the test-suite door', () => {
       (window as unknown as { __CG_SPLASH__?: unknown }).__CG_SPLASH__,
       'a disabled splash must not install a control surface',
     ).toBeUndefined();
-    // The bypass must be a SYNCHRONOUS no-op: `el.remove()` and return. Not even the
-    // ~450 ms fade may be scheduled — that fade in every E2E is the exact cost the bypass
-    // exists to avoid.
-    expect(vi.getTimerCount(), 'the bypass path scheduled something').toBe(0);
+    // A SYNCHRONOUS no-op: `el.remove()` and return. Not even the ~450 ms fade may be
+    // scheduled — that fade in every E2E is the exact cost the bypass exists to avoid.
+    expect(
+      scheduled,
+      'the bypass path scheduled something — it must be a synchronous no-op',
+    ).not.toHaveBeenCalled();
+    scheduled.mockRestore();
   });
 
-  it('is off by default — an absent global shows the splash', () => {
+  it('is off by default — an absent global shows the splash, and DOES arm its clock', () => {
+    // The positive control for the test above. Without it, `not.toHaveBeenCalled()` could
+    // pass because the spy never observes this script's scheduling at all rather than
+    // because the bypass declined to schedule.
+    const scheduled = vi.spyOn(globalThis, 'setTimeout');
     runSplashScript();
+
     expect(splashEl()).not.toBeNull();
+    expect(
+      scheduled,
+      'the spy cannot see the script scheduling — the bypass assertion would be vacuous',
+    ).toHaveBeenCalled();
+    scheduled.mockRestore();
   });
 
   it('is not reachable from the URL — the script never reads location', () => {
