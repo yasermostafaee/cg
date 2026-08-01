@@ -15,6 +15,7 @@ import type {
   ConnectionsFailoverChannel,
   ConnectionsSetConfigChannel,
   FixedLayerBank,
+  FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
   FixedLayersLoadChannel,
   FixedLayersSetConfigChannel,
@@ -37,12 +38,28 @@ import type {
   StackRemoveChannel,
   StackSetPositionChannel,
   StackSnapshotChannel,
+  StackStopAllChannel,
   StackTakeChannel,
   StackUpdateChannel,
+  PlayoutLayerState,
+  PlayoutLayersClearChannel,
+  PlayoutLayersStateChannel,
+  StackNextChannel,
+  TemplateInfo,
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
   TemplatesRemoveChannel,
+  DelimitersListChannel,
+  DelimitersSetChannel,
+  DelimiterOption,
+  ChannelSettingsGetChannel,
+  ChannelSettingsSetChannel,
+  ChannelSettingsState,
+  Rehearsal,
+  RehearseEnterChannel,
+  RehearseExitChannel,
+  RehearseStateChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChannel,
@@ -101,6 +118,13 @@ export interface RuntimeBridge {
     stop(
       req: ChannelRequest<typeof StackStopChannel>,
     ): Promise<ChannelResponse<typeof StackStopChannel>>;
+    /**
+     * R-028 (5.4) — advance the template's sequence (`CG NEXT`). Offered only
+     * when `TemplateInfo.hasNext` says the template has a step to advance to.
+     */
+    next(
+      req: ChannelRequest<typeof StackNextChannel>,
+    ): Promise<ChannelResponse<typeof StackNextChannel>>;
     out(
       req: ChannelRequest<typeof StackOutChannel>,
     ): Promise<ChannelResponse<typeof StackOutChannel>>;
@@ -126,6 +150,8 @@ export interface RuntimeBridge {
      * that one empties the list, this one only clears the screen.
      */
     clearAll(): Promise<ChannelResponse<typeof StackClearAllChannel>>;
+    /** C-012 — STOP every on-air item (outros run, producers stay resident). */
+    stopAll(): Promise<ChannelResponse<typeof StackStopAllChannel>>;
     snapshot(): Promise<ChannelResponse<typeof StackSnapshotChannel>>;
     onStateChanged(handler: (snapshot: readonly StackItemState[]) => void): Unsubscribe;
   };
@@ -174,6 +200,16 @@ export interface RuntimeBridge {
     load(
       req: ChannelRequest<typeof FixedLayersLoadChannel>,
     ): Promise<ChannelResponse<typeof FixedLayersLoadChannel>>;
+    /**
+     * Clear ONE layer of the declared bank, addressed by LAYER and permitted by
+     * STRUCTURE — in the declared bank AND not reserved — never by occupancy. The
+     * always-available escape hatch: it still works when occupancy reads `unknown`,
+     * which is exactly when the operator needs it. Refuses `not-in-bank` and
+     * `reserved`; the guard is bridge-side, so no UI state can bypass it.
+     */
+    clearLayer(
+      req: ChannelRequest<typeof FixedLayersClearLayerChannel>,
+    ): Promise<ChannelResponse<typeof FixedLayersClearLayerChannel>>;
     /** The current per-slot state ([] when no bank is declared). */
     state(): Promise<ChannelResponse<typeof FixedLayersStateChannel>>;
     onConfigChanged(handler: (bank: FixedLayerBank | null) => void): Unsubscribe;
@@ -208,6 +244,25 @@ export interface RuntimeBridge {
     onStateChanged(handler: (state: LockState) => void): Unsubscribe;
   };
 
+  /**
+   * R-028 part B — the declared PLAYOUT layers (C-015) and the operator's
+   * deliberate, kind-gated clear. Separate from `layers` on purpose: those are
+   * unowned orphans the app may reclaim, these are another system's layers the
+   * operator may only touch from a surface labelled as such.
+   */
+  playoutLayers: {
+    state(): Promise<ChannelResponse<typeof PlayoutLayersStateChannel>>;
+    /**
+     * Clear ONE declared playout layer. The bridge refuses anything that is
+     * not an observed `html` producer (`not-html`) and anything it cannot see
+     * (`unknown-occupancy`) — the gate is bridge-side, not merely unoffered.
+     */
+    clear(
+      req: ChannelRequest<typeof PlayoutLayersClearChannel>,
+    ): Promise<ChannelResponse<typeof PlayoutLayersClearChannel>>;
+    onStateChanged(handler: (state: PlayoutLayerState[]) => void): Unsubscribe;
+  };
+
   templates: {
     get(
       req: ChannelRequest<typeof TemplatesGetChannel>,
@@ -230,6 +285,27 @@ export interface RuntimeBridge {
     remove(
       req: ChannelRequest<typeof TemplatesRemoveChannel>,
     ): Promise<ChannelResponse<typeof TemplatesRemoveChannel>>;
+    /**
+     * R-028 (o1) — the bridge owns the catalogue and pushes the full template
+     * list on every import/removal, from ANY connected browser. Subscribing
+     * surfaces is how operator B's Library re-lists when operator A imports.
+     */
+    onChanged(handler: (templates: TemplateInfo[]) => void): Unsubscribe;
+    /**
+     * R-022 — the RETAINED self-contained page for a template, from THIS browser's
+     * local library, or null when it holds none.
+     *
+     * Browser-local by nature and deliberately NOT an `@cg/shared-ipc` channel:
+     * the page is already in this browser (the SPA produces it at import and keeps
+     * it to re-deliver on reconnect), so routing the read through the bridge would
+     * be a round trip to fetch something we hold — and would fail with the bridge
+     * down, when rehearse is exactly the thing that should still work.
+     *
+     * `null` is the honest "not in this browser": a template imported on another
+     * machine has metadata from the bridge's catalogue but no local page here, and
+     * the rehearsal panel says so instead of showing a blank box.
+     */
+    html(templateId: string): Promise<string | null>;
   };
 
   audit: {
@@ -253,5 +329,91 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof SettingsSetChannel>,
     ): Promise<ChannelResponse<typeof SettingsSetChannel>>;
     onChanged(handler: (next: Settings) => void): Unsubscribe;
+  };
+
+  /**
+   * R-034 — the station's split-delimiter list. On the BRIDGE, not in the
+   * browser, for the same two reasons `templates` is: an operator who adds a
+   * delimiter must find it from any browser in the gallery, and it must still
+   * be there after a bridge restart. Persisted to disk beside the templates.
+   */
+  /**
+   * R-030 — the per-channel output raster, and what the SERVER reports about it.
+   *
+   * On the BRIDGE for the same two reasons `templates` and `delimiters` are:
+   * several browsers share one bridge, and two operators disagreeing about the
+   * channel's raster would mean two different beliefs about where every graphic
+   * lands; and it is install config that must survive a bridge restart.
+   *
+   * `state.observed` is read off `INFO <channel>` and is deliberately NOT merged
+   * into `state.settings` — the mismatch verdict is the whole point, and it can
+   * only exist while the claim and the fact are held apart. Read the verdict with
+   * `rasterVerdict`, never by comparing the two locally.
+   */
+  channelSettings: {
+    get(): Promise<ChannelResponse<typeof ChannelSettingsGetChannel>>;
+    /**
+     * Apply a channel's raster. Refused `on-air-block` while anything is on air
+     * or unsettled (changing the raster re-scales every graphic on the channel)
+     * and `unknown-channel` for a channel this install never declared. Both
+     * guards are bridge-side, so no UI state can bypass them.
+     */
+    set(
+      req: ChannelRequest<typeof ChannelSettingsSetChannel>,
+    ): Promise<ChannelResponse<typeof ChannelSettingsSetChannel>>;
+    onChanged(handler: (state: ChannelSettingsState) => void): Unsubscribe;
+  };
+
+  /**
+   * R-022 — REHEARSE: run a loaded graphic's lifecycle and edit its values while
+   * it renders LOCALLY in PVW, with PLAY-to-air interlocked off.
+   *
+   * BRIDGE-OWNED, not browser-local, and that is not an implementation
+   * preference: several browsers share one bridge, so a rehearse flag held in one
+   * of them would leave the second operator seeing an ordinary loaded row and
+   * loading onto it — a collision on a real layer.
+   *
+   * The interlock is enforced by the BRIDGE — `stack.take` refuses a rehearsing
+   * item with `rehearsing` — so a disabled PLAY button is the courtesy, not the
+   * guarantee. A stale client cannot play past it.
+   */
+  rehearse: {
+    state(): Promise<ChannelResponse<typeof RehearseStateChannel>>;
+    /**
+     * Enter rehearse. The precondition is that the row has a template BOUND —
+     * that is the whole test, because the local render needs the template, the
+     * values and the raster, and none of those is the CasparCG layer.
+     *
+     * Refused `on-air` (rehearse mutes the layer; muting a live graphic is not on
+     * offer) and `mute-failed` — the latter being the important one: rehearse is
+     * never CLAIMED unless the mute that makes it safe actually landed. It is
+     * reachable only when a producer IS resident; over an empty layer entry sends
+     * no AMCP at all, so there is no mute to fail.
+     */
+    enter(
+      req: ChannelRequest<typeof RehearseEnterChannel>,
+    ): Promise<ChannelResponse<typeof RehearseEnterChannel>>;
+    /**
+     * Leave rehearse, restoring the layer's intended volume ONLY if entry muted
+     * it — the exit path mirrors the entry path rather than re-deriving it.
+     */
+    exit(
+      req: ChannelRequest<typeof RehearseExitChannel>,
+    ): Promise<ChannelResponse<typeof RehearseExitChannel>>;
+    onStateChanged(handler: (rehearsals: Rehearsal[]) => void): Unsubscribe;
+  };
+
+  delimiters: {
+    list(): Promise<ChannelResponse<typeof DelimitersListChannel>>;
+    /**
+     * Replace the whole list. The BRIDGE is authoritative for the refusal —
+     * it rejects an empty list and duplicate values and supplies the wording,
+     * the R-005 removal shape — so two browsers cannot disagree about what is
+     * allowed.
+     */
+    set(
+      req: ChannelRequest<typeof DelimitersSetChannel>,
+    ): Promise<ChannelResponse<typeof DelimitersSetChannel>>;
+    onChanged(handler: (delimiters: DelimiterOption[]) => void): Unsubscribe;
   };
 }

@@ -65,12 +65,16 @@ export async function importAndLoadOntoFixedSlot(
   reportCommandSuccess(importSuccessMessage(imported));
 
   // The registry is the authority on the registered template's shape; read the
-  // seed from THERE rather than from anything reconstructed here, so a fixed
-  // load and a Library load seed identical fields for identical bytes.
+  // seed from THERE rather than from anything reconstructed here, so an import
+  // and a re-use of an existing template seed identical fields for identical
+  // bytes.
   const template = await window.cg.templates.get({ templateId: imported.templateId });
   if (template === null) {
+    // §6 — no "library": it named a deleted panel, and worse, the remedy it gave
+    // pointed at that panel. The import DID land, so the honest remedy is to press
+    // LOAD again and pick the template that is now in the list.
     throw new Error(
-      `“${imported.displayName}” imported, but the library could not read it back — load it from the library.`,
+      `“${imported.displayName}” imported, but the registry could not read it back — press LOAD again and pick it from the list.`,
     );
   }
   return loadTemplateOntoFixedSlot(slot, template);

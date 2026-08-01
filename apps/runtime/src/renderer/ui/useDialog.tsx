@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { Button, type ButtonVariant } from './Button.js';
-import { Modal } from './Modal.js';
+import type { VerbTone } from './rowAction.js';
+import { Modal, ModalAction } from './Modal.js';
 
 /**
  * Promise-shaped replacements for `window.confirm` and `window.prompt`, so a caller keeps
@@ -16,8 +16,26 @@ interface ConfirmRequest {
   body: ReactNode;
   /** The label on the button that DOES the thing — name the act, never "OK". */
   confirmLabel: string;
-  /** Destructive acts are `danger`; on-air-clearing ones are `caution`. */
-  variant?: ButtonVariant;
+  /*
+    §2 — THERE IS NO `variant` HERE ANY MORE, and its absence is the point.
+    Callers used to choose between `danger` and `caution` per dialog ("destructive
+    acts are danger; on-air-clearing ones are caution"), which is one distinction
+    too many for the operator to read and the reason two confirm dialogs guarding
+    comparable acts wore different colours. A confirm dialog's committing button is
+    DESTRUCTIVE by definition — this hook exists to gate acts that remove something
+    or take it off air — so the role is fixed and the treatment comes from it.
+  */
+  /**
+   * The VERB this dialog is confirming, so its confirm button hovers to the same
+   * colour as the button that opened it (`--r-verb-*`).
+   *
+   * The resting `variant` is untouched and stays the safety signal — a confirm
+   * dialog is the one place a destructive control SHOULD read destructive at
+   * rest. This only makes the hover match the palette, so the operator's eye
+   * follows one colour from the row verb, through the bulk verb, to the button
+   * that actually commits.
+   */
+  tone?: VerbTone;
 }
 
 export function useConfirm(): {
@@ -50,14 +68,33 @@ export function useConfirm(): {
         onClose={() => settle(false)}
         footer={
           <>
-            {/* Cancel is first: it takes the modal's initial focus, and it is the outcome
-                of Escape and of a backdrop click. The safe path is the default path. */}
-            <Button variant="ghost" onClick={() => settle(false)}>
+            {/* Cancel is first in DOM order, and it is the outcome of Escape, of the
+                backdrop and of the header's close X. The safe path is the default path.
+                The `cancel` ROLE resolves to `neutral`, never `ghost`: on a confirm
+                dialog Cancel is a genuine peer of the destructive action, so it must
+                look like a control of the same kind rather than a link beside one. */}
+            <ModalAction actionRole="cancel" onClick={() => settle(false)}>
               Cancel
-            </Button>
-            <Button variant={request.variant ?? 'danger'} onClick={() => settle(true)}>
+            </ModalAction>
+            {/*
+              §2 — THE ROLE DECIDES THE TREATMENT, and a confirm dialog's committing
+              button is `destructive` by definition: this hook exists to gate acts
+              that remove something or take it off air. `Clear all` and `Remove…`
+              therefore resolve to ONE treatment instead of the two hues they wore —
+              `Clear all` is unchanged (it already had the solid amber) and `Remove`
+              moves up to it from the quieter red outline.
+
+              The confirm dialog is the ONE place a destructive control should read
+              destructive AT REST, so this is where the signal earns its keep and it
+              is deliberately not neutralised.
+            */}
+            <ModalAction
+              actionRole="destructive"
+              {...(request.tone !== undefined ? { 'data-verb-tone': request.tone } : {})}
+              onClick={() => settle(true)}
+            >
               {request.confirmLabel}
-            </Button>
+            </ModalAction>
           </>
         }
       >
@@ -113,12 +150,14 @@ export function usePrompt(): {
         onClose={() => settle(null)}
         footer={
           <>
-            <Button variant="ghost" onClick={() => settle(null)}>
+            {/* The same two roles as the confirm dialog — Cancel is a peer of Submit,
+                and Submit is the action this dialog exists to perform. */}
+            <ModalAction actionRole="cancel" onClick={() => settle(null)}>
               Cancel
-            </Button>
-            <Button variant="primary" disabled={tooShort} onClick={() => settle(value)}>
+            </ModalAction>
+            <ModalAction actionRole="primary" disabled={tooShort} onClick={() => settle(value)}>
               {request.submitLabel}
-            </Button>
+            </ModalAction>
           </>
         }
       >

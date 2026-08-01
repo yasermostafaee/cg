@@ -1,40 +1,56 @@
-import { useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import type { FieldPath } from './draftStore.js';
-import { splitDefaultFor } from './fieldTargetStore.js';
 import {
   DEFAULT_DELIMITER,
-  DELIMITER_SUGGESTIONS,
-  type FromFileFieldKind,
-} from './fromFileContent.js';
+  delimitersVersion,
+  listDelimiters,
+  subscribeDelimiters,
+} from './delimiterStore.js';
+import { DelimitersModal, ManageDelimitersButton } from './DelimitersModal.js';
+import { splitDefaultFor } from './fieldTargetStore.js';
+import { type FromFileFieldKind } from './fromFileContent.js';
 import { reloadFromFile, stageFromFile } from './fromFileOps.js';
 import {
   attachFileSource,
   detachFileSource,
   fromFileState,
   fromFileVersion,
+  setFromFilePermission,
   subscribeFromFile,
   updateSplitConfig,
 } from './fromFileStore.js';
 import {
+  FILE_SOURCE_NEEDS_PERMISSION_MESSAGE,
   FILE_SOURCE_UNSUPPORTED_MESSAGE,
   fileSourceSupported,
   pickTextFileSource,
+  requestReadPermission,
 } from './textFileSource.js';
 
 const styles = {
-  wrap: { display: 'flex', flexDirection: 'column' as const, gap: '0.25rem', marginTop: '0.2rem' },
+  // NO `marginTop`: the field's column (or, for a list, its footer ROW) owns the
+  // spacing around this control now, from the shared `--r-space-*` scale. A
+  // margin here fought the row's `align-items` and offset the button by ~3px
+  // against the "Add item" it sits beside.
+  /*
+   * THE GAP BETWEEN THE TWO LINES — the controls row and the split row beneath it.
+   *
+   * One step on the scale (8px), not the smallest: 4px read as a single wrapped
+   * line and let the checkbox crowd the chip above it, while a larger step would
+   * separate two rows that belong to ONE control. It is the same step the field
+   * footer uses between its buttons, so the block reads as one cluster with two
+   * lines rather than two stacked clusters.
+   */
+  wrap: { display: 'flex', flexDirection: 'column' as const, gap: 'var(--r-space-2)' },
   row: { display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' as const },
-  fileName: {
-    fontSize: '0.75rem',
-    color: colors.textMuted,
-    overflowWrap: 'anywhere' as const,
-    minWidth: 0,
-  },
+  // `fileName` is GONE — the name lives in `.cg-file-chip__name` now, welded to
+  // its detach control. It was a bare muted span that wrapped and pushed the
+  // buttons around as the path grew.
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: 0 },
   error: { fontSize: '0.75rem', color: colors.error, margin: 0 },
   splitLabel: {
@@ -44,7 +60,14 @@ const styles = {
     fontSize: '0.75rem',
     color: colors.textMuted,
   },
-  delimiter: { width: '5rem' },
+  // AUTO width, never a fixed one: the options are NAMES now ("Persian comma"),
+  // not one-character values, and an operator can add a longer one at any time.
+  // The old 5rem was sized for `\n` and would clip every real label. `maxWidth`
+  // keeps a pathologically long custom name from pushing the row wider than the
+  // Inspector — it truncates instead, and the full text is still in the menu.
+  // Both override `.cg-field`'s `width: 100%`, which is right for a text input
+  // and wrong for a select that should be as wide as what it holds.
+  delimiter: { width: 'auto', maxWidth: '100%' },
 } as const;
 
 /**
@@ -69,8 +92,11 @@ export function FromFileControl({
   fieldId: string;
 }): JSX.Element {
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
+  useSyncExternalStore(subscribeDelimiters, delimitersVersion);
   const state = fromFileState(item.itemId, path);
   const supported = fileSourceSupported();
+  const [managing, setManaging] = useState(false);
+  const delimiters = listDelimiters();
 
   const choose = async (): Promise<void> => {
     let source;
@@ -94,10 +120,16 @@ export function FromFileControl({
 
   if (state === undefined) {
     return (
-      <div style={styles.wrap}>
+      <div className="cg-from-file" style={styles.wrap}>
         <div style={styles.row}>
+          {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` (no fill, no border, muted
+              text) and read as static text under every text-carrying field — the most
+              PROPAGATED instance of that mistake in the app, since it renders once per
+              text / multiline / list field. `neutral` keeps it colourless while giving
+              it the boundary, hover and focus ring a control owes. See the `--ghost`
+              warning in `controls.css`. */}
           <Button
-            variant="ghost"
+            variant="neutral"
             aria-label={`Load ${fieldId} from file`}
             disabled={!supported}
             title={supported ? undefined : FILE_SOURCE_UNSUPPORTED_MESSAGE}
@@ -111,33 +143,78 @@ export function FromFileControl({
     );
   }
 
-  // Datalist ids must be document-unique; derived from item+path, sanitized.
-  const datalistId = `fromfile-delims-${`${item.itemId}-${path.join('-')}`.replace(/[^\w-]/g, '_')}`;
+  // B-113 — an attachment restored from a previous session whose read permission
+  // the browser did not carry over. The file NAME is shown (the operator needs
+  // to know which file was attached), but nothing may be read from it until they
+  // re-grant, so Reload is replaced by the gesture that makes reading possible
+  // rather than sitting there failing.
+  const needsGrant = state.permission !== 'granted';
+
+  const grant = async (): Promise<void> => {
+    const handle = state.source.handle;
+    if (handle === undefined) return;
+    const result = await requestReadPermission(handle);
+    setFromFilePermission(item.itemId, path, result);
+    if (result === 'denied') {
+      reportCommandError(`Access to “${state.source.name}” was refused.`);
+    }
+  };
+
   return (
-    <div style={styles.wrap}>
+    <div className="cg-from-file" style={styles.wrap}>
       <div style={styles.row}>
-        <span style={styles.fileName} title={state.source.name}>
-          {state.source.name}
+        {/* THE FILE, as ONE control: its name and the way to detach it, welded
+            together. See `.cg-file-chip` — the short version is that a bare `✕`
+            here is the same glyph as the item-delete buttons one row up, doing
+            something else, and attaching it to the name is what stops the two
+            being confusable. */}
+        <span className="cg-file-chip">
+          <span className="cg-file-chip__name" title={state.source.name}>
+            {state.source.name}
+          </span>
+          <button
+            type="button"
+            className="cg-file-chip__detach"
+            aria-label={`Detach ${fieldId} file source`}
+            title={`Detach ${state.source.name}`}
+            onClick={() => detachFileSource(item.itemId, path)}
+          >
+            ×
+          </button>
         </span>
-        {/* Reload re-reads and RE-APPLIES this field (the same stack.update path
-            as Update, scoped to this field). Failures are toasted + shown in the
-            inline error line below, so the button's own inline error is a
-            duplicate — suppressed, the #334 pattern. */}
-        <AsyncButton
-          variant="secondary"
-          aria-label={`Reload ${fieldId} from file`}
-          run={() => reloadFromFile(item, path, kind)}
-          onError={() => undefined}
-        >
-          Reload
-        </AsyncButton>
-        <Button
-          variant="ghost"
-          aria-label={`Detach ${fieldId} file source`}
-          onClick={() => detachFileSource(item.itemId, path)}
-        >
-          ×
-        </Button>
+        {needsGrant ? (
+          <AsyncButton
+            variant="secondary"
+            aria-label={`Grant access to ${fieldId} file`}
+            run={async () => {
+              await grant();
+              return { accepted: true, cancelled: true };
+            }}
+            onError={() => undefined}
+          >
+            Grant access
+          </AsyncButton>
+        ) : (
+          /* Reload RE-READS the file and STAGES it — it does not apply. It used to
+             apply, which made a read-verb button perform a write that reached the
+             graphic on air (owner's report); see `reloadFromFile`. The operator
+             commits with Update, exactly as they do after choosing the file.
+             Failures are toasted + shown in the inline error line below, so the
+             button's own inline error is a duplicate — suppressed, the #334
+             pattern. */
+          <AsyncButton
+            variant="secondary"
+            aria-label={`Reload ${fieldId} from file`}
+            run={() => reloadFromFile(item, path, kind)}
+            onError={() => undefined}
+          >
+            Reload
+          </AsyncButton>
+        )}
+        {/* THE DETACH `✕` MOVED INTO THE FILE CHIP ABOVE — it is part of the file
+            now, not a free-standing button at the end of the row. It stood here as
+            an `icon`: the same shape and the same glyph as the item-delete buttons
+            one row up, doing something else entirely. Do not put it back. */}
       </div>
       {kind === 'list' && (
         <div style={styles.row}>
@@ -152,25 +229,36 @@ export function FromFileControl({
           </label>
           {state.split && (
             <>
-              <input
+              {/* B-113 — a PICKER, not a text box. As a free-text input backed by
+                  a <datalist>, this showed only the option matching whatever was
+                  already typed: with the default `\n` in the box, the other four
+                  delimiters were filtered out and invisible until the operator
+                  cleared it. A select lists them all, by NAME, and cannot be
+                  typed into — a hand-typed delimiter was only ever a way to
+                  produce a split nobody intended.
+
+                  The current value is included even when it is not in the
+                  configured list, so removing a delimiter in the modal cannot
+                  silently change how an attached field splits. */}
+              <select
                 className="cg-field"
                 style={styles.delimiter}
-                type="text"
                 value={state.delimiter}
-                list={datalistId}
                 onChange={(e) =>
                   updateSplitConfig(item.itemId, path, { delimiter: e.target.value })
                 }
                 aria-label={`${fieldId} split delimiter`}
-                placeholder={DEFAULT_DELIMITER}
-              />
-              <datalist id={datalistId}>
-                {DELIMITER_SUGGESTIONS.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
+              >
+                {delimiters.every((d) => d.value !== state.delimiter) && (
+                  <option value={state.delimiter}>{state.delimiter} (in use)</option>
+                )}
+                {delimiters.map((d) => (
+                  <option key={d.id} value={d.value}>
+                    {d.label}
                   </option>
                 ))}
-              </datalist>
+              </select>
+              <ManageDelimitersButton onOpen={() => setManaging(true)} />
             </>
           )}
         </div>
@@ -178,11 +266,13 @@ export function FromFileControl({
       {kind === 'list' && !state.split && (
         <p style={styles.hint}>Whole file becomes ONE item — separators render exactly as typed.</p>
       )}
+      {needsGrant && <p style={styles.hint}>{FILE_SOURCE_NEEDS_PERMISSION_MESSAGE}</p>}
       {state.error !== null && (
         <p style={styles.error} role="alert">
           {state.error}
         </p>
       )}
+      {managing && <DelimitersModal onClose={() => setManaging(false)} />}
     </div>
   );
 }

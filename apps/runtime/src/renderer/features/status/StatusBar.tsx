@@ -1,7 +1,8 @@
 import { useConnections } from '../../hooks/useConnections.js';
+import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useLock } from '../../hooks/useLock.js';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { normalizeDigits } from '../../ui/NumericInput.js';
@@ -27,11 +28,49 @@ const styles = {
     fontSize: '0.85rem',
     color: colors.textMuted,
   },
-  primary: { color: colors.ready },
+  /*
+   * ── THE STATUS BAR HAS ITS OWN COLOUR VOCABULARY, AND "HEALTHY" IS NOT A HUE ──
+   *
+   * Owner's call, and the reason is a collision across two surfaces rather than
+   * within one. This bar used to read `● BRIDGE LIVE` in a green and
+   * `● PRIMARY A HEALTHY` in the sky blue — but GREEN means ON AIR on the layer
+   * table and SKY means READY, and a glance at green in the footer can read as
+   * "something is on air". `theme.ts` reserves the air hue for the layer rows and
+   * the status bar's own indicator; this is the second half of that rule, applied
+   * ACROSS the two surfaces instead of within one.
+   *
+   * The healthy state therefore takes no hue at all: primary INK and WEIGHT
+   * against the bar's muted base text. The rule that falls out is easy to hold and
+   * easy to check — NOTHING IN THIS BAR IS COLOURED UNLESS IT NEEDS ATTENTION.
+   * Health is the absence of an alarm, which is exactly what it is.
+   *
+   * The fault tones are unchanged and are not borrowed from anywhere: muted grey
+   * for what we cannot verify, amber for a configuration problem, red for down.
+   * Those are role colours (`--r-caution`, `--r-danger`) rather than state
+   * colours, and neither is a hue the layer table uses to describe a row.
+   *
+   * DO NOT reintroduce green or sky here at any weight, including a lighter or
+   * darker one — "not the same hue at a different weight" is the constraint.
+   */
+  primary: { color: colors.text, fontWeight: 700 },
+  /**
+   * THE HEALTH LED — the one thing in this bar that carries a hue while nothing
+   * is wrong (owner: «فقط دایره … رو سبز کن»).
+   *
+   * `--r-success`, the soft ack/healthy emerald, and NEVER `--r-onair`. `theme.ts`
+   * keeps the two greens under separate names for exactly this reason: the vivid
+   * air green is the mark an operator finds from across a gallery and may say only
+   * that a graphic is on the output.
+   *
+   * A dot and not a word, deliberately: the label stays uncoloured, so there is no
+   * green SENTENCE in the footer to be glanced at as an air claim. A 6px LED reads
+   * as "this light is on".
+   */
+  healthDot: { color: cssVars['--r-success'] },
   backup: { color: colors.textMuted },
   failed: { color: colors.offline },
   failedHard: { color: colors.error },
-  ok: { color: '#10B981' },
+  ok: { color: colors.text, fontWeight: 700 },
   // B-081 — the look of health we CANNOT currently verify: muted, never a confident color.
   stale: { color: colors.textMuted },
   // B-094 — a CONFIGURATION problem on a server that is otherwise fine. Amber, the
@@ -66,6 +105,25 @@ interface SessionLabel {
  * only in the tooltip, explicitly labelled as stale.
  */
 const UNKNOWN: SessionLabel = { text: 'UNKNOWN', style: styles.stale };
+
+/**
+ * THE DOT FOLLOWS ITS OWN SERVER'S STATE — it is an LED, not a decoration.
+ *
+ * The first version keyed the green on "not stale and not deaf", which is a
+ * different question and got the reported case exactly backwards: a server
+ * reporting `disconnected` is neither stale nor OSC-deaf, so `● PRIMARY A
+ * OFFLINE` rendered a GREEN light beside a red word. A light that says fine
+ * beside a label that says offline is the B-081 contradiction reintroduced on the
+ * one element that is hardest to read as text.
+ *
+ * So the dot is DERIVED FROM THE RESOLVED LABEL rather than computed beside it.
+ * Only a genuine HEALTHY gets the green LED; every other state — degraded,
+ * offline, unknown, stale, connecting — takes the label's own colour, so the two
+ * halves of the pill physically cannot disagree.
+ */
+function healthDotStyle(label: SessionLabel): { color: string } {
+  return label.style === styles.ok ? styles.healthDot : label.style;
+}
 
 function sessionLabel(state: string): SessionLabel {
   switch (state) {
@@ -152,13 +210,20 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
   const simulated = link === 'offline-mock';
   // B-081 — the link that DELIVERS health is down, so every reading below is unverifiable.
   const stale = link === 'disconnected';
+  /**
+   * §7 — the link pill's second hop, resolved HERE from the health this component
+   * already holds, and handed down. One subscription, one reading: the pill saying
+   * "bridge only" and the pills saying "PRIMARY A OFFLINE" are now two views of one
+   * value rather than two answers to one question.
+   */
+  const casparReach = resolveCasparReach(link, health);
   // Above the loading early return: a hook cannot be called conditionally.
   const { prompt, promptDialog } = usePrompt();
 
   if (health === null) {
     return (
       <footer style={styles.bar} aria-label="Status bar">
-        <LinkIndicator />
+        <LinkIndicator reach={casparReach} />
         {/* Nothing has answered yet. While the link is down that is not "loading" — there
             is nobody to load from (B-080/B-081). */}
         <span className="cg-pill" style={stale ? styles.stale : undefined}>
@@ -200,7 +265,7 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
 
   return (
     <footer style={styles.bar} aria-label="Status bar">
-      <LinkIndicator />
+      <LinkIndicator reach={casparReach} />
       {simulated ? (
         // R-006 — in test mode there is no server to describe. The per-server pills used to
         // read "PRIMARY A HEALTHY" in green here, straight from the mock's seed, which is
@@ -219,8 +284,23 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
                 ? { title: AMCP_ONLY_TITLE }
                 : {})}
           >
+            {/*
+              THE DOT IS THE ONLY THING THAT MAY BE GREEN (owner). The label keeps
+              the no-hue treatment; a 6px LED reads as "this light is on", where a
+              green WORD in the footer can be glanced at as an air claim.
+
+              `--r-success`, never `--r-onair` — the soft ack/healthy emerald, kept
+              under its own name in `theme.ts` precisely so a tweak to one cannot
+              move the other.
+
+              B-081 STILL HOLDS: while `stale` or AMCP-deaf the dot mutes WITH the
+              label, because a confident green light beside an UNKNOWN word is the
+              same contradiction this pill exists to end — "the green ● dot is a
+              claim too".
+            */}
+            <span style={healthDotStyle(primary)}>●</span>{' '}
             <span style={stale || primaryDeaf ? styles.stale : styles.primary}>
-              ● PRIMARY {health.primary.label}
+              PRIMARY {health.primary.label}
             </span>{' '}
             <span style={primary.style}>{primary.text}</span>
           </span>
@@ -233,7 +313,20 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
                   ? { title: AMCP_ONLY_TITLE }
                   : {})}
             >
-              <span style={styles.backup}>○ BACKUP {health.backup.label}</span>{' '}
+              {/*
+                THE BACKUP'S LED FOLLOWS ITS OWN STATE TOO (owner) — it used to be
+                permanently muted, so a backup that was DEFINED and OFFLINE showed
+                a neutral light beside a red word. Same defect as the primary's,
+                one pill along, and the same fix: `healthDotStyle` derives it from
+                the resolved label, so the light and the word cannot disagree.
+
+                The SHAPE stays `○` against the primary's `●`. That distinction is
+                which server is in charge, not how healthy it is, and it has to
+                survive the two now sharing a colour vocabulary — an operator must
+                be able to tell the pair apart without reading either word.
+              */}
+              <span style={healthDotStyle(backup)}>○</span>{' '}
+              <span style={styles.backup}>BACKUP {health.backup.label}</span>{' '}
               <span style={backup.style}>{backup.text}</span>
             </span>
           ) : (
@@ -293,9 +386,12 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
           SERVERS
         </Button>
       )}
+      {/* LOG, not AUDIT (owner). "Audit" names the FILE FORMAT the bridge writes;
+          "log" is what the operator is going to look at. The accessible name keeps
+          the fuller phrase, so a screen reader still says WHICH log this is. */}
       {onOpenAudit !== undefined && (
         <Button onClick={onOpenAudit} aria-label="Open audit log">
-          AUDIT
+          LOG
         </Button>
       )}
       {lock.engaged ? (

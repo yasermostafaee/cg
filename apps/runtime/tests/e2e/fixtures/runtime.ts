@@ -20,42 +20,127 @@ import { pack } from '@cg/vcg-format';
  * the `app` fixture, which arms `window.CG_E2E` before app JS so the mock bridge
  * starts deterministically.
  */
+/**
+ * The first EMPTY row of the seeded bank. 70–73 hold the four documented
+ * display cases (html / non-html producer / empty / unknown) and must keep
+ * them; everything from here up is seeded empty for the suite to load onto.
+ */
+const FIRST_LOADABLE_LAYER = 74;
+
+/**
+ * The row `openTemplatePicker` uses when the caller does not name one.
+ *
+ * §6 — the picker is reached through a row's `LOAD`, and a row that already holds
+ * something shows REMOVE instead. So a probe row that specs also load onto would
+ * silently stop working partway through a spec. This one is seeded empty and
+ * `#nextLayer` never reaches it. (The same constraint held before, when the entry
+ * point was a context menu item disabled on a filled row.)
+ */
+const TEMPLATE_PROBE_LAYER = 85;
+
 export class RuntimeApp {
   constructor(readonly page: Page) {}
 
-  /** Load the app at `/` and wait until the Library's import affordance is shown. */
+  /**
+   * The next row `importVcg` / `loadTemplate` will take when no layer is named.
+   *
+   * R-028 part B — a load now BINDS a specific row, and the gate refuses a row
+   * that is not observably empty (an unbound row can still be carrying a live
+   * graphic). So a fixed default layer would work exactly once per spec: the
+   * second import would find the row occupied, its LOAD relabelled REMOVE, and
+   * hang waiting for a file chooser that never opens. Handing out a fresh row
+   * each time models what an operator does — they load onto the next free
+   * layer — and keeps multi-import specs honest.
+   */
+  #nextLayer = FIRST_LOADABLE_LAYER;
+
+  /** Take the next free row, refusing to encroach on the picker probe row. */
+  #takeLayer(): number {
+    const layer = this.#nextLayer++;
+    if (layer >= TEMPLATE_PROBE_LAYER) {
+      throw new Error(
+        `E2E fixture ran out of loadable rows (reached ${String(layer)}). Widen the seeded bank in MockRuntime.seedFixedBank.`,
+      );
+    }
+    return layer;
+  }
+
+  /**
+   * Load the app at  and wait until the operator surface is shown.
+   *
+   * R-028 part B — the boot signal WAS the Library's Import button; the Library
+   * panel is deleted, so it is now the Layers region, which is the surface every
+   * spec actually drives.
+   */
   async goto(): Promise<void> {
     await this.page.goto('/');
-    await expect(this.importButton).toBeVisible();
+    await expect(this.layers).toBeVisible();
   }
 
   // ── regions ───────────────────────────────────────────────────────────────
-  get library(): Locator {
-    return this.page.getByRole('navigation', { name: 'Library' });
+  /**
+   * R-028 part B — THE operator surface: one Layers list (it replaced the
+   * Library, Stack and Fixed-Layers panels).
+   */
+  get layers(): Locator {
+    return this.page.getByRole('region', { name: 'Layers' });
   }
-  get stack(): Locator {
-    return this.page.getByRole('region', { name: 'Stack' });
+  /** The playout tab's panel (the reserved layers another system owns). */
+  get playoutTab(): Locator {
+    return this.page.getByRole('tab', { name: /PLAYOUT/ });
   }
   get inspector(): Locator {
     return this.page.getByRole('complementary', { name: 'Inspector' });
   }
   /**
-   * R-021 — the fixed-layers panel. Exists only when a bank is declared (the
-   * `CG_E2E_FIXED_BANK` seed, armed via addInitScript, declares one offline).
+   * R-028 — the fixed-layers panel WAS its own region; it is now the Layers
+   * list itself. Kept as an alias so specs that reason about "the panel with
+   * the declared rows" read the same.
    */
   get fixedPanel(): Locator {
-    return this.page.getByRole('region', { name: 'Fixed layers' });
+    return this.layers;
   }
   /**
-   * R-021 — the fixed row for `layer`, anchored on its stable `data-layer`
-   * attribute (the layer NUMBER is the bank's identity — aliases are display
-   * text and not unique), the way stack rows anchor on `data-template-id`.
+   * The layer row for `layer`, anchored on its stable `data-layer` attribute —
+   * the layer NUMBER is the row's identity (aliases are display text and not
+   * unique, and a row outlives every item loaded onto it).
    */
   fixedRow(layer: number): Locator {
-    return this.fixedPanel.locator(`[data-layer="${String(layer)}"]`);
+    return this.layers.locator(`[data-layer="${String(layer)}"]`);
   }
-  get importButton(): Locator {
-    return this.page.getByRole('button', { name: 'Import .vcg template' });
+  /** Alias — the R-028 name for the same thing. */
+  layerRow(layer: number): Locator {
+    return this.fixedRow(layer);
+  }
+  /**
+   * A row's STATE cell — the icon + word that carries what is on the layer.
+   *
+   * Two things are asserted through it. Its TEXT is the glanceable label (`ON AIR`,
+   * `READY`, `EMPTY`, `UNKNOWN`, `OCCUPIED`), always visible. Its `title` is the
+   * long form, and always includes CasparCG's own report of the layer verbatim —
+   * which is where a spec should read occupancy from, because the visible
+   * "Description" COLUMN is the first thing the table drops as the panel narrows,
+   * so a text assertion on it only holds at the widest density.
+   */
+  layerState(layer: number): Locator {
+    return this.layerRow(layer).locator('[data-row-state]');
+  }
+  /**
+   * WHERE THE REAL CasparCG LAYER NUMBER LIVES on the row, now that it has no column.
+   *
+   * The owner took it off the row (it is in the Inspector), and what made that safe is
+   * the mitigation this reads: the ROW carries it in its own `title` and accessible
+   * name, so it stays one hover or one keyboard focus away at every density. A spec
+   * asserting the operator can still find the layer number should assert THIS —
+   * matching visible text would be matching a column that no longer exists, and a bare
+   * "70" would in any case collide with the row's `#`.
+   */
+  async layerNumberReachableOn(layer: number): Promise<{ title: string; ariaLabel: string }> {
+    const row = this.layerRow(layer);
+    return {
+      title: (await row.getAttribute('title')) ?? '',
+      ariaLabel: (await row.getAttribute('aria-label')) ?? '',
+    };
   }
   /**
    * A command / import ERROR, surfaced as the shared command TOAST (page-level, `role="alert"`
@@ -74,10 +159,27 @@ export class RuntimeApp {
 
   // ── actions ───────────────────────────────────────────────────────────────
 
-  /** Upload a `.vcg` via the Library's import button (drives the native file chooser). */
-  async importVcg(filename: string, bytes: Uint8Array): Promise<void> {
+  /**
+   * R-028 — import a `.vcg` AND load it onto a row, in ONE operator flow.
+   *
+   * §6 — `LOAD` now opens the TEMPLATE PICKER, and importing a new file is one
+   * option inside it rather than the whole of it. So this is LOAD → "Import a
+   * .vcg…" → the file chooser, which is the flow the operator actually performs;
+   * the row still ends bound to the exact slot in one gesture.
+   *
+   * The extra click is the point of the change, not overhead: the other option in
+   * that dialog — re-using a template already imported — used to be reachable only
+   * through a context-menu entry named after a panel that no longer exists.
+   *
+   * With no `layer`, takes the next free one (see `#nextLayer`) and returns it.
+   */
+  async importVcg(filename: string, bytes: Uint8Array, layer?: number): Promise<number> {
+    const target = layer ?? this.#takeLayer();
+    const before = await this.templateCount();
+    await this.layerRow(target).getByRole('button', { name: 'LOAD' }).click();
+    await expect(this.templatePicker).toBeVisible();
     const chooser = this.page.waitForEvent('filechooser');
-    await this.importButton.click();
+    await this.templatePicker.getByRole('button', { name: 'Import a .vcg…' }).click();
     await (
       await chooser
     ).setFiles({
@@ -85,37 +187,88 @@ export class RuntimeApp {
       mimeType: 'application/octet-stream',
       buffer: Buffer.from(bytes),
     });
+    // Handing over the file only STARTS the chain — verify, register, then the
+    // exact-slot load. Returning here would hand the spec a row that is not yet
+    // bound and a library that does not yet list the template, so every caller
+    // would need its own wait. Settle on either real outcome: the registry grew
+    // (imported), or the command toast reported a refusal. Read from the
+    // registry rather than a toast alone, because a toast left over from an
+    // earlier action in the same spec would satisfy a naive wait instantly.
+    await expect
+      .poll(async () => (await this.templateCount()) > before || (await this.error.count()) > 0)
+      .toBe(true);
+    return target;
   }
 
-  /** How many templates the Library currently lists (one "Load …" button each). */
-  loadButtons(): Locator {
-    return this.library.getByRole('button', { name: /^Load / });
+  /** The template picker dialog — the only template list left (R-005 lives here too). */
+  get templatePicker(): Locator {
+    return this.page.getByRole('dialog');
   }
 
   /**
-   * The Library row for `templateId`.
+   * Open the TEMPLATE PICKER from a row's `LOAD`.
    *
-   * R-004 — the row is anchored on the ID, not the visible text: the Library now shows the
-   * template's DISPLAY NAME (a UUID meant nothing to the operator), and display names are
-   * not unique — two templates may legitimately share one. So anything that must address
-   * exactly one row keys on the id, which the row carries as a stable test anchor.
+   * §6 — re-pointed, not deleted. Its subject survives; only its entry point
+   * moved: the picker used to open from a context-menu item called LOAD FROM
+   * LIBRARY, which named a panel R-028 had already deleted. This dialog is still
+   * the only template list the product has, so every "what does this browser
+   * hold?" assertion is made here.
    */
-  templateRow(templateId: string): Locator {
-    return this.page.getByTestId(`library-template-${templateId}`);
+  async openTemplatePicker(layer = TEMPLATE_PROBE_LAYER): Promise<void> {
+    await this.layerRow(layer).getByRole('button', { name: 'LOAD' }).click();
+    await expect(this.templatePicker).toBeVisible();
   }
 
-  /** Click the Library's "Load" action for `templateId`, putting it on the stack. */
-  async loadTemplate(templateId: string): Promise<void> {
+  /** Dismiss the picker without loading anything (resolves the pick as `null`). */
+  async closeTemplatePicker(): Promise<void> {
+    await this.templatePicker.getByRole('button', { name: 'Cancel' }).click();
+    await expect(this.templatePicker).toHaveCount(0);
+  }
+
+  /**
+   * How many templates the LIBRARY holds.
+   *
+   * Read from the REGISTRY rather than by counting rows in the picker. The
+   * Library panel is gone, so the picker is the only list — and it is a modal:
+   * a before/after count would have to open and close it around the very action
+   * under test, which both perturbs the thing being measured and asserts
+   * something weaker than intended ("the dialog listed it" rather than "it is
+   * registered"). Specs still cover the picker's own listing through
+   * `loadTemplate`, which finds a template there by id and loads it.
+   */
+  templateCount(): Promise<number> {
+    return this.page.evaluate(async () => {
+      const w = window as unknown as { cg: { templates: { list: () => Promise<unknown[]> } } };
+      return (await w.cg.templates.list()).length;
+    });
+  }
+
+  /**
+   * A template's row INSIDE the open picker, anchored on its stable id (the
+   * visible label is file-derived and not unique). The picker must already be
+   * open.
+   */
+  templateRow(templateId: string): Locator {
+    return this.templatePicker.locator(`[data-template-id="${templateId}"]`);
+  }
+
+  /**
+   * Load an ALREADY-IMPORTED template onto a row, via the row's `LOAD` and the
+   * picker it opens.
+   */
+  async loadTemplate(templateId: string, layer?: number): Promise<number> {
+    const target = layer ?? this.#takeLayer();
+    await this.openTemplatePicker(target);
     await this.templateRow(templateId)
       .getByRole('button', { name: /^Load / })
       .click();
+    await expect(this.templatePicker).toHaveCount(0);
+    return target;
   }
 
-  /** R-005 — click the Library's "Remove" action for `templateId`. Confirm-gated. */
-  async removeTemplate(templateId: string): Promise<void> {
-    await this.templateRow(templateId)
-      .getByRole('button', { name: /^Remove / })
-      .click();
+  /** How many templates the OPEN picker lists (one "Load …" button each). */
+  loadButtons(): Locator {
+    return this.templatePicker.getByRole('button', { name: /^Load / });
   }
 
   /**
@@ -130,7 +283,7 @@ export class RuntimeApp {
    * need exactly one still pick — conventionally `.last()`, the most recently loaded.
    */
   stackRow(templateId: string): Locator {
-    return this.stack.locator(`[data-template-id="${templateId}"]`);
+    return this.layers.locator(`[data-template-id="${templateId}"]`);
   }
 
   /**
@@ -151,6 +304,11 @@ export class RuntimeApp {
    */
   async selectStackRow(templateId: string): Promise<void> {
     await this.stackRow(templateId).first().locator('[data-row-body]').click();
+  }
+
+  /** R-028 — select a row by its LAYER, which is the row identity now. */
+  async selectLayerRow(layer: number): Promise<void> {
+    await this.layerRow(layer).locator('[data-row-body]').click();
   }
 
   /** R-003 — apply the selected item's staged edits via the Inspector's Update. */
@@ -489,7 +647,7 @@ export function buildInvalidVcg(): Uint8Array {
 }
 
 /**
- * R-031 — TURN THE STARTUP SPLASH OFF, for every spec but its own.
+ * R-035 — TURN THE STARTUP SPLASH OFF, for every spec but its own.
  *
  * Without this each spec would pay the splash's cold-start floor (5 s) before its first
  * assertion could run, which is the most likely way a boot screen gets reverted. The
@@ -529,6 +687,12 @@ export const test = base.extend<{ app: RuntimeApp; splashDisabled: void }>({
     await disableSplash(page);
     await page.addInitScript(() => {
       (window as unknown as { CG_E2E: boolean }).CG_E2E = true;
+      // R-028 — the declared bank is armed for EVERY spec now, because the
+      // Layers list IS the operator surface: with no bank there are no rows,
+      // so there is nowhere to load, nothing to select and nothing to drive.
+      // It used to be opt-in because the fixed panel was an extra surface
+      // beside the Library and the Stack; both of those are gone.
+      (window as unknown as { CG_E2E_FIXED_BANK: boolean }).CG_E2E_FIXED_BANK = true;
       // B-038 Phase 3 — pin the bridge probe at a guaranteed-dead port so a real
       // caspar-bridge listening on the default 127.0.0.1:5280 can't make these
       // specs go LIVE (failover banner + real CG ADD) and flake. The library /

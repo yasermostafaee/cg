@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { isServerReachable } from '@cg/shared-ipc';
 import type { ServerSession, ServerSessionState } from '../session/server-session.js';
 import type { CommandQueue, QueueResult } from '../queue/command-queue.js';
 import { InMemoryJournal, type CommandJournal } from './journal.js';
@@ -509,7 +510,14 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
  * refusal (B-100) all read it, so the state list lives in exactly one place.
  */
 export function isLiveState(state: ServerSessionState): boolean {
-  return state === 'healthy' || state === 'degraded';
+  // DELEGATES — it does not keep a copy. `isServerReachable` is the single
+  // implementation of "which states count as live", defined in `@cg/shared-ipc`
+  // beside the wire enum so that the renderer, the bridge and this session FSM
+  // all read one answer. Re-deriving the list here is how `degraded` (AMCP up,
+  // OSC silent — REACHABLE, B-101) comes to mean different things in different
+  // tiers. This name is kept because callers here speak the session FSM's
+  // vocabulary; only the body moved.
+  return isServerReachable(state);
 }
 
 /**

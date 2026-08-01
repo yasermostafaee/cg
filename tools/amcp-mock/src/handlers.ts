@@ -19,7 +19,44 @@ export function defaultHandlers(): Map<string, AmcpHandler> {
   m.set('LOAD', handleLoad);
   m.set('CLEAR', handleClear);
   m.set('CG', handleCg);
+  m.set('MIXER', handleMixer);
   return m;
+}
+
+/**
+ * R-022 — `MIXER <ch>-<layer> VOLUME <value>`.
+ *
+ * Modelled because rehearse depends on it and its failure mode is SILENCE ON
+ * AIR: rehearse leaves the producer resident and mutes the layer, so a mute that
+ * is never restored is a graphic that airs with no sound. Without a MIXER handler
+ * the mock answered `400 ERROR` to the mute, which would have made the bridge's
+ * fail-closed refusal fire in every test and hidden the real behaviour behind a
+ * plumbing failure.
+ *
+ * Only the VOLUME sub-verb is implemented. Anything else is `400`, deliberately:
+ * an unimplemented sub-verb that silently `202`s would let a wrong command look
+ * correct, which is the one thing a mock must never do.
+ *
+ * The volume is applied to the layer's mixer state and NOT reset by `CLEAR` or
+ * `CG REMOVE` (those handlers patch specific fields), which is the real
+ * behaviour — mixer state belongs to the channel, not to the producer — and is
+ * precisely why the restore has to be explicit.
+ */
+function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
+  const slot = parseChannelLayer(req.args[0]);
+  if (!slot) return { kind: 'err', code: 401, verb: 'MIXER' };
+  if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'MIXER' };
+  if ((req.args[1] ?? '').toUpperCase() !== 'VOLUME') {
+    return { kind: 'err', code: 400, verb: 'MIXER' };
+  }
+  const raw = req.args[2];
+  if (raw === undefined) return { kind: 'err', code: 402, verb: 'MIXER' };
+  const volume = Number(raw);
+  // A non-numeric or negative volume is a REFUSAL, not a clamp: silently
+  // coercing it would let a malformed mute read as a successful one.
+  if (!Number.isFinite(volume) || volume < 0) return { kind: 'err', code: 401, verb: 'MIXER' };
+  ctx.setLayer(slot, { volume });
+  return { kind: 'ok', code: 202, verb: 'MIXER' };
 }
 
 const VERSION_STRING = '2.3.2 Stable';

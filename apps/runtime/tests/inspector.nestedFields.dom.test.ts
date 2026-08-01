@@ -11,6 +11,7 @@ import {
   buildApplyPayload,
   valueAt,
 } from '../src/renderer/features/inspector/draftStore.js';
+import { connectionsStub, linkFor } from './support/reachability.js';
 
 /**
  * B-067 — the operator-visible half. A D-119 starter's fields live in a NESTED
@@ -67,6 +68,10 @@ function item(): StackItemState {
 
 async function render(info: TemplateInfo): Promise<HTMLDivElement> {
   const stub = {
+    // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
+    // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
+    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    connections: connectionsStub('both-up'),
     templates: { get: vi.fn(() => Promise.resolve(info)) },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };

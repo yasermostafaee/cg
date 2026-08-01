@@ -13,8 +13,17 @@ export {
   outputTranslate,
   parsePositionQuery,
   resolveOutputPosition,
-  OUTPUT_FRAME,
+  // R-030 — the channel raster and the one uniform scale that maps the
+  // reference frame onto it. `REFERENCE_FRAME` replaces the old `OUTPUT_FRAME`
+  // name, which lied on every channel that was not 1080 (see position.ts).
+  REFERENCE_FRAME,
+  parseChannelRasterQuery,
+  resolveChannelRaster,
+  outputScale,
+  outputLetterbox,
   type ApplyOutputPositionOptions,
+  type Raster,
+  type RasterView,
 } from './position.js';
 export { buildScene } from './scene-builder.js';
 export { applyFieldValues } from './bindings.js';

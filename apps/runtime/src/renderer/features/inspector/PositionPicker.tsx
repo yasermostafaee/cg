@@ -3,6 +3,7 @@ import type { PositionAnchor, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { reportCommandError } from '../status/commandFeedback.js';
@@ -14,25 +15,50 @@ const ANCHOR_GRID: readonly (readonly PositionAnchor[])[] = [
   ['bottom-left', 'bottom-center', 'bottom-right'],
 ];
 
+/*
+ * Spacing from the scale (`--r-space-*`), and the ORDERING is what does the work:
+ * label→control is the smallest step, control→control one up, section→section the
+ * largest. That gradient is what makes the parts group without a divider line
+ * between every one of them.
+ *
+ * The GRID itself is in `controls.css` (`.cg-anchor-*`) — nine dots needed borders,
+ * a selected fill and a hover, and inline styles cannot express the last two.
+ */
 const styles = {
-  section: {
-    marginTop: '0.5rem',
-    borderTop: `1px solid #2b3044`,
-    paddingTop: '0.5rem',
+  /** The grid and the nudge inputs side by side — one control, read left to right. */
+  placement: {
+    display: 'flex',
+    gap: 'var(--r-space-4)',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap' as const,
+  },
+  /*
+   * The two nudge inputs AND "Apply position", bottom-aligned (the mock's
+   * `.nudge`). `flex-end` is the load-bearing bit: each nudge field is a label
+   * STACKED over its input, so aligning on the top would hang the button level
+   * with the 11px labels instead of with the boxes it acts on. Aligned on the
+   * baseline of the controls, the three read as one row of controls.
+   */
+  offsets: { display: 'flex', gap: 'var(--r-space-3)', alignItems: 'flex-end' },
+  /** One nudge input with its own label ABOVE it, so the two never compete for a row. */
+  offsetField: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.4rem',
+    gap: 'var(--r-space-1)',
   },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 2rem)',
-    gap: '0.25rem',
+  offsetLabel: {
+    color: colors.textMuted,
+    fontSize: '11px',
+    fontWeight: 600,
+    letterSpacing: '0.04em',
   },
-  offsets: { display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.85rem' },
-  offsetLabel: { color: colors.textMuted },
-  offsetInput: { width: '5rem' },
-  lock: { color: colors.textMuted, fontSize: '0.8rem' },
-  actions: { display: 'flex', gap: '0.5rem', alignItems: 'center' },
+  offsetInput: { width: '74px' },
+  lock: {
+    color: colors.textMuted,
+    fontSize: 'var(--r-text-sm)',
+    display: 'block',
+    marginTop: 'var(--r-space-2)',
+  },
 } as const;
 
 /** The on-air lock mirrors the bridge's set-position refusal predicate. */
@@ -82,84 +108,155 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
     return raw.trim() !== '' && Number.isFinite(n) ? n : 0;
   };
 
+  /**
+   * STAGED-BUT-UNAPPLIED, said the same way a dynamic field says it (owner
+   * request). Position was the one editable thing in this panel that changed
+   * silently: an operator could move the anchor, look away, and have no way to
+   * tell whether that had reached air — while every field beside it carries a
+   * dirty mark for exactly that question.
+   *
+   * COMPARED AGAINST THE SEED, which is the APPLIED value (`item.position`, the
+   * bridge's own published state) falling back to the manifest default — the same
+   * precedence B-072 established for what this picker displays. So this cannot
+   * drift from what Apply would overwrite: it is dirty exactly when pressing Apply
+   * would change something.
+   *
+   * It clears by ITSELF when the applied value catches up, because the seed is
+   * re-read from the item on every render. No local "clean" flag to get stuck.
+   */
+  const dirty =
+    anchor !== seed.anchor || offset(dx) !== seed.offset.x || offset(dy) !== seed.offset.y;
+
   return (
-    <div style={styles.section} aria-label="On-air position">
-      <h2
-        style={{
-          fontSize: '0.85rem',
-          fontWeight: 700,
-          color: colors.textMuted,
-          letterSpacing: '0.05em',
-          margin: 0,
-        }}
-      >
+    <div className="cg-inspector-section" aria-label="On-air position">
+      <h2>
         POSITION
+        {/* The SAME mark a dirty field carries, from the same class — so "not
+            applied yet" looks identical wherever it appears in this panel. */}
+        {dirty && (
+          <span className="cg-dirty-dot" aria-label="Position has unapplied changes">
+            ●
+          </span>
+        )}
       </h2>
-      <div style={styles.grid} role="group" aria-label="Position anchor">
-        {ANCHOR_GRID.flat().map((a) => (
-          <Button
-            key={a}
-            variant={a === anchor ? 'secondary' : 'ghost'}
-            aria-label={`Anchor ${a}`}
-            aria-pressed={a === anchor}
+      <div style={styles.placement}>
+        {/*
+          A GRID, not nine loose dots. It used to render as nine free-floating
+          glyphs in a bare `display: grid`, which communicated "here are nine
+          things" and never "pick a corner" — the shape of the control has to say
+          what the control is for, because a 3×3 of bordered cells IS a frame and
+          a scatter of dots is not.
+
+          The cells are BUTTONS still, so `aria-pressed`, the per-anchor
+          accessible name and the keyboard path are all unchanged. Only the
+          painting moves to `controls.css`, where a selected fill and a hover can
+          actually be expressed.
+        */}
+        <div className="cg-anchor-grid" role="group" aria-label="Position anchor">
+          {ANCHOR_GRID.flat().map((a) => (
+            <Button
+              key={a}
+              variant="default"
+              className="cg-anchor-cell"
+              aria-label={`Anchor ${a}`}
+              aria-pressed={a === anchor}
+              disabled={locked}
+              title={a}
+              onClick={() => setAnchor(a)}
+            >
+              {/* The anchor POINT inside its cell. The cell's border draws the
+                  frame; this marks where in the frame the graphic is pinned. */}
+              <span className="cg-anchor-cell__dot" aria-hidden="true" />
+            </Button>
+          ))}
+        </div>
+        <div className="cg-position-row" style={styles.offsets}>
+          {/* `scrub` — the offsets are PIXEL magnitudes, which is exactly the value
+              kind a horizontal drag suits: the operator nudges a graphic and watches
+              the number move, rather than selecting text and retyping. Arrow keys give
+              the same adjustment a keyboard, and Shift/Ctrl give fine and coarse steps.
+              Matches the Designer's transform fields (owner request).
+
+              THE WIDTH CHANGED AND THE GESTURE DID NOT. `scrub` is opt-in precisely
+              because the same primitive serves the lock PIN, so it travels with the
+              drag cursor and the keyboard steps — a narrower box must not quietly
+              drop it, because an invisible gesture is one nobody uses. */}
+          {/* A plain wrapper, NOT a `<label>`. These inputs are named by
+              `aria-label` ("Position offset X"), which OUTRANKS a wrapping label —
+              so a `<label>` would leave the visible text ("dx") different from the
+              accessible name, the WCAG 2.5.3 mismatch, while adding no association
+              that was missing. The a11y contract here is unchanged by this pass;
+              only the stacking of the visible text is new. */}
+          <div style={styles.offsetField}>
+            <span style={styles.offsetLabel}>dx</span>
+            <NumericInput
+              className="cg-field"
+              style={styles.offsetInput}
+              decimal
+              scrub={{ step: 1 }}
+              value={dx}
+              disabled={locked}
+              onValueChange={setDx}
+              aria-label="Position offset X"
+            />
+          </div>
+          <div style={styles.offsetField}>
+            <span style={styles.offsetLabel}>dy</span>
+            <NumericInput
+              className="cg-field"
+              style={styles.offsetInput}
+              decimal
+              scrub={{ step: 1 }}
+              value={dy}
+              disabled={locked}
+              onValueChange={setDy}
+              aria-label="Position offset Y"
+            />
+          </div>
+          {/* ONE OF THE THREE ACCENTED ACTIONS (owner request), with Add item and
+              Update — this is the action the POSITION section exists to perform.
+              See `.cg-btn--accent` in `controls.css` for why colour may mean
+              hierarchy here and must not on the layer table.
+
+              IN the nudge row, bottom-aligned with the two inputs, per the mock —
+              not on a line of its own below them. It commits what those boxes hold,
+              so it belongs beside them; on its own row it read as a section-level
+              action and left an empty band across the panel. */}
+          <AsyncButton
+            variant="accent"
+            aria-label="Apply position"
             disabled={locked}
-            title={a}
-            onClick={() => setAnchor(a)}
+            run={() =>
+              window.cg.stack
+                .setPosition({
+                  itemId: item.itemId,
+                  position: { anchor, offset: { x: offset(dx), y: offset(dy) } },
+                })
+                .then((r) => ({
+                  accepted: r.ok,
+                  ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
+                }))
+            }
+            // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
+            // control where its wrapped text bloated this narrow panel. `setPosition` does
+            // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
+            // The MESSAGE is unchanged: the button already mapped `r.reason` through
+            // `errorCodeMessage`, and the toast carries that same mapping — only its
+            // placement moves.
+            onError={reportCommandError}
           >
-            {a === anchor ? '◉' : '·'}
-          </Button>
-        ))}
+            Apply position
+          </AsyncButton>
+          {/* …and the same CHIP the commit bar shows for staged field edits, so the
+              two kinds of unapplied change read as one idea. Beside the button that
+              clears it, which is where an operator looks once they have noticed. */}
+          {dirty && !locked && <DraftChip label="unapplied position" />}
+        </div>
       </div>
-      <div style={styles.offsets}>
-        <span style={styles.offsetLabel}>dx</span>
-        <NumericInput
-          className="cg-field"
-          style={styles.offsetInput}
-          decimal
-          value={dx}
-          disabled={locked}
-          onValueChange={setDx}
-          aria-label="Position offset X"
-        />
-        <span style={styles.offsetLabel}>dy</span>
-        <NumericInput
-          className="cg-field"
-          style={styles.offsetInput}
-          decimal
-          value={dy}
-          disabled={locked}
-          onValueChange={setDy}
-          aria-label="Position offset Y"
-        />
-      </div>
-      <div style={styles.actions}>
-        <AsyncButton
-          variant="secondary"
-          aria-label="Apply position"
-          disabled={locked}
-          run={() =>
-            window.cg.stack
-              .setPosition({
-                itemId: item.itemId,
-                position: { anchor, offset: { x: offset(dx), y: offset(dy) } },
-              })
-              .then((r) => ({
-                accepted: r.ok,
-                ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
-              }))
-          }
-          // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
-          // control where its wrapped text bloated this narrow panel. `setPosition` does
-          // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
-          // The MESSAGE is unchanged: the button already mapped `r.reason` through
-          // `errorCodeMessage`, and the toast carries that same mapping — only its
-          // placement moves.
-          onError={reportCommandError}
-        >
-          Apply position
-        </AsyncButton>
-        {locked && <span style={styles.lock}>locked while on air</span>}
-      </div>
+      {/* BELOW the row, not inside it: it is a note about why the controls above are
+          inert, and a note that sits in the control row changes the row's height as
+          it appears and disappears. */}
+      {locked && <span style={styles.lock}>locked while on air</span>}
     </div>
   );
 }

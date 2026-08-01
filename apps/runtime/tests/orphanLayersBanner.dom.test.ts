@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
 import { OrphanLayersBanner } from '../src/renderer/features/layers/OrphanLayersBanner.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
+import { connectionsStub, type Reachability } from './support/reachability.js';
 
 /**
  * R-009 — the orphan-layer warning surface: renders NOTHING when the set is
@@ -30,9 +31,19 @@ function orphan(channel: number, layer: number): OrphanLayer {
   return { channel, layer, producer: 'html', since: '2026-07-11T12:00:00.000Z' };
 }
 
-function stubBridge(): { clear: Mock } {
+function stubBridge(
+  reach: Reachability = 'both-up',
+  link: 'live' | 'disconnected' = 'live',
+): { clear: Mock } {
   const clear = vi.fn(() => Promise.resolve({ ok: true }));
-  const stub = { layers: { clear } };
+  const stub = {
+    // §1 — this Clear emits AMCP, so the banner reads BOTH hops and the stub owes
+    // both channels. Adding `useCasparReach` anywhere pulls `useLink` in
+    // transitively (health rides `useBridgeSnapshot`, which reads the link).
+    link: { status: () => link, onStatusChanged: () => () => undefined },
+    connections: connectionsStub(reach),
+    layers: { clear },
+  };
   (window as unknown as { cg: typeof stub }).cg = stub;
   return { clear };
 }
@@ -152,6 +163,55 @@ describe('OrphanLayersBanner — B-056 owned-slot occupancy variant', () => {
     expect(
       el.querySelector('[aria-label="Owned-layer occupancy warnings"]')?.querySelector('button'),
     ).toBeNull();
+  });
+});
+
+/**
+ * §1 — THE CLEAR THAT WAS NOT IN THE GATE'S LIST.
+ *
+ * It emits AMCP (`layers.clear`), so with either hop down the command never
+ * leaves: the enabled button was the APPEARANCE of a remedy. That matters more
+ * here than on a row verb, because this is the control an operator reaches for
+ * once the console's own model has already failed them — they press it, believe
+ * the layer is coming off, and a graphic they cannot account for stays on air.
+ *
+ * The gate is on REACHABILITY ONLY. The orphan row exists precisely because the
+ * layer carries something we did not put there, and that is never a reason to
+ * refuse the remedy.
+ */
+describe('OrphanLayersBanner — §1 the Clear is gated on BOTH hops', () => {
+  function clearBtn(el: HTMLElement): HTMLButtonElement | null {
+    return el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 1-60"]');
+  }
+
+  it('with both hops up it is enabled and says what it will send', async () => {
+    stubBridge('both-up');
+    const el = await renderBanner([orphan(1, 60)]);
+    expect(clearBtn(el)?.disabled).toBe(false);
+    expect(clearBtn(el)?.title).toContain('Send CLEAR 1-60');
+  });
+
+  it('with CasparCG unreachable it is DISABLED and names the playout server', async () => {
+    stubBridge('caspar-down');
+    const el = await renderBanner([orphan(1, 60)]);
+    expect(clearBtn(el)?.disabled).toBe(true);
+    expect(clearBtn(el)?.title).toMatch(/CasparCG cannot be reached/i);
+  });
+
+  it('with the BRIDGE down it is disabled and names the BRIDGE, not CasparCG', async () => {
+    stubBridge('bridge-down', 'disconnected');
+    const el = await renderBanner([orphan(1, 60)]);
+    expect(clearBtn(el)?.disabled).toBe(true);
+    expect(clearBtn(el)?.title).toMatch(/Bridge disconnected/i);
+    expect(clearBtn(el)?.title).not.toMatch(/CasparCG cannot be reached/i);
+  });
+
+  it('during the BOOT WINDOW it is disabled and says connecting, not unreachable', async () => {
+    stubBridge('unknown');
+    const el = await renderBanner([orphan(1, 60)]);
+    expect(clearBtn(el)?.disabled).toBe(true);
+    expect(clearBtn(el)?.title).toMatch(/connecting/i);
+    expect(clearBtn(el)?.title).not.toMatch(/cannot be reached/i);
   });
 });
 

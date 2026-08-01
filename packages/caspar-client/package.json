@@ -23,6 +23,7 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
+    "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*"
   },
   "devDependencies": {

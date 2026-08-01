@@ -3,20 +3,24 @@ import * as path from 'node:path';
 import {
   type FIXED_LAYERS_SET_CONFIG_REASONS,
   FixedLayerBankSchema,
+  isLayerVisible,
   type FixedLayerBank,
 } from '@cg/shared-ipc';
 import type { LayerPolicy, LayerSlot } from '@cg/caspar-client';
 
 /**
- * R-021 stage 1 — validation + bridge-side persistence of the fixed operator
- * layer bank (modelled on `connection-store.ts`: atomic tmp+rename write).
+ * R-021 stage 1 / R-028 — validation + bridge-side persistence of the fixed
+ * candidate-layer bank (modelled on `connection-store.ts`: atomic tmp+rename
+ * write). R-028 made the bank a FIXED CEILING: the count never changes
+ * mid-session (`resize-refused`), and the live-change surface is visibility
+ * ticks + aliases only, with unticking fail-closed on occupancy.
  *
  * THE CONTRACT: the bank is validated ONCE, loudly, at config time — never
  * adjudicated at Clear/allocation time (design.md's governing principle). The
  * validators are pure and exported so unit tests exercise every refusal, and
  * every refusal carries a machine code plus a message that names what the
- * operator must fix (a1/e1: an overlap names BOTH ranges; a refused shrink
- * names the occupied slot NUMBERS).
+ * operator must fix (an overlap names BOTH ranges; an untick refusal names
+ * the layer and distinguishes OCCUPIED from UNKNOWN).
  *
  * DELIBERATE DIVERGENCE from connection-store's warn-and-ignore: a fixed-layers
  * file that is PRESENT but unusable (unreadable, bad JSON, schema-invalid) is a
@@ -36,8 +40,21 @@ import type { LayerPolicy, LayerSlot } from '@cg/caspar-client';
  * ("Fixed layers"), the C-009 operator-contract class.
  */
 
-/** The highest layer a bank may reach (design.md (e): 70–89 is the free space). */
-export const MAX_FIXED_LAYER = 89;
+/**
+ * The highest layer a bank may reach.
+ *
+ * RAISED FROM 89 TO 99 by owner decision, so the operator's candidate bank can be the
+ * full 70–99 (thirty rows). design.md (e) recorded 70–89 as the free space because
+ * `logo-bug` held 90–99 in the dynamic policy; that range MOVED to 40–49 in the same
+ * change (`DEFAULT_LAYER_POLICY`), so 90–99 is genuinely free now rather than merely
+ * declared free.
+ *
+ * The two had to move TOGETHER. Raising this alone would have produced a bank the
+ * validator accepts and then refuses on `overlaps-policy`, or — worse, if that check
+ * were also weakened — a bank sharing layers with automatic allocation, which is the
+ * cross-subsystem destruction the disjointness rules exist to prevent.
+ */
+export const MAX_FIXED_LAYER = 99;
 
 /**
  * R-021 stage 2a — DERIVED from the wire contract's shared const, so the
@@ -72,16 +89,27 @@ export interface ValidateOptions {
   /** The layer policy in force — THE SAME object handed to the LayerManager. */
   policy: LayerPolicy;
   /**
-   * Layers reserved by other subsystems on the bank's channel. C-015's Live
-   * Source layer plan is the future provider; the bridge passes `[]` until it
-   * exists. A non-empty set overlapping the bank is refused (a1).
+   * R-028 / C-015 — the layers the PLAYOUT system owns, from real config
+   * (`reserved-layers-store.ts` / the `--reserved-layers` flag). A non-empty
+   * set overlapping the bank is refused (`overlaps-reserved`), naming BOTH
+   * ranges — at load and at every change.
    */
   reservedLayers: readonly number[];
 }
 
+/**
+ * R-028 (2.3) — what the bridge can say about ONE candidate layer when asked
+ * whether it may be hidden. `occupied` covers BOTH knowledge sources: the
+ * bridge's own records (a bound item / retained intent — valid even with no
+ * OSC) and a fresh OSC observation of a producer. `unknown` means occupancy
+ * cannot be verified (no healthy primary / the tap has no fresh OSC) — and
+ * unknown REFUSES the untick exactly like occupied does (fail closed).
+ */
+export type SlotOccupancy = 'occupied' | 'empty' | 'unknown';
+
 export interface ValidateChangeOptions extends ValidateOptions {
-  /** True when the slot currently holds a resident item or retained intent. */
-  isSlotBusy: (slot: LayerSlot) => boolean;
+  /** The occupancy verdict for a slot — see {@link SlotOccupancy}. */
+  slotOccupancy: (slot: LayerSlot) => SlotOccupancy;
 }
 
 function bankEnd(bank: FixedLayerBank): number {
@@ -126,10 +154,14 @@ export function validateFixedBank(
   }
   const reservedHits = options.reservedLayers.filter((l) => l >= bank.start && l <= end);
   if (reservedHits.length > 0) {
+    // R-028 (2.5) — name BOTH ranges: the candidate ceiling AND the declared
+    // playout range, so the operator can see which side to move.
     throw new FixedLayersConfigError(
       'overlaps-reserved',
-      `fixed bank ${range} overlaps reserved (Live Source, C-015) layer(s) ` +
-        `${reservedHits.map(String).join(', ')} — the two must be disjoint`,
+      `candidate layer ceiling ${range} overlaps the reserved playout range ` +
+        `${formatRanges(options.reservedLayers)} (C-015) on layer(s) ` +
+        `${reservedHits.map(String).join(', ')} — the two must be disjoint; move the ` +
+        `ceiling or the reservation`,
     );
   }
   for (const key of Object.keys(bank.aliases ?? {})) {
@@ -141,15 +173,50 @@ export function validateFixedBank(
       );
     }
   }
+  // R-028 — visibility ticks must name layers of the ceiling, like aliases.
+  for (const key of Object.keys(bank.visibility ?? {})) {
+    const layer = Number(key);
+    if (layer < bank.start || layer > end) {
+      throw new FixedLayersConfigError(
+        'visibility-out-of-bank',
+        `visibility key ${key} is outside the fixed bank ${range}`,
+      );
+    }
+  }
   return bankSlots(bank);
 }
 
+/** Compress a layer list into human-readable inclusive ranges (`60–69, 105`). */
+function formatRanges(layers: readonly number[]): string {
+  const sorted = [...new Set(layers)].sort((a, b) => a - b);
+  const parts: string[] = [];
+  let runStart: number | null = null;
+  let prev = Number.NaN;
+  for (const layer of sorted) {
+    if (runStart === null) {
+      runStart = layer;
+    } else if (layer !== prev + 1) {
+      parts.push(runStart === prev ? String(runStart) : `${String(runStart)}–${String(prev)}`);
+      runStart = layer;
+    }
+    prev = layer;
+  }
+  if (runStart !== null) {
+    parts.push(runStart === prev ? String(runStart) : `${String(runStart)}–${String(prev)}`);
+  }
+  return parts.join(', ');
+}
+
 /**
- * Validate a bank CHANGE against a currently-active bank (design.md (e)):
- * grow-at-end within the ceiling and alias changes are accepted; moving
- * `start` or `channel` mid-session is refused; a shrink is refused while any
- * removed slot is busy (resident item / retained intent) — the error names the
- * occupied slot numbers. Returns the NEXT bank's slots.
+ * Validate a bank CHANGE against a currently-active bank (R-028): alias and
+ * visibility changes are the ONLY live changes. Moving `start` or `channel`
+ * mid-session is refused (unchanged from R-021), and the COUNT is now refused
+ * too (`resize-refused`) — the candidate ceiling is FIXED at install; a
+ * mutable count is exactly what R-028 rejected (design.md §b3). Hiding a row
+ * (`visibility` tick going false) is refused while its layer is OCCUPIED and
+ * while its occupancy is UNKNOWN — fail closed; unknown is never treated as
+ * empty. The two refusals carry DISTINCT codes and messages naming the layer.
+ * Returns the NEXT bank's slots.
  */
 export function validateFixedBankChange(
   current: FixedLayerBank,
@@ -161,7 +228,7 @@ export function validateFixedBankChange(
     throw new FixedLayersConfigError(
       'renumber-refused',
       `fixed bank start cannot move mid-session (${String(current.start)} → ` +
-        `${String(next.start)}) — the bank is extendable only at the end, never renumbered`,
+        `${String(next.start)}) — the candidate ceiling is fixed at install, never renumbered`,
     );
   }
   if (next.channel !== current.channel) {
@@ -171,18 +238,33 @@ export function validateFixedBankChange(
         `${String(next.channel)})`,
     );
   }
-  if (next.count < current.count) {
-    const removed: LayerSlot[] = [];
-    for (let layer = bankEnd(next) + 1; layer <= bankEnd(current); layer++) {
-      removed.push({ channel: current.channel, layer });
-    }
-    const busy = removed.filter((s) => options.isSlotBusy(s)).map((s) => s.layer);
-    if (busy.length > 0) {
+  if (next.count !== current.count) {
+    throw new FixedLayersConfigError(
+      'resize-refused',
+      `the candidate layer ceiling cannot change mid-session (${String(current.count)} → ` +
+        `${String(next.count)} layers) — it is fixed at install; edit the persisted ` +
+        `fixed-layers config and restart the bridge to change it`,
+    );
+  }
+  // R-028 (2.3) — every layer flipping VISIBLE → HIDDEN must be provably
+  // empty. Occupied refuses; UNKNOWN refuses too (fail closed): hiding a row
+  // that may be on air would leave the operator no surface for a live graphic.
+  for (let layer = next.start; layer <= bankEnd(next); layer++) {
+    if (!isLayerVisible(current, layer) || isLayerVisible(next, layer)) continue;
+    const occupancy = options.slotOccupancy({ channel: next.channel, layer });
+    if (occupancy === 'occupied') {
       throw new FixedLayersConfigError(
-        'shrink-occupied',
-        `fixed bank shrink refused: slot(s) ${busy.map(String).join(', ')} still hold a ` +
-          `resident item or retained intent — clear them first (a pending shrink is invisible ` +
-          `state; config never silently diverges from reality)`,
+        'untick-occupied',
+        `cannot hide layer ${String(layer)}: it is OCCUPIED (an item or producer is on it) — ` +
+          `remove its template first (removal implies clear), then untick`,
+      );
+    }
+    if (occupancy === 'unknown') {
+      throw new FixedLayersConfigError(
+        'untick-unknown',
+        `cannot hide layer ${String(layer)}: its occupancy is UNKNOWN (no healthy CasparCG ` +
+          `link or no fresh OSC), and unknown is never treated as empty — a hidden row may ` +
+          `be on air. Restore the link/OSC so the layer reads empty, then untick`,
       );
     }
   }

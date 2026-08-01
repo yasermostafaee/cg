@@ -28,6 +28,9 @@ afterEach(() => {
 const A = 'item-a';
 const B = 'item-b';
 
+/** A stack snapshot that HAS arrived, carrying these ids. */
+const live = (...ids: string[]) => ({ ready: true as const, liveItemIds: new Set(ids) });
+
 describe('staging + effective value', () => {
   it('stages a field and reads it back; effectiveValue prefers the draft', () => {
     stageField(A, ['title'], 'draft');
@@ -101,9 +104,34 @@ describe('discard + prune', () => {
   it('pruneDrafts drops drafts of items no longer on the stack', () => {
     stageField(A, ['title'], 'x');
     stageField(B, ['title'], 'y');
-    pruneDrafts([B]); // A was removed
+    pruneDrafts(live(B)); // A was removed
     expect(hasStaged(A, ['title'])).toBe(false);
     expect(hasStaged(B, ['title'])).toBe(true);
+  });
+
+  /**
+   * THE GUARD. A snapshot that has not arrived is not an empty stack, and a prune
+   * that cannot tell what is on the stack has no business deleting anything.
+   *
+   * This is the unit-level half of the fullscreen data-loss bug: the effect that
+   * used to run this lived in `LayersPanel`, which `App` unmounts on either
+   * fullscreen path, so it re-ran on remount against the bootstrap `[]` and
+   * deleted every staged edit. The call site moved to `App`; this guard is kept
+   * anyway, because the failure mode is silent destruction of typed work with no
+   * undo — the one case that earns defence in depth.
+   */
+  it('pruneDrafts deletes NOTHING when the snapshot has not arrived', () => {
+    stageField(A, ['title'], 'x');
+    stageField(B, ['title'], 'y');
+    pruneDrafts({ ready: false });
+    expect(hasStaged(A, ['title'])).toBe(true);
+    expect(hasStaged(B, ['title'])).toBe(true);
+  });
+
+  it('a READY snapshot that is genuinely empty still prunes — the guard is not an off switch', () => {
+    stageField(A, ['title'], 'x');
+    pruneDrafts(live());
+    expect(hasStaged(A, ['title'])).toBe(false);
   });
 });
 

@@ -94,15 +94,24 @@ it('an exact-slot load lands the CG ADD on THAT layer and publishes the binding'
   const result = await r.loadFixed({ channel: 1, layer: 72 }, 'item-clock', 'tpl-clock', {});
   expect(result).toEqual({ accepted: true });
 
-  // THE assertion: the wire's CG ADD went to 1-72 — the row's own layer.
-  expect(mock?.lastCgAdd({ channel: 1, layer: 72 })).toBeDefined();
-  for (const layer of [70, 71, 73]) {
+  // THE assertion USED TO BE "the CG ADD went to 1-72" — the row's own layer.
+  // It is now the opposite, and that inversion is the point: LOAD is LIST-ONLY
+  // and emits NO AMCP at all, so the exact-slot property is proved by the
+  // BINDING below rather than by which layer a wire command addressed. Nothing
+  // reached ANY layer.
+  for (const layer of [70, 71, 72, 73]) {
     expect(mock?.lastCgAdd({ channel: 1, layer })).toBeUndefined();
   }
 
   // …and the published binding names the item + the REGISTRY's template type
-  // (not the id) — a value only `bindFixed` can put on a fixed slot.
-  expect(slotState(r, 72)?.binding).toEqual({ itemId: 'item-clock', templateType: 'clock' });
+  // (not the id) — a value only `bindFixed` can put on a fixed slot. R-028
+  // (3.1): the bridge also resolves WHICH template is on the row, so every
+  // browser reads the same identity.
+  expect(slotState(r, 72)?.binding).toEqual({
+    itemId: 'item-clock',
+    templateType: 'clock',
+    templateId: 'tpl-clock',
+  });
   expect(r.fixedLayersState().filter((s) => s.binding !== null)).toHaveLength(1);
   // The binding is PUBLISHED, not merely readable — the row learns about it.
   expect(published.some((s) => s.find((x) => x.layer === 72)?.binding !== null)).toBe(true);
@@ -159,7 +168,11 @@ it('refuses a coordinate outside the bank, an unregistered template, and an occu
     errorCode: 'slot-bound',
   });
   // The refused second load did NOT disturb the resident item's binding.
-  expect(slotState(r, 72)?.binding).toEqual({ itemId: 'item-d', templateType: 'clock' });
+  expect(slotState(r, 72)?.binding).toEqual({
+    itemId: 'item-d',
+    templateType: 'clock',
+    templateId: 'tpl-clock',
+  });
 });
 
 it('Remove drops the binding but KEEPS the fence — the slot is re-loadable, never allocatable', async () => {
@@ -179,5 +192,76 @@ it('Remove drops the binding but KEEPS the fence — the slot is re-loadable, ne
   expect(
     (await r.loadFixed({ channel: 1, layer: 71 }, 'item-second', 'tpl-clock', {})).accepted,
   ).toBe(true);
-  expect(slotState(r, 71)?.binding).toEqual({ itemId: 'item-second', templateType: 'clock' });
+  expect(slotState(r, 71)?.binding).toEqual({
+    itemId: 'item-second',
+    templateType: 'clock',
+    templateId: 'tpl-clock',
+  });
+});
+
+/**
+ * B-114 — after a bridge RESTART, an item retained on a declared row comes back
+ * ON THAT ROW, bound.
+ *
+ * The failure this pins was reported from live use: restart the bridge and the
+ * loaded templates disappear from every row, and the rows will not accept a new
+ * LOAD either (their occupancy is `unknown` until OSC arrives, and the load gate
+ * fails closed on unknown — correctly). The operator was left with a row that
+ * showed nothing and could do nothing.
+ *
+ * The cause was in `#slotForRestore`: it re-seated a retained coordinate with
+ * `reserve()`, which REFUSES a fixed slot by construction, then fell through to
+ * `#allocate()` — re-homing the row's item onto a dynamic layer, or (for a
+ * `custom` template type, whose range is the reserved playout range) throwing,
+ * which SKIPS the item. Neither path records a `fixedBinding`, so every row
+ * published `binding: null`.
+ *
+ * A published binding can only come from `bindFixed`, so asserting it is the
+ * proof the restore took the fixed door.
+ */
+it('B-114 — a retained item on a declared row is RE-BOUND to that row after a restart', async () => {
+  const r = await boot();
+  await r.loadFixed({ channel: 1, layer: 72 }, 'item-clock', 'tpl-clock', {});
+  const retained = r.stackSnapshot().find((i) => i.itemId === 'item-clock');
+  expect(retained?.slot).toMatchObject({ channel: 1, layer: 72 });
+
+  // The bridge PROCESS dies and comes back; the browser re-delivers its
+  // retained intent, exactly as `StackRetentionStore` does on reconnect.
+  await runtime?.stop();
+  const oscPort = await freeUdpPort();
+  await mock?.stop();
+  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
+  runtime = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS, fixedSlots: FIXED_SLOTS, fixedBank: BANK },
+  );
+  runtime.start();
+  await runtime.startServing();
+  runtime.templateImport({ templateId: 'tpl-clock', templateType: 'clock', fields: [] }, HTML);
+  await runtime.whenServerHealthy(HEALTH_MS);
+
+  const result = await runtime.restore([
+    {
+      itemId: 'item-clock',
+      templateId: 'tpl-clock',
+      fields: {},
+      played: false,
+      slot: { channel: 1, layer: 72 },
+    },
+  ]);
+  expect(result.restored).toBe(1);
+  expect(result.skipped).toBe(0);
+
+  // THE assertion: the row names the item again, with the registry's template
+  // type — not `null`, and not a raw templateId.
+  expect(slotState(runtime, 72)?.binding).toMatchObject({
+    itemId: 'item-clock',
+    templateType: 'clock',
+  });
+  // And it went back on ITS OWN layer, not re-homed into the dynamic pool.
+  const item = runtime.stackSnapshot().find((i) => i.itemId === 'item-clock');
+  expect(item?.slot).toMatchObject({ channel: 1, layer: 72 });
+  // No other declared row was disturbed.
+  expect(runtime.fixedLayersState().filter((s) => s.binding !== null)).toHaveLength(1);
 });

@@ -1,6 +1,6 @@
 import type { StackItemState } from '@cg/shared-schema';
 import type { Unsubscribe } from '../../shared/runtime-bridge.js';
-import { useBridgeSnapshot } from './useBridgeSnapshot.js';
+import { useBridgeSnapshot, useBridgeSnapshotState } from './useBridgeSnapshot.js';
 
 const EMPTY: readonly StackItemState[] = [];
 
@@ -26,4 +26,21 @@ const subscribeStack = (handler: (next: readonly StackItemState[]) => void): Uns
  */
 export function useStack(): readonly StackItemState[] {
   return useBridgeSnapshot(fetchStack, subscribeStack, EMPTY, true);
+}
+
+/**
+ * The stack WITH its readiness — for the consumers that act on an item's ABSENCE.
+ *
+ * `useStack()` above hands back `[]` during the bootstrap window, which is right
+ * for rendering (an empty list for one frame is not a loss) and catastrophic for
+ * deleting: `pruneDrafts` read that `[]` as "every item has left the stack" and
+ * destroyed every staged edit the operator had typed. Nothing surfaced it, because
+ * the panel it lived in remounts only on a fullscreen round-trip.
+ *
+ * So the rule is a type, not a comment: anything destructive takes
+ * {@link StackPruneInput}, which cannot even be constructed from a bare id list.
+ */
+export function useStackSnapshot(): { items: readonly StackItemState[]; ready: boolean } {
+  const { value, ready } = useBridgeSnapshotState(fetchStack, subscribeStack, EMPTY, true);
+  return { items: value, ready };
 }

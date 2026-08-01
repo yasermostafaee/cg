@@ -6,6 +6,7 @@ import { useStack } from '../../hooks/useStack.js';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { Modal, ModalAction, modalActionVariant } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 
 interface Props {
@@ -13,36 +14,17 @@ interface Props {
   onClose: () => void;
 }
 
+/*
+  NO `scrim`, `modal`, `header`, `title` OR `footer` HERE ANY MORE.
+
+  This panel hand-rolled all five, which is how it came to be the one dialog with a
+  `Close` BUTTON in its header instead of the ✕ every other dialog uses, the one with
+  a SHOUTING title, and the one whose action row sat in its own footer element. All of
+  that now comes from `ui/Modal`. What is left below is this dialog's CONTENT styling
+  and nothing else — if a chrome style reappears here, the primitive is being bypassed
+  again.
+*/
 const styles = {
-  scrim: {
-    position: 'fixed' as const,
-    inset: 0,
-    background: 'rgba(2, 6, 23, 0.7)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 900,
-  },
-  modal: {
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.5rem',
-    padding: '1rem 1.25rem',
-    width: 'min(560px, 90vw)',
-    maxHeight: '85vh',
-    overflowY: 'auto' as const,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.75rem',
-    color: colors.text,
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '0.75rem',
-  },
-  title: { margin: 0, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.05em' },
   section: {
     border: `1px solid ${colors.border}`,
     borderRadius: '0.25rem',
@@ -82,7 +64,6 @@ const styles = {
   },
   status: { fontSize: '0.8rem', color: colors.textMuted },
   error: { fontSize: '0.8rem', color: colors.error },
-  footer: { display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', alignItems: 'center' },
 } as const;
 
 interface EndpointDraft {
@@ -207,9 +188,24 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
     prefix: string,
   ): JSX.Element => (
     <>
+      {/*
+        EVERY FIELD HERE CARRIES `cg-field`, and all four were missing it.
+
+        Owner's report: "the bg of inputs in the servers modal are different than
+        the others on the App". They were — `.cg-field` is what paints an input as a
+        WELL sunk into the panel (`--r-field-bg`), and a bare `<input>` falls back to
+        the browser's own white box. `NumericInput` passes `className` STRAIGHT
+        THROUGH and deliberately adds nothing (see its note), so a caller that omits
+        it gets an unstyled control — which is what these were, ports included.
+
+        `style` still carries only the WIDTH. The look belongs to the one shared
+        rule; a local background here would be the second surface that drifts at the
+        next change.
+      */}
       <div style={styles.row}>
         <span style={styles.label}>Host</span>
         <input
+          className="cg-field"
           style={styles.host}
           aria-label={`${prefix} host`}
           value={draft.host}
@@ -221,6 +217,7 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
         {/* R-020 — ports are integer-only NumericInputs: Persian/Arabic-Indic
             digits normalize to Latin BEFORE parsePort's /^\d+$/ sees them. */}
         <NumericInput
+          className="cg-field"
           style={styles.port}
           aria-label={`${prefix} AMCP port`}
           value={draft.amcpPort}
@@ -228,6 +225,7 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
         />
         <span style={styles.label}>OSC port</span>
         <NumericInput
+          className="cg-field"
           style={styles.port}
           aria-label={`${prefix} OSC port`}
           value={draft.oscPort}
@@ -237,89 +235,77 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
     </>
   );
 
+  /*
+    §3 — THE DIALOG'S MESSAGES GO TO THE PRIMITIVE'S PINNED REGION.
+
+    All four of them are the CONSEQUENCE of pressing Apply, or the reason it is
+    refused, so all four belong beside the action row rather than at the end of a
+    body the operator may have scrolled. Ordered worst-first: a validation error and
+    a bridge refusal are why nothing happened; the on-air block is why the button is
+    disabled; the status line is what happened when it worked.
+
+    None of the wording changes.
+  */
+  const messages = (
+    <>
+      {onAirCount > 0 && (
+        <div style={styles.blocked}>
+          Apply is blocked: {onAirCount} item(s) are on air or unsettled. Use Remove All (or Out
+          each item) first.
+        </div>
+      )}
+      {validationError !== null && <span style={styles.error}>{validationError}</span>}
+      {refusal !== null && <span style={styles.error}>{refusal}</span>}
+      {status !== null && <span style={styles.status}>{status}</span>}
+    </>
+  );
+  const hasMessage =
+    onAirCount > 0 || validationError !== null || refusal !== null || status !== null;
+
   return (
-    <div style={styles.scrim} role="dialog" aria-label="Server connection settings">
-      <div style={styles.modal}>
-        <header style={styles.header}>
-          <h2 style={styles.title}>SERVER CONNECTION</h2>
-          <Button onClick={onClose} aria-label="Close server settings">
-            Close
-          </Button>
-        </header>
+    <Modal
+      /*
+        §1 — SENTENCE CASE, brought to what the majority of dialogs already use.
+        It was `SERVER CONNECTION`, the only shouting title besides the audit log's,
+        and inventing a third treatment for it was never on offer. The WORDS are
+        unchanged; only the case is.
+      */
+      title="Server connection"
+      ariaLabel="Server connection settings"
+      size="wide"
+      onClose={onClose}
+      {...(hasMessage ? { message: messages } : {})}
+      footer={
+        <>
+          {/*
+            CANCEL (owner). This dialog had no way out but the ✕ — and it is the one
+            dialog in the app where that matters most, because it is a FORM: the
+            operator edits hosts and ports into a draft, and until Apply lands none
+            of it has been sent. Leaving without applying is a real, deliberate
+            choice, and it needs a control that says so rather than a glyph shared
+            with "I am finished reading".
 
-        <section style={styles.section} aria-label="Primary server">
-          <span style={styles.sectionTitle}>PRIMARY (A)</span>
-          {endpointRows(primary, setPrimary, 'Primary')}
-        </section>
+            It routes to the same `onClose` as the ✕, Escape and the backdrop — one
+            safe path, four ways to reach it. Nothing is sent; the draft is simply
+            dropped, and the next open re-reads the live config from the bridge.
 
-        <section style={styles.section} aria-label="Backup server">
-          <span style={styles.sectionTitle}>
-            BACKUP (B)
-            {backupEnabled ? (
-              <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
-                Remove backup
-              </Button>
-            ) : (
-              <Button aria-label="Add backup" onClick={() => setBackupEnabled(true)}>
-                Add backup
-              </Button>
-            )}
-          </span>
-          {backupEnabled ? (
-            endpointRows(backup, setBackup, 'Backup')
-          ) : (
-            <span style={styles.status}>
-              No backup declared — single-server operation (B-046: quiet by design).
-            </span>
-          )}
-        </section>
+            First in DOM order, so Apply keeps the corner every other dialog's
+            primary action sits in.
+          */}
+          <ModalAction actionRole="cancel" onClick={onClose}>
+            Cancel
+          </ModalAction>
+          {/*
+            §2 — APPLY IS `primary`, NOT THE AMBER IT WORE.
 
-        <section style={styles.section} aria-label="Redundancy options">
-          <div style={styles.row}>
-            <span style={styles.label}>Strategy</span>
-            <select
-              aria-label="Redundancy strategy"
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value as ConnectionConfig['strategy'])}
-            >
-              <option value="mirror-sync">mirror-sync</option>
-              <option value="mirror-async">mirror-async</option>
-              <option value="journal-replay">journal-replay</option>
-            </select>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-              <input
-                type="checkbox"
-                aria-label="Auto-failover enabled"
-                checked={autoFailover}
-                onChange={(e) => setAutoFailover(e.target.checked)}
-              />
-              auto-failover
-            </label>
-          </div>
-        </section>
-
-        {remoteHosts.length > 0 && (
-          <div style={styles.warning} role="note">
-            ⚠ Remote server ({remoteHosts.join(', ')}): the template server and OSC listener will
-            use a LAN address so CasparCG can reach this machine. The control connection stays on
-            127.0.0.1.
-          </div>
-        )}
-
-        {onAirCount > 0 && (
-          <div style={styles.blocked} role="note">
-            Apply is blocked: {onAirCount} item(s) are on air or unsettled. Use Remove All (or Out
-            each item) first.
-          </div>
-        )}
-
-        {validationError !== null && <span style={styles.error}>{validationError}</span>}
-        {refusal !== null && <span style={styles.error}>{refusal}</span>}
-        {status !== null && <span style={styles.status}>{status}</span>}
-
-        <footer style={styles.footer}>
+            It was `caution` — the colour that means THIS WILL INTERRUPT SOMETHING —
+            on a button that saves a configuration. A destructive signal spent on a
+            non-destructive action drains it everywhere it is real, and this dialog
+            is in fact the one that REFUSES to act while anything is on air.
+          */}
           <AsyncButton
-            variant="caution"
+            variant={modalActionVariant('primary')}
+            data-modal-role="primary"
             aria-label="Apply server settings"
             disabled={onAirCount > 0 || validationError !== null}
             run={async () => {
@@ -341,8 +327,74 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
           >
             APPLY
           </AsyncButton>
-        </footer>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <section style={styles.section} aria-label="Primary server">
+        <span style={styles.sectionTitle}>PRIMARY (A)</span>
+        {endpointRows(primary, setPrimary, 'Primary')}
+      </section>
+
+      <section style={styles.section} aria-label="Backup server">
+        <span style={styles.sectionTitle}>
+          BACKUP (B)
+          {backupEnabled ? (
+            <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
+              Remove backup
+            </Button>
+          ) : (
+            <Button aria-label="Add backup" onClick={() => setBackupEnabled(true)}>
+              Add backup
+            </Button>
+          )}
+        </span>
+        {backupEnabled ? (
+          endpointRows(backup, setBackup, 'Backup')
+        ) : (
+          <span style={styles.status}>
+            No backup declared — single-server operation (B-046: quiet by design).
+          </span>
+        )}
+      </section>
+
+      <section style={styles.section} aria-label="Redundancy options">
+        <div style={styles.row}>
+          <span style={styles.label}>Strategy</span>
+          {/* Same omission as the inputs above — the audit log's filter select
+              already carries `cg-field`, and this one is the odd one out. */}
+          <select
+            className="cg-field"
+            style={{ width: 'auto' }}
+            aria-label="Redundancy strategy"
+            value={strategy}
+            onChange={(e) => setStrategy(e.target.value as ConnectionConfig['strategy'])}
+          >
+            <option value="mirror-sync">mirror-sync</option>
+            <option value="mirror-async">mirror-async</option>
+            <option value="journal-replay">journal-replay</option>
+          </select>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+            <input
+              type="checkbox"
+              aria-label="Auto-failover enabled"
+              checked={autoFailover}
+              onChange={(e) => setAutoFailover(e.target.checked)}
+            />
+            auto-failover
+          </label>
+        </div>
+      </section>
+
+      {/* The remote-host note stays in the BODY: it describes the configuration
+          being edited, not the outcome of pressing Apply. The message region is for
+          "why that did or did not happen". */}
+      {remoteHosts.length > 0 && (
+        <div style={styles.warning} role="note">
+          ⚠ Remote server ({remoteHosts.join(', ')}): the template server and OSC listener will use
+          a LAN address so CasparCG can reach this machine. The control connection stays on
+          127.0.0.1.
+        </div>
+      )}
+    </Modal>
   );
 }

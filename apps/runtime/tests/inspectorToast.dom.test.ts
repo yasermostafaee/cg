@@ -10,6 +10,7 @@ import {
   onCommandError,
   reportCommandError,
 } from '../src/renderer/features/status/commandFeedback.js';
+import { connectionsStub, linkFor } from './support/reachability.js';
 
 /**
  * #334 finished the migration to toast-only feedback for the Library and Stack rows, but the
@@ -51,6 +52,10 @@ function itemWith(status: StackItemState['status'] = 'on-air'): StackItemState {
 function stubBridge(over: Record<string, unknown> = {}): void {
   const stub = {
     link: { status: () => 'live', onStatusChanged: () => () => undefined },
+    // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
+    // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
+    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    connections: connectionsStub('both-up'),
     templates: { get: () => Promise.resolve(null), list: () => Promise.resolve([]) },
     stack: {
       setPosition: () => Promise.resolve({ ok: true }),

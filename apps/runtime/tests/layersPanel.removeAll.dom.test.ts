@@ -1,0 +1,240 @@
+// @vitest-environment jsdom
+import { StrictMode, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import { act } from 'react-dom/test-utils';
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
+import type { StackItemState } from '@cg/shared-schema';
+import { LayersPanel } from '../src/renderer/features/layers/LayersPanel.js';
+import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
+import { connectionsStub, type Reachability } from './support/reachability.js';
+
+/**
+ * R-010 â the StackPanel header's Remove-All: confirm-gated (accept â one
+ * stack.removeAll call; cancel â none), hidden on an empty stack.
+ *
+ * The gate is now the app's own modal, not `window.confirm` â so these drive the dialog's
+ * real buttons, and assert that no native dialog is reached for at all.
+ */
+
+let container: HTMLDivElement | null = null;
+
+afterEach(() => {
+  container?.remove();
+  container = null;
+  clearPortals();
+  vi.restoreAllMocks();
+});
+
+function items(n: number): StackItemState[] {
+  return Array.from({ length: n }, (_, i) => ({
+    itemId: `item-${String(i)}`,
+    templateId: 'tpl',
+    fields: {},
+    status: 'idle' as const,
+    pending: false,
+  }));
+}
+
+function stubBridge(
+  stack: StackItemState[],
+  link: 'live' | 'disconnected' = 'live',
+): { removeAll: Mock } {
+  const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: stack.length }));
+  // §0a — both hops up unless this spec is about being disconnected.
+  const reach: Reachability = 'both-up';
+  const stub = {
+    // R-006 â StackRow + the header bulk actions mirror the connection refusal.
+    link: { status: () => link, onStatusChanged: () => () => undefined },
+    connections: connectionsStub(reach),
+    // R-004 â the panel joins each row against the registry to label its template.
+    templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
+    // R-028 â the merged panel also reads the declared layers and the playout tab.
+    fixedLayers: {
+      config: () => Promise.resolve(null),
+      state: () => Promise.resolve([]),
+      onConfigChanged: () => () => undefined,
+      onStateChanged: () => () => undefined,
+    },
+    // §0a — the second hop, selected BY NAME (support/reachability.ts).
+    connections: connectionsStub(reach),
+    // R-022 — rehearse is bridge-owned, so the panel subscribes to it on mount.
+    rehearse: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
+
+    playoutLayers: {
+      state: () => Promise.resolve([]),
+      clear: () => Promise.resolve({ ok: true }),
+      onStateChanged: () => () => undefined,
+    },
+    stack: {
+      snapshot: () => Promise.resolve(stack),
+      onStateChanged: () => () => undefined,
+      removeAll,
+      take: () => Promise.resolve({ accepted: true }),
+      update: () => Promise.resolve({ accepted: true }),
+      out: () => Promise.resolve({ accepted: true }),
+      remove: () => Promise.resolve({ accepted: true }),
+    },
+  };
+  (window as unknown as { cg: typeof stub }).cg = stub;
+  return { removeAll };
+}
+
+async function renderPanel(): Promise<HTMLDivElement> {
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      createElement(
+        StrictMode,
+        null,
+        createElement(LayersPanel, {
+          onSelectionChange: () => undefined,
+          selectedId: null,
+          layout: {
+            inspectorPx: 320,
+            focus: 'none' as const,
+            narrow: false,
+            setInspectorPx: () => undefined,
+            setFocus: () => undefined,
+            reset: () => undefined,
+            customized: false,
+          },
+          inspectorOpen: false,
+          onToggleInspector: () => undefined,
+          onUpdate: () => Promise.resolve({ accepted: true }),
+        }),
+      ),
+    );
+    await Promise.resolve();
+  });
+  return container;
+}
+
+function removeAllButton(el: HTMLElement): HTMLButtonElement | null {
+  return el.querySelector<HTMLButtonElement>('button[aria-label="Remove all items"]');
+}
+
+describe('StackPanel Remove-All â R-010', () => {
+  it('confirming in the modal calls stack.removeAll once', async () => {
+    const { removeAll } = stubBridge(items(3));
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const el = await renderPanel();
+    const btn = removeAllButton(el);
+    expect(btn).not.toBeNull();
+    expect(btn?.disabled).toBe(false); // enabled while the link is live
+
+    await act(async () => {
+      btn?.click();
+      await Promise.resolve();
+    });
+
+    // The app's own dialog, naming the consequence â not the browser's.
+    const dialog = openDialog();
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).toContain('This clears anything on air');
+    expect(dialog?.textContent).toContain('3 item(s)');
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(removeAll).not.toHaveBeenCalled();
+
+    await clickDialogButton('Remove all');
+
+    expect(removeAll).toHaveBeenCalledTimes(1);
+    expect(openDialog()).toBeNull();
+  });
+
+  it('cancelling the modal removes nothing', async () => {
+    const { removeAll } = stubBridge(items(2));
+    const el = await renderPanel();
+
+    await act(async () => {
+      removeAllButton(el)?.click();
+      await Promise.resolve();
+    });
+    await clickDialogButton('Cancel');
+
+    expect(removeAll).not.toHaveBeenCalled();
+    expect(openDialog()).toBeNull();
+  });
+
+  it('is PRESENT but disabled when the stack is empty (nothing to destroy)', async () => {
+    stubBridge([]);
+    const el = await renderPanel();
+    /*
+      Present-but-disabled rather than absent. The bulk verbs follow the same rule the
+      row verbs already do ("THE SHAPE NEVER CHANGES"): a control that appears and
+      disappears moves the target under the operator's hand mid-reach, and with
+      Clear-All now permanently present a Remove-All that came and went would shift
+      the whole group sideways as items were added and dropped.
+    */
+    const remove = removeAllButton(el);
+    expect(remove).not.toBeNull();
+    expect(remove?.disabled).toBe(true);
+  });
+
+  it('is DISABLED while the CasparCG link is down â the stack is bridge-owned', async () => {
+    // Was-live-then-dropped: the snapshot persists (useBridgeSnapshot keeps its last value while
+    // disconnected), so the button stays SHOWN but disabled â it can no more reach CasparCG
+    // than the per-item PLAY/UPDATE/CLEAR/REMOVE can.
+    const listeners = new Set<(s: 'live' | 'disconnected') => void>();
+    let status: 'live' | 'disconnected' = 'live';
+    const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: 2 }));
+    // §0a — both hops up unless this spec is about being disconnected.
+    const reach: Reachability = 'both-up';
+    const stub = {
+      link: {
+        status: () => status,
+        onStatusChanged: (h: (s: 'live' | 'disconnected') => void) => {
+          listeners.add(h);
+          return () => listeners.delete(h);
+        },
+      },
+      // §0a — the second hop, selected BY NAME (support/reachability.ts).
+      connections: connectionsStub(reach),
+      templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
+      // R-028 â the merged panel also reads the declared layers and the playout tab.
+      fixedLayers: {
+        config: () => Promise.resolve(null),
+        state: () => Promise.resolve([]),
+        onConfigChanged: () => () => undefined,
+        onStateChanged: () => () => undefined,
+      },
+      // R-022 — rehearse is bridge-owned, so the panel subscribes to it on mount.
+      rehearse: {
+        state: () => Promise.resolve([]),
+        onStateChanged: () => () => undefined,
+      },
+
+      playoutLayers: {
+        state: () => Promise.resolve([]),
+        clear: () => Promise.resolve({ ok: true }),
+        onStateChanged: () => () => undefined,
+      },
+      stack: {
+        snapshot: () => Promise.resolve(items(2)),
+        onStateChanged: () => () => undefined,
+        removeAll,
+        take: () => Promise.resolve({ accepted: true }),
+        update: () => Promise.resolve({ accepted: true }),
+        out: () => Promise.resolve({ accepted: true }),
+        remove: () => Promise.resolve({ accepted: true }),
+      },
+    };
+    (window as unknown as { cg: typeof stub }).cg = stub;
+    const el = await renderPanel();
+    expect(removeAllButton(el)?.disabled).toBe(false); // enabled while live
+
+    await act(async () => {
+      status = 'disconnected';
+      for (const h of listeners) h('disconnected');
+      await Promise.resolve();
+    });
+
+    const btn = removeAllButton(el);
+    expect(btn).not.toBeNull(); // still shown â items persist across the drop
+    expect(btn?.disabled).toBe(true);
+  });
+});

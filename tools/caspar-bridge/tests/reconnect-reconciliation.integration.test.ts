@@ -154,7 +154,11 @@ it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD
 
   // The fresh ADD references the NEW session's served URL (the old origin is dead).
   const freshAdd = mock.lastCgAdd(SLOT);
-  expect(freshAdd?.template).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third$/);
+  // R-030 — the served URL carries the channel raster on every ADD; what this
+  // case is about is the ORIGIN changing, asserted on the next line.
+  expect(freshAdd?.template).toMatch(
+    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third\?cw=1920&ch=1080$/,
+  );
   expect(freshAdd?.template).not.toBe(staleAdd?.template);
   await expect(mock.waitForCgAddResolution(SLOT)).resolves.toBe('resolved');
 
@@ -226,7 +230,7 @@ it('a remove landing during the adopt-CLEAR window neither leaks the layer nor A
   expect((await r.load('item2', 'lower-third', { headline: 'تازه' })).accepted).toBe(true);
   for (const release of releases.splice(0)) release(); // any residual adopt-CLEARs
   expect(mock.lastCgAdd(SLOT)?.template).toMatch(
-    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third$/,
+    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third\?cw=1920&ch=1080$/,
   );
   // Settle the page before the take so PLAY deterministically flips onAir
   // (a pending fetch spuriously timing out under contention would flip the

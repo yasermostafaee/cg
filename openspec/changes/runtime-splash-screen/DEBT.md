@@ -1,4 +1,4 @@
-# DEBT — startup splash screen (R-031)
+# DEBT — startup splash screen (R-035)
 
 Things this change NOTICED and deliberately did not do. Filed here, in the change dir,
 rather than in a root `DEBT.md`: `main` has no such file (the one on `dev` is that

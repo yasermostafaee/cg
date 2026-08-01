@@ -66,6 +66,23 @@ export interface LayerState {
    * (`LOAD`/`PLAY` media) are `'resolved'`.
    */
   pageResolution: CgAddResolution;
+  /**
+   * R-022 — the layer's audio volume, as `MIXER <ch>-<layer> VOLUME <v>` sets
+   * it. `1` is full (CasparCG's default for a fresh layer) and `0` is muted.
+   *
+   * MODELLED BECAUSE THE FAILURE MODE IS SILENCE ON AIR. Rehearse leaves the
+   * producer resident and mutes the layer; a mute that is never restored means a
+   * graphic that goes to air with no sound, and nobody notices until someone asks
+   * why. That is invisible to every other signal the mock carries — `producer`,
+   * `onAir` and `pageResolution` are all identical either way — so without this
+   * field no test in the repo could watch for it.
+   *
+   * Volume SURVIVES `CLEAR` and `CG REMOVE`, exactly as it does on real
+   * CasparCG: `MIXER` state belongs to the channel's mixer, not to the producer
+   * on the layer, so destroying the producer does not restore the audio. That
+   * property is the whole reason the restore has to be explicit.
+   */
+  volume: number;
 }
 
 /** B-041 — why the mock's second-layer (html_cg_proxy → V8) emulation rejected a CG data arg. */
@@ -141,6 +158,17 @@ export interface MockHandle {
   setHandler(verb: string, handler: AmcpHandler): void;
   /** Snapshot of the layer the slot currently has. */
   layerState(slot: LayerSlot): LayerState | undefined;
+  /**
+   * R-022 — set a layer's volume WITHOUT an AMCP command. Test hook.
+   *
+   * Exists to stage the one state that matters: a layer muted by something the
+   * bridge has no record of — a process that died mid-rehearse, a second operator's
+   * own `MIXER`, a reload. That is precisely the state in which a graphic would go
+   * to air SILENT, and a test cannot reach it by driving the bridge, because the
+   * bridge's own paths always restore. Doing it through `MIXER` from the test would
+   * instead assert that the mock's handler works, which is not the question.
+   */
+  setLayerVolume(slot: LayerSlot, volume: number): void;
   /**
    * B-038 — the last `CG ADD` seen on a slot: the template argument and the data
    * payload. Lets tests assert `CG ADD` carried a real URL + non-empty fields.

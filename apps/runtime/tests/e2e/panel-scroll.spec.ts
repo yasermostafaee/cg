@@ -8,21 +8,18 @@ import { expect, test } from './fixtures/runtime.js';
  * the document must stay exactly one viewport tall, with the scrolling confined to the panel
  * that overflowed.
  */
-test('a long stack scrolls its own panel, never the page', async ({ app }) => {
+/**
+ * R-028 part B — the subject moved, the invariant did not. The Library, Stack
+ * and Fixed-Layers panels merged into ONE Layers list, so "a long stack scrolls
+ * its own panel" is now asserted of that list. The viewport is shrunk rather
+ * than the row count inflated: overflow is the precondition this contract is
+ * about, and forcing it by geometry is exact, where loading N more rows was
+ * only ever a guess that N was enough.
+ */
+test('a long layers list scrolls its own panel, never the page', async ({ app }) => {
   const page = app.page;
-
-  // Overflow the STACK well past the viewport by loading the seeded templates repeatedly —
-  // the mock accepts every load. The boot seed already puts rows on the stack, so the target
-  // is relative to what is there.
-  const rows = page.getByRole('region', { name: 'Stack' }).locator('.cg-row');
-  const seeded = await rows.count();
-  const loadButtons = app.loadButtons();
-  const count = await loadButtons.count();
-  expect(count).toBeGreaterThan(0);
-  for (let i = 0; i < 12; i++) {
-    await loadButtons.nth(i % count).click();
-  }
-  await expect(rows).toHaveCount(seeded + 12);
+  await page.setViewportSize({ width: 1280, height: 400 });
+  await expect(app.layers.locator('.cg-row').first()).toBeVisible();
 
   // The DOCUMENT does not scroll: its scrollable height is its visible height.
   const doc = await page.evaluate(() => ({
@@ -31,63 +28,61 @@ test('a long stack scrolls its own panel, never the page', async ({ app }) => {
   }));
   expect(doc.scrollHeight).toBe(doc.clientHeight);
 
-  // The stack's own list DOES scroll, and scrolling it moves nothing else.
-  const list = page
-    .getByRole('region', { name: 'Stack' })
-    .locator('div')
-    .filter({
-      has: page.locator('.cg-row'),
+  // The layers list DOES scroll, and scrolling it moves nothing else.
+  //
+  // The scroll container is found by walking UP from a row rather than being
+  // named by selector: which wrapper carries `overflow-y` is a styling detail
+  // that has already moved once, and a test pinned to it fails on a refactor
+  // that kept the contract perfectly. What matters is that the overflow is
+  // absorbed somewhere INSIDE the panel and never reaches the document.
+  const scrolled = await app.layers
+    .locator('.cg-row')
+    .first()
+    .evaluate((row) => {
+      for (let el = row.parentElement; el !== null; el = el.parentElement) {
+        const overflowY = getComputedStyle(el).overflowY;
+        if (overflowY !== 'auto' && overflowY !== 'scroll') continue;
+        if (el.scrollHeight <= el.clientHeight) continue;
+        el.scrollTop = 400;
+        return { found: true, scrollTop: el.scrollTop };
+      }
+      return { found: false, scrollTop: 0 };
     });
-  const scrolled = await list.first().evaluate((el) => {
-    el.scrollTop = 400;
-    return { scrollTop: el.scrollTop, overflowed: el.scrollHeight > el.clientHeight };
-  });
-  expect(scrolled.overflowed).toBe(true);
+  expect(scrolled.found).toBe(true);
   expect(scrolled.scrollTop).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
 
 /**
- * R-021 — the centre column now holds TWO panels (fixed bank above the stack).
- * The layout contract must survive both at once: the fixed panel is capped
- * (`appShell.fixedPanel`), the stack keeps the remainder, and overflowing the
- * stack still scrolls the STACK's own list — never the document.
+ * R-028 part B — the centre column's two stacked panels became two TABS
+ * (LAYERS / PLAYOUT). The layout contract has to hold on both: whichever tab is
+ * up, its list scrolls itself and the document stays exactly one viewport tall.
+ * The playout tab is the one that matters most here — it is a safety surface,
+ * and a page that scrolls it out of view is a surface the operator cannot see.
  */
-test('the two-panel centre column stays bounded: fixed bank + long stack never scroll the page', async ({
-  app,
-}) => {
+test('the PLAYOUT tab is bounded too: switching tabs never scrolls the page', async ({ app }) => {
   const page = app.page;
-  await page.addInitScript(() => {
-    (window as unknown as { CG_E2E_FIXED_BANK: boolean }).CG_E2E_FIXED_BANK = true;
-  });
-  await page.reload();
-  await expect(app.fixedPanel).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 400 });
 
-  // Overflow the stack with both panels up.
-  const rows = page.getByRole('region', { name: 'Stack' }).locator('.cg-row');
-  const seeded = await rows.count();
-  const loadButtons = app.loadButtons();
-  const count = await loadButtons.count();
-  expect(count).toBeGreaterThan(0);
-  for (let i = 0; i < 12; i++) {
-    await loadButtons.nth(i % count).click();
-  }
-  await expect(rows).toHaveCount(seeded + 12);
+  await app.playoutTab.click();
+  await expect(app.playoutTab).toHaveAttribute('aria-selected', 'true');
+  await expect(app.layers.getByText('These layers belong to the PLAYOUT system')).toBeVisible();
 
-  // The DOCUMENT still does not scroll…
   const doc = await page.evaluate(() => ({
     scrollHeight: document.documentElement.scrollHeight,
     clientHeight: document.documentElement.clientHeight,
   }));
   expect(doc.scrollHeight).toBe(doc.clientHeight);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
 
-  // …the fixed panel stays a bounded strip (capped at 40% of its column, so
-  // well under half the viewport), and the stack survives beside it.
-  const viewport = page.viewportSize();
-  const fixedBox = await app.fixedPanel.boundingBox();
-  expect(fixedBox).not.toBeNull();
-  expect(fixedBox?.height ?? 0).toBeLessThan((viewport?.height ?? 0) * 0.5);
-  await expect(page.getByRole('region', { name: 'Stack' })).toBeVisible();
+  // …and back, with the layers list still owning its own scrolling.
+  await page.getByRole('tab', { name: /LAYERS/ }).click();
+  await expect(app.layers).toBeVisible();
+  const back = await page.evaluate(() => ({
+    scrollHeight: document.documentElement.scrollHeight,
+    clientHeight: document.documentElement.clientHeight,
+  }));
+  expect(back.scrollHeight).toBe(back.clientHeight);
 });
 
 /**

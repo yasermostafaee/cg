@@ -6,7 +6,6 @@ import {
   hasStaged,
   stagedValue,
   stageField,
-  valueAt,
 } from '../src/renderer/features/inspector/draftStore.js';
 import {
   __resetFromFileForTest,
@@ -61,6 +60,9 @@ function item(fields: FieldValues = {}): StackItemState {
 
 const PATH = ['crawl'] as const;
 
+/** A stack snapshot that HAS arrived, carrying these ids. */
+const live = (...ids: string[]) => ({ ready: true as const, liveItemIds: new Set(ids) });
+
 describe('initial load (choose file) — stages like a hand edit', () => {
   it('whole-file mode stages ONE list item holding the entire content verbatim', async () => {
     const source = fakeSource(['خبر اول *** خبر دوم']);
@@ -81,22 +83,40 @@ describe('initial load (choose file) — stages like a hand edit', () => {
   });
 });
 
-describe('RELOAD — re-reads and re-applies through stack.update', () => {
-  it('sends the split value through the normal field-update path and clears the staged entry', async () => {
+/**
+ * RELOAD RE-READS AND STAGES. IT DOES NOT APPLY.
+ *
+ * These assertions are RE-EXPRESSED, not loosened, and the behaviour they
+ * describe is the corrected one. Reload used to call `applyFieldValue` — the same
+ * `stack.update` the Update button sends — so a button with a READ verb performed
+ * a WRITE that reached the graphic on air (owner's report). Nothing on the surface
+ * said so: choosing a file stages and waits, and Reload looked like that same
+ * gesture repeated.
+ *
+ * What each old case was really protecting survives here, pointed at the staging
+ * path: the split transform, that a reload genuinely RE-READS, that it touches
+ * only its own field, and that a failed read changes nothing. The one assertion
+ * that could not survive is "a rejected update keeps it staged" — there is no
+ * update to reject any more, and the value is staged unconditionally, which is
+ * strictly the safer half of what that test was guarding.
+ */
+describe('RELOAD — re-reads and STAGES, exactly like choosing the file did', () => {
+  it('stages the split value and sends NOTHING to the bridge', async () => {
     const { update } = stubBridge();
     const source = fakeSource(['a | b']);
     attachFileSource('item-1', PATH, source, { split: true, delimiter: '|' });
 
     const res = await reloadFromFile(item({ crawl: [] }), PATH, 'list');
     expect(res.accepted).toBe(true);
-    expect(update).toHaveBeenCalledTimes(1);
-    const sent = (update.mock.calls[0] as unknown as [{ fields: FieldValues }])[0];
-    expect(valueAt(sent.fields, [...PATH])).toEqual([
+    // THE ASSERTION THIS SUITE EXISTS FOR NOW: no write reached air.
+    expect(update).not.toHaveBeenCalled();
+    // …and the transform still ran, so the staged value is the split one.
+    expect(stagedValue('item-1', PATH)).toEqual([
       { id: 'file-1', text: 'a' },
       { id: 'file-2', text: 'b' },
     ]);
-    // Accepted → this field's staged entry cleared (nothing left dirty).
-    expect(hasStaged('item-1', PATH)).toBe(false);
+    // It is DIRTY afterwards — the operator commits it with Update.
+    expect(hasStaged('item-1', PATH)).toBe(true);
   });
 
   it('RE-reads: each reload sees the file’s CURRENT content', async () => {
@@ -107,30 +127,39 @@ describe('RELOAD — re-reads and re-applies through stack.update', () => {
     await reloadFromFile(item(), PATH, 'text');
     await reloadFromFile(item(), PATH, 'text');
     expect(source.reads()).toBe(2);
-    const second = (update.mock.calls[1] as unknown as [{ fields: FieldValues }])[0];
-    expect(valueAt(second.fields, [...PATH])).toBe('new');
+    // The SECOND read is what is staged — a reload that returned a cached value
+    // would make the button a no-op, which is the other way to break it.
+    expect(stagedValue('item-1', PATH)).toBe('new');
+    expect(update).not.toHaveBeenCalled();
   });
 
-  it('a reload never carries the operator’s unrelated staged edits to air', async () => {
+  it('a reload touches only its OWN field — an unrelated draft is left alone', async () => {
     const { update } = stubBridge();
     stageField('item-1', ['other'], 'DRAFT-ONLY');
     const source = fakeSource(['content']);
     attachFileSource('item-1', PATH, source, { split: false, delimiter: '\\n' });
 
     await reloadFromFile(item({ crawl: 'applied', other: 'applied-other' }), PATH, 'text');
-    const sent = (update.mock.calls[0] as unknown as [{ fields: FieldValues }])[0];
-    expect(valueAt(sent.fields, ['other'])).toBe('applied-other'); // NOT the draft
-    expect(hasStaged('item-1', ['other'])).toBe(true); // the draft survives, still staged
+    // The sibling draft survives untouched, and — the point of the original
+    // assertion — it is still not on air, because nothing went to air at all.
+    expect(stagedValue('item-1', ['other'])).toBe('DRAFT-ONLY');
+    expect(hasStaged('item-1', ['other'])).toBe(true);
+    expect(stagedValue('item-1', PATH)).toBe('content');
+    expect(update).not.toHaveBeenCalled();
   });
 
-  it('a rejected update keeps the reloaded value STAGED (dirty), like any hand edit', async () => {
-    stubBridge(false);
+  it('a reload while the bridge would REFUSE still stages — editing is never gated', async () => {
+    // The offline surface's whole point: an operator can go on preparing with the
+    // playout machine unreachable, and the edit reaches air when they press Update.
+    // Reload is an edit, so it must work here too.
+    const { update } = stubBridge(false);
     const source = fakeSource(['content']);
     attachFileSource('item-1', PATH, source, { split: false, delimiter: '\\n' });
 
     const res = await reloadFromFile(item(), PATH, 'text');
-    expect(res.accepted).toBe(false);
+    expect(res.accepted).toBe(true);
     expect(stagedValue('item-1', PATH)).toBe('content');
+    expect(update).not.toHaveBeenCalled();
   });
 });
 
@@ -179,8 +208,22 @@ describe('store housekeeping', () => {
     const source = fakeSource(['x']);
     attachFileSource('item-1', PATH, source, { split: false, delimiter: '\\n' });
     attachFileSource('item-2', PATH, source, { split: false, delimiter: '\\n' });
-    pruneFromFile(['item-2']);
+    pruneFromFile(live('item-2'));
     expect(fromFileState('item-1', PATH)).toBeUndefined();
+    expect(fromFileState('item-2', PATH)).toBeDefined();
+  });
+
+  /**
+   * `pruneFromFile` rode the SAME pass as `pruneDrafts`, so it lost file
+   * attachments on exactly the remounts that lost the drafts. A different store
+   * and a different loss, one mechanism — asserted separately for that reason.
+   */
+  it('pruneFromFile deletes NOTHING when the snapshot has not arrived', () => {
+    const source = fakeSource(['x']);
+    attachFileSource('item-1', PATH, source, { split: false, delimiter: '\\n' });
+    attachFileSource('item-2', PATH, source, { split: false, delimiter: '\\n' });
+    pruneFromFile({ ready: false });
+    expect(fromFileState('item-1', PATH)).toBeDefined();
     expect(fromFileState('item-2', PATH)).toBeDefined();
   });
 
@@ -191,8 +234,12 @@ describe('store housekeeping', () => {
     attachFileSource('item-1', PATH, source, { split: false, delimiter: '\\n' });
 
     await reloadFromFile(item(), PATH, 'list');
-    const sent = (update.mock.calls[0] as unknown as [{ fields: FieldValues }])[0];
-    const items = valueAt(sent.fields, [...PATH]) as ListItem[];
+    // RE-EXPRESSED onto the staged value: reload stages rather than applying, so
+    // the staged entry is where the file's bytes land. The CLAIM is unchanged and
+    // is the one that matters — Persian digits survive verbatim, with no
+    // normalisation anywhere on the path from the file to the value.
+    const items = stagedValue('item-1', PATH) as ListItem[];
     expect(items[0]?.text).toBe(content);
+    expect(update).not.toHaveBeenCalled();
   });
 });

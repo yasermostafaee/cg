@@ -68,15 +68,23 @@ describe('LayerManager', () => {
   });
 
   it('pinned slots are reported and not allocated by normal flow', () => {
+    /*
+      The pin sits on the FIRST layer of the `logo-bug` range, which is what makes the
+      last assertion mean anything: the allocator has to skip it and hand out the next
+      one. The pin used to be layer 95 and the expected allocation 90, back when the
+      range was 90–99; the range moved to 40–49 (the operator's candidate bank took
+      70–99), so a pin at 95 would now be outside the range entirely and the allocator
+      would return 40 without ever having skipped anything.
+    */
     const lm = new LayerManager({
-      pinned: [{ channel: 1, layer: 95, templateId: 'net-logo-bug', autoStart: true }],
+      pinned: [{ channel: 1, layer: 40, templateId: 'net-logo-bug', autoStart: true }],
     });
-    expect(lm.isPinned({ channel: 1, layer: 95 })).toBe(true);
+    expect(lm.isPinned({ channel: 1, layer: 40 })).toBe(true);
     expect(lm.pinnedSlots()).toEqual([
-      { channel: 1, layer: 95, templateId: 'net-logo-bug', autoStart: true },
+      { channel: 1, layer: 40, templateId: 'net-logo-bug', autoStart: true },
     ]);
     // Allocator skips the pinned slot when looking for free space.
-    expect(lm.allocate('logo-bug', 1)).toEqual({ channel: 1, layer: 90 });
+    expect(lm.allocate('logo-bug', 1)).toEqual({ channel: 1, layer: 41 });
   });
 
   it('deallocate() on a pinned slot is a no-op', () => {
@@ -292,5 +300,30 @@ describe('LayerManager — fixed operator slots (R-021)', () => {
     } catch (err) {
       expect((err as Error).message).toContain('1-12');
     }
+  });
+});
+
+describe('LayerManager — reserved playout layers (R-028 / C-015)', () => {
+  it('allocate() never returns a reserved layer, whatever the policy range says', () => {
+    // The default policy's `custom` range is 60–69 — exactly where the playout
+    // split lives. With 60–68 reserved, allocation must skip straight to 69.
+    const lm = new LayerManager({
+      reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68],
+    });
+    expect(lm.allocate('custom', 1)).toEqual({ channel: 1, layer: 69 });
+    // Range now exhausted (everything else reserved): honest failure, no
+    // silent spill onto a playout layer.
+    expect(() => lm.allocate('custom', 1)).toThrow(OutOfLayersError);
+  });
+
+  it('reserve() refuses a reserved layer — a retained coordinate never lands on playout', () => {
+    const lm = new LayerManager({ reservedLayers: [65] });
+    expect(lm.reserve({ channel: 1, layer: 65 }, 'lower-third')).toBe(false);
+    expect(lm.reserve({ channel: 1, layer: 66 }, 'lower-third')).toBe(true);
+  });
+
+  it('the fence is per layer NUMBER across channels (conservative for the split)', () => {
+    const lm = new LayerManager({ reservedLayers: [60] });
+    expect(lm.reserve({ channel: 2, layer: 60 }, 'x')).toBe(false);
   });
 });

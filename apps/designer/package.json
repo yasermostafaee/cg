@@ -19,6 +19,7 @@
     "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*",
     "@cg/single-file-export": "workspace:*",
+    "@cg/splash-kit": "workspace:*",
     "@cg/starter-templates": "workspace:*",
     "@cg/storage": "workspace:*",
     "@cg/template-runtime": "workspace:*",

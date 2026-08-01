@@ -240,6 +240,31 @@ export const PositionSchema = z.object({
 });
 export type Position = z.infer<typeof PositionSchema>;
 
+/**
+ * R-011 — THE serialisation of an operator override onto a page's query string:
+ * `pos=<anchor>&dx=<x>&dy=<y>`, with no leading `?` (the caller joins it with
+ * whatever else rides the same query).
+ *
+ * ONE builder, deliberately, because there are now TWO deliverers of the same
+ * override and they must not drift: the bridge appends it to the served
+ * `/template/<id>` URL for CasparCG, and the Runtime's PVW hands the identical
+ * string to the rehearsal frame's own `applyOutputPosition`. A preview that
+ * spelled the query differently from air would place the graphic differently
+ * from air while looking authoritative — the exact failure a rehearsal exists to
+ * prevent.
+ *
+ * It lives HERE, next to {@link PositionSchema}, because it is the only package
+ * all three sides already depend on. `@cg/template-runtime`'s
+ * `parsePositionQuery` is its inverse and round-trips against it under test.
+ */
+export function positionQuery(position: Position): string {
+  return [
+    `pos=${position.anchor}`,
+    `dx=${String(position.offset.x)}`,
+    `dy=${String(position.offset.y)}`,
+  ].join('&');
+}
+
 /** Scene — root of the editor's domain model. */
 export const SceneSchema = z
   .object({
@@ -404,4 +429,67 @@ export function hasEffectiveHoldDrivers(
       return false;
     });
   return root.layers.some((l) => walk(l.children, undefined));
+}
+
+/**
+ * D-029 / R-028 (5.4) — can `runtime.next()` advance anything in this scene?
+ *
+ * THE ONE predicate, shared by the Designer's preview transport and the
+ * Runtime's per-row NEXT verb. A second copy is exactly the drift this repo
+ * forbids (a Designer that greys Next while the Runtime offers it, or worse
+ * the reverse: an enabled control that can only no-op — the anti-pattern
+ * R-021 stage 2b named).
+ *
+ * True iff a REACHABLE, VISIBLE `sequence` element exists. `next()` dispatches
+ * to each scope's sequence drivers and nothing else (`runtime.ts` `dispatchNext`
+ * → `scope.sequences`), so a sequence element is precisely what makes a scene
+ * steppable — today. When the D-031 authored-steps model joins that dispatch,
+ * it joins THIS predicate too.
+ *
+ * Reachability follows the runtime's own subtree cascade, so all THREE
+ * composition reference kinds are walked (the `collectChildCompositionRefs`
+ * set): a plain `composition` instance, a `repeater` (which stamps one subtree
+ * per row), and a D-083 sequence COMPOSITION ITEM (which builds its own item
+ * subtree). Missing the latter two under-reports — a sequence nested inside a
+ * repeater row genuinely IS steppable on air.
+ *
+ * B-034 — a hidden instance/container SHORT-CIRCUITS its whole subtree before
+ * descending: content under a hidden ancestor is inert (render's `display:none`
+ * and the runtime's subtree-skip agree), so it must not make a scene steppable.
+ * Cycle-guarded like every other instance walk here.
+ *
+ * NOT gated on `advance` (`'auto'` sequences still respond to `next()`), nor on
+ * `items.length` (a bound `list` field REPLACES the authored items at playout,
+ * so an empty authored list can still be many steps on air), nor on the
+ * `sequence-items` binding (a sequence with authored items and no binding is
+ * steppable). Those would each be a different question.
+ */
+export function hasNextStep(
+  root: Pick<Scene, 'layers'>,
+  compositions: readonly Composition[] | undefined,
+): boolean {
+  const visited = new Set<string>();
+  const intoComposition = (compositionId: string): boolean => {
+    if (visited.has(compositionId)) return false;
+    visited.add(compositionId);
+    const comp = compositions?.find((c) => c.id === compositionId);
+    return comp !== undefined && comp.layers.some((l) => walk(l.children));
+  };
+  const walk = (children: readonly Element[]): boolean =>
+    children.some((el) => {
+      if (el.visible === false) return false;
+      if (el.type === 'sequence') {
+        // The sequence itself is steppable; its composition ITEMS need no
+        // further inspection for that answer (a sequence with any items — or a
+        // list binding supplying them — is what NEXT advances).
+        return true;
+      }
+      if (el.type === 'container') return walk(el.children);
+      if (el.type === 'composition') return intoComposition(el.compositionId);
+      // A repeater stamps its composition once per row; a sequence inside one
+      // is reached by the runtime's cascade, so it counts.
+      if (el.type === 'repeater') return intoComposition(el.compositionId);
+      return false;
+    });
+  return root.layers.some((l) => walk(l.children));
 }

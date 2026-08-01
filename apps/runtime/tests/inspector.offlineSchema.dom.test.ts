@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
 import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
+import { connectionsStub, linkFor } from './support/reachability.js';
 
 /**
  * B-085 — the Inspector's `templates.get` is browser-local now and resolves offline. As a
@@ -45,6 +46,10 @@ function item(): StackItemState {
 
 async function renderWithGet(get: () => Promise<unknown>): Promise<HTMLDivElement> {
   const stub = {
+    // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
+    // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
+    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    connections: connectionsStub('both-up'),
     templates: { get: vi.fn(get) },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   aggregateCompositionFields,
+  aggregateHasFields,
   compositionClosure,
   defaultNestedValues,
   migrateGlobalFieldsToCompositions,
@@ -159,7 +160,7 @@ describe('aggregateCompositionFields (D-025)', () => {
     // The COMPOSITION item is still a group (id-based key, friendly label, its comp's fields).
     expect(agg.groups).toHaveLength(1);
     expect(agg.groups[0]?.name).toBe('seq:c1');
-    expect(agg.groups[0]?.label).toBe('Now/Next[1]');
+    expect(agg.groups[0]?.label).toBe('Now/Next — item 2');
     expect(agg.groups[0]?.aggregate.fields.map((f) => f.id)).toEqual(['label']);
     // The value object carries ONLY the comp item (no scalar for the unbound text item).
     expect(defaultNestedValues(agg)).toEqual({ 'seq:c1': { label: 'City' } });
@@ -257,8 +258,12 @@ describe('aggregateCompositionFields (D-025)', () => {
     const agg = aggregateCompositionFields(scene, parent);
     // Distinct id-based KEYS even though both sequences share the default name 'Sequence'…
     expect(agg.groups.map((g) => g.name)).toEqual(['s1:a', 's2:b']);
-    // …with the same friendly DISPLAY label (the operator disambiguates by element).
-    expect(agg.groups.map((g) => g.label)).toEqual(['Sequence[0]', 'Sequence[0]']);
+    // …but the friendly DISPLAY labels still COLLIDE, because the label is built from the
+    // sequence's NAME and both sequences are called 'Sequence'. Asserted so the limit is
+    // recorded rather than assumed away: the operator can only disambiguate these two by
+    // renaming one element. Making sibling labels unique needs a de-dup pass over the
+    // aggregate and is not attempted here (see DEBT.md).
+    expect(agg.groups.map((g) => g.label)).toEqual(['Sequence — item 1', 'Sequence — item 1']);
     // No collapse: both namespaces survive in the value object.
     expect(Object.keys(defaultNestedValues(agg))).toEqual(['s1:a', 's2:b']);
   });
@@ -384,5 +389,44 @@ describe('migrateGlobalFieldsToCompositions', () => {
     const child = comp({ id: 'child', fields: [textField('a')] });
     const scene = { compositions: [child], fields: [], bindings: [] } as unknown as Scene;
     expect(migrateGlobalFieldsToCompositions(scene)).toBe(scene);
+  });
+});
+
+/**
+ * dev-r028-b4 item 2 — the predicate behind hiding an EMPTY group heading in the
+ * operator Inspector. A group whose whole subtree declares no field is a label over a
+ * void; a group that carries one anywhere must keep its heading, because each stamped
+ * instance holds independent values and the label is the only thing telling two of
+ * them apart.
+ */
+describe('aggregateHasFields — is there anything under this heading?', () => {
+  it('false for a genuinely empty aggregate', () => {
+    expect(aggregateHasFields({ fields: [], groups: [] })).toBe(false);
+  });
+
+  it('true when the aggregate owns a flat field', () => {
+    expect(aggregateHasFields({ fields: [textField('a')], groups: [] })).toBe(true);
+  });
+
+  it('true when only a DEEPLY nested descendant carries the field', () => {
+    const leaf = comp({ id: 'leaf', fields: [textField('v')] });
+    const mid = comp({ id: 'mid', layers: [layer([instance('m1', 'leaf', 'inner')])] });
+    const root = comp({ id: 'root', layers: [layer([instance('r1', 'mid', 'outer')])] });
+    const scene = { compositions: [leaf, mid, root] } as Pick<Scene, 'compositions'>;
+    // Neither `root` nor `mid` owns a field — only `leaf` does, two levels down.
+    const agg = aggregateCompositionFields(scene, root);
+    expect(agg.fields).toEqual([]);
+    expect(aggregateHasFields(agg)).toBe(true);
+  });
+
+  it('false for a chain of field-LESS groups (the noise-heading case)', () => {
+    const leaf = comp({ id: 'leaf' }); // no fields anywhere
+    const mid = comp({ id: 'mid', layers: [layer([instance('m1', 'leaf', 'inner')])] });
+    const root = comp({ id: 'root', layers: [layer([instance('r1', 'mid', 'outer')])] });
+    const scene = { compositions: [leaf, mid, root] } as Pick<Scene, 'compositions'>;
+    const agg = aggregateCompositionFields(scene, root);
+    // The groups EXIST (the instances are real) — they just have nothing to edit.
+    expect(agg.groups).toHaveLength(1);
+    expect(aggregateHasFields(agg)).toBe(false);
   });
 });

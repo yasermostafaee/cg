@@ -1,4 +1,4 @@
-// R-031 — `test` comes from the shared harness rather than `@playwright/test` so this
+// R-035 — `test` comes from the shared harness rather than `@playwright/test` so this
 // spec inherits the auto splash bypass. It drives the raw `page` (it arms its own bridge
 // URL and navigates itself), so it never instantiates `app`; without the harness's auto
 // fixture each of these three tests would sit through the splash's 5 s cold floor before
@@ -69,14 +69,31 @@ test.describe('bridge link indicator', () => {
     await expect(page.getByLabel('Status bar')).not.toContainText('HEALTHY');
   });
 
-  test('boot with a reachable bridge → LIVE indicator', async ({ page }) => {
+  /**
+   * §7 — THIS TEST USED TO ASSERT THE DEFECT, and re-pointing it is the evidence.
+   *
+   * It asserted `LIVE` against a bridge whose CasparCG is deliberately unreachable
+   * (`amcpPort: 1` — see `ephemeralConnection`), which is precisely the state the
+   * owner misread: `● LIVE` beside `● PRIMARY A OFFLINE`, and the reassuring claim
+   * won. The link IS up and that is worth saying; what the pill may not do is say
+   * it in the word that reads as connected-to-the-plant.
+   */
+  test('boot with a reachable bridge but no CasparCG → says BRIDGE ONLY, never LIVE', async ({
+    page,
+  }) => {
     bridge = await createBridge({ port: 0, connection: ephemeralConnection() });
 
     await page.addInitScript(setBridgeUrl(bridge.url));
     await page.goto('/');
 
     const link = page.getByRole('status', { name: 'Bridge link' });
-    await expect(link).toContainText('LIVE');
+    await expect(link).toContainText('BRIDGE ONLY');
+    await expect(link).toContainText('NO CASPARCG');
+    // The whole point: nothing in this pill reads as connected while it is not.
+    await expect(link).not.toContainText('LIVE');
+    // …and the link state itself is NOT collapsed away — a down bridge is a
+    // different, louder thing, and this is not it.
+    await expect(link).not.toContainText('DISCONNECTED');
   });
 
   test('bridge drops mid-session → DISCONNECTED indicator (no silent downgrade)', async ({
@@ -88,7 +105,10 @@ test.describe('bridge link indicator', () => {
     await page.goto('/');
 
     const link = page.getByRole('status', { name: 'Bridge link' });
-    await expect(link).toContainText('LIVE');
+    // The link is UP. The pill names which hop it means, so the assertion does
+    // too — this fixture has no CasparCG behind the bridge (`amcpPort: 1`).
+    await expect(link).toContainText('BRIDGE');
+    await expect(link).not.toContainText('DISCONNECTED');
 
     // Drop the bridge mid-session — the indicator must surface DISCONNECTED,
     // never silently revert to the mock.

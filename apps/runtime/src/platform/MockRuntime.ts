@@ -9,16 +9,61 @@ import type {
   OrphanLayer,
   OwnedOccupancyWarning,
   PendingUpdate,
+  PLAYOUT_CLEAR_REASONS,
+  PlayoutLayerState,
   Settings,
   TemplateInfo,
+  DelimiterOption,
+  Rehearsal,
+  REHEARSE_ENTER_REASONS,
+  ChannelRaster,
+  ChannelSettings,
+  ChannelSettingsState,
+  CHANNEL_SETTINGS_SET_REASONS,
+} from '@cg/shared-ipc';
+// R-030 — `videoModeRaster` is the ONE video-mode → raster map, shared with the
+// bridge. The mock must never carry a second copy: a mock that disagreed with the
+// bridge about what `1080i5000` means would show a mismatch that does not exist
+// on air.
+import {
+  ChannelRasterSchema,
+  DelimiterOptionSchema,
+  REFERENCE_RASTER,
+  videoModeRaster,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
 import { isLoopbackHost } from '../shared/loopback.js';
 import { seedConfig, seedHealth, seedStack, seedTemplates } from './seed.js';
 
+/** R-028 part B — the mock mirrors the bridge's refusal union exactly. */
+type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
+
 type FieldValues = StackItemState['fields'];
 
 const SETTINGS_KEY = 'cg-runtime:settings';
+const DELIMITERS_KEY = 'cg-runtime:delimiters';
+const CHANNEL_SETTINGS_KEY = 'cg-runtime:channel-settings';
+
+/**
+ * R-030 parity — the channel the mock declares, matching `MOCK_BANK`'s.
+ *
+ * The mock reports the SAME video mode it configures, so test mode shows the
+ * `match` verdict rather than a permanent fake alarm. A simulated mismatch would
+ * be indistinguishable from a real one on the operator's screen, and R-006's
+ * whole doctrine is that the mock must never wear a signal that means a real
+ * server said something.
+ */
+const MOCK_CHANNEL = 1;
+const MOCK_VIDEO_MODE = '1080i5000';
+
+/** R-034 parity — the same shipped list the bridge starts a station with. */
+const DEFAULT_DELIMITERS: readonly DelimiterOption[] = [
+  { id: 'newline', label: 'new line', value: '\\n' },
+  { id: 'pipe', label: 'pipe', value: '|' },
+  { id: 'persian-comma', label: 'Persian comma', value: '،' },
+  { id: 'comma', label: 'comma', value: ',' },
+  { id: 'semicolon', label: 'semicolon', value: ';' },
+];
 
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -44,9 +89,24 @@ export class MockRuntime {
   // R-021 stage 2a — fixed-bank parity.
   readonly fixedConfigChanged = new Emitter<FixedLayerBank | null>();
   readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
+  // R-028 (o1) parity — the bridge pushes the full catalogue on every change.
+  readonly templatesChanged = new Emitter<TemplateInfo[]>();
+  // R-028 part B — the declared playout layers' occupancy.
+  readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
+  // R-034 parity — the shared delimiter list.
+  readonly delimitersChanged = new Emitter<DelimiterOption[]>();
+  // R-030 parity — the per-channel output raster + the video-mode reading.
+  readonly channelSettingsChanged = new Emitter<ChannelSettingsState>();
+  // R-022 parity — the rehearsing set.
+  readonly rehearseChanged = new Emitter<Rehearsal[]>();
+
+  /** R-022 parity — rows in REHEARSE, keyed by item id. Session state, like the bridge's. */
+  readonly #rehearsing = new Map<string, Rehearsal>();
 
   #stack: StackItemState[] = seedStack();
   #templates = new Map<string, TemplateInfo>(seedTemplates().map((t) => [t.templateId, t]));
+  /** R-028 part B parity — ids removed here, so a re-delivery cannot revive them. */
+  readonly #removedTemplateIds = new Set<string>();
   #config: ConnectionConfig = seedConfig();
   #health: ConnectionHealth = seedHealth('A');
   #lock: LockState = { engaged: false };
@@ -94,17 +154,24 @@ export class MockRuntime {
     else this.#stack[idx] = next;
     // B-070 parity — CG ADD creates the producer.
     this.#loaded.add(itemId);
+    this.#settleSlotObservation(itemId, 'producer');
     this.#audit.unshift(auditEntry('load', { itemId, templateId }));
     this.#emitStack();
     return { accepted: true };
   }
 
   take(itemId: string): { accepted: boolean; errorCode?: string } {
+    // R-022 parity — THE INTERLOCK, and the mock must hold it too. If test mode
+    // allowed a take the real bridge refuses, the interlock would be exercised
+    // nowhere in the suite and the UI would be built against semantics the bridge
+    // does not have — the precise mistake the `update` comment below records.
+    if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
     // B-070/B-039 parity — a take with no live producer re-ADDs first, so a
     // producer always exists afterwards.
     this.#loaded.add(itemId);
+    this.#settleSlotObservation(itemId, 'producer');
     this.#transition(itemId, 'playing', true);
     this.#audit.unshift(auditEntry('take', { itemId, templateId: item.templateId }));
     this.#settle(itemId, 'on-air');
@@ -171,6 +238,26 @@ export class MockRuntime {
     return { accepted: true };
   }
 
+  /**
+   * R-028 (5.4) parity — advance the template's sequence. Offline there is no
+   * template running, so this changes NO item state: `next` carries none on
+   * the bridge either (only the template's internal step moves). Modelled at
+   * all so the row's NEXT verb dispatches identically in test mode.
+   */
+  next(itemId: string): { accepted: boolean; errorCode?: string } {
+    const item = this.#find(itemId);
+    if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    this.#audit.unshift(auditEntry('next', { itemId, templateId: item.templateId }));
+    return { accepted: true };
+  }
+
+  /** C-012 parity — STOP every on-air item; producers stay resident. */
+  stopAll(): { ok: boolean; stopped: number } {
+    const onAir = this.#stack.filter((i) => i.status !== 'idle' && i.status !== 'loaded');
+    for (const item of onAir) this.stop(item.itemId);
+    return { ok: true, stopped: onAir.length };
+  }
+
   out(itemId: string): { accepted: boolean } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false };
@@ -178,6 +265,7 @@ export class MockRuntime {
     // B-070 parity — out's CLEAR DESTROYS the producer, so a later update
     // commits without a wire send and a later take re-ADDs.
     this.#loaded.delete(itemId);
+    this.#settleSlotObservation(itemId, 'empty');
     this.#audit.unshift(auditEntry('out', { itemId, templateId: item.templateId }));
     this.#settle(itemId, 'idle');
     // B-056 parity — the mock's simulated servers are healthy, so an out's
@@ -198,6 +286,9 @@ export class MockRuntime {
     this.#positions.delete(itemId);
     // B-070 parity — the producer dies with the item.
     this.#loaded.delete(itemId);
+    // …so the layer it held reads EMPTY on the next sweep. Settled BEFORE the
+    // binding is released, since the binding is how the layer is found.
+    this.#settleSlotObservation(itemId, 'empty');
     // R-021 stage 3 parity — and so does any FIXED binding (the bridge's
     // `#releaseSlot`): the slot stays in the bank, unbound and re-loadable, and
     // the row stops naming an item that is no longer on the stack.
@@ -210,6 +301,33 @@ export class MockRuntime {
     for (const [layer, bound] of this.#fixedBindings) {
       if (bound.itemId !== itemId) continue;
       this.#fixedBindings.delete(layer);
+      this.fixedStateChanged.emit(this.fixedLayersState());
+      return;
+    }
+  }
+
+  /**
+   * The mock's stand-in for the NEXT OSC SWEEP.
+   *
+   * On the real bridge the wire observation is not something a command writes —
+   * it is what the tap reports a moment later. A `CG ADD` puts an html producer
+   * on the layer and the next sweep says so; a `CLEAR` destroys it and the next
+   * sweep reports the layer empty. Without modelling that, the mock's rows kept
+   * reading "occupied — html producer" forever after a CLEAR, which is the exact
+   * class of divergence B-070 was: a UI built and tested against semantics the
+   * bridge does not have.
+   *
+   * Only ever touches a layer the mock itself holds a BINDING for. A foreign
+   * producer's layer (71's ffmpeg) is not ours to narrate, and an unbound row's
+   * observation must keep coming from the seed alone.
+   */
+  #settleSlotObservation(itemId: string, kind: 'producer' | 'empty'): void {
+    for (const [layer, bound] of this.#fixedBindings) {
+      if (bound.itemId !== itemId) continue;
+      this.#fixedObservations.set(
+        layer,
+        kind === 'empty' ? { kind: 'empty' } : { kind: 'producer', producer: 'html' },
+      );
       this.fixedStateChanged.emit(this.fixedLayersState());
       return;
     }
@@ -298,10 +416,51 @@ export class MockRuntime {
   // R-021 stage 3 — the bridge's LayerManager fixed BINDING, modelled: layer →
   // the item bound to it. The mock allocates no real layers, so this map IS its
   // `fixedBinding`, and `loadFixed` is the only thing that writes to it.
-  readonly #fixedBindings = new Map<number, { itemId: string; templateType: string }>();
+  // R-028 (3.1) — `templateId` rides along so the published binding carries
+  // identity, exactly like the bridge's registry join.
+  readonly #fixedBindings = new Map<
+    number,
+    { itemId: string; templateType: string; templateId: string }
+  >(seedFixedBindings());
+
+  // R-028 part B — the declared playout layers, test-seeded like the bank.
+  readonly #playoutObservations = seedPlayoutLayers();
 
   fixedLayersConfig(): FixedLayerBank | null {
     return this.#fixedBank;
+  }
+
+  /** R-028 part B — the declared playout layers and what is observed on them. */
+  playoutLayersState(): PlayoutLayerState[] {
+    return [...this.#playoutObservations.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([layer, observed]) => ({ channel: 1, layer, observed }));
+  }
+
+  /**
+   * R-028 part B parity — the deliberate playout clear, with the bridge's gate
+   * modelled EXACTLY, because the gate is what the operator UI is built
+   * against: not reserved → `not-reserved`; unverifiable or absent occupancy →
+   * `unknown-occupancy`; any non-`html` kind → `not-html`, naming what was
+   * seen. A mock that cleared freely would teach test mode a different — and
+   * more dangerous — mental model than air.
+   */
+  playoutClear(
+    channel: number,
+    layer: number,
+  ): { ok: boolean; reason?: PlayoutClearReason; observedProducer?: string } {
+    const observed = this.#playoutObservations.get(layer);
+    if (observed === undefined) return { ok: false, reason: 'not-reserved' };
+    if (observed.kind === 'unknown') return { ok: false, reason: 'unknown-occupancy' };
+    // Distinct from unknown: the tap LOOKED and found nothing there.
+    if (observed.kind === 'empty') return { ok: false, reason: 'already-empty' };
+    if (observed.producer !== 'html') {
+      return { ok: false, reason: 'not-html', observedProducer: observed.producer };
+    }
+    this.#playoutObservations.set(layer, { kind: 'empty' });
+    this.playoutStateChanged.emit(this.playoutLayersState());
+    void channel;
+    return { ok: true };
   }
 
   setFixedLayers(next: FixedLayerBank): { ok: boolean; message?: string } {
@@ -320,6 +479,13 @@ export class MockRuntime {
    * arbitrary layer) and an already-bound slot is `slot-bound` (rebinding is
    * Remove-then-load, two explicit steps). An unregistered template refuses
    * with the same `unknown-template` the bridge answers.
+   *
+   * `slot-bound` MIRRORS THE BRIDGE'S OCCUPANCY RULE, not the old binding one.
+   * A CLEARed row keeps its binding and loses its producer, and putting the
+   * row's own template back is exactly the load that must succeed there — so a
+   * mock that refused it would teach test mode the defect this change removes.
+   * Rebinding to a DIFFERENT item is still refused whatever the layer says.
+   * `#loaded` is the producer signal here as it is bridge-side.
    *
    * On acceptance the item joins the stack exactly as `load()` builds it — the
    * fixed row is a second surface onto an ORDINARY stack item, never a parallel
@@ -341,12 +507,76 @@ export class MockRuntime {
       layer >= bank.start &&
       layer < bank.start + bank.count;
     if (!inBank) return { accepted: false, errorCode: 'not-fixed' };
-    if (this.#fixedBindings.has(layer)) return { accepted: false, errorCode: 'slot-bound' };
+    const bound = this.#fixedBindings.get(layer);
+    // R-022 parity — the LOAD interlock, and the mock must hold it for the same
+    // reason it holds `take`'s: if test mode allowed a load the real bridge
+    // refuses, the interlock would be exercised nowhere in the suite and the UI
+    // would be built against semantics the bridge does not have.
+    if (bound !== undefined && this.#rehearsing.has(bound.itemId)) {
+      return { accepted: false, errorCode: 'rehearsing' };
+    }
+    // A different item may never take a bound row — Remove-then-load, two steps.
+    if (bound !== undefined && bound.itemId !== itemId) {
+      return { accepted: false, errorCode: 'slot-bound' };
+    }
+    // The same item may not re-load over its OWN live producer; CLEAR first.
+    if (bound !== undefined && this.#loaded.has(itemId)) {
+      return { accepted: false, errorCode: 'slot-bound' };
+    }
 
-    this.#fixedBindings.set(layer, { itemId, templateType: template.templateType });
+    this.#fixedBindings.set(layer, { itemId, templateType: template.templateType, templateId });
     this.load(itemId, templateId, fields);
     this.fixedStateChanged.emit(this.fixedLayersState());
     return { accepted: true };
+  }
+
+  /**
+   * The BANK-SCOPED layer clear, with the bridge's guard modelled EXACTLY — because
+   * the guard is what the operator UI is built against, and a mock that cleared more
+   * freely than air would teach test mode a more dangerous mental model than the real
+   * thing.
+   *
+   * Permission is STRUCTURAL and comes from two facts, both required: the layer is in
+   * the DECLARED bank (`start`..`start+count-1` on the bank's channel — never the
+   * VISIBLE rows, since a tick is a display concern), and the layer is NOT reserved.
+   * Reserved is checked FIRST so it wins even if the two sets ever overlapped.
+   *
+   * It consults NO occupancy and NO binding, which is the whole point: those are the
+   * things that may be wrong when the operator needs this. So an `unknown` observation
+   * does not block it, and an unticked in-bank row is still clearable.
+   */
+  clearBankLayer(
+    channel: number,
+    layer: number,
+  ): { ok: boolean; reason?: 'not-in-bank' | 'reserved' | 'amcp-error'; message?: string } {
+    // The reserved set is channel-agnostic here exactly as it is on the bridge.
+    if (this.#playoutObservations.has(layer)) {
+      return {
+        ok: false,
+        reason: 'reserved',
+        message: `layer ${String(layer)} is inside the reserved playout range`,
+      };
+    }
+    const bank = this.#fixedBank;
+    const inBank =
+      bank !== null &&
+      channel === bank.channel &&
+      layer >= bank.start &&
+      layer < bank.start + bank.count;
+    if (!inBank) {
+      return {
+        ok: false,
+        reason: 'not-in-bank',
+        message: `${String(channel)}-${String(layer)} is not a layer of the declared bank`,
+      };
+    }
+    // A CLEAR destroys whatever was there. Offline that means: the observation
+    // becomes empty, and any binding on the layer is gone — the producer it named
+    // no longer exists, so keeping the binding would make the row lie.
+    this.#fixedObservations.set(layer, { kind: 'empty' });
+    this.#fixedBindings.delete(layer);
+    this.fixedStateChanged.emit(this.fixedLayersState());
+    return { ok: true };
   }
 
   /**
@@ -366,12 +596,29 @@ export class MockRuntime {
     for (let layer = start; layer <= start + count - 1; layer++) {
       const alias = aliases?.[String(layer)];
       const bound = this.#fixedBindings.get(layer);
+      // R-028 (3.1) parity — the binding carries WHICH template is on the row
+      // as RAW naming facts (id + name + file name), the same join the bridge
+      // does with its registry; the renderer resolves the label canonically.
+      const boundInfo = bound !== undefined ? this.#templates.get(bound.templateId) : undefined;
       out.push({
         channel,
         layer,
         ...(alias !== undefined ? { alias } : {}),
         observed: this.#fixedObservations.get(layer) ?? { kind: 'unknown' },
-        binding: bound ?? null,
+        binding:
+          bound !== undefined
+            ? {
+                itemId: bound.itemId,
+                templateType: bound.templateType,
+                templateId: bound.templateId,
+                ...(boundInfo?.name !== undefined && boundInfo.name !== ''
+                  ? { templateName: boundInfo.name }
+                  : {}),
+                ...(boundInfo?.sourceFileName !== undefined && boundInfo.sourceFileName !== ''
+                  ? { sourceFileName: boundInfo.sourceFileName }
+                  : {}),
+              }
+            : null,
       });
     }
     return out;
@@ -574,8 +821,23 @@ export class MockRuntime {
    * Inspector picks up its field schema). A re-imported id overwrites the prior
    * entry. No persistence — the registry resets on reload (see design.md).
    */
-  templateImport(template: TemplateInfo): { registered: boolean; templateId: string } {
+  templateImport(
+    template: TemplateInfo,
+    redelivery = false,
+  ): { registered: boolean; templateId: string; skipped?: boolean } {
+    // R-028 part B parity — the same reconciliation rule as the bridge: a
+    // re-delivery never resurrects a removal and never overwrites what is held.
+    if (redelivery) {
+      if (this.#removedTemplateIds.has(template.templateId)) {
+        return { registered: false, templateId: template.templateId, skipped: true };
+      }
+    } else {
+      this.#removedTemplateIds.delete(template.templateId);
+    }
     this.#templates.set(template.templateId, template);
+    // R-028 (o1) parity — the catalogue push every browser converges on.
+    this.templatesChanged.emit(this.templateList());
+    this.fixedStateChanged.emit(this.fixedLayersState());
     return { registered: true, templateId: template.templateId };
   }
 
@@ -608,6 +870,9 @@ export class MockRuntime {
     }
 
     this.#templates.delete(templateId);
+    this.#removedTemplateIds.add(templateId);
+    // R-028 (o1) parity — the catalogue push every browser converges on.
+    this.templatesChanged.emit(this.templateList());
     return { ok: true };
   }
 
@@ -620,6 +885,220 @@ export class MockRuntime {
   }
 
   // ── settings ────────────────────────────────────────────────────────
+  /**
+   * R-034 parity — the delimiter list. The bridge persists it to DISK; the
+   * offline mock has no disk, so it uses `localStorage` — which is the closest
+   * thing test mode has to "survives a restart", and the same store the mock
+   * already uses for settings.
+   */
+  delimitersList(): DelimiterOption[] {
+    try {
+      const raw = localStorage.getItem(DELIMITERS_KEY);
+      if (raw !== null) {
+        const parsed = DelimiterOptionSchema.array().safeParse(JSON.parse(raw));
+        if (parsed.success && parsed.data.length > 0) return parsed.data;
+      }
+    } catch {
+      // Unusable storage falls through to the defaults — never an empty picker.
+    }
+    return [...DEFAULT_DELIMITERS];
+  }
+
+  /** Mirrors the bridge's refusals exactly, so the UI meets one behaviour. */
+  delimitersSet(delimiters: readonly DelimiterOption[]): {
+    ok: boolean;
+    reason?: 'empty-list' | 'duplicate-value';
+    message?: string;
+  } {
+    if (delimiters.length === 0) {
+      return {
+        ok: false,
+        reason: 'empty-list',
+        message: 'At least one delimiter must remain — a split field needs something to split on.',
+      };
+    }
+    const seen = new Set<string>();
+    for (const d of delimiters) {
+      if (seen.has(d.value)) {
+        return {
+          ok: false,
+          reason: 'duplicate-value',
+          message: `“${d.value}” appears twice — two delimiters that split identically cannot be told apart.`,
+        };
+      }
+      seen.add(d.value);
+    }
+    try {
+      localStorage.setItem(DELIMITERS_KEY, JSON.stringify(delimiters));
+    } catch {
+      // Persistence lost, the session's list is not.
+    }
+    this.delimitersChanged.emit([...delimiters]);
+    return { ok: true };
+  }
+
+  /**
+   * R-030 parity — the channel raster. The bridge persists it to DISK; the
+   * offline mock has no disk, so it uses `localStorage`, exactly as the
+   * delimiter list does.
+   *
+   * `observed` reports the mode the mock itself is configured for, so the
+   * verdict reads `match`. That is not the mock flattering itself: a simulated
+   * MISMATCH would be pixel-identical on screen to a real server contradicting
+   * config, and R-006 forbids the mock wearing a signal that means a real server
+   * said something.
+   */
+  channelSettingsState(): ChannelSettingsState {
+    return {
+      settings: [{ channel: MOCK_CHANNEL, raster: this.#mockRaster() }],
+      observed: [
+        {
+          channel: MOCK_CHANNEL,
+          mode: MOCK_VIDEO_MODE,
+          raster: videoModeRaster(MOCK_VIDEO_MODE) ?? null,
+        },
+      ],
+    };
+  }
+
+  #mockRaster(): ChannelRaster {
+    try {
+      const raw = localStorage.getItem(CHANNEL_SETTINGS_KEY);
+      if (raw !== null) {
+        const parsed = ChannelRasterSchema.safeParse(JSON.parse(raw));
+        if (parsed.success) return parsed.data;
+      }
+    } catch {
+      // Unusable storage falls through to the reference raster — the same
+      // fallback the bridge's store uses, so the two never diverge on default.
+    }
+    return { ...REFERENCE_RASTER };
+  }
+
+  /** Mirrors the bridge's refusals exactly, so the UI meets one behaviour. */
+  setChannelSettings(settings: ChannelSettings): {
+    ok: boolean;
+    reason?: (typeof CHANNEL_SETTINGS_SET_REASONS)[number];
+    message?: string;
+  } {
+    // Same gate, same wording, same predicate shape as the bridge: changing the
+    // raster re-scales every graphic on the channel.
+    const unsettled = this.#stack.filter(
+      (i) =>
+        i.pending ||
+        i.status === 'playing' ||
+        i.status === 'on-air' ||
+        i.status === 'updating' ||
+        i.status === 'exiting' ||
+        i.status === 'unconfirmed',
+    ).length;
+    if (unsettled > 0) {
+      return {
+        ok: false,
+        reason: 'on-air-block',
+        message:
+          `${String(unsettled)} item(s) are on air or unsettled — changing the channel raster ` +
+          `re-scales every graphic on the channel, so it cannot be applied while anything is live. ` +
+          `Take them off air first.`,
+      };
+    }
+    if (settings.channel !== MOCK_CHANNEL) {
+      return {
+        ok: false,
+        reason: 'unknown-channel',
+        message: `Channel ${String(settings.channel)} is not declared by this install (declared: ${String(MOCK_CHANNEL)}).`,
+      };
+    }
+    try {
+      localStorage.setItem(CHANNEL_SETTINGS_KEY, JSON.stringify(settings.raster));
+    } catch {
+      // Persistence lost, the session's raster is not.
+    }
+    this.channelSettingsChanged.emit(this.channelSettingsState());
+    return { ok: true };
+  }
+
+  /**
+   * R-022 parity — REHEARSE.
+   *
+   * Mirrors the bridge's guards EXACTLY, including the fail-closed on-air rule.
+   * The mock has no AMCP socket, so it cannot fail the mute and never returns
+   * `mute-failed` — which is an honest gap and not a modelled behaviour: test mode
+   * simply has no layer to leave unmuted. Everything the UI branches on is here.
+   */
+  rehearseState(): Rehearsal[] {
+    return [...this.#rehearsing.values()].sort(
+      (a, b) => a.channel - b.channel || a.layer - b.layer,
+    );
+  }
+
+  enterRehearse(itemId: string): {
+    ok: boolean;
+    reason?: (typeof REHEARSE_ENTER_REASONS)[number];
+    message?: string;
+  } {
+    const item = this.#find(itemId);
+    if (item === null) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    if (this.#rehearsing.has(itemId)) return { ok: true };
+    // Fail closed: `unconfirmed`/`pending` mean the on-air result is UNKNOWN, and
+    // an unknown must never be muted on a guess. Same status list as the bridge's
+    // `isOnAirStatus`.
+    const onAir =
+      item.pending ||
+      item.status === 'playing' ||
+      item.status === 'on-air' ||
+      item.status === 'updating' ||
+      item.status === 'exiting' ||
+      item.status === 'unconfirmed';
+    if (onAir) {
+      return {
+        ok: false,
+        reason: 'on-air',
+        message:
+          'That graphic is on air or unsettled. Take it off air before rehearsing it — ' +
+          'rehearse mutes the layer, and muting a live graphic is not something this will do.',
+      };
+    }
+    // Bridge parity — a RESIDENT PRODUCER is no longer required. Rehearse renders
+    // the bound template locally; the layer is not an input to that render, and
+    // requiring it made a CLEARed row un-rehearsable while a STOPped one was fine.
+    // The mock sends no AMCP at all, so the bridge's mute branch has no analogue
+    // here: what it mirrors is the PRECONDITION, which is the binding.
+    const slot = this.#slotFor(itemId);
+    if (slot === null) {
+      // The binding IS the precondition, so its absence is a real refusal — and it
+      // is `unknown-item`, matching the bridge's own missing-slot answer. Inventing
+      // a layer number would put a false coordinate on the wire, which a second
+      // browser would then read as fact.
+      return {
+        ok: false,
+        reason: 'unknown-item',
+        message: 'That item is not bound to a layer, so there is nothing to rehearse.',
+      };
+    }
+    this.#rehearsing.set(itemId, { itemId, channel: slot.channel, layer: slot.layer });
+    this.rehearseChanged.emit(this.rehearseState());
+    return { ok: true };
+  }
+
+  /** The fixed layer this item is bound to, or null when the mock knows of none. */
+  #slotFor(itemId: string): { channel: number; layer: number } | null {
+    for (const [layer, bound] of this.#fixedBindings) {
+      if (bound.itemId === itemId) return { channel: this.#fixedBank?.channel ?? 1, layer };
+    }
+    return null;
+  }
+
+  exitRehearse(itemId: string): { ok: boolean; reason?: 'unknown-item'; message?: string } {
+    if (!this.#rehearsing.delete(itemId)) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not rehearsing.' };
+    }
+    this.rehearseChanged.emit(this.rehearseState());
+    return { ok: true };
+  }
+
   settingsGet(): Settings {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
@@ -773,8 +1252,15 @@ function seedFixedBank(): FixedLayerBank | null {
     ? {
         channel: 1,
         start: 70,
-        count: 4,
-        aliases: { '70': 'CLOCK', '71': 'LOWER THIRD' },
+        // R-028 — EIGHTEEN rows, not four. 70–73 keep the four documented
+        // display cases (html / non-html / empty / unknown); 74–85 are seeded
+        // EMPTY so the E2E suite has rows it can actually LOAD onto; 86–87
+        // carry the seed's two remaining stack items. Since part B's occupancy
+        // gate refuses a load onto anything not observably empty — an unbound
+        // row can still carry a live graphic — one empty row would let exactly
+        // one spec load, once.
+        count: 18,
+        aliases: { '70': 'CLOCK', '71': 'LOWER THIRD', '86': 'TICKER', '87': 'LOGO BUG' },
       }
     : null;
 }
@@ -794,6 +1280,75 @@ function seedFixedObservations(): Map<number, FixedSlotObservation> {
         [71, { kind: 'producer', producer: 'ffmpeg' }],
         [72, { kind: 'empty' }],
         [73, { kind: 'unknown' }],
+        // Loadable rows for the E2E flows (see `seedFixedBank`). Without an
+        // explicit `empty` these default to `unknown`, which the load gate
+        // refuses — correctly, but it would leave the suite nowhere to load.
+        ...([74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85] as const).map(
+          (layer) => [layer, { kind: 'empty' }] as [number, FixedSlotObservation],
+        ),
+        // 86/87 hold the seed's two IDLE items. Idle means no `CG ADD` has run,
+        // so there is no producer and the wire correctly sees an EMPTY layer —
+        // a bound row over an empty layer is not a contradiction.
+        [86, { kind: 'empty' }],
+        [87, { kind: 'empty' }],
       ])
     : new Map();
+}
+
+/**
+ * R-028 part B — the e2e playout-layer seed, armed by the SAME flag as the
+ * fixed bank. It covers all THREE occupant cases the tab must distinguish, and
+ * they are the cases the safety gate turns on:
+ *
+ *   60 — an `html` producer      → clearable (the playout graphics case)
+ *   61 — an `ffmpeg` producer    → NOT clearable, and no control at all: a
+ *        video on a playout layer is the antenna/live-channel accident the
+ *        reservation exists to prevent
+ *   62 — `unknown`               → NOT clearable: occupancy cannot be
+ *        verified, and unknown is never treated as empty
+ *   63 — `empty`                 → nothing there, nothing offered
+ *
+ * The offline mock has no OSC, so UNSEEDED there are no reserved layers at all
+ * and the tab does not appear — the bridge-side truth is integration-tested in
+ * tools/caspar-bridge.
+ */
+function seedPlayoutLayers(): Map<number, FixedSlotObservation> {
+  return fixedBankSeedArmed()
+    ? new Map<number, FixedSlotObservation>([
+        [60, { kind: 'producer', producer: 'html' }],
+        [61, { kind: 'producer', producer: 'ffmpeg' }],
+        [62, { kind: 'unknown' }],
+        [63, { kind: 'empty' }],
+      ])
+    : new Map();
+}
+
+/**
+ * R-028 — bind the SEEDED stack items to seeded rows.
+ *
+ * Before part B the mock's seeded stack rendered in its own Stack panel, so it
+ * was visible without belonging to any layer. Now an item is only visible ON a
+ * row: the stack panel is gone and the row IS the surface. Without this the
+ * seed existed but showed nowhere, which is both a lie about the model and the
+ * reason several E2E specs had nothing to click.
+ *
+ * Bound to 70 and 71 — the two rows the seed already gives producers, so the
+ * binding and the observation agree the way they would on a real bridge.
+ */
+function seedFixedBindings(): [
+  number,
+  { itemId: string; templateType: string; templateId: string },
+][] {
+  if (!fixedBankSeedArmed()) return [];
+  const types = ['clock', 'ticker', 'logo-bug'];
+  // 70 takes the seed's LOADED item, because 70 is the row observed as an html
+  // producer and a loaded item HAS one — binding and wire agree. The two IDLE
+  // items go on 86/87, observed empty, for the same reason in reverse. 71–73
+  // stay UNBOUND so they keep modelling the foreign-producer / empty / unknown
+  // display cases cleanly.
+  const layers = [70, 86, 87];
+  return seedStack().map((item, i) => [
+    layers[i] ?? 88 + i,
+    { itemId: item.itemId, templateType: types[i] ?? 'custom', templateId: item.templateId },
+  ]);
 }

@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { ListItem } from '@cg/shared-schema';
 import {
   addItem,
+  dropTargetIndex,
   itemText,
   moveItem,
   removeItem,
   setItemText,
   toListItems,
+  type DropEdge,
 } from '../src/renderer/features/inspector/listField.js';
 
 /**
@@ -99,5 +101,54 @@ describe('multi-line item text is never flattened (2026-07-07 live finding)', ()
     // the payload never carries a flattened/joined string.
     expect(parsed[1]).toEqual({ id: 'b', text: twoLines, dwellMs: 4000 });
     expect((parsed[1] as { text: string }).text).toContain('\n');
+  });
+});
+
+/**
+ * dev-r028-b4 item 3 — drag-to-reorder. The pointer half cannot be exercised in
+ * jsdom (native drag events are not synthesizable), so the whole of the reorder
+ * ARITHMETIC lives in `dropTargetIndex` and is proved here. The component only
+ * decides which edge the pointer is nearest.
+ *
+ * The correction under test: `moveItem` removes before it inserts, so every index
+ * above the lifted item shifts down by one. An uncorrected "drop before item N"
+ * therefore lands one slot too high whenever the item came from BELOW N.
+ */
+describe('dropTargetIndex — drag-reorder arithmetic', () => {
+  const abc: ListItem[] = [
+    { id: 'a', text: 'A' },
+    { id: 'b', text: 'B' },
+    { id: 'c', text: 'C' },
+  ];
+  const order = (from: number, over: number, edge: DropEdge): string[] =>
+    moveItem(abc, from, dropTargetIndex(from, over, edge)).map((i) => itemText(i));
+
+  it('drags DOWN onto a later row (the case the shift correction exists for)', () => {
+    expect(order(0, 1, 'after')).toEqual(['B', 'A', 'C']);
+    expect(order(0, 2, 'before')).toEqual(['B', 'A', 'C']);
+    expect(order(0, 2, 'after')).toEqual(['B', 'C', 'A']);
+  });
+
+  it('drags UP onto an earlier row', () => {
+    expect(order(2, 1, 'before')).toEqual(['A', 'C', 'B']);
+    expect(order(2, 0, 'after')).toEqual(['A', 'C', 'B']);
+    expect(order(2, 0, 'before')).toEqual(['C', 'A', 'B']);
+  });
+
+  it('dropping on EITHER edge of the dragged row itself is a no-op, not a shuffle', () => {
+    expect(order(1, 1, 'before')).toEqual(['A', 'B', 'C']);
+    expect(order(1, 1, 'after')).toEqual(['A', 'B', 'C']);
+  });
+
+  it('never loses, duplicates or mutates an item — the drag only reorders', () => {
+    for (const from of [0, 1, 2]) {
+      for (const over of [0, 1, 2]) {
+        for (const edge of ['before', 'after'] as DropEdge[]) {
+          const next = moveItem(abc, from, dropTargetIndex(from, over, edge));
+          expect(next).toHaveLength(3);
+          expect([...next].sort((x, y) => x.id.localeCompare(y.id))).toEqual(abc);
+        }
+      }
+    }
   });
 });

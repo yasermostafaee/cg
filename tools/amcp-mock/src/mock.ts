@@ -157,6 +157,9 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     layerState(slot: LayerSlot): LayerState | undefined {
       return registry.peek(slot);
     },
+    setLayerVolume(slot: LayerSlot, volume: number): void {
+      registry.patch(slot, { volume });
+    },
     lastCgAdd(
       slot: LayerSlot,
     ): ({ template: string; resolution: CgAddResolution } & CgDataResult) | undefined {

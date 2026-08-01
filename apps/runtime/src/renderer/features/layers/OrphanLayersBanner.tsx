@@ -2,6 +2,9 @@ import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { useConfirm } from '../../ui/useDialog.js';
+import { useCasparReach } from '../../hooks/useCasparReachable.js';
+import { useLink } from '../../hooks/useLink.js';
+import { casparRefusalReason } from '../../ui/reachWording.js';
 import { runCommand } from '../status/commandFeedback.js';
 
 interface Props {
@@ -80,6 +83,24 @@ const styles = {
 export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Element | null {
   // Above the idle-quiet early return: a hook cannot be called conditionally.
   const { confirm, confirmDialog } = useConfirm();
+  /**
+   * THIS CLEAR EMITS AMCP, so it is gated on BOTH hops like every other one.
+   *
+   * It was not in the sweep that gated the row and header verbs — not a decision,
+   * simply a surface nobody listed — and it is the one Clear an operator reaches
+   * for when the console's own model has already failed them, which makes an
+   * enabled-but-dead button costlier here than anywhere else: they press it,
+   * believe the layer is coming off, and watch a graphic they cannot account for
+   * stay on air.
+   *
+   * Gating it does NOT re-gate on LAYER STATE — the orphan row exists precisely
+   * because the layer is carrying something we did not put there, and that fact is
+   * never a reason to refuse the remedy. Only reachability is, because with either
+   * hop down the command does not leave at all.
+   */
+  const linkDown = useLink() === 'disconnected';
+  const casparReach = useCasparReach();
+  const clearRefusal = casparRefusalReason(linkDown, casparReach);
 
   if (orphans.length === 0 && ownedOccupancy.length === 0) return null;
 
@@ -104,7 +125,11 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
                 <Button
                   variant="caution"
                   aria-label={`Clear layer ${name}`}
-                  title={`Send CLEAR ${name} — removes whatever is on that layer from the output`}
+                  disabled={clearRefusal !== undefined}
+                  title={
+                    clearRefusal ??
+                    `Send CLEAR ${name} — removes whatever is on that layer from the output`
+                  }
                   onClick={() => {
                     // Explicit, confirm-gated operator act (the B-048 principle:
                     // the operator decides, never a heuristic). Errors surface
@@ -115,7 +140,7 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
                         title: `Clear layer ${name}?`,
                         body: 'This removes whatever is on that layer from air.',
                         confirmLabel: 'Clear layer',
-                        variant: 'caution',
+                        tone: 'clear',
                       });
                       if (!ok) return;
                       runCommand(

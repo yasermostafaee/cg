@@ -91,6 +91,21 @@ export class LibraryStore {
     return this.#index.has(templateId);
   }
 
+  /**
+   * R-022 — the retained self-contained page for a template, or null when this
+   * browser holds none.
+   *
+   * The rehearsal render is the ONLY consumer, and it wants exactly this rather
+   * than a re-derived scene: it is the byte-identical page the bridge serves to
+   * CasparCG, so rehearsing it cannot drift from air the way a second render path
+   * would. `null` is the honest "not in this browser" — a template imported
+   * elsewhere has metadata (from the bridge's catalogue) but no local page, and the
+   * panel says so rather than showing an empty black box.
+   */
+  html(templateId: string): string | null {
+    return this.#index.get(templateId)?.html ?? null;
+  }
+
   /** The full retention/delivery set (metadata + HTML) for reconcile-on-connect. */
   entries(): LibraryEntry[] {
     return [...this.#index.values()];

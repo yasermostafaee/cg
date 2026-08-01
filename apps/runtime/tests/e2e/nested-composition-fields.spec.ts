@@ -21,7 +21,6 @@ test('a two-composition starter shows its NESTED fields in the Inspector, groupe
   await app.importVcg('nested.vcg', bytes);
   await expect(app.error).toHaveCount(0);
 
-  await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
   // The regression: this used to be "No fields."

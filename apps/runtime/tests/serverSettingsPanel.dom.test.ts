@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { ServerSettingsPanel } from '../src/renderer/features/connections/ServerSettingsPanel.js';
+import { clearPortals, openDialog } from './support/dialog.js';
 
 /**
  * R-010 — the server settings panel: loads the current config, mirrors the
@@ -19,6 +20,9 @@ let container: HTMLDivElement | null = null;
 afterEach(() => {
   container?.remove();
   container = null;
+  // The panel is a `Modal` now, so it renders into a PORTAL on `document.body`
+  // rather than into the container — a leaked scrim would be found by the next test.
+  clearPortals();
 });
 
 function item(status: StackItemState['status'], pending = false): StackItemState {
@@ -58,7 +62,7 @@ function stubBridge(
   return { setConfig };
 }
 
-async function renderPanel(): Promise<HTMLDivElement> {
+async function renderPanel(): Promise<HTMLElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -72,7 +76,12 @@ async function renderPanel(): Promise<HTMLDivElement> {
     );
     await Promise.resolve();
   });
-  return container;
+  // The DIALOG, not the mount container: this panel is built on the shared `Modal`
+  // primitive now, which portals to `document.body`. Every query below is scoped to
+  // the dialog, which is also what an operator can actually see and reach.
+  const dialog = openDialog();
+  if (dialog === null) throw new Error('the server settings dialog did not open');
+  return dialog;
 }
 
 function applyButton(el: HTMLElement): HTMLButtonElement {
@@ -137,6 +146,56 @@ describe('ServerSettingsPanel — R-010', () => {
     await setInput(el, 'Primary AMCP port', 'abc');
     expect(el.textContent).toContain('AMCP port must be an integer');
     expect(applyButton(el).disabled).toBe(true);
+  });
+
+  /**
+   * CANCEL SENDS NOTHING — the dialog is a FORM, and that is what makes this worth
+   * asserting rather than assuming.
+   *
+   * The operator types hosts and ports into a DRAFT; until Apply lands, none of it
+   * has reached the bridge. So leaving without applying is a real choice, and the
+   * one thing it must never do is half-apply. Edited fields, then Cancel: no
+   * `setConfig` call at all, and the dialog closes by the same path as the ✕,
+   * Escape and the backdrop.
+   */
+  it('Cancel leaves the bridge config byte-identical — nothing is sent', async () => {
+    const { setConfig } = stubBridge([]);
+    let closed = false;
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(ServerSettingsPanel, {
+            open: true,
+            onClose: () => {
+              closed = true;
+            },
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+    const el = openDialog();
+    if (el === null) throw new Error('the server settings dialog did not open');
+
+    // Edit the draft, so there is genuinely something that COULD have been sent.
+    await setInput(el, 'Primary host', '192.168.1.99');
+
+    const cancel = [...el.querySelectorAll<HTMLButtonElement>('.cg-modal-footer button')].find(
+      (b) => b.textContent === 'Cancel',
+    );
+    if (cancel === undefined) throw new Error('Cancel not rendered in the action row');
+    await act(async () => {
+      cancel.click();
+      await Promise.resolve();
+    });
+
+    expect(setConfig, 'Cancel must not reach the bridge').not.toHaveBeenCalled();
+    expect(closed, 'Cancel takes the same path out as the ✕ and Escape').toBe(true);
   });
 
   it('adding a backup submits servers.B; the bridge refusal message is surfaced', async () => {

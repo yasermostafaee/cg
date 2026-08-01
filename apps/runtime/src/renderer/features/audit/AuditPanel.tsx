@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AuditEntry } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
-import { Button } from '../../ui/Button.js';
+import { Modal, ModalAction } from '../../ui/Modal.js';
 
 interface Props {
   open: boolean;
@@ -27,34 +27,6 @@ const ACTION_OPTIONS = [
 type ActionFilter = (typeof ACTION_OPTIONS)[number];
 
 const styles = {
-  scrim: {
-    position: 'fixed' as const,
-    inset: 0,
-    background: 'rgba(2, 6, 23, 0.7)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 900,
-  },
-  modal: {
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.5rem',
-    padding: '1rem 1.25rem',
-    width: 'min(880px, 90vw)',
-    maxHeight: '80vh',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.75rem',
-    color: colors.text,
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '0.75rem',
-  },
-  title: { margin: 0, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.05em' },
   filters: {
     display: 'flex',
     gap: '0.5rem',
@@ -134,56 +106,72 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   if (!open) return null;
 
   return (
-    <div style={styles.scrim} role="dialog" aria-label="Audit log" aria-modal="true">
-      <div style={styles.modal}>
-        <div style={styles.header}>
-          <h2 style={styles.title}>AUDIT LOG</h2>
-          <Button variant="ghost" onClick={onClose} aria-label="Close audit panel">
-            Close
-          </Button>
-        </div>
-        <div style={styles.filters}>
-          <label htmlFor="audit-action">Action</label>
-          <select
-            id="audit-action"
-            className="cg-field"
-            style={{ width: 'auto' }}
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value as ActionFilter)}
-          >
-            {ACTION_OPTIONS.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-          <label htmlFor="audit-actor">Actor</label>
-          <input
-            id="audit-actor"
-            className="cg-field"
-            style={styles.actorInput}
-            placeholder="any"
-            value={actorFilter}
-            onChange={(e) => setActorFilter(e.target.value)}
-          />
-          <AsyncButton run={() => refresh().then(() => ({ accepted: true }))}>Refresh</AsyncButton>
-        </div>
-        <div style={styles.table}>
-          <div style={styles.headerRow}>
-            <span>timestamp</span>
-            <span>actor</span>
-            <span>action</span>
-            <span>item / detail</span>
-            <span>outcome</span>
-          </div>
-          {entries.length === 0 ? (
-            <p style={styles.empty}>No audit entries yet.</p>
-          ) : (
-            entries.map((e, idx) => <Row key={idx} entry={e} />)
-          )}
-        </div>
+    <Modal
+      /* §1 — SENTENCE case, like every other dialog. It was `AUDIT LOG`; the words
+         are unchanged. */
+      title="Audit log"
+      ariaLabel="Audit log"
+      size="wide"
+      onClose={onClose}
+      /*
+        ONE action, and its role is `cancel` — not `primary` (owner).
+
+        `Close` DISMISSES; it commits nothing. This dialog is read-only, so it has no
+        primary action at all, and dressing a dismissal as one would put the weight
+        of "the action this dialog exists to perform" on a button that does nothing.
+        Same treatment as every other Cancel, which is the point: the operator learns
+        one shape for "get me out of here".
+
+        The hand-rolled header's `Close` BUTTON is still gone — the primitive's ✕ is
+        the close affordance here as it is everywhere else.
+      */
+      footer={
+        <ModalAction actionRole="cancel" onClick={onClose}>
+          Close
+        </ModalAction>
+      }
+    >
+      <div style={styles.filters}>
+        <label htmlFor="audit-action">Action</label>
+        <select
+          id="audit-action"
+          className="cg-field"
+          style={{ width: 'auto' }}
+          value={actionFilter}
+          onChange={(e) => setActionFilter(e.target.value as ActionFilter)}
+        >
+          {ACTION_OPTIONS.map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
+          ))}
+        </select>
+        <label htmlFor="audit-actor">Actor</label>
+        <input
+          id="audit-actor"
+          className="cg-field"
+          style={styles.actorInput}
+          placeholder="any"
+          value={actorFilter}
+          onChange={(e) => setActorFilter(e.target.value)}
+        />
+        <AsyncButton run={() => refresh().then(() => ({ accepted: true }))}>Refresh</AsyncButton>
       </div>
-    </div>
+      <div style={styles.table}>
+        <div style={styles.headerRow}>
+          <span>timestamp</span>
+          <span>actor</span>
+          <span>action</span>
+          <span>item / detail</span>
+          <span>outcome</span>
+        </div>
+        {entries.length === 0 ? (
+          <p style={styles.empty}>No audit entries yet.</p>
+        ) : (
+          entries.map((e, idx) => <Row key={idx} entry={e} />)
+        )}
+      </div>
+    </Modal>
   );
 }
 

@@ -12,6 +12,7 @@ import {
   type LayerSlot,
   type ServerLabel,
 } from '@cg/caspar-client';
+import { positionQuery } from '@cg/shared-schema';
 import type {
   AuditEntry,
   FieldValues,
@@ -19,29 +20,47 @@ import type {
   RetainedStackItem,
   StackItemState,
 } from '@cg/shared-schema';
-import type {
-  ChannelResponse,
-  ConnectionConfig,
-  ConnectionHealth,
-  ConnectionsSetConfigChannel,
-  FixedLayerBank,
-  FixedSlotState,
-  LockState,
-  OrphanLayer,
-  OwnedOccupancyWarning,
-  PendingUpdate,
-  Settings,
-  TemplateInfo,
+import {
+  isLayerVisible,
+  // R-030 — the video-mode token map lives in shared-ipc, not caspar-client, so
+  // the browser's MockRuntime can read the SAME map without dragging `node:net`
+  // into the SPA bundle (see channelSettings.ts for the full reasoning).
+  parseVideoModeFromInfo,
+  videoModeRaster,
+  type PLAYOUT_CLEAR_REASONS,
+  type PlayoutLayerState,
+  type DelimiterOption,
+  type ChannelResponse,
+  type ConnectionConfig,
+  type ConnectionHealth,
+  type ConnectionsSetConfigChannel,
+  type FixedLayerBank,
+  type FixedSlotState,
+  type LockState,
+  type OrphanLayer,
+  type OwnedOccupancyWarning,
+  type PendingUpdate,
+  type Settings,
+  type TemplateInfo,
+  type ChannelSettings,
+  type ChannelSettingsState,
+  type CHANNEL_SETTINGS_SET_REASONS,
+  type Rehearsal,
+  type REHEARSE_ENTER_REASONS,
+  type REHEARSE_EXIT_REASONS,
 } from '@cg/shared-ipc';
+import { ChannelSettingsStore } from './channel-settings-store.js';
 import {
   validateFixedBank,
   validateFixedBankChange,
   FixedLayersConfigError,
   type FixedLayersErrorCode,
+  type SlotOccupancy,
 } from './fixed-layers-store.js';
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
 import { TemplateRegistry } from './template-registry.js';
+import { DelimiterStore } from './delimiter-store.js';
 import {
   TemplateHttpServer,
   deriveServeOptions,
@@ -52,6 +71,74 @@ import {
 
 /** R-010 — the `connections.set-config` response shape. */
 type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
+
+/** R-028 part B — a refused deliberate playout clear. */
+type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
+
+/** R-030 — a refused channel-settings change. */
+type ChannelSettingsSetReason = (typeof CHANNEL_SETTINGS_SET_REASONS)[number];
+
+/** R-022 — a refused rehearse entry. */
+type RehearseEnterReason = (typeof REHEARSE_ENTER_REASONS)[number];
+/** R-022 — a refused rehearse exit. */
+type RehearseExitReason = (typeof REHEARSE_EXIT_REASONS)[number];
+
+/**
+ * R-022 — the wording for a rehearse transition that is already in flight.
+ *
+ * WHY THIS SERIALISATION EXISTS, because it looks like mere debounce and is not.
+ * The mute and the un-mute are separate AMCP round trips, and `exitRehearse`
+ * necessarily drops the claim BEFORE its un-mute lands (so the state is honest if
+ * the send fails). Two overlapping transitions can therefore interleave as:
+ *
+ *   exit: drop claim → [await un-mute]
+ *   enter:              mute → set claim
+ *   exit:                              → un-mute LANDS
+ *
+ * leaving a row that CLAIMS to be rehearsing while its layer is NOT muted. On
+ * 2.5.0 that is audio on air behind a UI insisting the graphic cannot reach air —
+ * the worst kind of wrong this feature can be, because the interlock is the whole
+ * point of it. Serialising per item makes the interleaving unrepresentable rather
+ * than merely unlikely, which is the standard this surface holds everywhere else.
+ */
+const BUSY_MESSAGE =
+  'A rehearse change for this row is still in flight — wait for it to finish, then try again.';
+
+/**
+ * R-022 — the volume a layer is INTENDED to have: full.
+ *
+ * A named constant, not a bare `1`, because it appears in four places that must
+ * agree — the take path's unconditional re-assert, the rehearse exit, the startup
+ * re-assert, and the tests — and because it is the seam a future per-layer volume
+ * feature would replace. Rehearse does NOT change a layer's intended volume; it
+ * applies a temporary mute over it, which is why the restore is a re-assert of
+ * intent rather than an "un-mute" that has to remember what it clobbered.
+ */
+const INTENDED_VOLUME = 1;
+
+/**
+ * THE on-air predicate for a stack item — the ONE definition of "on air or
+ * unsettled", read by R-010's `setConfig` gate, R-030's raster gate, the
+ * rehearse-entry guard and the rehearse abort.
+ *
+ * Extracted because rehearse made it the fourth consumer, and a fourth inline
+ * copy of this status list is exactly how one of them comes to disagree — the
+ * repo's one-canonical-predicate rule (CLAUDE.md golden rule 6). The stakes
+ * differ per caller but the question does not: `updating`/`exiting` ride an
+ * on-air producer, and B-044's `unconfirmed` means the on-air result is UNKNOWN.
+ * Unknown must count as on air in every one of these gates, because each one's
+ * failure mode is acting on a live graphic.
+ */
+function isOnAirStatus(status: StackItemState['status'], pending: boolean): boolean {
+  return (
+    pending ||
+    status === 'playing' ||
+    status === 'on-air' ||
+    status === 'updating' ||
+    status === 'exiting' ||
+    status === 'unconfirmed'
+  );
+}
 
 /**
  * R-010 — where the OSC UDP ingest binds, derived from the declared server's
@@ -167,6 +254,28 @@ export class CasparRuntime {
   readonly fixedConfigChanged = new Emitter<FixedLayerBank | null>();
   /** R-021 stage 2a — emitted ONLY when the per-slot fixed state changes. */
   readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
+  /**
+   * R-028 (o1) — emitted with the full catalogue after every import/removal,
+   * so every connected browser converges on the same library.
+   */
+  readonly templatesChanged = new Emitter<TemplateInfo[]>();
+  /** R-028 part B — emitted ONLY when the declared playout layers' state changes. */
+  readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
+  /** R-034 — emitted with the full delimiter list whenever a browser changes it. */
+  readonly delimitersChanged = new Emitter<DelimiterOption[]>();
+  /**
+   * R-030 — emitted when a browser changes the channel raster AND when a fresh
+   * `INFO <channel>` reading lands. Both, because the mismatch verdict is a
+   * function of the two together: a new reading can turn a settled `match` into
+   * a `mismatch` without anybody touching config.
+   */
+  readonly channelSettingsChanged = new Emitter<ChannelSettingsState>();
+  /**
+   * R-022 — emitted whenever the rehearsing set changes. Bridge-owned and pushed
+   * to EVERY client: if rehearse lived in one browser, the second operator would
+   * see that row as ordinary and load onto it — a collision on a real layer.
+   */
+  readonly rehearseChanged = new Emitter<Rehearsal[]>();
 
   // R-010 — mutable: `setConfig` swaps the whole connection layer at runtime.
   #config: ConnectionConfig;
@@ -181,7 +290,17 @@ export class CasparRuntime {
   // the last PUBLISHED per-slot state (JSON, for the publish-on-change compare).
   #fixedBank: FixedLayerBank | null;
   readonly #layerPolicy: LayerPolicy;
+  /**
+   * R-028 / C-015 — the reserved playout layer numbers, from real config.
+   * The SAME list the boot validator saw and the LayerManager fences on —
+   * resolved once in `createBridge`, never re-derived here.
+   */
+  readonly #reservedLayers: readonly number[];
+  /** The same list as a Set, for the sweep/clear/restore membership checks. */
+  readonly #reservedSet: ReadonlySet<number>;
   #lastFixedStateJson: string | null = null;
+  /** R-028 part B — the last PUBLISHED playout state (publish-on-change compare). */
+  #lastPlayoutStateJson: string | null = null;
   readonly #builder = new CommandBuilder();
 
   /**
@@ -281,7 +400,66 @@ export class CasparRuntime {
   // B-038 Phase 2 — holds each imported template's info + the browser-produced
   // self-contained HTML, keyed by id. B-038 Phase 3 — the HTTP server serves that
   // HTML at `/template/<id>`, so `CG ADD` can reference a real, loadable URL.
-  readonly #templates = new TemplateRegistry();
+  // R-028 (o1) — persisted to disk when a templates dir is configured, and
+  // hydrated in the constructor so the registry is complete before the
+  // WebSocket ever answers a `templates.list`.
+  readonly #templates: TemplateRegistry;
+  /** R-034 — the station's delimiter list, persisted beside the templates. */
+  readonly #delimiters: DelimiterStore;
+  /** R-030 — the per-channel output raster + what `INFO` reports, persisted. */
+  readonly #channelSettings: ChannelSettingsStore;
+  /**
+   * R-030 — which server label produced the video-mode reading we hold for each
+   * channel.
+   *
+   * Keyed by server, not merely "have we read it once", because A and B are
+   * DIFFERENT MACHINES and can be configured with different video modes. A
+   * reading taken from A says nothing about the channel now that B is primary,
+   * so failover must re-read rather than keep quoting the old server's answer.
+   * This is the same "probe the axis you intend to judge" rule the CLAUDE.md
+   * golden rules state for liveness, applied to geometry.
+   */
+  readonly #modeReadFrom = new Map<number, ServerLabel>();
+  /**
+   * R-030 — channels whose raster mismatch has already been shouted, so a
+   * settled fault is announced on its TRANSITION and not on every publish.
+   * Without this, a mismatch that nobody has fixed yet would repeat on each
+   * reading and bury the next distinct problem in its own noise.
+   */
+  readonly #mismatchWarned = new Map<number, boolean>();
+  /**
+   * R-022 — rows currently in REHEARSE, keyed by item id. Process state, not
+   * persisted: a bridge restart is precisely the case where the claim must NOT
+   * survive — the mute does not survive either (startup re-asserts every declared
+   * row's volume), so a persisted rehearse flag would outlive the condition it
+   * describes and interlock PLAY on a layer that is no longer muted.
+   *
+   * The value carries `muted` — whether ENTRY actually sent `MIXER VOLUME 0` —
+   * because the exit path must mirror the entry path exactly. A rehearsal
+   * entered over an EMPTY layer sends no mute, and so must send no restore: a
+   * `MIXER VOLUME` on a layer we never touched is not a harmless no-op, it is a
+   * command aimed at whatever occupies that layer NOW. It is internal state and
+   * never reaches the wire — {@link rehearseState} projects the `Rehearsal`
+   * shape the contract declares.
+   */
+  readonly #rehearsing = new Map<string, Rehearsal & { muted: boolean }>();
+  /**
+   * R-022 — items whose rehearse transition (mute or un-mute) is in flight. See
+   * {@link BUSY_MESSAGE} for the interleaving this prevents; it is a correctness
+   * lock, not a debounce.
+   */
+  readonly #rehearseBusy = new Set<string>();
+  /** R-022 — the startup volume re-assert is once per process, not per sweep. */
+  #volumesReasserted = false;
+  /**
+   * R-028 part B — ids this bridge REMOVED, so a reconnecting browser's
+   * re-delivery cannot bring them back. Process-lifetime only, deliberately: a
+   * bridge restart re-reads the persisted registry, and a template absent from
+   * it is indistinguishable from one that was never imported — at which point a
+   * browser's re-delivery is the desired REPAIR rather than a resurrection. The
+   * tombstone only needs to outlive the reconnects of the session that removed.
+   */
+  readonly #removedTemplateIds = new Set<string>();
   readonly #templateServer: TemplateHttpServer;
   #serveOptions: TemplateServeOptions;
   /** Kept for `setConfig`'s serve re-derivation (explicit overrides keep winning). */
@@ -345,14 +523,46 @@ export class CasparRuntime {
        * side of live change validation). Absent = no bank declared.
        */
       fixedBank?: FixedLayerBank;
+      /**
+       * R-028 / C-015 — the reserved playout layer numbers, from real config
+       * (resolved once in `createBridge`; the SAME list the boot validator
+       * saw). Fenced from allocation in the LayerManager AND enforced against
+       * every live bank change here.
+       */
+      reservedLayers?: readonly number[];
+      /**
+       * R-028 (o1) — where the template registry persists (one JSON file per
+       * template). Absent = in-memory only (unit tests).
+       */
+      templatesDir?: string;
     } = {},
   ) {
+    this.#reservedLayers = options.reservedLayers ?? [];
+    this.#reservedSet = new Set(this.#reservedLayers);
     this.#layers = new LayerManager({
       ...(options.layerPolicy !== undefined ? { policy: options.layerPolicy } : {}),
       ...(options.fixedSlots !== undefined ? { fixed: options.fixedSlots } : {}),
+      reservedLayers: this.#reservedLayers,
     });
     this.#layerPolicy = options.layerPolicy ?? DEFAULT_LAYER_POLICY;
     this.#fixedBank = options.fixedBank ?? null;
+    // R-028 (o1) — hydrate the persisted catalogue BEFORE anything can ask
+    // for it; a bridge restart must not empty the library.
+    this.#templates = new TemplateRegistry(options.templatesDir);
+    this.#templates.loadPersisted();
+    // R-034 — same shape, same reason: the delimiter list is read from disk
+    // before the WebSocket can answer a `delimiters.list`, so a bridge restart
+    // never hands a browser the defaults over the operator's own list.
+    this.#delimiters = new DelimiterStore(options.templatesDir);
+    this.#delimiters.hydrate();
+    // R-030 — same shape, same reason: the channel raster is read from disk
+    // before the WebSocket can answer a `channelSettings.get`, and before the
+    // first `CG ADD` can append a geometry query. Hydrating late would mean the
+    // first load of a session placed its graphic against a default raster and
+    // every later one against the configured raster — the kind of difference
+    // nobody would think to look for.
+    this.#channelSettings = new ChannelSettingsStore(options.templatesDir);
+    this.#channelSettings.hydrate(this.#declaredChannels());
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
@@ -727,10 +937,67 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, false, 'not-fixed');
       return { accepted: false, errorCode: 'not-fixed' };
     }
+    /*
+     * THE REHEARSE INTERLOCK ON LOAD IS GONE, AND ITS ABSENCE IS THE STRONGER
+     * FORM — do not add it back.
+     *
+     * It was added one task ago because LOAD could put an unmuted producer under
+     * a rehearsing row: `#loadOnto` issued a `CG ADD`, and a bare ADD is audible
+     * on 2.5.0 (R-029). LOAD is now LIST-ONLY and emits no AMCP at all, so there
+     * is no producer to put anywhere and nothing for the guard to protect.
+     *
+     * Replaced by a test rather than deleted quietly: `cleared-row-verbs`
+     * asserts LOAD emits ZERO AMCP in every state INCLUDING a rehearsing row.
+     * A path that cannot exist beats a guard that has to be remembered — the
+     * same move as `StackPruneInput`, where the bad call became unrepresentable
+     * instead of merely checked.
+     *
+     * If LOAD is ever given a wire step again, the guard comes back WITH it.
+     */
     // The registry's OWN templateType — the LayerManager records what is bound,
     // and the per-slot publish reads it straight back out, so the row names the
     // template kind the operator recognises rather than an internal id.
     const templateType = this.#templates.get(templateId)?.templateType ?? templateId;
+    /**
+     * `slot-bound` NOW REFUSES ON OCCUPANCY, NOT ON THE BINDING.
+     *
+     * It used to be `!bindFixed(...)`, which is false whenever the slot carries
+     * ANY binding — and a CLEARed row still carries one, because `out()` destroys
+     * the producer and leaves the item. So the layer refused the one load that
+     * should always work: putting the row's OWN already-bound template back after
+     * a CLEAR. That is the second half of the reported defect; the row's toggle
+     * was the half the operator could see.
+     *
+     * The two facts are separated here:
+     *
+     *   - REBINDING A ROW TO A DIFFERENT ITEM stays refused whatever the layer
+     *     says. Remove-then-load is two explicit steps by decision, and nothing
+     *     about an empty layer makes silently moving a row's binding acceptable.
+     *   - THE SAME ITEM RE-LOADING is refused only while a producer is actually
+     *     RESIDENT. With one there, this would be a reload of a live layer, which
+     *     the operator reaches through CLEAR first; with none, it is the re-ADD.
+     *
+     * `#loaded` IS the occupancy signal, deliberately, and not OSC. It is the
+     * bridge's own producer record — exactly what `out()` deletes and exactly what
+     * `take()`'s B-039 pre-roll reads to decide whether to re-ADD — so the load
+     * path and the take path cannot disagree about whether a producer exists. OSC
+     * would have been the wrong axis twice over: it is absent on OSC-less installs
+     * (B-101 — silence is not evidence), and a wire that cannot be heard would
+     * then refuse every re-ADD on precisely the plants this fixes.
+     */
+    const boundItemId = this.#itemBoundToSlot(slot);
+    if (boundItemId !== undefined && boundItemId !== itemId) {
+      this.#reconciler.applyAck(seq, false, 'slot-bound');
+      return { accepted: false, errorCode: 'slot-bound' };
+    }
+    if (boundItemId === itemId && this.#loaded.has(itemId)) {
+      this.#reconciler.applyAck(seq, false, 'slot-bound');
+      return { accepted: false, errorCode: 'slot-bound' };
+    }
+    // Re-binding the SAME item onto its own empty row: drop the stale binding so
+    // `bindFixed` can record it again. `unbindFixed` keeps the slot fenced out of
+    // the dynamic pool, so this cannot leak a fixed layer into allocation.
+    if (boundItemId === itemId) this.#layers.unbindFixed(slot);
     if (!this.#layers.bindFixed(slot, templateType)) {
       this.#reconciler.applyAck(seq, false, 'slot-bound');
       return { accepted: false, errorCode: 'slot-bound' };
@@ -739,7 +1006,11 @@ export class CasparRuntime {
     // set. A publish HERE would find only half the binding (the LayerManager's
     // template type, no itemId yet) and so publish `null` — the honest
     // both-halves rule in `#computeFixedState`.
-    return this.#loadOnto(itemId, templateId, fields, slot, seq);
+    //
+    // LIST-ONLY: the operator's LOAD binds the row and touches NO LAYER. See
+    // `#loadOnto`'s `listOnly` note for why, and for why it rides the same
+    // single boolean that B-100 pairs the CLEAR and the ADD on.
+    return this.#loadOnto(itemId, templateId, fields, slot, seq, true);
   }
 
   /**
@@ -755,6 +1026,25 @@ export class CasparRuntime {
     fields: FieldValues,
     slot: CommandSlot,
     seq: number,
+    /**
+     * LIST-ONLY: bind the row and touch NO LAYER — no adopt-CLEAR, no pre-roll
+     * `CG ADD`, no AMCP of any kind.
+     *
+     * "The list is ours, the layer is CasparCG's." The operator's LOAD is a
+     * LIST action — pick a template, import it into the bridge's store, bind it
+     * to a row — and it must work with CasparCG unreachable, because building a
+     * rundown before the playout machine is up is ordinary. Nothing is lost by
+     * not pre-rolling: `take()` re-ADDs on the way to air (B-039 / R-028
+     * decision 5), which is the path a disconnected load has always taken.
+     *
+     * It is expressed as a THIRD REASON for `reachable` to be false rather than
+     * as a branch of its own, and that is deliberate. B-100's rule is that ONE
+     * boolean gates both the destructive adopt-CLEAR and the constructive ADD
+     * that repairs it; a separate "skip the ADD" flag would be a second read and
+     * could leave a layer cleared-and-empty. Here the pairing is preserved by
+     * construction: list-only means neither, never one.
+     */
+    listOnly = false,
   ): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-100 — evaluate reachability ONCE, here, and gate BOTH the destructive
     // adopt-CLEAR and the constructive pre-roll ADD on this single value. The two
@@ -762,7 +1052,7 @@ export class CasparRuntime {
     // a session slipping state in the gap could land the CLEAR yet skip the ADD —
     // CLEAR-then-nothing, a BLACK layer. One evaluation makes the pairing structural:
     // if the CLEAR can reach the wire, the ADD is attempted; neither, or both.
-    const reachable = !this.#noServerReachable();
+    const reachable = !listOnly && !this.#noServerReachable();
 
     // Reconnect-reconciliation — adopt the layer BEFORE binding the slot/OSC
     // interest: destroy any producer a previous bridge session orphaned there,
@@ -827,8 +1117,12 @@ export class CasparRuntime {
 
     // B-039 — `CG ADD` only (play-on-load OFF in the builder): the producer is
     // loaded, NOT playing. The operator's take issues the `CG PLAY`.
-    const ok = await this.#sendAdd(itemId, slot, templateId, fields, seq);
-    return { accepted: ok };
+    // §8 — the ADD's own reason reaches the operator instead of a bare refusal.
+    const added = await this.#sendAdd(itemId, slot, templateId, fields, seq);
+    return {
+      accepted: added.ok,
+      ...(added.errorCode !== undefined && { errorCode: added.errorCode }),
+    };
   }
 
   /**
@@ -904,7 +1198,13 @@ export class CasparRuntime {
           played: item.played,
         }) === null
       ) {
-        this.#layers.deallocate(slot);
+        // B-114 — release by the SAME door the slot was taken through.
+        // `deallocate` returns early for a fixed slot on purpose (it must keep
+        // the fence), so using it alone here would leave the row bound to an
+        // item the reconciler just refused — a permanently occupied row holding
+        // nothing, which no verb can clear.
+        if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
+        else this.#layers.deallocate(slot);
         skipped++;
         continue;
       }
@@ -953,8 +1253,35 @@ export class CasparRuntime {
    */
   #slotForRestore(item: RetainedStackItem): CommandSlot | null {
     if (item.slot !== undefined) {
+      // R-028 / C-015 — a retained coordinate now inside the RESERVED playout
+      // range is SKIPPED, never re-homed. Falling through to `#allocate()`
+      // would consult a DIFFERENT layer's occupancy (the exact
+      // wrong-layer-occupancy hazard this method's contract forbids) and could
+      // re-ADD a duplicate while the surviving producer stays live on the
+      // playout layer — two copies on air, with the row pointing at the wrong
+      // one. Skipping keeps the wire untouched, exactly like the
+      // exhausted-range case; the survivor is the playout team's to deal with.
+      if (this.#reservedSet.has(item.slot.layer)) return null;
       const slot = { channel: item.slot.channel, layer: item.slot.layer };
-      if (this.#layers.reserve(slot, item.templateId)) return slot;
+      // B-114 — a retained coordinate inside the DECLARED BANK is re-bound with
+      // `bindFixed`, not `reserve`.
+      //
+      // `reserve()` refuses a fixed slot BY CONSTRUCTION (a fixed slot is born
+      // allocated, so it is never "free" to reserve). Falling through to
+      // `#allocate()` for one is wrong twice over: it re-homes the operator's
+      // row onto some dynamic layer, and for a `custom` template type that
+      // range IS the reserved playout range, so allocation throws and the item
+      // is SKIPPED entirely. Either way `fixedBinding` is never recorded, so
+      // after a bridge restart every declared row published `binding: null` —
+      // the operator's templates vanished from the surface, and the rows also
+      // refused a fresh LOAD because their occupancy is `unknown` until OSC
+      // arrives. The row was left with nothing on it and no way to fill it.
+      //
+      // The bound value is the REGISTRY's `templateType`, resolved exactly as
+      // `fixedLoad` resolves it — the row reads this straight back out as its
+      // label, so binding the raw id here would restore the row under a UUID.
+      const templateType = this.#templates.get(item.templateId)?.templateType ?? item.templateId;
+      if (this.#layers.bindFixed(slot, templateType)) return slot;
     }
     try {
       return this.#allocate(item.templateId);
@@ -1033,7 +1360,10 @@ export class CasparRuntime {
     const pending = [...this.#pendingRestore];
     this.#pendingRestore.clear();
 
-    const adds: Promise<boolean>[] = [];
+    // The restore pass does not report per-item reasons anywhere (it is a bulk
+    // rebuild with no operator waiting on it), so it takes `#sendAdd`'s result
+    // whole and looks at neither half.
+    const adds: Promise<{ ok: boolean; errorCode?: string }>[] = [];
     for (const [itemId, { slot, templateId, fields }] of pending) {
       // A remove landed between the restore and this decision — the item is
       // gone; its slot was already released by remove(). Nothing to do.
@@ -1174,6 +1504,27 @@ export class CasparRuntime {
   }
 
   async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    /**
+     * R-022 — THE INTERLOCK. A rehearsing item cannot be taken to air, and the
+     * refusal lives HERE rather than only in a disabled button.
+     *
+     * This is the whole point of making rehearse a mode instead of a preview
+     * pane. A greyed-out PLAY is a request, not a guarantee: another browser with
+     * a stale snapshot, a client that reconnected mid-rehearse, or any direct
+     * call reaches this method with the button's opinion nowhere in sight. If the
+     * only thing standing between rehearse and air were UI state, rehearse would
+     * be exactly the "preview pane we hope nobody plays from" this feature exists
+     * not to be.
+     *
+     * Refused rather than silently exiting rehearse and playing: leaving the mode
+     * is the operator's decision, and a PLAY that quietly dropped the interlock
+     * would be a compound verb hiding a mode change behind a take — the same
+     * objection that keeps re-binding a row a two-step Remove-then-Load.
+     *
+     * FIRST in the method, before `#retirePendingRestore`: a refused take must
+     * mutate nothing, and retiring a parked restore is a mutation.
+     */
+    if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -1196,25 +1547,337 @@ export class CasparRuntime {
         this.#reconciler.applyAck(seq, false, 'unknown-template');
         return { accepted: false, errorCode: 'unknown-template' };
       }
-      const addedOk = await this.#sendAdd(
+      const added = await this.#sendAdd(
         itemId,
         slot,
         templateId,
         item?.fields ?? {},
         this.#nextSeq(),
       );
-      if (!addedOk) {
-        this.#reconciler.applyAck(seq, false, 'amcp-error');
-        return { accepted: false, errorCode: 'amcp-error' };
+      if (!added.ok) {
+        /*
+          §8 — THE PRE-ROLL'S OWN REASON, not a re-labelling of it.
+
+          This said `amcp-error` for every failure of the B-039 re-ADD, including
+          the one where the bridge's OWN template server is down and CasparCG was
+          never contacted. `amcp-error` asserts CasparCG was involved; the
+          operator reads it and goes to the playout machine.
+
+          The fallback stays `amcp-error` only for the case where the ADD really
+          did fail at the wire with no code to quote.
+        */
+        const code = added.errorCode ?? 'amcp-error';
+        this.#reconciler.applyAck(seq, false, code);
+        return { accepted: false, errorCode: code };
       }
+    }
+
+    // R-022 — RE-ASSERT THE INTENDED VOLUME, UNCONDITIONALLY, ON EVERY TAKE.
+    //
+    // This is the single most important line in the rehearse feature, and it is
+    // deliberately HERE — in the play path — rather than in a "leave rehearse"
+    // step. Rehearse mutes a layer whose producer stays resident, and MIXER state
+    // is channel state: it survives a CLEAR, a CG REMOVE and a bridge restart,
+    // and nothing restores it implicitly. A mute that is not restored means A
+    // GRAPHIC THAT GOES TO AIR SILENT — which is worse than the audio leak the
+    // mute prevents, because nobody notices until someone asks why there is no
+    // sound.
+    //
+    // Putting the restore only on the rehearse-exit path would leave a crash, a
+    // browser reload, a dropped WebSocket or any missed transition able to strand
+    // the mute. Re-asserting on every take makes that class of bug unreachable:
+    // whatever happened before, a graphic cannot reach air without its intended
+    // volume being set on the way.
+    //
+    // It rides its OWN seq, not the take's, so a MIXER refusal cannot perturb the
+    // take's reconciled status — and it is deliberately NOT gated on
+    // `#rehearsing.has(itemId)`. Gating it would reintroduce exactly the
+    // dependence on our own bookkeeping being correct that this exists to remove;
+    // the command is idempotent and costs one AMCP line.
+    const volumeOk = await this.#send(
+      this.#builder.mixerVolume(slot, INTENDED_VOLUME),
+      this.#nextSeq(),
+      'urgent',
+    );
+    if (!volumeOk.ok) {
+      // A FAILED re-assert does NOT block the take, and it must not be silent.
+      //
+      // Not blocking: refusing to put a graphic on air because a volume command
+      // was rejected would be the worse failure — the operator would have no way
+      // to get their graphic up, over an audio setting.
+      //
+      // Not silent: this is the one moment at which the "graphic airs silent"
+      // failure becomes possible, and it is otherwise completely undetectable —
+      // every other signal about the layer reads identically muted or not. The
+      // first cut of this swallowed the result entirely, which meant the single
+      // most consequential failure in the feature had no trace anywhere.
+      process.stderr.write(
+        `[caspar-bridge] ⚠ could not re-assert volume on ${String(slot.channel)}-${String(slot.layer)} ` +
+          `before taking ${itemId} to air (${volumeOk.errorCode ?? 'unknown'}). If this layer was ` +
+          `left muted by a rehearsal, the graphic may be ON AIR SILENT — check the output audio.\n`,
+      );
     }
 
     // B-079 — bounded completion for a take, which it never had: #armExpiry was called for
     // update and out only, so a take whose ack never settled rested on its optimistic
     // playing/on-air claim forever, with nothing to bound it.
     this.#armExpiry(seq);
-    const { ok } = await this.#send(this.#builder.take(slot), seq, 'normal');
-    return ok ? { accepted: true } : { accepted: false, errorCode: 'amcp-error' };
+    // §8 — the PLAY's own code rides out: `amcp-send-failed` (the command never
+    // left this process) and `amcp-404` (CasparCG refused it) are different facts
+    // pointing at different machines, and flattening both to `amcp-error` told the
+    // operator neither.
+    const { ok, errorCode } = await this.#send(this.#builder.take(slot), seq, 'normal');
+    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
+  }
+
+  /**
+   * R-022 — enter REHEARSE for a not-on-air item with a template BOUND.
+   *
+   * THE PRECONDITION IS THE BINDING, AND THAT IS THE WHOLE TEST. Rehearse renders
+   * the retained page locally, from the bound template, the operator's values and
+   * the channel raster — all bridge-owned, none of them the CasparCG layer. It
+   * used to additionally require a resident producer, which made a preview refuse
+   * to preview because of a resource it does not use: a CLEARed row could not be
+   * rehearsed while the same row after STOP could, and the operator experiences
+   * both as "close it".
+   *
+   * WHAT REMAINS IS A BRANCH ON THE LAYER, NOT A GATE ON IT:
+   *
+   *   - RESIDENT PRODUCER → mute first, exactly as before. On 2.5.0 a bare
+   *     `CG ADD` puts the template's audio on air (R-029), so the mute IS the
+   *     safety condition and is part of the guard, not a follow-up: if it does
+   *     not land, rehearse is REFUSED. Entering anyway would leave a resident
+   *     producer unmuted while every browser shows the row as safely rehearsing.
+   *     The producer STAYS RESIDENT — the alternative, CLEAR then re-ADD, is the
+   *     sequence that failed in the field (adopt-`CLEAR` succeeded, the `CG ADD`
+   *     after it 404'd, the layer was left empty on air), and this is R-029's
+   *     recorded containment option 2.
+   *   - EMPTY LAYER → enter with NO AMCP TRAFFIC AT ALL. There is nothing on the
+   *     layer, so there is nothing to make safe, and a mute aimed at an empty
+   *     layer is a command with no subject.
+   *
+   * Every guard is still HERE, bridge-side, so no UI state can bypass it. The
+   * on-air refusal is UNCHANGED and still fails closed: rehearsing a live graphic
+   * would mute air.
+   */
+  async enterRehearse(itemId: string): Promise<{
+    ok: boolean;
+    reason?: RehearseEnterReason;
+    message?: string;
+  }> {
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    if (this.#rehearseBusy.has(itemId)) return { ok: false, reason: 'busy', message: BUSY_MESSAGE };
+    if (this.#rehearsing.has(itemId)) return { ok: true };
+    const item = this.#reconciler.get(itemId);
+    if (item === null || item === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    // Fail closed on the air question: `unconfirmed`/`pending` mean the on-air
+    // result is UNKNOWN, and an unknown must never be muted on a guess. Reuses
+    // the SAME predicate `#onAirCount` and R-010's `setConfig` gate read, never a
+    // second local list of what counts as on air.
+    if (isOnAirStatus(item.status, item.pending)) {
+      return {
+        ok: false,
+        reason: 'on-air',
+        message:
+          'That graphic is on air or unsettled. Take it off air before rehearsing it — ' +
+          'rehearse mutes the layer, and muting a live graphic is not something this will do.',
+      };
+    }
+    // THE BRANCH. Read ONCE, here, and carried into the rehearsal record — the
+    // exit path must not re-derive it. Between entry and exit the layer can
+    // change under us (a take, another operator, the playout system), and a
+    // second read would decide the restore from a DIFFERENT fact than the one
+    // that decided the mute. That is the B-100 two-reads class: the constructive
+    // step and the step that undoes it must read the same evaluation.
+    const mustMute = this.#loaded.has(itemId);
+    if (!mustMute) {
+      // Nothing resident: no mute, no traffic, nothing to fail. `#rehearseBusy`
+      // is not taken either — it serialises AMCP round trips, and there are none.
+      this.#rehearsing.set(itemId, {
+        itemId,
+        channel: slot.channel,
+        layer: slot.layer,
+        muted: false,
+      });
+      this.rehearseChanged.emit(this.rehearseState());
+      return { ok: true };
+    }
+    // A producer is resident, so mute it — BEST EFFORT. See the note below for
+    // why entry no longer refuses when it does not land.
+    this.#rehearseBusy.add(itemId);
+    try {
+      const { ok } = await this.#send(
+        this.#builder.mixerVolume(slot, 0),
+        this.#nextSeq(),
+        'urgent',
+      );
+      /*
+       * §4 — THE MUTE IS BEST-EFFORT. ENTRY NEVER FAILS ON IT.
+       *
+       * It used to refuse, which made ON PVW behave differently on two rows the
+       * operator considers identical: a row closed with STOP keeps its producer,
+       * so `#loaded` still held it and the mute branch ran and failed; a row
+       * closed with CLEAR had `#loaded` deleted by `out()`, took the zero-AMCP
+       * path, and succeeded. Two ways of closing a graphic, two different answers.
+       *
+       * That is the last thing `dev-rehearse-decouple` left behind. It removed the
+       * PRECONDITION — rehearse no longer requires a resident producer — but kept
+       * this CONSEQUENCE branch, and the branch reads `#loaded`, which is exactly
+       * "what is on the CasparCG layer". The standing decision is that entry does
+       * not depend on that, so it no longer does.
+       *
+       * WHAT IS GIVEN UP, stated rather than buried: with the mute unlanded, a
+       * resident producer stays unmuted while the row claims PVW, and on 2.5.0 a
+       * resident producer's audio can be on air (R-029). The exchange is
+       * deliberate — PVW sends nothing to the layer, so entering changes nothing
+       * that was not already true, and the common case for a failed mute is an
+       * unreachable server, where nothing we do reaches air anyway.
+       *
+       * The failure is RECORDED, not swallowed: `muted` carries whether the mute
+       * actually landed, and exit mirrors it — a rehearsal that muted nothing
+       * restores nothing, which is the B-100 read-once pairing this branch has
+       * always kept.
+       */
+      this.#rehearsing.set(itemId, {
+        itemId,
+        channel: slot.channel,
+        layer: slot.layer,
+        // What ACTUALLY happened, not what was intended — exit mirrors this.
+        muted: ok,
+      });
+      this.rehearseChanged.emit(this.rehearseState());
+      return { ok: true };
+    } finally {
+      this.#rehearseBusy.delete(itemId);
+    }
+  }
+
+  /**
+   * R-022 — leave REHEARSE and restore the layer's intended volume.
+   *
+   * Reports `ok` even when the un-mute command fails, and says so in `message`.
+   * The alternative would leave every browser claiming rehearse over a layer the
+   * bridge no longer treats as rehearsing — a UI that lies about an interlock is
+   * worse than one that admits a command failed. The restore is also not the last
+   * line of defence: the PLAY path re-asserts the intended volume on every take
+   * and the bridge re-asserts for every declared row at startup, so a failed
+   * un-mute here cannot strand a silent graphic on air.
+   */
+  async exitRehearse(itemId: string): Promise<{
+    ok: boolean;
+    reason?: RehearseExitReason;
+    message?: string;
+  }> {
+    if (this.#rehearseBusy.has(itemId)) return { ok: false, reason: 'busy', message: BUSY_MESSAGE };
+    const rehearsal = this.#rehearsing.get(itemId);
+    if (rehearsal === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not rehearsing.' };
+    }
+    // Dropped from the set FIRST, so the state is honest even if the send throws:
+    // the bridge has stopped interlocking this row, and it must not keep telling
+    // browsers otherwise.
+    this.#rehearsing.delete(itemId);
+    this.rehearseChanged.emit(this.rehearseState());
+    // EXIT MIRRORS ENTRY. A rehearsal that muted nothing restores nothing: the
+    // flag is the one recorded at entry, never a fresh read of `#loaded`. A
+    // producer loaded onto this layer DURING the rehearsal is not ours to
+    // re-volume on the way out — the restore would be aimed at a graphic this
+    // rehearsal never silenced.
+    if (!rehearsal.muted) return { ok: true };
+    this.#rehearseBusy.add(itemId);
+    try {
+      const { ok } = await this.#send(
+        this.#builder.mixerVolume(
+          { channel: rehearsal.channel, layer: rehearsal.layer },
+          INTENDED_VOLUME,
+        ),
+        this.#nextSeq(),
+        'urgent',
+      );
+      if (ok) return { ok: true };
+      return {
+        ok: true,
+        message:
+          'Rehearse ended, but the layer volume could not be restored. It will be re-asserted the ' +
+          'next time this layer is taken to air.',
+      };
+    } finally {
+      this.#rehearseBusy.delete(itemId);
+    }
+  }
+
+  /**
+   * R-022 — every row currently rehearsing, PROJECTED to the wire contract.
+   *
+   * The internal record also carries `muted`, which is bridge bookkeeping about
+   * a command it sent; the contract is "facts only — the renderer derives its own
+   * row state", and a browser has no use for it. Projected explicitly rather than
+   * spread, so a field added to the internal record can never leak onto the wire
+   * by default.
+   */
+  rehearseState(): Rehearsal[] {
+    return [...this.#rehearsing.values()]
+      .sort((a, b) => a.channel - b.channel || a.layer - b.layer)
+      .map(({ itemId, channel, layer }) => ({ itemId, channel, layer }));
+  }
+
+  /**
+   * R-022 — REHEARSE IS A CLAIM ABOUT OUR INTENT, NOT A GUARANTEE ABOUT THE
+   * CHANNEL. If the layer goes live by ANY route while a row is rehearsing —
+   * another operator on another browser, the playout system driving AMCP
+   * directly, anything — the honest response to being wrong is to stop claiming
+   * it, immediately, and restore the volume.
+   *
+   * Called from the occupancy sweep. The signal is the RECONCILED ITEM STATUS,
+   * not OSC occupancy, and the distinction matters: a rehearsing layer carries a
+   * resident `html` producer, so OSC reports `html` whether it is playing or
+   * merely held ready — occupancy genuinely cannot tell the two apart, and using
+   * it here would abort every rehearsal on the first sweep. The reconciler's
+   * status is driven by AMCP acks and OSC confirmations together and is the only
+   * thing that distinguishes them.
+   */
+  #abortRehearsalsThatWentLive(): void {
+    for (const itemId of [...this.#rehearsing.keys()]) {
+      const item = this.#reconciler.get(itemId);
+      // An item that has VANISHED (removed from the stack) is also no longer
+      // ours to interlock. Its volume still has to be restored — the producer may
+      // be gone but the mixer setting is not.
+      const live = item == null || isOnAirStatus(item.status, item.pending);
+      if (!live) continue;
+      process.stderr.write(
+        `[caspar-bridge] rehearse on ${String(itemId)} ended: the layer went live by another ` +
+          `route, so the rehearse claim was withdrawn and the volume restored.\n`,
+      );
+      void this.exitRehearse(itemId);
+    }
+  }
+
+  /**
+   * R-022 — re-assert the intended volume for every DECLARED row at startup.
+   *
+   * The bridge already owns restore, and this belongs with it. A bridge that died
+   * mid-rehearse left a muted layer behind: mixer state is channel state and
+   * survives the process, so without this the next operator would take that
+   * graphic to air silent, with nothing anywhere explaining why. Runs once the
+   * primary is first reachable, best-effort, and is idempotent.
+   */
+  async #reassertDeclaredVolumes(): Promise<void> {
+    const bank = this.#fixedBank;
+    if (bank === null) return;
+    for (let layer = bank.start; layer < bank.start + bank.count; layer++) {
+      // `normal`, not `urgent`: this is startup housekeeping across the whole
+      // bank, and it must never sit ahead of an operator's take in the queue.
+      await this.#send(
+        this.#builder.mixerVolume({ channel: bank.channel, layer }, INTENDED_VOLUME),
+        this.#nextSeq(),
+        'normal',
+      );
+    }
   }
 
   async update(
@@ -1297,8 +1960,42 @@ export class CasparRuntime {
     this.#reconciler.applyIntent({ kind: 'stop', itemId }, seq);
     this.#armExpiry(seq);
     // Urgent lane, like out(): an air-affecting verb does not queue behind loads.
-    const { ok } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
-    return { accepted: ok };
+    // §8 — and the code comes with it. A refused STOP used to answer a bare
+    // `{ accepted: false }`, which the toast could only render as "Not accepted."
+    // — the operator told that a graphic did not come off air, and nothing about
+    // whether the command reached CasparCG at all.
+    const { ok, errorCode } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
+    return { accepted: ok, ...(!ok && errorCode !== undefined && { errorCode }) };
+  }
+
+  /**
+   * R-028 (5.4) — advance the item's template sequence: `CG … NEXT`.
+   *
+   * Modelled on `stopItem`, and for the same reasons: it is on-air-affecting
+   * (the graphic visibly changes), so it is REFUSED with no reachable server
+   * (R-006) rather than optimistically applied, and it rides the urgent lane —
+   * an operator stepping a sequence must not queue behind a load.
+   *
+   * NOT an intent: `next` carries no per-item state the Reconciler models
+   * (the item stays exactly as on-air as it was; only the template's internal
+   * step moved), so it applies no intent and arms no expiry. That is why it
+   * touches neither `#loaded` nor `#adopted` — advancing a sequence proves
+   * nothing new about the producer's existence beyond what PLAY already did.
+   *
+   * The bridge does NOT re-check `hasNext` here: whether a template has a next
+   * step is import-time knowledge carried on `TemplateInfo`, and the row gates
+   * on it. A NEXT that reaches a single-step template is a harmless no-op on
+   * the wire (`CG NEXT` on a template with no sequence does nothing), so the
+   * gate is the UI's to hold and this path stays a thin verb.
+   */
+  async nextItem(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    // B-093 — the operator is acting; any parked restore for this item is stale.
+    this.#retirePendingRestore(itemId);
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
+    if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    const { ok, errorCode } = await this.#send(this.#builder.next(slot), this.#nextSeq(), 'urgent');
+    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
   }
 
   async out(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
@@ -1312,7 +2009,7 @@ export class CasparRuntime {
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'out', itemId }, seq);
     this.#armExpiry(seq);
-    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), seq, 'urgent');
+    const { ok, onPrimary, errorCode } = await this.#send(this.#builder.out(slot), seq, 'urgent');
     // B-039 — `CLEAR` DESTROYS the producer: record that no producer exists on the
     // slot so a subsequent take re-ADDs (instead of `CG PLAY`-ing an empty layer).
     // The slot stays RESERVED (the item is still on the stack, idle) until remove —
@@ -1323,7 +2020,11 @@ export class CasparRuntime {
     // — and provably resolves any B-056 owned-slot warning; a backup-only out
     // leaves the warning standing (the primary's orphan may still be live).
     if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
-    return { accepted: ok };
+    // §8 — CLEAR is the escape hatch, so it is the verb where "the command never
+    // left" versus "CasparCG refused it" matters MOST: the first is fixed by
+    // waiting for the link, the second means the graphic is still on air and
+    // needs another route off. It answered a bare `{ accepted: false }`.
+    return { accepted: ok, ...(!ok && errorCode !== undefined && { errorCode }) };
   }
 
   // ── R-009: orphan-layer sweep + explicit per-layer Clear ────────────
@@ -1364,19 +2065,44 @@ export class CasparRuntime {
   } {
     let slots: readonly LayerSlot[];
     try {
-      slots =
-        this.#fixedBank === null
-          ? // No current bank: installing one live is a pure grow-at-end case.
-            validateFixedBank(next, { policy: this.#layerPolicy, reservedLayers: [] })
-          : validateFixedBankChange(this.#fixedBank, next, {
-              policy: this.#layerPolicy,
-              reservedLayers: [],
-              isSlotBusy: (slot) =>
-                isFixedSlotBusy(slot, {
-                  fixedBinding: (s) => this.#layers.fixedBinding(s),
-                  retainedSlotKeys: this.#retainedFixedSlotKeys(),
-                }),
-            });
+      if (this.#fixedBank === null) {
+        // No current bank: installing one live is validated like a load…
+        slots = validateFixedBank(next, {
+          policy: this.#layerPolicy,
+          reservedLayers: this.#reservedLayers,
+        });
+        // …PLUS the fail-closed untick rule, which validateFixedBank alone
+        // cannot carry (the BOOT path shares it, and at boot occupancy is
+        // always unknown — the persisted ticks were adjudicated when applied).
+        // A LIVE install that arrives with layers already hidden must not
+        // slip an occupied or unverifiable layer out of sight in one step.
+        for (let layer = next.start; layer <= next.start + next.count - 1; layer++) {
+          if (isLayerVisible(next, layer)) continue;
+          const occupancy = this.#fixedSlotOccupancy({ channel: next.channel, layer });
+          if (occupancy === 'occupied') {
+            throw new FixedLayersConfigError(
+              'untick-occupied',
+              `cannot hide layer ${String(layer)}: it is OCCUPIED (an item or producer is on ` +
+                `it) — remove its template first (removal implies clear), then untick`,
+            );
+          }
+          if (occupancy === 'unknown') {
+            throw new FixedLayersConfigError(
+              'untick-unknown',
+              `cannot hide layer ${String(layer)}: its occupancy is UNKNOWN (no healthy ` +
+                `CasparCG link or no fresh OSC), and unknown is never treated as empty — a ` +
+                `hidden row may be on air. Restore the link/OSC so the layer reads empty, ` +
+                `then untick`,
+            );
+          }
+        }
+      } else {
+        slots = validateFixedBankChange(this.#fixedBank, next, {
+          policy: this.#layerPolicy,
+          reservedLayers: this.#reservedLayers,
+          slotOccupancy: (slot) => this.#fixedSlotOccupancy(slot),
+        });
+      }
     } catch (err) {
       if (err instanceof FixedLayersConfigError) {
         return { ok: false, reason: err.code, message: err.message };
@@ -1407,6 +2133,39 @@ export class CasparRuntime {
       keys.add(`${String(slot.channel)}:${String(slot.layer)}`);
     }
     return keys;
+  }
+
+  /**
+   * R-028 (2.3) — the occupancy verdict the untick validator reads, composed
+   * from the two knowledge sources IN ORDER:
+   *
+   *   1. The bridge's OWN records — a bound item or retained intent
+   *      (`isFixedSlotBusy`). Valid even with no OSC at all: the bridge put
+   *      the item there, so `occupied` needs no wire confirmation.
+   *   2. The occupancy tap, with the SAME hearing predicate
+   *      `#computeFixedState` publishes from (`state === 'healthy'` +
+   *      `hasFreshOsc`) — never a second staleness constant. Hearing +
+   *      observed producer → `occupied` (a foreign/playout producer blocks
+   *      hiding too); hearing + silent → `empty` (B-053); not hearing →
+   *      `unknown` — which the validator REFUSES, fail closed.
+   */
+  #fixedSlotOccupancy(slot: LayerSlot): SlotOccupancy {
+    if (
+      isFixedSlotBusy(slot, {
+        fixedBinding: (s) => this.#layers.fixedBinding(s),
+        retainedSlotKeys: this.#retainedFixedSlotKeys(),
+      })
+    ) {
+      return 'occupied';
+    }
+    const session = this.#adapter.primarySession;
+    const hearing =
+      session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
+    if (!hearing) return 'unknown';
+    const observed = session.osc.occupancy
+      .occupied(this.#occupancyStaleMs)
+      .some((o) => o.channel === slot.channel && o.layer === slot.layer);
+    return observed ? 'occupied' : 'empty';
   }
 
   /**
@@ -1454,13 +2213,44 @@ export class CasparRuntime {
             : { kind: 'empty' };
         const itemId = itemBySlot.get(key);
         const templateType = this.#layers.fixedBinding(slot);
+        // R-028 (3.1) — WHICH template is on the row, resolved by the bridge
+        // (item → templateId → its own registry), so every browser reads the
+        // SAME answer and an item another browser loaded is never foreign.
+        // (3.3) — resolution needs a LIVE item→slot binding: after a bridge
+        // restart there is none until the item is reloaded, so identity is
+        // simply ABSENT (honest unknown) — never guessed from the persisted
+        // registry, which records what was imported, not what is on a layer.
+        let identity: {
+          templateId?: string;
+          templateName?: string;
+          sourceFileName?: string;
+        } = {};
+        if (itemId !== undefined) {
+          const templateId = this.#reconciler.get(itemId)?.templateId;
+          if (templateId !== undefined) {
+            // RAW naming facts only — name AND sourceFileName. The renderer
+            // resolves the display label with its ONE canonical rule
+            // (`templateDisplayName`: file name first); resolving here would
+            // be the second copy of that rule.
+            const info = this.#templates.get(templateId);
+            identity = {
+              templateId,
+              ...(info?.name !== undefined && info.name !== '' ? { templateName: info.name } : {}),
+              ...(info?.sourceFileName !== undefined && info.sourceFileName !== ''
+                ? { sourceFileName: info.sourceFileName }
+                : {}),
+            };
+          }
+        }
         return {
           channel: slot.channel,
           layer: slot.layer,
           ...(alias !== undefined ? { alias } : {}),
           observed,
           binding:
-            itemId !== undefined && templateType !== undefined ? { itemId, templateType } : null,
+            itemId !== undefined && templateType !== undefined
+              ? { itemId, templateType, ...identity }
+              : null,
         };
       });
   }
@@ -1503,8 +2293,58 @@ export class CasparRuntime {
     // healthy guard: on a disconnect the next tick honestly re-publishes every
     // slot as `unknown` instead of freezing a stale 'empty'/'producer'.
     this.#publishFixedStateIfChanged();
+    // R-028 part B — the PLAYOUT state publishes here for the SAME reason, and
+    // it matters more here than anywhere else: this is the input to a CLEAR
+    // gate. Published after the guard (as it first was), a CasparCG outage
+    // would leave the tab frozen on "Graphic on air (html)" with an ENABLED
+    // CLEAR that the bridge can only refuse — unverifiable occupancy shown as
+    // verified, and an enabled control that can only reject, both at once.
+    // The two publishes belong on the SAME side of the guard because they
+    // answer the same question about the same tap.
+    this.#publishPlayoutStateIfChanged();
+
+    // R-022 — withdraw any rehearse claim whose layer has gone live by another
+    // route. Deliberately BEFORE the reachability guards, like the two publishes
+    // above and for the same reason: this reads the RECONCILER, not the wire, so
+    // it needs no healthy session — and a rehearse claim that has become false
+    // must not be left standing just because the server is unreachable.
+    this.#abortRehearsalsThatWentLive();
 
     const session = this.#adapter.primarySession;
+
+    // R-030 — piggyback the video-mode read on this tick rather than arming a
+    // second timer, and gate it so it is NOT one AMCP query every 5 s: a channel
+    // whose mode has already been read FROM THE CURRENT PRIMARY is not re-read.
+    // Failover re-arms it, because A and B are different machines that can carry
+    // different video modes — a reading from A is not evidence about B.
+    //
+    // DELIBERATELY BEFORE THE `healthy` GUARD BELOW, and gated on `isLiveState`
+    // instead. The video mode is an AMCP-AXIS question — it is answered by
+    // sending `INFO` and reading the reply — so OSC silence must not decide
+    // whether it can be asked (CLAUDE.md golden rules 6 and 8: probe the axis
+    // you intend to judge, and reuse the ONE canonical predicate). `degraded` is
+    // AMCP-up / OSC-silent and therefore REACHABLE. Sitting under the `healthy`
+    // guard, as the first cut of this did, meant every OSC-less install read no
+    // mode at all, reported `unreadable` forever, and so silently lost the
+    // mismatch check — on exactly the installs the C-018 recon was about.
+    if (isLiveState(session.state)) {
+      for (const channel of this.#declaredChannels()) {
+        if (this.#modeReadFrom.get(channel) === this.#adapter.currentPrimary) continue;
+        void this.#readChannelMode(channel);
+      }
+      // R-022 — re-assert every declared row's intended volume, once, as soon as a
+      // server is first reachable. A bridge that died mid-rehearse left a MUTED
+      // layer behind (mixer state is channel state and outlives the process), and
+      // without this the next operator would take that graphic to air silent with
+      // nothing anywhere explaining why. Gated on `isLiveState` for the same reason
+      // as the mode read: it is an AMCP-axis action, so OSC silence must not
+      // decide whether it happens.
+      if (!this.#volumesReasserted) {
+        this.#volumesReasserted = true;
+        void this.#reassertDeclaredVolumes();
+      }
+    }
+
     if (session.state !== 'healthy') return;
 
     // B-094 — re-publish health when the OSC-heard bit flips, so the operator's
@@ -1538,21 +2378,269 @@ export class CasparRuntime {
     // allocatable pool (and returns them when the foreign producer leaves).
     this.#reconcileForeignQuarantine();
 
-    const occupied = session.osc.occupancy.occupied(this.#occupancyStaleMs);
+    // R-028 / C-015 — declared playout layers are excluded from the orphan
+    // candidates entirely (the spec scenario "Declared playout layers never
+    // surface as orphans"): the sweep would otherwise permanently surface a
+    // healthy playout graphic as reclaimable and invite the operator to clear
+    // live automation output. Exclusion, not ownership — the bridge neither
+    // owns nor watches these layers; it just declares them off limits.
+    const occupied = session.osc.occupancy
+      .occupied(this.#occupancyStaleMs)
+      .filter((o) => !this.#reservedSet.has(o.layer));
     const owned = new Set<string>();
     for (const slot of this.#slots.values()) {
       owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
     }
-    // R-021 stage 1 (task 4.2a) — fixed slots are excluded from the orphan
-    // surface: the fixed bank's PERMANENT row (stage 2) is its occupancy
-    // surface, and a bank fenced from allocation but still shouted about in the
-    // R-009 banner would be an incoherent intermediate state. The LayerManager
-    // is the single source of the bank — never a second local copy of the config.
-    for (const slot of this.#layers.fixedSlots()) {
-      owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
-    }
+    /*
+     * BANK LAYERS ARE NO LONGER EXCLUDED — the exclusion's own premise expired.
+     *
+     * It read: "fixed slots are excluded from the orphan surface: the fixed
+     * bank's PERMANENT row is its occupancy surface, and a bank fenced from
+     * allocation but still shouted about in the R-009 banner would be an
+     * incoherent intermediate state."
+     *
+     * THE ROW IS NO LONGER THAT SURFACE. An unbound bank row now reads `EMPTY`
+     * unconditionally and asks CasparCG nothing — the owner's rule, and it stays.
+     * So the two halves that used to cover this fact between them became zero:
+     * another system's live video on a declared bank layer was reported nowhere,
+     * while the row said "Nothing is loaded on this row" and offered LOAD.
+     *
+     * There is no double-talk left to avoid, because only one voice remains. And
+     * the banner already models this case properly — `html` gets the warning
+     * strip with a confirm-gated Clear (plausibly OUR graphic riding a dead
+     * session), `ffmpeg` gets the neutral "in use by other systems" strip. A
+     * second, narrower banner would be a second implementation of one fact.
+     *
+     * SCOPE: only UNBOUND bank layers can surface here. A bank layer carrying an
+     * item we bound is already in `owned` above via `#slots`, so this reports
+     * exactly "a producer on a bank layer that we did not put there" — ticked or
+     * unticked alike, because an unticked row with a producer is kept visible by
+     * the panel and tells the same lie.
+     *
+     * WHAT MUST NOT MOVE: the RESERVED playout range is still filtered out of
+     * `occupied` above, and that exclusion is a different rule with a different
+     * and still-valid reason — a playout `html` graphic is indistinguishable from
+     * ours on the wire, so surfacing it would invite the operator to clear the
+     * company's live automation output. It is pinned by its own test rather than
+     * left to this comment.
+     */
     const { changed } = this.#orphanTracker.update(occupied, owned);
     if (changed) this.orphansChanged.emit(this.orphans());
+  }
+
+  // ── R-028 part B: the declared playout layers (the operator's tab) ──
+
+  /**
+   * The state of every DECLARED reserved layer, computed on demand ([] when
+   * nothing is reserved).
+   *
+   * Occupancy is read through the SAME hearing predicate the fixed rows use —
+   * a healthy primary AND a fresh OSC tap — so `unknown` means the same thing
+   * on both surfaces. It is deliberately NOT collapsed to `empty`: a tab that
+   * reads "nothing here" when it simply cannot see is the failure mode part A's
+   * untick refusal and task 3.3's honest-unknown both exist to prevent, and
+   * here it would also be the input to a CLEAR gate.
+   *
+   * The reserved set is channel-agnostic (a layer NUMBER is reserved), so the
+   * rows are reported on the bridge's own channel — the one it drives.
+   */
+  playoutLayersState(): PlayoutLayerState[] {
+    if (this.#reservedLayers.length === 0) return [];
+    const session = this.#adapter.primarySession;
+    const hearing =
+      session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
+    const producerByLayer = new Map<number, string>();
+    if (hearing) {
+      for (const o of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
+        if (o.channel === DEFAULT_CHANNEL) producerByLayer.set(o.layer, o.producer);
+      }
+    }
+    return [...this.#reservedLayers]
+      .sort((a, b) => a - b)
+      .map((layer) => {
+        const producer = producerByLayer.get(layer);
+        const observed: PlayoutLayerState['observed'] = !hearing
+          ? { kind: 'unknown' }
+          : producer !== undefined
+            ? { kind: 'producer', producer }
+            : { kind: 'empty' };
+        return { channel: DEFAULT_CHANNEL, layer, observed };
+      });
+  }
+
+  /** Publish the playout-layer state ONLY when it differs (the orphan-tracker precedent). */
+  #publishPlayoutStateIfChanged(): void {
+    if (this.#reservedLayers.length === 0) return;
+    const state = this.playoutLayersState();
+    const json = JSON.stringify(state);
+    if (json === this.#lastPlayoutStateJson) return;
+    this.#lastPlayoutStateJson = json;
+    this.playoutStateChanged.emit(state);
+  }
+
+  /**
+   * R-028 part B — the operator's DELIBERATE clear of one declared playout
+   * layer, from the playout tab. Every refusal fails closed.
+   *
+   * This is a second, narrower door than `clearLayer`, never a loosening of
+   * it: `clearLayer` still refuses reserved layers outright (part A), the
+   * orphan sweep still excludes them, and no automatic path can reach here.
+   * Only an operator who opened a tab labelled "not our layers" can.
+   *
+   * The gate, in order, and why each step fails closed:
+   *
+   *   NOT RESERVED  → refuse. This channel is for declared playout layers
+   *     only; it must never become a general clear-anything door.
+   *   NOT HEARING / NO FRESH OBSERVATION → refuse (`unknown-occupancy`).
+   *     Silence is evidence of nothing (B-093). A kind gate that cannot read
+   *     its input must refuse rather than guess — and guessing here means
+   *     possibly clearing a live video feed.
+   *   NOT `html`    → refuse (`not-html`), naming what was seen. The
+   *     reservation says who owns the LAYER, not what is on it: a video,
+   *     route or decklink can land on 60–69 by the playout operator's own
+   *     mistake, and that is exactly the antenna/live-channel accident the
+   *     reservation exists to prevent. "Not html" fails safe — video kinds are
+   *     never enumerated.
+   *
+   * Ownership check ordering note: a reserved layer can never be in `#slots`
+   * (allocation and reserve are both fenced off reserved layers), so there is
+   * no owned-vs-reserved ambiguity to resolve here.
+   */
+  async playoutClear(
+    channel: number,
+    layer: number,
+  ): Promise<{ ok: boolean; reason?: PlayoutClearReason; observedProducer?: string }> {
+    if (!this.#reservedSet.has(layer)) return { ok: false, reason: 'not-reserved' };
+    const session = this.#adapter.primarySession;
+    const hearing =
+      session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
+    if (!hearing) return { ok: false, reason: 'unknown-occupancy' };
+    const observed = session.osc.occupancy
+      .occupied(this.#occupancyStaleMs)
+      .find((o) => o.channel === channel && o.layer === layer);
+    // Nothing observed on a HEARING tap means the layer is already EMPTY
+    // (B-053: on a hearing tap, silence for a layer IS empty) — there is
+    // nothing to clear, and reporting ok would claim an act we did not do.
+    //
+    // This is deliberately its OWN reason, not `unknown-occupancy`: the two are
+    // opposite statements about our knowledge. "I can see it is empty" and "I
+    // cannot see" must never share a message, or the operator is told the
+    // bridge is blind when in fact it looked and found nothing.
+    if (observed === undefined) return { ok: false, reason: 'already-empty' };
+    if (observed.producer !== 'html') {
+      return { ok: false, reason: 'not-html', observedProducer: observed.producer };
+    }
+    const slot: CommandSlot = { channel, layer };
+    const { ok } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    // Deliberately NOT marked adopted: adoption is bookkeeping about layers we
+    // OWN, and clearing a playout layer never makes it ours. The next sweep
+    // re-reads the tap and the tab tells the truth either way.
+    return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };
+  }
+
+  /**
+   * THE BANK-SCOPED LAYER CLEAR — the always-available escape hatch.
+   *
+   * The sentence this command asserts is a strong one: *"I may clear this layer
+   * without knowing what is on it."* Two structural facts license it, both required,
+   * and both derived from CONFIG so that no UI state, no stale bookkeeping and no
+   * silent OSC port can bypass them:
+   *
+   *   1. the layer is inside the DECLARED bank, and
+   *   2. the layer is NOT inside the reserved playout range.
+   *
+   * If both hold, the layer is ours and may be cleared whatever we currently believe
+   * is on it. That indifference is the entire point — it is what makes this work when
+   * occupancy reads `unknown`, and it is why the guard cannot depend on OSC.
+   *
+   * ORDER MATTERS AND IS DELIBERATE: reserved is checked FIRST. Boot already refuses a
+   * bank that overlaps the reservation (`validateFixedBank` throws before the
+   * WebSocket binds) and so does every live change, so the two sets cannot currently
+   * intersect — but if they ever did, the reserved refusal must WIN rather than being
+   * shadowed by a bank membership that happens to be true. Checking it first makes
+   * that outcome hold by construction instead of by a proof about another module.
+   *
+   * The reserved set is channel-AGNOSTIC (a layer NUMBER is reserved) while bank
+   * membership is channel-SPECIFIC. Both readings are kept exactly as they are
+   * elsewhere: the channel-agnostic reservation is the more conservative of the two,
+   * and this is not the place to narrow it.
+   *
+   * WHAT IT DELIBERATELY DOES **NOT** CONSULT: `#slots` (do we think we own it),
+   * the item's status, the occupancy tap, OSC freshness, or the row's visibility
+   * tick. Each of those is a thing that can be WRONG in the situation this exists
+   * for, so making any of them a precondition would reintroduce the failure.
+   *
+   * It is NOT a loosening of {@link clearLayer} or {@link playoutClear}: both keep
+   * every guard they have. This is a third, NARROWER door — it can only ever reach a
+   * layer the operator's own bank declares.
+   */
+  async clearBankLayer(
+    channel: number,
+    layer: number,
+  ): Promise<{
+    ok: boolean;
+    reason?: 'not-in-bank' | 'reserved' | 'amcp-error';
+    message?: string;
+  }> {
+    // GUARD 0 — THE COORDINATE IS TWO INTEGERS, checked here rather than trusted.
+    //
+    // This is not defensive noise; it closes a real bypass in the guard below. Both
+    // subsequent checks mis-answer on a non-number, and they mis-answer in OPPOSITE
+    // directions, which is the dangerous combination:
+    //
+    //   - `#reservedSet` is a `Set<number>`, so `.has('55')` is FALSE — a string layer
+    //     slips past the reservation entirely;
+    //   - `isFixed` keys on `` `${String(channel)}:${String(layer)}` `` (see `keyOf`),
+    //     so `{channel:'1', layer:'70'}` produces the SAME key as the real slot and
+    //     MATCHES.
+    //
+    // Together those would mean a string-typed coordinate is treated as in-bank while
+    // being invisible to the reservation. The WebSocket boundary does reject such a
+    // payload today (`handleMessage` hands the handler `safeParse`d data, and
+    // `z.number()` does not coerce) — but that is a guarantee in ANOTHER module, and
+    // this method already has an in-process caller that skips it: `invokeRoute` in the
+    // wire tests calls `route.handle(req)` directly. A safety guard must not depend on
+    // every present and future caller having validated first, which is the same
+    // reasoning that puts the reservation check ahead of the membership check.
+    if (!Number.isInteger(channel) || !Number.isInteger(layer)) {
+      return {
+        ok: false,
+        reason: 'not-in-bank',
+        message:
+          `${String(channel)}-${String(layer)} is not a valid layer coordinate — a bank ` +
+          `layer is two integers, so this can be neither in the bank nor cleared`,
+      };
+    }
+    // GUARD 2 FIRST — see the ordering note above. Absolute, and channel-agnostic.
+    if (this.#reservedSet.has(layer)) {
+      return {
+        ok: false,
+        reason: 'reserved',
+        message:
+          `layer ${String(layer)} is inside the reserved playout range — the company's ` +
+          `playout system owns it, and clearing it would take playout output off air`,
+      };
+    }
+    // GUARD 1 — membership in the DECLARED bank, read from the LayerManager's
+    // config-derived fixed set. Channel-aware, and independent of visibility ticks:
+    // `bankSlots` enumerates every declared layer whether its row is shown or not, so
+    // unticking a row can never remove it from the guard's world.
+    if (!this.#layers.isFixed({ channel, layer })) {
+      return {
+        ok: false,
+        reason: 'not-in-bank',
+        message:
+          `${String(channel)}-${String(layer)} is not a layer of the declared operator ` +
+          `bank — this clear is scoped to the bank and can address nothing else`,
+      };
+    }
+    const slot: CommandSlot = { channel, layer };
+    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    // Adoption marking mirrors `clearLayer`: a CLEAR we executed on the current
+    // primary is an adoption, so the bookkeeping stays consistent with the other two
+    // clear paths. It is bookkeeping ONLY — it is never a precondition above.
+    if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+    return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };
   }
 
   /**
@@ -1582,7 +2670,15 @@ export class CasparRuntime {
   async clearLayer(
     channel: number,
     layer: number,
-  ): Promise<{ ok: boolean; reason?: 'owned' | 'foreign' | 'amcp-error' }> {
+  ): Promise<{ ok: boolean; reason?: 'owned' | 'foreign' | 'reserved' | 'amcp-error' }> {
+    // R-028 / C-015 — a DECLARED playout layer is never clearable, from any
+    // caller. The R-015 `html` discriminator below cannot protect it: a
+    // playout template graphic IS an html producer, and that
+    // indistinguishability is exactly why the reservation exists in config.
+    // Config is the identity here; clearing would take playout output off air.
+    if (this.#reservedSet.has(layer)) {
+      return { ok: false, reason: 'reserved' };
+    }
     for (const slot of this.#slots.values()) {
       if (slot.channel === channel && slot.layer === layer) {
         return { ok: false, reason: 'owned' };
@@ -1653,6 +2749,38 @@ export class CasparRuntime {
       await this.out(item.itemId);
     }
     return { ok: true, cleared: clearable.length };
+  }
+
+  /**
+   * C-012 / R-028 — STOP every on-air item: each template runs its OWN outro and
+   * its producer stays RESIDENT.
+   *
+   * The graceful sibling of `clearAll`, and the distinction is the whole point.
+   * Clear-All hard-cuts everything off air; Stop-All asks each graphic to leave
+   * the way it was authored to leave. On a real programme that is the difference
+   * between a clean end-of-segment and every lower-third snapping to black at
+   * once.
+   *
+   * Deliberately built exactly like `clearAll`: the SAME candidate predicate
+   * (anything not idle/loaded that actually holds a slot — so nothing is sent
+   * for an item that owns no layer), the SAME sequential loop through the
+   * per-item verb rather than a burst, and the SAME "a failure does not abort
+   * the rest" property — one stuck graphic must never strand the ones behind it
+   * on air. Reusing `stopItem` means the C-012 semantics (`#loaded` and
+   * `#adopted` untouched, so a later take RESUMES rather than re-ADDs) can never
+   * drift between the single and bulk paths.
+   */
+  async stopAll(): Promise<{ ok: boolean; stopped: number }> {
+    const stoppable = this.#reconciler
+      .snapshot()
+      .filter(
+        (i) =>
+          i.status !== 'idle' && i.status !== 'loaded' && this.#slots.get(i.itemId) !== undefined,
+      );
+    for (const item of stoppable) {
+      await this.stopItem(item.itemId);
+    }
+    return { ok: true, stopped: stoppable.length };
   }
 
   async remove(itemId: string): Promise<{ accepted: boolean }> {
@@ -1863,17 +2991,7 @@ export class CasparRuntime {
    * `error`/`disconnected` rest states don't.
    */
   #onAirCount(): number {
-    return this.#reconciler
-      .snapshot()
-      .filter(
-        (i) =>
-          i.pending ||
-          i.status === 'playing' ||
-          i.status === 'on-air' ||
-          i.status === 'updating' ||
-          i.status === 'exiting' ||
-          i.status === 'unconfirmed',
-      ).length;
+    return this.#reconciler.snapshot().filter((i) => isOnAirStatus(i.status, i.pending)).length;
   }
 
   health(): ConnectionHealth {
@@ -1953,11 +3071,54 @@ export class CasparRuntime {
    * self-contained HTML, keyed by id. Re-import replaces both. The HTML is held,
    * not served yet (Phase 3 serves it over HTTP; Phase 4 `CG ADD`s its URL).
    */
+  /**
+   * R-028 part B — the reconciliation policy, enforced here because this is
+   * where a removal actually happens.
+   *
+   * An operator's import (no `redelivery` flag) always wins and clears the
+   * tombstone. A reconnect RE-DELIVERY is ignored when the id is either:
+   *
+   *   - deliberately REMOVED — otherwise any browser still holding a local copy
+   *     resurrects it on its next reconnect, and a page reload is enough. The
+   *     removal was an operator decision on the catalogue of record; a stale
+   *     browser must not undo it;
+   *   - ALREADY HELD — the bridge's copy is the catalogue of record and may be
+   *     newer than the re-delivering browser's, so an older local copy must not
+   *     overwrite it.
+   *
+   * Both cases answer `registered: true` (the template IS available, which is
+   * all the caller needs) with `skipped: true` for honesty.
+   */
   templateImport(
     template: TemplateInfo,
     html: string,
-  ): { registered: boolean; templateId: string } {
-    return this.#templates.import(template, html);
+    redelivery = false,
+  ): { registered: boolean; templateId: string; skipped?: boolean } {
+    if (redelivery) {
+      if (this.#removedTemplateIds.has(template.templateId)) {
+        return { registered: false, templateId: template.templateId, skipped: true };
+      }
+      // NOTE — an id the bridge ALREADY holds is deliberately NOT skipped.
+      //
+      // An earlier draft kept the bridge's copy ("the catalogue of record is
+      // newer"), which quietly REVERSED B-085's documented local-wins policy:
+      // a browser that fixed a template while offline would reconnect, be
+      // ignored, and the STALE html would keep going to air with no signal
+      // that the correction never landed. Nothing here can tell which copy is
+      // newer — `TemplateInfo` carries no version — so the safe direction is
+      // the documented one, and the tombstone above is the narrower fix that
+      // part A actually asked for (stop RESURRECTION, not stop repair).
+    } else {
+      // An operator re-importing a previously removed template revives it.
+      this.#removedTemplateIds.delete(template.templateId);
+    }
+    const result = this.#templates.import(template, html);
+    // R-028 (o1) — every browser converges on the same catalogue.
+    this.templatesChanged.emit(this.#templates.list());
+    // A re-import can change the template's display name — the rows naming it
+    // must follow (published through the same change-compare as always).
+    this.#publishFixedStateIfChanged();
+    return result;
   }
   /** The retained HTML for a template id, or `null` (the Phase 3 serve seam). */
   templateHtml(templateId: string): string | null {
@@ -2001,6 +3162,11 @@ export class CasparRuntime {
     }
 
     this.#templates.remove(templateId);
+    // R-028 part B — remember the removal, so a browser that still holds a
+    // local copy cannot resurrect it by reconnecting (see `templateImport`).
+    this.#removedTemplateIds.add(templateId);
+    // R-028 (o1) — every browser converges on the same catalogue.
+    this.templatesChanged.emit(this.#templates.list());
     return { ok: true };
   }
 
@@ -2009,6 +3175,160 @@ export class CasparRuntime {
     if (action !== undefined) rows = rows.filter((r) => r.action === action);
     if (actor !== undefined) rows = rows.filter((r) => r.actor === actor);
     return rows.slice(0, limit);
+  }
+
+  /** R-034 — the station's split delimiters (disk-persisted, shared by every browser). */
+  delimitersList(): DelimiterOption[] {
+    return this.#delimiters.list();
+  }
+
+  /**
+   * Replace the delimiter list. The STORE decides whether the list is allowed
+   * and supplies the operator-facing reason — the R-005 removal shape — so the
+   * refusal cannot differ between the two browsers that might attempt it.
+   */
+  delimitersSet(delimiters: readonly DelimiterOption[]): {
+    ok: boolean;
+    reason?: 'empty-list' | 'duplicate-value';
+    message?: string;
+  } {
+    const refusal = this.#delimiters.set(delimiters);
+    if (refusal !== null) return { ok: false, reason: refusal.reason, message: refusal.message };
+    // Every connected browser converges, the `templates.changed` precedent.
+    this.delimitersChanged.emit(this.#delimiters.list());
+    return { ok: true };
+  }
+
+  /**
+   * R-030 — the channels this install DECLARES.
+   *
+   * The fixed bank is the only channel authority the install has (the SPA's
+   * `ChannelScope` reads the same fact), and channel 1 is the documented default
+   * when no bank is declared — `FixedLayerBankSchema`'s own default, not a second
+   * guess invented here. When the channel list eventually arrives from an API,
+   * THIS is the one function that changes.
+   */
+  #declaredChannels(): number[] {
+    return [this.#fixedBank?.channel ?? DEFAULT_CHANNEL];
+  }
+
+  /** R-030 — the configured raster(s) plus what `INFO <channel>` reported. */
+  channelSettingsState(): ChannelSettingsState {
+    return this.#channelSettings.state();
+  }
+
+  /**
+   * R-030 — apply a channel's settings.
+   *
+   * The ON-AIR gate is HERE rather than in the store, because it needs the
+   * reconciler's view of what is live and the store has no business holding
+   * one. It reuses `#onAirCount` — the SAME predicate R-010's `setConfig` uses,
+   * never a second local copy of "what counts as on air" — and it is not
+   * politeness: changing the raster re-scales EVERY graphic on the channel, so
+   * applying it under a live graphic would move what is on air, mid-shot. Fail
+   * closed, so `unconfirmed`/`pending` count as on air.
+   */
+  setChannelSettings(settings: ChannelSettings): {
+    ok: boolean;
+    reason?: ChannelSettingsSetReason;
+    message?: string;
+  } {
+    const unsettled = this.#onAirCount();
+    if (unsettled > 0) {
+      return {
+        ok: false,
+        reason: 'on-air-block',
+        message:
+          `${String(unsettled)} item(s) are on air or unsettled — changing the channel raster ` +
+          `re-scales every graphic on the channel, so it cannot be applied while anything is live. ` +
+          `Take them off air first.`,
+      };
+    }
+    const refusal = this.#channelSettings.set(settings);
+    if (refusal !== null) return { ok: false, reason: refusal.reason, message: refusal.message };
+    this.#announceChannelSettings(settings.channel);
+    return { ok: true };
+  }
+
+  /**
+   * R-030 — publish the channel-settings state, and shout on stderr when a
+   * channel's raster BECOMES a mismatch.
+   *
+   * This is one function called from BOTH sides on purpose. The verdict is a
+   * function of config AND the server's reading, so either can create a
+   * mismatch: a new `INFO` reading can contradict settled config, and a config
+   * change can contradict a settled reading. Warning from only the reading path
+   * — which is what the first cut of this did — meant an operator who typed the
+   * wrong raster got silence, which is precisely the case they most need told
+   * about, because they have just formed a false belief about where graphics land.
+   *
+   * The warning fires on the TRANSITION, not on every publish: a mismatch that
+   * has already been announced is not re-announced until it clears, so a settled
+   * fault cannot bury the next one in repeats.
+   */
+  #announceChannelSettings(channel: number): void {
+    const warning = this.#channelSettings.mismatchWarning(channel);
+    if (warning !== null) {
+      if (this.#mismatchWarned.get(channel) !== true) {
+        this.#mismatchWarned.set(channel, true);
+        process.stderr.write(warning);
+      }
+    } else {
+      this.#mismatchWarned.set(channel, false);
+    }
+    this.channelSettingsChanged.emit(this.#channelSettings.state());
+  }
+
+  /**
+   * R-030 — read the channel's REAL video mode off the server and compare it
+   * with what config claims.
+   *
+   * The configured raster is a CLAIM; `INFO <channel>` is the fact. When they
+   * disagree every graphic on the channel is mis-placed, and silently, because
+   * nothing else in the system would notice — so the disagreement is shouted on
+   * stderr and pushed to every browser rather than logged at debug.
+   *
+   * Sends through the adapter directly, NOT through `#send`: that path settles a
+   * reconciler intent by `seq`, and this query has no intent to settle. It rides
+   * `low` priority so a diagnostic read can never delay an operator's take (the
+   * `CommandQueue` header's own classification of non-heartbeat `INFO`).
+   *
+   * Failure is SILENT here on purpose — a timeout or a 404 leaves `observed`
+   * absent, which `rasterVerdict` reports as `unreadable`, i.e. "the check could
+   * not be performed". Writing a scary line for an unreachable server would
+   * duplicate what connection health already says, and inventing an entry would
+   * turn a missing measurement into evidence.
+   */
+  async #readChannelMode(channel: number): Promise<void> {
+    try {
+      // `target: 'primary'` — the geometry that matters is the channel currently
+      // ON AIR, and under a mirror strategy the default `'both'` fans out and can
+      // return the BACKUP's reply as the winner. That would attribute B's video
+      // mode to the live channel, which is the wrong machine's answer to the
+      // question actually being asked.
+      const result = await this.#adapter.send(`INFO ${String(channel)}`, {
+        priority: 'low',
+        target: 'primary',
+      });
+      const response = result.response;
+      if (response.kind !== 'ok-multi') return;
+      const mode = parseVideoModeFromInfo(response.lines.join('\n'));
+      if (mode === null) return;
+      // Attributed to the server that actually ANSWERED, never to whoever was
+      // primary when the send started: a failover mid-flight would otherwise
+      // record the reading under the wrong label and suppress the re-read that
+      // the new primary needs.
+      this.#modeReadFrom.set(channel, result.winner);
+      const changed = this.#channelSettings.observe({
+        channel,
+        mode,
+        raster: videoModeRaster(mode) ?? null,
+      });
+      if (!changed) return;
+      this.#announceChannelSettings(channel);
+    } catch {
+      // See above: an unreadable mode stays absent, never guessed.
+    }
   }
 
   settingsGet(): Settings {
@@ -2306,13 +3626,28 @@ export class CasparRuntime {
    * `take` re-ADD path. Uses the SERVED `/template/<id>` URL when the HTTP server is
    * up (B-038 Phase 3), else the bare id (isolated unit tests).
    */
+  /*
+    §8 — IT RETURNS THE REASON, NOT JUST A BOOLEAN, AND THAT IS THE POINT.
+
+    It used to answer `boolean`, so both of its failures — the bridge's own
+    template server being down (`template-serve-down`) and whatever `#send`
+    reported (an AMCP refusal code, or `amcp-send-failed` when the command never
+    left) — arrived at the caller as `false` and were re-labelled `amcp-error`.
+    `amcp-error` NAMES A MECHANISM: it says CasparCG was involved. When the local
+    HTTP server is down, CasparCG was not involved at all, and the operator is
+    sent to the wrong machine.
+
+    That is the `mute-failed` class exactly, and it cost this project an
+    investigation into mute scope and 2.3.2-versus-2.5.0 audio. A wrapper may add
+    context; it may not replace the cause.
+  */
   async #sendAdd(
     itemId: string,
     slot: CommandSlot,
     templateId: string,
     fields: FieldValues,
     seq: number,
-  ): Promise<boolean> {
+  ): Promise<{ ok: boolean; errorCode?: string }> {
     // fix-setconfig-serve-restart — the loud-failure contract: when serving
     // is INTENDED for this process but the server is down, a load must fail
     // with a clear reason (mirroring the unknown-template guard) — NEVER
@@ -2320,7 +3655,7 @@ export class CasparRuntime {
     // The bare-id fallback survives ONLY for the never-served unit-test path.
     if (!this.#templateServer.listening && this.#servingDesired) {
       this.#reconciler.applyAck(seq, false, 'template-serve-down');
-      return false;
+      return { ok: false, errorCode: 'template-serve-down' };
     }
     let templateArg = this.#templateServer.listening
       ? this.#templateServer.urlFor(templateId)
@@ -2331,15 +3666,52 @@ export class CasparRuntime {
     // is NEVER given a query). Both load's ADD and take's B-039 re-ADD flow
     // through here, so both inherit the override. The position never touches
     // the data payload — the AMCP escape rule is unaffected.
-    const position = this.#positions.get(itemId);
-    if (position !== undefined && this.#templateServer.listening) {
-      templateArg +=
-        `?pos=${position.anchor}` +
-        `&dx=${String(position.offset.x)}&dy=${String(position.offset.y)}`;
+    //
+    // R-030 — the CHANNEL RASTER rides the same query, and note that it is
+    // appended INDEPENDENTLY of whether a position override exists. That
+    // independence is the whole point: a graphic with no operator override still
+    // has an authored position, and on a non-1080 channel that authored position
+    // is computed against the wrong frame unless the page is told the real
+    // geometry. Gating the raster behind `position !== undefined` would have
+    // left exactly the untouched-by-the-operator graphics — the majority —
+    // mis-placed, which is the C-018 defect surviving its own fix.
+    if (this.#templateServer.listening) {
+      const params: string[] = [];
+      const position = this.#positions.get(itemId);
+      // `positionQuery` (@cg/shared-schema), never a local spelling: PVW's
+      // rehearsal frame now hands the SAME string to the page's own
+      // `applyOutputPosition`, and two spellings of one override is how a
+      // preview comes to place a graphic differently from air.
+      if (position !== undefined) params.push(positionQuery(position));
+      // The raster is ALWAYS present (`rasterFor` falls back to the reference
+      // frame), so the query is never empty and needs no emptiness guard — the
+      // position half is the only optional part.
+      const raster = this.#channelSettings.rasterFor(slot.channel);
+      params.push(`cw=${String(raster.width)}`, `ch=${String(raster.height)}`);
+      templateArg += `?${params.join('&')}`;
     }
-    const { ok } = await this.#send(this.#builder.load(slot, templateArg, fields), seq, 'normal');
+    const { ok, errorCode } = await this.#send(
+      this.#builder.load(slot, templateArg, fields),
+      seq,
+      'normal',
+    );
     if (ok) this.#loaded.add(itemId);
-    return ok;
+    return { ok, ...(errorCode !== undefined && { errorCode }) };
+  }
+
+  /**
+   * The item currently bound to a slot, or undefined when the slot is free.
+   *
+   * `#slots` is itemId → slot, so this is its inverse. Kept as one helper rather
+   * than an inline scan at each site because `loadFixed`'s refusal now depends on
+   * WHICH item is bound, and a second copy of "who is on this layer" is how the
+   * binding/occupancy conflation this method exists to resolve got started.
+   */
+  #itemBoundToSlot(slot: CommandSlot): string | undefined {
+    for (const [itemId, s] of this.#slots) {
+      if (s.channel === slot.channel && s.layer === slot.layer) return itemId;
+    }
+    return undefined;
   }
 
   #markDirty(itemId: string): void {

@@ -1,4 +1,4 @@
-# Design — startup splash screen (R-031)
+# Design — startup splash screen (R-035)
 
 Only the decisions that are not obvious from the proposal, each with the reason it was taken
 that way rather than the alternative.

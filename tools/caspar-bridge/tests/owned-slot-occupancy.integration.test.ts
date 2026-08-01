@@ -179,8 +179,9 @@ it('B-056: a backup-only adopt over an observed foreign producer raises the owne
   // (b) Load behavior unchanged: accepted, and its own CG ADD reached the
   // (reachable) backup with the served URL — the warning is purely additive.
   expect(loaded.accepted).toBe(true);
+  // R-030 — the served URL now carries the channel raster on every ADD.
   expect(mockB!.lastCgAdd(SLOT)?.template).toMatch(
-    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third$/,
+    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third\?cw=1920&ch=1080$/,
   );
 
   // (a) The warning surfaces, naming the channel-layer AND the item.

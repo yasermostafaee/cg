@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * R-031 — the startup splash, in a real browser.
+ * R-035 — the startup splash, in a real browser.
  *
  * `test` comes from `@playwright/test` DIRECTLY and not from `./fixtures/runtime.js`,
  * and that is the whole opt-in mechanism: the shared harness arms
@@ -30,7 +30,46 @@ async function armMockBoot(page: Page): Promise<void> {
   });
 }
 
-test('a cold start holds the splash for at least five seconds; a reload in the same tab does not', async ({
+/**
+ * Record every distinct percentage the readout shows, IN THE PAGE, from first paint until
+ * the splash removes itself.
+ *
+ * Sampled here rather than asserted with `toHaveText('100%')`, and the difference matters:
+ * the splash shows 100% only for the ~450 ms fade before it deletes itself, so an assertion
+ * that depends on Playwright's polling cadence landing inside that window passes on an idle
+ * machine and fails on a loaded one. It did exactly that — polls landed at 40 %, 42 %, 44 %
+ * and then the element was gone. A 40 ms in-page sampler cannot miss it, and it gives the
+ * whole climb to assert over instead of one instant.
+ */
+async function recordPercentages(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const log: string[] = [];
+    (window as unknown as { __CG_PCT_LOG__: string[] }).__CG_PCT_LOG__ = log;
+    let seen = false;
+    const tick = setInterval(() => {
+      const el = document.getElementById('cg-splash-pct');
+      if (el === null) {
+        // Only STOP once the element has existed and then gone: this init script runs
+        // before the document is parsed, so a null on the first ticks is "not yet".
+        if (seen) clearInterval(tick);
+        return;
+      }
+      seen = true;
+      const text = el.textContent ?? '';
+      if (log[log.length - 1] !== text) log.push(text);
+    }, 40);
+  });
+}
+
+/** The recorded climb, as numbers. */
+async function recordedPercentages(page: Page): Promise<number[]> {
+  const log = await page.evaluate(
+    () => (window as unknown as { __CG_PCT_LOG__?: string[] }).__CG_PCT_LOG__ ?? [],
+  );
+  return log.map((value) => Number(value.replace('%', '')));
+}
+
+test('a cold start holds the splash for at least eight seconds; a reload in the same tab is shorter', async ({
   page,
 }) => {
   await armMockBoot(page);
@@ -39,39 +78,53 @@ test('a cold start holds the splash for at least five seconds; a reload in the s
   const coldStartedAt = Date.now();
   await page.goto('/');
   await expect(splash(page)).toBeVisible();
-  await expect(splash(page)).toHaveCount(0, { timeout: 15_000 });
+  await expect(splash(page)).toHaveCount(0, { timeout: 25_000 });
   const coldHeldMs = Date.now() - coldStartedAt;
-  expect(coldHeldMs).toBeGreaterThanOrEqual(5000);
+  expect(coldHeldMs).toBeGreaterThanOrEqual(8000);
 
-  // WARM — same tab, so the session marker the first boot wrote is still there. The
-  // point of the short floor is that it stops a flash; it must not pad a fast reload.
+  // WARM — same tab, so the session marker the first boot wrote is still there. Three
+  // seconds is a brand moment on every load rather than a padded one, so the claim is that
+  // it is honoured AND that it is visibly shorter than a cold start; an upper bound in
+  // milliseconds would just be measuring this machine's navigation time.
   const warmStartedAt = Date.now();
   await page.reload();
-  await expect(splash(page)).toHaveCount(0, { timeout: 15_000 });
+  await expect(splash(page)).toHaveCount(0, { timeout: 25_000 });
   const warmHeldMs = Date.now() - warmStartedAt;
-  expect(warmHeldMs).toBeLessThan(4000);
+  expect(warmHeldMs).toBeGreaterThanOrEqual(3000);
   expect(warmHeldMs).toBeLessThan(coldHeldMs);
 
-  // Gone means GONE — a full-screen overlay left in the DOM swallows clicks.
-  await expect(page.getByRole('region', { name: 'Stack' })).toBeVisible();
+  // Gone means GONE — a full-screen overlay left in the DOM swallows clicks. `Layers` is
+  // this branch's operator surface (it replaced the old `Stack` region); it is also what
+  // `fixtures/runtime.ts` uses as its own post-boot barrier.
+  await expect(page.getByRole('region', { name: 'Layers' })).toBeVisible();
 });
 
-test('the phase label LEAVES on boot-done — the counter carries the rest of the hold', async ({
+test('the phase label LEAVES on boot-done — the percentage carries the rest of the hold', async ({
   page,
 }) => {
   await armMockBoot(page);
+  await recordPercentages(page);
   await page.goto('/');
 
   const readout = splash(page).locator('#cg-splash-readout');
   const label = readout.locator('#cg-splash-phase');
 
   // The boot steps are real and fast against the mock, so by the time this runs the app
-  // has committed and `done()` has fired — the label is on its way out and the counter
-  // is at its last step. No terminal word settles in its place.
+  // has committed and `done()` has fired — the label is on its way out. No terminal word
+  // settles in its place.
   await expect(readout).toHaveAttribute('data-done', 'true');
   await expect(label).toHaveCSS('opacity', '0');
-  await expect(readout.locator('#cg-splash-step')).toHaveText('3 / 3');
   await expect(splash(page)).not.toContainText(/\bready\b/i);
+
+  await expect(splash(page)).toHaveCount(0, { timeout: 15_000 });
+
+  // The percentage carried the hold on its own: it CLIMBED, it never went backwards, and it
+  // arrived at exactly 100 — which is the moment the door opens and not a moment earlier.
+  const climb = await recordedPercentages(page);
+  expect(climb.length, 'the readout never moved').toBeGreaterThan(3);
+  expect(climb).toEqual([...climb].sort((a, b) => a - b));
+  expect(climb[0]).toBeLessThan(100);
+  expect(climb.at(-1)).toBe(100);
 });
 
 test('a refused bridge still dismisses the splash — the app shows its own NOT CONNECTED surface', async ({
@@ -125,7 +178,7 @@ test.describe('reduced motion', () => {
         // Guard on the guard: without this the whole test passes vacuously the day the
         // emulation silently stops being applied.
         emulated: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-        mark: read('.cg-splash__mark'),
+        scene: read('.cg-splash__scene'),
         wordmark: read('.cg-splash__wordmark'),
         company: read('.cg-splash__company'),
         progress: read('.cg-splash__progress'),
@@ -142,5 +195,52 @@ test.describe('reduced motion', () => {
       expect(style.animationName, `${name} still animates under reduced motion`).toBe('none');
       expect(style.opacity, `${name} is invisible under reduced motion`).toBe('1');
     }
+  });
+
+  test('the scene holds a FREEZE-FRAME that still tells the story, not a blank stage', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await armMockBoot(page);
+    await page.goto('/');
+    await expect(splash(page)).toBeVisible();
+
+    const frame = await page.evaluate(() => {
+      const opacityOf = (selector: string): string => {
+        const el = document.querySelector(selector);
+        if (el === null) throw new Error(`no element for ${selector}`);
+        return getComputedStyle(el).opacity;
+      };
+      return {
+        emulated: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        armedRow: opacityOf('.cg-splash__scene .hl1'),
+        playTriangle: opacityOf('.cg-splash__scene .tri1'),
+        lowerThird: opacityOf('.cg-splash__scene .lt'),
+        secondRow: opacityOf('.cg-splash__scene .hl2'),
+        commandDot: opacityOf('.cg-splash__scene .dot1'),
+        bug: opacityOf('.cg-splash__scene .bug'),
+        ticker: opacityOf('.cg-splash__scene .tk'),
+        scanDisplay: getComputedStyle(document.querySelector('.cg-splash__scan') as Element)
+          .display,
+      };
+    });
+
+    expect(frame.emulated, 'reduced-motion emulation is not active').toBe(true);
+
+    // The FULL PACKAGE — the scene's own resting state, since the graphics stack rather
+    // than take turns. Both rows armed, strap, bug and ticker all live together.
+    expect(frame.armedRow, 'the armed row is not shown').toBe('1');
+    expect(frame.playTriangle, 'the PLAY triangle is not shown').toBe('1');
+    expect(frame.lowerThird, 'the lower third is not on the monitor').toBe('1');
+    expect(frame.secondRow, 'the second row is not armed').toBe('1');
+    expect(frame.bug, 'the corner bug is not shown').toBe('1');
+    expect(frame.ticker, 'the ticker is not shown').toBe('1');
+
+    // The ONE thing a still frame cannot mean: a command dot frozen mid-wire depicts a
+    // message in flight. Everything else here is a state, and a state can be held.
+    expect(frame.commandDot).toBe('0');
+
+    // …and the ambient raster sweep is gone entirely.
+    expect(frame.scanDisplay).toBe('none');
   });
 });

@@ -174,16 +174,29 @@ function primaryPill(el: HTMLElement): string {
 }
 
 /**
- * The `#10B981` green that means "this server is fine" (`styles.ok`) — jsdom serializes it
- * to `rgb(...)`. B-081 is about a CLAIM, and the color makes the claim as loudly as the word:
- * a muted "UNKNOWN" beside a still-green ● dot would not be a fix.
+ * THE CONFIDENT-HEALTH TREATMENT (`styles.ok`) — what a pill wears when it is
+ * asserting that a server is fine.
+ *
+ * B-081 is about a CLAIM, and the treatment makes the claim as loudly as the word:
+ * a muted "UNKNOWN" beside a still-confident ● dot would not be a fix. That is
+ * unchanged and is what these assertions protect.
+ *
+ * WHAT CHANGED IS THE MECHANISM, NOT THE ASSERTION. Confident health used to be
+ * the emerald `#10B981`. The status bar may no longer borrow the on-air green or
+ * the ready sky at any weight — a glance at green in the footer reads as
+ * "something is on air", and those two hues already mean something on the layer
+ * table (owner's call; see `StatusBar`'s style block). Health is now the primary
+ * INK at bold weight against the bar's muted base text, so this matches on that
+ * instead. Deliberately still a POSITIVE match on the confident treatment rather
+ * than a weaker "not muted" check: the original would have gone green-blind, and
+ * so would a loosened rewrite.
  */
-const OK_GREEN = 'rgb(16, 185, 129)';
+const OK_INK = 'rgb(229, 231, 235)';
 
-function greensIn(scope: HTMLElement | undefined): string[] {
+function confidentIn(scope: HTMLElement | undefined): string[] {
   if (scope === undefined) return [];
   return [...scope.querySelectorAll<HTMLElement>('span')]
-    .filter((s) => s.style.color === OK_GREEN)
+    .filter((s) => s.style.color === OK_INK && s.style.fontWeight === '700')
     .map((s) => s.textContent ?? '');
 }
 
@@ -218,7 +231,7 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
     // StrictMode deliberately double-invokes the mount effect, so the absolute number is a
     // property of the harness, not of the hook.)
     expect(primaryPill(el)).toContain('HEALTHY');
-    expect(greensIn(pill(el, 'PRIMARY'))).not.toEqual([]);
+    expect(confidentIn(pill(el, 'PRIMARY'))).not.toEqual([]);
     const pullsWhileConnected = bridge.healthPulls();
     expect(pullsWhileConnected).toBeGreaterThan(0);
     const footerBefore = el.querySelector('footer');
@@ -231,8 +244,8 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
     expect(primaryPill(el)).toContain('UNKNOWN');
     expect(primaryPill(el)).not.toContain('HEALTHY');
     // Not just the word — nothing in the pill is still claiming green, ● dot included.
-    expect(greensIn(pill(el, 'PRIMARY'))).toEqual([]);
-    expect(greensIn(pill(el, 'BACKUP'))).toEqual([]);
+    expect(confidentIn(pill(el, 'PRIMARY'))).toEqual([]);
+    expect(confidentIn(pill(el, 'BACKUP'))).toEqual([]);
     // The last-known reading survives ONLY as an explicitly-stale tooltip.
     expect(pill(el, 'PRIMARY')?.title).toContain('Last known before the link dropped: HEALTHY');
     // And no read is fired at a link that refuses reads by design (R-006).
@@ -244,7 +257,7 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
     expect(bridge.healthPulls()).toBe(pullsWhileConnected + 1);
     expect(primaryPill(el)).toContain('HEALTHY');
     expect(primaryPill(el)).not.toContain('UNKNOWN');
-    expect(greensIn(pill(el, 'PRIMARY'))).not.toEqual([]);
+    expect(confidentIn(pill(el, 'PRIMARY'))).not.toEqual([]);
     expect(el.querySelector('footer')).toBe(footerBefore);
   });
 
@@ -277,5 +290,117 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
     await flush(() => bridge.answerPull(HEALTHY));
     expect(primaryPill(el)).toContain('DEGRADED');
     expect(primaryPill(el)).not.toContain('HEALTHY');
+  });
+});
+
+/**
+ * THE HEALTH LED FOLLOWS ITS OWN SERVER, and this is the owner-reported bug.
+ *
+ * With CasparCG down the footer rendered `● PRIMARY A OFFLINE` with a GREEN dot
+ * beside a red word. The first version keyed the green on "not stale and not
+ * OSC-deaf" — a different question — and a server reporting `disconnected` is
+ * neither, so it kept the confident light. A light that says fine next to a label
+ * that says offline is the B-081 contradiction reintroduced on the one element
+ * that is hardest to read as text, and the reassuring half wins.
+ *
+ * Asserted on the DOT specifically rather than on the pill's text, because the
+ * text was right the whole time.
+ */
+const LED_GREEN = 'rgb(16, 185, 129)';
+
+const PRIMARY_OFFLINE: ConnectionHealth = {
+  ...HEALTHY,
+  primary: { label: 'A', state: 'disconnected', amcpAxisOk: false, oscFreshAt: HEARD_AT },
+};
+
+/** The ● glyphs inside a pill that are painted the confident green. */
+function greenDots(scope: HTMLElement | undefined): number {
+  if (scope === undefined) return 0;
+  return [...scope.querySelectorAll<HTMLElement>('span')].filter(
+    (s) => s.textContent?.trim() === '●' && s.style.color === LED_GREEN,
+  ).length;
+}
+
+describe('the health LED agrees with its own label', () => {
+  it('a HEALTHY primary lights green', async () => {
+    const bridge = stubBridge('disconnected');
+    const el = await mount();
+    await flush(() => bridge.setLink('live'));
+    await flush(() => bridge.publishHealth(HEALTHY));
+
+    expect(primaryPill(el)).toContain('HEALTHY');
+    expect(greenDots(pill(el, 'PRIMARY'))).toBe(1);
+  });
+
+  it('THE BUG: an OFFLINE primary must NOT keep a green dot', async () => {
+    const bridge = stubBridge('disconnected');
+    const el = await mount();
+    await flush(() => bridge.setLink('live'));
+    await flush(() => bridge.publishHealth(PRIMARY_OFFLINE));
+
+    expect(primaryPill(el)).toContain('OFFLINE');
+    expect(greenDots(pill(el, 'PRIMARY')), 'a green LED beside OFFLINE').toBe(0);
+  });
+
+  it('a DEGRADED primary does not keep one either', async () => {
+    const bridge = stubBridge('disconnected');
+    const el = await mount();
+    await flush(() => bridge.setLink('live'));
+    await flush(() => bridge.publishHealth(PRIMARY_DEGRADED));
+
+    expect(primaryPill(el)).toContain('DEGRADED');
+    expect(greenDots(pill(el, 'PRIMARY'))).toBe(0);
+  });
+});
+
+describe('the BACKUP LED agrees with its own label too', () => {
+  /**
+   * Owner: a backup that is DEFINED and OFFLINE must light red. It used to be
+   * permanently muted — the primary's defect one pill along, and invisible for the
+   * same reason: the WORD was right the whole time.
+   *
+   * The `○` shape stays against the primary's `●`. That distinction says which
+   * server is in charge, not how healthy it is, and it has to survive the two now
+   * sharing a colour vocabulary — the pair must be tellable apart without reading
+   * either word.
+   */
+  const BACKUP_OFFLINE: ConnectionHealth = {
+    ...HEALTHY,
+    backup: { label: 'B', state: 'disconnected', amcpAxisOk: false, oscFreshAt: HEARD_AT },
+  };
+
+  /** `colors.error` — `styles.failedHard`, the tone a down server wears. */
+  const FAULT_RED = 'rgb(153, 27, 27)';
+
+  function hollowDot(scope: HTMLElement | undefined): HTMLElement | undefined {
+    return [...(scope?.querySelectorAll<HTMLElement>('span') ?? [])].find(
+      (x) => x.textContent?.trim() === '○',
+    );
+  }
+
+  it('a DEFINED but OFFLINE backup lights RED, never neutral', async () => {
+    const bridge = stubBridge('disconnected');
+    const el = await mount();
+    await flush(() => bridge.setLink('live'));
+    await flush(() => bridge.publishHealth(BACKUP_OFFLINE));
+
+    const scope = pill(el, 'BACKUP');
+    expect(scope?.textContent ?? '').toContain('OFFLINE');
+    expect(greenDots(scope), 'a green LED beside an OFFLINE backup').toBe(0);
+    expect(hollowDot(scope)?.style.color, 'the backup LED must read as the fault').toBe(FAULT_RED);
+    // The shape is still the backup's, so the pair stays tellable apart.
+    expect(hollowDot(scope)).toBeDefined();
+  });
+
+  it('a HEALTHY backup lights green, and keeps its hollow shape', async () => {
+    const bridge = stubBridge('disconnected');
+    const el = await mount();
+    await flush(() => bridge.setLink('live'));
+    await flush(() => bridge.publishHealth(HEALTHY));
+
+    const scope = pill(el, 'BACKUP');
+    expect(scope?.textContent ?? '').toContain('HEALTHY');
+    expect(hollowDot(scope)).toBeDefined();
+    expect(hollowDot(scope)?.style.color).toBe(LED_GREEN);
   });
 });

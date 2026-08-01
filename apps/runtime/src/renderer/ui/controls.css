@@ -21,35 +21,64 @@
   --r-text-muted: #9ca3af;
   --r-accent: #38bdf8;
   --r-accent-strong: #0ea5e9;
-  --r-onair: #e11d48;
+  /* The ACCENTED ACTION's weights — the same sky as `--r-accent`, in the dark
+     fill / line / light ink a FILLED control needs. Three controls wear it, all
+     in the Inspector. See `theme.ts` and `.cg-btn--accent` below. */
+  --r-accent-fill: #153b56;
+  --r-accent-fill-hover: #1a4a6b;
+  --r-accent-line: #2f7ba8;
+  --r-accent-line-hover: #4aa8e0;
+  --r-accent-ink: #cfe8f8;
+  /* THE INPUT SURFACE — one background and one line for every field in the app.
+     See `theme.ts` and `.cg-field`: an input is a well sunk into the panel, not a
+     raised chip, and ONE pair is what stops the dx/dy boxes from drifting away
+     from the text inputs. */
+  --r-field-bg: #0e1822;
+  --r-field-line: #2d4150;
+  /* ON AIR — GREEN, and this hue may mean nothing else. Red is now errors and
+     destructive intent only. See `theme.ts`'s header for the decision and for
+     the R-006 / B-087 re-anchoring it owes. Mirrored from `cssVars`; a parity
+     test asserts the two match. */
+  --r-onair: rgb(44 255 122);
   --r-caution: #f59e0b;
   --r-danger: #dc2626;
   --r-danger-strong: #b91c1c;
   --r-success: #10b981;
   --r-dirty: #f59e0b;
-  --r-ready: #0ea5e9;
+  --r-ready: #38bdf8;
   --r-idle: #3f3f46;
   --r-offline: #94a3b8;
+  --r-rehearsing: #a78bfa;
+  --r-rehearsing-strong: #7c3aed;
+  --r-verb-load: #1aacd8;
+  --r-verb-remove: #ff0000;
+  --r-verb-play: #22dd7a;
+  --r-verb-next: #2ebea1;
+  --r-verb-stop: #b38d18;
+  --r-verb-clear: #de5105;
 
-  /* R-031 — the STARTUP SPLASH's own greys. Mirrored from `theme.ts` `cssVars` like
+  /* R-035 — the STARTUP SPLASH's own greys. Mirrored from `theme.ts` `cssVars` like
      every token here, but with one extra hop nothing else has: the splash paints
      BEFORE this stylesheet is loaded, so it cannot read these at all — the inline
      `<style>` in `index.html` mirrors the VALUES as literals and
      `tests/splashCss.test.ts` pins that second mirror. Their own family rather than
      reuse of `--r-surface-*` (a deeper near-black, inks tuned for large tracked-out
-     type), and NO RED, ever — see `theme.ts` for both reasons. The rail's accent is
-     deliberately not a splash token: it reuses `--r-accent` / `--r-accent-strong`. */
-  --r-splash-bg: #090b0f;
-  --r-splash-line: #2a3441;
+     type), and NO RED, ever — see `theme.ts` for both reasons. The chrome ACCENT is not
+     a token at all: the splash wears APASAI's exact brand blue as a splash-local
+     constant, and the app's own `--r-accent` sky is unchanged by that. */
+  --r-splash-bg: #1a212d;
+  --r-splash-line: #3d4959;
   --r-splash-ink: #e8edf4;
   --r-splash-ink-dim: #5a6675;
-  --r-splash-ink-faint: #3f4a58;
+  --r-splash-ink-faint: #55637a;
   --r-splash-readout: #8b97a6;
-  --r-splash-rail: #1c232e;
-  --r-splash-mark-mid: #3d4b5c;
-  --r-splash-mark-dim: #28323e;
-  --r-splash-glow: rgba(56, 189, 248, 0.5);
-  --r-splash-vignette: rgba(0, 0, 0, 0.55);
+  --r-splash-rail: #2c3644;
+  --r-splash-scene-bar: #3a4557;
+  --r-splash-company-ink: #c9d3df;
+  --r-splash-logo-bars: #eef3f9;
+  --r-splash-logo-swoosh: #5c6a7c;
+  --r-splash-glow: rgba(0, 174, 239, 0.5);
+  --r-splash-vignette: rgba(0, 0, 0, 0.22);
 
   --r-space-1: 4px;
   --r-space-2: 8px;
@@ -76,9 +105,93 @@
   --r-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.35);
   --r-shadow-2: 0 4px 16px rgba(0, 0, 0, 0.4);
 
+  /* THE PANEL BAR'S HEIGHT — one number, so four panels cannot disagree.
+     See `.cg-panel-header` for why it is a fixed floor and not intrinsic. */
+  --r-panel-bar-h: 52px;
+
   --r-dur-fast: 120ms;
   --r-dur-med: 200ms;
   --r-dur-spin: 700ms;
+}
+
+/* ── Panel chrome — THE bar, shared by every panel ──────────────────────────
+ *
+ * Owner report: «هدر پنل Inspector باید با هدر بقیه پنل‌ها یکی باشه» — the
+ * Inspector's title bar did not match the others'. It was never a colour or a
+ * font difference, which is why reading either file found nothing: it was
+ * HEIGHT, and the height was INTRINSIC. Every bar was as tall as whatever
+ * happened to be inside it, so LAYERS — whose header carries `--neutral` bulk
+ * verbs with their 36px floor — stood ~52px while the Inspector, carrying only
+ * two small icon buttons, stood ~39px. Two bars beside each other, 13px apart,
+ * both "correct" on their own terms.
+ *
+ * `--r-panel-bar-h` is the fix and the reason it is a FLOOR rather than a
+ * computed value: a bar whose height is a function of its contents is a bar that
+ * disagrees with its neighbour the moment one of them gains a control. The
+ * number belongs to BEING A PANEL, not to what a given panel puts in its bar —
+ * same structural argument as the fullscreen affordance the primitive renders.
+ *
+ * These are classes rather than the primitive's old inline style objects for the
+ * usual reason (inline cannot express interaction states), and because a shared
+ * bar defined in ONE stylesheet rule is the thing that cannot be hand-matched
+ * into drifting.
+ */
+
+.cg-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--r-space-2);
+  min-height: var(--r-panel-bar-h);
+  box-sizing: border-box;
+  padding: var(--r-space-3) var(--r-space-4);
+  border-bottom: 1px solid var(--r-border);
+  /* RAISED, per the approved mock: the bar is a distinct surface from the body
+     it labels, which is also what gives its controls something to sit on. */
+  background: var(--r-surface-raised);
+  color: var(--r-text-muted);
+  flex-shrink: 0;
+}
+
+/* Small, wide-tracked, uppercase — a LABEL for the panel, not a heading competing
+   with the content inside it. */
+.cg-panel-title {
+  font-size: 11px;
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cg-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  flex-shrink: 0;
+}
+
+/*
+ * THE BAR DECIDES ITS CONTROLS' HEIGHT — not the other way round, which is the
+ * whole point and was the half the first attempt missed.
+ *
+ * `min-height: var(--r-panel-bar-h)` alone is only a FLOOR, so LAYERS — whose bar
+ * carries `--neutral` bulk verbs with their own 36px minimum — still stood 61px
+ * beside the other three at 53px. The floor made the SHORT bars agree and left
+ * the tall one exactly as tall as its contents, which is the original defect
+ * surviving in the one panel the owner was comparing against.
+ *
+ * A height that belongs to BEING A PANEL cannot be a function of what a given
+ * panel happens to put in its bar. So every control in a panel bar takes the same
+ * 28px square-ish geometry (what `--icon` already is), and the bar's height stops
+ * depending on which panel it belongs to. 36px is the ROW-VERB floor — a
+ * gallery-scanned table target — and a piece of panel chrome is not that.
+ */
+.cg-panel-header .cg-btn {
+  min-height: 28px;
+  height: 28px;
+  padding-block: 0;
 }
 
 /* ── Button ─────────────────────────────────────────────────────────────── */
@@ -135,22 +248,11 @@
   color: #fff;
   font-weight: var(--r-weight-bold);
 }
-/* C-012 — the ON-AIR family, subordinate to PLAY.
-   UPDATE changes what is on air RIGHT NOW, so it must not read like the neutral
-   staging controls (Load / Apply position / Add item) that touch nothing live. It
-   wears the on-air hue to say "this reaches air", as an OUTLINE so the SOLID red
-   stays what it has always been: PLAY, the one control that puts a graphic on air.
-   The sacred-red rule is intact — solid `--r-onair` remains PLAY + ON AIR only. */
-.cg-btn--air {
-  background: transparent;
-  border-color: var(--r-onair);
-  color: #fb7185;
-  font-weight: var(--r-weight-bold);
-}
-.cg-btn--air:hover:not(:disabled) {
-  background: rgba(225, 29, 72, 0.16);
-  color: #fff;
-}
+/* `.cg-btn--air` IS GONE — do not bring it back.
+   C-012 gave the Inspector's UPDATE an outlined on-air hue to say "this reaches
+   air". That is retired: colour in this build belongs to STATE, and an outlined
+   air-hue control put a transmission colour on an affordance. UPDATE is `neutral`
+   now, like every other verb. Solid `--r-onair` remains PLAY's alone. */
 /* C-012 — the destructive half of the EXIT family.
    STOP and CLEAR both take a graphic off air and must not look alike: STOP leaves
    the producer resident (recoverable), CLEAR destroys it. Same amber hue so they
@@ -178,6 +280,88 @@
   border-color: var(--r-accent);
   color: var(--r-accent);
 }
+
+/*
+ * ── THE ACCENTED ACTION ─────────────────────────────────────────────────────
+ *
+ * Owner: «فقط از ایده تفاوت رنگ بین دکمه هاش استفاده کن. رنگ apply/update/add
+ * item متفاوته.» Exactly three controls wear this — Apply position, Add item,
+ * Update — and every other control in the Inspector stays neutral.
+ *
+ * ── ONE MEANING PER SURFACE; NEVER BOTH ON ONE ──────────────────────────────
+ *
+ * WRITE THIS DOWN OR A FUTURE SESSION WILL "FIX" ONE SURFACE TO MATCH THE OTHER.
+ *
+ * In the INSPECTOR, colour means HIERARCHY: "this is the action the surface
+ * exists to perform." That is available here only because the Inspector shows
+ * ONE item and has no row state competing for the eye.
+ *
+ * In the LAYER TABLE, colour means STATE. It has an on-air indicator to protect,
+ * and thirty coloured affordances are exactly what drowned it once already (see
+ * `--verb` below). Its verb and state colours are the owner's own and are
+ * SETTLED.
+ *
+ * So this variant does NOT spread to the table, and the table's colours are NOT
+ * to be unified with it. A surface that used colour for hierarchy AND state
+ * would communicate neither. Sky is also the safe hue for this precisely because
+ * it has never been a state colour: green is ON AIR and may mean nothing else,
+ * amber is caution, red is error, violet is rehearse.
+ *
+ * DISABLED KEEPS ITS FILL. `Update` renders disabled with the refusal reason on
+ * its `title`, and a control that dims into invisibility turns a fail-closed
+ * gate into a dead button — the defect the gating was built to remove. 0.55
+ * rather than the shared 0.45 for the same reason.
+ */
+/*
+ * ── COMMIT — the Inspector's UPDATE, and only that ──────────────────────────
+ *
+ * Owner: «رنگ دکمه update مثل دکمه play بشه», then refined to these exact values:
+ * `--r-verb-play` for the fill and the line, `#10151f` for the ink.
+ *
+ * THE REFINEMENT IS THE POINT, AND IT RESOLVES THE RISK RATHER THAN ACCEPTING IT.
+ * The first pass gave this button `--r-onair` — literally PLAY's variant, one
+ * token, no drift. That worked and it put THE SACRED AIR GREEN on a control in a
+ * panel that also shows an on-air state dot, so the same hue meant "this is on
+ * air" and "press this" six inches apart. `--r-verb-play` is a DIFFERENT green —
+ * darker, and already the app's PLAY-verb colour — so UPDATE reads as the
+ * play-family action it is without ever wearing the hue that means a graphic is
+ * on the output. `--r-onair` stays PLAY's alone.
+ *
+ * A DARK INK, not white: `--r-verb-play` is a bright green and light text on it
+ * fails to separate. Same reason `--caution-strong` carries `#1c1207` and
+ * `--primary` carries `#04121f` — a filled bright control owes a dark foreground.
+ *
+ * SCOPE: the Inspector's UPDATE and nothing else. It is not a general "important
+ * button" colour, and it must not reach the layer table, whose verbs rest neutral.
+ */
+.cg-btn--commit {
+  background: var(--r-verb-play);
+  border-color: var(--r-verb-play);
+  color: #10151f;
+  font-weight: var(--r-weight-bold);
+}
+.cg-btn--commit:disabled {
+  /* Above the shared 0.45: this button carries its refusal REASON on `title`, and
+     a fail-closed control that dims into invisibility is a dead button. */
+  opacity: 0.55;
+}
+
+.cg-btn--accent {
+  background: var(--r-accent-fill);
+  border-color: var(--r-accent-line);
+  color: var(--r-accent-ink);
+}
+.cg-btn--accent:hover:not(:disabled) {
+  background: var(--r-accent-fill-hover);
+  border-color: var(--r-accent-line-hover);
+  filter: none; /* the lifted fill IS the hover; brightness on top muddies it */
+}
+.cg-btn--accent:active:not(:disabled) {
+  background: var(--r-accent-fill);
+}
+.cg-btn--accent:disabled {
+  opacity: 0.55;
+}
 .cg-btn--caution {
   background: transparent;
   border-color: var(--r-caution);
@@ -192,6 +376,37 @@
   background: var(--r-danger-strong);
   color: #fff;
 }
+/*
+ * GHOST — and the trap it is.
+ *
+ * NEUTRAL IS NOT INVISIBLE. Ghost has no fill, no border and muted text, so a ghost
+ * button standing on its own reads as a LINE OF STATIC TEXT, not a control. That is
+ * exactly what happened to the Inspector's Discard and "From file…": both were
+ * ghosts, and the operator could not tell either was pressable. A button nobody
+ * recognises as a button is worse than a coloured one.
+ *
+ * Dropping COLOUR from a control never drops its need for an AFFORDANCE — a visible
+ * boundary or fill, a hover state, and a focus ring. `--neutral` / `--verb` carry all
+ * three with no hue, which is why the neutral rule costs nothing legibility-wise; it
+ * only looks free if you reach for ghost instead.
+ *
+ * USE GHOST ONLY where surrounding chrome already frames the control and its position
+ * names it: a modal's close ✕, a banner's dismiss. For a standalone verb in a panel
+ * body, use `neutral` (text) or `verb` (icon-only); in a PANEL BAR, use `icon`.
+ *
+ * "A PANEL-HEADER AFFORDANCE" USED TO BE ON THAT LIST AND HAS BEEN REMOVED. Third
+ * occurrence of the same defect, and the one that finally names the flaw in the rule
+ * rather than in a caller: the owner could see the fullscreen control on LAYERS and
+ * not on the INSPECTOR. Both had it — `Panel` renders it for every panel — but
+ * "surrounding chrome already frames the control" is a property of THAT panel's bar,
+ * not of panel bars in general. Layers' bar is full of bordered bulk verbs, so a bare
+ * glyph beside them reads as one of the row; the Inspector's bar carries nothing else,
+ * so the same glyph sat alone in an empty strip.
+ *
+ * A condition a SHARED primitive cannot evaluate is not a condition it may depend on.
+ * The exception survives only where the frame is structural and unconditional — a
+ * modal's chrome is always there, a panel's neighbours are not.
+ */
 .cg-btn--ghost {
   background: transparent;
   border-color: transparent;
@@ -201,6 +416,367 @@
 .cg-btn--ghost:hover:not(:disabled) {
   background: var(--r-surface-raised);
   color: var(--r-text);
+}
+
+/*
+ * THE ROW VERB — neutral, square, icon-only.
+ *
+ * Why neutral. A bright PLAY, an amber CLEAR and a red REMOVE on EVERY row meant
+ * the one question a control room has to answer in a glance — what is on air —
+ * had nowhere left to shout from. Thirty rows of coloured affordances drown the
+ * one row that is actually live. So colour left the buttons and moved to the
+ * row's STATE mark (`rowState.ts`), which is the only thing on the row entitled
+ * to it.
+ *
+ * HOVER NOW CARRIES A PER-VERB HUE (owner decision) — this paragraph used to say
+ * the opposite and is corrected rather than deleted, because the concern it
+ * raised is still live and the next reader should meet it.
+ *
+ * It argued that no hover hue may come from the STATE palette: if hovering PLAY
+ * turned it the colour that means ON AIR, the cursor would flash a false air
+ * signal as it crossed the row. The verbs now hover to their own colours
+ * (`--r-verb-*`, see the block further down), and ONE of them lands close to that
+ * warning: PLAY hovers to a dark green, and green is the air family. What keeps
+ * them apart is weight and state — the air MARK is bright `--r-onair` text on the
+ * state cell, while a hovered PLAY is a dark fill under the pointer, and an
+ * actually-on-air PLAY is that same dark fill DISABLED and dimmed. Worth watching
+ * on the real surface: if an operator ever reads a hovered PLAY as "this is on
+ * air", the fix is PLAY's hover hue, not the mechanism.
+ *
+ * The rest of hover is still ELEVATION and BRIGHTNESS (a lifted fill, a stronger
+ * border, a shadow).
+ *
+ * DESTRUCTIVE VERBS ARE NEUTRAL TOO, and that is safe. CLEAR and REMOVE get
+ * their weight from a confirm gate that names the layer and says ON AIR in words
+ * — a far better protection than a red button, which an operator stops seeing by
+ * the end of a shift. Do NOT re-introduce a coloured REMOVE on the principle
+ * that destructive controls should be red; the gate is the protection.
+ *
+ * ENABLED vs DISABLED WITHOUT COLOUR. This is the real cost of going neutral,
+ * and it lands on an existing decision: buttons stay PRESENT and disabled on
+ * empty rows, so a row can show four inert controls. Opacity alone would not
+ * carry that at a glance from across a gallery. So the two states differ in
+ * SHAPE: enabled is a raised chip with a border, disabled has neither fill nor
+ * border — a bare dimmed glyph. On an empty row the single enabled LOAD reads as
+ * the only thing you can press, which is exactly true.
+ */
+/*
+ * THE NEUTRAL LOOK, shared by the icon-only row verbs and the text bulk verbs.
+ *
+ * Split from the geometry deliberately. `--verb` began as one class doing both, and
+ * when the bulk verbs were made neutral by reusing it they inherited `padding: 0`,
+ * a 36px square minimum and `width: 100%` — geometry meant for a glyph in a sized
+ * column — so their labels came out squashed against the borders. The LOOK is the
+ * shared thing; the SHAPE is not.
+ */
+.cg-btn--verb,
+.cg-btn--neutral,
+.cg-btn--icon {
+  background: var(--r-surface-raised);
+  border-color: var(--r-border-strong);
+  color: var(--r-text);
+}
+.cg-btn--verb:hover:not(:disabled),
+.cg-btn--neutral:hover:not(:disabled),
+.cg-btn--icon:hover:not(:disabled) {
+  background: #2c3a4e;
+  border-color: #64748b;
+  box-shadow: var(--r-shadow-1);
+  filter: none; /* the lifted fill IS the hover; brightness on top muddies it */
+}
+.cg-btn--verb:active:not(:disabled),
+.cg-btn--neutral:active:not(:disabled),
+.cg-btn--icon:active:not(:disabled) {
+  background: var(--r-surface-sunken);
+  box-shadow: none;
+}
+/*
+ * DISABLED — and the two shapes split here, which they did not used to.
+ *
+ * `--verb` (the LAYER TABLE's icon-only row verbs) loses its fill AND its border:
+ * enabled is a raised chip, disabled is a bare dimmed glyph, so the difference
+ * survives being read from across a gallery without colour. That is the decision
+ * documented above and it is deliberately untouched — on an empty row the single
+ * enabled LOAD reading as the only pressable thing is exactly true.
+ *
+ * `--neutral` and `--icon` KEEP their boundary, and that is the correction. They
+ * do not sit in a column of peers that makes a bare glyph legible; they stand
+ * alone in panel bodies and panel bars. The Inspector's DISCARD is the case that
+ * forced it: `neutral` and correct, it went fully transparent whenever there was
+ * nothing staged, so the control an operator reaches for to ABANDON an edit was
+ * invisible for as long as there was no edit to abandon — and an operator who
+ * cannot find Discard presses Update to get out, which is the opposite of what
+ * they wanted. The list-item minis are the same story: `↑` on the first row must
+ * stay IN PLACE and visible-but-inert, or the cluster reflows between rows.
+ *
+ * NEUTRAL IS NOT INVISIBLE — and neither is disabled. Removing a control's colour,
+ * or its availability, never removes its need to be FOUND.
+ */
+.cg-btn--verb:disabled {
+  background: transparent;
+  border-color: transparent;
+  color: var(--r-text-muted);
+  box-shadow: none;
+  /* Higher than the shared 0.45: the glyph still has to be IDENTIFIABLE, because
+     which verbs a row is offering is information even when they are inert. */
+  opacity: 0.6;
+}
+.cg-btn--neutral:disabled,
+.cg-btn--icon:disabled {
+  background: transparent;
+  border-color: var(--r-border);
+  color: var(--r-text-muted);
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+/*
+ * PER-VERB HOVER FILLS. The verb keeps its neutral resting look and takes its own
+ * colour only under the pointer.
+ *
+ * This does not reopen "row verbs are neutral": that rule is about what the
+ * operator sees while SCANNING thirty rows, and a hover fill is on one button at a
+ * time, under the pointer they are already looking at. What it buys is
+ * disambiguation at the moment of the click — and on this surface that is worth
+ * paying for, because STOP (graceful) and CLEAR (hard kill) mean the OPPOSITE of
+ * the reference product's, so the verb an operator is about to press is exactly the
+ * thing they must not misread.
+ *
+ * Keyed on `data-verb-tone`, which the ACTION declares, so LOAD and REMOVE — one
+ * key, one slot, two verbs — get their own colours without the CSS having to know
+ * which half of the toggle is showing.
+ *
+ * `:not(:disabled)` on every rule: an inert verb must not light up. The attribute
+ * selector also outranks the neutral hover above (0,4,0 vs 0,3,0), which is what
+ * lets these override it without `!important`.
+ */
+.cg-btn[data-verb-tone]:hover:not(:disabled) {
+  /* One shared shape; the fill itself comes from the per-tone rules below. */
+  box-shadow: var(--r-shadow-1);
+  filter: none;
+  /*
+   * A DARK foreground, not the surface's light `--r-text`, and it flipped when
+   * the palette got brighter. Against this set of hover fills every one is a
+   * mid-to-light colour: light text on `#22dd7a` measures about 1.5:1 and on
+   * `#2ebea1` about 2:1 — unreadable, and below the 3:1 WCAG 1.4.11 floor these
+   * glyphs need as non-text content. Near-black clears ~4.4:1 on the darkest of
+   * the six and ~9:1 on the lightest, so ONE foreground serves all of them.
+   */
+  color: #10151f;
+}
+.cg-btn[data-verb-tone='load']:hover:not(:disabled) {
+  background: var(--r-verb-load);
+  border-color: var(--r-verb-load);
+}
+.cg-btn[data-verb-tone='remove']:hover:not(:disabled) {
+  background: var(--r-verb-remove);
+  border-color: var(--r-verb-remove);
+}
+.cg-btn[data-verb-tone='play']:hover:not(:disabled) {
+  background: var(--r-verb-play);
+  border-color: var(--r-verb-play);
+}
+.cg-btn[data-verb-tone='next']:hover:not(:disabled) {
+  background: var(--r-verb-next);
+  border-color: var(--r-verb-next);
+}
+.cg-btn[data-verb-tone='stop']:hover:not(:disabled) {
+  background: var(--r-verb-stop);
+  border-color: var(--r-verb-stop);
+}
+.cg-btn[data-verb-tone='clear']:hover:not(:disabled) {
+  background: var(--r-verb-clear);
+  border-color: var(--r-verb-clear);
+}
+
+/*
+ * `.is-on` — a TOGGLE that is currently ENGAGED, filled in its mode's own hue.
+ *
+ * Only REHEARSE uses it today, and the hue is the row's own REHEARSING violet, so
+ * the lit button and the state mark on the same row cannot disagree about which
+ * mode that row is in.
+ *
+ * WHY THIS IS NOT A HOLE IN "ROW VERBS ARE NEUTRAL". That rule bans colour used to
+ * advertise AVAILABILITY — thirty rows of coloured affordances drowned the state
+ * signal, which is why the verbs went neutral in the first place. `.is-on` says
+ * something else: this mode is ACTIVE right now, on this row. It is the same
+ * statement the state cell makes, in the same colour, and it appears on at most the
+ * handful of rows actually rehearsing.
+ *
+ * `--r-rehearsing-strong`, not `--r-rehearsing`: the state hue is a light violet
+ * meant for TEXT, and filling a button with it leaves white unreadable. Same
+ * two-weight split as `--r-accent-strong` and `--r-danger-strong`.
+ *
+ * IT FILLS EVEN WHEN DISABLED, and that is required rather than incidental: PLAY
+ * on an on-air row is disabled BECAUSE its state is already true, so a rule that
+ * skipped disabled buttons would drop the fill in exactly the case that most needs
+ * it. The shared `:disabled` opacity above still applies — it sets a different
+ * property — so an engaged-and-inert control reads as both: coloured by its state,
+ * dimmed because it cannot be pressed. This block sits after `:disabled` and
+ * matches at the same specificity, which is what lets the fill through.
+ *
+ * (An earlier draft carried `:not(:disabled)` here so a link drop would grey a
+ * rehearsing toggle. That was wrong twice over: the row IS still rehearsing, so
+ * hiding it was the less honest reading, and it would have blocked the on-air PLAY
+ * fill outright.)
+ */
+.cg-btn--verb.is-on,
+.cg-btn--neutral.is-on,
+.cg-btn--icon.is-on {
+  background: var(--r-rehearsing-strong);
+  border-color: var(--r-rehearsing-strong);
+  color: #fff;
+}
+
+/*
+ * …and the fill takes the VERB'S OWN colour where it has one. PLAY engaged means
+ * ON AIR, so it wears PLAY's green rather than the rehearse violet — the button
+ * and the row's state mark then say the same thing about the same row.
+ *
+ * `--r-verb-play`, PLAY's own green, rather than the state mark's `--r-onair`:
+ * one hue, two weights, the same split the rehearse pair uses.
+ *
+ * The FOREGROUND is near-black here for the reason the hover block above gives —
+ * this green is light, and the white the other `.is-on` fills use would leave the
+ * glyph at about 1.5:1. It is repeated rather than inherited because `.is-on`'s
+ * base rule sets `color: #fff` for the violet, and only the play tone overrides it.
+ */
+.cg-btn[data-verb-tone='play'].is-on {
+  background: var(--r-verb-play);
+  border-color: var(--r-verb-play);
+  color: #10151f;
+}
+
+/*
+ * …and a PANEL-HEADER toggle takes the interactive accent, not the rehearse violet.
+ *
+ * The owner's ask: when a panel is FULLSCREEN, its minimize control must look
+ * different, so the operator can tell at a glance that what he is looking at is one
+ * panel blown up rather than the whole workspace. The icon already flips
+ * (Maximize2 → Minimize2) and `aria-pressed` already says so, but neither survives
+ * a glance across a gallery — which is the whole reason this console puts state in
+ * colour.
+ *
+ * IT MAY NOT BE THE VIOLET. `.is-on`'s base fill is `--r-rehearsing-strong`, and
+ * that hue is R-022's REHEARSING state: it means "this row is on PVW and cannot
+ * reach air". A violet chip in a panel header would be that claim in a place it
+ * cannot be true, which is precisely the one-hue-one-meaning rule the rest of this
+ * file is built on.
+ *
+ * Sky is the right one BECAUSE it is the interactive accent and has never been a
+ * state colour — nothing else on this surface is competing for it, and a lit
+ * control here is a statement about the CHROME (a panel is maximised), never about
+ * a graphic. Scoped to `.cg-panel-actions` so it cannot leak onto a row verb.
+ */
+.cg-panel-actions .cg-btn.is-on {
+  background: var(--r-accent);
+  border-color: var(--r-accent);
+  /* Near-black, like the play tone above and for the same reason: sky is light
+     enough that the white the violet uses would leave the glyph unreadable. */
+  color: #10151f;
+}
+.cg-btn--verb.is-on:hover:not(:disabled),
+.cg-btn--neutral.is-on:hover:not(:disabled),
+.cg-btn--icon.is-on:hover:not(:disabled) {
+  /* Lift the fill rather than swapping to the neutral hover, which would make an
+     engaged toggle look like it had switched off under the pointer. */
+  background: #8b5cf6;
+  border-color: #a78bfa;
+  box-shadow: var(--r-shadow-1);
+}
+.cg-btn--verb.is-on:active:not(:disabled),
+.cg-btn--neutral.is-on:active:not(:disabled),
+.cg-btn--icon.is-on:active:not(:disabled) {
+  background: #6d28d9;
+  box-shadow: none;
+}
+
+/* The icon-only row verb adds only its GEOMETRY on top of the neutral look. */
+.cg-btn--verb {
+  /* The hit target floor. Mirrors `VERB_TARGET_PX` in `layerTable.ts`, which
+     budgets the verb column's width from the same number. */
+  min-width: 36px;
+  min-height: 36px;
+  /* Fill the column the header sized, so the word above sits over the button. */
+  width: 100%;
+  padding: 0;
+}
+
+/* A neutral TEXT button keeps the base `.cg-btn` padding; it only needs a floor on
+   its height so it matches the row verbs' weight in the same header. */
+.cg-btn--neutral {
+  min-height: 36px;
+  padding: 0.4rem 0.75rem;
+}
+
+/*
+ * THE THIRD SHAPE — a small, FIXED icon button for a free-standing control row.
+ *
+ * This exists because `--verb` was reused for its neutral LOOK and dragged its
+ * COLUMN GEOMETRY along with it: `width: 100%` is right for a glyph filling a
+ * table column the sticky header sized, and wrong everywhere else. Three of them
+ * in the Inspector's flex tools row each asked for the container's full width and
+ * came out STRETCHED — the owner's report, and precisely the trap the
+ * `--verb`/`--neutral` split above was written to warn about. The LOOK is the
+ * shared thing; the SHAPE is not, and there are three shapes, not two.
+ *
+ * `flex: 0 0 auto` is the load-bearing part: it makes the button refuse to grow
+ * AND refuse to shrink, so the size is genuinely fixed rather than a function of
+ * how much room the row happens to have. That is what keeps it responsive — the
+ * TEXT beside it reflows, the controls never resize.
+ *
+ * 28px, not 36px: the owner asked for smaller, and these sit in a dense field
+ * editor rather than a gallery-scanned table. It stays above the 24px WCAG 2.5.8
+ * floor, which is the reason not to shrink it further.
+ *
+ * IT IS ALSO THE PANEL BAR'S SHAPE now (`Panel`'s fullscreen and close). Those were
+ * `ghost` and were invisible on a bar with nothing else on it — see the `--ghost`
+ * warning above. Reusing this rather than minting a `--panel-action` fifth geometry is
+ * deliberate: the bar wanted a small fixed neutral square, which is precisely what this
+ * already is, and a shape per site is how a design system stops being one.
+ */
+.cg-btn--icon {
+  flex: 0 0 auto;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  font-size: var(--r-text-md);
+  line-height: 1;
+}
+
+/*
+ * MODAL CHROME — sized here, in the primitive's stylesheet, so every dialog in the app
+ * gets it rather than each one being dressed by hand.
+ *
+ * The footer rule exists because Cancel and Apply came out different sizes: Cancel was a
+ * `ghost` (tight padding, meant for an icon affordance) sitting beside a full-size
+ * `primary`, so the two read as different KINDS of control when they are peers — one
+ * dismisses, one commits, and both are equally reachable choices. A shared floor makes
+ * them a matched pair whatever variants a caller passes.
+ */
+.cg-modal-footer .cg-btn {
+  min-height: 36px;
+  /* A shared MIN-WIDTH as well as a shared height (owner's rule). Cancel and Apply
+     are peers, and two peers whose widths are set by their word lengths still read
+     as a big control beside a small one — `Done` next to `Reset to defaults` was the
+     clearest case. A floor makes the pair match without stretching the long one. */
+  min-width: 110px;
+  /* The explicit line-height and the asymmetric bottom padding are what optically
+     centre the label: the app's shaping-capable Persian-first font sits high in its
+     box, so an even `0.4rem` top/bottom left every dialog button's text riding
+     slightly low. Do not "tidy" this back to a symmetric shorthand. */
+  line-height: 22px;
+  padding: 0.5rem 0.9rem 0.2rem;
+}
+
+/* The close X: a square target, not a text button's rectangle. */
+.cg-modal-close.cg-btn {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 /* Busy + success + error states (driven by AsyncButton). No layout shift: while
@@ -255,10 +831,25 @@
 
 /* ── Fields (text / textarea / number / select) ─────────────────────────── */
 
+/*
+ * ONE INPUT SURFACE FOR THE WHOLE APP — owner's report was that the dx/dy numeric
+ * boxes rendered differently from the text inputs and textareas.
+ *
+ * The finding: they did NOT have a second style. `NumericInput` passes `className`
+ * straight through and every caller gives it `.cg-field`, so all of them were
+ * already on this one rule — what differed was that this rule painted a RAISED
+ * chip (`--r-surface-raised`) while the mock's fields are a WELL sunk into the
+ * panel. At 74px beside a full-width input that difference reads as two kinds of
+ * control rather than one control at two widths.
+ *
+ * So the fix stays a SINGLE rule and changes what it paints, rather than adding a
+ * variant for the small ones. Two surfaces tuned to match are two surfaces that
+ * drift at the next change.
+ */
 .cg-field {
-  background: var(--r-surface-raised);
+  background: var(--r-field-bg);
   color: var(--r-text);
-  border: 1px solid var(--r-border);
+  border: 1px solid var(--r-field-line);
   border-radius: var(--r-radius-sm);
   padding: 0.3rem 0.5rem;
   font: inherit;
@@ -288,6 +879,719 @@
 textarea.cg-field {
   resize: vertical;
   line-height: 1.4;
+}
+/*
+ * THE GRIP IS REAL, and it wins. This was `resize: none` because auto-sizing
+ * would undo a drag on the next keystroke — a sound observation with the wrong
+ * conclusion: the fix is to stop undoing it, not to remove the handle. An operator
+ * working four headline items needs to open one up. `AutoGrowTextarea` latches on
+ * the first manual resize and never auto-sizes that element again; see its header
+ * for why the latch is per-element, per-mount, and never reaches the value.
+ */
+textarea.cg-field--autogrow {
+  resize: vertical;
+  overflow-y: auto;
+}
+
+/* ── Inspector field layout ─────────────────────────────────────────────────
+ *
+ * WHY A CONTAINER QUERY AND NOT A MEDIA QUERY. The Inspector is a resizable
+ * column (the operator drags the divider), it can go fullscreen, and below the
+ * narrow breakpoint it becomes a right-pinned overlay at `min(24rem, 82vw)`. Its
+ * width is therefore NOT a function of the viewport's, so a media query would ask
+ * the wrong question and get it wrong in the two cases that matter most — a
+ * dragged-narrow column on a wide screen, and the overlay. `container-type:
+ * inline-size` on the panel body makes the fields respond to the space they are
+ * actually in, which is the only correct axis (the CLAUDE.md "probe the axis you
+ * intend to judge" rule, applied to layout).
+ */
+.cg-inspector-body {
+  container-type: inline-size;
+  container-name: inspector;
+}
+
+/*
+ * A COMPACT field: label beside its control. Right for a checkbox, a number, a
+ * colour swatch or a select — controls with an intrinsic, small width.
+ *
+ * `minmax(0, …)` on BOTH tracks, not `120px 1fr`: a grid track's default `min-width:
+ * auto` refuses to shrink below its content, which is how a long label or a wide
+ * control pushed the row past the panel and forced horizontal overflow.
+ */
+.cg-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
+  gap: var(--r-space-2);
+  /* Same field→field step as the wide rows, so a panel mixing the two kinds
+     keeps ONE rhythm rather than two competing ones. */
+  padding: 0 0 var(--r-space-6);
+  font-size: var(--r-text-md);
+  align-items: center;
+}
+
+/*
+ * A WIDE field — text, multiline, list, image — stacks its label ABOVE the control.
+ *
+ * This is the real fix for the unusable list editors, and it is a LAYOUT fix rather
+ * than a width setting. At the default 320px panel the two-column row left roughly
+ * 160px for the control; the list editor then spent ~95px of that on its own reorder
+ * and delete buttons, leaving an ~80px textarea in which Persian text broke mid-word
+ * across three lines. Widening the value column could not fix that — the label
+ * column and the buttons were both taking from the same 288px. Giving the control
+ * the panel's FULL width, and moving the buttons off its line (see
+ * `.cg-list-item`), is what actually gives the text room.
+ */
+.cg-field-row--wide {
+  display: flex;
+  flex-direction: column;
+  /* LABEL→CONTROL is the smallest step in the gradient — they are one object. */
+  gap: var(--r-space-2);
+  /* …and FIELD→FIELD is two steps up, so the boundary between two fields is
+     unmistakably wider than the gap inside one. That difference is what removes
+     the need for a divider line between every field. */
+  padding: 0 0 var(--r-space-6);
+  font-size: var(--r-text-md);
+  min-width: 0;
+}
+
+/* Below this, even a compact row has no room for two tracks — the overlay on a
+   phone, or a column dragged to its minimum. Everything stacks. */
+@container inspector (max-width: 15rem) {
+  .cg-field-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.2rem;
+  }
+}
+
+/* ── The attached FILE chip (name + detach), as one control ─────────────────
+ *
+ * §7. Once a file was chosen the row became: `Add item` · the filename as bare
+ * text · `Reload` · `✕` — four things at three heights with nothing aligning, and
+ * the filename pushing the controls around as it grew.
+ *
+ * ── WHY THE `✕` IS WELDED TO THE NAME ───────────────────────────────────────
+ *
+ * That `✕` DETACHES THE FILE. Directly above it, one per row, sit the item-delete
+ * `✕` buttons — same glyph, same size, different consequence. Two identical
+ * glyphs doing different things in one column is the defect to avoid, and
+ * alignment alone would have made it worse by putting them in a tidy vertical
+ * line.
+ *
+ * So this one stops being a free-standing button and becomes part of the FILE: a
+ * segmented chip that reads as one object, "this file, with a way to remove it".
+ * It is a different shape, a different fill and a different position from an item
+ * row's delete, and it is physically attached to the thing it acts on — which is
+ * a stronger answer than a label, because it survives an operator who is not
+ * reading.
+ *
+ * THE NAME IS CONTENT, so it takes a light fill and dark ink: it is a document
+ * the operator chose, not a control the app offers, and every control around it
+ * is dark-on-dark. It truncates rather than pushing its neighbours (`min-width: 0`
+ * plus the ellipsis), so a long path can never move the buttons.
+ */
+
+/*
+ * 28px — THE SAME HEIGHT AS THE BUTTONS IT SITS BETWEEN, which is the whole point
+ * of the row reading as one cluster. `Add item` and `Reload` take 28px from
+ * `.cg-field-foot`, so the chip states it explicitly rather than taking its height
+ * from the filename's line box: a chip sized by its text is a chip whose height
+ * changes with the font, and it was the odd one out in a row of three.
+ *
+ * `align-items: stretch` then makes the name and the detach exactly as tall as
+ * each other, so the seam between them runs the full height and the two halves
+ * read as one object rather than two things that happen to touch.
+ */
+.cg-file-chip {
+  display: inline-flex;
+  align-items: stretch;
+  height: 28px;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: var(--r-radius-sm);
+  overflow: hidden;
+  flex: 0 1 auto;
+}
+
+.cg-file-chip__name {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--r-space-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #e6ebf0;
+  color: #10151f;
+  font-size: var(--r-text-sm);
+}
+
+/*
+ * The detach half — joined, and deliberately NOT `--icon`: it must not look like
+ * the item-delete buttons in the rows above, which are that shape.
+ *
+ * ITS FILL IS THE SEAM. A mid grey between the name's light panel and the dark
+ * surface behind the row: light enough to belong to the chip, dark enough that the
+ * boundary between "the file" and "remove the file" is unmistakable without a
+ * border. That contrast IS the affordance here — the two halves have no divider
+ * line, so if the fills converge the chip becomes one undifferentiated block and
+ * the operator cannot see there is a control in it.
+ */
+.cg-file-chip__detach {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  padding: 0;
+  border: 0;
+  background: #55606c;
+  color: #f2f5f8;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+.cg-file-chip__detach:hover {
+  background: var(--r-danger);
+}
+.cg-file-chip__detach:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+
+/* ── Inspector rhythm — the spacing GRADIENT does the grouping ──────────────
+ *
+ * One scale (`--r-space-*`: 4/8/12/16/24/32) and nothing in this panel outside
+ * it. What makes it work is the ORDERING, not the values: label→control is the
+ * smallest step, control→control one up, field→field larger, section→section
+ * largest. Read down the panel, the gaps say what belongs to what — which is why
+ * this needs no divider line between every pair of things. Half the visual noise
+ * the owner was reacting to came from every gap being a different arbitrary
+ * number, so a rule per relationship replaces a number per element.
+ */
+
+.cg-inspector-section {
+  margin: 0 0 var(--r-space-8);
+}
+
+/*
+ * A SECTION HEADING — small, wide-tracked, faint, with a rule under it. It names
+ * a region; it is not a heading competing with the field labels below it, which
+ * are the thing the operator is actually reading.
+ */
+.cg-inspector-section > h2 {
+  margin: 0 0 var(--r-space-4);
+  padding-bottom: var(--r-space-2);
+  border-bottom: 1px solid var(--r-border);
+  font-size: 11px;
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--r-text-muted);
+}
+
+/* ── Inspector control heights — a ROW decides, not the variants in it ──────
+ *
+ * Owner report: "the From file… button height is higher than Add item". It was —
+ * 36px against ~29px — and neither button was wrong on its own. `From file…` is
+ * `--neutral`, whose 36px floor exists to match the ROW VERBS' weight in the
+ * layer table's header; `Add item` is a plain `.cg-btn` and takes its height from
+ * its padding. Two variants chosen for their COLOUR, each dragging along a height
+ * meant for somewhere else.
+ *
+ * Same shape as the panel bar's problem one level up, and the same answer: the
+ * CONTAINER owns the height, so a control's variant decides what it looks like and
+ * never how tall it is. Two rows, two heights, deliberately — the field footers are
+ * secondary controls at 28px, the commit bar is the panel's primary action at 32px.
+ *
+ * Set on the ROW rather than per button, so a control added to either row later
+ * cannot arrive at a third height.
+ */
+.cg-field-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--r-space-2);
+  flex-wrap: wrap;
+}
+/* The from-file block is a COLUMN, not a footer row, so it takes the height rule
+   without the layout — its buttons are the same secondary controls whether they
+   sit beside "Add item" or under a text field. */
+.cg-field-foot .cg-btn,
+.cg-from-file .cg-btn {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
+}
+.cg-inspector-actions .cg-btn {
+  height: 32px;
+  min-height: 32px;
+  padding-block: 0;
+}
+/* "Apply position" sits IN the nudge row and must line up with the two number
+   boxes beside it, so it takes the field height rather than a button height. */
+.cg-position-row .cg-btn {
+  height: 32px;
+  min-height: 32px;
+  padding-block: 0;
+}
+
+/* ── Inspector metadata chips (status / layer / channel / server) ───────────
+ *
+ * These were two loose prose lines under the item's title. Two sentences read as
+ * an afterthought; a wrapping row of pills reads as a STATUS LINE, which is what
+ * they are — the line an operator comes to the Inspector to reconcile against
+ * what CasparCG reports.
+ *
+ * The LABEL is dim and the VALUE is primary and semibold, because the label is
+ * the same four words every time and the value is the only part that changes.
+ * The words themselves are unchanged (`dev-offline-polish` owns wording).
+ */
+
+/*
+ * THE CHIP ROW BELONGS TO THE TITLE ABOVE IT, NOT TO THE SECTION BELOW.
+ *
+ * The scale was applied to the FIELDS in the first pass and not to the panel's
+ * HEAD, so the title, the chips and the POSITION heading sat almost flush — the
+ * owner's report. The gap inside the head (title → chips) is a small step because
+ * they are one block: the chips are metadata ABOUT that title. The gap out of it
+ * (chips → the first section heading) is the largest step in the scale, because
+ * that is a SECTION boundary and must read as one.
+ *
+ * The ordering is the whole mechanism: small inside a group, large between
+ * groups. It is what lets this panel group things without a divider line between
+ * every pair.
+ */
+.cg-meta-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r-space-1) var(--r-space-2);
+  align-items: center;
+  margin: 0 0 var(--r-space-8);
+}
+
+.cg-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-1);
+  padding: 2px var(--r-space-2);
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--r-surface-raised);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-full);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.cg-meta-chip__label {
+  color: var(--r-text-muted);
+  white-space: nowrap;
+}
+
+.cg-meta-chip__value {
+  color: var(--r-text);
+  font-weight: var(--r-weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The status chip's dot. TYPOGRAPHY, NOT STATE — it inherits the label's dim ink
+ * and never an air-state hue. `theme.ts` reserves the on-air colour for the layer
+ * rows and the status bar's indicator "and NOWHERE else", and a coloured dot here
+ * would be a second air indicator on the same console. Its job is to mark which
+ * chip is the STATE among three coordinates, and dim does that.
+ */
+.cg-meta-chip__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--r-radius-full);
+  background: var(--r-text-muted);
+}
+
+/* ── Inspector 3×3 anchor grid (the 9-point Position model) ─────────────────
+ *
+ * IT HAS TO READ AS A GRID. It used to be nine loose glyphs — a `·` per cell and a
+ * `◉` on the selected one — in a bare `display: grid` with no cell borders. That
+ * communicated "here are nine things" and never "pick a corner": the SHAPE of a
+ * control is what says what the control is for, and a 3×3 of bordered cells IS a
+ * frame while a scatter of dots is not.
+ *
+ * THE SELECTED CELL IS NOT JUST A FILL. `inset 0 0 0 2px var(--r-surface)` cuts a
+ * ring between the accent fill and the accent border, so the mark reads as a
+ * deliberate selection rather than as the hover it would otherwise be mistaken for
+ * — the two states are one hue apart and a fill alone cannot separate them.
+ *
+ * `aria-pressed` is what the CSS keys on, so the painting and the announcement can
+ * never disagree about which anchor is chosen.
+ */
+
+.cg-anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 30px);
+  grid-template-rows: repeat(3, 30px);
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.cg-btn.cg-anchor-cell {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 3px;
+  border: 1px solid var(--r-border-strong);
+  background: var(--r-surface-sunken);
+}
+
+.cg-anchor-cell__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: var(--r-radius-full);
+  background: var(--r-text-muted);
+}
+
+.cg-btn.cg-anchor-cell[aria-pressed='true'] {
+  background: var(--r-accent-fill);
+  border-color: var(--r-accent-line);
+  box-shadow: inset 0 0 0 2px var(--r-surface);
+}
+
+.cg-btn.cg-anchor-cell[aria-pressed='true'] .cg-anchor-cell__dot {
+  background: var(--r-accent-ink);
+  /* Larger as well as brighter — the chosen anchor must survive being read at a
+     glance by someone who cannot separate the two blues. */
+  width: 6px;
+  height: 6px;
+}
+
+.cg-btn.cg-anchor-cell:hover:not(:disabled) {
+  border-color: var(--r-accent);
+  filter: none;
+}
+
+.cg-btn.cg-anchor-cell:hover:not(:disabled) .cg-anchor-cell__dot {
+  background: var(--r-text);
+}
+
+/* ── Inspector list-field items (ticker / sequence rows) ────────────────────── */
+
+/*
+ * ONE ITEM = ONE ROW: the cluster, then the text it acts on.
+ *
+ * ── WHAT WAS ACTUALLY WRONG ─────────────────────────────────────────────────
+ *
+ * The controls used to be a full-width strip on their OWN LINE beneath the
+ * textarea, with a `flex: 1` spacer shoving the ✕ to the far end. At the panel's
+ * narrow default that looked reasonable. At FULLSCREEN it put the reorder arrows
+ * and the delete button roughly 1800px apart — five controls acting on one item,
+ * scattered across the width of a monitor, on a second line below the thing they
+ * act on. That is most of what "بهم ریخته به نظر میاد" was pointing at.
+ *
+ * The width was never the problem. The strip only looked broken at full width
+ * because the controls inside it had drifted apart.
+ *
+ * ── THE DURABLE RULE, WHICH OUTRANKS EVERY PIXEL BELOW ──────────────────────
+ *
+ * The five controls that act on ONE item stay together as ONE cluster, ALWAYS.
+ * At a narrow panel the cluster may wrap onto its own line — that is fine, and
+ * `flex-wrap` is what allows it. What must never happen again is the cluster
+ * SPLITTING, with some controls at one edge and others at the opposite edge. No
+ * spacer, no `justify-content: space-between`, no `margin-inline-start: auto`.
+ *
+ * ── THE TEXT LEADS, THE CLUSTER FOLLOWS — AND NO `order` IS INVOLVED ────────
+ *
+ * The approved mock puts the textarea first and the controls after it, and that
+ * is what is implemented. It is worth saying why the alternative was rejected
+ * rather than merely not chosen: leading with the cluster would have needed
+ * `order` to keep the DOM sequence honest, because DOM ORDER IS TAB ORDER and the
+ * operator's task here is TYPING — tabbing must reach an item's text before its
+ * four controls (the same principle the commit bar's comment in `Inspector.tsx`
+ * applies to Update). With the text leading, DOM order, visual order and tab
+ * order all agree and no override is needed at all. A layout that needs no
+ * `order` is the one to prefer; `order` is a repair, not a tool.
+ */
+/*
+ * IT DOES NOT WRAP — the TEXT shrinks and the cluster holds its size.
+ *
+ * Verified against the owner's screenshots at ~420px: the item stays one line and
+ * the textarea narrows. An earlier `flex-wrap: wrap` with a 12rem basis pushed the
+ * cluster onto its own line at the default panel width, which is the OLD layout
+ * re-created by accident — controls on one line, text on another.
+ *
+ * This is the fixed-size-plus-reflow split doing its job: the cluster is
+ * `flex: 0 0 auto` so it never resizes, the text is `flex: 1 1 auto; min-width: 0`
+ * so it absorbs every change in width. One rule covers 320px and fullscreen.
+ */
+.cg-list-item {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--r-space-2);
+  min-width: 0;
+  border-radius: var(--r-radius-sm);
+  /* Reserved so the drop indicator below never shifts the list as it moves. */
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+}
+
+.cg-list-item__tools {
+  display: flex;
+  align-items: center;
+  /* Tighter than the spacing scale, deliberately: these five are ONE object, and
+     the scale's smallest step between them would read as five separate controls
+     that happen to be near each other. The scale governs the gaps BETWEEN
+     things; this is the gap INSIDE one thing. */
+  gap: 2px;
+  flex: 0 0 auto;
+  /* Aligned to the textarea's FIRST TEXT LINE rather than to its box top — a
+     cluster flush with the border sits visibly above the text it acts on. */
+  padding-top: 2px;
+}
+
+/*
+ * The item's text — it takes every pixel the cluster does not, at every width.
+ *
+ * `min-width: 0` is the load-bearing part: a flex item's default `min-width: auto`
+ * refuses to shrink below its content, which is how a long Persian headline would
+ * push the row wider than the panel instead of wrapping inside its own box.
+ */
+.cg-list-item__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 52px;
+  line-height: 1.6;
+}
+
+/* The item's display number — the operator's way of telling two identical-looking
+   rows apart, and it matches the 1-based numbering the rest of the console uses.
+   It is also what identifies an item now that no bracketed key is printed per row
+   (see `FieldEditor`): the FIELD is named once, the ITEMS are numbered. */
+.cg-list-item__index {
+  flex: 0 0 auto;
+  width: 20px;
+  text-align: center;
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-bold);
+  color: var(--r-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The minis. `--icon`'s neutral look, one notch narrower — five of them plus a
+   handle and an index have to fit beside the text at the panel's default width. */
+.cg-list-item__tools .cg-btn--icon {
+  width: 26px;
+  min-width: 26px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: var(--r-radius-sm);
+}
+
+/*
+ * A DISABLED MINI STAYS IN PLACE — ↑ on the first item, ↓ on the last.
+ *
+ * Dimmer than the shared disabled treatment (the mock's 0.35) because there are
+ * up to five of these per row and an inert one must recede; still carrying its
+ * fill and border, because it must hold its SPACE. A control that vanished would
+ * make the cluster a different width on the first row, the middle rows and the
+ * last — the whole column of clusters would then fail to line up, which is its
+ * own kind of mess and the one this layout exists to end.
+ */
+.cg-list-item__tools .cg-btn--icon:disabled {
+  background: var(--r-surface-raised);
+  border-color: var(--r-border-strong);
+  opacity: 0.35;
+  cursor: default;
+}
+
+/*
+ * DELETE: neutral at rest, RED ON HOVER ONLY.
+ *
+ * This replaced the `flex: 1` spacer that used to hold the ✕ away from the
+ * reorder pair. The spacer's job — "these are two different kinds of action" — is
+ * real and is kept; only the mechanism changes, from POSITION to hover colour,
+ * because position is what split the cluster across 1800px. The small leading gap
+ * is the residue of it: enough that a thumb reaching for ↓ does not land here,
+ * not enough to break the cluster into two objects.
+ */
+.cg-list-item__tools .cg-btn--icon.cg-list-remove {
+  margin-inline-start: var(--r-space-1);
+}
+.cg-btn--icon.cg-list-remove:hover:not(:disabled) {
+  border-color: var(--r-danger);
+  color: #fca5a5;
+}
+
+/*
+ * THE DRAG HANDLE. Pointer-only by nature, which is exactly why the ↑/↓ buttons
+ * stay: drag is unreachable by keyboard and awkward under time pressure, so it is
+ * an ADDITION to them, never a replacement. `cursor: grab` and the grip icon are
+ * the whole affordance.
+ */
+.cg-list-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Matched to the remove button's 28px so the cluster is one consistent height. */
+  flex: 0 0 auto;
+  /*
+   * 24px, NOT the 22px it was — and the E2E hit-target assertion is what caught
+   * the change. At 22px this was a decorative `<span>`: `aria-hidden`, `tabIndex`
+   * -1, unreachable, and therefore not a target that owed a size. Making it a real
+   * focusable button (the ↑/↓ pair is gone) turned it into the ONLY reorder
+   * control, and a control owes the 24px WCAG 2.5.8 floor.
+   *
+   * The lesson is the general one, not the two pixels: promoting something to a
+   * control brings the whole contract with it — a name, a focus ring, a keyboard
+   * path and a hit target — and it is easy to add the behaviour and forget the
+   * rest. Do not shrink this back to match a mock that was drawn for a span.
+   */
+  width: 24px;
+  min-width: 24px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--r-text-muted);
+  cursor: grab;
+  line-height: 1;
+  font: inherit;
+}
+.cg-list-handle:hover {
+  color: var(--r-text);
+}
+/*
+ * IT IS A REAL BUTTON NOW, so it owes a real focus ring — and this one is not
+ * cosmetic. With the ↑/↓ pair gone (owner request) this handle is the ONLY
+ * keyboard route to reordering: focus it and press ↑/↓. An operator who cannot
+ * see where focus is cannot use the only path there is.
+ */
+.cg-list-handle:focus-visible {
+  outline: none;
+  color: var(--r-text);
+  border-radius: var(--r-radius-sm);
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+.cg-list-item.is-dragging {
+  opacity: 0.5;
+}
+.cg-list-item.is-dragging .cg-list-handle {
+  cursor: grabbing;
+}
+
+/*
+ * THE DROP INDICATOR — a line on the EDGE the item would land on, not a highlight
+ * of the hovered row. A filled row says "this row", which is the wrong answer: the
+ * question a reorder drag asks is "between which two?". Sky, the interactive accent,
+ * because this is an interaction in progress and never an air claim.
+ */
+.cg-list-item.is-drop-before {
+  border-top-color: var(--r-accent);
+}
+.cg-list-item.is-drop-after {
+  border-bottom-color: var(--r-accent);
+}
+
+/* ── Checkbox ───────────────────────────────────────────────────────────── */
+
+/*
+ * THE app's checkbox, styled on the ELEMENT selector rather than behind a class.
+ *
+ * Deliberate: "for the whole app" means every checkbox that exists and every one added
+ * later inherits this without being wired to it — the same reasoning as the single
+ * global `Tooltip`. A `.cg-check` class would mean the next checkbox somebody adds is
+ * the one that silently still looks like Windows.
+ *
+ * It keeps the native `<input type="checkbox">` underneath (`appearance: none` only
+ * removes the painting), so the accessibility, the label association, the keyboard
+ * behaviour and the form semantics are all untouched — this is a re-skin, not a
+ * re-implementation.
+ *
+ * THE TICK IS A COLOUR-INDEPENDENT SHAPE. The checked state is a drawn checkmark, not
+ * merely a filled box, so it survives a monochrome display and any form of colour
+ * blindness — the same rule the row states follow. The fill is the interactive accent
+ * (sky), NEVER the on-air green: a checkbox is not an air claim, and after on-air
+ * moved to green that separation matters more, not less.
+ */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  /* 18px: comfortable to hit without dominating a dense config row. */
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--r-border-strong);
+  border-radius: var(--r-radius-sm);
+  background: var(--r-surface-raised);
+  cursor: pointer;
+  position: relative;
+  display: inline-grid;
+  place-content: center;
+  transition:
+    background var(--r-dur-fast) ease,
+    border-color var(--r-dur-fast) ease,
+    box-shadow var(--r-dur-fast) ease;
+}
+
+input[type='checkbox']:hover:not(:disabled) {
+  border-color: var(--r-accent);
+  background: #2c3a4e;
+}
+
+input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+
+input[type='checkbox']:checked {
+  background: var(--r-accent);
+  border-color: var(--r-accent);
+}
+
+/*
+ * Hovering a CHECKED box must not darken it.
+ *
+ * The unchecked hover fill is a dark lift, and `:hover:not(:disabled)` outranks
+ * `:checked` on specificity — so without this rule pointing at a ticked box replaced its
+ * accent fill with that dark colour and it read as unticking itself. A checked control
+ * brightens on hover instead; the state never changes appearance just because the
+ * pointer crossed it.
+ */
+input[type='checkbox']:checked:hover:not(:disabled) {
+  background: #6dd3fb;
+  border-color: #6dd3fb;
+}
+
+/* The checkmark: two borders of a rotated box, so it scales with the control and
+   needs no glyph font or SVG. */
+input[type='checkbox']:checked::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border: solid #04121f;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+
+input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* A checked-but-disabled box must still read as CHECKED — the state is information
+   even when it cannot be changed. */
+input[type='checkbox']:disabled:checked {
+  background: var(--r-border-strong);
+  border-color: var(--r-border-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input[type='checkbox'] {
+    transition: none;
+  }
 }
 
 /* ── Badge (stack status pill) ──────────────────────────────────────────── */
@@ -349,33 +1653,276 @@ textarea.cg-field {
 
 /* ── Pill (link / session indicators) ───────────────────────────────────── */
 
+/*
+ * Status READOUTS — deliberately not button-shaped.
+ *
+ * These used to carry a border, a raised background and rounded corners: the
+ * exact chrome every control in this app uses, so operators read them as
+ * clickable and tried to press them. Nothing here is interactive — LIVE,
+ * PRIMARY A HEALTHY, NO BACKUP and the strategy are things the console is
+ * TELLING you.
+ *
+ * So the box is gone and the affordance signals with it. What remains is the
+ * signal itself: a coloured dot plus a label, on the bar's own background,
+ * separated by a hairline rule rather than by a chip outline. The state colours
+ * are untouched — they were never the problem — and `cursor: default` means the
+ * pointer stops promising an action too.
+ */
 .cg-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.15rem 0.55rem;
-  border-radius: var(--r-radius-sm);
-  border: 1px solid var(--r-border);
-  background: var(--r-surface-raised);
+  padding: 0.15rem 0;
   font-weight: var(--r-weight-bold);
   white-space: nowrap;
+  cursor: default;
+}
+
+/* A hairline between adjacent readouts: grouping without a box. */
+.cg-pill + .cg-pill {
+  margin-left: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--r-border);
 }
 
 /* ── Stack row (interactive container) ──────────────────────────────────── */
 
+/*
+ * R-028 part B — SELECTION had to become unmistakable. It used to be the exact
+ * same `--r-surface-raised` background as :hover, so on a real console the
+ * operator could not tell which row the Inspector was editing — they looked
+ * identical the moment the pointer rested anywhere in the list.
+ *
+ * Two constraints shaped the fix:
+ *
+ *  1. NOT COLOUR ALONE. The cue is STRUCTURAL — a 4px left accent bar plus an
+ *     inset padding shift — so it survives a monochrome display and any form of
+ *     colour blindness. The background lift is reinforcement, never the signal.
+ *  2. IT MUST NOT RESEMBLE ON AIR. Selection is about FOCUS; on air is about the
+ *     TRANSMISSION. The bar therefore uses the interactive accent (sky), which
+ *     is the colour this app already means "you are interacting with this" —
+ *     never the sacred `--r-on-air` red, which is reserved for a graphic a real
+ *     server confirmed. An operator glancing at the screen must never read
+ *     "selected" as "on air".
+ */
 .cg-row {
   cursor: pointer;
-  transition: background var(--r-dur-fast) ease;
+  /* A transparent inset ring reserves the selected row's outline, so selecting a
+     row never shifts its content — the buttons stay exactly where the finger
+     expects. Replaces a 4px left bar, which the mock-up supersedes. */
+  box-shadow: inset 0 0 0 2px transparent;
+  transition:
+    background var(--r-dur-fast) ease,
+    box-shadow var(--r-dur-fast) ease;
 }
-.cg-row:hover {
+/*
+ * A ROW WITH A TEMPLATE ON IT sits slightly lifted from an empty one.
+ *
+ * NOT zebra striping — the owner corrected an earlier read of the mock-up on exactly
+ * this point, and the distinction matters. Alternating bands are decoration that
+ * happens to aid scanning; this is SEMANTIC: it separates the rows that can do
+ * something from the rows that are waiting to be filled, which is a real question an
+ * operator asks of the list at a glance.
+ *
+ * Deliberately faint. It must not register as a STATE — the state column owns that,
+ * and a background strong enough to compete would put two answers to "what is on
+ * this row?" on one row. It also must never be mistaken for the selection ring or an
+ * air claim, so it carries no hue at all, just a few percent of white.
+ */
+.cg-row.has-template {
+  /* Exact value specified by the owner. Opaque rather than a white overlay so it
+     does not compound with anything painted behind it. */
+  background: rgb(30 38 51);
+}
+/* Hover outranks both, and must beat `has-template`'s specificity. */
+.cg-row:hover,
+.cg-row.has-template:hover {
   background: var(--r-surface-raised);
 }
-.cg-row.is-selected {
-  background: var(--r-surface-raised);
+
+/*
+ * AN EMPTY ROW IS NOT INTERACTIVE, and now stops claiming to be.
+ *
+ * It carried `cursor: pointer` and a hover fill because both live on `.cg-row`,
+ * which is every row — so a row with nothing on it invited a click that does
+ * nothing. Not merely cosmetic: clicking an empty row already reports `null`
+ * (there is no item to select, and `layerRow.dom.test.ts` pins exactly that), so
+ * the affordance was advertising an action the row cannot perform. Thirty rows of
+ * false affordance is also thirty rows of hover noise while the eye travels to
+ * the one row that matters.
+ *
+ * Its VERBS keep their own cursors and hovers — LOAD is real on an empty row, and
+ * this rule is about the row SURFACE, not the controls sitting on it.
+ *
+ * `:not(.has-template)` rather than a new class: `has-template` already carries
+ * "this row has something on it", and a second flag for the same fact is how the
+ * two come to disagree.
+ */
+.cg-row:not(.has-template) {
+  cursor: default;
+}
+.cg-row:not(.has-template):hover {
+  background: transparent;
+}
+
+/*
+ * SELECTION — a bright ring around the WHOLE row, per the mock-up.
+ *
+ * Two constraints it still has to satisfy, unchanged from the left-bar version it
+ * replaces:
+ *
+ *  1. NOT COLOUR ALONE. The cue is a continuous ring — a shape enclosing the row —
+ *     so it survives a monochrome display and any form of colour blindness. The
+ *     background lift is reinforcement, never the signal.
+ *  2. IT MUST NOT RESEMBLE ON AIR. Selection is about FOCUS; on air is about the
+ *     TRANSMISSION. The ring is the interactive accent (sky), which this app
+ *     already means "you are interacting with this" — never the sacred air colour
+ *     reserved for a graphic a real server confirmed. That separation got MORE
+ *     important, not less, when on-air moved to green: sky and green sit closer to
+ *     each other than sky and red did, so the ring is deliberately the bright,
+ *     saturated accent rather than anything softer.
+ *
+ * An enclosing ring also reads better than the old edge bar at a glance across a
+ * gallery, and it does not compete with the state column for the eye.
+ */
+/* The tint is a wash of the accent rather than the neutral raised surface, matching
+   the mock-up: it makes the selected row unmistakable even where the ring is clipped
+   by the scroll edge, and it cannot be confused with the has-template lift, which
+   carries no hue at all. Listed with `.has-template` so it wins on specificity. */
+.cg-row.is-selected,
+.cg-row.is-selected.has-template {
+  background: rgba(56, 189, 248, 0.1);
+  box-shadow: inset 0 0 0 2px var(--r-accent);
 }
 .cg-row:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 var(--r-focus-ring) var(--r-accent);
+  /* Focus and selection can coexist; the focus ring is inset further so both read. */
+  box-shadow:
+    inset 0 0 0 2px var(--r-accent),
+    inset 0 0 0 4px rgba(56, 189, 248, 0.35);
+}
+
+/* ── Narrow-screen Inspector overlay ───────────────────────────────────── */
+
+/*
+ * THE OVERLAY'S PANEL MUST FILL IT — full viewport height, always (owner request).
+ *
+ * The wrapper is pinned `top: 0; bottom: 0`, so the OVERLAY was already full height.
+ * The panel INSIDE it was not, and that is the whole bug: the wrapper is a column
+ * flex container, height is therefore its MAIN axis, and a flex child sizes to its
+ * CONTENT on the main axis rather than stretching. So a short field list produced a
+ * short panel floating in a full-height box — measured at 800px in a 900px viewport.
+ *
+ * `flex: 1` on the child is the fix; `min-height: 0` alongside it is what keeps the
+ * panel's own body scrollable instead of letting a long field list push the panel
+ * past the viewport (the `layout.ts` page-never-scrolls invariant).
+ *
+ * Expressed as a child rule rather than a prop threaded through the Inspector,
+ * because it is a fact about THIS CONTAINER, not about the Inspector — anything
+ * placed in the overlay needs it.
+ */
+.cg-inspector-overlay > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Shell divider (the drag handle between panels) ─────────────────────── */
+
+/*
+ * IT MUST NOT LOOK LIKE A SCROLLBAR — the owner's report, and it did.
+ *
+ * The old handle was a 6px `border`-coloured bar with `border-radius: 3px`: a solid,
+ * rounded, full-height sliver, which is precisely the shape every scrollbar thumb in
+ * the app has. So operators read it as a scrollbar — something you drag to LOOK
+ * somewhere else — when it actually RESIZES the panels. It also had no hover and no
+ * dragging state, so nothing corrected the misreading on approach.
+ *
+ * The fix is a different SHAPE, not just a different colour: the track is now nearly
+ * invisible and the affordance is a short centred GRIP in the middle of the run. A
+ * scrollbar thumb is long and offset (its position means something); a grip is short
+ * and always centred (its position means nothing). That difference is legible at a
+ * glance even before the pointer arrives.
+ *
+ * HOVER AND DRAG ARE DISTINCT, and both use the INTERACTIVE accent (sky) — the colour
+ * this app already means "you are interacting with this". Never the on-air hue: a
+ * divider is not a transmission claim, and after on-air moved to green the separation
+ * matters more, not less, because sky and green sit closer together than sky and red
+ * did. Hover lengthens and lights the grip; DRAGGING fills the whole track, so the
+ * operator can see which divider is captured even with the pointer far away from it
+ * (the drag is tracked on the window, so the pointer usually is).
+ */
+.cg-divider {
+  position: relative;
+  flex-shrink: 0;
+  background: transparent;
+  transition:
+    background var(--r-dur-fast) ease,
+    opacity var(--r-dur-fast) ease;
+}
+
+/* The GRIP: short, centred, and the only thing visible at rest. */
+.cg-divider::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  background: var(--r-border-strong);
+  border-radius: var(--r-radius-full);
+  transition:
+    background var(--r-dur-fast) ease,
+    width var(--r-dur-fast) ease,
+    height var(--r-dur-fast) ease;
+}
+.cg-divider--vertical::after {
+  width: 2px;
+  height: 28px;
+}
+.cg-divider--horizontal::after {
+  width: 28px;
+  height: 2px;
+}
+
+.cg-divider:hover::after {
+  background: var(--r-accent);
+}
+/* The grip GROWS along the drag axis on hover — motion that says "this slides", and
+   a bigger target once the operator has committed to reaching for it. */
+.cg-divider--vertical:hover::after {
+  height: 56px;
+}
+.cg-divider--horizontal:hover::after {
+  width: 56px;
+}
+
+/* DRAGGING — the whole track lights, not just the grip, so the captured divider is
+   identifiable while the pointer is off somewhere else entirely. */
+.cg-divider.is-dragging {
+  background: rgba(56, 189, 248, 0.22);
+}
+.cg-divider.is-dragging::after {
+  background: var(--r-accent);
+}
+.cg-divider--vertical.is-dragging::after {
+  height: 100%;
+  border-radius: 0;
+}
+.cg-divider--horizontal.is-dragging::after {
+  width: 100%;
+  border-radius: 0;
+}
+
+/* Keyboard resize is a real feature here (arrow keys), so the focus ring has to be
+   as visible as any control's. */
+.cg-divider:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cg-divider,
+  .cg-divider::after {
+    transition: none;
+  }
 }
 
 /* ── Reduced motion: no spin / no transitions; static affordances only. ──── */
@@ -393,4 +1940,52 @@ textarea.cg-field {
   .cg-badge--transient .cg-badge__icon {
     animation: none;
   }
+}
+
+/* ── Tooltip (the ONE global mechanism — see ui/Tooltip.tsx) ─────────────── */
+
+/*
+ * Positioned by the component (measured, clamped to the viewport); everything
+ * that is a LOOK lives here, so the bubble matches the rest of the console
+ * rather than carrying its own private palette in inline styles.
+ *
+ * `z-index` sits above the modal scrim (1000) and the narrow Inspector overlay
+ * (801): a tooltip explaining a button inside a dialog is useless behind it.
+ */
+.cg-tooltip {
+  position: fixed;
+  max-width: 22rem;
+  background: var(--r-surface-sunken);
+  color: var(--r-text);
+  border: 1px solid var(--r-border-strong);
+  border-radius: var(--r-radius-sm);
+  padding: 0.3rem 0.5rem;
+  font-size: var(--r-text-xs);
+  line-height: 1.35;
+  /* Long titles wrap inside the bubble; a single long token breaks rather than
+     spilling past its edge. */
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  pointer-events: none;
+  box-shadow: var(--r-shadow-2);
+  z-index: 3000;
+}
+
+/*
+ * R-028 part B — visually hidden, still announced. Used where a signal is
+ * carried by colour or shape for sighted operators (the playout tab's warning
+ * dot) so the same signal reaches a screen reader in words. Colour is never
+ * the only channel.
+ */
+.cg-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

@@ -96,11 +96,14 @@ const BRIDGE_SURFACE: {
       'update',
       // C-012 — the graceful stop, beside the destroying `out`.
       'stop',
+      // R-028 (5.4) — advance the template's sequence.
+      'next',
       'out',
       'remove',
       'setPosition',
       'removeAll',
       'clearAll',
+      'stopAll',
       'snapshot',
       'onStateChanged',
     ],
@@ -113,11 +116,54 @@ const BRIDGE_SURFACE: {
       'onConfigChanged',
     ],
     layers: ['orphans', 'clear', 'onOrphansChanged', 'ownedOccupancy', 'onOwnedOccupancyChanged'],
+    // R-028 part B — `fixedLayers` was MISSING from this guard (recorded as a
+    // part-A seam): `tests/**` is not typechecked, so the mapped type above
+    // never caught the omission and any mock↔bridge divergence in the fixed
+    // surface shipped silently. Both layer groups are covered now, and
+    // `playoutLayers` especially: it is a SAFETY surface, and a mock that
+    // cleared where the bridge refuses would teach test mode a more dangerous
+    // model than air.
+    // `clearLayer` is the BANK-SCOPED clear, and it belongs in this guard for the
+    // same reason `playoutLayers.clear` does: it is a SAFETY surface. It asserts
+    // "I may clear this layer without knowing what is on it", so a mock that
+    // cleared where the bridge refuses — or vice versa — would teach test mode a
+    // different guard from the one air enforces.
+    fixedLayers: [
+      'config',
+      'setConfig',
+      'load',
+      'clearLayer',
+      'state',
+      'onConfigChanged',
+      'onStateChanged',
+    ],
+    playoutLayers: ['state', 'clear', 'onStateChanged'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
-    templates: ['get', 'list', 'import', 'remove'],
+    // R-028 (o1) — `onChanged`: the bridge-owned catalogue push.
+    // R-022 — `html` is the RETAINED self-contained page for a template, read from
+    // THIS browser's local library. Declared here like every other method because
+    // both implementations must answer it: the live one from its `LibraryStore`, the
+    // mock with `null` (it retains no rendered page, so the rehearsal panel shows
+    // its honest "unavailable in this browser" state).
+    templates: ['get', 'list', 'import', 'remove', 'onChanged', 'html'],
     audit: ['recent'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
     settings: ['get', 'set', 'onChanged'],
+    /**
+     * R-022 — REHEARSE belongs in this guard for exactly the reason
+     * `playoutLayers.clear` and `fixedLayers.clearLayer` do: it is a SAFETY
+     * surface. It carries the PLAY-to-air interlock, and a mock that let a take
+     * through where the bridge refuses would teach test mode a more dangerous
+     * model than air — which is the specific mistake this guard exists to catch.
+     */
+    rehearse: ['state', 'enter', 'exit', 'onStateChanged'],
+    /**
+     * R-030 — likewise a safety surface, less obviously. A wrong raster mis-places
+     * EVERY graphic on the channel, and `set` carries an on-air refusal (changing
+     * the raster re-scales what is live). A mock that accepted where the bridge
+     * refuses would let the UI be built against the wrong gate.
+     */
+    channelSettings: ['get', 'set', 'onChanged'],
   },
 };
 

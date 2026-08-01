@@ -1121,6 +1121,138 @@ producer KIND, not identity — without declaration R-009 flags healthy playout 
 **C-015 stops being distant** — it is a prerequisite. One RECON owed: whether CasparCG 2.3.2
 exposes template identity beyond producer kind, via `tools/caspar-amcp-probe` on real hardware.
 
+## [~] R-031 — the operator surface, as the owner described it: one Layers section, no Library, verbs on the row ⟨priority: high⟩
+
+**What:** The concrete UI shape [[R-028]] resolves to, stated by the owner in review and filed
+here because it was decided in chat and would otherwise exist only in a prompt. (1) The NUMBER of
+layers and which are active is set in Settings. (2) The Library panel is DELETED — not hidden,
+not collapsed. (3) Fixed Layers and Stack MERGE into one list, and what remains is the layer
+list. (4) The section is called just **Layers** — with one list, "Fixed" distinguishes nothing.
+(5) **Load means import + load together, in one action.** (6) Nothing is ever appended to a list
+below — the stack model goes away entirely. (7) The verb buttons live on the layer ROW. (8) The
+buttons MAY be present before a load, rendered DISABLED when that layer has no template.
+**Why:** R-028's design settled the model; this is the owner's own description of what the
+operator actually sees, and several points are not derivable from the design (the deletion of the
+Library rather than its demotion, the section's NAME, and point 8's disabled-not-absent rule).
+Point 8 is the one that looks like a contradiction and is not: [[R-021]] stage 2b forbids an
+ENABLED control that can only reject, which a DISABLED button is not. A fixed control set that
+lights up as state changes is legible under time pressure; controls that appear and disappear
+move the target under the operator's hand. **Point 8 wins as written — do not "correct" it back
+to hiding the buttons.**
+**Acceptance:**
+
+- WHEN the Runtime is opened THEN there is ONE section named Layers, and no Library panel exists
+  anywhere in the product
+- WHEN a row has no template THEN its verb buttons are present and DISABLED (never absent, never
+  enabled-and-rejecting)
+- WHEN the operator uses a row's Load THEN one action imports the `.vcg` AND loads it onto that
+  row's exact layer
+- WHEN an item is loaded THEN it appears on its own row and nothing is appended to any list below
+- WHEN the candidate layers are configured THEN that happens in Settings, not on the row
+
+**Notes:** Implemented in R-028 part B (`dev-r028-b`): `features/layers/LayersPanel.tsx` +
+`LayerRow.tsx`, with `LibraryPanel`, `StackPanel`, `StackRow`, `FixedLayersPanel` and `FixedRow`
+DELETED. Template REMOVAL was re-homed into the template picker dialog — it had no other surface
+once the Library panel went, and losing a shipped capability (R-005) silently would have been
+worse. Settings-side candidate-layer editing is the existing bank config modal, reached from the
+Layers header. See `openspec/changes/runtime-unified-layer-rows/DEBT.md` for what part B left
+owed (E2E suite, hardware pass).
+
+## [~] R-032 — a PLAYOUT tab: see and clear what the playout system has on the reserved layers ⟨priority: high⟩
+
+**What:** A second tab beside Layers, listing the DECLARED reserved (playout-owned) layers and
+what is on each. When something is present on a reserved layer a **yellow indicator appears on
+the tab** so the operator knows without opening it. Opening the tab lists the occupants and
+allows clearing — individually and all at once. **This REVERSES [[R-028]] task 5.3's "playout
+rows offer NO operator verbs"**: the main Layers list still offers none, but this tab does.
+**Why (the owner's reasoning, which IS the specification):** the original rule against clearing
+layers that are not ours existed to prevent accidentally killing the antenna layer itself, or a
+live channel. Now that the graphics layers are declared in advance, even a graphic the playout
+system put on 60–69 is something the operator should be able to see and clear.
+**Acceptance:**
+
+- WHEN something is on a declared playout layer THEN a yellow indicator appears on the tab, and
+  opening it lists every reserved layer with what is observed on it
+- WHEN an occupant is an `html` producer THEN a clear is offered, individually and via clear-all
+- WHEN an occupant is ANY other producer kind (video, route, decklink, unrecognised) THEN NO
+  clear control is offered at all and the row says why — the bridge refuses it independently
+- WHEN a layer's occupancy cannot be verified THEN it reads as UNKNOWN in its own right (never as
+  empty), and no clear is offered
+- WHEN clear-all is invoked THEN it is confirm-gated, names how many and WHICH layers, states
+  plainly that these are not our layers, and EXCLUDES every non-html and unverifiable occupant
+- WHEN the R-009 orphan sweep runs THEN reserved layers are still excluded from it, and
+  `layers.clear` still refuses them — automatic paths never touch these layers
+
+**Notes:** The three constraints are not optional and are what make the reversal safe: **(1)
+automatic never, deliberate yes** — part A's sweep exclusion and `layers.clear` refusal stand
+UNCHANGED; this is a separate channel (`playoutLayers.clear`) reachable only from a labelled tab
+the operator opens on purpose. **(2) html only** — the reservation is a claim about who owns the
+LAYER, never about what is on it; a video landing there (including by the playout operator's own
+mistake) is exactly the antenna/live-channel accident the reservation exists to prevent. **(3)
+unknown is not empty** — fail closed, as [[R-028]]'s untick refusal and task 3.3 already do.
+**The kind gate's boundary, stated honestly:** it guarantees "never a non-graphic". It does NOT
+guarantee "never something important" — an html producer on a playout layer may well be the
+station's own on-air graphics package, and clearing it takes real graphics off air. That is
+accepted and intended; the wording must not imply a stronger promise. **Premise verified on the
+station's running CasparCG 2.3.2** (R-028 task 1.3's recon, finally run): producer kind IS legible
+for layers this bridge did not create — four foreign `html` producers observed via both the OSC
+tap and AMCP `INFO` — and the occupancy tap stores the kind verbatim with no defaulting, so a
+non-html producer cannot be misread as html. Still owed: observing the NEGATIVE case (a video on a
+reserved layer) on hardware. Implemented in R-028 part B.
+
+## [ ] R-033 — the Layers surface as a table: neutral controls, state carried by icon, channel as the outer axis ⟨priority: high⟩
+
+**What:** The owner's visual review of the R-028 part B surface, filed because it was given in
+chat and would otherwise be lost. Twelve items: (1) **row number** 1..n is the primary
+identifier, left-aligned, with the REAL layer number kept on the row as a small fixed-width
+secondary; (2) **alias is the row title**, template name and description beneath it; (3) a rigid
+column grid — nothing moves horizontally when any text changes length, ellipsis inside the
+column; (4) **channel tabs as the OUTER axis**, LAYERS/PLAYOUT inside a channel (one channel for
+now, assume channel 1); (5) graceful degradation under panel drag — verbs collapse to icon-only,
+text truncates, the row never wraps, no horizontal scrollbar; (6) **one tooltip mechanism**
+inherited by default, matching the Designer; (7) **PGM/Preview reserved now** as labelled
+not-connected panels, resizable and fullscreen-able; (8) the Configure modal scales to the
+configured layer count and scrolls; (9) the **whole row is the click target**, edge to edge,
+controls excepted; (10) **neutral buttons, colour on hover only** — row state carried by a large
+coloured icon; (11) a real **table with a sticky header** plus icon-only verbs; (12) the
+**fullscreen affordance as a property of the panel primitive**, so every panel has it.
+**Why:** the reference is Cinegy's CG panel. The through-line is that in a control room the one
+question that must be answerable at a glance is _what is on air_ — and today five competing
+button colours per row leave that question nowhere to shout from. Making the controls neutral
+gives the state hues back their meaning.
+**Acceptance:**
+
+- WHEN any row's alias, template name or state text changes length THEN no other element on any
+  row moves horizontally
+- WHEN the operator clicks anywhere on a row except a control THEN that row is selected —
+  including the extreme left edge, and including empty rows
+- WHEN a button is hovered THEN its treatment comes from OUTSIDE the state hues (or is a
+  brightness/elevation change) — hovering PLAY must never flash the red that means ON AIR
+- WHEN a row is disabled versus enabled THEN the two are obviously different on the dark
+  background at a glance, without colour doing the work
+- WHEN a row state is shown THEN icon AND colour distinguish it — on air, cued, empty, error and
+  unknown are each distinct, and `unknown` never reads as `empty`
+- WHEN the panel is dragged narrow THEN columns drop in the order description → template name →
+  layer number; the verb columns NEVER drop, the row never wraps, and no horizontal scrolling is
+  needed to reach a control
+- WHEN a verb is icon-only THEN a visible column header names it, it keeps an `aria-label`, and
+  it keeps a hover tooltip — three complementary channels, not one substituting for another
+- WHEN the hit target is measured under a dense table THEN it still meets the declared minimum
+
+**Notes:** **Two items are structural and must come FIRST because retrofitting them is
+expensive.** (a) Channel is the OUTER tab level with LAYERS/PLAYOUT inside it — "Channel 1 |
+Channel 2 | Playout" in one strip is ambiguous about whose playout it means, and the reservation
+is per-channel so the yellow indicator must be attributable to a channel; invisible at one
+channel, a correctness bug at two. (b) Fullscreen and tooltips belong to a shared panel/control
+primitive, so PGM, Preview and anything added later inherit them instead of being hand-wired and
+missed. Also: item 10's "destructive stays neutral" is deliberate and must not be
+"fixed" back to a red REMOVE — the confirm gate is what protects that action, and red is
+reserved for air. Item 11's icon-only verbs are only safe BECAUSE the sticky header carries the
+label; do not ship one without the other. **Open config question for the owner, not for CC:** the
+candidate ceiling is currently four layers (70–73) while R-028's design records 70–99 as
+available — if the demo needs more than four simultaneous rows that is a config decision to take
+before the demo. Filed from `dev-r028-b2`; see `openspec/changes/runtime-unified-layer-rows/DEBT.md`.
+
 ## [ ] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩
 
 **What:** Make template audio start at the **take**, not at the **cue**. Today `CG ADD` with no
@@ -1222,9 +1354,43 @@ already there** — `outputTranslate` takes a `frame` parameter with a default
 
 **Notes:** Filed from the C-018 recon; the approach is decided but no code rides this item yet.
 
-## [~] R-031 — a startup splash screen: the product's first frame ⟨priority: medium⟩
+## [ ] R-034 — the delimiter list is CONFIGURABLE in settings, not hard-coded in the control ⟨priority: medium⟩
+
+**What:** the five delimiters offered under a list field are a hard-coded array in
+`fromFileContent.ts` (`DELIMITER_SUGGESTIONS`). The owner asked for a section in settings where
+the list can be added to and removed from, so a station whose source files use a separator nobody
+anticipated can add it once rather than hand-typing it on every field, every session.
+
+Pairs with [[B-113]], which makes the control a proper picker: once the operator cannot type a
+delimiter inline, the configured list becomes the ONLY way to introduce one, so it must be
+editable somewhere.
+
+**Why:** the current list is a guess at what Persian broadcast source files use. It is right often
+enough to look finished and wrong often enough to matter, and the cost of being wrong is an
+operator retyping an escape sequence under time pressure. Configuration moves that cost to a
+one-time setup step.
+
+**Acceptance:**
+
+- Settings offers a section listing the configured delimiters, each with the label the picker
+  shows and the character(s) it splits on.
+- A delimiter can be added, with a label, and appears in the field picker immediately.
+- A delimiter can be removed, and disappears from the picker immediately.
+- The list persists across a page refresh.
+- Removing a delimiter that a field is currently using does not silently change that field's
+  split: the field keeps splitting on what it was given.
+- The list can never be emptied to nothing — a list field with split on must always have at
+  least one delimiter to choose.
+
+## [~] R-035 — a startup splash screen: the product's first frame ⟨priority: medium⟩
 
 <!-- change: openspec/changes/runtime-splash-screen/ -->
+
+<!-- Filed as R-031 by a session reading this file ON `main`, where R-030 was the highest in
+     use; `dev` already held R-031 (the operator surface) in an unmerged fast-mode edit that
+     `main` could not see, so the `origin/main` merge produced two R-031 entries. Renumbered
+     to R-035 (the first free number above `dev`'s R-034) because this is the newer claim and
+     all of its references sit in one place. The operator-surface R-031 is unchanged. -->
 
 **What:** Give `apps/runtime` a startup splash — APASAI / **CG CONTROL**, a phase readout and a
 progress rail — that is on screen from the FIRST PAINT until the app is genuinely ready, with a
@@ -1243,12 +1409,13 @@ build stamp belongs on it.
 - WHEN the page is opened THEN the splash is painted on the first frame, before any application
   JavaScript has run
 - WHEN the boot reaches a real step (initializing, bridge probe, interface start) THEN the phase
-  readout names that step and the rail advances by COMPLETED PHASE, with a step counter (`2 / 3`)
-  and never a percentage
+  readout names that step, and the rail and the readout show ONE value: the monotone
+  `min(elapsed / floor, completed steps / total steps)` — a PERCENTAGE, gated by real steps so it
+  is never ahead of boot, reading 100 exactly when the floor has elapsed AND boot is done
 - WHEN boot completes THEN the phase label FADES OUT and the readout's left side is empty — there
   is no terminal `READY` label anywhere in the markup, CSS or script
 - WHEN this is a cold start (no `CG_RUNTIME_SESSION` marker in `sessionStorage`) THEN the splash
-  is held for at least 5000 ms; WHEN it is a warm reload THEN the floor is 600 ms
+  is held for at least 8000 ms; WHEN it is a warm reload THEN the floor is 3000 ms
 - WHEN boot completes AFTER the floor THEN the hold extends to boot completion — the splash never
   hides a boot that is still running
 - WHEN 20000 ms have elapsed since first paint THEN the splash dismisses regardless of boot state,
@@ -1261,11 +1428,14 @@ build stamp belongs on it.
 - WHEN `prefers-reduced-motion: reduce` is set THEN the splash renders with no entrance animation
   and no fade
 
-**Notes:** Company **APASAI**, product **CG CONTROL**; all splash copy is English. The logo and
-brand colours are NOT final — the placeholder mark is a single documented SVG slot in
-`index.html`. **No red anywhere on the splash**: red is the sacred air-state colour and decorative
-red is already forbidden across this UI ([[R-007]], `theme.ts`), so the accent is the existing
-sky — checked by a test, not merely asserted. This is a display gate
+**Notes:** Company **APASAI**, product **CG CONTROL**; all splash copy is English. The real
+APASAI mark is inlined in `index.html` (recoloured for a dark ground via three class hooks, never
+by editing path data) — it is an auto-trace of a raster and must be replaced with the original
+vector before any customer-facing release. **No red anywhere on the splash**: red is the sacred
+air-state colour and decorative red is already forbidden across this UI ([[R-007]], `theme.ts`),
+and the check is by hue band so coral is excluded with it — verified by a test, not merely
+asserted. The chrome accent is APASAI's exact brand blue `#00AEEF`, a SPLASH-LOCAL value: the
+app's own `--r-accent` sky is unchanged, which a test also pins. This is a display gate
 layered ON TOP of the connection model — `createRuntimeBridge`, `WebSocketRuntime` and
 `MockRuntime` are unchanged, and the live / offline-mock / disconnected tri-state, the
 refuse-while-disconnected contract and the NOT CONNECTED / TEST MODE banners all stay as they are.

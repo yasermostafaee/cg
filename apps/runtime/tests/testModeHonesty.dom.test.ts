@@ -4,10 +4,11 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
-import { StackRow } from '../src/renderer/features/stack/StackRow.js';
+import { LayerRow } from '../src/renderer/features/layers/LayerRow.js';
 import { ConnectionBanner } from '../src/renderer/features/status/ConnectionBanner.js';
 import { seedHealth } from '../src/platform/seed.js';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
+import { connectionsStub, type Reachability } from './support/reachability.js';
 
 /**
  * R-006 — test mode may SIMULATE, but it may not LIE.
@@ -29,7 +30,21 @@ afterEach(() => {
 });
 
 function stubLink(status: 'live' | 'disconnected' | 'offline-mock'): void {
-  const stub = { link: { status: () => status, onStatusChanged: () => () => undefined } };
+  const noopAsync = (): Promise<{ accepted: boolean }> => Promise.resolve({ accepted: true });
+  // The health MUST follow the link, not be chosen independently of it. Pinning
+  // this to `both-up` gave test mode a healthy primary the offline mock never
+  // reports (`seedHealth` is `disconnected`, deliberately, R-006) — so the unit
+  // suite exercised a state that does not exist while the real mock disabled
+  // every verb in the E2E run. A fixture that can disagree with the product it
+  // stands in for is worse than no fixture.
+  const reach: Reachability =
+    status === 'offline-mock' ? 'test-mode' : status === 'disconnected' ? 'bridge-down' : 'both-up';
+  const stub = {
+    link: { status: () => status, onStatusChanged: () => () => undefined },
+    connections: connectionsStub(reach),
+    stack: { take: noopAsync, next: noopAsync, stop: noopAsync, out: noopAsync, remove: noopAsync },
+    templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
+  };
   (window as unknown as { cg: typeof stub }).cg = stub;
 }
 
@@ -54,16 +69,32 @@ const ON_AIR: StackItemState = {
 
 const noop = (): Promise<{ accepted: boolean }> => Promise.resolve({ accepted: true });
 
+/**
+ * R-028 part B — the same claims, now on the LAYER row that replaced StackRow.
+ * The badge treatment is precisely what these tests protect, so they moved with
+ * it rather than being left behind with the deleted component. (Porting them
+ * caught a real regression: the first draft of the new row rendered a raw
+ * status label, which would have claimed "ON AIR" in test mode.)
+ */
 function row(item: StackItemState): ReturnType<typeof createElement> {
-  return createElement(StackRow, {
-    item,
+  return createElement(LayerRow, {
+    slot: {
+      channel: 1,
+      layer: 70,
+      alias: 'CLOCK',
+      observed: { kind: 'producer' as const, producer: 'html' },
+      binding: { itemId: item.itemId, templateType: 'clock', templateId: item.templateId },
+    },
+    // A settled panel: these specs are about how an ARRIVED status is badged. The
+    // union's `bound` arm carries the item, so there is no separate `item` prop —
+    // see `RowBinding`.
+    binding: { kind: 'bound' as const, item },
+    template: { templateId: 'tpl-1', templateType: 'clock', fields: [] },
+    bankPosition: 1,
     selected: false,
     dirty: false,
     onSelect: () => undefined,
-    onPlay: noop,
     onUpdate: noop,
-    onOut: noop,
-    onRemove: noop,
   });
 }
 
@@ -72,21 +103,50 @@ describe('test mode does not claim real air — R-006', () => {
     stubLink('offline-mock');
     const el = await render(row(ON_AIR));
 
-    const badge = el.querySelector('.cg-badge');
-    expect(badge?.textContent).toContain('SIM ON AIR');
-    // The sacred red tone is RESERVED for a graphic a real server confirmed.
-    expect(badge?.className).not.toContain('cg-badge--onair');
+    // The row's state CELL replaced the badge pill when the verbs went neutral
+    // and colour moved to the state. The claims below are unchanged.
+    const state = el.querySelector('[data-row-state]');
+    expect(state?.textContent).toContain('SIM ON AIR');
+    // The sacred red ROLE is RESERVED for a graphic a real server confirmed.
+    expect(state?.getAttribute('data-row-state')).not.toBe('onair');
     expect(el.querySelector('[aria-label="status SIM ON AIR"]')).not.toBeNull();
+  });
+
+  /**
+   * THE OTHER HALF OF R-006, and the one that was missing.
+   *
+   * "May simulate but may not lie" has a second edge: test mode must still WORK.
+   * Simulating the take is the entire point of the mode, so every AMCP-emitting
+   * verb stays live there — the mock is the executor and it does execute.
+   *
+   * This is the test whose absence let a real regression ship. The reachability
+   * gate answered from `useConnections()` alone, the mock honestly reports
+   * `disconnected` (it has no server), and so every verb in test mode went
+   * disabled with "CasparCG cannot be reached" — a control refusing a command
+   * that would have succeeded. The unit suite did not notice, because its stub
+   * had been pinned to a healthy primary test mode never has; 14 E2E specs
+   * failed instead.
+   */
+  it('keeps the AMCP verbs LIVE — the mock is the executor, so the command does arrive', async () => {
+    stubLink('offline-mock');
+    const el = await render(row(ON_AIR));
+
+    // A row on air in test mode: STOP is the verb that must remain pressable.
+    const stop = el.querySelector('button[aria-label="STOP"]');
+    expect(stop).not.toBeNull();
+    expect((stop as HTMLButtonElement).disabled).toBe(false);
+    // …and it must not be wearing an unreachability excuse it cannot justify.
+    expect(stop?.getAttribute('title') ?? '').not.toContain('cannot be reached');
   });
 
   it('renders the identical item as real ON AIR when the link is live', async () => {
     stubLink('live');
     const el = await render(row(ON_AIR));
 
-    const badge = el.querySelector('.cg-badge');
-    expect(badge?.textContent).toContain('ON AIR');
-    expect(badge?.textContent).not.toContain('SIM');
-    expect(badge?.className).toContain('cg-badge--onair');
+    const state = el.querySelector('[data-row-state]');
+    expect(state?.textContent).toContain('ON AIR');
+    expect(state?.textContent).not.toContain('SIM');
+    expect(state?.getAttribute('data-row-state')).toBe('onair');
   });
 
   it('shows a loud, persistent TEST MODE alert — not a pill among pills', async () => {

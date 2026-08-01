@@ -192,3 +192,97 @@ it('the sweep follows the CURRENT primary across a failover', async () => {
   expect(result.newPrimary).toBe('B');
   await waitFor(() => runtime!.orphans().some((o) => o.channel === 1 && o.layer === 88));
 }, 20000);
+
+/**
+ * §1 — A FOREIGN PRODUCER ON A DECLARED **BANK** LAYER IS SURFACED.
+ *
+ * It used to be excluded, on the reasoning that "the fixed bank's PERMANENT row
+ * is its occupancy surface". The row is no longer that surface — an unbound bank
+ * row reads `EMPTY` unconditionally and asks CasparCG nothing — so the two halves
+ * that covered this fact between them became zero: another system's live video on
+ * a bank layer was reported NOWHERE while the row said "Nothing is loaded on this
+ * row" and offered LOAD.
+ *
+ * Only UNBOUND bank layers can surface: one carrying an item we bound is already
+ * owned via `#slots`, so what this reports is exactly "a producer we did not put
+ * there".
+ */
+it('§1 — a foreign producer on an UNBOUND BANK layer surfaces as an orphan', async () => {
+  const oscPort = await freeUdpPort();
+  mockA = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
+  runtime = new CasparRuntime(
+    singleServer(mockA.amcpPort, oscPort),
+    {},
+    {
+      sweepMs: SWEEP_MS,
+      occupancyStaleMs: STALE_MS,
+      // A declared bank, AND a declared playout reservation — the two exclusions
+      // that must now behave differently from each other.
+      fixedBank: { channel: 1, start: 70, count: 4 },
+      fixedSlots: [
+        { channel: 1, layer: 70 },
+        { channel: 1, layer: 71 },
+        { channel: 1, layer: 72 },
+        { channel: 1, layer: 73 },
+      ],
+      reservedLayers: [60, 61, 62],
+    },
+  );
+  runtime.start();
+  await runtime.startServing();
+  await runtime.whenServerHealthy(HEALTH_MS);
+
+  expect(runtime.orphans()).toEqual([]);
+
+  // Another system puts a graphic on BANK layer 71. Nobody bound it.
+  await foreignPlay(mockA, 'PLAY 1-71 "foreign" HTML');
+  await waitFor(() => runtime!.orphans().some((o) => o.channel === 1 && o.layer === 71));
+  expect(runtime.orphans()).toMatchObject([{ channel: 1, layer: 71 }]);
+});
+
+/**
+ * 🔴 THE GUARD RAIL THAT MUST NOT MOVE, pinned by its own test because §1 edits
+ * the very function that protects it — "I didn't touch that part" is not enough.
+ *
+ * A declared PLAYOUT layer (the reserved range) is still excluded from the sweep,
+ * and `layers.clear` still refuses it. The reason is different from the bank's and
+ * still valid: a playout `html` graphic is indistinguishable from ours on the
+ * wire, so surfacing it as reclaimable would invite the operator to clear the
+ * company's live automation output.
+ */
+it('§1 GUARD — a producer on a RESERVED playout layer is never an orphan, and clear refuses it', async () => {
+  const oscPort = await freeUdpPort();
+  mockA = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
+  runtime = new CasparRuntime(
+    singleServer(mockA.amcpPort, oscPort),
+    {},
+    {
+      sweepMs: SWEEP_MS,
+      occupancyStaleMs: STALE_MS,
+      fixedBank: { channel: 1, start: 70, count: 4 },
+      fixedSlots: [
+        { channel: 1, layer: 70 },
+        { channel: 1, layer: 71 },
+        { channel: 1, layer: 72 },
+        { channel: 1, layer: 73 },
+      ],
+      reservedLayers: [60, 61, 62],
+    },
+  );
+  runtime.start();
+  await runtime.startServing();
+  await runtime.whenServerHealthy(HEALTH_MS);
+
+  // The playout system's own graphic, on a layer it owns.
+  await foreignPlay(mockA, 'PLAY 1-61 "playout" HTML');
+  // Give the sweep several cadences to NOT report it. Asserted as a sustained
+  // absence rather than one sample, because a race would otherwise read as a pass.
+  await new Promise((r) => setTimeout(r, SWEEP_MS * 5));
+  expect(runtime.orphans().some((o) => o.layer === 61)).toBe(false);
+
+  // …and the console cannot clear it either. Both halves, because either alone
+  // would leave the other free to regress.
+  const refused = await runtime.clearLayer(1, 61);
+  expect(refused.ok).toBe(false);
+  expect(refused.reason).toBe('reserved');
+});

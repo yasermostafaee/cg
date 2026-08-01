@@ -75,6 +75,28 @@ export const StackStopChannel = defineChannel(
   z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
 );
 
+/**
+ * R-028 (owner call o2, task 5.4) — advance the template's sequence:
+ * `CG <ch>-<layer> NEXT`.
+ *
+ * The capability existed template-side all along (`window.next`, the runtime's
+ * per-scope sequence drivers); what was missing was the wire. Part A added the
+ * verb to the command builder; this is the channel that reaches it.
+ *
+ * OFFERED ONLY when the loaded template actually has a next step
+ * (`TemplateInfo.hasNext`, derived at import by the canonical `hasNextStep`).
+ * An always-enabled NEXT that silently no-ops on a single-step template is the
+ * anti-pattern R-021 stage 2b named — an enabled control must never invite a
+ * click that can only do nothing.
+ *
+ * On-air-affecting, so refused while no server is reachable, like take/stop/out.
+ */
+export const StackNextChannel = defineChannel(
+  'stack.next',
+  z.object({ itemId: IdSchema }),
+  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
+);
+
 export const StackOutChannel = defineChannel(
   'stack.out',
   z.object({ itemId: IdSchema, immediate: z.boolean().optional() }),
@@ -141,6 +163,27 @@ export const StackClearAllChannel = defineChannel(
   'stack.clear-all',
   z.void(),
   z.object({ ok: z.boolean(), cleared: z.number().int().nonnegative() }),
+);
+
+/**
+ * C-012 / R-028 — STOP every on-air item: each template runs its OWN outro and
+ * its producer stays RESIDENT, so a later take RESUMES it with no re-load.
+ *
+ * The graceful sibling of `stack.clear-all`, and the pairing matters as much as
+ * either verb alone: Clear-All hard-cuts every graphic off air at once, Stop-All
+ * asks each to leave the way it was authored to. On a real programme that is the
+ * difference between a clean end-of-segment and every lower-third snapping to
+ * black together.
+ *
+ * NO new AMCP verb: it issues the SAME per-item `CG … STOP` the row's STOP
+ * button sends, over the same candidate set Clear-All uses (everything not
+ * `idle`/`loaded` that actually holds a layer of ours), sequentially — no
+ * command burst, and one stuck graphic never strands the ones behind it.
+ */
+export const StackStopAllChannel = defineChannel(
+  'stack.stop-all',
+  z.void(),
+  z.object({ ok: z.boolean(), stopped: z.number().int().nonnegative() }),
 );
 
 export const StackSnapshotChannel = defineChannel(

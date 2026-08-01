@@ -16,6 +16,36 @@ const ServerHealthSchema = z.object({
   oscFreshAt: z.string().datetime().optional(),
 });
 
+/**
+ * The session states a server can be in — the wire spelling, and the one the
+ * predicate below is defined over.
+ */
+export type ServerState = z.infer<typeof ServerHealthSchema>['state'];
+
+/**
+ * CAN A COMMAND REACH THIS SERVER RIGHT NOW?
+ *
+ * THE one predicate over the server-state axis, and it lives here because this is
+ * where the wire enum lives: "what does this health value MEAN" is part of the
+ * same contract as "what values are there". `@cg/caspar-client`'s `isLiveState`
+ * CALLS this rather than keeping a copy, so there is one implementation and drift
+ * is impossible rather than merely detected — the renderer and the session FSM
+ * cannot come to disagree about which states count as live.
+ *
+ * `degraded` IS REACHABLE, and that is the whole reason this must not be
+ * re-derived per caller. Degraded means the AMCP axis is up while OSC is silent:
+ * commands genuinely land, we simply cannot CONFIRM their effect. Treating it as
+ * unreachable would disable the entire console on every OSC-less install — the
+ * B-101 class, where silence on one channel was read as death on another. A
+ * second local copy of the state list is exactly how that regression returns.
+ *
+ * Everything else — `disconnected`, `connecting`, `handshaking`, `resyncing` —
+ * is a state in which a command cannot be relied on to arrive.
+ */
+export function isServerReachable(state: ServerState): boolean {
+  return state === 'healthy' || state === 'degraded';
+}
+
 const FailoverReasonSchema = z.enum([
   'manual',
   'osc-silence',

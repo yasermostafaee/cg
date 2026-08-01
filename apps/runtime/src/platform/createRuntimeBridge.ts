@@ -124,11 +124,14 @@ export function createMockBridge(): RuntimeBridge {
       take: (req) => Promise.resolve(mock.take(req.itemId)),
       update: (req) => Promise.resolve(mock.update(req.itemId, req.fields, req.mergeMode)),
       stop: (req) => Promise.resolve(mock.stop(req.itemId)),
+      // R-028 (5.4) — advance the template's sequence.
+      next: (req) => Promise.resolve(mock.next(req.itemId)),
       out: (req) => Promise.resolve(mock.out(req.itemId)),
       remove: (req) => Promise.resolve(mock.remove(req.itemId)),
       setPosition: (req) => Promise.resolve(mock.setPosition(req.itemId, req.position)),
       removeAll: () => Promise.resolve(mock.removeAll()),
       clearAll: () => Promise.resolve(mock.clearAll()),
+      stopAll: () => Promise.resolve(mock.stopAll()),
       snapshot: () => Promise.resolve(mock.stackSnapshot()),
       onStateChanged: (handler) => mock.stackChanged.subscribe(handler),
     },
@@ -159,9 +162,18 @@ export function createMockBridge(): RuntimeBridge {
         Promise.resolve(
           mock.loadFixed(req.channel, req.layer, req.itemId, req.templateId, req.fields),
         ),
+      // The bank-scoped clear (mock models the bridge's two structural guards).
+      clearLayer: (req) => Promise.resolve(mock.clearBankLayer(req.channel, req.layer)),
       state: () => Promise.resolve(mock.fixedLayersState()),
       onConfigChanged: (handler) => mock.fixedConfigChanged.subscribe(handler),
       onStateChanged: (handler) => mock.fixedStateChanged.subscribe(handler),
+    },
+
+    // R-028 part B — the declared playout layers (offline: seeded, else empty).
+    playoutLayers: {
+      state: () => Promise.resolve(mock.playoutLayersState()),
+      clear: (req) => Promise.resolve(mock.playoutClear(req.channel, req.layer)),
+      onStateChanged: (handler) => mock.playoutStateChanged.subscribe(handler),
     },
 
     lock: {
@@ -177,9 +189,16 @@ export function createMockBridge(): RuntimeBridge {
       // B-038 Phase 2 — offline accepts and IGNORES `req.html`: the mock has no
       // HTTP server and no CasparCG, so there is nothing to serve. Only the live
       // bridge retains the HTML; offline stays "OFFLINE (mock) — nothing renders".
-      import: (req) => Promise.resolve(mock.templateImport(req.template)),
+      import: (req) => Promise.resolve(mock.templateImport(req.template, req.redelivery ?? false)),
       // R-005 — the mock applies the same refuse-while-referenced predicate as the bridge.
       remove: (req) => Promise.resolve(mock.templateRemove(req.templateId)),
+      // R-028 (o1) — the catalogue push, mirrored by the mock's own emitter.
+      onChanged: (handler) => mock.templatesChanged.subscribe(handler),
+      // R-022 — the mock retains no rendered page (it accepts and ignores `html`
+      // at import, per the note above), so it honestly holds none. The rehearsal
+      // panel renders its "unavailable in this browser" state rather than a blank
+      // box — which is the truthful answer in test mode, not a degradation.
+      html: () => Promise.resolve(null),
     },
 
     audit: {
@@ -202,6 +221,35 @@ export function createMockBridge(): RuntimeBridge {
           mock.settingsSet(req.telemetry !== undefined ? { telemetry: req.telemetry } : {}),
         ),
       onChanged: (handler) => mock.settingsChanged.subscribe(handler),
+    },
+
+    // R-034 — offline parity. The mock stands in for the bridge's disk-persisted
+    // list; it uses `localStorage`, which is the closest thing test mode has to
+    // "survives a restart". Cross-browser sharing is the one property the mock
+    // genuinely cannot model — there is no shared party in offline mode — and
+    // that is a property of test mode, not a gap in the contract.
+    delimiters: {
+      list: () => Promise.resolve(mock.delimitersList()),
+      set: (req) => Promise.resolve(mock.delimitersSet(req.delimiters)),
+      onChanged: (handler) => mock.delimitersChanged.subscribe(handler),
+    },
+
+    // R-022 — offline parity for REHEARSE. The mock holds the same interlock:
+    // `take` refuses a rehearsing item, so the guard is exercised in test mode
+    // rather than only against the real bridge.
+    rehearse: {
+      state: () => Promise.resolve(mock.rehearseState()),
+      enter: (req) => Promise.resolve(mock.enterRehearse(req.itemId)),
+      exit: (req) => Promise.resolve(mock.exitRehearse(req.itemId)),
+      onStateChanged: (handler) => mock.rehearseChanged.subscribe(handler),
+    },
+
+    // R-030 — offline parity for the channel raster, same shape and same reason
+    // as the delimiter list above.
+    channelSettings: {
+      get: () => Promise.resolve(mock.channelSettingsState()),
+      set: (req) => Promise.resolve(mock.setChannelSettings(req)),
+      onChanged: (handler) => mock.channelSettingsChanged.subscribe(handler),
     },
   };
 }

@@ -46,3 +46,10 @@ export * from './channels/audit.js';
 export * from './channels/updates.js';
 export * from './channels/settings.js';
 export * from './channels/fixedLayers.js';
+export * from './channels/playoutLayers.js';
+export * from './channels/delimiters.js';
+// R-030 — the per-channel output raster (bridge-owned) + the configured-vs-real
+// video-mode verdict.
+export * from './channels/channelSettings.js';
+// R-022 — REHEARSE: a bridge-owned mode with a PLAY-to-air interlock.
+export * from './channels/rehearse.js';

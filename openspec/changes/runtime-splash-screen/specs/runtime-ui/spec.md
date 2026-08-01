@@ -1,4 +1,4 @@
-# runtime-ui — delta (R-031, startup splash screen)
+# runtime-ui — delta (R-035, startup splash screen)
 
 ## ADDED Requirements
 

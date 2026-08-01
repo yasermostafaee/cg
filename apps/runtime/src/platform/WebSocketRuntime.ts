@@ -19,11 +19,16 @@ import {
   SettingsChangedChannel,
   SettingsGetChannel,
   SettingsSetChannel,
+  PlayoutLayersClearChannel,
+  PlayoutLayersStateChangedChannel,
+  PlayoutLayersStateChannel,
   StackLoadChannel,
+  StackNextChannel,
   StackOutChannel,
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackStopAllChannel,
   StackRestoreChannel,
   StackStopChannel,
   StackSetPositionChannel,
@@ -31,14 +36,30 @@ import {
   StackStateChangedChannel,
   StackTakeChannel,
   StackUpdateChannel,
-  type TemplatesGetChannel,
+  TemplatesChangedChannel,
+  DelimitersChangedChannel,
+  DelimitersListChannel,
+  DelimitersSetChannel,
+  type DelimiterOption,
+  ChannelSettingsChangedChannel,
+  ChannelSettingsGetChannel,
+  ChannelSettingsSetChannel,
+  type ChannelSettingsState,
+  RehearseEnterChannel,
+  RehearseExitChannel,
+  RehearseStateChangedChannel,
+  RehearseStateChannel,
+  type Rehearsal,
+  TemplatesGetChannel,
   TemplatesImportChannel,
+  TemplatesListChannel,
   TemplatesRemoveChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChangedChannel,
   UpdateStateChannel,
   FixedLayersConfigChangedChannel,
+  FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
   FixedLayersLoadChannel,
   FixedLayersSetConfigChannel,
@@ -57,7 +78,9 @@ import {
   type OrphanLayer,
   type OwnedOccupancyWarning,
   type PendingUpdate,
+  type PlayoutLayerState,
   type Settings,
+  type TemplateInfo,
 } from '@cg/shared-ipc';
 import { MemoryWorkspace } from '@cg/storage';
 import type {
@@ -169,13 +192,14 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #pending = new Map<string, Pending>();
 
   /**
-   * B-085 — the browser-local template library is the source of truth AND the
-   * reconnect-reconciliation retention set (it REPLACES the former page-lifetime
-   * `#retained` map, and is now persistent). `templates.*` are served from it
-   * with no bridge round-trip, so they work with the bridge down; `#resync()`
-   * re-delivers `#library.entries()` FIRST on every reconnect so a subsequent
-   * load resolves against a populated bridge registry (conflict policy:
-   * local-wins).
+   * B-085, re-scoped by R-028 (o1): the browser-local library is now the
+   * OFFLINE FALLBACK and the reconnect re-delivery set — the BRIDGE's
+   * persisted registry is the catalogue of record (one bridge, many browsers,
+   * one library). While live, `templates.list/get` are served from the bridge;
+   * with the link down they answer from this retained copy (this browser's own
+   * imports), display-only. `#resync()` still re-delivers `#library.entries()`
+   * FIRST on every reconnect so an offline import reaches the bridge (per-id
+   * conflict policy: local-wins, unchanged).
    */
   readonly #library: LibraryStore;
 
@@ -220,7 +244,17 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #lockSubs = new Subs<LockState>();
   readonly #updateSubs = new Subs<PendingUpdate | null>();
   readonly #settingsSubs = new Subs<Settings>();
+  /** R-034 — the bridge-owned delimiter list, pushed on every change. */
+  readonly #delimiterSubs = new Subs<DelimiterOption[]>();
+  /** R-030 — the bridge-owned channel raster + video-mode reading. */
+  readonly #channelSettingsSubs = new Subs<ChannelSettingsState>();
+  /** R-022 — the bridge-owned rehearsing set, pushed to every client. */
+  readonly #rehearseSubs = new Subs<Rehearsal[]>();
   readonly #statusSubs = new Subs<BridgeLinkStatus>();
+  // R-028 (o1) — the bridge-owned catalogue push.
+  readonly #templatesSubs = new Subs<TemplateInfo[]>();
+  // R-028 part B — the declared playout layers' occupancy push.
+  readonly #playoutSubs = new Subs<PlayoutLayerState[]>();
 
   #readyResolve: (() => void) | null = null;
   #readyReject: ((err: Error) => void) | null = null;
@@ -324,11 +358,36 @@ export class WebSocketRuntime implements RuntimeBridge {
    * A failed re-delivery is surfaced and never aborts the rest.
    */
   async #resync(rePullSnapshots = true): Promise<void> {
-    // B-085 — reconcile the bridge to the browser-local library (local-wins):
-    // deliver every retained template FIRST, sourced from the persistent store.
+    // B-085 — reconcile the bridge to the browser-local library: deliver every
+    // retained template FIRST, sourced from the persistent store.
+    //
+    // R-028 part B — THE RECONCILIATION POLICY, and it is enforced on the
+    // BRIDGE, not here. Every frame below is marked `redelivery: true`, which
+    // means "restore this if you lost it, but do not resurrect it if you
+    // deliberately dropped it": the bridge keeps a removed-id set beside its
+    // persisted registry and ignores a re-delivery of anything in it, and it
+    // keeps its OWN copy of an id it already holds rather than letting an older
+    // local one overwrite it. An operator's real import carries no flag and
+    // always wins, clearing the tombstone.
+    //
+    // Why bridge-side: the bridge is already the catalogue's authority and the
+    // only party that persists it. A browser cannot know a removal it was
+    // offline for, so client-side filtering would need every browser to learn
+    // every removal. Deciding it where the removal HAPPENED needs no
+    // replication at all.
+    //
+    // Why not a pre-flight `templates.list` here: the frames below are written
+    // before this method yields, so single-socket FIFO plus the bridge's
+    // synchronous registration guarantee an operator load issued right after
+    // connect resolves against a populated registry. Awaiting a round-trip
+    // first would open exactly that window.
     const redeliveries = this.#library.entries().map(async (req) => {
       try {
-        await this.#invoke(TemplatesImportChannel, { template: req.template, html: req.html });
+        await this.#invoke(TemplatesImportChannel, {
+          template: req.template,
+          html: req.html,
+          redelivery: true,
+        });
       } catch (err) {
         // A fresh drop mid-resync re-triggers the whole resync on the next
         // reconnect — stay quiet; only a real per-template rejection surfaces.
@@ -465,6 +524,16 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#ownedOccupancySubs.emit(p.data);
         break;
       }
+      case TemplatesChangedChannel.name: {
+        const p = TemplatesChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#templatesSubs.emit(p.data);
+        break;
+      }
+      case PlayoutLayersStateChangedChannel.name: {
+        const p = PlayoutLayersStateChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#playoutSubs.emit(p.data);
+        break;
+      }
       case LockStateChangedChannel.name: {
         const p = LockStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#lockSubs.emit(p.data);
@@ -473,6 +542,21 @@ export class WebSocketRuntime implements RuntimeBridge {
       case UpdateStateChangedChannel.name: {
         const p = UpdateStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#updateSubs.emit(p.data);
+        break;
+      }
+      case DelimitersChangedChannel.name: {
+        const p = DelimitersChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#delimiterSubs.emit(p.data);
+        break;
+      }
+      case ChannelSettingsChangedChannel.name: {
+        const p = ChannelSettingsChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#channelSettingsSubs.emit(p.data);
+        break;
+      }
+      case RehearseStateChangedChannel.name: {
+        const p = RehearseStateChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#rehearseSubs.emit(p.data);
         break;
       }
       case SettingsChangedChannel.name: {
@@ -530,6 +614,8 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackUpdateChannel, req),
     // C-012 — the graceful stop (outro runs, producer stays resident).
     stop: (req: ChannelRequest<typeof StackStopChannel>) => this.#invoke(StackStopChannel, req),
+    // R-028 (5.4) — advance the template's sequence.
+    next: (req: ChannelRequest<typeof StackNextChannel>) => this.#invoke(StackNextChannel, req),
     out: (req: ChannelRequest<typeof StackOutChannel>) => this.#invoke(StackOutChannel, req),
     remove: (req: ChannelRequest<typeof StackRemoveChannel>) =>
       this.#invoke(StackRemoveChannel, req),
@@ -537,6 +623,8 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetPositionChannel, req),
     removeAll: () => this.#invoke(StackRemoveAllChannel, undefined),
     clearAll: () => this.#invoke(StackClearAllChannel, undefined),
+    // C-012 / R-028 — the graceful bulk beside the hard one.
+    stopAll: () => this.#invoke(StackStopAllChannel, undefined),
     snapshot: async () => {
       // B-092 — with the bridge unreachable, answer from the browser-local
       // retention instead of REFUSING. A cold page load against a dead bridge
@@ -634,11 +722,26 @@ export class WebSocketRuntime implements RuntimeBridge {
     // down (the browser-local library is the only surface that works offline).
     load: (req: ChannelRequest<typeof FixedLayersLoadChannel>) =>
       this.#invoke(FixedLayersLoadChannel, req),
+    // The bank-scoped clear. Round-trips like every command; the two structural
+    // guards are held bridge-side.
+    clearLayer: (req: ChannelRequest<typeof FixedLayersClearLayerChannel>) =>
+      this.#invoke(FixedLayersClearLayerChannel, req),
     state: () => this.#invoke(FixedLayersStateChannel, undefined),
     onConfigChanged: (handler: (bank: FixedLayerBank | null) => void) =>
       this.#fixedConfigSubs.add(handler),
     onStateChanged: (handler: (state: FixedSlotState[]) => void) =>
       this.#fixedStateSubs.add(handler),
+  };
+
+  // R-028 part B — the declared playout layers. Bridge-owned throughout: the
+  // state is what the bridge's own tap observes, and the clear's kind gate is
+  // enforced there, so a disconnected browser simply cannot reach either.
+  readonly playoutLayers = {
+    state: () => this.#invoke(PlayoutLayersStateChannel, undefined),
+    clear: (req: ChannelRequest<typeof PlayoutLayersClearChannel>) =>
+      this.#invoke(PlayoutLayersClearChannel, req),
+    onStateChanged: (handler: (state: PlayoutLayerState[]) => void) =>
+      this.#playoutSubs.add(handler),
   };
 
   readonly lock = {
@@ -649,14 +752,39 @@ export class WebSocketRuntime implements RuntimeBridge {
     onStateChanged: (handler: (state: LockState) => void) => this.#lockSubs.add(handler),
   };
 
-  // B-085 — the template library is browser-local: reads and writes are served
-  // from `#library` and do NOT round-trip `#invoke`, so they work with the bridge
-  // process unreachable (none of them commands CasparCG). The bridge is a
-  // delivery/serve target reconciled on (re)connect (`#resync`).
+  // R-028 (o1) — the BRIDGE owns the template catalogue: one bridge, many
+  // browsers, one library. While the link is LIVE, reads are served from the
+  // bridge so every browser sees the same list (including templates other
+  // browsers imported); the browser-local `#library` (B-085) remains the
+  // OFFLINE fallback and the reconnect re-delivery source — a read that cannot
+  // reach the bridge answers from the local retained copy rather than
+  // rejecting, the same display-only degradation the stack snapshot uses.
   readonly templates = {
-    get: (req: ChannelRequest<typeof TemplatesGetChannel>) =>
-      Promise.resolve(this.#library.get(req.templateId)),
-    list: () => Promise.resolve(this.#library.list()),
+    get: async (req: ChannelRequest<typeof TemplatesGetChannel>) => {
+      if (this.#status === 'live') {
+        try {
+          const fromBridge = await this.#invoke(TemplatesGetChannel, req);
+          // A local-only template (imported offline, delivery still pending)
+          // must keep resolving — fall through to the local copy on null.
+          if (fromBridge !== null) return fromBridge;
+        } catch {
+          /* mid-flight drop — answer from the retained copy below */
+        }
+      }
+      return this.#library.get(req.templateId);
+    },
+    list: async () => {
+      if (this.#status === 'live') {
+        try {
+          return await this.#invoke(TemplatesListChannel, undefined);
+        } catch {
+          /* mid-flight drop — answer from the retained copy below */
+        }
+      }
+      return this.#library.list();
+    },
+    // R-022 — a LOCAL read. The page is already here; never a bridge round trip.
+    html: (templateId: string) => Promise.resolve(this.#library.html(templateId)),
     import: async (req: ChannelRequest<typeof TemplatesImportChannel>) => {
       // Register LOCALLY first (the source of truth) — this is what makes import
       // succeed offline. Then, when live, deliver to the bridge so it can serve
@@ -684,6 +812,10 @@ export class WebSocketRuntime implements RuntimeBridge {
       // stack (exact while disconnected — the bridge cannot mutate it).
       return this.#library.remove(req.templateId, this.#referencedCount(req.templateId));
     },
+    // R-028 (o1) — the bridge pushes the full catalogue on every change, so
+    // operator B's Library re-lists the moment operator A imports.
+    onChanged: (handler: (templates: TemplateInfo[]) => void): Unsubscribe =>
+      this.#templatesSubs.add(handler),
   };
 
   readonly audit = {
@@ -704,5 +836,33 @@ export class WebSocketRuntime implements RuntimeBridge {
     get: () => this.#invoke(SettingsGetChannel, undefined),
     set: (req: ChannelRequest<typeof SettingsSetChannel>) => this.#invoke(SettingsSetChannel, req),
     onChanged: (handler: (next: Settings) => void) => this.#settingsSubs.add(handler),
+  };
+
+  /** R-030 — the per-channel output raster, owned and disk-persisted by the bridge. */
+  readonly channelSettings = {
+    get: () => this.#invoke(ChannelSettingsGetChannel, undefined),
+    set: (req: ChannelRequest<typeof ChannelSettingsSetChannel>) =>
+      this.#invoke(ChannelSettingsSetChannel, req),
+    onChanged: (handler: (state: ChannelSettingsState) => void) =>
+      this.#channelSettingsSubs.add(handler),
+  };
+
+  /** R-022 — REHEARSE. Bridge-owned; the PLAY interlock is enforced bridge-side. */
+  readonly rehearse = {
+    state: () => this.#invoke(RehearseStateChannel, undefined),
+    enter: (req: ChannelRequest<typeof RehearseEnterChannel>) =>
+      this.#invoke(RehearseEnterChannel, req),
+    exit: (req: ChannelRequest<typeof RehearseExitChannel>) =>
+      this.#invoke(RehearseExitChannel, req),
+    onStateChanged: (handler: (rehearsals: Rehearsal[]) => void) => this.#rehearseSubs.add(handler),
+  };
+
+  /** R-034 — the station's delimiter list, owned and disk-persisted by the bridge. */
+  readonly delimiters = {
+    list: () => this.#invoke(DelimitersListChannel, undefined),
+    set: (req: ChannelRequest<typeof DelimitersSetChannel>) =>
+      this.#invoke(DelimitersSetChannel, req),
+    onChanged: (handler: (delimiters: DelimiterOption[]) => void) =>
+      this.#delimiterSubs.add(handler),
   };
 }

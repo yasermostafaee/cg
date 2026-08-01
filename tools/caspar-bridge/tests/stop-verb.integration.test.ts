@@ -206,3 +206,82 @@ it('STOP on an unknown item is refused, and sends nothing', async () => {
   const lines = (await recvLines(mock, tracePath)).slice(before);
   expect(lines.some((l) => l.includes('STOP'))).toBe(false);
 }, 40_000);
+
+/**
+ * R-028 (o2 / 5.4) — the NEXT verb reaches the wire.
+ *
+ * The capability existed template-side all along (`window.next` and the
+ * runtime's per-scope sequence drivers); what was missing was a way to SEND
+ * it. Part A added the builder verb; this pins the whole path — runtime verb →
+ * AMCP line — plus the R-006 refusal every on-air-affecting verb owes.
+ */
+it('R-028 — next() sends CG <ch>-<layer> NEXT, and refuses an unknown item', async () => {
+  tracePath = path.join(os.tmpdir(), `cg-next-${String(process.pid)}-${String(Date.now())}.ndjson`);
+  const oscPort = await freeUdpPort();
+  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, tracePath });
+  const r = await onAir(mock, oscPort);
+  const before = (await recvLines(mock, tracePath)).length;
+
+  expect((await r.nextItem('item1')).accepted).toBe(true);
+
+  const lines = (await recvLines(mock, tracePath)).slice(before);
+  // The item's own slot, and the flash layer every other CG verb uses.
+  expect(lines.some((l) => l.startsWith('CG 1-10 NEXT 0'))).toBe(true);
+  // NEXT advances the template in place: it must not re-ADD or clear.
+  expect(lines.some((l) => l.startsWith('CG 1-10 ADD'))).toBe(false);
+  expect(lines.some((l) => l.startsWith('CLEAR 1-10'))).toBe(false);
+  // …and the item is still exactly as on air as it was.
+  expect(status(r, 'item1')).toBe('on-air');
+
+  // An unknown item is refused rather than sent blind.
+  expect(await r.nextItem('no-such-item')).toEqual({
+    accepted: false,
+    errorCode: 'unknown-item',
+  });
+});
+
+/**
+ * C-012 / R-028 — STOP ALL: the graceful bulk, beside Clear-All's hard one.
+ */
+it('R-028 — stopAll sends CG STOP per on-air item, never a CLEAR and never a channel-wide one', async () => {
+  tracePath = path.join(
+    os.tmpdir(),
+    `cg-stopall-${String(process.pid)}-${String(Date.now())}.ndjson`,
+  );
+  const oscPort = await freeUdpPort();
+  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, tracePath });
+  const r = await onAir(mock, oscPort);
+  const before = (await recvLines(mock, tracePath)).length;
+
+  expect(await r.stopAll()).toEqual({ ok: true, stopped: 1 });
+
+  const lines = (await recvLines(mock, tracePath)).slice(before);
+  expect(lines.some((l) => l.startsWith('CG 1-10 STOP'))).toBe(true);
+  // The two things it must never be: the hard CLEAR, or a channel-wide wipe
+  // that would take the programme feed with it.
+  expect(lines.some((l) => l.startsWith('CLEAR 1-10'))).toBe(false);
+  expect(lines.some((l) => /^CLEAR 1\s*$/.test(l))).toBe(false);
+  // C-012 — the producer stays resident, so the item settles LOADED (resumable
+  // with a bare PLAY), not idle.
+  await waitFor(() => status(r, 'item1') === 'loaded', 5000, 'item settles loaded after STOP ALL');
+});
+
+it('stopAll sends NOTHING when nothing is on air', async () => {
+  tracePath = path.join(
+    os.tmpdir(),
+    `cg-stopall2-${String(process.pid)}-${String(Date.now())}.ndjson`,
+  );
+  const oscPort = await freeUdpPort();
+  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, tracePath });
+  const r = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  runtime = r;
+  r.start();
+  await r.startServing();
+  await r.whenServerHealthy(HEALTH_MS);
+  const before = (await recvLines(mock, tracePath)).length;
+
+  expect(await r.stopAll()).toEqual({ ok: true, stopped: 0 });
+  expect((await recvLines(mock, tracePath)).slice(before).some((l) => / STOP /.test(l))).toBe(
+    false,
+  );
+});
