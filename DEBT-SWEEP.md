@@ -1,4 +1,4 @@
-Censused through DEBT.md:1143
+Censused through DEBT.md:1848
 
 # DEBT-SWEEP.md — a census of `DEBT.md`
 
@@ -86,3 +86,61 @@ Both are `dev-offline-ux` version entries listing unstarted sections. DEBT.md:68
 version of it." That is `DEBT.md` correcting itself in place, which is what the evidence rule
 requires. DEBT.md:978 is **not** covered by it — it is `dev-list-vs-layer`, a different change,
 and nothing in the file supersedes it, so it stays UNSURE rather than being swept along.
+
+## DEBT.md:178–1848 — `## Findings to file` (part 2: 1144–1848)
+
+Two rows below are anchored inside a `###` entry rather than at its heading, breaking the
+one-row-per-heading rule deliberately. Both are flagged `(sub)` and both are justified in the
+note that follows the table.
+
+| line                   | summary                                                                                            | bucket     | target                      | evidence     |
+| ---------------------- | -------------------------------------------------------------------------------------------------- | ---------- | --------------------------- | ------------ |
+| DEBT.md:1144           | The PVW white 16:9 area was an opaque canvas forced by a `color-scheme` mismatch — fixed           | DISCHARGED | —                           | DEBT.md:1146 |
+| DEBT.md:1190 **(sub)** | Claims the `scene.background` → `.cg-stage` cause is "measured dead" — the owner says it is not    | LIVE       | bugs-designer.md (`new D-`) |              |
+| DEBT.md:1213           | PVW composite + position override fixed; per-row transport left as an open design question         | DECISION   | runtime.md                  |              |
+| DEBT.md:1251           | `dev-r028-b5` was not started                                                                      | OBSOLETE   | —                           | DEBT.md:602  |
+| DEBT.md:1277           | Chain stopped: `dev-r022-rehearse` and `dev-r030-channel-raster` never started                     | OBSOLETE   | —                           | DEBT.md:1254 |
+| DEBT.md:1295           | Non-1080 channels mis-place every graphic — `OUTPUT_FRAME` hardcoded 1920×1080                     | LIVE       | bugs-runtime.md (`new B-`)  |              |
+| DEBT.md:1321           | Flake: Designer multi-select group-drag spec times out under a loaded gate                         | LIVE       | bugs-designer.md (`new D-`) |              |
+| DEBT.md:1343           | Flake: Designer VP8+alpha seek-fragile canvas test hits a decode error                             | LIVE       | bugs-designer.md (`new D-`) |              |
+| DEBT.md:1360           | Owner UI review batch shipped; no E2E covers the scrub DRAG, only `arrowStep`                      | LIVE       | runtime.md                  |              |
+| DEBT.md:1388           | `--verb`'s `width:100%` stretched Inspector icon buttons to 286px — fixed via a third shape        | DISCHARGED | —                           | DEBT.md:1400 |
+| DEBT.md:1420           | Two same-named sequences render identical Inspector headings; needs a wording decision             | LIVE       | runtime.md                  |              |
+| DEBT.md:1442           | `Reload` and `Grant access` are still accent-coloured affordances                                  | DECISION   | runtime.md                  |              |
+| DEBT.md:1456           | VOID notice + the lesson: a control test reaching a different implementation is not a control test | LIVE       | platform.md (`new P-`)      |              |
+| DEBT.md:1479           | "CasparCG 2.5.0 cannot load our templates" — wrong; CEF was dead in that instance                  | OBSOLETE   | —                           | DEBT.md:1456 |
+| DEBT.md:1531 **(sub)** | Adopt-`CLEAR` succeeded, `CG ADD` failed, layer left empty — B-100 shape by a new route            | UNSURE     | bugs-runtime.md             |              |
+| DEBT.md:1539           | `CLEAR ALL` filters on the very statuses that may be wrong — reports success having sent nothing   | LIVE       | bugs-runtime.md (`new B-`)  |              |
+| DEBT.md:1569           | R-006 and B-087 still say air is "red"; air is now green — PRD re-wording owed                     | PROCESS    | runtime.md                  |              |
+| DEBT.md:1606           | `#` and the default alias share one number; the gap-not-renumber property has no test              | LIVE       | runtime.md                  |              |
+| DEBT.md:1618           | `B-113`, `B-114`, `R-034` claimed on `dev`; all three still owe a full-ref verification            | PROCESS    | —                           |              |
+| DEBT.md:1641           | Description column could drop the wire's own report at 1280px — fixed via the state-cell tooltip   | DISCHARGED | —                           | DEBT.md:1656 |
+| DEBT.md:1665           | The LOAD/REMOVE toggle cannot be named by one column header word                                   | DECISION   | runtime.md                  |              |
+| DEBT.md:1678           | Bulk verbs in the Layers header keep their colour while row verbs went neutral                     | DECISION   | runtime.md                  |              |
+| DEBT.md:1687           | Retired `M0–M12` milestone references — visible copy fixed, a comment sweep still owed             | PROCESS    | —                           |              |
+| DEBT.md:1700           | PREVIEW and PROGRAM are empty for different reasons — now encoded per panel                        | DISCHARGED | —                           | DEBT.md:1709 |
+| DEBT.md:1714           | `FailoverBanner` is `position: fixed` and overlays the monitor strip                               | LIVE       | bugs-runtime.md (`new B-`)  |              |
+| DEBT.md:1722           | `clampInspector`'s `MIN_WORKSPACE_PX` ignores ~54px of shell chrome                                | LIVE       | bugs-runtime.md (`new B-`)  |              |
+| DEBT.md:1732           | Pattern (2 occurrences): an observer effect silently no-ops when its target is absent              | LIVE       | platform.md (`new P-`)      |              |
+| DEBT.md:1762           | A panel fullscreen round-trip destroyed unapplied drafts — closed by `dev-draft-loss`              | DISCHARGED | —                           | DEBT.md:1762 |
+| DEBT.md:1800           | The draft-loss diagnosis as first written                                                          | OBSOLETE   | —                           | DEBT.md:1800 |
+| DEBT.md:1832           | `mute-before-ADD` upgrade deferred; on 2.5.0 the volume must land before the `CG ADD`              | LIVE       | runtime.md (`new R-`)       |              |
+
+### Why the two sub-rows exist
+
+**DEBT.md:1190 — this is the entry §3 of the task warned about, and it is not what the task
+expected to find.** The task describes "a note from the PVW investigation observing that
+`buildScene` paints a background on `.cg-stage` whenever `scene.background !== 'transparent'`",
+to be classified LIVE. **No such note exists in `DEBT.md`.** The string `buildScene` appears
+nowhere in the file (0 hits, case-insensitive); `scene.background` appears exactly once, at
+DEBT.md:1191. What survives is not the observation but its **closure**: DEBT.md:1190–1193 says
+the two candidate causes "are both DEAD, and were measured dead". The note was removed and
+replaced by a claim that its mechanism is dead. Per §3 — the owner has independently confirmed a
+live defect with that mechanism candidate — the row is LIVE, and the closure claim at
+DEBT.md:1190 is the thing that must not be trusted.
+
+**DEBT.md:1531 — the void at DEBT.md:1456 may not cover it.** DEBT.md:1481 voids the 2.5.0
+entry's "conclusion and its recommendation". DEBT.md:1531 is neither: it is a separate
+observation from the same log — the adopt-`CLEAR` committed and the `CG ADD` after it failed,
+leaving layer 71 empty — explicitly labelled "worth its own item". Whether the void reaches it
+cannot be settled from `DEBT.md`, so it is UNSURE rather than swept into the OBSOLETE parent.
