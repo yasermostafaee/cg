@@ -1381,3 +1381,54 @@ one-time setup step.
   split: the field keeps splitting on what it was given.
 - The list can never be emptied to nothing — a list field with split on must always have at
   least one delimiter to choose.
+
+## [~] R-031 — a startup splash screen: the product's first frame ⟨priority: medium⟩
+
+<!-- change: openspec/changes/runtime-splash-screen/ -->
+
+**What:** Give `apps/runtime` a startup splash — APASAI / **CG CONTROL**, a phase readout and a
+progress rail — that is on screen from the FIRST PAINT until the app is genuinely ready, with a
+minimum hold on a cold start. It replaces the bare `Connecting to bridge…` div the entry point
+renders today. The markup and its critical CSS are INLINE in `index.html` so they paint with no
+bundle and no network; a tiny inline script owns the clock and exposes `window.__CG_SPLASH__`
+(`phase()` / `done()`), which the React entry calls at its real boot steps.
+**Why:** The Runtime boots into an unstyled `Connecting to bridge…` line, so the product's first
+frame is a fragment of debug text — and it cannot be fixed by a React component, because a
+component cannot appear until the bundle has parsed and `createRuntimeBridge()` has resolved,
+which is precisely the window that needs covering. On an on-air tool the first frame is also the
+operator's confirmation that the right application came up on the right machine, which is why the
+build stamp belongs on it.
+**Acceptance:**
+
+- WHEN the page is opened THEN the splash is painted on the first frame, before any application
+  JavaScript has run
+- WHEN the boot reaches a real step (initializing, bridge probe, interface start) THEN the phase
+  readout names that step and the rail advances by COMPLETED PHASE, with a step counter (`2 / 3`)
+  and never a percentage
+- WHEN boot completes THEN the phase label FADES OUT and the readout's left side is empty — there
+  is no terminal `READY` label anywhere in the markup, CSS or script
+- WHEN this is a cold start (no `CG_RUNTIME_SESSION` marker in `sessionStorage`) THEN the splash
+  is held for at least 5000 ms; WHEN it is a warm reload THEN the floor is 600 ms
+- WHEN boot completes AFTER the floor THEN the hold extends to boot completion — the splash never
+  hides a boot that is still running
+- WHEN 20000 ms have elapsed since first paint THEN the splash dismisses regardless of boot state,
+  and the app shows its own DISCONNECTED / error surface
+- WHEN the bridge resolves to any of `live` / `offline-mock` / `disconnected` AND the app shell has
+  made its first React commit THEN boot counts as done — snapshot pulls (stack / health / lock) are
+  NOT part of the gate
+- WHEN `window.__CG_SPLASH_DISABLED__` is set before app JS THEN the splash does not appear and boot
+  is not delayed
+- WHEN `prefers-reduced-motion: reduce` is set THEN the splash renders with no entrance animation
+  and no fade
+
+**Notes:** Company **APASAI**, product **CG CONTROL**; all splash copy is English. The logo and
+brand colours are NOT final — the placeholder mark is a single documented SVG slot in
+`index.html`. **No red anywhere on the splash**: red is the sacred air-state colour and decorative
+red is already forbidden across this UI ([[R-007]], `theme.ts`), so the accent is the existing
+sky — checked by a test, not merely asserted. This is a display gate
+layered ON TOP of the connection model — `createRuntimeBridge`, `WebSocketRuntime` and
+`MockRuntime` are unchanged, and the live / offline-mock / disconnected tri-state, the
+refuse-while-disconnected contract and the NOT CONNECTED / TEST MODE banners all stay as they are.
+The 20 s ceiling is the safety property: a stuck splash on an on-air tool means the operator has no
+door into the application at all. The test bypass is an init-script global and deliberately NOT a
+URL query parameter — a query parameter is a door an operator can reach by bookmark or typo.

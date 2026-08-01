@@ -217,6 +217,46 @@ export const cssVars = {
   '--r-verb-next': '#2EBEA1',
   '--r-verb-stop': '#B38D18',
   '--r-verb-clear': '#DE5105',
+  /**
+   * R-031 — THE STARTUP SPLASH's own greys, and the one thing to know about them:
+   * the splash CANNOT READ THESE TOKENS.
+   *
+   * It paints before the bundle — that is its entire reason to exist — so
+   * `controls.css` has not arrived yet and `var(--r-splash-bg)` would resolve to
+   * nothing on the frame that matters. The inline `<style>` in `index.html` therefore
+   * mirrors these VALUES as literals, each with a comment naming the token it mirrors,
+   * and `tests/splashCss.test.ts` asserts every colour literal in that document is the
+   * value of one of these (and that none of them is red).
+   *
+   * They live here anyway, rather than only in the HTML, for the reason every other
+   * token does: this file is the single source of truth, so the mirror has something to
+   * be checked AGAINST. A literal with no token behind it is a colour nobody can find
+   * when the palette moves.
+   *
+   * WHY THEIR OWN FAMILY rather than reuse of `--r-surface-*`: the splash is a deeper,
+   * near-black console than the app chrome (`--r-surface-sunken` is #0F172A, visibly
+   * blue beside it) and its inks are tuned for large tracked-out type on that black,
+   * not for panel text. Tying them to the chrome tokens would mean a chrome tweak
+   * silently repainting the product's first frame.
+   *
+   * NO RED IN THIS FAMILY, EVER. Red is the sacred air-state colour and decorative red
+   * is forbidden across this UI (see the header) — a boot screen is the LAST place it
+   * may appear, because it would teach the operator's eye "red" before they have seen a
+   * single real state. The accent is deliberately NOT a splash token either: the rail
+   * reuses `--r-accent` / `--r-accent-strong`, so the first frame speaks the palette the
+   * app already speaks rather than a parallel one beside it.
+   */
+  '--r-splash-bg': '#090B0F',
+  '--r-splash-line': '#2A3441',
+  '--r-splash-ink': '#E8EDF4',
+  '--r-splash-ink-dim': '#5A6675',
+  '--r-splash-ink-faint': '#3F4A58',
+  '--r-splash-readout': '#8B97A6',
+  '--r-splash-rail': '#1C232E',
+  '--r-splash-mark-mid': '#3D4B5C',
+  '--r-splash-mark-dim': '#28323E',
+  '--r-splash-glow': 'rgba(56, 189, 248, 0.5)',
+  '--r-splash-vignette': 'rgba(0, 0, 0, 0.55)',
   // Spacing (4px base)
   '--r-space-1': '4px',
   '--r-space-2': '8px',

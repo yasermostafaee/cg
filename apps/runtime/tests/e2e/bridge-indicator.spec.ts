@@ -1,6 +1,11 @@
-import { expect, test } from '@playwright/test';
+// R-031 — `test` comes from the shared harness rather than `@playwright/test` so this
+// spec inherits the auto splash bypass. It drives the raw `page` (it arms its own bridge
+// URL and navigates itself), so it never instantiates `app`; without the harness's auto
+// fixture each of these three tests would sit through the splash's 5 s cold floor before
+// its first assertion. Nothing else about the spec changes.
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import type { ConnectionConfig } from '@cg/shared-ipc';
+import { expect, test } from './fixtures/runtime.js';
 
 /** Unreachable CasparCG + ephemeral OSC bind — these tests only exercise the WS link. */
 function ephemeralConnection(): ConnectionConfig {

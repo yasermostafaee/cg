@@ -646,9 +646,45 @@ export function buildInvalidVcg(): Uint8Array {
   return new TextEncoder().encode('this is not a .vcg archive');
 }
 
+/**
+ * R-031 — TURN THE STARTUP SPLASH OFF, for every spec but its own.
+ *
+ * Without this each spec would pay the splash's cold-start floor (5 s) before its first
+ * assertion could run, which is the most likely way a boot screen gets reverted. The
+ * global is read once by the inline script in `index.html`, before any app JS: set ⇒ the
+ * splash element is removed immediately and no clock is started.
+ *
+ * Three deliberate choices, each the alternative rejected:
+ *  - an INIT-SCRIPT GLOBAL, not a URL query parameter — a query parameter is a door an
+ *    operator can reach by bookmark or typo, and unguarded doors have cost this project
+ *    before;
+ *  - its OWN global, not an overload of `CG_E2E` — one global, one meaning;
+ *  - defaulted HERE, in the harness, not in product code — so the product's default is
+ *    "show the splash" and the splash's own specs opt back in simply by not using this.
+ */
+export async function disableSplash(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;
+  });
+}
+
 /** The extended `test` every Runtime spec imports: provides a booted `app`. */
-export const test = base.extend<{ app: RuntimeApp }>({
+export const test = base.extend<{ app: RuntimeApp; splashDisabled: void }>({
+  /**
+   * Auto, so a spec that drives the raw `page` (arming its own bridge URL and navigating
+   * itself, e.g. `bridge-indicator.spec.ts`) is covered too — those never touch `app`, so
+   * arming inside `app` alone would leave them paying the hold. `app` arms it as well,
+   * because it navigates during its OWN setup and must not depend on fixture ordering.
+   */
+  splashDisabled: [
+    async ({ page }, use) => {
+      await disableSplash(page);
+      await use();
+    },
+    { auto: true },
+  ],
   app: async ({ page }, use) => {
+    await disableSplash(page);
     await page.addInitScript(() => {
       (window as unknown as { CG_E2E: boolean }).CG_E2E = true;
       // R-028 — the declared bank is armed for EVERY spec now, because the
