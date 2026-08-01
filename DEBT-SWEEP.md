@@ -1,4 +1,4 @@
-Censused through DEBT.md:1848
+Censused through DEBT.md:2240
 
 # DEBT-SWEEP.md — a census of `DEBT.md`
 
@@ -144,3 +144,98 @@ entry's "conclusion and its recommendation". DEBT.md:1531 is neither: it is a se
 observation from the same log — the adopt-`CLEAR` committed and the `CG ADD` after it failed,
 leaving layer 71 empty — explicitly labelled "worth its own item". Whether the void reaches it
 cannot be settled from `DEBT.md`, so it is UNSURE rather than swept into the OBSOLETE parent.
+
+## DEBT.md:1849–1960 — `## R-035 SPLASH — the readout and the visual layer`
+
+| line         | summary                                                                                      | bucket   | target                | evidence |
+| ------------ | -------------------------------------------------------------------------------------------- | -------- | --------------------- | -------- |
+| DEBT.md:1855 | No `pnpm gate`, no E2E run, no Linux `gate:e2e`, no OpenSpec spec-delta for the visual layer | PROCESS  | openspec              |          |
+| DEBT.md:1891 | The APASAI mark is an auto-trace of a raster — replace with real vector before release       | LIVE     | runtime.md (`new R-`) |          |
+| DEBT.md:1904 | Nine splash decisions taken fast (token choices, `scaleX` rail, foot inset, glow repoint)    | DECISION | runtime.md            |          |
+| DEBT.md:1949 | The entrance rests at ~2.05 s, past the 1.6 s intent; a warm reload never shows it settled   | DECISION | runtime.md            |          |
+
+## DEBT.md:1961–2072 — `## DESIGNER SPLASH + the shared splash kit`
+
+| line         | summary                                                                                        | bucket     | target                 | evidence     |
+| ------------ | ---------------------------------------------------------------------------------------------- | ---------- | ---------------------- | ------------ |
+| DEBT.md:1967 | No `D-` number, no PRD entry, no OpenSpec change dir, no `pnpm gate`; Linux `gate:e2e` owed    | PROCESS    | designer.md (`new D-`) |              |
+| DEBT.md:1986 | Six Designer-splash decisions taken fast (dropped phase label, source exports, floors, coral)  | DECISION   | designer.md            |              |
+| DEBT.md:2019 | Two Runtime splash E2E specs were faults in the specs; both repaired, no product code touched  | DISCHARGED | —                      | DEBT.md:2041 |
+| DEBT.md:2044 | No in-app about/version surface in either product, though `__CG_BUILD__` is ready for one      | LIVE       | designer.md            |              |
+| DEBT.md:2049 | Both products hold 8000 ms cold / 3000 ms warm; the `Esc`-to-skip door is agreed but not built | DECISION   | runtime.md             |              |
+
+## DEBT.md:2073–2240 — `## Skipped process`
+
+This section has **no `###` headings**: it is bold group labels over bullet lists, so per the
+stated rule each top-level bullet is one entry. That makes it denser than a `###`-structured
+section carrying the same weight of debt — the asymmetry is a consequence of applying one rule
+consistently, not of treating this section differently.
+
+**`dev-modal-primitive`:**
+
+| line         | summary                                                                                 | bucket  | target     | evidence |
+| ------------ | --------------------------------------------------------------------------------------- | ------- | ---------- | -------- |
+| DEBT.md:2079 | No OpenSpec artifacts and no PRD item for the `Modal` contract and five changed dialogs | PROCESS | openspec   |          |
+| DEBT.md:2082 | The §3 in-viewport E2E is owed (`toBeInViewport`); a Linux `gate:e2e` owed regardless   | PROCESS | openspec   |          |
+| DEBT.md:2088 | Nothing asserts the migrated dialogs still OPEN from their real entry points            | LIVE    | runtime.md |          |
+| DEBT.md:2091 | `Cancel` leaving state byte-identical is asserted only for the config dialog            | LIVE    | runtime.md |          |
+
+**`dev-awaiting-verbs`:**
+
+| line         | summary                                                                                              | bucket  | target     | evidence |
+| ------------ | ---------------------------------------------------------------------------------------------------- | ------- | ---------- | -------- |
+| DEBT.md:2098 | No OpenSpec artifacts, no PRD item; the `awaiting` row state and `CLEAR`'s narrowing are spec-worthy | PROCESS | openspec   |          |
+| DEBT.md:2102 | No E2E spec added (the window is not holdable at that layer); Linux `gate:e2e` owed                  | PROCESS | openspec   |          |
+| DEBT.md:2107 | `AWAITING_ROW_REASON` sits with the verbs, not in the shared `reachWording` module                   | LIVE    | runtime.md |          |
+
+**`dev-r030-channel-raster` + `dev-r022-rehearse`:**
+
+| line         | summary                                                                             | bucket       | target   | evidence    |
+| ------------ | ----------------------------------------------------------------------------------- | ------------ | -------- | ----------- |
+| DEBT.md:2114 | No OpenSpec artifacts for either; `R-030`/`R-022` not flipped to `[~]`              | PROCESS      | openspec |             |
+| DEBT.md:2118 | Records that `pnpm gate` WAS run uncached and green — explicitly not a skipped item | OUT OF SCOPE | —        |             |
+| DEBT.md:2120 | `gate:e2e` not run; Linux owed for both; no E2E spec written for either             | PROCESS      | openspec |             |
+| DEBT.md:2125 | The `dev-r030` task file's "run after r022" header is stale — the order was flipped | LIVE         | openspec |             |
+| DEBT.md:2131 | `dev-r028-b5` was not started                                                       | OBSOLETE     | —        | DEBT.md:602 |
+
+**Nothing in either feature is verified on air:**
+
+| line         | summary                                                                                   | bucket  | target    | evidence |
+| ------------ | ----------------------------------------------------------------------------------------- | ------- | --------- | -------- |
+| DEBT.md:2135 | r030 — a 720p channel is the useful manual check; scale maths seen only in unit tests     | PROCESS | caspar.md |          |
+| DEBT.md:2141 | r030 — the video-mode read is confirmed against the mock's `INFO` stub, never real `INFO` | PROCESS | caspar.md |          |
+| DEBT.md:2147 | r022 — `MIXER … VOLUME` has never been sent to this plant; unvalidated on 2.3.2           | PROCESS | caspar.md |          |
+| DEBT.md:2152 | r022 — the 2.5.0 premise behind the mute is inherited from earlier recon, not re-measured | PROCESS | caspar.md |          |
+
+**b4 (the Inspector task):**
+
+| line         | summary                                                                                      | bucket       | target   | evidence |
+| ------------ | -------------------------------------------------------------------------------------------- | ------------ | -------- | -------- |
+| DEBT.md:2158 | No `pnpm gate` — affected workspaces' own tasks only, no uncached cross-workspace run        | PROCESS      | —        |          |
+| DEBT.md:2164 | E2E run and green on Windows (superseding "not run at all"); Linux still owed                | PROCESS      | —        |          |
+| DEBT.md:2174 | Item 6 asserted in jsdom, which has no bidi engine — needs a real browser or the owner's eye | PROCESS      | —        |          |
+| DEBT.md:2179 | No OpenSpec, no PRD edits, no numbers; the R-028 spec no longer describes the Inspector      | PROCESS      | openspec |          |
+| DEBT.md:2181 | Engine doc-sync not done for `AutoGrowTextarea` and `editorTextDirection`                    | PROCESS      | —        |          |
+| DEBT.md:2183 | Records that the hardware/adversarial requirement did not fire for b4 — not a debt           | OUT OF SCOPE | —        |          |
+
+**`dev-clear-bank-scoped`:**
+
+| line         | summary                                                                                     | bucket  | target                     | evidence |
+| ------------ | ------------------------------------------------------------------------------------------- | ------- | -------------------------- | -------- |
+| DEBT.md:2190 | No `pnpm gate` — affected workspaces' own tasks only                                        | PROCESS | —                          |          |
+| DEBT.md:2194 | E2E run and green on Windows; Linux still owed                                              | PROCESS | —                          |          |
+| DEBT.md:2202 | Not verifiable on air from this machine — the whole point is a real `CLEAR` to a real layer | PROCESS | caspar.md                  |          |
+| DEBT.md:2207 | The bound-row race seam is left open — "worth filing as an item"                            | LIVE    | bugs-runtime.md (`new B-`) |          |
+| DEBT.md:2209 | No OpenSpec, no PRD edit, no number for the new capability or the new channel               | PROCESS | openspec                   |          |
+
+**Earlier tasks (b3 and before):**
+
+| line         | summary                                                                                 | bucket  | target    | evidence |
+| ------------ | --------------------------------------------------------------------------------------- | ------- | --------- | -------- |
+| DEBT.md:2214 | No `pnpm gate` — affected workspace's own tasks only                                    | PROCESS | —         |          |
+| DEBT.md:2219 | E2E run and green on Windows; Linux still owed                                          | PROCESS | —         |          |
+| DEBT.md:2227 | No OpenSpec anything; the R-028 spec describes a row that no longer exists in that form | PROCESS | openspec  |          |
+| DEBT.md:2230 | No PR, no merge, no branch cleanup, no archive                                          | PROCESS | —         |          |
+| DEBT.md:2231 | No `docs/prd/*` edits and no numbers claimed for 13 items plus the findings             | PROCESS | —         |          |
+| DEBT.md:2233 | Engine doc-sync not done for `Panel`, `Tooltip` and the `layerTable` column model       | PROCESS | —         |          |
+| DEBT.md:2235 | No hardware verification of on-air behaviour — nothing could be put on air at all       | PROCESS | caspar.md |          |
