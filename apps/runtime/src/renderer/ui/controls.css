@@ -623,6 +623,35 @@
   border-color: var(--r-verb-play);
   color: #10151f;
 }
+
+/*
+ * …and a PANEL-HEADER toggle takes the interactive accent, not the rehearse violet.
+ *
+ * The owner's ask: when a panel is FULLSCREEN, its minimize control must look
+ * different, so the operator can tell at a glance that what he is looking at is one
+ * panel blown up rather than the whole workspace. The icon already flips
+ * (Maximize2 → Minimize2) and `aria-pressed` already says so, but neither survives
+ * a glance across a gallery — which is the whole reason this console puts state in
+ * colour.
+ *
+ * IT MAY NOT BE THE VIOLET. `.is-on`'s base fill is `--r-rehearsing-strong`, and
+ * that hue is R-022's REHEARSING state: it means "this row is on PVW and cannot
+ * reach air". A violet chip in a panel header would be that claim in a place it
+ * cannot be true, which is precisely the one-hue-one-meaning rule the rest of this
+ * file is built on.
+ *
+ * Sky is the right one BECAUSE it is the interactive accent and has never been a
+ * state colour — nothing else on this surface is competing for it, and a lit
+ * control here is a statement about the CHROME (a panel is maximised), never about
+ * a graphic. Scoped to `.cg-panel-actions` so it cannot leak onto a row verb.
+ */
+.cg-panel-actions .cg-btn.is-on {
+  background: var(--r-accent);
+  border-color: var(--r-accent);
+  /* Near-black, like the play tone above and for the same reason: sky is light
+     enough that the white the violet uses would leave the glyph unreadable. */
+  color: #10151f;
+}
 .cg-btn--verb.is-on:hover:not(:disabled),
 .cg-btn--neutral.is-on:hover:not(:disabled),
 .cg-btn--icon.is-on:hover:not(:disabled) {

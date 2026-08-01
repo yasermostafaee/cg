@@ -2,6 +2,93 @@
 
 ---
 
+## OVERNIGHT HANDOVER — 2026-08-01
+
+Base was `a112783c`. Everything below is pushed to `origin/dev`; nothing is local-only.
+
+### What landed
+
+| commit     | what                                                                             |
+| ---------- | -------------------------------------------------------------------------------- |
+| `64cc6953` | `dev-awaiting-verbs` — verbs read the `RowBinding` union; the panel-level notice |
+| `2eebc4cd` | the `Modal` primitive — three roles + the pinned message region                  |
+| `c63690b1` | the four dialogs already on `Modal` — roles, and the §3 refusal fix              |
+| `841a0b0d` | `SERVER CONNECTION` migrated off its hand-rolled chrome; APPLY → primary         |
+| `3468dabb` | the audit log migrated — the last bypass                                         |
+| `afd2e491` | 🗣 your report: the servers dialog's fields were missing `cg-field`              |
+| `8b039b30` | 🗣 your `.cg-modal-footer .cg-btn` metrics, applied verbatim                     |
+| `a42bfd9c` | 🗣 servers Cancel · audit `Close` → cancel treatment · `AUDIT` → `LOG`           |
+
+Both task files are complete. The diagnosis is written and no code was changed for it.
+
+### What is half-done
+
+**Nothing is half-done in the tree** — every commit is self-contained and the working tree
+is clean. What is OWED is listed under _Skipped process_; the two that matter:
+
+- **🔴 The §3 E2E is not written.** The task asked for an in-viewport assertion on the
+  scrolled refusal. jsdom computes no layout, so the DOM spec pins the MECHANISM instead
+  (message outside the scroll container, immediately above the action row). The real
+  assertion needs Playwright's `toBeInViewport()`.
+- **A Linux `gate:e2e` is owed.** Five dialogs changed layout. The Windows run is recorded
+  below and is non-authoritative for pixel/geometry.
+
+### Everything filed under AWAITING OWNER, in one place
+
+Four items, all in the section immediately below this one:
+
+1. **🔴 `PRIMARY A` stuck in `connecting`** — diagnosed, not fixed. Almost certainly a
+   PUBLISH bug (`emitHealth` collapses four FSM states into one dedupe key), not a stuck
+   state. **It does not need a backup to happen.** One ten-second test separates the two
+   causes: refresh the browser and see whether the word changes.
+2. **`destructive` → solid amber**, so the `Remove` confirms changed colour. One line to
+   revert if you want red kept as a stronger, separate signal.
+3. **`Reset to defaults` is now destructive** (was a borderless ghost). Config reset, not
+   an on-air act — `cancel` is the other defensible role.
+4. **`CLEAR` is held during the `awaiting` window** — a narrowing of an on-air escape
+   hatch, argued in full, flagged because it is that class of change.
+
+### Gate results
+
+- **`pnpm gate` — GREEN**, run uncached on the final code (`8b039b30`).
+  `openspec validate --all --strict` is the last link in the `&&` chain and reported
+  `42 passed, 0 failed`, so typecheck + lint + test + build + `format:check` all passed
+  ahead of it.
+- **`pnpm gate:e2e` — see the line appended at the end of this section.** Windows, and
+  therefore NOT authoritative for pixel or a11y geometry; a Linux/WSL run is still owed.
+- **Runtime unit suite: 526 passed / 70 files**, including 23 new assertions across
+  `awaitingVerbs`, `layersPanel.awaitingNotice` and `modalPrimitive`.
+- Two specs were verified RED against the unfixed code first — the verb gate and the §3
+  placement. Both are described where they are recorded.
+
+### 👁 Look at these with your own eyes first
+
+**This run touched modal chrome across every dialog in the app.** In rough order of how
+likely you are to disagree with me:
+
+1. **Every confirm dialog's committing button changed colour** — `Remove …` and
+   `Remove and clear (ON AIR)` were a transparent red OUTLINE and are now SOLID amber.
+   `Clear all` is unchanged. Reasoning under AWAITING OWNER #2; this is the single most
+   visible change of the night.
+2. **`Server connection`** — new Cancel, APPLY is blue not amber, sentence-case title, the
+   ✕ replaces the `Close` button, field backgrounds fixed, messages moved beside the
+   action row. It changed more than any other dialog. Open it with a bad port to see the
+   validation message land next to the buttons.
+3. **`Candidate layers — configuration`** — the §3 fix. To see the point: untick an
+   occupied row far down a long list, scroll back to the top, press Apply. The refusal now
+   appears beside Apply instead of at the bottom of the list.
+4. **`Text file delimiters`** — `Reset to defaults` is now solid amber (AWAITING OWNER #3).
+5. **The template picker** (`LOAD` on any row) — Cancel moved from the right to the left
+   and is now bordered rather than a ghost.
+6. **`Log`** (was `AUDIT`) in the status bar, and its dialog's `Close` is now neutral.
+7. **The Layers panel has a new reserved strip above the table** — about 1.65rem, empty
+   except during the first second after a connect, when it carries the "layer states have
+   not arrived yet" line. It is always reserved ON PURPOSE so nothing shifts under your
+   cursor when the notice goes; the cost is a permanent thin band. Worth a look because it
+   is a permanent change to the panel you spend the most time in.
+
+---
+
 ## AWAITING OWNER — 2026-08-01 (overnight run)
 
 Four things were left undecided rather than guessed. Nothing here blocks what landed; each

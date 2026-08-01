@@ -128,8 +128,29 @@ export function Panel({
             fill and a hover, at a fixed 28px square. No new palette and no new
             shape: NEUTRAL IS NOT INVISIBLE, which is `--ghost`'s own warning.
           */}
+          {/*
+            LIT WHILE FULLSCREEN (owner request), through the design system's own
+            engaged-toggle mechanism rather than a colour spelled here.
+
+            A maximised panel looks exactly like a workspace with one panel in it, so
+            the operator can lose track of which he is in — and the way OUT is this
+            button. The icon already flips and `aria-pressed` already announces it,
+            but neither survives a glance from across a gallery, which is why this
+            console puts state in colour.
+
+            `active` and not a className: `.is-on` is one typo away from silently
+            doing nothing, and hand-spelled control classes are what the design
+            system forbids. The HUE is chosen in `controls.css` — scoped to the panel
+            header so it takes the interactive sky rather than `.is-on`'s default
+            rehearse violet, which means something else entirely.
+
+            `aria-pressed` stays: this toggle keeps ONE label per state rather than
+            flipping its word, so the attribute is the only thing carrying the state
+            to a screen reader.
+          */}
           <Button
             variant="icon"
+            active={focused}
             aria-label={focused ? `Exit fullscreen ${title}` : `Show ${title} fullscreen`}
             aria-pressed={focused}
             title={focused ? `Restore ${title} to the workspace` : `Give ${title} the whole shell`}

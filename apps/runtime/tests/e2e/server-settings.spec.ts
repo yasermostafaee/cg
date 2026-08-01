@@ -27,7 +27,25 @@ test('settings panel: blocked while on air, Remove-All clears + unblocks, remote
   await expect(panel.getByLabel('Primary host')).toHaveValue('127.0.0.1');
   await expect(panel.getByText(/on air or unsettled/)).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Apply server settings' })).toBeDisabled();
-  await panel.getByRole('button', { name: 'Close server settings' }).click();
+
+  /*
+    THE HEADER'S `Close` BUTTON IS GONE, and this assertion is why the line below
+    changed rather than the code.
+
+    This dialog used to hand-roll its chrome, and its dedicated `Close` BUTTON was
+    the odd one out in the app: every other dialog dismisses with the ✕ glyph. The
+    modal primitive now owns the chrome, so the word is spent nowhere and the ✕ is
+    the close affordance here as everywhere else — plus a real `Cancel` in the
+    action row, because this dialog is a FORM and leaving without applying is a
+    deliberate choice.
+
+    Pinned, not merely updated: if the hand-rolled button ever comes back, this
+    fails.
+  */
+  await expect(panel.getByRole('button', { name: 'Close server settings' })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'Cancel' }).click();
+  await expect(panel).toBeHidden();
 
   // 2. Remove-All: confirm the app's modal (a deliberate destructive path).
   await page.getByRole('button', { name: 'Remove all items' }).click();
