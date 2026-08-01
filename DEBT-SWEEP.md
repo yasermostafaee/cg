@@ -1,4 +1,4 @@
-Censused through DEBT.md:2240
+Censused through DEBT.md:2707 — complete.
 
 # DEBT-SWEEP.md — a census of `DEBT.md`
 
@@ -239,3 +239,273 @@ consistently, not of treating this section differently.
 | DEBT.md:2231 | No `docs/prd/*` edits and no numbers claimed for 13 items plus the findings             | PROCESS | —         |          |
 | DEBT.md:2233 | Engine doc-sync not done for `Panel`, `Tooltip` and the `layerTable` column model       | PROCESS | —         |          |
 | DEBT.md:2235 | No hardware verification of on-air behaviour — nothing could be put on air at all       | PROCESS | caspar.md |          |
+
+## DEBT.md:2241–2687 — `## Decisions taken fast`
+
+| line         | summary                                                                                          | bucket       | target                     | evidence     |
+| ------------ | ------------------------------------------------------------------------------------------------ | ------------ | -------------------------- | ------------ |
+| DEBT.md:2243 | `awaiting` shows LOAD disabled; the notice strip reserves height; `linkDown` outranks `awaiting` | DECISION     | runtime.md                 |              |
+| DEBT.md:2260 | Nothing writes the authored position; the byte-identical test would assert nothing               | DECISION     | runtime.md                 |              |
+| DEBT.md:2297 | The mute is `MIXER VOLUME 0` and the producer stays; CLEAR-then-re-ADD rejected                  | DECISION     | runtime.md                 |              |
+| DEBT.md:2312 | REHEARSE is violet — green, sky, amber and red each ruled out for a stated reason                | DECISION     | runtime.md                 |              |
+| DEBT.md:2325 | Wide vs compact field rows decided by field KIND, not width alone                                | DECISION     | runtime.md                 |              |
+| DEBT.md:2342 | The container query is on the panel, not the viewport — a media query answers wrongly            | DECISION     | runtime.md                 |              |
+| DEBT.md:2352 | Auto-grow textareas carry no resize handle; raise the ~200px cap instead                         | DECISION     | runtime.md                 |              |
+| DEBT.md:2359 | The drag handle is `aria-hidden`; the ↑/↓ buttons are the accessible path                        | DECISION     | runtime.md                 |              |
+| DEBT.md:2367 | The sequence label was fixed in `@cg/shared-schema`, so the Designer's wording moved too         | DECISION     | designer.md                |              |
+| DEBT.md:2380 | The real layer number stays on the row as a secondary column — a softening of task 4.2           | DECISION     | runtime.md                 |              |
+| DEBT.md:2395 | Row `#` counts from the top of the displayed list, which is descending layer order               | DECISION     | runtime.md                 |              |
+| DEBT.md:2402 | Template name and description became droppable columns, not text stacked under the alias         | DECISION     | runtime.md                 |              |
+| DEBT.md:2412 | Verbs are icon-only at every width, not only when narrow                                         | DECISION     | runtime.md                 |              |
+| DEBT.md:2421 | The channel tab strip renders even with one channel, costing ~28px                               | DECISION     | runtime.md                 |              |
+| DEBT.md:2428 | `Panel` outside its provider degrades rather than throws — a throw would blank the console       | DECISION     | runtime.md                 |              |
+| DEBT.md:2438 | PGM/PVW placement is not RTL-flipped — it follows the hardware convention                        | DECISION     | runtime.md                 |              |
+| DEBT.md:2444 | Two tests re-expressed onto `data-row-state` rather than loosened                                | DECISION     | runtime.md                 |              |
+| DEBT.md:2456 | `dev-clear-bank-scoped` shipped; the bound-row race seam and `clearAll` are both left open       | LIVE         | bugs-runtime.md (`new B-`) |              |
+| DEBT.md:2603 | CLEAR is disabled on a genuinely unbound row — "the interim state, not the intent"               | OBSOLETE     | —                          | DEBT.md:2486 |
+| DEBT.md:2621 | `#` and the default alias diverge on a non-contiguous tick set; neither property has a test      | LIVE         | runtime.md                 |              |
+| DEBT.md:2640 | The bank moved to 70–99 and `logo-bug` to 40–49; owner re-scoped it as NOT a hardware debt       | DECISION     | runtime.md                 |              |
+| DEBT.md:2679 | Records that the code landed as one commit because the pieces are mutually dependent             | OUT OF SCOPE | —                          |              |
+
+## DEBT.md:2688–2707 — `## Environment notes (this machine, not debt)`
+
+Read in full. The section's self-declaration holds: all four bullets describe the state of the
+owner's own machine (`~/.cg-runtime/` bridge config, a rebuilt `dist/`, a stale bridge holding
+port 5280), not the product. Recorded as one row per §7 rather than skipped.
+
+| line         | summary                                                                                                  | bucket       | target | evidence |
+| ------------ | -------------------------------------------------------------------------------------------------------- | ------------ | ------ | -------- |
+| DEBT.md:2688 | Four machine-local notes: stored aliases, the created bank file, the bridge rebuild, a stale port holder | OUT OF SCOPE | —      |          |
+
+> **One thing inside it is an owner action, not just a note.** DEBT.md:2690 records that the
+> saved aliases on this machine now contradict the `#` column (layer 70 is stored as `Layer 1`
+> but displays as `#4`), deliberately not rewritten because it is the owner's own config. The
+> remedy is in the file: open Configure, clear the four Name fields, Apply. It is carried into
+> the checklist below so it is not lost behind the section's out-of-scope marking.
+
+---
+
+# The three extractions
+
+## Skipped process — checklist
+
+Deduplicated, as commands and steps. Sources include non-PROCESS rows whose bundled parts are
+process debts, so nothing is lost to the strongest-demand rule.
+
+**Gates to run**
+
+- [ ] `pnpm gate` — never run uncached across the workspace for: R-035 splash (DEBT.md:1857),
+      the Designer splash + splash kit (DEBT.md:1983), b4 (DEBT.md:2158), `dev-clear-bank-scoped`
+      (DEBT.md:2190), b3 and earlier (DEBT.md:2214).
+- [ ] `pnpm gate:e2e` **on Linux/WSL** — owed, and **not discharged by any Windows run**, for:
+      the overnight modal work (DEBT.md:42, DEBT.md:2087), `dev-awaiting-verbs` (DEBT.md:2105),
+      r022 and r030 (DEBT.md:2120), R-035 splash (DEBT.md:1864), the Designer splash
+      (DEBT.md:1981), b4 (DEBT.md:2172), `dev-clear-bank-scoped` (DEBT.md:2194), b3 and earlier
+      (DEBT.md:2219).
+- [ ] `pnpm gate:e2e` **on Windows** — not yet run at all for r022/r030 (DEBT.md:2120), and the
+      R-035 splash specs were edited but never executed (DEBT.md:1860).
+- [ ] Suite-timing measurement for both splash runs (DEBT.md:1860, DEBT.md:1983).
+
+**OpenSpec**
+
+- [ ] `pnpm openspec validate --all --strict` — never run for the splash work (DEBT.md:1871) or
+      the Designer splash (DEBT.md:1975).
+- [ ] Reconcile the spec-delta in `openspec/changes/runtime-splash-screen/` — its `spec.md`,
+      `design.md` and `tasks.md` still describe the step counter and the placeholder brand slot
+      (DEBT.md:1867).
+- [ ] Author change artifacts that do not exist at all: `dev-modal-primitive` (DEBT.md:2079),
+      `dev-awaiting-verbs` (DEBT.md:2098), `dev-r030-channel-raster` and `dev-r022-rehearse`
+      (DEBT.md:2114), the Designer splash + splash kit (DEBT.md:1975), `dev-clear-bank-scoped`'s
+      new capability and channel (DEBT.md:2209), b4 (DEBT.md:2179), b3 and earlier (DEBT.md:2227).
+- [ ] Flip `R-030` and `R-022` in `docs/prd/runtime.md` to `[~]` (DEBT.md:2114).
+- [ ] Correct the stale header in the `dev-r030-channel-raster` task file — it says "run after
+      `dev-r022-rehearse`" and the order was flipped (DEBT.md:2125).
+- [ ] **No archive is pending.** No change directory named in `DEBT.md` is described as ready to
+      archive; every one of them is owed authoring first.
+
+**Tests owed**
+
+- [ ] Write the §3 in-viewport refusal assertion with Playwright's `toBeInViewport()` against a
+      scrolled `Candidate layers` list (DEBT.md:2082, DEBT.md:38).
+- [ ] Assert the migrated dialogs still open from their real entry points (DEBT.md:2088).
+- [ ] Assert `Cancel` leaves state byte-identical for the destructive dialogs, not only the
+      config dialog (DEBT.md:2091).
+- [ ] E2E on the scrub DRAG, not only `arrowStep` (DEBT.md:1383).
+- [ ] Tests for `#`-vs-alias divergence and alias stability (DEBT.md:2638), and for the
+      gap-not-renumber property (DEBT.md:1615).
+
+**Verification and reconciliation**
+
+- [ ] Verify `B-113`, `B-114` and `R-034` against `origin/main` and **every ref**
+      (`git for-each-ref` plus the `docs/prd/*` files on `main`) — DEBT.md:1625.
+- [ ] Re-word `R-006` and `B-087` in `docs/prd/*` to name the air colour by role, not by hue, and
+      audit the surface for reds that no longer mean danger (DEBT.md:1583).
+- [ ] Sweep the source for remaining retired `M<n>` milestone references (DEBT.md:1697).
+- [ ] Engine doc-sync for `AutoGrowTextarea` + `editorTextDirection` (DEBT.md:2181) and for
+      `Panel`, `Tooltip` and the `layerTable` column model (DEBT.md:2233).
+- [ ] Owner action on this machine: open Configure, clear the four Name fields, Apply — so the
+      stored aliases stop contradicting the `#` column (DEBT.md:2690).
+
+**Hardware — needs a CasparCG this session cannot reach**
+
+- [ ] Configure a 720p5000 channel and confirm proportional placement (DEBT.md:2135).
+- [ ] Confirm `parseVideoModeFromInfo` against real `INFO` XML, not the mock stub (DEBT.md:2141).
+- [ ] Confirm `MIXER … VOLUME` is accepted on real 2.3.2 — never sent to this plant
+      (DEBT.md:2147); the 2.5.0 mute premise is inherited, not re-measured (DEBT.md:2152).
+- [ ] Verify a real `CLEAR` reaches a real layer for `dev-clear-bank-scoped` (DEBT.md:2202), and
+      an end-to-end load/take/update/stop/clear for b3 and earlier (DEBT.md:2235).
+- [ ] Run the ten-second `PRIMARY A` diagnostic: with the pill stuck on CONNECTING, refresh the
+      browser. Word changes → publish bug; word stays → a real connect problem (DEBT.md:331).
+- [ ] Observe whether the link indicator read LIVE when `unknown` was seen — the one observation
+      that separates a display bug from a second defect (DEBT.md:1061).
+
+**Not process — recorded so it is not mistaken for it**
+
+- `pnpm gate` **was** run uncached and green for r030 and r022 (DEBT.md:2118) and for the
+  overnight run's final tree (DEBT.md:64). `pnpm gate:e2e` **was** run and is green on Windows
+  for b4, `dev-clear-bank-scoped`, b3-and-earlier and the overnight run.
+
+## Decisions awaiting ratification
+
+The four `## AWAITING OWNER` items are folded in first, as §5.2 requires.
+
+| #   | decision                                                                                                     | what changes if the owner reverses it                                                                                                                                                                                                                                                         |
+| --- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **`PRIMARY A` stuck in `connecting`** — diagnosed as a publish bug, deliberately not fixed (DEBT.md:119)     | Authorising the fix touches connection-health publishing and reconnect timing on a live playout link. Leaving it means the pill goes on lying about a normal reconnect loop.                                                                                                                  |
+| 2   | **Modal `destructive` → solid amber** (DEBT.md:139)                                                          | Reverting to the red outline makes `Remove` a weaker signal than `Clear all`. Keeping red as a distinct data-destroying role is a fourth role — one line in `ROLE_VARIANT`.                                                                                                                   |
+| 3   | **`Reset to defaults` is `destructive`** (DEBT.md:150)                                                       | `cancel` is the other defensible role; it is a config reset, not an on-air act. One line in `DelimitersModal`.                                                                                                                                                                                |
+| 4   | **`CLEAR` held during the `awaiting` window** (DEBT.md:157)                                                  | Reversing re-opens the guess between `stack.out` and `clearLayer` with no itemId — which can clear a layer out from under a live item. Keeping it narrows an on-air escape hatch.                                                                                                             |
+| 5   | **Eight visible changes to modal chrome, app-wide** (DEBT.md:84)                                             | The owner's eyes are the acceptance. The reserved ~1.65rem strip above the Layers table is the one permanent change to the most-used panel.                                                                                                                                                   |
+| 6   | **`resize: vertical` was not followed from the Inspector mock** (DEBT.md:646)                                | Either amend the mock to accept autogrow, or make a drag pin the height and disable autogrow for that item — the second is a behaviour change.                                                                                                                                                |
+| 7   | **PVW transport drives every rehearsing frame, not the selected one** (DEBT.md:1245)                         | Per-row transport is a real design question, not a tweak: judging whether two graphics collide requires running them together.                                                                                                                                                                |
+| 8   | **`Reload` and `Grant access` stay accent-coloured** (DEBT.md:1442)                                          | One `variant` word per button. `Grant access` only appears in an attention state, so its accent is arguably state-adjacent.                                                                                                                                                                   |
+| 9   | **The LOAD/REMOVE column header reads `LOAD`** (DEBT.md:1665)                                                | The alternatives are two columns (costs 44px, re-introduces an appearing/disappearing control) or a header word that changes with the rows.                                                                                                                                                   |
+| 10  | **Bulk verbs keep their colour while row verbs went neutral** (DEBT.md:1678)                                 | A `variant` change per button. They are rare, bulk and destructive, and there is one of each rather than one per row.                                                                                                                                                                         |
+| 11  | **Nine R-035 splash decisions** (DEBT.md:1904)                                                               | Notably `--r-success` over the task's `#34d399`, a `scaleX` rail, the foot at 18px, and `--r-splash-glow` repointed to brand blue. Each is one value.                                                                                                                                         |
+| 12  | **The splash entrance rests at ~2.05 s, past the 1.6 s intent** (DEBT.md:1949)                               | Two `animation-delay` values would compress the stagger; the author judged that it would make the entrance feel rushed.                                                                                                                                                                       |
+| 13  | **Six Designer-splash decisions** (DEBT.md:1986)                                                             | Notably `LOADING PROJECTS` dropped for `STARTING INTERFACE`, source-not-`dist` exports, and the coral kept because the Designer is not an air surface.                                                                                                                                        |
+| 14  | **Both products hold 8000 ms cold / 3000 ms warm** (DEBT.md:2049)                                            | Already owner-confirmed. The reservation on record: a Runtime cold start is also a recovery path, so the eight seconds are sometimes paid at the least calm moment there is. The agreed remedy is an `Esc`-to-skip door — **not built, and the floor must not be quietly shortened instead**. |
+| 15  | **`awaiting` shows LOAD disabled; the strip reserves height; `linkDown` outranks `awaiting`** (DEBT.md:2243) | Each reversible in about one line.                                                                                                                                                                                                                                                            |
+| 16  | **The mute is `MIXER VOLUME 0` and the producer stays** (DEBT.md:2297)                                       | Owner decision, recorded. CLEAR-then-re-ADD is the rejected alternative and has a known field failure.                                                                                                                                                                                        |
+| 17  | **REHEARSE is violet** (DEBT.md:2312)                                                                        | Green, sky, amber and red were each ruled out for a stated reason; violet is new to the state vocabulary on purpose.                                                                                                                                                                          |
+| 18  | **Seven b4 layout / a11y decisions** (DEBT.md:2325, 2342, 2352, 2359, 2367, 2380, 2395)                      | Field-kind row layout, the panel container query, no resize handle, the `aria-hidden` grip, the source-level sequence label (which moved the Designer's wording too), the layer number staying on the row, and row `#` counting from the top.                                                 |
+| 19  | **Four Layers-table decisions** (DEBT.md:2402, 2412, 2421, 2438)                                             | Name/description as droppable columns, icon-only verbs at every width, the tab strip with one channel, and PGM/PVW not RTL-flipped.                                                                                                                                                           |
+| 20  | **`Panel` degrades rather than throws outside its provider** (DEBT.md:2428)                                  | The reversal traded "one button absent" for "the operator's whole surface blank".                                                                                                                                                                                                             |
+| 21  | **Two tests re-expressed onto `data-row-state`** (DEBT.md:2444)                                              | Asserting the role rather than a hex is the more durable form — and is exactly why the suite stayed green through the red→green air-colour change (DEBT.md:1578).                                                                                                                             |
+| 22  | **The bank is 70–99 and `logo-bug` moved to 40–49** (DEBT.md:2640)                                           | Owner has re-scoped this as **not** a hardware debt: the operator picks the row, so a template type's range no longer decides where a logo lands.                                                                                                                                             |
+
+## Numbers claimed during fast mode
+
+Every `B-`/`C-`/`D-`/`P-`/`R-` identifier appearing anywhere in `DEBT.md`, as found. Nothing
+here is verified against any registry — that is the next session's job.
+
+| id        | occurrences | lines                                         |
+| --------- | ----------- | --------------------------------------------- |
+| B-039     | 6           | 515, 729, 1070, 1113, 2486, 2596              |
+| B-044     | 1           | 715                                           |
+| B-046     | 1           | 282                                           |
+| B-070     | 1           | 1081                                          |
+| B-073     | 2           | 1336, 1337                                    |
+| B-080     | 1           | 328                                           |
+| B-087     | 4           | 1569, 1574, 1583, 2450                        |
+| B-092     | 1           | 546                                           |
+| B-093     | 1           | 716                                           |
+| B-094     | 1           | 1643                                          |
+| B-098     | 2           | 1336, 1338                                    |
+| B-100     | 5           | 347, 905, 987, 1238, 1534                     |
+| B-101     | 2           | 347, 885                                      |
+| **B-113** | 1           | 1620                                          |
+| **B-114** | 1           | 1620                                          |
+| C-016     | 2           | 1692, 1707                                    |
+| C-018     | 1           | 1305                                          |
+| D-054     | 1           | 1323                                          |
+| D-083     | 2           | 395, 401                                      |
+| R-001     | 1           | 1636                                          |
+| R-006     | 8           | 802, 816, 828, 1569, 1574, 1583, 1592, 2449   |
+| R-009     | 1           | 2614                                          |
+| R-011     | 2           | 1318, 2269                                    |
+| R-022     | 3           | 1116, 1703, 2115                              |
+| R-028     | 7           | 1003, 1070, 1079, 2179, 2228, 2668            |
+| R-029     | 3           | 909, 1840, 2302                               |
+| R-030     | 5           | 1228, 1629, 1873, 2114, 2281                  |
+| R-031     | 10          | 189, 1629, 1634, 1638, 1872, 1874, 1878, 2027 |
+| R-032     | 2           | 1630, 1634                                    |
+| R-033     | 2           | 1630, 1635                                    |
+| **R-034** | 6           | 1620, 1629, 1631, 1636, 1876                  |
+| R-035     | 7           | 193, 1639, 1849, 1876, 1904, 1973, 2028       |
+| R-036     | 1           | 1639                                          |
+
+**Two disagreements with the expected list, both reportable findings.**
+
+1. **There is no `R-030`→`R-034` gap in `DEBT.md`.** `R-031`, `R-032` and `R-033` all appear
+   (lines 1629–1635). DEBT.md:1634 answers it explicitly and in place: "**ANSWERED, 2026-08-01.**
+   There is no gap" — `R-031` (the operator surface), `R-032` (a PLAYOUT tab) and `R-033` (the
+   Layers table) all exist as real headings in `docs/prd/runtime.md` on `dev`, so the space is
+   contiguous `R-001`…`R-034`. The one real collision — a `main`-side session filing the splash
+   as `R-031` because `dev`'s was invisible from `main` — was resolved by renumbering the splash
+   to **`R-035`**. DEBT.md:1639 records **next free: `R-036`**.
+2. **No `P-` identifier appears anywhere in `DEBT.md`** (zero matches). The process rules this
+   file wants filed — the split-registry rule (DEBT.md:180), the observer-effect pattern
+   (DEBT.md:1732), the control-test lesson (DEBT.md:1456) — are all described without a number,
+   which is correct under fast mode but means the `P-` space is untouched by this file.
+
+`B-113`, `B-114` and `R-034` are present exactly as expected, all three on DEBT.md:1620, and
+DEBT.md:1625 records that all three still owe a full-ref verification.
+
+---
+
+# Verification
+
+**Bucket counts**
+
+| bucket       | rows    |
+| ------------ | ------- |
+| LIVE         | 36      |
+| PROCESS      | 33      |
+| DECISION     | 32      |
+| OBSOLETE     | 8       |
+| DISCHARGED   | 7       |
+| OUT OF SCOPE | 6       |
+| UNSURE       | 2       |
+| **total**    | **124** |
+
+Per section: 5 + 4 + 19 + 30 + 4 + 5 + 34 + 22 + 1 = **124**. The two totals agree.
+
+**UNSURE ratio: 2 / 124 = 1.6%**, far below the one-third threshold that would mean `DEBT.md`
+cannot be classified from itself. Both are named and reasoned above (DEBT.md:978, DEBT.md:1531).
+
+**Section map.** Every range in the task's §7 table is correct as written against the file; no
+correction is needed. Lines 1–4 hold the title and a horizontal rule and carry no entry.
+
+## Contradictions inside `DEBT.md`
+
+The most valuable output of this pass, because each is invisible to any later reader who opens
+only one of the two entries.
+
+1. **DEBT.md:1190 vs. the owner's own knowledge — the one the task predicted.** The file states
+   the `scene.background` → `.cg-stage` cause is "measured dead". The owner has independently
+   confirmed a live defect with that mechanism. `DEBT.md` is actively wrong here, and the note
+   that recorded the mechanism is gone rather than merely superseded.
+2. **DEBT.md:1251 / DEBT.md:1277 vs. DEBT.md:602 and DEBT.md:1254 — three snapshots of the same
+   chain.** DEBT.md:1277 says `dev-r022-rehearse` and `dev-r030-channel-raster` were never
+   started; DEBT.md:1254 says both shipped; DEBT.md:1251 says `dev-r028-b5` was not started and
+   DEBT.md:602 says it shipped in three commits. Read as a timeline (newest entry at the top of
+   the section) these are consistent stale snapshots, not conflicts — but nothing in the file
+   says so, and a reader who lands on DEBT.md:1277 has no signal that it was overtaken.
+3. **DEBT.md:1295 is the dangerous case of that same pattern.** It records a live on-air defect
+   (non-1080 channels mis-place every graphic) and attributes the fix to
+   `dev-r030-channel-raster`, "which was not started" — while DEBT.md:1254, a newer entry, says
+   r030 shipped. **Nothing anywhere in the file says the non-1080 defect was fixed.** It is
+   classified LIVE on that basis. Confirming it either way needs the source, which this pass
+   does not read.
+4. **DEBT.md:2603 vs. DEBT.md:2486.** DEBT.md:2603 describes CLEAR as disabled on an unbound row
+   and calls that "the interim state, not the intent"; DEBT.md:2486, in the `✅ DONE` entry above
+   it, says CLEAR is now enabled on every row. Superseded in place.
+5. **DEBT.md:836 / DEBT.md:892 vs. DEBT.md:688.** Two `dev-offline-ux` entries list unstarted
+   sections; DEBT.md:688 says the whole change is "CLOSED and superseded; discard every version
+   of it".
+6. **The same debt is recorded in three places without cross-reference.** The `dev-clear-bank-scoped`
+   bound-row race appears at DEBT.md:2207 and DEBT.md:2535; `CLEAR ALL` being enabled but
+   ineffective appears at DEBT.md:1539 and again at DEBT.md:2558; `PRIMARY A` appears at
+   DEBT.md:119, DEBT.md:248 and DEBT.md:409. Filing from this census must dedupe, or the same
+   defect gets three numbers.
