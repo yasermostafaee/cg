@@ -119,9 +119,39 @@ test('the item controls are a FIXED small square — they never stretch to fill 
     expect(Math.abs(b.width - b.height), `${b.name} is square`).toBeLessThanOrEqual(4);
   }
 
-  // All three identical: a fixed size cannot depend on which glyph is inside it.
-  const widths = boxes.map((b) => Math.round(b.width));
-  expect(new Set(widths).size, `widths ${widths.join(',')}`).toBe(1);
+  /*
+   * A FIXED SIZE CANNOT DEPEND ON CONTENT OR POSITION — re-expressed, and the new
+   * form is stronger than the one it replaces.
+   *
+   * The old assertion was "all three controls are the same width", which held when
+   * the cluster was three identical `icon` minis. It is now a grab HANDLE and a
+   * remove BUTTON — deliberately different kinds at 24px and 26px — so equality
+   * across kinds is no longer the claim, and asserting it would force one of them
+   * to the wrong size.
+   *
+   * What the test was really protecting is that a control's box is fixed rather
+   * than a function of what is in it or where it sits. So compare each control
+   * against ITS OWN counterpart on another item: same kind, different position,
+   * different neighbouring text length. That is the property the stretched-verb
+   * defect actually violated, and it is checked across rows now instead of within
+   * one.
+   */
+  for (const kind of ['Reorder', 'Remove']) {
+    const first = await app.inspector
+      .getByRole('button', { name: `${kind} _tickerTexts item 1` })
+      .boundingBox();
+    const second = await app.inspector
+      .getByRole('button', { name: `${kind} _tickerTexts item 2` })
+      .boundingBox();
+    expect(first, `${kind} on item 1`).not.toBeNull();
+    expect(second, `${kind} on item 2`).not.toBeNull();
+    expect(Math.round(first!.width), `${kind} width differs between items`).toBe(
+      Math.round(second!.width),
+    );
+    expect(Math.round(first!.height), `${kind} height differs between items`).toBe(
+      Math.round(second!.height),
+    );
+  }
 
   // The TEXTAREA keeps the width instead — it is the thing that should flex. Well
   // wider than the three controls put together, which is what went wrong originally.

@@ -1374,8 +1374,20 @@ textarea.cg-field--autogrow {
   justify-content: center;
   /* Matched to the remove button's 28px so the cluster is one consistent height. */
   flex: 0 0 auto;
-  width: 22px;
-  min-width: 22px;
+  /*
+   * 24px, NOT the 22px it was — and the E2E hit-target assertion is what caught
+   * the change. At 22px this was a decorative `<span>`: `aria-hidden`, `tabIndex`
+   * -1, unreachable, and therefore not a target that owed a size. Making it a real
+   * focusable button (the ↑/↓ pair is gone) turned it into the ONLY reorder
+   * control, and a control owes the 24px WCAG 2.5.8 floor.
+   *
+   * The lesson is the general one, not the two pixels: promoting something to a
+   * control brings the whole contract with it — a name, a focus ring, a keyboard
+   * path and a hit target — and it is easy to add the behaviour and forget the
+   * rest. Do not shrink this back to match a mock that was drawn for a span.
+   */
+  width: 24px;
+  min-width: 24px;
   height: 28px;
   padding: 0;
   border: 0;
