@@ -1,11 +1,26 @@
+import { splashDismissAt as sharedDismissAt, type SplashFloors } from '@cg/splash-kit';
+
+export {
+  SPLASH_CEILING_MS,
+  SPLASH_FADE_MS,
+  SPLASH_LABEL_FADE_MS,
+  SPLASH_TICK_MS,
+  splashProgress,
+  splashProgressPercent,
+  type SplashProgressInput,
+} from '@cg/splash-kit';
+
 /**
- * R-031 — the startup splash's TIMING CONTRACT, as pure arithmetic.
+ * R-031 — the Runtime splash's TIMING CONTRACT: THIS APP'S NUMBERS, over the shared rules.
  *
- * The splash itself cannot import this module: it paints before the bundle
- * exists, so its clock lives in the inline `<script>` in `apps/runtime/index.html`
- * (see that file's header for why). What lives HERE is the contract those few
- * inline lines implement — extracted so it can be reasoned about and tested as a
- * function instead of as a tangle of `setTimeout`s.
+ * The arithmetic itself lives in `@cg/splash-kit` (`tools/splash-kit`), because the
+ * Designer's splash obeys the same contract and two copies of a timing rule is two rules
+ * that drift. What is here is what is genuinely this app's: its floors, its session key, its
+ * phase labels, and the `declare global` for the control surface its own boot path calls.
+ *
+ * The splash itself cannot import any of it: it paints before the bundle exists, so its
+ * clock lives in the inline `<script>` in `apps/runtime/index.html` (see that file's header
+ * for why).
  *
  * THE DUPLICATION IS REAL AND IT IS CONTAINED, NOT DENIED. `tests/splash.dom.test.ts`
  * extracts the inline script out of the real `index.html`, drives it in jsdom, and
@@ -13,28 +28,24 @@
  * instant `splashDismissAt` says it should. If the two ever disagree, that test is
  * what says so — nothing else can, because the two live in different languages of the
  * same document.
- *
- * The three rules the numbers encode:
- *
- *  1. **The ceiling is absolute.** On an on-air tool a stuck splash means the operator
- *     has no door into the application at all — no banner, no settings, no way to see
- *     WHY. At the ceiling the splash goes regardless of boot state and the app shows
- *     its own DISCONNECTED / error surface, which already exists and is better than a
- *     spinner in every case.
- *  2. **The warm floor stops a flash; it does not pad.** 600 ms is the smallest value
- *     that keeps a fast reload from strobing.
- *  3. **The hold EXTENDS to boot.** A boot slower than the floor is never hidden — the
- *     floor is a minimum, not a schedule.
  */
 
 /** Cold start — no session marker. Long enough to be the product's first frame. */
 export const SPLASH_COLD_FLOOR_MS = 5000;
 
-/** Warm reload — the smallest hold that keeps a fast F5 from strobing. */
+/**
+ * Warm reload — the smallest hold that keeps a fast F5 from strobing.
+ *
+ * DELIBERATELY SHORTER THAN THE DESIGNER'S 3000 ms, and that difference is a product
+ * decision rather than drift: this is the ON-AIR tool. An operator reloading it is usually
+ * reloading it in a hurry, and a brand moment charged against that is charged at the worst
+ * possible moment. The Designer, which nobody reloads under that kind of pressure, holds
+ * the longer one.
+ */
 export const SPLASH_WARM_FLOOR_MS = 600;
 
-/** Absolute, non-negotiable. See rule 1 above. */
-export const SPLASH_CEILING_MS = 20_000;
+/** This app's floors, in the shape the shared arithmetic takes. */
+const FLOORS: SplashFloors = { cold: SPLASH_COLD_FLOOR_MS, warm: SPLASH_WARM_FLOOR_MS };
 
 /**
  * The `sessionStorage` key whose ABSENCE means a cold start.
@@ -45,27 +56,6 @@ export const SPLASH_CEILING_MS = 20_000;
  * that had simply been sitting idle as a cold start.
  */
 export const SPLASH_SESSION_KEY = 'CG_RUNTIME_SESSION';
-
-/** How long the fade-out runs before the element is removed from the DOM. */
-export const SPLASH_FADE_MS = 450;
-
-/**
- * How long the phase LABEL takes to fade out once boot completes. Opacity only.
- *
- * See `SPLASH_PHASES` for why the label leaves rather than settling on a word.
- */
-export const SPLASH_LABEL_FADE_MS = 350;
-
-/**
- * How often the readout recomputes `splashProgress`.
- *
- * A timer rather than `requestAnimationFrame`, and that is the point: this screen runs
- * WHILE the bundle parses and React makes its first commit, so per-frame script work
- * would be taken from the very boot it exists to cover. A percentage renders whole
- * numbers anyway — ten updates a second reads as continuous and costs almost nothing,
- * and the rail's own CSS `transition` does the smoothing between ticks.
- */
-export const SPLASH_TICK_MS = 100;
 
 /**
  * The phase readout, in order. Each label names the work happening NOW, so the list has
@@ -124,19 +114,23 @@ export interface SplashTimingInput {
   /**
    * When boot completed, or `undefined` while it is still running.
    *
-   * Boot-done is defined NARROWLY: bridge selection resolved (`live`,
-   * `offline-mock` and `disconnected` ALL count as resolved) plus the first React
-   * commit of the app shell. Snapshot pulls (stack / health / lock) are not part of
-   * it — they have their own in-app loading states, and on a `disconnected` link
-   * they never settle, so gating on them would hold the splash to the ceiling on
-   * exactly the installs that most need to reach the UI.
+   * Boot-done is defined NARROWLY: bridge selection resolved (`live`, `offline-mock` and
+   * `disconnected` ALL count as resolved) plus the first React commit of the app shell.
+   * Snapshot pulls (stack / health / lock) are not part of it — they have their own in-app
+   * loading states, and on a `disconnected` link they never settle, so gating on them would
+   * hold the splash to the ceiling on exactly the installs that most need to reach the UI.
    */
   readonly bootDoneAt?: number | undefined;
   /** No session marker was present at first paint. */
   readonly coldStart: boolean;
 }
 
-/** The minimum hold for this boot. */
+/**
+ * The minimum hold for this boot — the shared rule, bound to THIS app's floors.
+ *
+ * The wrapper exists so no call site in this app has to remember to pass the floors, which
+ * is precisely how one of them would eventually pass the other product's.
+ */
 export function splashFloorMs(coldStart: boolean): number {
   return coldStart ? SPLASH_COLD_FLOOR_MS : SPLASH_WARM_FLOOR_MS;
 }
@@ -146,75 +140,8 @@ export function splashFloorMs(coldStart: boolean): number {
  *
  *     dismissAt = min( max(firstPaint + floor, bootDone), firstPaint + ceiling )
  *
- * With boot still incomplete (`bootDoneAt: undefined`) the inner `max` is unbounded,
- * so the ceiling is the answer — which is the ceiling doing its job rather than a
- * special case bolted beside it.
+ * The arithmetic is `@cg/splash-kit`'s; this binds it to the Runtime's floors.
  */
 export function splashDismissAt(input: SplashTimingInput): number {
-  const { firstPaintAt, bootDoneAt, coldStart } = input;
-  const ceilingAt = firstPaintAt + SPLASH_CEILING_MS;
-  const floorAt = firstPaintAt + splashFloorMs(coldStart);
-  if (bootDoneAt === undefined) return ceilingAt;
-  return Math.min(Math.max(floorAt, bootDoneAt), ceilingAt);
-}
-
-export interface SplashProgressInput {
-  /** `now − firstPaintAt`. */
-  readonly elapsedMs: number;
-  /** This boot's minimum hold — `splashFloorMs(coldStart)`. */
-  readonly floorMs: number;
-  /**
-   * Steps FINISHED, not steps entered. A label names the work happening NOW, so it is
-   * not complete while it is on screen: entering phase *n* (0-based *i*) means *i* steps
-   * are behind it, and the last step completes at `done()` — which is why 1 is reachable
-   * only once boot is genuinely finished.
-   */
-  readonly completedSteps: number;
-  /** `SPLASH_PHASES.length`. */
-  readonly totalSteps: number;
-  /** The last value returned, so the reading can never go backwards. */
-  readonly previous?: number | undefined;
-}
-
-/**
- * The ONE definition of progress on this screen — the rail's width and the percentage
- * beside it are the same number, so they can never tell two stories.
- *
- *     progress = monotone-max of  min( elapsed / floor ,  completed / total )
- *
- * It measures **progress toward the door opening**, which is the thing the operator is
- * actually waiting on, and it is honest in three specific ways:
- *
- *  - **Never ahead of real boot.** The `min` gates the clock against work that has
- *    genuinely finished, so a slow bridge probe visibly PARKS the number on the step that
- *    is slow instead of sweeping past it. It cannot claim measured progress through a
- *    step that has not returned.
- *  - **Never backwards.** Both terms are non-decreasing, and `previous` clamps it anyway
- *    — a reading that retreats reads as a fault even when it is arithmetic.
- *  - **100 means exactly one thing:** the floor has elapsed AND boot is done, which is
- *    precisely when the splash may dismiss. Not "almost" — the render floors rather than
- *    rounds, so 100 cannot appear a moment early.
- *
- * At the 20 s ceiling the splash goes regardless, and this may honestly read below 100 at
- * that instant. That is the ceiling telling the truth, not a bug to paper over.
- *
- * @returns 0…1.
- */
-export function splashProgress(input: SplashProgressInput): number {
-  const { elapsedMs, floorMs, completedSteps, totalSteps, previous } = input;
-  const byTime = floorMs > 0 ? elapsedMs / floorMs : 1;
-  const bySteps = totalSteps > 0 ? completedSteps / totalSteps : 1;
-  const gated = Math.min(byTime, bySteps);
-  return Math.max(previous ?? 0, Math.min(1, Math.max(0, gated)));
-}
-
-/**
- * `splashProgress` as the integer the readout prints.
- *
- * FLOOR, not round: 99.6 % is not 100 %, and a screen that says 100 while the door is
- * still shut is the same false claim as a terminal `READY` label. It reaches 100 on the
- * tick where progress is exactly 1.
- */
-export function splashProgressPercent(progress: number): number {
-  return Math.floor(progress * 100);
+  return sharedDismissAt({ ...input, floors: FLOORS });
 }

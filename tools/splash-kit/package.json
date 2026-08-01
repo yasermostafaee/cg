@@ -1,0 +1,34 @@
+{
+  "name": "@cg/splash-kit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The startup splash's shared rules: the timing arithmetic both apps obey, and the one build-stamp vite plugin they both stamp from.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./build-stamp": {
+      "types": "./src/buildStamp.d.ts",
+      "default": "./src/buildStamp.mjs"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json --tsBuildInfoFile typecheck.tsbuildinfo",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "clean": "rimraf --glob *.tsbuildinfo coverage"
+  },
+  "devDependencies": {
+    "@cg/eslint-config": "workspace:*",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.17.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}
