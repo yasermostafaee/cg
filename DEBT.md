@@ -19,7 +19,16 @@ Base was `a112783c`. Everything below is pushed to `origin/dev`; nothing is loca
 | `8b039b30` | 🗣 your `.cg-modal-footer .cg-btn` metrics, applied verbatim                     |
 | `a42bfd9c` | 🗣 servers Cancel · audit `Close` → cancel treatment · `AUDIT` → `LOG`           |
 
+| `3732857f` | 🗣 a maximised panel lights its minimize control · the red `gate:e2e` fixed |
+
 Both task files are complete. The diagnosis is written and no code was changed for it.
+
+**🗣 = something you asked for mid-run.** Five arrived after the two task files and all five
+are in. The last one is the only place I made a design call you did not state: `.is-on`'s
+default fill is the REHEARSE violet, and putting that hue in a panel header would assert
+"on PVW, cannot reach air" somewhere it cannot be true — so the engaged fullscreen toggle
+takes the interactive sky instead. One scoped rule in `controls.css`; say the word if you
+want a different colour.
 
 ### What is half-done
 
@@ -50,16 +59,27 @@ Four items, all in the section immediately below this one:
 
 ### Gate results
 
-- **`pnpm gate` — GREEN**, run uncached on the final code (`8b039b30`).
-  `openspec validate --all --strict` is the last link in the `&&` chain and reported
-  `42 passed, 0 failed`, so typecheck + lint + test + build + `format:check` all passed
-  ahead of it.
-- **`pnpm gate:e2e` — see the line appended at the end of this section.** Windows, and
-  therefore NOT authoritative for pixel or a11y geometry; a Linux/WSL run is still owed.
-- **Runtime unit suite: 526 passed / 70 files**, including 23 new assertions across
-  `awaitingVerbs`, `layersPanel.awaitingNotice` and `modalPrimitive`.
+Both gates were re-run on the FINAL tree (`3732857f`), not on an earlier state.
+
+- **`pnpm gate` — GREEN**, uncached. `openspec validate --all --strict` is the last link
+  in the `&&` chain and reported `42 passed, 0 failed`, so typecheck + lint + test + build
+  - `format:check` all passed ahead of it.
+- **`pnpm gate:e2e` — GREEN.** `22 successful, 22 total` — runtime `56 passed`, designer
+  `231 passed`. **Windows, therefore NOT authoritative for pixel or a11y geometry; a
+  Linux/WSL run is still owed** (five dialogs and the layers panel changed layout).
+- **Runtime unit suite: 526 passed / 70 files**, including 24 new assertions across
+  `awaitingVerbs`, `layersPanel.awaitingNotice`, `modalPrimitive` and the servers-dialog
+  Cancel.
 - Two specs were verified RED against the unfixed code first — the verb gate and the §3
   placement. Both are described where they are recorded.
+
+**🔴 `gate:e2e` WAS RED on the first run, and it caught a real thing.**
+`server-settings.spec.ts` clicked `Close server settings` — the hand-rolled header button
+the modal migration deliberately deleted. Fixed in `3732857f` by rewriting the assertion as
+a FENCE (old button absent, ✕ present, dismiss via the new Cancel) rather than swapping one
+selector for another, so the deleted control cannot come back unnoticed. **No test was
+loosened and no timeout was raised.** It is worth noting that `pnpm gate` was green
+throughout — the e2e caught what the unit suite could not, for the fourth time.
 
 ### 👁 Look at these with your own eyes first
 
@@ -81,7 +101,9 @@ likely you are to disagree with me:
 5. **The template picker** (`LOAD` on any row) — Cancel moved from the right to the left
    and is now bordered rather than a ghost.
 6. **`Log`** (was `AUDIT`) in the status bar, and its dialog's `Close` is now neutral.
-7. **The Layers panel has a new reserved strip above the table** — about 1.65rem, empty
+7. **A maximised panel's minimize button is now filled sky.** Hit fullscreen on any panel
+   and look at the header — the reasoning for sky rather than the default violet is above.
+8. **The Layers panel has a new reserved strip above the table** — about 1.65rem, empty
    except during the first second after a connect, when it carries the "layer states have
    not arrived yet" line. It is always reserved ON PURPOSE so nothing shifts under your
    cursor when the notice goes; the cost is a permanent thin band. Worth a look because it
