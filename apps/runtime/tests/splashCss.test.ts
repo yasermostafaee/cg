@@ -368,17 +368,29 @@ describe('reduced motion renders a freeze-frame that still tells the story', () 
     expect(reduced).toMatch(/\.cg-splash__scan\s*\{\s*display:\s*none/);
   });
 
-  it('holds row 1 armed with its lower third on air — NOT a blank scene', () => {
-    expect(reduced).toMatch(/\.cg-splash__scene \.hl1,[\s\S]{0,60}opacity:\s*1\s*!important/);
-    expect(reduced).toMatch(/\.cg-splash__scene \.lt\s*\{[\s\S]{0,80}transform:\s*scaleX\(1\)/);
+  it('holds the FULL PACKAGE on air — NOT a blank scene and not a half-built one', () => {
+    // The scene's resting state is both rows armed with the strap, bug and ticker all live
+    // — the graphics stack rather than take turns — so that is the honest still of it.
+    expect(reduced).toMatch(
+      /\.cg-splash__scene \.hl1,[\s\S]{0,200}\.bug\s*\{[\s\S]{0,60}opacity:\s*1\s*!important/,
+    );
+    expect(reduced).toMatch(
+      /\.cg-splash__scene \.lt,[\s\S]{0,80}transform:\s*scaleX\(1\)\s*!important/,
+    );
   });
 
-  it('hides the beats that only make sense in motion', () => {
+  it('hides ONLY the command dots — the one beat a still frame cannot mean', () => {
+    // A dot frozen mid-wire depicts a message in flight. Everything else in this scene is a
+    // state, and a state can be held; a message in transit cannot.
     const hidden = /\.cg-splash__scene \.dot1,([\s\S]*?)\}/.exec(reduced)?.[0] ?? '';
-    for (const hook of ['dot2', 'hl2', 'tri2', 'bug', 'tk']) {
-      expect(hidden).toContain(`.${hook}`);
-    }
+    expect(hidden).toContain('.dot2');
     expect(hidden).toMatch(/opacity:\s*0\s*!important/);
+    for (const shown of ['hl2', 'tri2', 'bug', 'tk']) {
+      expect(
+        hidden,
+        `.${shown} must not be hidden — it is part of the resting frame`,
+      ).not.toContain(`.${shown}`);
+    }
   });
 });
 

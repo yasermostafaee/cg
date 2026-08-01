@@ -218,7 +218,7 @@
         width: min(400px, 66vw);
         margin-bottom: 28px;
         opacity: 0;
-        animation: cg-rise 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) 0.12s forwards;
+        animation: cg-rise 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) 0.05s forwards;
       }
 
       /* THE INSTRUMENT — rows, wires, monitor. One neutral hue, tokens throughout. */
@@ -297,38 +297,49 @@
         transform-origin: center;
       }
 
-      /* The loop starts at 1.9s — after the entrance has rested, so a warm 600 ms reload
-         never catches a story mid-sentence. One cycle, as beats:
-              0–3%   row 1 arms              45–50% row 1 releases
-              3–12%  its command dot travels 50–53% row 2 arms
-             11–17%  lower third wipes ON    53–62% its dot travels
-             42–47%  lower third wipes out   61–64% bug + ticker ON
-                                             88–97% out, row 2 releases            */
+      /* THE BEAT MAP, AND THE TIMING IS A HARD REQUIREMENT — NOT DECORATION.
+         The loop starts at 0.85s and runs 6s. The previous shape (start 1.9s, 7.2s cycle)
+         put the bug and ticker at ~6.3s — more than a second AFTER the 5s cold start had
+         already closed — so nobody ever saw beat four. The scene was telling a story with
+         an audience for only its first sentence.
+
+         What actually makes it fit is not just starting earlier: THE GRAPHICS STACK
+         INSTEAD OF TAKING TURNS. Row 2 arms while the lower third is still on air, so a
+         strap, a bug and a ticker end up live together — which is also what a real playout
+         looks like. Everything lands by ~3s and holds for the rest of the cold start.
+
+              ~1.0s  row 1 arms                ~2.2-2.9s  row 2 arms, its dot crosses,
+              ~1.5s  its command dot crosses              amber bug + emerald ticker join
+              ~1.8s  lower third wipes ON      ~3.0-5.1s  the full package holds, then
+                                                          clears; both rows release
+
+         If a future edit pushes any beat past ~3s, the scene is back to telling a story
+         nobody watches. Check it against a 5s cold start before changing these numbers. */
       .cg-splash__scene .hl1,
       .cg-splash__scene .tri1 {
-        animation: cg-take1 7.2s ease-in-out 1.9s infinite;
+        animation: cg-take1 6s ease-in-out 0.85s infinite;
       }
       .cg-splash__scene .dot1 {
-        animation: cg-go1 7.2s linear 1.9s infinite;
+        animation: cg-go1 6s linear 0.85s infinite;
       }
       .cg-splash__scene .lt {
-        animation: cg-air1 7.2s ease-in-out 1.9s infinite;
+        animation: cg-air1 6s ease-in-out 0.85s infinite;
       }
       .cg-splash__scene .hl2,
       .cg-splash__scene .tri2 {
-        animation: cg-take2 7.2s ease-in-out 1.9s infinite;
+        animation: cg-take2 6s ease-in-out 0.85s infinite;
       }
       .cg-splash__scene .dot2 {
-        animation: cg-go2 7.2s linear 1.9s infinite;
+        animation: cg-go2 6s linear 0.85s infinite;
       }
       .cg-splash__scene .bug {
-        animation: cg-air2 7.2s ease-in-out 1.9s infinite;
+        animation: cg-air2 6s ease-in-out 0.85s infinite;
       }
       .cg-splash__scene .tk {
-        animation: cg-air3 7.2s ease-in-out 1.9s infinite;
+        animation: cg-air3 6s ease-in-out 0.85s infinite;
       }
       .cg-splash__scene .tkd {
-        animation: cg-crawl 7.2s linear 1.9s infinite;
+        animation: cg-crawl 6s linear 0.85s infinite;
       }
 
       @keyframes cg-take1 {
@@ -338,10 +349,10 @@
         3% {
           opacity: 1;
         }
-        45% {
+        78% {
           opacity: 1;
         }
-        50% {
+        82% {
           opacity: 0;
         }
         100% {
@@ -372,25 +383,25 @@
       }
       @keyframes cg-air1 {
         0%,
-        11% {
+        10% {
           opacity: 0;
           transform: scaleX(0);
         }
-        13% {
+        12% {
           opacity: 1;
         }
-        17% {
+        16% {
           transform: scaleX(1);
         }
-        42% {
+        70% {
           opacity: 1;
           transform: scaleX(1);
         }
-        47% {
+        76% {
           opacity: 1;
           transform: scaleX(0);
         }
-        48%,
+        77%,
         100% {
           opacity: 0;
           transform: scaleX(0);
@@ -398,16 +409,16 @@
       }
       @keyframes cg-take2 {
         0%,
-        50% {
+        20% {
           opacity: 0;
         }
-        53% {
+        23% {
           opacity: 1;
         }
-        92% {
+        82% {
           opacity: 1;
         }
-        97% {
+        86% {
           opacity: 0;
         }
         100% {
@@ -416,18 +427,18 @@
       }
       @keyframes cg-go2 {
         0%,
-        53% {
+        23% {
           opacity: 0;
           transform: translateX(0);
         }
-        55% {
+        25% {
           opacity: 1;
         }
-        60% {
+        30% {
           opacity: 1;
           transform: translateX(46px);
         }
-        62% {
+        32% {
           opacity: 0;
           transform: translateX(46px);
         }
@@ -438,19 +449,19 @@
       }
       @keyframes cg-air2 {
         0%,
-        61% {
+        30% {
           opacity: 0;
           transform: scale(0.3);
         }
-        64% {
+        35% {
           opacity: 1;
           transform: scale(1);
         }
-        88% {
+        72% {
           opacity: 1;
           transform: scale(1);
         }
-        92% {
+        78% {
           opacity: 0;
           transform: scale(0.6);
         }
@@ -461,19 +472,19 @@
       }
       @keyframes cg-air3 {
         0%,
-        61% {
+        30% {
           opacity: 0;
           transform: scaleX(0);
         }
-        64% {
+        35% {
           opacity: 1;
           transform: scaleX(1);
         }
-        88% {
+        72% {
           opacity: 1;
           transform: scaleX(1);
         }
-        92% {
+        78% {
           opacity: 0;
           transform: scaleX(0);
         }
@@ -484,10 +495,10 @@
       }
       @keyframes cg-crawl {
         0%,
-        63% {
+        32% {
           transform: translateX(-12px);
         }
-        89%,
+        76%,
         100% {
           transform: translateX(10px);
         }
@@ -674,9 +685,13 @@
       }
 
       @media (prefers-reduced-motion: reduce) {
-        /* Everything stops — but the scene is NOT blanked. It settles on a FREEZE-FRAME
-           that still tells the story: row 1 armed, its lower third on the monitor. A
-           reader who cannot take motion gets the same sentence, held still. */
+        /* Everything stops — but the scene is NOT blanked. It settles on the FULL PACKAGE:
+           both rows armed, the lower third, the bug and the ticker all on the monitor.
+           That is the scene's own resting state now that the graphics STACK rather than
+           take turns (see the beat map), so it is the honest still of it — a reader who
+           cannot take motion gets the whole sentence, held. Only the command dots stay
+           hidden: a dot frozen mid-wire depicts a message in flight, which is the one
+           thing a still frame cannot mean. */
         .cg-splash *,
         .cg-splash *::before,
         .cg-splash *::after {
@@ -700,19 +715,20 @@
           display: none;
         }
         .cg-splash__scene .hl1,
-        .cg-splash__scene .tri1 {
+        .cg-splash__scene .tri1,
+        .cg-splash__scene .hl2,
+        .cg-splash__scene .tri2,
+        .cg-splash__scene .bug {
           opacity: 1 !important;
+          transform: none !important;
         }
-        .cg-splash__scene .lt {
+        .cg-splash__scene .lt,
+        .cg-splash__scene .tk {
           opacity: 1 !important;
           transform: scaleX(1) !important;
         }
         .cg-splash__scene .dot1,
-        .cg-splash__scene .dot2,
-        .cg-splash__scene .hl2,
-        .cg-splash__scene .tri2,
-        .cg-splash__scene .bug,
-        .cg-splash__scene .tk {
+        .cg-splash__scene .dot2 {
           opacity: 0 !important;
         }
         .cg-splash {

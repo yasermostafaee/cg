@@ -186,17 +186,18 @@ test.describe('reduced motion', () => {
 
     expect(frame.emulated, 'reduced-motion emulation is not active').toBe(true);
 
-    // The sentence a still frame can still say: row one armed, its lower third on air.
+    // The FULL PACKAGE — the scene's own resting state, since the graphics stack rather
+    // than take turns. Both rows armed, strap, bug and ticker all live together.
     expect(frame.armedRow, 'the armed row is not shown').toBe('1');
     expect(frame.playTriangle, 'the PLAY triangle is not shown').toBe('1');
     expect(frame.lowerThird, 'the lower third is not on the monitor').toBe('1');
+    expect(frame.secondRow, 'the second row is not armed').toBe('1');
+    expect(frame.bug, 'the corner bug is not shown').toBe('1');
+    expect(frame.ticker, 'the ticker is not shown').toBe('1');
 
-    // The beats that only mean anything in motion stay off, rather than piling up as a
-    // simultaneous jumble that never occurs during the loop itself.
-    expect(frame.secondRow).toBe('0');
+    // The ONE thing a still frame cannot mean: a command dot frozen mid-wire depicts a
+    // message in flight. Everything else here is a state, and a state can be held.
     expect(frame.commandDot).toBe('0');
-    expect(frame.bug).toBe('0');
-    expect(frame.ticker).toBe('0');
 
     // …and the ambient raster sweep is gone entirely.
     expect(frame.scanDisplay).toBe('none');
