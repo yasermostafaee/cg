@@ -1929,6 +1929,75 @@ Say the word and it is two `animation-delay` values.
 
 Observed in the browser: cold held 5.79 s (5 s floor + 450 ms fade + navigation), warm 1.44 s.
 
+## DESIGNER SPLASH + the shared splash kit (2026-08-01, fast mode)
+
+The Designer gained the same startup splash the Runtime has, and the two things they must
+agree on were extracted to `tools/splash-kit` (`@cg/splash-kit`) BEFORE the second consumer
+existed rather than after.
+
+### Owed — process suspended by fast mode
+
+- **No `D-` item number and no `docs/prd/designer.md` entry.** To file when normal mode
+  resumes, in words: _"the Designer boots straight into the landing screen; give it a startup
+  splash — APASAI / CG DESIGNER, an artboard scene, a phase readout and a progress rail —
+  visible from the first paint until the app is genuinely ready, with a minimum hold. Same
+  timing contract and same company lockup as the Runtime's R-031; different heart (a working
+  artboard rather than a playout instrument)."_
+- **No OpenSpec change dir and no `openspec validate`.** The whole feature — the timing
+  contract, the boot gate, the bypass, the reduced-motion composition — is spec-worthy and is
+  written down nowhere but the code and this file.
+- **No full E2E run.** `apps/designer/tests/e2e/splash.spec.ts` was WRITTEN (six specs: the
+  cold/warm holds, the label leaving, the build stamp, the harness bypass, and the two
+  reduced-motion cases) and **not executed** — fast mode runs no Playwright. Owed.
+- **🔴 A Linux `gate:e2e` is owed.** This is entirely UI and rendering. Nothing about it was
+  verified on Linux, and Windows is non-authoritative for pixel and geometry.
+- **No `pnpm gate` and no suite-timing measurement.** Only the designer's own `test`,
+  `typecheck`, `lint` and `build` were run, plus the runtime's and the kit's.
+
+### Decisions taken fast — Designer splash
+
+1. **`LOADING PROJECTS` was DROPPED from the phase list; `STARTING INTERFACE` replaced it.**
+   The task's expected list named a project-index read, and `bootstrap()` has none — the
+   landing screen reads projects after React mounts. Synthesising a step to keep three labels
+   is exactly what the task forbids, so the third label is the step that does exist: the gap
+   between the platform resolving and `createRoot().render()`. Three real labels, three real
+   steps, same shape as the Runtime.
+2. **The shared kit exports SOURCE, not `dist/`, and its build-stamp half is `.mjs`.** Both
+   were forced, not preferred, and both are recorded in the package's README because they look
+   like mistakes: turbo's `dev` task has no `dependsOn: ["^build"]` and `pnpm --filter
+@cg/designer dev` runs `vite` directly, so a `dist` export breaks the dev server on a clean
+   checkout; and vite treats a workspace package resolved through `node_modules` as external
+   when bundling a config, so Node imports the build stamp untransformed and a `.ts` export
+   dies with `ERR_MODULE_NOT_FOUND` before the build starts. Observed both, not guessed.
+3. **The FLOORS are parameterised rather than shared.** Runtime 5000/600, Designer 8000/3000.
+   The arithmetic is one rule in one place; the numbers are a product decision per app, and
+   folding them together would mean one product reading the other's.
+4. **The Designer's surface constants are `--cg-*` in the inline CSS, with no token mirror.**
+   The Runtime mirrors `theme.ts` tokens because it HAS a `--r-*` system with a parity test;
+   the Designer is styled with vanilla-extract and has no equivalent, and `packages/**` was
+   fenced off. So the rule enforced instead is stronger in one way and weaker in another:
+   every colour literal in the document must be a declared `--cg-*` constant (parsed out of
+   the document by the test, so "declared once, in the open" is the mechanism) — but there is
+   nothing outside the file for it to be checked against.
+5. **Two colour literals are allowed outside a constant, and the test names them:** the
+   vignette's `rgba(0,0,0,.22)` and the rail's glow `rgba(0,174,239,.5)`. CSS gives no other
+   form — a gradient stop and a `box-shadow` both need an alpha colour, and a hex constant
+   cannot carry one in.
+6. **The coral stays.** The Designer is not an air surface, so the Runtime's hard no-red rule
+   does not apply here; `--cg-coral` is declared exactly once and the CSS says so, which is
+   what makes removing it a one-line swap if the owner ever extends that rule.
+
+### Not done, and deliberately
+
+- **No in-app about/version surface** in either product, though `__CG_BUILD__` is defined in
+  both and carries `{ version, sha, builtAt }` ready for one.
+- **The Runtime's cold floor was NOT changed to 8000 ms.** The delta that raised it arrived
+  with the Designer's warm floor in the same formula (`coldStart ? 8000 : 3000`), and the
+  Runtime's warm floor is 600 ms — so the instruction reads as the Designer's contract. The
+  Runtime is also the on-air tool, where lengthening the hold before an operator can reach the
+  console is a real product decision rather than a cosmetic one. **Left at 5000 ms; say the
+  word and it is one constant.**
+
 ## Skipped process
 
 Per the fast-mode contract, all of this was deliberately not done.

@@ -818,6 +818,15 @@ export const test = base.extend<{ app: DesignerApp }>({
   app: async ({ page }, use) => {
     await page.addInitScript(() => {
       (window as unknown as { CG_E2E: boolean }).CG_E2E = true;
+      // THE SPLASH IS OFF FOR EVERY SPEC THAT BOOTS THROUGH THIS FIXTURE. Otherwise every
+      // one of them would pay the cold floor before its first assertion — the splash holds
+      // the product's first frame for seconds on purpose, which is exactly wrong for a
+      // suite. The splash's OWN specs opt back in by not using this harness at all.
+      //
+      // The default lives HERE and not in product code: one global, one meaning. It is an
+      // init-script global rather than a URL query parameter deliberately — a query
+      // parameter is a door an operator can reach by bookmark or typo.
+      (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;
       // Neutralize native pickers so disk save / export fall back to a capturable
       // <a download> and nothing blocks on a dialog.
       for (const k of ['showSaveFilePicker', 'showOpenFilePicker', 'showDirectoryPicker']) {
