@@ -1852,6 +1852,72 @@ gate, the timing contract, the build stamp and the bypass are inherited untouche
   item (line ~1124). Both are now in the file. Pre-existing on `main`, not introduced here,
   and deliberately not renumbered — the fast-mode contract forbids touching that file beyond
   the merge. Someone has to pick which one keeps the number.
+- **The PRD item's own acceptance text is now STALE, and I was not allowed to fix it.** The
+  splash `R-031` says the readout carries "a step counter (`2 / 3`) and never a percentage",
+  and calls the mark "a placeholder … a single documented SVG slot" with "the accent is the
+  existing sky". All three are superseded by this run. The fast-mode contract permits no
+  `docs/prd/*` edit beyond the merge, so the item still describes the version it replaced.
+  Fix it with the OpenSpec reconciliation above, in one pass.
+
+### 🔴 The APASAI mark is NOT production brand artwork
+
+`apps/runtime/brand/apasai-logo.svg` is an **auto-trace of a 114×96 raster** the owner
+supplied, inlined into `index.html`. It is faithful enough to sign a boot screen and it is
+not vector artwork: curves are polygonised, so it will show its origin at large sizes or in
+print. **Replace it with the original vector (AI / EPS / SVG) before any customer-facing
+release.** The swap is one file plus the inlined copy in `index.html`; the three class hooks
+(`.apasai-bars` / `.apasai-swoosh` / `.apasai-arc`) are the contract, and
+`tests/splashCss.test.ts` asserts the inlined path data still equals the file's.
+
+`#00AEEF` is the company's exact blue and is not ours to alter — not for contrast, not for
+consistency, not for a theme. Only the bars and the swoosh are relit for the dark ground.
+
+### Decisions taken fast — R-031 splash
+
+1. **The PLAY triangles and the ticker use `--r-success` (`#10B981`), not the `#34d399` the
+   task named.** The task calls `#34d399` "the console's own success green" — it is not; the
+   palette's success green is `#10B981`, and the task's own rule says an existing UI colour
+   uses its token. Took the token. One value in the `--cg-ok` constant if the owner wants the
+   brighter emerald instead.
+2. **The rail is `transform: scaleX()`, not an animated `width`.** The readout re-renders ten
+   times a second for the whole hold, so a width transition is ~50 layout invalidations
+   during the exact window the bundle is parsing — the cost the task's own "loops are
+   compositor-only" rule exists to prevent. Identical on screen. Side effect worth knowing:
+   the fill's gradient and glow scale with it, so the leading edge is always the bright end
+   of the gradient rather than a fixed point along it.
+3. **The foot sits at `bottom: 18px`, not the reference's 34px.** At 34px the corner
+   brackets' horizontal arms (`inset: 40px`) run straight through the build stamp — it
+   rendered struck through. Both are anchored to the same edge, so this was a constant
+   collision, not a viewport case.
+4. **The inlined copy of the mark drops the source's three `fill` attributes** so all three
+   class hooks take their colour from the stylesheet. Path data untouched (asserted). This is
+   what lets the palette test see every colour on the screen from one place; the standalone
+   `brand/apasai-logo.svg` keeps its original fills and stays correct on a light ground.
+5. **`--r-splash-mark-mid` deleted, `--r-splash-mark-dim` renamed `--r-splash-scene-bar`.**
+   Their only consumer was the placeholder mark this run removed; a token named for a deleted
+   element is a name that lies about what it is for.
+6. **`--r-splash-glow` moved from the sky `rgba(56,189,248,.5)` to the brand
+   `rgba(0,174,239,.5)`.** It is the rail's halo and the rail is now brand blue; leaving it
+   sky would have been a stale value behind a live literal. It is the ONE splash token
+   holding the brand hue, and only because `box-shadow` needs an `rgba()`. **`--r-accent` is
+   untouched** — asserted by a test.
+7. **The readout ticks on a 100 ms `setInterval`, not `requestAnimationFrame`.** A percentage
+   renders whole numbers; per-frame script work would be taken from the boot being covered.
+8. **The brand blue, violet and amber are `--cg-*` constants on `.cg-splash`, not tokens** —
+   parsed back out of the document by the palette test, so "declared once, in the open" is
+   enforced rather than merely agreed.
+
+### The one tension worth the owner's eye
+
+**The entrance does not fully rest by 1.6 s — the foot lands at ~2.05 s**, and that is the
+reference stagger kept verbatim (foot `1.15s` delay + `0.9s` duration). Everything else is
+down by ~1.62 s. The consequence is only on a WARM reload: the 600 ms floor dismisses the
+splash while the foot is still arriving, so a fast F5 never shows the composition settled.
+I did not compress the stagger to force the number, because tightening the last two entrances
+is what would actually make the entrance feel rushed — the thing the task asked me to avoid.
+Say the word and it is two `animation-delay` values.
+
+Observed in the browser: cold held 5.79 s (5 s floor + 450 ms fade + navigation), warm 1.44 s.
 
 ## Skipped process
 

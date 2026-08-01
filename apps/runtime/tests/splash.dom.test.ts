@@ -127,9 +127,15 @@ describe('the phase readout', () => {
     return document.getElementById('cg-splash-pct')?.textContent ?? undefined;
   }
 
-  /** The rail's width — the SAME number, which is the point of one definition. */
-  function railWidth(): string | undefined {
-    return document.getElementById('cg-splash-fill')?.style.width;
+  /**
+   * The rail, read back as a percentage — it is SCALED rather than widened (an animated
+   * width would cost layout on every one of the ~50 ticks of a cold hold), and it must be
+   * the SAME number as the readout, which is the whole point of one definition.
+   */
+  function railPct(): string | undefined {
+    const transform = document.getElementById('cg-splash-fill')?.style.transform ?? '';
+    const scale = /scaleX\(([\d.]+)\)/.exec(transform);
+    return scale === null ? undefined : `${Math.round(Number(scale[1]) * 100)}%`;
   }
 
   /** What the pure module says the readout should show. The oracle, never a typed literal. */
@@ -149,7 +155,7 @@ describe('the phase readout', () => {
     expect(document.getElementById('cg-splash-phase')?.textContent).toBe('INITIALIZING');
     expect(shownPct()).toBe(expected(0, 0));
     expect(shownPct()).toBe('0%');
-    expect(railWidth()).toBe('0%');
+    expect(railPct()).toBe('0%');
   });
 
   it('the readout is a PERCENTAGE and the rail is the same number', () => {
@@ -158,7 +164,7 @@ describe('the phase readout', () => {
     // The clock is at 0 here, so the `min` pins both readings to the clock's 0.
     splash().phase('PROBING BRIDGE');
     expect(shownPct()).toBe(expected(0, 1));
-    expect(railWidth()).toBe(shownPct());
+    expect(railPct()).toBe(shownPct());
 
     // Let the floor run out; now the gate is the STEP count, not the clock.
     vi.advanceTimersByTime(SPLASH_COLD_FLOOR_MS);
@@ -167,7 +173,7 @@ describe('the phase readout', () => {
 
     splash().phase('STARTING INTERFACE');
     expect(shownPct()).toBe('66%');
-    expect(railWidth()).toBe(shownPct());
+    expect(railPct()).toBe(shownPct());
     // NOT 100 — the last label is on screen, so the last step is still RUNNING.
     expect(shownPct()).not.toBe('100%');
   });
@@ -191,7 +197,7 @@ describe('the phase readout', () => {
 
     vi.advanceTimersByTime(SPLASH_TICK_MS);
     expect(shownPct()).toBe('100%');
-    expect(railWidth()).toBe('100%');
+    expect(railPct()).toBe('100%');
   });
 
   it('the ceiling dismisses with the percentage HONESTLY below 100', () => {

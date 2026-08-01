@@ -137,7 +137,7 @@ test.describe('reduced motion', () => {
         // Guard on the guard: without this the whole test passes vacuously the day the
         // emulation silently stops being applied.
         emulated: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-        mark: read('.cg-splash__mark'),
+        scene: read('.cg-splash__scene'),
         wordmark: read('.cg-splash__wordmark'),
         company: read('.cg-splash__company'),
         progress: read('.cg-splash__progress'),
@@ -154,5 +154,51 @@ test.describe('reduced motion', () => {
       expect(style.animationName, `${name} still animates under reduced motion`).toBe('none');
       expect(style.opacity, `${name} is invisible under reduced motion`).toBe('1');
     }
+  });
+
+  test('the scene holds a FREEZE-FRAME that still tells the story, not a blank stage', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await armMockBoot(page);
+    await page.goto('/');
+    await expect(splash(page)).toBeVisible();
+
+    const frame = await page.evaluate(() => {
+      const opacityOf = (selector: string): string => {
+        const el = document.querySelector(selector);
+        if (el === null) throw new Error(`no element for ${selector}`);
+        return getComputedStyle(el).opacity;
+      };
+      return {
+        emulated: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        armedRow: opacityOf('.cg-splash__scene .hl1'),
+        playTriangle: opacityOf('.cg-splash__scene .tri1'),
+        lowerThird: opacityOf('.cg-splash__scene .lt'),
+        secondRow: opacityOf('.cg-splash__scene .hl2'),
+        commandDot: opacityOf('.cg-splash__scene .dot1'),
+        bug: opacityOf('.cg-splash__scene .bug'),
+        ticker: opacityOf('.cg-splash__scene .tk'),
+        scanDisplay: getComputedStyle(document.querySelector('.cg-splash__scan') as Element)
+          .display,
+      };
+    });
+
+    expect(frame.emulated, 'reduced-motion emulation is not active').toBe(true);
+
+    // The sentence a still frame can still say: row one armed, its lower third on air.
+    expect(frame.armedRow, 'the armed row is not shown').toBe('1');
+    expect(frame.playTriangle, 'the PLAY triangle is not shown').toBe('1');
+    expect(frame.lowerThird, 'the lower third is not on the monitor').toBe('1');
+
+    // The beats that only mean anything in motion stay off, rather than piling up as a
+    // simultaneous jumble that never occurs during the loop itself.
+    expect(frame.secondRow).toBe('0');
+    expect(frame.commandDot).toBe('0');
+    expect(frame.bug).toBe('0');
+    expect(frame.ticker).toBe('0');
+
+    // …and the ambient raster sweep is gone entirely.
+    expect(frame.scanDisplay).toBe('none');
   });
 });

@@ -135,7 +135,7 @@ describe('splashProgress — one definition for the rail and the percentage', ()
   });
 
   it('is monotone across a whole cold boot, step by step', () => {
-    const timeline: Array<[number, number]> = [
+    const timeline: [number, number][] = [
       [0, 0],
       [400, 1],
       [900, 2],

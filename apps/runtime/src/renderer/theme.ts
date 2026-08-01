@@ -242,9 +242,15 @@ export const cssVars = {
    * NO RED IN THIS FAMILY, EVER. Red is the sacred air-state colour and decorative red
    * is forbidden across this UI (see the header) — a boot screen is the LAST place it
    * may appear, because it would teach the operator's eye "red" before they have seen a
-   * single real state. The accent is deliberately NOT a splash token either: the rail
-   * reuses `--r-accent` / `--r-accent-strong`, so the first frame speaks the palette the
-   * app already speaks rather than a parallel one beside it.
+   * single real state.
+   *
+   * THE ACCENT IS NOT IN THIS FAMILY, and no longer borrows `--r-accent` either. The
+   * splash is the BRAND screen, so its chrome is APASAI's own blue `#00AEEF` — an exact
+   * company value that is not ours to alter — declared as a splash-local constant in the
+   * inline CSS beside the scene's violet and amber, NOT as a `--r-*` token, because
+   * nothing in the console UI may ever wear them. The app's own sky `--r-accent` is
+   * deliberately UNCHANGED by that decision. `--r-splash-glow` is the one exception and
+   * only because it must be an `rgba()` a `box-shadow` can take.
    */
   '--r-splash-bg': '#090B0F',
   '--r-splash-line': '#2A3441',
@@ -253,9 +259,19 @@ export const cssVars = {
   '--r-splash-ink-faint': '#3F4A58',
   '--r-splash-readout': '#8B97A6',
   '--r-splash-rail': '#1C232E',
-  '--r-splash-mark-mid': '#3D4B5C',
-  '--r-splash-mark-dim': '#28323E',
-  '--r-splash-glow': 'rgba(56, 189, 248, 0.5)',
+  /** The dim filler bars inside the playout scene's stack rows. */
+  '--r-splash-scene-bar': '#28323E',
+  /** The APASAI wordmark beside the mark — brighter than a tagline, dimmer than `ink`. */
+  '--r-splash-company-ink': '#C9D3DF',
+  /**
+   * The APASAI mark, RELIT FOR A DARK GROUND at the owner's explicit direction: the
+   * source artwork's bars are near-black and its swoosh mid-grey, which disappear on
+   * `--r-splash-bg`. The arc is NOT here — it keeps the exact brand blue, untouched.
+   */
+  '--r-splash-logo-bars': '#EEF3F9',
+  '--r-splash-logo-swoosh': '#5C6A7C',
+  /** The rail's halo — the brand blue at half alpha, in the form `box-shadow` takes. */
+  '--r-splash-glow': 'rgba(0, 174, 239, 0.5)',
   '--r-splash-vignette': 'rgba(0, 0, 0, 0.55)',
   // Spacing (4px base)
   '--r-space-1': '4px',

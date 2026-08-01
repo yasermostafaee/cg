@@ -63,8 +63,9 @@
      `<style>` in `index.html` mirrors the VALUES as literals and
      `tests/splashCss.test.ts` pins that second mirror. Their own family rather than
      reuse of `--r-surface-*` (a deeper near-black, inks tuned for large tracked-out
-     type), and NO RED, ever — see `theme.ts` for both reasons. The rail's accent is
-     deliberately not a splash token: it reuses `--r-accent` / `--r-accent-strong`. */
+     type), and NO RED, ever — see `theme.ts` for both reasons. The chrome ACCENT is not
+     a token at all: the splash wears APASAI's exact brand blue as a splash-local
+     constant, and the app's own `--r-accent` sky is unchanged by that. */
   --r-splash-bg: #090b0f;
   --r-splash-line: #2a3441;
   --r-splash-ink: #e8edf4;
@@ -72,9 +73,11 @@
   --r-splash-ink-faint: #3f4a58;
   --r-splash-readout: #8b97a6;
   --r-splash-rail: #1c232e;
-  --r-splash-mark-mid: #3d4b5c;
-  --r-splash-mark-dim: #28323e;
-  --r-splash-glow: rgba(56, 189, 248, 0.5);
+  --r-splash-scene-bar: #28323e;
+  --r-splash-company-ink: #c9d3df;
+  --r-splash-logo-bars: #eef3f9;
+  --r-splash-logo-swoosh: #5c6a7c;
+  --r-splash-glow: rgba(0, 174, 239, 0.5);
   --r-splash-vignette: rgba(0, 0, 0, 0.55);
 
   --r-space-1: 4px;
