@@ -6,7 +6,7 @@ import { useStack } from '../../hooks/useStack.js';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
-import { Modal, modalActionVariant } from '../../ui/Modal.js';
+import { Modal, ModalAction, modalActionVariant } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 
 interface Props {
@@ -276,38 +276,58 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
       onClose={onClose}
       {...(hasMessage ? { message: messages } : {})}
       footer={
-        /*
-          §2 — APPLY IS `primary`, NOT THE AMBER IT WORE.
+        <>
+          {/*
+            CANCEL (owner). This dialog had no way out but the ✕ — and it is the one
+            dialog in the app where that matters most, because it is a FORM: the
+            operator edits hosts and ports into a draft, and until Apply lands none
+            of it has been sent. Leaving without applying is a real, deliberate
+            choice, and it needs a control that says so rather than a glyph shared
+            with "I am finished reading".
 
-          It was `caution` — the colour that means THIS WILL INTERRUPT SOMETHING —
-          on a button that saves a configuration. A destructive signal spent on a
-          non-destructive action drains it everywhere it is real, and this dialog
-          is in fact the one that REFUSES to act while anything is on air.
-        */
-        <AsyncButton
-          variant={modalActionVariant('primary')}
-          data-modal-role="primary"
-          aria-label="Apply server settings"
-          disabled={onAirCount > 0 || validationError !== null}
-          run={async () => {
-            if (typeof validated === 'string') return { accepted: false };
-            setRefusal(null);
-            setStatus(null);
-            const result = await window.cg.connections.setConfig(validated);
-            if (!result.ok) {
-              setRefusal(result.message ?? 'The bridge refused the new configuration.');
-              return { accepted: false, errorCode: result.reason ?? 'refused' };
-            }
-            setStatus(
-              result.templateServe?.exposed === true
-                ? `Applied. Template serve is LAN-exposed at ${result.templateServe.serveHost} (remote server); control stays on 127.0.0.1.`
-                : 'Applied. All listeners remain loopback-only.',
-            );
-            return { accepted: true };
-          }}
-        >
-          APPLY
-        </AsyncButton>
+            It routes to the same `onClose` as the ✕, Escape and the backdrop — one
+            safe path, four ways to reach it. Nothing is sent; the draft is simply
+            dropped, and the next open re-reads the live config from the bridge.
+
+            First in DOM order, so Apply keeps the corner every other dialog's
+            primary action sits in.
+          */}
+          <ModalAction actionRole="cancel" onClick={onClose}>
+            Cancel
+          </ModalAction>
+          {/*
+            §2 — APPLY IS `primary`, NOT THE AMBER IT WORE.
+
+            It was `caution` — the colour that means THIS WILL INTERRUPT SOMETHING —
+            on a button that saves a configuration. A destructive signal spent on a
+            non-destructive action drains it everywhere it is real, and this dialog
+            is in fact the one that REFUSES to act while anything is on air.
+          */}
+          <AsyncButton
+            variant={modalActionVariant('primary')}
+            data-modal-role="primary"
+            aria-label="Apply server settings"
+            disabled={onAirCount > 0 || validationError !== null}
+            run={async () => {
+              if (typeof validated === 'string') return { accepted: false };
+              setRefusal(null);
+              setStatus(null);
+              const result = await window.cg.connections.setConfig(validated);
+              if (!result.ok) {
+                setRefusal(result.message ?? 'The bridge refused the new configuration.');
+                return { accepted: false, errorCode: result.reason ?? 'refused' };
+              }
+              setStatus(
+                result.templateServe?.exposed === true
+                  ? `Applied. Template serve is LAN-exposed at ${result.templateServe.serveHost} (remote server); control stays on 127.0.0.1.`
+                  : 'Applied. All listeners remain loopback-only.',
+              );
+              return { accepted: true };
+            }}
+          >
+            APPLY
+          </AsyncButton>
+        </>
       }
     >
       <section style={styles.section} aria-label="Primary server">

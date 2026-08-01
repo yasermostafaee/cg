@@ -386,9 +386,12 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
           SERVERS
         </Button>
       )}
+      {/* LOG, not AUDIT (owner). "Audit" names the FILE FORMAT the bridge writes;
+          "log" is what the operator is going to look at. The accessible name keeps
+          the fuller phrase, so a screen reader still says WHICH log this is. */}
       {onOpenAudit !== undefined && (
         <Button onClick={onOpenAudit} aria-label="Open audit log">
-          AUDIT
+          LOG
         </Button>
       )}
       {lock.engaged ? (

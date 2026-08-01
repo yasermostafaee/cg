@@ -113,11 +113,20 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       ariaLabel="Audit log"
       size="wide"
       onClose={onClose}
-      /* One action, and it is what this dialog exists to end on. The hand-rolled
-         header's `Close` BUTTON is gone — the primitive's ✕ is the close
-         affordance here as it is everywhere else. */
+      /*
+        ONE action, and its role is `cancel` — not `primary` (owner).
+
+        `Close` DISMISSES; it commits nothing. This dialog is read-only, so it has no
+        primary action at all, and dressing a dismissal as one would put the weight
+        of "the action this dialog exists to perform" on a button that does nothing.
+        Same treatment as every other Cancel, which is the point: the operator learns
+        one shape for "get me out of here".
+
+        The hand-rolled header's `Close` BUTTON is still gone — the primitive's ✕ is
+        the close affordance here as it is everywhere else.
+      */
       footer={
-        <ModalAction actionRole="primary" onClick={onClose}>
+        <ModalAction actionRole="cancel" onClick={onClose}>
           Close
         </ModalAction>
       }

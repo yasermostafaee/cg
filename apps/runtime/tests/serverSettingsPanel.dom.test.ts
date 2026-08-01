@@ -148,6 +148,56 @@ describe('ServerSettingsPanel — R-010', () => {
     expect(applyButton(el).disabled).toBe(true);
   });
 
+  /**
+   * CANCEL SENDS NOTHING — the dialog is a FORM, and that is what makes this worth
+   * asserting rather than assuming.
+   *
+   * The operator types hosts and ports into a DRAFT; until Apply lands, none of it
+   * has reached the bridge. So leaving without applying is a real choice, and the
+   * one thing it must never do is half-apply. Edited fields, then Cancel: no
+   * `setConfig` call at all, and the dialog closes by the same path as the ✕,
+   * Escape and the backdrop.
+   */
+  it('Cancel leaves the bridge config byte-identical — nothing is sent', async () => {
+    const { setConfig } = stubBridge([]);
+    let closed = false;
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(ServerSettingsPanel, {
+            open: true,
+            onClose: () => {
+              closed = true;
+            },
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+    const el = openDialog();
+    if (el === null) throw new Error('the server settings dialog did not open');
+
+    // Edit the draft, so there is genuinely something that COULD have been sent.
+    await setInput(el, 'Primary host', '192.168.1.99');
+
+    const cancel = [...el.querySelectorAll<HTMLButtonElement>('.cg-modal-footer button')].find(
+      (b) => b.textContent === 'Cancel',
+    );
+    if (cancel === undefined) throw new Error('Cancel not rendered in the action row');
+    await act(async () => {
+      cancel.click();
+      await Promise.resolve();
+    });
+
+    expect(setConfig, 'Cancel must not reach the bridge').not.toHaveBeenCalled();
+    expect(closed, 'Cancel takes the same path out as the ✕ and Escape').toBe(true);
+  });
+
   it('adding a backup submits servers.B; the bridge refusal message is surfaced', async () => {
     const { setConfig } = stubBridge([], {
       ok: false,
