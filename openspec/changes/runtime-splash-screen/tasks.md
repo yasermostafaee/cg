@@ -1,4 +1,4 @@
-# Tasks — startup splash screen (R-031)
+# Tasks — startup splash screen (R-035)
 
 ## 1. The timing contract (pure, testable)
 

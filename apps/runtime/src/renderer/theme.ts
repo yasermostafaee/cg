@@ -218,7 +218,7 @@ export const cssVars = {
   '--r-verb-stop': '#B38D18',
   '--r-verb-clear': '#DE5105',
   /**
-   * R-031 — THE STARTUP SPLASH's own greys, and the one thing to know about them:
+   * R-035 — THE STARTUP SPLASH's own greys, and the one thing to know about them:
    * the splash CANNOT READ THESE TOKENS.
    *
    * It paints before the bundle — that is its entire reason to exist — so

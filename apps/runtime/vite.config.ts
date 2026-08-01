@@ -13,7 +13,7 @@ import { createBuildStamp } from '@cg/splash-kit/build-stamp';
  */
 
 /**
- * R-031 - THE BUILD STAMP, from `@cg/splash-kit`: ONE object, computed ONCE, feeding
+ * R-035 - THE BUILD STAMP, from `@cg/splash-kit`: ONE object, computed ONCE, feeding
  * BOTH the HTML transform and the `__CG_BUILD__` define. It is SHARED with the Designer
  * rather than copied into it, because what an operator reads off a splash and repeats
  * down a phone line has to identify the running build exactly - and two independently

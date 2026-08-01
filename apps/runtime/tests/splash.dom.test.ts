@@ -16,7 +16,7 @@ import {
 } from '../src/renderer/splashTiming.js';
 
 /**
- * R-031 — THE SPLASH'S CLOCK, driven in jsdom out of the REAL `index.html`.
+ * R-035 — THE SPLASH'S CLOCK, driven in jsdom out of the REAL `index.html`.
  *
  * The splash paints before the bundle, so its clock cannot import
  * `splashTiming.ts` — it mirrors those constants as literals in an inline script.

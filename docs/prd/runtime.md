@@ -1382,9 +1382,15 @@ one-time setup step.
 - The list can never be emptied to nothing — a list field with split on must always have at
   least one delimiter to choose.
 
-## [~] R-031 — a startup splash screen: the product's first frame ⟨priority: medium⟩
+## [~] R-035 — a startup splash screen: the product's first frame ⟨priority: medium⟩
 
 <!-- change: openspec/changes/runtime-splash-screen/ -->
+
+<!-- Filed as R-031 by a session reading this file ON `main`, where R-030 was the highest in
+     use; `dev` already held R-031 (the operator surface) in an unmerged fast-mode edit that
+     `main` could not see, so the `origin/main` merge produced two R-031 entries. Renumbered
+     to R-035 (the first free number above `dev`'s R-034) because this is the newer claim and
+     all of its references sit in one place. The operator-surface R-031 is unchanged. -->
 
 **What:** Give `apps/runtime` a startup splash — APASAI / **CG CONTROL**, a phase readout and a
 progress rail — that is on screen from the FIRST PAINT until the app is genuinely ready, with a
@@ -1403,12 +1409,13 @@ build stamp belongs on it.
 - WHEN the page is opened THEN the splash is painted on the first frame, before any application
   JavaScript has run
 - WHEN the boot reaches a real step (initializing, bridge probe, interface start) THEN the phase
-  readout names that step and the rail advances by COMPLETED PHASE, with a step counter (`2 / 3`)
-  and never a percentage
+  readout names that step, and the rail and the readout show ONE value: the monotone
+  `min(elapsed / floor, completed steps / total steps)` — a PERCENTAGE, gated by real steps so it
+  is never ahead of boot, reading 100 exactly when the floor has elapsed AND boot is done
 - WHEN boot completes THEN the phase label FADES OUT and the readout's left side is empty — there
   is no terminal `READY` label anywhere in the markup, CSS or script
 - WHEN this is a cold start (no `CG_RUNTIME_SESSION` marker in `sessionStorage`) THEN the splash
-  is held for at least 5000 ms; WHEN it is a warm reload THEN the floor is 600 ms
+  is held for at least 8000 ms; WHEN it is a warm reload THEN the floor is 3000 ms
 - WHEN boot completes AFTER the floor THEN the hold extends to boot completion — the splash never
   hides a boot that is still running
 - WHEN 20000 ms have elapsed since first paint THEN the splash dismisses regardless of boot state,
@@ -1421,11 +1428,14 @@ build stamp belongs on it.
 - WHEN `prefers-reduced-motion: reduce` is set THEN the splash renders with no entrance animation
   and no fade
 
-**Notes:** Company **APASAI**, product **CG CONTROL**; all splash copy is English. The logo and
-brand colours are NOT final — the placeholder mark is a single documented SVG slot in
-`index.html`. **No red anywhere on the splash**: red is the sacred air-state colour and decorative
-red is already forbidden across this UI ([[R-007]], `theme.ts`), so the accent is the existing
-sky — checked by a test, not merely asserted. This is a display gate
+**Notes:** Company **APASAI**, product **CG CONTROL**; all splash copy is English. The real
+APASAI mark is inlined in `index.html` (recoloured for a dark ground via three class hooks, never
+by editing path data) — it is an auto-trace of a raster and must be replaced with the original
+vector before any customer-facing release. **No red anywhere on the splash**: red is the sacred
+air-state colour and decorative red is already forbidden across this UI ([[R-007]], `theme.ts`),
+and the check is by hue band so coral is excluded with it — verified by a test, not merely
+asserted. The chrome accent is APASAI's exact brand blue `#00AEEF`, a SPLASH-LOCAL value: the
+app's own `--r-accent` sky is unchanged, which a test also pins. This is a display gate
 layered ON TOP of the connection model — `createRuntimeBridge`, `WebSocketRuntime` and
 `MockRuntime` are unchanged, and the live / offline-mock / disconnected tri-state, the
 refuse-while-disconnected contract and the NOT CONNECTED / TEST MODE banners all stay as they are.

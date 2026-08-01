@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * R-031 — the startup splash, in a real browser.
+ * R-035 — the startup splash, in a real browser.
  *
  * `test` comes from `@playwright/test` DIRECTLY and not from `./fixtures/runtime.js`,
  * and that is the whole opt-in mechanism: the shared harness arms

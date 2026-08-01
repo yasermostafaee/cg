@@ -11,7 +11,7 @@ export {
 } from '@cg/splash-kit';
 
 /**
- * R-031 — the Runtime splash's TIMING CONTRACT: THIS APP'S NUMBERS, over the shared rules.
+ * R-035 — the Runtime splash's TIMING CONTRACT: THIS APP'S NUMBERS, over the shared rules.
  *
  * The arithmetic itself lives in `@cg/splash-kit` (`tools/splash-kit`), because the
  * Designer's splash obeys the same contract and two copies of a timing rule is two rules
@@ -70,7 +70,7 @@ export const SPLASH_SESSION_KEY = 'CG_RUNTIME_SESSION';
  * begins (the last one completes at `done()`). See `splashProgress`.
  *
  * THREE LABELS, THREE WORK STEPS — and there is deliberately NO TERMINAL "READY" LABEL.
- * A fast cold boot finishes about a second in while the door stays shut until the 5 s
+ * A fast cold boot finishes about a second in while the door stays shut until the cold
  * floor, so a READY label would be the thing on screen for MOST of the splash at exactly
  * the moment the operator still cannot use the app: a word that says "go" over a screen
  * that is not letting them. When boot completes the label FADES OUT instead

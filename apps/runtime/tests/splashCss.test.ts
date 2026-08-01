@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { cssVars } from '../src/renderer/theme.js';
 
 /**
- * R-031 — THE SPLASH'S COLOURS, pinned twice over.
+ * R-035 — THE SPLASH'S COLOURS, pinned twice over.
  *
  * The splash paints before `controls.css` exists, so it cannot write `var(--r-…)`; it
  * mirrors token VALUES as literals in `index.html`. Two things can go wrong with that

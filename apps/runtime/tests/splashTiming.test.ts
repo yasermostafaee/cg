@@ -11,7 +11,7 @@ import {
 } from '../src/renderer/splashTiming.js';
 
 /**
- * R-031 — the splash's timing contract, as arithmetic.
+ * R-035 — the splash's timing contract, as arithmetic.
  *
  * These assert the RULE, not the wiring: `tests/splash.dom.test.ts` is what proves the
  * inline script in `index.html` actually implements what is proved here.

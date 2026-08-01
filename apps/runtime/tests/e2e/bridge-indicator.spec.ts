@@ -1,4 +1,4 @@
-// R-031 — `test` comes from the shared harness rather than `@playwright/test` so this
+// R-035 — `test` comes from the shared harness rather than `@playwright/test` so this
 // spec inherits the auto splash bypass. It drives the raw `page` (it arms its own bridge
 // URL and navigates itself), so it never instantiates `app`; without the harness's auto
 // fixture each of these three tests would sit through the splash's 5 s cold floor before

@@ -8,7 +8,7 @@
       content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
     />
     <!--
-      R-031 — LOADED NON-BLOCKING (`media="print"` until `onload`), and that is not a
+      R-035 — LOADED NON-BLOCKING (`media="print"` until `onload`), and that is not a
       micro-optimisation: a plain `<link rel="stylesheet">` to a CDN blocks the FIRST
       PAINT until the CDN answers or the socket times out. The splash below exists to own
       the first frame, and on a LAN-only broadcast machine — which is most of them —
@@ -31,7 +31,7 @@
     <title>cg Runtime</title>
 
     <!--
-      ══ R-031 · STARTUP SPLASH — CRITICAL CSS ═════════════════════════════════════
+      ══ R-035 · STARTUP SPLASH — CRITICAL CSS ═════════════════════════════════════
 
       Inline, in `<head>`, because this must paint on the FIRST FRAME: no bundle, no
       stylesheet request, no webfont. (A React splash cannot exist during the window it is
@@ -743,7 +743,7 @@
   </head>
   <body>
     <!--
-      ══ R-031 · STARTUP SPLASH — MARKUP ═══════════════════════════════════════════
+      ══ R-035 · STARTUP SPLASH — MARKUP ═══════════════════════════════════════════
       Before `#root` on purpose: this is the first frame, and it must exist in the document
       rather than be produced by the bundle. The inline script below owns its clock;
       `src/renderer/main.tsx` only reports the boot steps it actually reaches.
@@ -942,7 +942,7 @@
     <div id="root"></div>
 
     <!--
-      ══ R-031 · STARTUP SPLASH — THE CLOCK ════════════════════════════════════════
+      ══ R-035 · STARTUP SPLASH — THE CLOCK ════════════════════════════════════════
       A classic (non-module) script, so it runs BEFORE the deferred module bundle. It owns
       `t0`, because first paint is the only honest start for this clock: a clock started
       from module scope is already late by exactly the parse time this screen exists to

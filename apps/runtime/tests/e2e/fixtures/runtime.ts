@@ -647,7 +647,7 @@ export function buildInvalidVcg(): Uint8Array {
 }
 
 /**
- * R-031 — TURN THE STARTUP SPLASH OFF, for every spec but its own.
+ * R-035 — TURN THE STARTUP SPLASH OFF, for every spec but its own.
  *
  * Without this each spec would pay the splash's cold-start floor (5 s) before its first
  * assertion could run, which is the most likely way a boot screen gets reverted. The

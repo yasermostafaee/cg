@@ -17,7 +17,7 @@ import { reportCommandError } from './features/status/commandFeedback.js';
  * else the offline `MockRuntime`. We await it before rendering so the chosen
  * backend is fixed and the connection indicator is correct on first paint.
  *
- * R-031 — this file REPORTS its boot steps to the startup splash and never depends on
+ * R-035 — this file REPORTS its boot steps to the startup splash and never depends on
  * it. The splash is not a React component and could not be one: it has to be on screen
  * during exactly this function — the bundle parse plus that 1500 ms probe — so it lives
  * in `index.html` and owns its own clock (`window.__CG_SPLASH__`, see that file). The

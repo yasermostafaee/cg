@@ -57,7 +57,7 @@
   --r-verb-stop: #b38d18;
   --r-verb-clear: #de5105;
 
-  /* R-031 — the STARTUP SPLASH's own greys. Mirrored from `theme.ts` `cssVars` like
+  /* R-035 — the STARTUP SPLASH's own greys. Mirrored from `theme.ts` `cssVars` like
      every token here, but with one extra hop nothing else has: the splash paints
      BEFORE this stylesheet is loaded, so it cannot read these at all — the inline
      `<style>` in `index.html` mirrors the VALUES as literals and

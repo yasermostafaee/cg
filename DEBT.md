@@ -177,6 +177,21 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### 🔢 THE ITEM-NUMBER REGISTRY IS SPLIT ACROSS BRANCHES WHILE FAST MODE RUNS
+
+**File this as a rule when normal mode resumes.** While `dev` holds unmerged `docs/prd/*`
+edits, the item-number registry is split. A session on **either** branch that claims a
+`B-`/`C-`/`D-`/`P-`/`R-` number from one branch alone can collide with the other. Until fast
+mode ends, a claim must check **both** branches — or not be made at all.
+
+`dev-mode.md` already forbids claiming on `dev`. What it did not anticipate was a
+**normal-mode session claiming on `main`** while `dev` held numbers `main` could not see —
+which is exactly how the splash was filed as `R-031` when `dev`'s `R-031` (the operator
+surface) already existed. The one-directional rule reads as sufficient and is not: the
+registry is split, so the check has to be symmetric.
+
+Observed once, cost one duplicate and one renumber (splash → `R-035`, 2026-08-01).
+
 ### 💰 COSTED, NOT BUILT — a version/shape marker on the persisted configs
 
 **Asked for in `dev-bridge-bootstrap` §2 as "recommended, but report the cost before doing
@@ -1616,6 +1631,13 @@ Note specifically that **`R-034` skips past the last known `R-030`**, so `R-031`
 `R-034` is a genuine collision, or the numbering jumped and the gap should be
 recorded as intentional.
 
+**ANSWERED, 2026-08-01.** There is no gap: `R-031` (the operator surface), `R-032` (a
+PLAYOUT tab) and `R-033` (the Layers table) all exist as real headings in
+`docs/prd/runtime.md` on `dev`, so the space is contiguous `R-001`…`R-034` and `R-034`
+is not a collision. One genuine collision DID occur and is now fixed — a `main`-side
+session filed the splash as `R-031` because `dev`'s was invisible from `main`; the
+splash is now **`R-035`**. **Next free: `R-036`.**
+
 ### The Description column could drop the wire's own report — found by the E2E gate, fixed
 
 Worth filing as a near-miss, because it is the B-094 honesty class and a test caught what
@@ -1824,7 +1846,7 @@ silent) nobody notices until someone asks why there is no sound.
 
 ---
 
-## R-031 SPLASH — the readout and the visual layer (2026-08-01, fast mode)
+## R-035 SPLASH — the readout and the visual layer (2026-08-01, fast mode)
 
 Base: the `origin/main` merge (`78bdd34`), which brought PR #431's splash infrastructure
 onto `dev`. This run changes the READOUT and adds the VISUAL LAYER on top of it; the boot
@@ -1847,17 +1869,24 @@ gate, the timing contract, the build stamp and the bypass are inherited untouche
   replaced, and says nothing about the playout scene or the APASAI lockup. Its `spec.md`,
   `design.md` and `tasks.md` need reconciling before the change is validated or archived.
   No `openspec validate` was run.
-- **`R-031` is a DUPLICATE item number in `docs/prd/runtime.md`.** The splash item that
-  arrived from `main` reuses the number of the existing "one Layers section, no Library"
-  item (line ~1124). Both are now in the file. Pre-existing on `main`, not introduced here,
-  and deliberately not renumbered — the fast-mode contract forbids touching that file beyond
-  the merge. Someone has to pick which one keeps the number.
-- **The PRD item's own acceptance text is now STALE, and I was not allowed to fix it.** The
-  splash `R-031` says the readout carries "a step counter (`2 / 3`) and never a percentage",
-  and calls the mark "a placeholder … a single documented SVG slot" with "the accent is the
-  existing sky". All three are superseded by this run. The fast-mode contract permits no
-  `docs/prd/*` edit beyond the merge, so the item still describes the version it replaced.
-  Fix it with the OpenSpec reconciliation above, in one pass.
+- **✅ RESOLVED — the duplicate `R-031` is gone.** The splash item was filed as `R-031` by a
+  session reading `docs/prd/runtime.md` **on `main`**, where `R-030` was the highest in use;
+  `dev` already held `R-031` (the operator surface) in an unmerged fast-mode edit that `main`
+  could not see, so the `origin/main` merge produced two. **The SPLASH item was renumbered to
+  `R-035`** — the first free number above `dev`'s `R-034`, verified as unused anywhere in the
+  repo — because it is the newer claim and every reference to it sits in one place. The
+  operator-surface `R-031` is untouched. Moved with it in the same commit: the PRD entry, the
+  five files under `openspec/changes/runtime-splash-screen/`, and every reference in this
+  file. The rule that would have prevented it is filed under `## Findings to file`.
+- **✅ RESOLVED — the splash item's stale acceptance text is corrected.** Fixed while
+  rewriting that entry for the renumber, because leaving a known-wrong acceptance behind is
+  worse than the scope discipline that deferred it. Four statements were superseded: the
+  readout is a PERCENTAGE (not a `2 / 3` step counter), the floors are 8000/3000 (not
+  5000/600), the mark is the real inlined APASAI artwork (not "a placeholder … a single
+  documented SVG slot"), and the accent is APASAI's brand blue `#00AEEF` as a splash-local
+  value (not "the existing sky"). The OpenSpec delta under
+  `openspec/changes/runtime-splash-screen/` is still owed a reconciliation for the VISUAL
+  layer — see the item above it.
 
 ### 🔴 The APASAI mark is NOT production brand artwork
 
@@ -1872,7 +1901,7 @@ release.** The swap is one file plus the inlined copy in `index.html`; the three
 `#00AEEF` is the company's exact blue and is not ours to alter — not for contrast, not for
 consistency, not for a theme. Only the bars and the swoosh are relit for the dark ground.
 
-### Decisions taken fast — R-031 splash
+### Decisions taken fast — R-035 splash
 
 1. **The PLAY triangles and the ticker use `--r-success` (`#10B981`), not the `#34d399` the
    task named.** The task calls `#34d399` "the console's own success green" — it is not; the
@@ -1941,7 +1970,7 @@ existed rather than after.
   resumes, in words: _"the Designer boots straight into the landing screen; give it a startup
   splash — APASAI / CG DESIGNER, an artboard scene, a phase readout and a progress rail —
   visible from the first paint until the app is genuinely ready, with a minimum hold. Same
-  timing contract and same company lockup as the Runtime's R-031; different heart (a working
+  timing contract and same company lockup as the Runtime's R-035; different heart (a working
   artboard rather than a playout instrument)."_
 - **No OpenSpec change dir and no `openspec validate`.** The whole feature — the timing
   contract, the boot gate, the bypass, the reduced-motion composition — is spec-worthy and is
@@ -1995,7 +2024,8 @@ themselves, and I state the changes explicitly because the repair rules require 
 1. **`getByRole('region', { name: 'Stack' })` no longer exists on `dev`.** The splash spec
    came from `main` (PR #431), where the Runtime still had a `Stack` region. On this branch
    the operator-surface work replaced it with **`Layers`** — which is precisely why the merge
-   in Step 0a carried TWO `R-031` items, one of them being "one Layers section, no Library".
+   in Step 0a carried TWO `R-031` items, one of them being "one Layers section, no Library"
+   (that duplicate has since been resolved — the splash item is now `R-035`).
    So this is a test updated because the branch's behaviour deliberately changed, not an
    assertion loosened to go green: `fixtures/runtime.ts` already uses `Layers` as its own
    post-boot barrier, and the spec now uses the same one. The claim is unchanged — the splash
