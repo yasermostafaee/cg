@@ -34,11 +34,15 @@
 ## 3. Real phase call sites
 
 - [x] 3.1 `main.tsx` — `PROBING BRIDGE` immediately before `createRuntimeBridge()`,
-      `STARTING INTERFACE` after it resolves and before the app render, `READY` + `done()` in the
-      `createRoot().render()` commit callback. `INITIALIZING` is emitted inline at first paint.
-      All calls optional-chained.
+      `STARTING INTERFACE` after it resolves and before the app render, and `done()` from a mount
+      effect (the first React commit). `INITIALIZING` is emitted inline at first paint. All calls
+      optional-chained.
 - [x] 3.2 Verify no synthesised step: the phase list is exactly the steps that exist in the boot
       path. The bare `Connecting to bridge…` pre-render is removed — the splash IS that state now.
+- [x] 3.3 NO TERMINAL `READY` LABEL — three labels for three work steps. `done()` fades the label
+      out (350 ms, opacity only) and the counter carries the remaining hold; the readout's left
+      side goes empty. Replaces the earlier `[data-done] → success green` rule. A test greps the
+      whole of `index.html` and fails if `READY` reappears in the markup, the CSS or the script.
 
 ## 4. The build stamp — one source, two consumers
 

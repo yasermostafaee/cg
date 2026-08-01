@@ -193,8 +193,8 @@
         background: #1c232e; /* mirrors: --r-splash-rail */
         overflow: hidden;
       }
-      /* The rail advances BY COMPLETED PHASE (4 phases → 25/50/75/100). The readout beside
-         it is a STEP COUNTER, never a percentage: a percentage claims measured progress and
+      /* The rail advances BY COMPLETED PHASE (3 phases → 33/67/100). The readout beside it
+         is a STEP COUNTER, never a percentage: a percentage claims measured progress and
          nothing here measures anything — the bridge probe is a bounded wait, not a
          quantity. */
       .cg-splash__fill {
@@ -215,8 +215,16 @@
         letter-spacing: 0.13em;
         color: #8b97a6; /* mirrors: --r-splash-readout */
       }
+      /* WHEN BOOT COMPLETES THE LABEL LEAVES — it does not settle on a word.
+         A fast cold boot is done about a second in while the door stays shut until the
+         5s floor, so a terminal "READY" would be the thing on screen for MOST of the
+         splash at exactly the moment the operator still cannot use the app. The counter
+         carries the remaining hold on its own and the left side goes empty. */
+      #cg-splash-phase {
+        transition: opacity 0.35s ease;
+      }
       .cg-splash__readout[data-done='true'] #cg-splash-phase {
-        color: #10b981; /* mirrors: --r-success */
+        opacity: 0;
       }
 
       .cg-splash__foot {
@@ -273,6 +281,9 @@
         .cg-splash__fill {
           transition: none;
         }
+        #cg-splash-phase {
+          transition: none;
+        }
         .cg-splash {
           transition: opacity 0.01s;
         }
@@ -320,7 +331,7 @@
           <div class="cg-splash__rail"><div class="cg-splash__fill" id="cg-splash-fill"></div></div>
           <div class="cg-splash__readout" id="cg-splash-readout">
             <span id="cg-splash-phase">INITIALIZING</span>
-            <span id="cg-splash-step">1 / 4</span>
+            <span id="cg-splash-step">1 / 3</span>
           </div>
         </div>
       </div>
@@ -375,7 +386,10 @@
         var CEILING_MS = 20000;
         var FADE_MS = 450;
         var SESSION_KEY = 'CG_RUNTIME_SESSION';
-        var PHASES = ['INITIALIZING', 'PROBING BRIDGE', 'STARTING INTERFACE', 'READY'];
+        // THREE LABELS, THREE WORK STEPS, each naming the work happening NOW. There is no
+        // terminal label: see `splashTiming.ts` and the `#cg-splash-phase` rule above for
+        // why the label leaves on completion instead of settling on a word.
+        var PHASES = ['INITIALIZING', 'PROBING BRIDGE', 'STARTING INTERFACE'];
 
         var t0 = Date.now();
 
@@ -417,10 +431,9 @@
           var i = PHASES.indexOf(key);
           if (i < 0 || dismissed) return;
           var completed = i + 1;
-          if (fillEl) fillEl.style.width = completed * 25 + '%';
+          if (fillEl) fillEl.style.width = Math.round((completed / PHASES.length) * 100) + '%';
           if (phaseEl) phaseEl.textContent = key;
           if (stepEl) stepEl.textContent = completed + ' / ' + PHASES.length;
-          if (readoutEl && key === 'READY') readoutEl.setAttribute('data-done', 'true');
         }
 
         function done() {
@@ -429,6 +442,9 @@
           // of course.
           if (bootDone || dismissed) return;
           bootDone = true;
+          // The label LEAVES rather than settling on a word — the counter carries the rest
+          // of the hold alone. See the `#cg-splash-phase` rule for why.
+          if (readoutEl) readoutEl.setAttribute('data-done', 'true');
           var now = Date.now();
           // dismissAt = min( max(t0 + floor, bootDone), t0 + ceiling )
           var dismissAt = Math.min(Math.max(t0 + floorMs, now), t0 + CEILING_MS);

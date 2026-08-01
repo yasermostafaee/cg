@@ -50,22 +50,32 @@ export const SPLASH_SESSION_KEY = 'CG_RUNTIME_SESSION';
 export const SPLASH_FADE_MS = 450;
 
 /**
- * The phase readout, in order. The rail advances by COMPLETED PHASE — entering
- * phase *n* of 4 puts the rail at *n* × 25 % and the readout at `n / 4`.
+ * How long the phase LABEL takes to fade out once boot completes. Opacity only.
  *
- * A STEP COUNTER rather than a percentage, deliberately: a percentage claims
- * measured progress, and nothing here measures anything — the bridge probe is a
- * bounded wait, not a quantity.
- *
- * Every one of these is a step that EXISTS in `main.tsx`'s boot path; none was
- * invented to lengthen the list.
+ * See `SPLASH_PHASES` for why the label leaves rather than settling on a word.
  */
-export const SPLASH_PHASES = [
-  'INITIALIZING',
-  'PROBING BRIDGE',
-  'STARTING INTERFACE',
-  'READY',
-] as const;
+export const SPLASH_LABEL_FADE_MS = 350;
+
+/**
+ * The phase readout, in order. The rail advances by COMPLETED PHASE — entering
+ * phase *n* of 3 puts the rail at *n*⁄3 and the readout at `n / 3`.
+ *
+ * THREE LABELS, THREE WORK STEPS, each naming the work happening NOW — and there is
+ * deliberately NO TERMINAL "READY" LABEL. A fast cold boot finishes about a second in
+ * while the door stays shut until the 5 s floor, so a READY label would be the thing on
+ * screen for MOST of the splash at exactly the moment the operator still cannot use the
+ * app: a word that says "go" over a screen that is not letting them. When boot completes
+ * the label FADES OUT instead (`SPLASH_LABEL_FADE_MS`) and the readout's left side is
+ * simply empty; the counter carries the remaining hold alone.
+ *
+ * A STEP COUNTER rather than a percentage, deliberately: a percentage claims measured
+ * progress, and nothing here measures anything — the bridge probe is a bounded wait, not
+ * a quantity.
+ *
+ * Every one of these is a step that EXISTS in `main.tsx`'s boot path; none was invented
+ * to lengthen the list.
+ */
+export const SPLASH_PHASES = ['INITIALIZING', 'PROBING BRIDGE', 'STARTING INTERFACE'] as const;
 
 export type SplashPhase = (typeof SPLASH_PHASES)[number];
 

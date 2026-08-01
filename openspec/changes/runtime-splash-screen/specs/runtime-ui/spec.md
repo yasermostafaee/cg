@@ -39,11 +39,18 @@ accent is the existing sky accent.
 ### Requirement: The phase readout names real boot steps and advances by completed phase
 
 The splash SHALL show a named phase for each REAL step of the Runtime's boot — initialization,
-the bridge probe, interface start, and ready — advanced by the application at the point that step
-actually occurs, never on a simulated schedule.
+the bridge probe, and interface start — advanced by the application at the point that step
+actually occurs, never on a simulated schedule. Each label SHALL name the work happening NOW.
 
-The progress rail SHALL advance by COMPLETED PHASE (four phases → 25 / 50 / 75 / 100 %), and the
-readout SHALL show a STEP COUNTER (e.g. `2 / 4`). It SHALL NOT show a percentage, which would
+There SHALL be exactly THREE labels for three work steps, and NO TERMINAL "READY" LABEL. When
+boot completes the label SHALL FADE OUT (opacity only, ~350 ms), leaving the left side of the
+readout empty; the step counter carries the remaining hold alone. A terminal label is forbidden
+because a fast cold boot completes roughly a second in while the hold keeps the door shut until
+5000 ms — so "READY" would be the thing on screen for most of the splash at exactly the moment
+the operator still cannot use the app.
+
+The progress rail SHALL advance by COMPLETED PHASE (three phases → 33 / 67 / 100 %), and the
+readout SHALL show a STEP COUNTER (e.g. `2 / 3`). It SHALL NOT show a percentage, which would
 claim measured progress that nothing here measures.
 
 #### Scenario: Each phase is announced when it happens
@@ -54,13 +61,18 @@ claim measured progress that nothing here measures.
 
 #### Scenario: The rail advances by completed phase, with a step counter
 
-- **WHEN** two of the four phases have completed **THEN** the rail is at 50 % and the readout
-  shows `2 / 4` — never a percentage
+- **WHEN** two of the three phases have completed **THEN** the rail is at 67 % and the readout
+  shows `2 / 3` — never a percentage
 
-#### Scenario: A fast boot rests at READY for the remainder of the hold
+#### Scenario: The label leaves when boot completes
 
-- **WHEN** boot completes before the minimum hold has elapsed **THEN** the rail sits at 100 % and
-  the phase reads `READY` until the hold elapses
+- **WHEN** boot completes **THEN** the phase label fades out and the readout's left side is empty,
+  while the rail stays at 100 % and the step counter remains for the rest of the hold
+
+#### Scenario: No terminal label exists anywhere
+
+- **WHEN** the splash's markup, styles and script are inspected **THEN** the word `READY` does not
+  appear in any of them
 
 ### Requirement: The splash hold has a cold floor, a warm floor, and a hard ceiling
 

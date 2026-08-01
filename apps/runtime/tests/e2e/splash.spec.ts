@@ -53,7 +53,25 @@ test('a cold start holds the splash for at least five seconds; a reload in the s
   expect(warmHeldMs).toBeLessThan(coldHeldMs);
 
   // Gone means GONE — a full-screen overlay left in the DOM swallows clicks.
-  await expect(page.getByRole('region', { name: 'Layers' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Stack' })).toBeVisible();
+});
+
+test('the phase label LEAVES on boot-done — the counter carries the rest of the hold', async ({
+  page,
+}) => {
+  await armMockBoot(page);
+  await page.goto('/');
+
+  const readout = splash(page).locator('#cg-splash-readout');
+  const label = readout.locator('#cg-splash-phase');
+
+  // The boot steps are real and fast against the mock, so by the time this runs the app
+  // has committed and `done()` has fired — the label is on its way out and the counter
+  // is at its last step. No terminal word settles in its place.
+  await expect(readout).toHaveAttribute('data-done', 'true');
+  await expect(label).toHaveCSS('opacity', '0');
+  await expect(readout.locator('#cg-splash-step')).toHaveText('3 / 3');
+  await expect(splash(page)).not.toContainText(/\bready\b/i);
 });
 
 test('a refused bridge still dismisses the splash — the app shows its own NOT CONNECTED surface', async ({

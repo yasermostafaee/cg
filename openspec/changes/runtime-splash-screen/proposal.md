@@ -25,8 +25,12 @@ first paint until the app is genuinely ready, with a minimum hold on a cold star
   is the only honest `t0`) and exposes `window.__CG_SPLASH__ = { phase, done }`.
 - **`main.tsx` calls the real boot steps** — `INITIALIZING` (inline, at first paint),
   `PROBING BRIDGE` (before `createRuntimeBridge()`), `STARTING INTERFACE` (after it resolves,
-  before the app render), `READY` (after the first React commit). Every call is null-safe, so a
-  build without the splash element cannot crash boot.
+  before the app render), then `done()` after the first React commit. Three labels for three
+  work steps and **no terminal `READY`**: on a fast cold boot the app is ready about a second in
+  while the hold keeps the door shut until 5 s, so a READY label would be on screen for most of
+  the splash at exactly the moment the operator still cannot use the app. `done()` fades the
+  label out instead and the counter carries the rest. Every call is null-safe, so a build without
+  the splash element cannot crash boot.
 - **The timing contract is a pure function** (`splashTiming.ts`), unit tested, rather than a
   tangle of `setTimeout`s: a 5000 ms cold floor / 600 ms warm floor (cold vs warm decided by a
   `sessionStorage` marker, not a wall-clock heuristic), a hold that EXTENDS to boot completion,

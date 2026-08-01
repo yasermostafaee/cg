@@ -1242,9 +1242,11 @@ build stamp belongs on it.
 
 - WHEN the page is opened THEN the splash is painted on the first frame, before any application
   JavaScript has run
-- WHEN the boot reaches a real step (bridge probe, interface start, ready) THEN the phase readout
-  names that step and the rail advances by COMPLETED PHASE, with a step counter (`2 / 4`) and
-  never a percentage
+- WHEN the boot reaches a real step (initializing, bridge probe, interface start) THEN the phase
+  readout names that step and the rail advances by COMPLETED PHASE, with a step counter (`2 / 3`)
+  and never a percentage
+- WHEN boot completes THEN the phase label FADES OUT and the readout's left side is empty — there
+  is no terminal `READY` label anywhere in the markup, CSS or script
 - WHEN this is a cold start (no `CG_RUNTIME_SESSION` marker in `sessionStorage`) THEN the splash
   is held for at least 5000 ms; WHEN it is a warm reload THEN the floor is 600 ms
 - WHEN boot completes AFTER the floor THEN the hold extends to boot completion — the splash never

@@ -28,6 +28,11 @@ import { reportCommandError } from './features/status/commandFeedback.js';
  * `__CG_SPLASH_DISABLED__` set — boots identically. The phases below are the steps this
  * function ACTUALLY has; none was invented to lengthen the readout. `INITIALIZING` is
  * emitted by the inline script itself at first paint, before any of this runs.
+ *
+ * There are three labels and three work steps, and no terminal "READY": `done()` FADES THE
+ * LABEL OUT instead of settling on a word. A fast cold boot finishes about a second in
+ * while the hold keeps the door shut until 5 s, so a READY label would be on screen for
+ * most of the splash at exactly the moment the operator still cannot use the app.
  */
 const rootEl = document.getElementById('root');
 if (!rootEl) {
@@ -53,7 +58,6 @@ const root = createRoot(rootEl);
  */
 function BootComplete({ children }: { children: ReactNode }): JSX.Element {
   useEffect(() => {
-    window.__CG_SPLASH__?.phase('READY');
     window.__CG_SPLASH__?.done();
   }, []);
   return <>{children}</>;

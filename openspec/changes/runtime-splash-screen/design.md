@@ -47,14 +47,27 @@ Snapshot pulls (stack / health / lock) are deliberately excluded. They have thei
 loading states, and on a `disconnected` link they never settle: gating on them would hang the
 splash until the ceiling on exactly the installs that most need to reach the UI.
 
-## 5. The rail advances by COMPLETED PHASE; the readout is a step counter
+## 5. Three labels, a step counter — and no terminal word
 
-Four phases → 25 / 50 / 75 / 100. The right-hand readout shows `2 / 4`, not `%`.
+Three phases → 33 / 67 / 100. The right-hand readout shows `2 / 3`, not `%`.
 
 A percentage claims measured progress, and nothing here measures anything — the bridge probe is a
-bounded wait, not a quantity. A step counter says exactly as much as is true. When boot finishes
-before the floor, the rail sits at 100 % and the phase reads `READY` for the remaining hold; that
-is honest and it is the intended look.
+bounded wait, not a quantity. A step counter says exactly as much as is true.
+
+**There is no terminal `READY` label, and that is a deliberate reversal of the obvious design.**
+Each of the three labels names the work happening NOW, and there is no fourth step because there
+is no fourth piece of work. A terminal label would also be actively misleading: on a fast cold
+boot the app is ready about a second in while the hold keeps the door shut until 5 s, so `READY`
+would be the thing on screen for MOST of the splash at exactly the moment the operator still
+cannot use the app — a word saying "go" over a screen that is not letting them.
+
+So `done()` FADES THE LABEL OUT instead (350 ms, opacity only) and the left side of the readout
+goes empty. The rail stays at 100 % and the counter carries the remaining hold alone. Under
+`prefers-reduced-motion` the label transition is `none` like every other, so it simply
+disappears.
+
+This replaced an earlier rule that turned the `READY` label `--r-success` green on completion.
+That rule is gone, and with it the last use of `--r-success` on this screen.
 
 ## 6. No red, and the accent is the existing sky
 

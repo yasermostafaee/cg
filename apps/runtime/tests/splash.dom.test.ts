@@ -102,36 +102,61 @@ describe('the inline clock mirrors splashTiming.ts', () => {
 });
 
 describe('the phase readout', () => {
-  it('starts at INITIALIZING, one of four, with the rail at a quarter', () => {
+  it('starts at INITIALIZING, one of three, with the rail a third along', () => {
     runSplashScript();
     expect(document.getElementById('cg-splash-phase')?.textContent).toBe('INITIALIZING');
-    expect(document.getElementById('cg-splash-step')?.textContent).toBe('1 / 4');
-    expect(document.getElementById('cg-splash-fill')?.style.width).toBe('25%');
+    expect(document.getElementById('cg-splash-step')?.textContent).toBe('1 / 3');
+    expect(document.getElementById('cg-splash-fill')?.style.width).toBe('33%');
   });
 
   it('advances by COMPLETED PHASE, and the readout is a step counter — never a percentage', () => {
     runSplashScript();
     splash().phase('PROBING BRIDGE');
-    expect(document.getElementById('cg-splash-fill')?.style.width).toBe('50%');
-    expect(document.getElementById('cg-splash-step')?.textContent).toBe('2 / 4');
+    expect(document.getElementById('cg-splash-fill')?.style.width).toBe('67%');
+    expect(document.getElementById('cg-splash-step')?.textContent).toBe('2 / 3');
 
     splash().phase('STARTING INTERFACE');
-    expect(document.getElementById('cg-splash-fill')?.style.width).toBe('75%');
-    expect(document.getElementById('cg-splash-step')?.textContent).toBe('3 / 4');
-
-    splash().phase('READY');
     expect(document.getElementById('cg-splash-fill')?.style.width).toBe('100%');
-    expect(document.getElementById('cg-splash-step')?.textContent).toBe('4 / 4');
+    expect(document.getElementById('cg-splash-step')?.textContent).toBe('3 / 3');
+
     // The step counter never carries a `%` — a percentage would claim measured progress.
     expect(document.getElementById('cg-splash-step')?.textContent).not.toContain('%');
-    expect(document.getElementById('cg-splash-readout')?.getAttribute('data-done')).toBe('true');
   });
 
   it('ignores a phase key it does not know rather than corrupting the readout', () => {
     runSplashScript();
     splash().phase('LOADING SNAPSHOTS');
     expect(document.getElementById('cg-splash-phase')?.textContent).toBe('INITIALIZING');
-    expect(document.getElementById('cg-splash-step')?.textContent).toBe('1 / 4');
+    expect(document.getElementById('cg-splash-step')?.textContent).toBe('1 / 3');
+  });
+
+  it('THE LABEL LEAVES on boot-done — it never settles on a terminal word', () => {
+    // A fast cold boot is done about a second in while the door stays shut until 5 s, so
+    // a "READY" label would be on screen for most of the splash at exactly the moment the
+    // operator still cannot use the app. The label fades; the counter carries the rest.
+    runSplashScript();
+    splash().phase('STARTING INTERFACE');
+    expect(document.getElementById('cg-splash-readout')?.getAttribute('data-done')).toBeNull();
+
+    splash().done();
+    expect(document.getElementById('cg-splash-readout')?.getAttribute('data-done')).toBe('true');
+    // The COUNTER stays — it is what carries the remaining hold once the label is gone.
+    expect(document.getElementById('cg-splash-step')?.textContent).toBe('3 / 3');
+  });
+
+  it('says READY nowhere — not in the markup, the CSS, or the script', () => {
+    // Comments are stripped first: the document DOCUMENTS the rejected label on purpose
+    // (so nobody reintroduces it), and a test that trips on its own rationale is a test
+    // people delete. Word-bounded so "already" neither satisfies nor breaks it, and
+    // case-insensitive so a lower-case reintroduction is caught too.
+    const withoutComments = html
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/^\s*\/\/.*$/gm, ' ');
+    expect(withoutComments, 'the terminal READY label is back in index.html').not.toMatch(
+      /\bready\b/i,
+    );
+    expect([...SPLASH_PHASES]).toHaveLength(3);
   });
 });
 

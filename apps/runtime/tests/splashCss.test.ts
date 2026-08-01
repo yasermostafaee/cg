@@ -115,6 +115,24 @@ describe('NO RED on the first frame', () => {
   });
 });
 
+describe('the phase label leaves rather than settling on a word', () => {
+  it('fades the label on boot-done — opacity only, no colour change', () => {
+    // Replaces an earlier "READY turns success-green" rule. A fast cold boot is done
+    // about a second in while the hold keeps the door shut until 5 s, so a terminal
+    // label would be on screen for most of the splash while the app is still unusable.
+    expect(code).toMatch(/#cg-splash-phase\s*\{[^}]*transition:\s*opacity/);
+    expect(code).toMatch(/\[data-done='true'\]\s*#cg-splash-phase\s*\{[^}]*opacity:\s*0/);
+  });
+
+  it('does not fade under reduced motion', () => {
+    const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*)\}\s*<\/style>/.exec(
+      code,
+    );
+    expect(reduced, 'no reduced-motion block in the splash CSS').not.toBeNull();
+    expect(reduced?.[1]).toMatch(/#cg-splash-phase\s*\{\s*transition:\s*none/);
+  });
+});
+
 describe('the build stamp', () => {
   it('leaves exactly one placeholder for the build-stamp transform to fill', () => {
     // A comment placeholder, not `%TOKEN%`: Vite runs its own `%ENV%` pass over
