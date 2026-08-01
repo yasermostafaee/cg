@@ -77,6 +77,16 @@
 - [x] 6.3 Measure the Playwright suite wall-clock BEFORE and AFTER; report both. Stop and report
       rather than ship if the regression exceeds ~10 s.
 
+      **Result: median +3.7 s for five added tests — inside the budget.** Baseline 41 tests,
+      median **46.6 s** (n=9). Branch 46 tests, median **50.3 s** (n=10). Measured INTERLEAVED
+      (checkout → build → run, alternating arms) because a single before/after pair is worthless
+      here: this host's suite is BIMODAL, with a ~45 s mode and an occasional ~80 s mode. The
+      slow mode appears in BOTH arms — the baseline's own worst run was 70.7 s against the
+      branch's 83.6 s — so it is host noise, not the splash. Per-test durations confirm it: the
+      two long splash specs are 8.7 s and 7.0 s, sitting in the same band as existing tests at
+      7.0 / 6.8 / 6.7 s. The first "before" figure taken (68 s) was a cold first run and is
+      discarded; every number here is from a warmed host.
+
 ## 7. Gate
 
 - [x] 7.1 `pnpm gate` green (uncached) and `pnpm format:check` clean.
