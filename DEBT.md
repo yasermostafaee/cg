@@ -10,6 +10,67 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### 🟡 `dev-b6-inspector-finish` — seven of nine, plus six owner calls made live
+
+Landed: **§1** (the panel head takes the scale — the chip row gets the largest step
+beneath it), **§2** (one input surface), **§4** (the resize grip, made real), **§5**
+(the status dot takes the state colour), **§6** (UPDATE takes `--r-verb-play`), **§7**
+(the file chip), **§8** (the status bar's own vocabulary).
+
+**§2's finding, because it is not what the report implied.** The dx/dy boxes did NOT
+have a second style — `NumericInput` passes `className` through and every caller
+already gave it `.cg-field`. They were on the one shared rule the whole time; what
+differed is that the rule painted a RAISED chip while an input should read as a WELL
+sunk into the panel, and at 74px beside a full-width input that reads as two kinds of
+control. Fixed by changing what the single rule paints, not by adding a variant.
+
+**§6's adversarial check, which changed the answer.** First pass used PLAY's own
+variant — `--r-onair`, one token, no drift — and measured it side by side with a row
+genuinely on air: both `rgb(44,255,122)`, i.e. the SACRED AIR GREEN on a control in a
+panel that also shows an on-air state dot. Reported it; the owner's `--r-verb-play` is
+a different green and resolves the risk rather than accepting it. `--r-onair` stays
+PLAY's alone. The `--r-verb-*` "hover only" rule now carries one narrow, written
+carve-out.
+
+**§8's second round was a real bug, not a preference.** The first pass keyed the
+health LED on "not stale and not OSC-deaf" — a different question — so a server
+reporting `disconnected` kept a GREEN dot beside a red OFFLINE (owner's screenshot).
+The LED is now DERIVED from the resolved label, so the two halves of a pill cannot
+disagree by construction. Same defect fixed on the backup, which had been permanently
+muted. Four tests, asserting on the dot, because the text was right the whole time.
+
+**Two bugs found and fixed that were not in any task.** (1) `Reload` on an attached
+file called `applyFieldValue` — a READ verb performing a WRITE that reached air,
+bypassing the one gate the offline surface is built around, including its reachability
+check. It stages now. (2) Promoting the drag handle to a real button gave it a name, a
+focus ring and a keyboard path but not a 24px hit target; the E2E floor assertion
+caught it.
+
+#### Still owed
+
+- **§3 — `ROTATOR — ITEM 3` is NOT done, and it needs a decision rather than code.**
+  The string comes from `sequenceItemNamespace(seq.name, index)` in
+  `@cg/shared-schema`, where `seq.name` is the SEQUENCE element's authored name. D-083
+  already replaced `ROTATOR[2]` with this form for exactly the reason §3 restates, so
+  the remaining complaint is that a sequence named `ROTATOR` is itself technical.
+  **What §3 asks for — the COMPOSITION's authored name — is available** (`child.name`,
+  the referenced composition) but is a `@cg/shared-schema` change that also moves the
+  Designer form and the GDD, and two items referencing the SAME composition would then
+  carry identical headings, which is the collision D-083's index exists to prevent.
+  The honest shape is probably `<composition name> — item N`. **Not started; it is a
+  schema change, not a restyle.** The CSS `text-transform: uppercase` on the group
+  heading also makes an authored `Rotator` read as a constant — worth removing whoever
+  takes this.
+- **§7's split row** — the chip, the heights and the two-line gap are done to the
+  owner's reference; the `Split on delimiter` row's own alignment was not separately
+  revisited.
+- **A NEW BUG REPORTED AND NOT YET INVESTIGATED:** removing backup B leaves primary A
+  stuck in `connecting`. Bridge/connections behaviour, not styling — it needs its own
+  task.
+- **The b5 carry-over still stands:** during the loading window a bound row's VERBS
+  render as an empty row's, because everything but the state cell derives from
+  `item === null`. Gating them on `binding.kind === 'awaiting'` is a gating change.
+
 ### ✅ `dev-loading-row` — every row read EMPTY on startup and reconnect
 
 **The task's premise was directionally right and located one level too low.** It named
