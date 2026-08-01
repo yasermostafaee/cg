@@ -66,19 +66,19 @@
      type), and NO RED, ever — see `theme.ts` for both reasons. The chrome ACCENT is not
      a token at all: the splash wears APASAI's exact brand blue as a splash-local
      constant, and the app's own `--r-accent` sky is unchanged by that. */
-  --r-splash-bg: #090b0f;
-  --r-splash-line: #2a3441;
+  --r-splash-bg: #1a212d;
+  --r-splash-line: #3d4959;
   --r-splash-ink: #e8edf4;
   --r-splash-ink-dim: #5a6675;
-  --r-splash-ink-faint: #3f4a58;
+  --r-splash-ink-faint: #55637a;
   --r-splash-readout: #8b97a6;
-  --r-splash-rail: #1c232e;
-  --r-splash-scene-bar: #28323e;
+  --r-splash-rail: #2c3644;
+  --r-splash-scene-bar: #3a4557;
   --r-splash-company-ink: #c9d3df;
   --r-splash-logo-bars: #eef3f9;
   --r-splash-logo-swoosh: #5c6a7c;
   --r-splash-glow: rgba(0, 174, 239, 0.5);
-  --r-splash-vignette: rgba(0, 0, 0, 0.55);
+  --r-splash-vignette: rgba(0, 0, 0, 0.22);
 
   --r-space-1: 4px;
   --r-space-2: 8px;

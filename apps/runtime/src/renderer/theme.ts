@@ -233,11 +233,17 @@ export const cssVars = {
    * be checked AGAINST. A literal with no token behind it is a colour nobody can find
    * when the palette moves.
    *
-   * WHY THEIR OWN FAMILY rather than reuse of `--r-surface-*`: the splash is a deeper,
-   * near-black console than the app chrome (`--r-surface-sunken` is #0F172A, visibly
-   * blue beside it) and its inks are tuned for large tracked-out type on that black,
-   * not for panel text. Tying them to the chrome tokens would mean a chrome tweak
-   * silently repainting the product's first frame.
+   * WHY THEIR OWN FAMILY rather than reuse of `--r-surface-*`: the splash ground is a
+   * PANEL LIFTED ABOVE the console — lighter than `--r-surface-sunken` (#0F172A) rather
+   * than the near-black it started as — so the dismissal reads as a curtain rising off
+   * the app instead of one dark screen becoming another. Its inks are tuned for large
+   * tracked-out type on that ground, not for panel text. Tying them to the chrome tokens
+   * would mean a chrome tweak silently repainting the product's first frame.
+   *
+   * THE WHOLE FAMILY MOVES TOGETHER OR NOT AT ALL. Lifting the ground alone would have
+   * sunk the lines and the rail track into it — `#1C232E` is within two points of the
+   * ground, so the progress rail would simply have had no visible track. Every value
+   * below the inks was lifted with it, in one step, for that reason.
    *
    * NO RED IN THIS FAMILY, EVER. Red is the sacred air-state colour and decorative red
    * is forbidden across this UI (see the header) — a boot screen is the LAST place it
@@ -252,15 +258,17 @@ export const cssVars = {
    * deliberately UNCHANGED by that decision. `--r-splash-glow` is the one exception and
    * only because it must be an `rgba()` a `box-shadow` can take.
    */
-  '--r-splash-bg': '#090B0F',
-  '--r-splash-line': '#2A3441',
+  '--r-splash-bg': '#1A212D',
+  /** Strong border — the corner brackets, the rule, the scene's row and monitor strokes. */
+  '--r-splash-line': '#3D4959',
   '--r-splash-ink': '#E8EDF4',
   '--r-splash-ink-dim': '#5A6675',
-  '--r-splash-ink-faint': '#3F4A58',
+  '--r-splash-ink-faint': '#55637A',
   '--r-splash-readout': '#8B97A6',
-  '--r-splash-rail': '#1C232E',
+  /** Subtle border — the rail's TRACK, the scene's wires and the monitor's safe ticks. */
+  '--r-splash-rail': '#2C3644',
   /** The dim filler bars inside the playout scene's stack rows. */
-  '--r-splash-scene-bar': '#28323E',
+  '--r-splash-scene-bar': '#3A4557',
   /** The APASAI wordmark beside the mark — brighter than a tagline, dimmer than `ink`. */
   '--r-splash-company-ink': '#C9D3DF',
   /**
@@ -272,7 +280,11 @@ export const cssVars = {
   '--r-splash-logo-swoosh': '#5C6A7C',
   /** The rail's halo — the brand blue at half alpha, in the form `box-shadow` takes. */
   '--r-splash-glow': 'rgba(0, 174, 239, 0.5)',
-  '--r-splash-vignette': 'rgba(0, 0, 0, 0.55)',
+  /**
+   * Softer than it was, and for the same reason the ground was lifted: a heavy vignette on
+   * a lighter panel darkens the corners until the thing stops reading as ONE rectangle.
+   */
+  '--r-splash-vignette': 'rgba(0, 0, 0, 0.22)',
   // Spacing (4px base)
   '--r-space-1': '4px',
   '--r-space-2': '8px',

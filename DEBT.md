@@ -1906,6 +1906,16 @@ consistency, not for a theme. Only the bars and the swoosh are relit for the dar
 8. **The brand blue, violet and amber are `--cg-*` constants on `.cg-splash`, not tokens** —
    parsed back out of the document by the palette test, so "declared once, in the open" is
    enforced rather than merely agreed.
+9. **🗣 The surface lift inverted the splash family's stated rationale, so I rewrote it.**
+   The owner's mid-run delta raises the ground to `#1A212D`. `theme.ts` documented the family
+   as "a deeper, near-black console than the app chrome (`--r-surface-sunken` is #0F172A)" —
+   the new ground is LIGHTER than that, so the comment had become false. It now says what is
+   true: a panel lifted ABOVE the console, so the dismissal reads as a curtain rising rather
+   than one dark screen becoming another. Six values moved together (ground, both border
+   weights, the scene bars, the foot ink, the vignette) because lifting the ground alone
+   would have sunk the rail's track into it — `#1C232E` was within two points of `#1A212D`.
+   All six were already `--r-splash-*` tokens, so this was a repoint in `theme.ts` +
+   `controls.css` + the inline mirrors, with no new token and no hand-picked literal.
 
 ### The one tension worth the owner's eye
 
