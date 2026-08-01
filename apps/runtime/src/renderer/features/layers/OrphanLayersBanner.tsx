@@ -141,7 +141,6 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
                         body: 'This removes whatever is on that layer from air.',
                         confirmLabel: 'Clear layer',
                         tone: 'clear',
-                        variant: 'caution',
                       });
                       if (!ok) return;
                       runCommand(

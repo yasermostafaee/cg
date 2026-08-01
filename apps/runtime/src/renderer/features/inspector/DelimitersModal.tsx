@@ -3,7 +3,7 @@ import { Settings2, Trash2 } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { Modal } from '../../ui/Modal.js';
+import { Modal, ModalAction } from '../../ui/Modal.js';
 import {
   addDelimiter,
   delimitersVersion,
@@ -67,12 +67,23 @@ export function DelimitersModal({ onClose }: { onClose: () => void }): JSX.Eleme
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" onClick={() => void resetDelimiters().then(setError)}>
+          {/*
+            §2 — `destructive`, because it is: it discards every delimiter the
+            operator added. It was a `ghost`, which is the treatment that reads as
+            static text rather than a control — the wrong signal for the one button
+            here that throws work away.
+          */}
+          <ModalAction
+            actionRole="destructive"
+            onClick={() => void resetDelimiters().then(setError)}
+          >
             Reset to defaults
-          </Button>
-          <Button variant="secondary" onClick={onClose}>
+          </ModalAction>
+          {/* The action this dialog exists to end on, in the same corner as every
+              other dialog's primary. */}
+          <ModalAction actionRole="primary" onClick={onClose}>
             Done
-          </Button>
+          </ModalAction>
         </>
       }
     >

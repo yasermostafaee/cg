@@ -153,7 +153,6 @@ export function PlayoutPanel({ layers }: Props): JSX.Element {
         `This is NOT our layer — it belongs to the playout system. Its graphic leaves air ` +
         `immediately, with no outro. Only the playout side can put it back.`,
       confirmLabel: `Clear layer ${String(layer.layer)}`,
-      variant: 'caution-strong',
     });
     if (!ok) return { accepted: false, cancelled: true };
     return clearOne(layer);
@@ -171,7 +170,6 @@ export function PlayoutPanel({ layers }: Props): JSX.Element {
         `Occupants that are not html templates, and any layer whose occupancy cannot be ` +
         `verified, are NOT included and stay untouched.`,
       confirmLabel: `Clear ${String(clearable.length)} layer${clearable.length === 1 ? '' : 's'}`,
-      variant: 'caution-strong',
     });
     if (!ok) return { accepted: false, cancelled: true };
     // N calls to the SAME single-layer channel (the UN-gated `clearOne` — this

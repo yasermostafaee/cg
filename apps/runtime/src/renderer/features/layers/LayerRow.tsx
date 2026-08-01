@@ -398,7 +398,6 @@ export function LayerRow({
                 body: `Layer ${layerName} is cleared immediately — the graphic leaves air with no outro. The template stays on the row and can be played again.`,
                 confirmLabel: 'Clear layer',
                 tone: 'clear',
-                variant: 'caution-strong',
               }
             : {
                 title: `Clear layer ${layerName}?`,
@@ -409,7 +408,6 @@ export function LayerRow({
                   `on it — it does not need to know in order to clear it.`,
                 confirmLabel: 'Clear layer',
                 tone: 'clear',
-                variant: 'caution-strong',
               },
         ),
       );
@@ -445,7 +443,6 @@ export function LayerRow({
               `The item leaves the row and layer ${layerName} is cleared. Loading again means pressing LOAD and choosing a template, or importing a new .vcg.`,
           confirmLabel: onAirNow ? 'Remove and clear (ON AIR)' : 'Remove',
           tone: 'remove',
-          variant: 'danger',
         }),
       );
     }

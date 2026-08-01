@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
-import { Modal } from '../../ui/Modal.js';
+import { Modal, ModalAction } from '../../ui/Modal.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { templateDisplayName } from '../library/templateName.js';
@@ -141,20 +141,30 @@ export function useTemplatePicker(): {
         footer={
           <>
             {/*
+              CANCEL FIRST IN DOM ORDER, like every other dialog. The row is
+              right-aligned, so first-in-DOM is LEFTMOST and the primary action
+              lands in the same corner it does everywhere else.
+
+              It was last, and it was a `ghost` — no fill, no border, muted text,
+              which reads as a line of static text rather than a control. `cancel`
+              resolves to `neutral`: neutral must not mean invisible.
+            */}
+            <ModalAction actionRole="cancel" onClick={() => settle(null)}>
+              Cancel
+            </ModalAction>
+            {/*
               §6 — IMPORT LIVES IN HERE, and it is not a convenience.
 
               `LOAD` opens this dialog, so if importing were not offered inside it
               the operator on a fresh install would meet an empty list telling him
-              to import a `.vcg` with no way to do so. It is the first control in
-              the footer for the same reason: on a station with nothing loaded yet
-              it is the only one that can do anything.
+              to import a `.vcg` with no way to do so. On a station with nothing
+              loaded yet it is the only control that can do anything, which is
+              exactly what makes it this dialog's PRIMARY — it now carries that
+              weight through its role rather than through being placed first.
             */}
-            <Button variant="secondary" onClick={() => settle('import')}>
+            <ModalAction actionRole="primary" onClick={() => settle('import')}>
               Import a .vcg…
-            </Button>
-            <Button variant="ghost" onClick={() => settle(null)}>
-              Cancel
-            </Button>
+            </ModalAction>
           </>
         }
       >

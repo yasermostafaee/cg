@@ -292,7 +292,6 @@ export function LayersPanel({
       body,
       confirmLabel: 'Clear all',
       tone: 'clear',
-      variant: 'caution-strong',
     });
     if (!ok) return;
     try {
@@ -318,7 +317,6 @@ export function LayersPanel({
       body: `All ${String(onAirCount)} on-air item(s) run their own outro and come off air gracefully. They stay loaded and can be taken again.`,
       confirmLabel: 'Stop all',
       tone: 'stop',
-      variant: 'caution',
     });
     if (!ok) return;
     try {

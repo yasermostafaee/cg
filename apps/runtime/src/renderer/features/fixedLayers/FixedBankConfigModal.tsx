@@ -8,7 +8,7 @@ import {
 } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
-import { Modal } from '../../ui/Modal.js';
+import { Modal, ModalAction } from '../../ui/Modal.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { fixedLayersReasonMessage } from '../../ui/fixedLayersReasonMessage.js';
 import { reportCommandError } from '../status/commandFeedback.js';
@@ -171,9 +171,9 @@ function NoBankModal({ onClose }: { onClose: () => void }): JSX.Element {
       title="Candidate layers — not configured"
       onClose={onClose}
       footer={
-        <Button variant="primary" onClick={onClose}>
+        <ModalAction actionRole="primary" onClick={onClose}>
           Close
-        </Button>
+        </ModalAction>
       }
     >
       <div style={styles.needsConfig}>
@@ -335,7 +335,6 @@ function BankEditor({
             `CLEARS layer ${String(slot.layer)} — anything live there leaves the output ` +
             `immediately, with no outro.`,
       confirmLabel: onAir ? 'Remove and clear (ON AIR)' : 'Remove template',
-      variant: 'danger',
     });
     if (!confirmed) return;
     try {
@@ -355,17 +354,45 @@ function BankEditor({
       // template, Remove), and at prose width every row wrapped into a stack.
       size="wide"
       onClose={onClose}
+      /*
+        §3 — THE REFUSAL GOES TO THE PRIMITIVE'S MESSAGE REGION, NOT INTO THE BODY.
+
+        This is the defect, and it was not styling. The refusal — "That row is
+        occupied — remove its template first…" — was appended to the BOTTOM of the
+        scrolling candidate-layer list. With the list scrolled to the top and the
+        offending row far down, the operator pressed Apply, nothing happened, and the
+        explanation was below the fold. A refusal reported where the operator is not
+        looking is a SILENT refusal, and this one guards an occupied layer.
+
+        The message region is pinned beside the action row — the operator's eye is
+        already there, because that is where he just clicked. Nothing about the
+        message is shortened: it names the cause AND the remedy, which is what makes
+        it worth showing at all.
+      */
+      {...(refusal !== null
+        ? {
+            message: (
+              <div style={styles.refusal}>
+                <span>{refusal.rule ?? 'Not accepted.'}</span>
+                {refusal.detail !== undefined && (
+                  <span style={styles.refusalDetail}>{refusal.detail}</span>
+                )}
+              </div>
+            ),
+          }
+        : {})}
       footer={
         <>
-          {/* `neutral`, not `ghost` — Cancel and Apply are peers, so they must read as
-              the same KIND of control. The footer rule in `controls.css` holds both to
-              one size whatever variant a caller passes. */}
-          <Button variant="neutral" onClick={onClose}>
+          {/* CANCEL FIRST — leftmost in a right-aligned row, so Apply sits in the
+              same corner as every other dialog's primary action. The `cancel` role
+              resolves to `neutral` and never `ghost`: Cancel and Apply are peers and
+              must read as the same KIND of control. */}
+          <ModalAction actionRole="cancel" onClick={onClose}>
             Cancel
-          </Button>
-          <Button variant="primary" disabled={busy} onClick={apply}>
+          </ModalAction>
+          <ModalAction actionRole="primary" disabled={busy} onClick={apply}>
             Apply
-          </Button>
+          </ModalAction>
         </>
       }
     >
@@ -472,14 +499,9 @@ function BankEditor({
           })}
         </div>
       </div>
-      {refusal !== null && (
-        <div style={styles.refusal} role="alert">
-          <span>{refusal.rule ?? 'Not accepted.'}</span>
-          {refusal.detail !== undefined && (
-            <span style={styles.refusalDetail}>{refusal.detail}</span>
-          )}
-        </div>
-      )}
+      {/* The refusal is NOT rendered here any more — see the `message` prop above.
+          Anything appended at this point is inside the scrolling body, which is
+          exactly where the operator could not find it. */}
       {confirmDialog}
     </Modal>
   );
