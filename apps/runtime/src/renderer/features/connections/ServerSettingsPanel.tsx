@@ -188,9 +188,24 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
     prefix: string,
   ): JSX.Element => (
     <>
+      {/*
+        EVERY FIELD HERE CARRIES `cg-field`, and all four were missing it.
+
+        Owner's report: "the bg of inputs in the servers modal are different than
+        the others on the App". They were — `.cg-field` is what paints an input as a
+        WELL sunk into the panel (`--r-field-bg`), and a bare `<input>` falls back to
+        the browser's own white box. `NumericInput` passes `className` STRAIGHT
+        THROUGH and deliberately adds nothing (see its note), so a caller that omits
+        it gets an unstyled control — which is what these were, ports included.
+
+        `style` still carries only the WIDTH. The look belongs to the one shared
+        rule; a local background here would be the second surface that drifts at the
+        next change.
+      */}
       <div style={styles.row}>
         <span style={styles.label}>Host</span>
         <input
+          className="cg-field"
           style={styles.host}
           aria-label={`${prefix} host`}
           value={draft.host}
@@ -202,6 +217,7 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
         {/* R-020 — ports are integer-only NumericInputs: Persian/Arabic-Indic
             digits normalize to Latin BEFORE parsePort's /^\d+$/ sees them. */}
         <NumericInput
+          className="cg-field"
           style={styles.port}
           aria-label={`${prefix} AMCP port`}
           value={draft.amcpPort}
@@ -209,6 +225,7 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
         />
         <span style={styles.label}>OSC port</span>
         <NumericInput
+          className="cg-field"
           style={styles.port}
           aria-label={`${prefix} OSC port`}
           value={draft.oscPort}
@@ -323,7 +340,11 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
       <section style={styles.section} aria-label="Redundancy options">
         <div style={styles.row}>
           <span style={styles.label}>Strategy</span>
+          {/* Same omission as the inputs above — the audit log's filter select
+              already carries `cg-field`, and this one is the odd one out. */}
           <select
+            className="cg-field"
+            style={{ width: 'auto' }}
             aria-label="Redundancy strategy"
             value={strategy}
             onChange={(e) => setStrategy(e.target.value as ConnectionConfig['strategy'])}
