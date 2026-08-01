@@ -1946,9 +1946,9 @@ existed rather than after.
 - **No OpenSpec change dir and no `openspec validate`.** The whole feature — the timing
   contract, the boot gate, the bypass, the reduced-motion composition — is spec-worthy and is
   written down nowhere but the code and this file.
-- **No full E2E run.** `apps/designer/tests/e2e/splash.spec.ts` was WRITTEN (six specs: the
-  cold/warm holds, the label leaving, the build stamp, the harness bypass, and the two
-  reduced-motion cases) and **not executed** — fast mode runs no Playwright. Owed.
+- **The E2E DID run** — the turn-end gate hook ran `pnpm gate:e2e` regardless of fast mode.
+  All six Designer splash specs passed. Two RUNTIME splash specs failed and were fixed; both
+  are recorded under "What the gate caught" below. A Linux run is still owed.
 - **🔴 A Linux `gate:e2e` is owed.** This is entirely UI and rendering. Nothing about it was
   verified on Linux, and Windows is non-authoritative for pixel and geometry.
 - **No `pnpm gate` and no suite-timing measurement.** Only the designer's own `test`,
@@ -1987,16 +1987,58 @@ existed rather than after.
    does not apply here; `--cg-coral` is declared exactly once and the CSS says so, which is
    what makes removing it a one-line swap if the owner ever extends that rule.
 
+### What the gate caught, and what I changed
+
+Two Runtime splash E2E specs failed. Neither was a product bug; both were faults in the specs
+themselves, and I state the changes explicitly because the repair rules require it.
+
+1. **`getByRole('region', { name: 'Stack' })` no longer exists on `dev`.** The splash spec
+   came from `main` (PR #431), where the Runtime still had a `Stack` region. On this branch
+   the operator-surface work replaced it with **`Layers`** — which is precisely why the merge
+   in Step 0a carried TWO `R-031` items, one of them being "one Layers section, no Library".
+   So this is a test updated because the branch's behaviour deliberately changed, not an
+   assertion loosened to go green: `fixtures/runtime.ts` already uses `Layers` as its own
+   post-boot barrier, and the spec now uses the same one. The claim is unchanged — the splash
+   removes itself and the operator surface is reachable.
+2. **`toHaveText('100%')` was a race I wrote.** The splash shows 100 % only for the ~450 ms
+   fade before it deletes itself, so the assertion depended on Playwright's polling cadence
+   landing inside that window. Under a fully loaded parallel gate it polled 40 %, 42 %, 44 %
+   and then found nothing. Replaced with an in-page 40 ms sampler installed before navigation
+   that records every distinct value, so the spec now asserts something STRONGER than before:
+   the readout climbed, never went backwards, and ended at exactly 100. The same latent race
+   existed in the Designer's twin (it passed by luck this run) and was fixed identically.
+
+Neither fix touched product code. The Runtime's `index.html`, its inline clock and its boot
+gate are unchanged by this repair.
+
 ### Not done, and deliberately
 
 - **No in-app about/version surface** in either product, though `__CG_BUILD__` is defined in
   both and carries `{ version, sha, builtAt }` ready for one.
-- **The Runtime's cold floor was NOT changed to 8000 ms.** The delta that raised it arrived
-  with the Designer's warm floor in the same formula (`coldStart ? 8000 : 3000`), and the
-  Runtime's warm floor is 600 ms — so the instruction reads as the Designer's contract. The
-  Runtime is also the on-air tool, where lengthening the hold before an operator can reach the
-  console is a real product decision rather than a cosmetic one. **Left at 5000 ms; say the
-  word and it is one constant.**
+
+### 🗣 THE FLOORS: both products hold 8000 ms cold / 3000 ms warm
+
+`floor(coldStart) = coldStart ? 8000 : 3000`, in the Runtime as well as the Designer. I first
+applied it only to the Designer and flagged the Runtime as a separate decision; the owner
+confirmed he was looking at the RUNTIME splash when he set it and has taken the decision
+knowingly. It is applied to both, and the Runtime's warm floor moved 600 → 3000 with it.
+
+**The reservation, kept on the record because it is a real property of the product and not an
+objection to the decision:** on the Runtime a cold start is also a **recovery path** — a
+crashed tab, a reopened browser, a machine restarted mid-shift — so the eight seconds are
+sometimes paid at the least calm moment there is. The owner has weighed that.
+
+**The agreed answer if the wait proves costly in practice is an `Esc`-to-skip door**, and the
+shape of it matters: it skips only the REMAINING HOLD, never the load. `dismiss()` already
+does exactly that (it fires whenever the hold elapses, and boot-done is tracked separately),
+so the change is a keydown listener in the inline script plus a hint on the splash — not a
+shortened floor and not a bypassed boot. **Not built. Do not quietly shorten the floor
+instead.**
+
+Consequences already handled: the Runtime's comments explaining why its floors DIFFERED from
+the Designer's were false the moment this landed and have been rewritten; the scene's beat map
+notes that it must still fit the SHORTEST floor the product ships, not the current one, so the
+5 s case stays covered if the floor ever moves back.
 
 ## Skipped process
 

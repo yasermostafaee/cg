@@ -20,14 +20,21 @@ import {
 const T0 = 1_000_000;
 
 describe('splashFloorMs', () => {
-  it('a cold start holds for at least five seconds', () => {
+  it('a cold start holds for at least EIGHT seconds', () => {
+    // Owner decision, taken knowingly for both products. A cold start is also a recovery
+    // path on this one — a crashed tab, a reopened browser — so the concern was raised and
+    // answered rather than overlooked; see `splashTiming.ts` and the repo-root `DEBT.md`.
     expect(splashFloorMs(true)).toBe(SPLASH_COLD_FLOOR_MS);
-    expect(SPLASH_COLD_FLOOR_MS).toBe(5000);
+    expect(SPLASH_COLD_FLOOR_MS).toBe(8000);
+    expect(splashFloorMs(true)).toBeGreaterThanOrEqual(8000);
   });
 
-  it('a warm reload holds only long enough not to strobe', () => {
+  it('a warm reload holds three seconds — the brand moment is on every load', () => {
     expect(splashFloorMs(false)).toBe(SPLASH_WARM_FLOOR_MS);
-    expect(SPLASH_WARM_FLOOR_MS).toBe(600);
+    expect(SPLASH_WARM_FLOOR_MS).toBe(3000);
+    expect(splashFloorMs(false)).toBeGreaterThanOrEqual(3000);
+    // …and still shorter than a cold start, or the distinction would be decorative.
+    expect(splashFloorMs(false)).toBeLessThan(splashFloorMs(true));
   });
 });
 
@@ -37,13 +44,13 @@ describe('splashDismissAt', () => {
     // product's first frame, which is what the cold floor is for.
     const at = splashDismissAt({ firstPaintAt: T0, bootDoneAt: T0 + 200, coldStart: true });
     expect(at).toBe(T0 + SPLASH_COLD_FLOOR_MS);
-    expect(at - T0).toBeGreaterThanOrEqual(5000);
+    expect(at - T0).toBeGreaterThanOrEqual(8000);
   });
 
   it('a warm boot that finishes early holds only the warm floor', () => {
     const at = splashDismissAt({ firstPaintAt: T0, bootDoneAt: T0 + 120, coldStart: false });
     expect(at).toBe(T0 + SPLASH_WARM_FLOOR_MS);
-    expect(at - T0).toBeGreaterThanOrEqual(600);
+    expect(at - T0).toBeGreaterThanOrEqual(3000);
     expect(at - T0).toBeLessThan(SPLASH_COLD_FLOOR_MS);
   });
 

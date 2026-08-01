@@ -30,19 +30,26 @@ export {
  * same document.
  */
 
-/** Cold start — no session marker. Long enough to be the product's first frame. */
-export const SPLASH_COLD_FLOOR_MS = 5000;
+/**
+ * Cold start — no session marker. Long enough to be the product's first frame.
+ *
+ * OWNER DECISION, taken knowingly while looking at this splash: both products hold the same
+ * eight seconds. A concern was raised and answered rather than overlooked — this is the
+ * on-air tool, and a cold start is also a RECOVERY path (a crashed tab, a reopened browser),
+ * so the hold is paid at moments that are not always calm. The owner's call stands; if the
+ * wait proves costly in practice the agreed answer is an Esc-to-skip door that skips only
+ * the REMAINING HOLD and never the load, not a quietly shortened floor.
+ */
+export const SPLASH_COLD_FLOOR_MS = 8000;
 
 /**
- * Warm reload — the smallest hold that keeps a fast F5 from strobing.
+ * Warm reload — a reload in the same tab.
  *
- * DELIBERATELY SHORTER THAN THE DESIGNER'S 3000 ms, and that difference is a product
- * decision rather than drift: this is the ON-AIR tool. An operator reloading it is usually
- * reloading it in a hurry, and a brand moment charged against that is charged at the worst
- * possible moment. The Designer, which nobody reloads under that kind of pressure, holds
- * the longer one.
+ * Three seconds rather than the 600 ms this started at: the splash is a brand moment on
+ * EVERY load, not only the first, and 600 ms cut the entrance off mid-flight (it settles at
+ * ~1.6 s). Identical to the Designer's, deliberately — one contract, both products.
  */
-export const SPLASH_WARM_FLOOR_MS = 600;
+export const SPLASH_WARM_FLOOR_MS = 3000;
 
 /** This app's floors, in the shape the shared arithmetic takes. */
 const FLOORS: SplashFloors = { cold: SPLASH_COLD_FLOOR_MS, warm: SPLASH_WARM_FLOOR_MS };

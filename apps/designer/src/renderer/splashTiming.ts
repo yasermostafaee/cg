@@ -28,16 +28,16 @@ export {
 export const SPLASH_COLD_FLOOR_MS = 8000;
 
 /**
- * Warm reload — and DELIBERATELY LONGER THAN THE RUNTIME'S 600 ms, by owner decision.
+ * Warm reload — a reload in the same tab, by owner decision.
  *
- * The Runtime is the on-air tool: an operator reloading it is usually reloading it in a
- * hurry, so its warm floor is the smallest value that stops a flash and nothing more. Nobody
- * reloads the Designer under that kind of pressure, so here the splash is a brand moment on
- * EVERY load rather than only the first.
- *
- * It also removes a tension the Runtime still carries: the entrance settles at ~1.6 s, so a
- * shorter floor cuts the composition off mid-flight on a reload. At 3000 ms every load, warm
+ * The splash is a brand moment on EVERY load rather than only the first, and three seconds
+ * also removes a tension a shorter floor creates: the entrance settles at ~1.6 s, so a
+ * 600 ms floor cut the composition off mid-flight on a reload. At 3000 ms every load, warm
  * or cold, shows the entrance complete.
+ *
+ * Identical to the Runtime's. The two are kept as each app's OWN constants rather than
+ * folded into `@cg/splash-kit` because they are product decisions that currently agree, not
+ * a shared rule — the kit takes them as an argument so either can move without the other.
  */
 export const SPLASH_WARM_FLOOR_MS = 3000;
 

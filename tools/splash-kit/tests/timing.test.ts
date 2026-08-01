@@ -18,16 +18,19 @@ import {
 
 const T0 = 1_000_000;
 
-/** Two apps, two sets of floors, one set of rules — which is the point of this file. */
-const RUNTIME: SplashFloors = { cold: 5000, warm: 600 };
-const DESIGNER: SplashFloors = { cold: 5000, warm: 3000 };
+/** What both products currently ship. */
+const SHIPPED: SplashFloors = { cold: 8000, warm: 3000 };
+/** Deliberately DIFFERENT numbers, so these prove the function is parameterised at all.
+ *  Both products currently ship SHIPPED's values; if a test used only those, a hard-coded
+ *  floor would pass this file unnoticed. */
+const OTHER: SplashFloors = { cold: 4000, warm: 900 };
 
 describe('splashFloorMs', () => {
   it('picks the cold or the warm floor, per app', () => {
-    expect(splashFloorMs(true, RUNTIME)).toBe(5000);
-    expect(splashFloorMs(false, RUNTIME)).toBe(600);
-    expect(splashFloorMs(true, DESIGNER)).toBe(5000);
-    expect(splashFloorMs(false, DESIGNER)).toBe(3000);
+    expect(splashFloorMs(true, SHIPPED)).toBe(8000);
+    expect(splashFloorMs(false, SHIPPED)).toBe(3000);
+    expect(splashFloorMs(true, OTHER)).toBe(4000);
+    expect(splashFloorMs(false, OTHER)).toBe(900);
   });
 });
 
@@ -38,21 +41,21 @@ describe('splashDismissAt', () => {
       firstPaintAt: T0,
       bootDoneAt: T0 + 200,
       coldStart: true,
-      floors: DESIGNER,
+      floors: OTHER,
     });
-    expect(at).toBe(T0 + 5000);
+    expect(at).toBe(T0 + OTHER.cold);
   });
 
-  it('a warm boot that finishes early holds only that app`s warm floor', () => {
+  it('a warm boot that finishes early holds only THAT set of floors` warm value', () => {
     const warm = (floors: SplashFloors): number =>
       splashDismissAt({ firstPaintAt: T0, bootDoneAt: T0 + 120, coldStart: false, floors });
-    expect(warm(RUNTIME) - T0).toBe(600);
-    expect(warm(DESIGNER) - T0).toBe(3000);
+    expect(warm(SHIPPED) - T0).toBe(3000);
+    expect(warm(OTHER) - T0).toBe(900);
   });
 
   it('a boot SLOWER than the floor extends the hold — the floor is a minimum, not a schedule', () => {
     const slow = T0 + 9000;
-    for (const floors of [RUNTIME, DESIGNER]) {
+    for (const floors of [SHIPPED, OTHER]) {
       expect(splashDismissAt({ firstPaintAt: T0, bootDoneAt: slow, coldStart: true, floors })).toBe(
         slow,
       );
@@ -66,7 +69,7 @@ describe('splashDismissAt', () => {
       firstPaintAt: T0,
       bootDoneAt: undefined,
       coldStart: true,
-      floors: DESIGNER,
+      floors: OTHER,
     });
     expect(at).toBe(T0 + SPLASH_CEILING_MS);
     expect(SPLASH_CEILING_MS).toBe(20_000);
@@ -77,7 +80,7 @@ describe('splashDismissAt', () => {
       firstPaintAt: T0,
       bootDoneAt: T0 + 45_000,
       coldStart: true,
-      floors: DESIGNER,
+      floors: OTHER,
     });
     expect(at).toBe(T0 + SPLASH_CEILING_MS);
   });
@@ -87,7 +90,7 @@ describe('splashDismissAt', () => {
       firstPaintAt: T0,
       bootDoneAt: T0 + 3000,
       coldStart: true,
-      floors: RUNTIME,
+      floors: SHIPPED,
     } as const;
     expect(splashDismissAt(input)).toBe(splashDismissAt(input));
   });

@@ -299,9 +299,12 @@
 
       /* THE BEAT MAP, AND THE TIMING IS A HARD REQUIREMENT — NOT DECORATION.
          The loop starts at 0.85s and runs 6s. The previous shape (start 1.9s, 7.2s cycle)
-         put the bug and ticker at ~6.3s — more than a second AFTER the 5s cold start had
-         already closed — so nobody ever saw beat four. The scene was telling a story with
-         an audience for only its first sentence.
+         put the bug and ticker at ~6.3s — more than a second AFTER the then-5s cold start
+         had already closed — so nobody ever saw beat four. The scene was telling a story
+         with an audience for only its first sentence. (The cold floor has since moved to
+         8s, which makes the fit comfortable rather than tight; the requirement below is
+         unchanged, because the floor is the owner's to move and this scene must survive it
+         moving back.)
 
          What actually makes it fit is not just starting earlier: THE GRAPHICS STACK
          INSTEAD OF TAKING TURNS. Row 2 arms while the lower third is still on air, so a
@@ -314,7 +317,8 @@
                                                           clears; both rows release
 
          If a future edit pushes any beat past ~3s, the scene is back to telling a story
-         nobody watches. Check it against a 5s cold start before changing these numbers. */
+         nobody watches. Check it against the SHORTEST floor the product ships, not the
+         current one — 5s was that floor when this was written. */
       .cg-splash__scene .hl1,
       .cg-splash__scene .tri1 {
         animation: cg-take1 6s ease-in-out 0.85s infinite;
@@ -627,7 +631,7 @@
       }
       /* WHEN BOOT COMPLETES THE LABEL LEAVES — it does not settle on a word.
          A fast cold boot is done about a second in while the door stays shut until the
-         5s floor, so a terminal "READY" would be the thing on screen for MOST of the
+         floor, so a terminal "READY" would be the thing on screen for MOST of the
          splash at exactly the moment the operator still cannot use the app. The
          percentage carries the remaining hold on its own and the left side goes empty. */
       #cg-splash-phase {
@@ -963,8 +967,8 @@
         }
 
         // Mirrors of `splashTiming.ts` — see this block's header.
-        var COLD_FLOOR_MS = 5000;
-        var WARM_FLOOR_MS = 600;
+        var COLD_FLOOR_MS = 8000;
+        var WARM_FLOOR_MS = 3000;
         var CEILING_MS = 20000;
         var FADE_MS = 450;
         var TICK_MS = 100;

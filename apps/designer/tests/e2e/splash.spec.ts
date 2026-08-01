@@ -24,6 +24,45 @@ async function armTestStorage(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Record every distinct percentage the readout shows, IN THE PAGE, from first paint until
+ * the splash removes itself.
+ *
+ * Sampled here rather than asserted with `toHaveText('100%')`, and the difference matters:
+ * the splash shows 100 % only for the ~450 ms fade before it deletes itself, so an assertion
+ * that depends on Playwright's polling cadence landing inside that window passes on an idle
+ * machine and fails on a loaded one — which is exactly how the Runtime's twin of this spec
+ * failed under a full parallel gate. A 40 ms in-page sampler cannot miss it, and it gives
+ * the whole climb to assert over instead of one instant.
+ */
+async function recordPercentages(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const log: string[] = [];
+    (window as unknown as { __CG_PCT_LOG__: string[] }).__CG_PCT_LOG__ = log;
+    let seen = false;
+    const tick = setInterval(() => {
+      const el = document.getElementById('cg-splash-pct');
+      if (el === null) {
+        // Only STOP once the element has existed and then gone: this init script runs
+        // before the document is parsed, so a null on the first ticks is "not yet".
+        if (seen) clearInterval(tick);
+        return;
+      }
+      seen = true;
+      const text = el.textContent ?? '';
+      if (log[log.length - 1] !== text) log.push(text);
+    }, 40);
+  });
+}
+
+/** The recorded climb, as numbers. */
+async function recordedPercentages(page: Page): Promise<number[]> {
+  const log = await page.evaluate(
+    () => (window as unknown as { __CG_PCT_LOG__?: string[] }).__CG_PCT_LOG__ ?? [],
+  );
+  return log.map((value) => Number(value.replace('%', '')));
+}
+
 test('a cold start holds the splash for at least eight seconds; a reload in the same tab is shorter', async ({
   page,
 }) => {
@@ -55,11 +94,11 @@ test('the phase label LEAVES on boot-done — the percentage carries the rest of
   page,
 }) => {
   await armTestStorage(page);
+  await recordPercentages(page);
   await page.goto('/');
 
   const readout = splash(page).locator('#cg-splash-readout');
   const label = readout.locator('#cg-splash-phase');
-  const pct = readout.locator('#cg-splash-pct');
 
   // The boot steps are real and fast against in-memory storage, so by the time this runs the
   // app has committed and `done()` has fired — the label is on its way out. No terminal word
@@ -68,17 +107,15 @@ test('the phase label LEAVES on boot-done — the percentage carries the rest of
   await expect(label).toHaveCSS('opacity', '0');
   await expect(splash(page)).not.toContainText(/\bready\b/i);
 
-  // The percentage climbs the hold on its own: two reads a second apart on an 8 s floor
-  // cannot be equal unless the readout has stopped moving.
-  const first = Number((await pct.textContent())?.replace('%', ''));
-  expect(first).toBeLessThan(100);
-  await page.waitForTimeout(1000);
-  const second = Number((await pct.textContent())?.replace('%', ''));
-  expect(second).toBeGreaterThan(first);
-
-  // …and it arrives at 100 exactly as the door opens, never before.
-  await expect(pct).toHaveText('100%', { timeout: 25_000 });
   await expect(splash(page)).toHaveCount(0, { timeout: 25_000 });
+
+  // The percentage carried the hold on its own: it CLIMBED, it never went backwards, and it
+  // arrived at exactly 100 — which is the moment the door opens and not a moment earlier.
+  const climb = await recordedPercentages(page);
+  expect(climb.length, 'the readout never moved').toBeGreaterThan(3);
+  expect(climb).toEqual([...climb].sort((a, b) => a - b));
+  expect(climb[0]).toBeLessThan(100);
+  expect(climb.at(-1)).toBe(100);
 });
 
 test('the foot carries a build stamp that identifies the running build', async ({ page }) => {
