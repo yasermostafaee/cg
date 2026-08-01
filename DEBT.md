@@ -1,5 +1,63 @@
 # DEBT.md — what fast mode on `dev` deferred
 
+---
+
+## AWAITING OWNER — 2026-08-01 (overnight run)
+
+Four things were left undecided rather than guessed. Nothing here blocks what landed; each
+is one line to change if you want it the other way.
+
+### 1. 🔴 `PRIMARY A` stuck in `connecting` — diagnosed, NOT fixed
+
+Full write-up under _Findings to file_. The short version: it is almost certainly a
+**publish** bug, not a stuck state — `RedundancyAdapter.emitHealth()` collapses
+`disconnected | connecting | handshaking | resyncing` into one dedupe key, so only the
+first of the four is ever published and the pill freezes on whichever word came first.
+Secondary: `AmcpTransport.connect()` has no timeout.
+
+**It does not need a backup to happen** — any `setConfig` takes the same path, so it can
+occur on a single-server plant. Removing B may simply be when a pre-existing A problem
+stopped being masked by auto-failover.
+
+**One test tells the two apart, and it takes ten seconds:** with the pill stuck, **refresh
+the browser**. Word changes → publish bug. Word stays → A really is in `connecting`.
+
+**Recommendation:** fix the dedupe (publish the raw state through a coalescing window
+rather than a lossy key), and bound the connect. **I would not touch `effectiveState` for
+the failover decision** — that use of it is correct. Not started: both changes touch a live
+playout link.
+
+### 2. Modal `destructive` role → SOLID amber, so `Remove` confirms changed colour
+
+`destructive` maps to `caution-strong` (solid amber), not `danger` (red outline). Reasoning
+in full under `dev-modal-primitive`; the tie-breaker was that the solid treatment is louder
+at rest, so `Clear all` is unchanged and nothing gets a _weaker_ safety signal.
+
+**Visible consequence:** the `Remove …` / `Remove and clear (ON AIR)` confirm buttons were a
+transparent red outline and are now solid amber. **If you want red kept as a distinct,
+stronger signal for data-destroying acts (as against air-interrupting ones), that is a
+fourth role and it is one line** in `ROLE_VARIANT` (`ui/Modal.tsx`).
+
+### 3. `Reset to defaults` (Text file delimiters) is now `destructive`
+
+It was a borderless ghost. It discards every delimiter the operator added, which matches
+the owner's own definition of destructive — so it is solid amber now, beside a primary
+`Done`. **It is a config reset, not an on-air act**, so if that reads too loud for what it
+does, `cancel` is the other defensible role. One line in `DelimitersModal`.
+
+### 4. `CLEAR` is now held during the `awaiting` window
+
+`CLEAR` is deliberately never gated on a row's STATUS — refusing the escape hatch because
+the state model is confused is fail-stuck, not fail-safe. It IS now gated on `awaiting`,
+argued in full under `dev-awaiting-verbs`: with no itemId the button cannot tell
+`stack.out` from the bank-scoped `clearLayer`, and guessing wrong clears a layer out from
+under a live item. The window is one bridge round trip, it ends on the data, and `CLEAR
+ALL` in the panel header is NOT held by it.
+
+**Flagged because it narrows an on-air escape hatch.** The task's wording decides it ("the
+row offers nothing until it knows"), but it is the sort of narrowing that should not pass
+unnoticed.
+
 Written as work happens, never reconstructed afterwards. This file is the INPUT to
 going back to normal mode: full `pnpm gate`, `openspec validate --all --strict`, the
 numbered items filed in one sweep, and the owner's hand-merge of `dev` into `main`.
@@ -9,6 +67,113 @@ Do not start that reconciliation without the owner asking for it.
 ---
 
 ## Findings to file
+
+### 🔴 DIAGNOSIS ONLY — `PRIMARY A` sticks in `connecting` after backup B is removed
+
+**No code was changed for this.** Connection-lifecycle behaviour, first sighting, and the
+fix is a judgement call — recorded, not written.
+
+**I could not reproduce it.** What I did: read the whole path end to end —
+`ServerSettingsPanel` → `connections.setConfig` → `CasparRuntime.#applyConfig` →
+`ServerSession.loop()` → `RedundancyAdapter.emitHealth()` → `ConnectionHealth` →
+`StatusBar.sessionLabel`. What I did NOT do: run the bridge against a real CasparCG, or
+add a test. There is no second machine here and the owner's box is the only plant.
+
+#### What `connecting` actually is here
+
+It is the **bridge-side `ServerSession` FSM state**, published as
+`ConnectionHealth.primary.state` and rendered verbatim by `StatusBar.sessionLabel`. It is
+NOT the renderer's other `connecting` (the `useCasparReach` boot window, which means "the
+bridge has not answered yet" — that one renders as `UNKNOWN` on this pill). So the pill is
+reporting a real state the bridge really sent.
+
+#### Finding 1 — it is a state we fail to RE-REPORT, not one we fail to leave
+
+This is the load-bearing finding and it answers the question directly.
+
+`RedundancyAdapter.emitHealth()` (`packages/caspar-client/src/redundancy/redundancy-adapter.ts`)
+dedupes publishes on a key built from `effectiveState()`, and `effectiveState` collapses
+**four** FSM states into one value:
+
+```
+healthy → 'up'   degraded → 'degraded'   disconnected | connecting | handshaking | resyncing → 'down'
+```
+
+So among those four, only the FIRST is ever published. Every later transition inside the
+down-set produces an identical key and is dropped. The comment says exactly why it was
+built that way — "a down session's reconnect loop flaps connecting↔disconnected forever …
+published once, not ~2 per backoff cycle" (B-046 health churn) — and that reasoning is
+sound for CHURN and wrong for the LABEL: the pill then shows whichever down-word happened
+to be current at the last publish, forever.
+
+**Why the word that sticks is `connecting` specifically.** `#applyConfig` step 6 calls
+`#sessions.A.start()` and then `healthChanged.emit(this.health())`. `start()` returns
+immediately (`void this.loop()`), so that first publish catches A at its initial
+`disconnected`; the adapter's own first `state-change` publish is then the `→connecting`
+one, which sets the key to `A:down|none`. From that moment every `disconnected` →
+`connecting` → `disconnected` flap is deduped. **The session is almost certainly cycling
+normally; the console is frozen on one frame of it.**
+
+The honest label for a session in a reconnect loop is OFFLINE (retrying). Saying
+CONNECTING says "nearly there" about a server that is not coming.
+
+#### Finding 2 — `AmcpTransport.connect()` has no timeout
+
+`packages/caspar-client/src/amcp/transport.ts` — `net.createConnection({ host, port })`
+with no `timeout` option, resolving on `connect` and rejecting on a pre-connect `error`.
+The handshake below it IS bounded (`versionTimeoutMs`, `infoTimeoutMs`); the connect is
+not. Against an endpoint that blackholes SYNs rather than refusing them, one `connecting`
+legitimately lasts the OS connect timeout, which on Windows is tens of seconds and on a
+blackholed route can be much longer. Combined with Finding 1 that is indistinguishable
+from a permanent stick.
+
+#### Does it need a backup at all? — NO, and this is the part that matters
+
+The mechanism is **`setConfig` + A not reaching `healthy`**. Removing B is simply one way
+to trigger a `setConfig`; changing A's host, the strategy, or the auto-failover toggle all
+take the identical rebuild path. **So yes, it can happen with no backup ever declared**,
+which is the plant's normal configuration.
+
+**There is also a reason removing B is when it becomes VISIBLE.** With B declared, a
+failing A auto-fails-over (`wireSessionEvents` → `maybeFailover` on `disconnected` /
+`degraded`) and `currentPrimary` flips to B — and `emitHealth` publishes
+`{ label: this.primary, state: this.primarySession.state }`, i.e. the pill labelled
+PRIMARY now describes **B**. Remove B and that escape hatch is gone, so A's own failure
+surfaces for the first time. **The owner may be seeing a pre-existing A problem that the
+backup was masking, rather than damage done by the removal.** That distinction changes the
+fix, and it is why this needed a decision rather than a patch.
+
+#### Does it self-correct?
+
+- **On its own:** only when the session reaches `healthy` or `degraded` — those change the
+  key and publish. While A stays in the down-set, **never**, however long you wait.
+- **On a browser refresh:** yes, and this is the diagnostic to run. `useBridgeSnapshot`
+  re-pulls on link-up (B-080), so a refresh shows the true CURRENT state.
+- **On a bridge restart:** yes — everything is rebuilt.
+
+**→ The one test that separates the two findings, for the owner to run:** with the pill
+stuck on CONNECTING, **refresh the browser**. If the word changes (to OFFLINE, HEALTHY,
+DEGRADED), it is Finding 1 — a publish bug, and A is fine or failing normally. If it still
+says CONNECTING, A genuinely is sitting in `connecting` and Finding 2 / a real connect
+problem is in play.
+
+#### Recommended fix, in shape only
+
+1. **Stop the dedupe from lying.** Keep suppressing churn, stop collapsing distinct states:
+   publish on the RAW state through a small coalescing window (the runtime already does this
+   for stack publishes — `COALESCE_MS`) instead of discarding by a lossy key. A ~250 ms
+   coalesce gives the same "not ~2 per backoff cycle" guarantee without ever reporting a
+   state the session is not in. **`effectiveState` should stay exactly as it is for the
+   FAILOVER decision** — that is a different question and it is right.
+2. **Bound the AMCP connect** (`sock.setTimeout` or a raced timer), so a blackholed endpoint
+   reaches `disconnected` promptly and the backoff loop is honest about it.
+3. **Touch neither `isLiveState` nor the failover predicate.** B-100/B-101 are unaffected by
+   both changes, and CLAUDE.md golden rule 6 applies — there must go on being one canonical
+   reachability predicate.
+
+**Not started, and it should not be started without the owner:** (1) is a change to how
+often every client is told about connection health, on the path that feeds the on-air
+refusal wording; (2) changes reconnect timing on a live playout link.
 
 ### 🟡 `dev-b6-inspector-finish` — seven of nine, plus six owner calls made live
 
@@ -69,6 +234,68 @@ caught it.
   task.
 - ~~The b5 carry-over: during the loading window a bound row's VERBS render as an
   empty row's.~~ **CLOSED by `dev-awaiting-verbs` below.**
+
+### ✅ `dev-modal-primitive` — one chrome, three roles, and the refusal that was unseen
+
+Four commits: `2eebc4cd` (the primitive), `c63690b1` (the dialogs already on it, incl. the
+§3 fix), `841a0b0d` (`SERVER CONNECTION`), `3468dabb` (the audit log). Plus `afd2e491`, the
+owner's mid-run field-background report.
+
+**§1 — the survey the task asked for. EVERY dialog in the app, and what it was doing:**
+
+| dialog                                  | file                     | was                                       | now                           |
+| --------------------------------------- | ------------------------ | ----------------------------------------- | ----------------------------- |
+| Text file delimiters                    | `DelimitersModal`        | on `Modal`; ghost Reset + secondary Done  | roles                         |
+| Candidate layers — configuration        | `FixedBankConfigModal`   | on `Modal`; refusal in the SCROLL         | roles + §3                    |
+| Candidate layers — not configured       | `FixedBankConfigModal`   | on `Modal`                                | role                          |
+| confirm (Clear all, Remove…, Stop all…) | `useDialog`/`useConfirm` | on `Modal`; per-call `variant`            | roles                         |
+| prompt (lock PIN)                       | `useDialog`/`usePrompt`  | on `Modal`                                | roles                         |
+| template picker (`Load onto …`)         | `useTemplatePicker`      | on `Modal`; Cancel LAST and a ghost       | roles + order                 |
+| SERVER CONNECTION                       | `ServerSettingsPanel`    | **hand-rolled**, `Close` button, shouting | migrated                      |
+| Audit log                               | `AuditPanel`             | **hand-rolled**, `Close` button, shouting | migrated                      |
+| Lock screen                             | `LockOverlay`            | hand-rolled                               | **deliberately NOT migrated** |
+
+**No dialog hand-rolls its chrome any more, with one deliberate exception.**
+`LockOverlay` is a full-screen LOCK, not a dialog: the primitive gives every dialog a
+visible ✕, Escape and backdrop-click — three ways out — and **a lock screen with a way out
+is not a lock**. Migrating it would be a security regression dressed as consistency. Written
+into `Modal`'s own header note so the next reader does not "finish the job".
+
+**§3 was the real defect and it is fixed.** The refusal was the last child of `Modal`'s
+SCROLLING body, so with a long candidate-layer list at the top the operator pressed Apply,
+nothing happened, and the reason was below the fold. The message region is now part of the
+primitive, outside the scroll and immediately above the action row, so no dialog can put it
+somewhere unseen. Wording untouched.
+
+**Ran the §3 test against the unfixed placement and saw it red** — and isolated the
+PLACEMENT rather than the presence: the refusal was moved back into the body _keeping its
+test hook_, so the spec failed on `the refusal was appended to content the operator may
+have scrolled away from` rather than trivially on "not found". 2 of 9 red, the two that
+should be.
+
+**The §3 assertion is structural, and honestly so.** The task asks for "visible in the
+viewport without scrolling", which is a LAYOUT claim, and jsdom computes no layout — a
+`getBoundingClientRect` check there returns zeros and passes for the broken code too. The
+spec pins the MECHANISM instead (the message is not inside the scroll container; it is the
+element immediately before the action row). **A true in-viewport assertion needs Playwright
+and is owed** — see Skipped process.
+
+**§2's one genuinely open call, and why it went the way it did.** `destructive` maps to
+`caution-strong` (SOLID amber) and not `danger` (transparent red OUTLINE). Both existed;
+the tie-breaker is that the solid one is LOUDER at rest. Picking `danger` would have made
+`Clear all` quieter — turning a filled button into an outline — which is the "neutralising
+it in the name of consistency" the owner forbade in as many words. This way `Clear all` is
+byte-identical and the `Remove` confirms get louder. **No safety signal weakens in either
+direction**, which is the only defensible way to pick between two loud colours at 4 a.m.
+
+**Two things the owner will SEE change, listed so they are not a surprise** — both under
+`OVERNIGHT HANDOVER` as well.
+
+**A defect found in my own diff by review, not by tests.** `ModalAction`'s prop was
+originally named `role`, which is the ARIA attribute: the component spreads its remaining
+props onto a real `<button>`, so it was one refactor from emitting `role="cancel"` — an
+invalid, non-abstract ARIA role — and the a11y lint flagged all 12 call sites meanwhile. It
+is `actionRole` now. Caught by reading the lint delta rather than the test result.
 
 ### ✅ `dev-awaiting-verbs` — the verbs, and one panel-level notice
 
@@ -1438,6 +1665,25 @@ silent) nobody notices until someone asks why there is no sound.
 ## Skipped process
 
 Per the fast-mode contract, all of this was deliberately not done.
+
+**`dev-modal-primitive` (overnight run, 2026-08-01):**
+
+- **No OpenSpec change artifacts and no PRD item.** The `Modal` primitive gained a public
+  contract (the three roles, the message region) and five dialogs changed appearance — that
+  is spec-worthy and none of it is written down outside the code and this file.
+- **🔴 THE §3 E2E IS OWED, and it is the assertion the task actually asked for.** The DOM
+  spec pins the MECHANISM (the message is outside the scroll container, immediately above
+  the action row) because jsdom computes no layout. The task's own wording — "assert the
+  message is in the viewport without scrolling … assert visibility, not presence in the
+  DOM" — needs Playwright's `toBeInViewport()` against a scrolled `Candidate layers` list.
+  **Not written.** A Linux `gate:e2e` is owed regardless: five dialogs changed layout.
+- **No test asserts the migrated dialogs still OPEN from their real entry points.** The
+  specs drive `ServerSettingsPanel` and `AuditPanel` directly. Their launchers (the status
+  bar, the audit button) are unchanged and typecheck clean, but nothing pins it.
+- **`Cancel` leaving state byte-identical is asserted only for the config dialog** (the
+  refusal keeps the dialog open with all 30 rows intact). The task asked for it on "at
+  least the destructive ones"; the confirm dialogs' cancel path is unchanged code and was
+  not separately re-asserted.
 
 **`dev-awaiting-verbs` (overnight run, 2026-08-01):**
 

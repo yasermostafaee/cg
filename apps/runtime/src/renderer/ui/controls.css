@@ -706,7 +706,17 @@
  */
 .cg-modal-footer .cg-btn {
   min-height: 36px;
-  padding: 0.4rem 0.9rem;
+  /* A shared MIN-WIDTH as well as a shared height (owner's rule). Cancel and Apply
+     are peers, and two peers whose widths are set by their word lengths still read
+     as a big control beside a small one — `Done` next to `Reset to defaults` was the
+     clearest case. A floor makes the pair match without stretching the long one. */
+  min-width: 110px;
+  /* The explicit line-height and the asymmetric bottom padding are what optically
+     centre the label: the app's shaping-capable Persian-first font sits high in its
+     box, so an even `0.4rem` top/bottom left every dialog button's text riding
+     slightly low. Do not "tidy" this back to a symmetric shorthand. */
+  line-height: 22px;
+  padding: 0.5rem 0.9rem 0.2rem;
 }
 
 /* The close X: a square target, not a text button's rectangle. */
