@@ -177,6 +177,59 @@ Do not start that reconciliation without the owner asking for it.
 
 ## Findings to file
 
+### 💰 COSTED, NOT BUILT — a version/shape marker on the persisted configs
+
+**Asked for in `dev-bridge-bootstrap` §2 as "recommended, but report the cost before doing
+it", with an instruction to record rather than build it if it is more than small. It is more
+than small.** What landed instead is the cheap half: the CLI now prints the bank in force
+**and its source** at every boot, so "which bank am I on, and why" is answerable without
+opening a file. That reports; it does not detect.
+
+**What a real marker costs.** A `schemaVersion` on `FixedLayerBankSchema` is the easy 10%.
+The other 90%:
+
+1. **Deciding what "stale" MEANS.** The office file was not schema-invalid — it was a
+   perfectly valid `count: 4` bank written before a decision. No version number catches
+   that, because the shape never changed; only the intended VALUE did. A marker that
+   detects shape drift would have said nothing about the file that caused this. Catching
+   THIS needs a "written-at" stamp compared against a "decision-changed-at" constant the
+   codebase must now carry and maintain — a different and more invasive design.
+2. **A surface to report it on.** stderr is where it would land, and the owner does not
+   read stderr (that is why the boot line is a stopgap, not a fix). Reaching the operator
+   means a new publish channel (`fixedLayers.config-advisory` or similar), a renderer
+   surface for it, its DOM spec and its E2E — the LayersPanel's "no candidate layers"
+   notice is the nearest existing thing and it is a different message with different
+   semantics.
+3. **Three files, not one.** `bridge-connection.json`, `bridge-fixed-layers.json` and
+   `bridge-reserved-layers.json` all have the same exposure, and a marker on only the one
+   that bit us this week is the kind of partial rule that drifts.
+
+**Estimate: an OpenSpec change of its own** — schema + store + wire channel + renderer
+notice + specs. Not a fast-mode item.
+
+**What is cheap and would close most of the gap** (also not built, deliberately — it is
+new behaviour and the task did not ask for it): have the boot line say the bank differs
+from the built-in default, in words, when it does. No schema change, no new channel, one
+comparison in `describeFixedBank`. It still only reaches stderr.
+
+### 🐛 FOUND WHILE RUNNING IT — `delimiters.json` is stored inside the template dir and warns on every boot
+
+**Not fixed — out of this task's scope, and it is cosmetic.** `DelimiterStore` persists to
+`delimiters.json` **inside** `--templates-dir` (`~/.cg-runtime/bridge-templates/`), and
+`TemplateRegistry`'s loader reads every `*.json` in that directory as a template. So every
+single boot prints:
+
+```
+[caspar-bridge] ⚠ skipping unusable persisted template …\bridge-templates\delimiters.json:
+  [ … "path": ["info"], "message": "Required" … ] — re-import it to restore durability
+```
+
+Nothing is broken — the delimiters load fine from their own store — but the operator is
+told a template is corrupt and instructed to re-import it, on a machine where nothing is
+wrong. It is the loudest thing in the boot output and it is a lie. Fix is one line (skip
+the store's own filename, or move the delimiter file up to `~/.cg-runtime/`); the choice
+between those two is a small design call, and the second is a migration.
+
 ### 🔴 DIAGNOSIS ONLY — `PRIMARY A` sticks in `connecting` after backup B is removed
 
 **No code was changed for this.** Connection-lifecycle behaviour, first sighting, and the
