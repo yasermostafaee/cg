@@ -7,11 +7,460 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
     />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/vazirmatn@5/index.min.css" />
+    <!--
+      R-031 — LOADED NON-BLOCKING (`media="print"` until `onload`), and that is not a
+      micro-optimisation: a plain `<link rel="stylesheet">` to a CDN blocks the FIRST
+      PAINT until the CDN answers or the socket times out. The splash below exists to own
+      the first frame, and on a LAN-only broadcast machine — which is most of them —
+      jsdelivr never answers, so the render-blocking form would hand the operator a blank
+      screen for the whole TCP timeout. Nothing about WHICH faces load changes: the sheet
+      still applies the moment it arrives.
+
+      The face itself is a leftover: the Designer self-hosts its fonts and this app already
+      ships the same Vazirmatn faces in `src/renderer/fonts.css` — but that file is imported
+      only as `?inline` for template delivery, so the app UI still reads Persian off this
+      CDN. Moving it to the self-hosted faces is filed as item 4 in
+      `openspec/changes/runtime-splash-screen/DEBT.md`, not done here.
+    -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@fontsource/vazirmatn@5/index.min.css"
+      media="print"
+      onload="this.media = 'all'"
+    />
     <title>cg Runtime</title>
+
+    <!--
+      ══ R-031 · STARTUP SPLASH — CRITICAL CSS ═════════════════════════════════════
+
+      Inline, in `<head>`, because this must paint on the FIRST FRAME: no bundle, no
+      stylesheet request, no webfont. (A React splash cannot exist during the window it is
+      for — the bundle has to parse and `createRuntimeBridge()` has to resolve its probe
+      first, which is precisely the window being covered.)
+
+      COLOUR RULE — NO RED ANYWHERE ON THIS SCREEN. Red is the SACRED air-state colour in
+      this app and decorative red is forbidden across the UI (`src/renderer/theme.ts`); a
+      boot screen is the last place it may appear, because it would teach the operator's eye
+      "red" before they have seen a single real state. The accent is the existing sky.
+
+      Every colour literal below MIRRORS a `--r-*` token from `theme.ts` `cssVars`, named in
+      the comment beside it. It cannot READ the token: `controls.css` arrives with the
+      bundle, and the whole point is to paint before that. `tests/splashCss.test.ts` pins
+      the mirror — it asserts every colour literal in this document is the value of some
+      `--r-*` token, and that none of them is red.
+
+      FONTS — a system stack on purpose. The splash paints before any webfont can load, and
+      a font swap on the product's first frame is exactly the wrong first impression.
+    -->
+    <style>
+      .cg-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #090b0f; /* mirrors: --r-splash-bg */
+        color: #e8edf4; /* mirrors: --r-splash-ink */
+        font-family:
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      /* The fade is 450ms; an INVISIBLE full-screen overlay that still swallows clicks for
+         those 450ms is a worse bug than no fade at all. */
+      .cg-splash[data-dismissing='true'] {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .cg-splash::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        /* mirrors: --r-splash-vignette */
+        background: radial-gradient(120% 90% at 50% 45%, transparent 35%, rgba(0, 0, 0, 0.55) 100%);
+      }
+
+      /* Safe-area corner brackets — the frame a broadcast console draws around itself. */
+      .cg-splash__marks {
+        position: absolute;
+        inset: 40px;
+        pointer-events: none;
+      }
+      .cg-splash__marks i {
+        position: absolute;
+        width: 26px;
+        height: 26px;
+        border: 1px solid #2a3441; /* mirrors: --r-splash-line */
+      }
+      .cg-splash__marks i:nth-child(1) {
+        top: 0;
+        left: 0;
+        border-right: 0;
+        border-bottom: 0;
+      }
+      .cg-splash__marks i:nth-child(2) {
+        top: 0;
+        right: 0;
+        border-left: 0;
+        border-bottom: 0;
+      }
+      .cg-splash__marks i:nth-child(3) {
+        bottom: 0;
+        left: 0;
+        border-right: 0;
+        border-top: 0;
+      }
+      .cg-splash__marks i:nth-child(4) {
+        bottom: 0;
+        right: 0;
+        border-left: 0;
+        border-top: 0;
+      }
+
+      .cg-splash__stage {
+        position: relative;
+        z-index: 2;
+        width: min(560px, 78vw);
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .cg-splash__mark {
+        width: 56px;
+        height: 56px;
+        margin-bottom: 26px;
+        opacity: 0;
+        animation: cg-rise 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) 0.1s forwards;
+      }
+      .cg-splash__wordmark {
+        margin: 0;
+        line-height: 1;
+        color: #e8edf4; /* mirrors: --r-splash-ink */
+        font-weight: 250;
+        font-size: clamp(30px, 5.6vw, 46px);
+        letter-spacing: 0.3em;
+        text-indent: 0.3em;
+        opacity: 0;
+        animation: cg-rise 1s cubic-bezier(0.2, 0.7, 0.3, 1) 0.22s forwards;
+      }
+      .cg-splash__wordmark b {
+        font-weight: 600;
+      }
+      .cg-splash__rule {
+        height: 1px;
+        width: 0;
+        margin-top: 22px;
+        /* mirrors: --r-splash-line */
+        background: linear-gradient(to right, transparent, #2a3441 20%, #2a3441 80%, transparent);
+        animation: cg-widen 1.1s cubic-bezier(0.2, 0.7, 0.3, 1) 0.45s forwards;
+      }
+      .cg-splash__company {
+        margin: 18px 0 0;
+        font-size: 11px;
+        font-weight: 500;
+        color: #5a6675; /* mirrors: --r-splash-ink-dim */
+        letter-spacing: 0.42em;
+        text-indent: 0.42em;
+        opacity: 0;
+        animation: cg-rise 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) 0.6s forwards;
+      }
+      .cg-splash__tagline {
+        margin: 9px 0 0;
+        font-size: 11.5px;
+        letter-spacing: 0.05em;
+        color: #5a6675; /* mirrors: --r-splash-ink-dim */
+        opacity: 0;
+        animation: cg-rise 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) 0.72s forwards;
+      }
+
+      .cg-splash__progress {
+        width: 100%;
+        margin-top: 52px;
+        opacity: 0;
+        animation: cg-rise 0.9s ease 0.95s forwards;
+      }
+      .cg-splash__rail {
+        position: relative;
+        height: 2px;
+        border-radius: 2px;
+        background: #1c232e; /* mirrors: --r-splash-rail */
+        overflow: hidden;
+      }
+      /* The rail advances BY COMPLETED PHASE (3 phases → 33/67/100). The readout beside it
+         is a STEP COUNTER, never a percentage: a percentage claims measured progress and
+         nothing here measures anything — the bridge probe is a bounded wait, not a
+         quantity. */
+      .cg-splash__fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 0%;
+        /* mirrors: --r-accent-strong --r-accent */
+        background: linear-gradient(to right, #0ea5e9, #38bdf8);
+        box-shadow: 0 0 14px rgba(56, 189, 248, 0.5); /* mirrors: --r-splash-glow */
+        transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .cg-splash__readout {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 12px;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        color: #8b97a6; /* mirrors: --r-splash-readout */
+      }
+      /* WHEN BOOT COMPLETES THE LABEL LEAVES — it does not settle on a word.
+         A fast cold boot is done about a second in while the door stays shut until the
+         5s floor, so a terminal "READY" would be the thing on screen for MOST of the
+         splash at exactly the moment the operator still cannot use the app. The counter
+         carries the remaining hold on its own and the left side goes empty. */
+      #cg-splash-phase {
+        transition: opacity 0.35s ease;
+      }
+      .cg-splash__readout[data-done='true'] #cg-splash-phase {
+        opacity: 0;
+      }
+
+      .cg-splash__foot {
+        position: absolute;
+        z-index: 2;
+        left: 0;
+        right: 0;
+        bottom: 34px;
+        padding: 0 46px;
+        display: flex;
+        justify-content: space-between;
+        color: #3f4a58; /* mirrors: --r-splash-ink-faint */
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        opacity: 0;
+        animation: cg-rise 0.9s ease 1.15s forwards;
+      }
+
+      @keyframes cg-rise {
+        from {
+          opacity: 0;
+          transform: translateY(9px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes cg-widen {
+        from {
+          width: 0;
+        }
+        to {
+          width: min(360px, 60vw);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .cg-splash__mark,
+        .cg-splash__wordmark,
+        .cg-splash__company,
+        .cg-splash__tagline,
+        .cg-splash__progress,
+        .cg-splash__foot {
+          animation: none !important;
+          opacity: 1 !important;
+          transform: none !important;
+        }
+        .cg-splash__rule {
+          animation: none !important;
+          width: min(360px, 60vw);
+        }
+        .cg-splash__fill {
+          transition: none;
+        }
+        #cg-splash-phase {
+          transition: none;
+        }
+        .cg-splash {
+          transition: opacity 0.01s;
+        }
+      }
+    </style>
   </head>
   <body>
+    <!--
+      ══ R-031 · STARTUP SPLASH — MARKUP ═══════════════════════════════════════════
+      Before `#root` on purpose: this is the first frame, and it must exist in the document
+      rather than be produced by the bundle. The inline script below owns its clock;
+      `src/renderer/main.tsx` only reports the boot steps it actually reaches.
+    -->
+    <div
+      class="cg-splash"
+      id="cg-splash"
+      role="status"
+      aria-live="polite"
+      aria-label="CG CONTROL is starting"
+    >
+      <div class="cg-splash__marks"><i></i><i></i><i></i><i></i></div>
+
+      <div class="cg-splash__stage">
+        <!--
+          ══ BRAND SLOT ══ THE ONLY PLACE THE APASAI MARK IS DEFINED. ══
+          A PLACEHOLDER: the company logo and brand colours are not final. Swapping the
+          brand is swapping THIS `<svg>` and nothing else — keep the `cg-splash__mark`
+          class, the 56×56 viewBox and `aria-hidden` (the company name is read out as text
+          below, so the mark is decorative to a screen reader). Colours must stay token
+          values — see `tests/splashCss.test.ts`.
+        -->
+        <svg class="cg-splash__mark" viewBox="0 0 56 56" fill="none" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="53" height="53" rx="14" stroke="#2a3441" />
+          <rect x="15" y="18" width="26" height="4.5" rx="2.25" fill="#38bdf8" />
+          <rect x="15" y="26" width="19" height="4.5" rx="2.25" fill="#3d4b5c" />
+          <rect x="15" y="34" width="12" height="4.5" rx="2.25" fill="#28323e" />
+        </svg>
+
+        <h1 class="cg-splash__wordmark">CG&nbsp;<b>CONTROL</b></h1>
+        <div class="cg-splash__rule"></div>
+        <p class="cg-splash__company">APASAI</p>
+        <p class="cg-splash__tagline">Broadcast graphics playout controller</p>
+
+        <div class="cg-splash__progress">
+          <div class="cg-splash__rail"><div class="cg-splash__fill" id="cg-splash-fill"></div></div>
+          <div class="cg-splash__readout" id="cg-splash-readout">
+            <span id="cg-splash-phase">INITIALIZING</span>
+            <span id="cg-splash-step">1 / 3</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cg-splash__foot">
+        <!--
+          The build stamp — `sha · YYYY-MM-DD`, computed ONCE by the plugin in
+          `vite.config.ts` and substituted for the comment below. The splash paints before
+          the bundle, so a `define` global is not reachable here and the HTML transform is
+          the only mechanism that works; the SAME object is exposed as `__CG_BUILD__` for
+          any later in-app surface, so the two cannot disagree.
+
+          No version number: `0.0.0` is a placeholder, not a release identity. WHEN THE
+          PROJECT STARTS TAGGING RELEASES, prefix `v${version}` here — this line and
+          nowhere else.
+        -->
+        <span id="cg-splash-version"><!-- CG_BUILD_STAMP --></span>
+        <span>CASPARCG · AMCP + OSC</span>
+      </div>
+    </div>
+
     <div id="root"></div>
+
+    <!--
+      ══ R-031 · STARTUP SPLASH — THE CLOCK ════════════════════════════════════════
+      A classic (non-module) script, so it runs BEFORE the deferred module bundle. It owns
+      `t0`, because first paint is the only honest start for this clock: a clock started
+      from module scope is already late by exactly the parse time this screen exists to
+      cover.
+
+      The arithmetic it implements is stated as a pure function in
+      `src/renderer/splashTiming.ts`. That duplication is real, and it is CONTAINED rather
+      than denied: `tests/splash.dom.test.ts` runs THIS script in jsdom and asserts its
+      constants and its dismissal instant against that module.
+    -->
+    <script>
+      (function () {
+        var el = document.getElementById('cg-splash');
+        if (!el) return;
+
+        // The test-suite door, read FIRST. An init-script global — deliberately NOT a URL
+        // query parameter, which is a door an operator can reach by bookmark or typo.
+        // Set ⇒ the splash never exists: no clock, no timers, no hold.
+        if (window.__CG_SPLASH_DISABLED__) {
+          el.remove();
+          return;
+        }
+
+        // Mirrors of `splashTiming.ts` — see this block's header.
+        var COLD_FLOOR_MS = 5000;
+        var WARM_FLOOR_MS = 600;
+        var CEILING_MS = 20000;
+        var FADE_MS = 450;
+        var SESSION_KEY = 'CG_RUNTIME_SESSION';
+        // THREE LABELS, THREE WORK STEPS, each naming the work happening NOW. There is no
+        // terminal label: see `splashTiming.ts` and the `#cg-splash-phase` rule above for
+        // why the label leaves on completion instead of settling on a word.
+        var PHASES = ['INITIALIZING', 'PROBING BRIDGE', 'STARTING INTERFACE'];
+
+        var t0 = Date.now();
+
+        // Cold vs warm. `sessionStorage` survives F5 in the same tab and is empty in a new
+        // tab or a new browser, so its ABSENCE is the cold signal exactly — no threshold to
+        // guess. A browser that refuses storage is treated as cold rather than failing boot.
+        var coldStart = true;
+        try {
+          coldStart = window.sessionStorage.getItem(SESSION_KEY) === null;
+          window.sessionStorage.setItem(SESSION_KEY, '1');
+        } catch (e) {
+          coldStart = true;
+        }
+        var floorMs = coldStart ? COLD_FLOOR_MS : WARM_FLOOR_MS;
+
+        var fillEl = document.getElementById('cg-splash-fill');
+        var phaseEl = document.getElementById('cg-splash-phase');
+        var stepEl = document.getElementById('cg-splash-step');
+        var readoutEl = document.getElementById('cg-splash-readout');
+
+        var dismissed = false;
+        var bootDone = false;
+        var holdTimer = null;
+
+        function dismiss() {
+          if (dismissed) return;
+          dismissed = true;
+          clearTimeout(ceilingTimer);
+          if (holdTimer !== null) clearTimeout(holdTimer);
+          el.setAttribute('data-dismissing', 'true');
+          setTimeout(function () {
+            // REMOVE it, don't just hide it: a full-screen overlay left in the DOM is a
+            // click swallower waiting to be rediscovered.
+            if (el.parentNode) el.parentNode.removeChild(el);
+          }, FADE_MS);
+        }
+
+        function phase(key) {
+          var i = PHASES.indexOf(key);
+          if (i < 0 || dismissed) return;
+          var completed = i + 1;
+          if (fillEl) fillEl.style.width = Math.round((completed / PHASES.length) * 100) + '%';
+          if (phaseEl) phaseEl.textContent = key;
+          if (stepEl) stepEl.textContent = completed + ' / ' + PHASES.length;
+        }
+
+        function done() {
+          // Idempotent: the hold is scheduled from the FIRST completion signal only. React
+          // StrictMode re-runs effects in development, so this is called twice as a matter
+          // of course.
+          if (bootDone || dismissed) return;
+          bootDone = true;
+          // The label LEAVES rather than settling on a word — the counter carries the rest
+          // of the hold alone. See the `#cg-splash-phase` rule for why.
+          if (readoutEl) readoutEl.setAttribute('data-done', 'true');
+          var now = Date.now();
+          // dismissAt = min( max(t0 + floor, bootDone), t0 + ceiling )
+          var dismissAt = Math.min(Math.max(t0 + floorMs, now), t0 + CEILING_MS);
+          holdTimer = setTimeout(dismiss, Math.max(0, dismissAt - now));
+        }
+
+        // The CEILING is armed at t0 and never disarmed except by dismissal. On an on-air
+        // tool a stuck splash means the operator has no door into the application at all;
+        // at the ceiling it goes regardless of boot state and the app's own DISCONNECTED
+        // surface — which already exists — takes over.
+        var ceilingTimer = setTimeout(dismiss, CEILING_MS);
+
+        window.__CG_SPLASH__ = { phase: phase, done: done };
+        phase('INITIALIZING');
+      })();
+    </script>
     <script type="module" src="/src/renderer/main.tsx"></script>
   </body>
 </html>
