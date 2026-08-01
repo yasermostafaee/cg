@@ -1824,6 +1824,35 @@ silent) nobody notices until someone asks why there is no sound.
 
 ---
 
+## R-031 SPLASH — the readout and the visual layer (2026-08-01, fast mode)
+
+Base: the `origin/main` merge (`78bdd34`), which brought PR #431's splash infrastructure
+onto `dev`. This run changes the READOUT and adds the VISUAL LAYER on top of it; the boot
+gate, the timing contract, the build stamp and the bypass are inherited untouched.
+
+### Owed — process suspended by fast mode
+
+- **No `pnpm gate`.** Only `pnpm --filter @cg/runtime test` + `build` were run. Never run
+  uncached across the workspace, so a cross-workspace break would not have been seen —
+  though the diff is confined to `apps/runtime`.
+- **No full E2E run, and no suite-timing measurement.** `apps/runtime/tests/e2e/splash.spec.ts`
+  was EDITED (the counter assertions became percentage assertions; a reduced-motion
+  freeze-frame case was added) and **not executed** — fast mode runs no Playwright. Both the
+  splash specs and the timing measurement are owed.
+- **🔴 A Linux `gate:e2e` is owed.** This change is entirely UI and rendering — a new SVG
+  scene, a new company lockup, changed type weights. Nothing about it was verified on Linux,
+  and Windows is non-authoritative for pixel and geometry.
+- **No OpenSpec spec-delta for the visual layer.** `openspec/changes/runtime-splash-screen/`
+  still describes the STEP COUNTER and the placeholder brand slot, both of which this run
+  replaced, and says nothing about the playout scene or the APASAI lockup. Its `spec.md`,
+  `design.md` and `tasks.md` need reconciling before the change is validated or archived.
+  No `openspec validate` was run.
+- **`R-031` is a DUPLICATE item number in `docs/prd/runtime.md`.** The splash item that
+  arrived from `main` reuses the number of the existing "one Layers section, no Library"
+  item (line ~1124). Both are now in the file. Pre-existing on `main`, not introduced here,
+  and deliberately not renumbered — the fast-mode contract forbids touching that file beyond
+  the merge. Someone has to pick which one keeps the number.
+
 ## Skipped process
 
 Per the fast-mode contract, all of this was deliberately not done.

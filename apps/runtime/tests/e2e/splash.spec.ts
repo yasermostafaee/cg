@@ -56,7 +56,7 @@ test('a cold start holds the splash for at least five seconds; a reload in the s
   await expect(page.getByRole('region', { name: 'Stack' })).toBeVisible();
 });
 
-test('the phase label LEAVES on boot-done — the counter carries the rest of the hold', async ({
+test('the phase label LEAVES on boot-done — the percentage carries the rest of the hold', async ({
   page,
 }) => {
   await armMockBoot(page);
@@ -64,14 +64,26 @@ test('the phase label LEAVES on boot-done — the counter carries the rest of th
 
   const readout = splash(page).locator('#cg-splash-readout');
   const label = readout.locator('#cg-splash-phase');
+  const pct = readout.locator('#cg-splash-pct');
 
   // The boot steps are real and fast against the mock, so by the time this runs the app
-  // has committed and `done()` has fired — the label is on its way out and the counter
-  // is at its last step. No terminal word settles in its place.
+  // has committed and `done()` has fired — the label is on its way out. No terminal word
+  // settles in its place.
   await expect(readout).toHaveAttribute('data-done', 'true');
   await expect(label).toHaveCSS('opacity', '0');
-  await expect(readout.locator('#cg-splash-step')).toHaveText('3 / 3');
   await expect(splash(page)).not.toContainText(/\bready\b/i);
+
+  // The percentage is still climbing the cold hold on its own, and it CLIMBS: two reads a
+  // second apart on a 5 s floor cannot be equal unless the readout has stopped moving.
+  const first = Number((await pct.textContent())?.replace('%', ''));
+  expect(first).toBeLessThan(100);
+  await page.waitForTimeout(1000);
+  const second = Number((await pct.textContent())?.replace('%', ''));
+  expect(second).toBeGreaterThan(first);
+
+  // …and it arrives at 100 exactly as the door opens, never before.
+  await expect(pct).toHaveText('100%', { timeout: 15_000 });
+  await expect(splash(page)).toHaveCount(0, { timeout: 15_000 });
 });
 
 test('a refused bridge still dismisses the splash — the app shows its own NOT CONNECTED surface', async ({

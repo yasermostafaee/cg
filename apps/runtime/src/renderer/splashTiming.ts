@@ -57,20 +57,28 @@ export const SPLASH_FADE_MS = 450;
 export const SPLASH_LABEL_FADE_MS = 350;
 
 /**
- * The phase readout, in order. The rail advances by COMPLETED PHASE — entering
- * phase *n* of 3 puts the rail at *n*⁄3 and the readout at `n / 3`.
+ * How often the readout recomputes `splashProgress`.
  *
- * THREE LABELS, THREE WORK STEPS, each naming the work happening NOW — and there is
- * deliberately NO TERMINAL "READY" LABEL. A fast cold boot finishes about a second in
- * while the door stays shut until the 5 s floor, so a READY label would be the thing on
- * screen for MOST of the splash at exactly the moment the operator still cannot use the
- * app: a word that says "go" over a screen that is not letting them. When boot completes
- * the label FADES OUT instead (`SPLASH_LABEL_FADE_MS`) and the readout's left side is
- * simply empty; the counter carries the remaining hold alone.
+ * A timer rather than `requestAnimationFrame`, and that is the point: this screen runs
+ * WHILE the bundle parses and React makes its first commit, so per-frame script work
+ * would be taken from the very boot it exists to cover. A percentage renders whole
+ * numbers anyway — ten updates a second reads as continuous and costs almost nothing,
+ * and the rail's own CSS `transition` does the smoothing between ticks.
+ */
+export const SPLASH_TICK_MS = 100;
+
+/**
+ * The phase readout, in order. Each label names the work happening NOW, so the list has
+ * exactly one entry per real work step — and a step counts as COMPLETE when the next one
+ * begins (the last one completes at `done()`). See `splashProgress`.
  *
- * A STEP COUNTER rather than a percentage, deliberately: a percentage claims measured
- * progress, and nothing here measures anything — the bridge probe is a bounded wait, not
- * a quantity.
+ * THREE LABELS, THREE WORK STEPS — and there is deliberately NO TERMINAL "READY" LABEL.
+ * A fast cold boot finishes about a second in while the door stays shut until the 5 s
+ * floor, so a READY label would be the thing on screen for MOST of the splash at exactly
+ * the moment the operator still cannot use the app: a word that says "go" over a screen
+ * that is not letting them. When boot completes the label FADES OUT instead
+ * (`SPLASH_LABEL_FADE_MS`) and the readout's left side is simply empty; the percentage
+ * carries the remaining hold alone.
  *
  * Every one of these is a step that EXISTS in `main.tsx`'s boot path; none was invented
  * to lengthen the list.
@@ -148,4 +156,65 @@ export function splashDismissAt(input: SplashTimingInput): number {
   const floorAt = firstPaintAt + splashFloorMs(coldStart);
   if (bootDoneAt === undefined) return ceilingAt;
   return Math.min(Math.max(floorAt, bootDoneAt), ceilingAt);
+}
+
+export interface SplashProgressInput {
+  /** `now − firstPaintAt`. */
+  readonly elapsedMs: number;
+  /** This boot's minimum hold — `splashFloorMs(coldStart)`. */
+  readonly floorMs: number;
+  /**
+   * Steps FINISHED, not steps entered. A label names the work happening NOW, so it is
+   * not complete while it is on screen: entering phase *n* (0-based *i*) means *i* steps
+   * are behind it, and the last step completes at `done()` — which is why 1 is reachable
+   * only once boot is genuinely finished.
+   */
+  readonly completedSteps: number;
+  /** `SPLASH_PHASES.length`. */
+  readonly totalSteps: number;
+  /** The last value returned, so the reading can never go backwards. */
+  readonly previous?: number | undefined;
+}
+
+/**
+ * The ONE definition of progress on this screen — the rail's width and the percentage
+ * beside it are the same number, so they can never tell two stories.
+ *
+ *     progress = monotone-max of  min( elapsed / floor ,  completed / total )
+ *
+ * It measures **progress toward the door opening**, which is the thing the operator is
+ * actually waiting on, and it is honest in three specific ways:
+ *
+ *  - **Never ahead of real boot.** The `min` gates the clock against work that has
+ *    genuinely finished, so a slow bridge probe visibly PARKS the number on the step that
+ *    is slow instead of sweeping past it. It cannot claim measured progress through a
+ *    step that has not returned.
+ *  - **Never backwards.** Both terms are non-decreasing, and `previous` clamps it anyway
+ *    — a reading that retreats reads as a fault even when it is arithmetic.
+ *  - **100 means exactly one thing:** the floor has elapsed AND boot is done, which is
+ *    precisely when the splash may dismiss. Not "almost" — the render floors rather than
+ *    rounds, so 100 cannot appear a moment early.
+ *
+ * At the 20 s ceiling the splash goes regardless, and this may honestly read below 100 at
+ * that instant. That is the ceiling telling the truth, not a bug to paper over.
+ *
+ * @returns 0…1.
+ */
+export function splashProgress(input: SplashProgressInput): number {
+  const { elapsedMs, floorMs, completedSteps, totalSteps, previous } = input;
+  const byTime = floorMs > 0 ? elapsedMs / floorMs : 1;
+  const bySteps = totalSteps > 0 ? completedSteps / totalSteps : 1;
+  const gated = Math.min(byTime, bySteps);
+  return Math.max(previous ?? 0, Math.min(1, Math.max(0, gated)));
+}
+
+/**
+ * `splashProgress` as the integer the readout prints.
+ *
+ * FLOOR, not round: 99.6 % is not 100 %, and a screen that says 100 while the door is
+ * still shut is the same false claim as a terminal `READY` label. It reaches 100 on the
+ * tick where progress is exactly 1.
+ */
+export function splashProgressPercent(progress: number): number {
+  return Math.floor(progress * 100);
 }
