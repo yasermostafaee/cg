@@ -67,6 +67,7 @@ import {
   UpdateStateChannel,
   parseWsFrame,
   serializeWsFrame,
+  defaultFixedLayerBank,
   reservedLayerNumbers,
   type AnyChannel,
   type AnyPublishChannel,
@@ -77,10 +78,15 @@ import {
   type WsPublishFrame,
   type WsResponseFrame,
 } from '@cg/shared-ipc';
-import { DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
+import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
 import { CasparRuntime } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
-import { loadFixedLayerBank, saveFixedLayerBank, validateFixedBank } from './fixed-layers-store.js';
+import {
+  FixedLayersConfigError,
+  loadFixedLayerBank,
+  saveFixedLayerBank,
+  validateFixedBank,
+} from './fixed-layers-store.js';
 import { loadReservedLayers } from './reserved-layers-store.js';
 import type { TemplateServeOverride } from './template-http-server.js';
 
@@ -106,17 +112,20 @@ export interface BridgeOptions {
    */
   persistPath?: string;
   /**
-   * R-021 stage 1 — the fixed operator layer bank, explicit. Precedence
-   * mirrors R-010: explicit option > persisted file > no bank. The bank is
+   * R-021 stage 1 — the fixed operator layer bank, explicit. Highest
+   * precedence; see {@link resolveFixedBank} for the full order. The bank is
    * VALIDATED at boot (`validateFixedBank`) and a violation throws BEFORE the
    * WebSocket binds — conflicts resolve loudly at startup.
    */
   fixedLayers?: FixedLayerBank;
   /**
-   * R-021 stage 1 — where the fixed bank persists (JSON). An ABSENT file means
-   * no bank; a PRESENT-but-unusable file is a HARD boot failure (see
+   * R-021 stage 1 — where the fixed bank persists (JSON). An ABSENT file at a
+   * CONFIGURED path means the BUILT-IN DEFAULT bank (70–99, top five ticked) —
+   * the file records a deviation, it does not supply the bank. A
+   * PRESENT-but-unusable file is a HARD boot failure (see
    * `fixed-layers-store.ts` for why this diverges from connection-store's
-   * warn-and-ignore).
+   * warn-and-ignore). Omitting the path entirely still means NO bank — see
+   * {@link resolveFixedBank}.
    */
   fixedLayersPath?: string;
   /**
@@ -157,6 +166,13 @@ export interface BridgeHandle {
   readonly templateServe: { url: string; serveHost: string; port: number; exposed: boolean };
   /** The real `@cg/caspar-client`-backed runtime (Reconciler is the truth). */
   readonly runtime: CasparRuntime;
+  /**
+   * WHERE the candidate-layer bank in force came from, so the CLI can SAY it at
+   * boot. Two machines ran different banks for two days and nothing anywhere
+   * announced the difference; the bank alone does not answer "why this one?",
+   * and the source is the half that does.
+   */
+  readonly fixedBankSource: { bank: FixedLayerBank | null; source: FixedBankSource };
   /** Force-close every client socket — used by tests to simulate a mid-session drop. */
   dropConnections(): void;
   /** Stop the WebSocket server, the CasparCG session, and close all clients. */
@@ -193,6 +209,76 @@ function defaultConnection(): ConnectionConfig {
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,
   };
+}
+
+/**
+ * Where the fixed bank in force came from — named in the CLI's boot line and,
+ * for the default, in a boot refusal. `none` is the embedder case: no explicit
+ * bank and no path, so no bank at all.
+ */
+export type FixedBankSource = 'explicit' | 'file' | 'built-in default' | 'none';
+
+/**
+ * THE fixed-bank boot precedence, in one place and in this order:
+ *
+ *   1. `options.fixedLayers` — an explicit in-process bank (tests, embedders).
+ *      No CLI flag sets this; a flag would be a per-run override, and the whole
+ *      point of the default below is that a station needs no per-run anything.
+ *   2. the persisted file at `fixedLayersPath` — the station's DEVIATION from
+ *      the default. Present-but-unusable is still a hard boot failure
+ *      (`loadFixedLayerBank`); only a genuinely ABSENT file falls through.
+ *   3. the BUILT-IN DEFAULT (`defaultFixedLayerBank`) — 70–99, top five ticked.
+ *
+ * STEP 3 IS CONDITIONAL ON A PATH HAVING BEEN CONFIGURED, and that is a
+ * contract, not an accident. Passing `fixedLayersPath` is what says "this
+ * process is a station, and its bank lives here" — the CLI always passes one
+ * (defaulted to `~/.cg-runtime/bridge-fixed-layers.json`), so every real
+ * machine reaches step 3. `createBridge({})` with no path at all is an embedder
+ * that has declared no config surface whatsoever; it still gets NO bank, which
+ * is what `fixed-layers-boot` T18 pins and what every integration test that
+ * declares its own layers relies on.
+ */
+function resolveFixedBank(options: BridgeOptions): {
+  bank: FixedLayerBank | null;
+  source: FixedBankSource;
+} {
+  if (options.fixedLayers !== undefined) return { bank: options.fixedLayers, source: 'explicit' };
+  if (options.fixedLayersPath === undefined) return { bank: null, source: 'none' };
+  const persisted = loadFixedLayerBank(options.fixedLayersPath);
+  return persisted !== null
+    ? { bank: persisted, source: 'file' }
+    : { bank: defaultFixedLayerBank(), source: 'built-in default' };
+}
+
+/**
+ * `validateFixedBank`, plus the one thing a default bank needs that a declared
+ * one does not: a refusal that says WHERE the offending bank came from.
+ *
+ * A conflict between the built-in default and this station's reserved playout
+ * range is still a HARD boot failure — nothing here weakens the disjointness
+ * rules, and falling back to "no bank" on a conflict would be the silent
+ * config/state divergence `fixed-layers-store.ts` exists to refuse. But the
+ * operator would otherwise be sent hunting through a file that does not exist,
+ * so the message names the default and the file that overrides it.
+ */
+function validateDeclaredBank(
+  bank: FixedLayerBank,
+  source: FixedBankSource,
+  fixedLayersPath: string | undefined,
+  options: { policy: LayerPolicy; reservedLayers: readonly number[] },
+): readonly LayerSlot[] {
+  try {
+    return validateFixedBank(bank, options);
+  } catch (err) {
+    if (source !== 'built-in default' || !(err instanceof FixedLayersConfigError)) throw err;
+    throw new FixedLayersConfigError(
+      err.code,
+      `the BUILT-IN DEFAULT candidate bank was refused by this station's own config — ` +
+        `${err.message}. No fixed-layers file is present${
+          fixedLayersPath !== undefined ? ` at ${fixedLayersPath}` : ''
+        }, so the default applied; write a bank there that fits this station to override it.`,
+    );
+  }
 }
 
 /**
@@ -236,22 +322,23 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       : null);
   const reservedLayers =
     reserved !== null && reserved !== undefined ? reservedLayerNumbers(reserved) : [];
-  const fixedBank =
-    options.fixedLayers ??
-    (options.fixedLayersPath !== undefined ? loadFixedLayerBank(options.fixedLayersPath) : null);
+  const { bank: fixedBank, source: fixedBankSource } = resolveFixedBank(options);
   const fixedSlots =
-    fixedBank !== null && fixedBank !== undefined
+    fixedBank !== null
       ? // R-028 (2.5) — the candidate ceiling must never intersect the
         // reserved playout range: refused HERE at load, and again at every
         // change (`setFixedLayers` reads the same list). A violation throws
         // BEFORE the WebSocket binds — conflicts resolve loudly at startup.
-        validateFixedBank(fixedBank, { policy: layerPolicy, reservedLayers })
+        validateDeclaredBank(fixedBank, fixedBankSource, options.fixedLayersPath, {
+          policy: layerPolicy,
+          reservedLayers,
+        })
       : [];
   const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
     fixedSlots,
     layerPolicy,
     reservedLayers,
-    ...(fixedBank !== null && fixedBank !== undefined ? { fixedBank } : {}),
+    ...(fixedBank !== null ? { fixedBank } : {}),
     ...(options.templatesDir !== undefined ? { templatesDir: options.templatesDir } : {}),
     ...(options.runtimeTuning ?? {}),
   });
@@ -314,6 +401,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     url: `ws://${host}:${port}`,
     templateServe,
     runtime,
+    fixedBankSource: { bank: fixedBank, source: fixedBankSource },
     dropConnections() {
       for (const client of wss.clients) client.terminate();
     },

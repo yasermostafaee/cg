@@ -3,7 +3,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_LAYER_POLICY, LayerManager, type LayerSlot } from '@cg/caspar-client';
-import { FIXED_LAYERS_SET_CONFIG_REASONS, type FixedLayerBank } from '@cg/shared-ipc';
+import {
+  FIXED_LAYERS_SET_CONFIG_REASONS,
+  defaultFixedLayerBank,
+  type FixedLayerBank,
+} from '@cg/shared-ipc';
 import {
   FixedLayersConfigError,
   FixedLayersFileError,
@@ -119,6 +123,20 @@ describe('validateFixedBank', () => {
         `'${type}' ${String(low)}–${String(high)} must not overlap 70–99`,
       ).toBe(true);
     }
+  });
+
+  it('the BUILT-IN DEFAULT bank itself validates — the bank a fresh station boots with', () => {
+    // Not a hand-written twin of the default: the default itself, run through
+    // the validator every boot runs it through. A machine with no config file
+    // gets this, so a policy or ceiling edit that made it unbootable would
+    // brick every unconfigured station — including the plant server.
+    const slots = validateFixedBank(defaultFixedLayerBank(), {
+      policy: DEFAULT_LAYER_POLICY,
+      reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
+    });
+    expect(slots).toHaveLength(30);
+    expect(slots[0]).toEqual({ channel: 1, layer: 70 });
+    expect(slots[29]).toEqual({ channel: 1, layer: 99 });
   });
 
   it('T11 — an alias key outside the bank is refused, naming the key', () => {

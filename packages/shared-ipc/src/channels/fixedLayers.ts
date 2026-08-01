@@ -16,18 +16,44 @@ import { definePublishChannel } from '../publish.js';
  * conflicts resolve loudly at config time). The schema carries only the
  * shape-local constraints.
  */
+/**
+ * THE built-in default bank — what a machine with NO persisted fixed-layers
+ * file comes up with. Owner decision, 2026-07-30: channel 1, the full 70–99
+ * ceiling, the top five rows ticked.
+ *
+ * WHY THESE ARE CONSTANTS AND NOT LITERALS. They are read from three places —
+ * the schema's `.default()`s (what a PARTIAL file leaves unsaid),
+ * {@link defaultFixedLayerBank} (what NO file means), and the bridge's boot
+ * resolver — and two different answers to "the default bank" is precisely the
+ * drift that put a four-layer bank on one machine and a thirty-layer bank on
+ * another. One definition, three readers.
+ */
+export const DEFAULT_FIXED_BANK_CHANNEL = 1;
+/** First layer of the default bank. */
+export const DEFAULT_FIXED_BANK_START = 70;
+/** Rows in the default bank — the full 70–99 ceiling. */
+export const DEFAULT_FIXED_BANK_COUNT = 30;
+/**
+ * How many of the default bank's rows are TICKED (displayed), counting down
+ * from its highest layer: 99, 98, 97, 96, 95. The other twenty-five are
+ * declared — and therefore fenced from automatic allocation — but hidden, so
+ * the operator can reveal one without a bridge restart (the ceiling is fixed
+ * at install; the ticks are live).
+ */
+export const DEFAULT_FIXED_BANK_VISIBLE_ROWS = 5;
+
 export const FixedLayerBankSchema = z.object({
   /** CasparCG channel the bank lives on (one channel per bank, v1). */
   channel: z.number().int().positive(),
   /** First layer of the bank. Immutable mid-session (validator-enforced). */
-  start: z.number().int().positive().default(70),
+  start: z.number().int().positive().default(DEFAULT_FIXED_BANK_START),
   /**
    * R-028 — the FIXED CEILING of candidate layers. Immutable mid-session
    * (validator-enforced: `resize-refused`); changing it means editing the
    * persisted install config and restarting the bridge. The 89 layer ceiling
    * is validator-enforced. Replaces R-021's mutable, grow-at-end `count`.
    */
-  count: z.number().int().min(1).max(30).default(10),
+  count: z.number().int().min(1).max(30).default(DEFAULT_FIXED_BANK_COUNT),
   /** Optional display aliases, keyed by layer number (as a numeric string). */
   aliases: z.record(z.string().regex(/^\d+$/), z.string().min(1)).optional(),
   /**
@@ -41,6 +67,44 @@ export const FixedLayerBankSchema = z.object({
   visibility: z.record(z.string().regex(/^\d+$/), z.boolean()).optional(),
 });
 export type FixedLayerBank = z.infer<typeof FixedLayerBankSchema>;
+
+/**
+ * THE bank a station gets when it has declared none — channel 1, layers 70–99,
+ * the top five ticked and the remaining twenty-five declared-but-hidden.
+ *
+ * THE POINT OF IT. A persisted fixed-layers file now records a DEVIATION from
+ * this bank; it does not supply the bank. That is what makes a new machine
+ * cheap to stand up: nothing to copy across, nothing to hand-edit, nothing to
+ * remember. Before this, a machine with no file came up with NO candidate
+ * layers at all and a machine with an old file came up with whatever that file
+ * last said — the two failure modes that made "which bank am I on?" a question
+ * anyone had to ask.
+ *
+ * IT RETURNS A FRESH OBJECT every call, deliberately. A shared module-level
+ * literal would be one mutation away from a default that differs between two
+ * readers in the same process, which is the exact class of bug the constants
+ * above exist to close.
+ *
+ * VISIBILITY IS WRITTEN OUT IN FULL — all thirty keys, `true` for the top five
+ * and `false` for the rest — rather than relying on `isLayerVisible`'s
+ * absent-means-visible rule for the ticked ones. The bank is persisted verbatim
+ * the first time the operator changes anything, and a file that states every
+ * tick explicitly says what it means to the next person who opens it.
+ */
+export function defaultFixedLayerBank(): FixedLayerBank {
+  const start = DEFAULT_FIXED_BANK_START;
+  const end = start + DEFAULT_FIXED_BANK_COUNT - 1;
+  const visibility: Record<string, boolean> = {};
+  for (let layer = start; layer <= end; layer++) {
+    visibility[String(layer)] = layer > end - DEFAULT_FIXED_BANK_VISIBLE_ROWS;
+  }
+  return {
+    channel: DEFAULT_FIXED_BANK_CHANNEL,
+    start,
+    count: DEFAULT_FIXED_BANK_COUNT,
+    visibility,
+  };
+}
 
 /**
  * R-028 — THE canonical visibility predicate: is this candidate layer's row

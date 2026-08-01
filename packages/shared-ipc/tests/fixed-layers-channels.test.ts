@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_FIXED_BANK_COUNT,
+  DEFAULT_FIXED_BANK_START,
   FIXED_LAYERS_SET_CONFIG_REASONS,
   FixedLayerBankSchema,
   FixedLayersSetConfigChannel,
   FixedSlotStateSchema,
   ReservedLayersSchema,
+  defaultFixedLayerBank,
   isLayerVisible,
   reservedLayerNumbers,
 } from '../src/index.js';
@@ -104,6 +107,54 @@ describe('R-028 — visibility ticks + the canonical isLayerVisible predicate', 
         visibility: { 'layer-71': false },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('the built-in default bank — what a station with no config comes up with', () => {
+  it('is channel 1, layers 70–99, thirty rows, with the top five ticked', () => {
+    const bank = defaultFixedLayerBank();
+
+    expect(bank.channel).toBe(1);
+    expect(bank.start).toBe(70);
+    expect(bank.count).toBe(30);
+    expect(bank.start + bank.count - 1).toBe(99);
+
+    // The five DISPLAYED rows are the bank's highest layers, counting down.
+    const visible = [];
+    for (let layer = bank.start; layer <= bank.start + bank.count - 1; layer++) {
+      if (isLayerVisible(bank, layer)) visible.push(layer);
+    }
+    expect(visible).toEqual([95, 96, 97, 98, 99]);
+  });
+
+  it('declares every row explicitly — the other twenty-five are present, not absent', () => {
+    const bank = defaultFixedLayerBank();
+    const keys = Object.keys(bank.visibility ?? {});
+    expect(keys).toHaveLength(30);
+    // Declared-but-hidden is not the same as not declared: all thirty stay
+    // fenced from automatic allocation, and the operator can tick one live.
+    expect(bank.visibility?.['70']).toBe(false);
+    expect(bank.visibility?.['94']).toBe(false);
+    expect(bank.visibility?.['95']).toBe(true);
+  });
+
+  it('is a fresh object each call — no shared mutable default', () => {
+    const first = defaultFixedLayerBank();
+    first.count = 4;
+    (first.visibility ?? {})['99'] = false;
+    const second = defaultFixedLayerBank();
+    expect(second.count).toBe(30);
+    expect(isLayerVisible(second, 99)).toBe(true);
+  });
+
+  it('round-trips through the schema unchanged', () => {
+    expect(FixedLayerBankSchema.parse(defaultFixedLayerBank())).toEqual(defaultFixedLayerBank());
+  });
+
+  it("the schema's own defaults agree with it — one answer to 'the default bank'", () => {
+    const partial = FixedLayerBankSchema.parse({ channel: 1 });
+    expect(partial.start).toBe(DEFAULT_FIXED_BANK_START);
+    expect(partial.count).toBe(DEFAULT_FIXED_BANK_COUNT);
   });
 });
 
