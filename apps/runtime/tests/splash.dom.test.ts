@@ -73,6 +73,8 @@ function splash(): { phase(key: string): void; done(): void } {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  // Start from an empty queue no matter what ran before — see `afterEach`.
+  vi.clearAllTimers();
   vi.setSystemTime(new Date('2026-08-01T12:00:00.000Z'));
   document.body.innerHTML = bodyMarkup;
   window.sessionStorage.clear();
@@ -81,6 +83,20 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  /**
+   * DRAIN THE QUEUE EXPLICITLY. Seven tests in this file end with timers deliberately
+   * pending — the ceiling armed and never reached, or the 450 ms fade caught mid-flight.
+   * That is the state under test, not sloppiness, and making each of them tidy up would
+   * blur what each one is actually asserting.
+   *
+   * What is NOT acceptable is carrying that queue into the NEXT test, because
+   * `vi.getTimerCount()` is a GLOBAL count: a leaked timer makes another test's "nothing
+   * was scheduled" assertion read someone else's work. Leaning on `useRealTimers()` to
+   * discard the queue is leaning on an implementation detail — it held on Windows and did
+   * not on CI's Linux runner, which is exactly how this arrived as a green-here-red-there
+   * (the bypass test read 1 pending timer that its own code had not created).
+   */
+  vi.clearAllTimers();
   vi.useRealTimers();
 });
 
@@ -248,6 +264,12 @@ describe('the hold', () => {
 describe('the test-suite door', () => {
   it('the bypass global removes the splash outright — no clock, no timers, no hold', () => {
     (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;
+
+    // Read BEFORE and AFTER, asserted separately, so a future failure says WHICH defect it
+    // is rather than leaving it to be guessed: a non-zero `before` is a test-isolation
+    // leak, a non-zero `after` is the bypass path actually scheduling something.
+    expect(vi.getTimerCount(), 'a previous test leaked a pending timer into this one').toBe(0);
+
     runSplashScript();
 
     expect(splashEl()).toBeNull();
@@ -255,7 +277,10 @@ describe('the test-suite door', () => {
       (window as unknown as { __CG_SPLASH__?: unknown }).__CG_SPLASH__,
       'a disabled splash must not install a control surface',
     ).toBeUndefined();
-    expect(vi.getTimerCount()).toBe(0);
+    // The bypass must be a SYNCHRONOUS no-op: `el.remove()` and return. Not even the
+    // ~450 ms fade may be scheduled — that fade in every E2E is the exact cost the bypass
+    // exists to avoid.
+    expect(vi.getTimerCount(), 'the bypass path scheduled something').toBe(0);
   });
 
   it('is off by default — an absent global shows the splash', () => {
