@@ -513,6 +513,68 @@ stash was taken). Both stashes are therefore REDUNDANT in content and ACTIVELY H
 number: applying either would mint a duplicate heading. Neither claims a number above the
 current maxima, so neither changes the derivation above. Disposition is the owner's call.
 
+**Re-audited 2026-08-03 — the CLOSING entry for the `DEBT.md` sweep, and the largest single run
+this file has ever recorded.** Thirty-five numbers claimed across four prefixes in three sessions,
+plus one filed on the closing day:
+
+| prefix | claimed           | count | file(s)                                                                       |
+| ------ | ----------------- | ----- | ----------------------------------------------------------------------------- |
+| `B-`   | `B-115` … `B-129` | 15    | [bugs-runtime.md](bugs-runtime.md) 12, [bugs-designer.md](bugs-designer.md) 3 |
+| `B-`   | `B-130`           | 1     | [bugs-runtime.md](bugs-runtime.md) — filed 2026-08-03                         |
+| `R-`   | `R-036` … `R-046` | 11    | [runtime.md](runtime.md)                                                      |
+| `D-`   | `D-142` … `D-146` | 5     | [designer.md](designer.md)                                                    |
+| `P-`   | `P-022` … `P-025` | 4     | [platform.md](platform.md)                                                    |
+| `C-`   | —                 | 0     | `C-021` stays free                                                            |
+
+**Every prefix was DERIVED from the headings, across all refs, immediately before the commit that
+wrote its headings — never from a pointer.** That is the procedure this file adopted when the
+pointer was retired the day before, and this run is its first real exercise. Four separate
+derivations were taken (`B-` before the bug files, then `R-`, `D-` and `P-` each immediately before
+their own commit), and each was checked twice: against `docs/prd/` in the working tree, and against
+every one of the 23 refs via `git for-each-ref`. All four agreed both times.
+
+**One ordering hazard was caught by that discipline and is worth recording, because the filing plan
+had it backwards.** The plan batched `bugs-designer.md` FIRST, because its `B-129` is on-air class.
+Filing in that order would have left a **twelve-number hole**: a later session deriving next-free
+from the headings would have seen `B-129` and returned `B-130`, stranding `B-115`…`B-126`
+permanently. **Filing order is not work order** — filing an item does not fix it, and the on-air
+priority belongs in the item's severity field. The `B-` free number was therefore derived ONCE and
+the whole run claimed inside one session across both bug files. Any future multi-file run must do
+the same per prefix.
+
+**Post-run audit, on the closing tree:** the duplicate audit prints exactly `B-056` and `B-080` and
+nothing else; `C-`, `D-`, `P-` and `R-` print nothing. Contiguity per prefix:
+
+| prefix | range           | contiguity                                                         |
+| ------ | --------------- | ------------------------------------------------------------------ |
+| `B-`   | `B-001`…`B-130` | contiguous, no gaps                                                |
+| `C-`   | `C-001`…`C-020` | contiguous, no gaps                                                |
+| `D-`   | `D-001`…`D-146` | **6 gaps** — `069` `070` `080` `090` `091` `095`, all pre-existing |
+| `P-`   | `P-001`…`P-025` | contiguous, no gaps                                                |
+| `R-`   | `R-001`…`R-046` | contiguous, no gaps                                                |
+
+The six `D-` gaps are the ones the 2026-08-02 audit characterised — `D-069`/`D-070` reserved
+sub-labels, `D-095` absorbed by `D-086`, `D-080` referenced but never filed, `D-090`/`D-091`
+unexplained. **This run added none.**
+
+**The two grep artifacts are load-bearing and this run confirms it.** Both are FORMAT SPECIMENS,
+not claims, and both still produce false positives in the bare command:
+
+- [README.md](README.md)'s worked example `## [ ] D-001 — Short title`, which reads as a `D-001`
+  duplicate against the real one in [designer.md](designer.md) — removed by `--exclude=README.md`.
+- [bugs.md](bugs.md)'s new-bug filing template `## [ ] B-0NN — Export blocked dialog shows wrong
+error count`, which sits **inside an HTML comment**. A comment hides nothing from a regex, so
+  `B-[0-9]+` matches its leading `0` and invents a phantom `B-0` — removed by anchoring the number
+  to three digits, `B-[0-9]{3}`.
+
+Neither should be "fixed" by editing the specimen: a filing template that does not look like a real
+heading teaches the wrong format. **Every derivation in this run used both guards**, which is why
+`B-115` came back rather than `B-0`.
+
+**Free after this run: `B-131` · `C-021` · `D-147` · `P-026` · `R-047`.** Recorded as a measurement
+taken on 2026-08-03, **not as a pointer** — derive it again before you claim. That is the whole
+doctrine of this file, and the reason the pointer above it is retired.
+
 ### The "next free" pointer is RETIRED — implemented 2026-08-02
 
 **Decided by the owner on 2026-08-02**, accepting the standing recommendation recorded below.
