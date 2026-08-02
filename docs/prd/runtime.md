@@ -1,4 +1,4 @@
-﻿# Runtime — backlog
+# Runtime — backlog
 
 Features for the playout controller (`apps/runtime`). The CasparCG control path
 itself lives in `caspar.md`. See `README.md` for the format.

@@ -1,4 +1,4 @@
-﻿# Bugs — Runtime / CasparCG
+# Bugs — Runtime / CasparCG
 
 Bug reports for the **Runtime** app (`apps/runtime`, the CasparCG playout controller)
 and its client stack (`@cg/caspar-client`, AMCP/OSC). For the bug format and Claude's
