@@ -3784,3 +3784,146 @@ operator enters the OFFICIAL announced time; computed prayer times must never be
 default for broadcast. Design-shaped: implementation starts with an openspec change
 (design-only first) since it widens ClockElementSchema, binding targets, and runtime
 behavior.
+
+## [ ] D-142 — Brand Pack Factory ⟨priority: unrated⟩
+
+**What:** a factory for brand packs — a reusable set of brand assets, colours and type that a
+template can be built against, so a station's identity is applied once rather than re-authored per
+template.
+
+**SCOPED STUB — the design work is tracked elsewhere and is NOT restated here.** The capability
+lives in `claude/feature-template-pack.md`, which is the source of truth for its requirements. This
+entry exists so the capability has a number and appears in the backlog; **no requirements are
+invented here.** Anyone picking it up reads that document first.
+
+**Why it is filed as a stub rather than left unfiled:** the whole purpose of the filing phase is
+that nothing is lost. A capability tracked only in a working document is one reorganisation away
+from disappearing.
+
+**DESIGN-FIRST — implementation needs an OpenSpec change before code.** It introduces a new
+authored artifact and therefore touches the schema and the export contract.
+
+**Severity `unrated`:** it is unscheduled net-new capability, and there is no defect evidence to
+rate. Source: owner, via `claude/feature-template-pack.md`.
+
+## [ ] D-143 — import a `.vcg` back into the Designer for editing ⟨priority: unrated⟩
+
+**What:** let the Designer open a `.vcg` package and edit it, rather than only produce one.
+
+**SCOPED STUB — tracked with [[D-142]] in `claude/feature-template-pack.md`.** No requirements are
+invented here.
+
+**Why it is not [[R-001]].** `R-001` (`[x]`, [runtime.md](runtime.md)) is **the Runtime** importing
+a `.vcg` for playout — read the package, register the template, put it on air. `D-143` is **the
+Designer** importing one back for editing — reconstruct an authored scene from a packaged artifact.
+Different product, opposite direction, and different failure modes: the Runtime needs the package
+to render, the Designer needs it to round-trip. Cross-referenced, deliberately not merged.
+
+**DESIGN-FIRST — implementation needs an OpenSpec change before code.** Round-tripping a `.vcg`
+back into an editable scene is a contract question across `@cg/vcg-format`, `@cg/shared-schema` and
+the Designer, and it has to answer what happens to anything the package does not carry.
+
+**Severity `unrated`:** net-new capability, no defect evidence. Source: owner, via
+`claude/feature-template-pack.md`.
+
+## [ ] D-144 — the Designer has no startup splash: it boots straight into the landing screen ⟨priority: low⟩
+
+**What:** give the Designer a startup splash — APASAI / **CG DESIGNER**, an artboard scene, a phase
+readout and a progress rail — visible from the first paint until the app is genuinely ready, with a
+minimum hold. **Same timing contract and same company lockup as the Runtime's [[R-035]]; different
+heart** (a working artboard rather than a playout instrument).
+
+**Why:** the Designer boots straight into the landing screen, so its first frame is unbranded and
+gives no signal that the right application came up. The Runtime's splash already establishes the
+contract and the lockup; this is the second product adopting them.
+
+**This work has already SHIPPED — the item is retroactive, and that is the point.** The Designer
+splash and the shared splash kit were built during fast mode with **no `D-` number and no
+`docs/prd/designer.md` entry**, so the shipped feature had no backlog identity at all. Filing it
+now gives the work a number to reference and a place for its remaining debt to hang.
+
+**Still owed on it, carried here so it is not lost with the fast-mode notes:**
+
+- **No OpenSpec change dir and no `openspec validate` run.** The timing contract, the boot gate,
+  the bypass and the reduced-motion composition are all spec-worthy.
+- **No `pnpm gate` run uncached across the workspace**, and a Linux `gate:e2e` is owed — the
+  splash is a layout and render change and a Windows run is not authoritative for it.
+
+**Acceptance:** as [[R-035]]'s, with the Designer's own content — the splash paints on the first
+frame before application JavaScript runs, the readout names real boot steps, and the hold extends
+to boot completion rather than hiding a boot still in progress.
+
+**Notes:** the splash kit is shared between both products, so a change here is a change there.
+Source: `DEBT.md:1968`, inside the Designer-splash section at `DEBT.md:1961`.
+
+## [ ] D-145 — a GUIDE LAYER: mark an element as reference-only, visible on canvas and absent from preview and export ⟨priority: unrated⟩
+
+**What:** let an element be marked as a **guide** — it renders on the Designer canvas as a
+reference, and does **not** appear in preview or in any export. Reference is the Loopic behaviour
+(`G` / eye / lock). Surfacing: right-click → top of the menu, `set as guide` / `remove guide`; then
+a `G` icon beside hide/lock on the layer row.
+
+**Why:** authors need alignment references — a photo of the intended design, a safe-area box, a
+client mock — inside the scene while working, and today anything placed for reference is a real
+element that ships. The alternative is deleting it before every export, which is exactly the manual
+step that gets forgotten once and reaches air.
+
+**⚠ THIS IS NOT [[D-015]] OR [[D-072]], and the near-miss is why the item says so.** Both existing
+items are `[x]` and both use the word "guide":
+
+- `D-015` — _View menu: ruler + snapping toggles_
+- `D-072` — _Guide coordinate readout on hover / drag_
+
+Both are about **ruler guides**: the draggable reference LINES that live in the viewport chrome and
+were never part of the scene. `D-145` is about a **scene ELEMENT** marked reference-only. Same
+word, different object. Filing this against either of those would bury a feature inside a shipped
+one.
+
+**THE CORRECTNESS CONSTRAINT, and it is why this is design-first:** there are **three consumers** —
+canvas, preview and export — so "is this a guide?" must be **one predicate in one place** that all
+three read. The `positionQuery` lesson in this repo is precise about this: **the second consumer is
+what creates the drift.** A guide that is hidden from preview but not from export is worse than no
+feature at all, because it reaches air looking deliberate.
+
+**Acceptance:**
+
+- An element can be marked and unmarked as a guide from the layer row and the canvas context menu.
+- A guide renders on the canvas and is visibly distinguishable from a normal element.
+- A guide is absent from preview.
+- A guide is absent from export — see the open decision below for exactly what "absent" means.
+- Exactly one predicate decides guide-ness, and canvas, preview and export all consume it.
+
+**OPEN DECISION — stated, not settled.** Does the exporter **strip** guide layers entirely, or keep
+them in the package behind a flag? **Recommendation: strip.** Keeping them means an older Runtime,
+which knows nothing about the flag, renders them — a guide reaching air through a version skew.
+Stripping cannot fail that way. Recorded as the recommendation so the decision is informed, not as
+the decision.
+
+**DESIGN-FIRST — implementation needs an OpenSpec change before code.** It adds a field to the
+element schema and changes the export contract, and the one-predicate constraint above is a design
+property that has to be specified rather than left to whoever writes the third consumer.
+
+**Severity `unrated`:** net-new capability with no defect evidence behind it. Source: owner report
+via the `DEBT.md` sweep (no `DEBT.md` line — reported directly).
+
+## [ ] D-146 — neither product has an in-app about/version surface, though the build stamp is ready for one ⟨priority: low⟩
+
+**What:** neither the Designer nor the Runtime shows the operator which build they are running.
+`__CG_BUILD__` is defined in **both** products and already carries `{ version, sha, builtAt }` —
+the data exists, the surface does not.
+
+**Why:** "which build is this machine on?" is the first question of every support conversation and
+every on-air incident, and today it can only be answered by inspecting the deployment. On the
+Runtime it matters more than on the Designer: a playout machine that is a version behind is
+indistinguishable, from the operator's side, from one that is current.
+
+**Acceptance:**
+
+- Each product exposes its version, commit SHA and build time somewhere the operator can reach
+  without developer tools.
+- The value comes from `__CG_BUILD__` — no second source, and no hand-maintained version string.
+
+**Notes:** deliberately not done during the splash work, though the splash already displays a build
+stamp on the Runtime — that is a boot-time surface that disappears, not something an operator can
+consult mid-session. Covers BOTH products; the Runtime half is the one that matters at 2 a.m.
+Source: `DEBT.md:2045`, inside the "Not done, and deliberately" section at `DEBT.md:2044`.
