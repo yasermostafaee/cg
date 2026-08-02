@@ -1,11 +1,39 @@
 # DEBT-FILING-PLAN.md — dedupe, destinations and batching
 
 Session 3 of the `DEBT.md` sweep. Turns the census in [DEBT-SWEEP.md](DEBT-SWEEP.md) into a
-filing plan. **Nothing is filed by this pass.** No item number is claimed, no file under
-`docs/prd/` or `openspec/` is touched, no product code is written.
+filing plan. **Nothing was filed by session 3.** Derived on `dev` at `2a1afe3e`; `dev` is the
+single source of truth for item numbers until the owner's final merge into frozen `main`.
 
-Derived on `dev` at `2a1afe3e`. `dev` is the single source of truth for item numbers until the
-owner's final merge into frozen `main`.
+## STATUS — the `B-` run is CLAIMED (session 4, 2026-08-02)
+
+**Read this before deriving anything.** A row's `verdict` column now distinguishes a proposal
+from a claim:
+
+| verdict           | meaning                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| **CLAIMED**       | the heading EXISTS in the PRD file at that number — do not re-file, do not renumber |
+| **DONE — merged** | the evidence was folded into the named existing item; no number was consumed        |
+| FILE              | still a PROPOSAL — re-derive and confirm before claiming                            |
+
+**Claimed in session 4 (commits `fce07a80`, `5bddda2e`):** `B-115` … `B-129`, fifteen items,
+twelve in [bugs-runtime.md](docs/prd/bugs-runtime.md) and three in
+[bugs-designer.md](docs/prd/bugs-designer.md). **The `B-` space is now contiguous `B-001` …
+`B-129`, and the next free `B-` is `B-130`.**
+
+**Merged in session 4 (commit `7b3b3349`):** `B-078`, `B-104`, `P-001` (priority also raised
+medium → high), `R-030`. No numbers consumed.
+
+**Still proposals:** the `R-`, `D-` and `P-` batches below (19 rows). Those numbers —
+`R-036`…`R-046`, `D-142`…`D-146`, `P-022`…`P-024` — have **not** been claimed and must be
+re-derived before they are.
+
+**One ordering correction session 4 had to make, recorded so it is not re-introduced.** The
+batching in §f puts `bugs-designer.md` first because `B-129` is on-air class. Filing in that order
+would have left a twelve-number hole: a later session deriving next-free from the headings would
+have seen `B-129` and returned `B-130`, stranding `B-115`…`B-126`. **Filing order is not work
+order** — filing `B-129` first fixes nothing, and the on-air priority belongs in the item's
+severity, which is where it now lives. Session 4 therefore derived the free number ONCE and
+claimed the whole run inside one session. Any future batch must do the same per prefix.
 
 ## Headline
 
@@ -28,8 +56,10 @@ The four merges are `B-127`→`B-078`, `B-129`→`B-104`, `B-132`→`P-001`, `R-
 as proposed _before_ this re-pack). That is **10.5% of the 38** — well under the one-third that
 would have meant the census was re-discovering known work, so the filing batches stand.
 
-**These remain PROPOSALS.** Each filing batch re-derives from the headings and confirms
-immediately before it claims. A proposal is not an allocation.
+**The `R-`, `D-` and `P-` numbers remain PROPOSALS** — each filing batch re-derives from the
+headings and confirms immediately before it claims; a proposal is not an allocation. **The `B-`
+range above was CLAIMED in session 4** and is no longer a proposal; see the STATUS section at the
+top of this file.
 
 ## Free numbers — re-derived, not read
 
@@ -53,8 +83,15 @@ grep -rhoE "^## \[.\] B-[0-9]{3}" --include="*.md" docs/prd/ --exclude=README.md
 Duplicate audit prints exactly `B-056` and `B-080`; `C-`, `D-`, `P-` and `R-` print nothing.
 `refs/stash` is empty; both rescue tags are present and untouched.
 
-**Every number below is a PROPOSAL.** Each filing session re-derives and confirms immediately
-before it claims, exactly as the registry requires. A proposal is not an allocation.
+**Every number below marked `FILE` is a PROPOSAL.** Each filing session re-derives and confirms
+immediately before it claims, exactly as the registry requires. A proposal is not an allocation.
+Rows marked **CLAIMED** are past that point — the heading exists, and re-deriving against them
+returns `B-130`.
+
+> **The table above is session 3's derivation and is left as written.** It was correct on
+> `2a1afe3e`. After session 4's `B-` run the live values are `B-130` free and `B-114` no longer
+> the highest heading; `C-`, `D-`, `P-` and `R-` are unchanged. Do not read this table as current
+> — derive.
 
 ## A correction the census carries — three rows have the wrong prefix
 
@@ -179,20 +216,20 @@ does not support one.
 
 ## `bugs-runtime.md` — `B-` (Runtime defects)
 
-| source                      | description                                                                                    | existing item?                          | verdict | dest              | prefix | number    | severity | design-first? |
-| --------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------- | ------- | ----------------- | ------ | --------- | -------- | ------------- |
-| `:119` + `:248` _(+`:409`)_ | `PRIMARY A` sticks in `connecting`: `emitHealth` dedupes on a key that collapses 4 FSM states  | related: `B-046` (bugs-runtime.md:628)  | FILE    | `bugs-runtime.md` | `B-`   | **B-115** | high     | no            |
-| `:230`                      | `delimiters.json` lives in the template dir, so every boot warns a template is corrupt         | related: `R-034` (runtime.md:1357)      | FILE    | `bugs-runtime.md` | `B-`   | **B-116** | medium   | no            |
-| `:796`                      | The reachability gate disabled the entire console in TEST MODE; fix landed, wants filing       | related: `R-006` (runtime.md:170)       | FILE    | `bugs-runtime.md` | `B-`   | **B-117** | medium   | no            |
-| `:1012`                     | `enterRehearse` reports a flat `mute-failed`; CasparCG never refuses `MIXER VOLUME` (measured) | related: `R-029` (runtime.md:1256)      | FILE    | `bugs-runtime.md` | `B-`   | **B-118** | high     | no            |
-| `:1048`                     | Whether `unknown` had a connected server is INFERRED; a second defect is not ruled out         | related: `B-093` (bugs-runtime.md:1799) | FILE    | `bugs-runtime.md` | `B-`   | **B-119** | unrated  | no            |
-| `:1064`                     | `PLAY` is enabled on a bound row whose template has left the registry — take fails at air time | related: `C-011` (caspar.md:166)        | FILE    | `bugs-runtime.md` | `B-`   | **B-120** | on-air   | no            |
-| `:1104`                     | `CG ADD` site 2 (reconnect reconciliation) is not rehearse-guarded — re-ADDs unmuted           | related: `R-022` (runtime.md:898)       | FILE    | `bugs-runtime.md` | `B-`   | **B-121** | on-air   | no            |
-| `:1539` + `:2456`           | `CLEAR ALL` filters on the very statuses that may be wrong — returns success having sent none  | related: `R-012` (runtime.md:523)       | FILE    | `bugs-runtime.md` | `B-`   | **B-122** | on-air   | no            |
-| `:1714`                     | `FailoverBanner` is `position: fixed` and overlays the monitor strip                           | none                                    | FILE    | `bugs-runtime.md` | `B-`   | **B-123** | low      | no            |
-| `:1722`                     | `clampInspector`'s `MIN_WORKSPACE_PX` ignores ~54px of shell chrome                            | none                                    | FILE    | `bugs-runtime.md` | `B-`   | **B-124** | low      | no            |
-| `:2207` + `:2456`           | Bound-row race: the unbound branch CLEARs a just-loaded producer, item state stays `loaded`    | none                                    | FILE    | `bugs-runtime.md` | `B-`   | **B-125** | on-air   | no            |
-| `DEBT.md:1531`              | Adopt-`CLEAR` returned 202, the following `CG ADD` returned 404, layer 71 left empty           | related: `B-056` (bugs-runtime.md:953)  | FILE    | `bugs-runtime.md` | `B-`   | **B-126** | on-air   | no            |
+| source                      | description                                                                                    | existing item?                          | verdict     | dest              | prefix | number    | severity | design-first? |
+| --------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------- | ----------- | ----------------- | ------ | --------- | -------- | ------------- |
+| `:119` + `:248` _(+`:409`)_ | `PRIMARY A` sticks in `connecting`: `emitHealth` dedupes on a key that collapses 4 FSM states  | related: `B-046` (bugs-runtime.md:628)  | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-115** | high     | no            |
+| `:230`                      | `delimiters.json` lives in the template dir, so every boot warns a template is corrupt         | related: `R-034` (runtime.md:1357)      | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-116** | medium   | no            |
+| `:796`                      | The reachability gate disabled the entire console in TEST MODE; fix landed, wants filing       | related: `R-006` (runtime.md:170)       | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-117** | medium   | no            |
+| `:1012`                     | `enterRehearse` reports a flat `mute-failed`; CasparCG never refuses `MIXER VOLUME` (measured) | related: `R-029` (runtime.md:1256)      | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-118** | high     | no            |
+| `:1048`                     | Whether `unknown` had a connected server is INFERRED; a second defect is not ruled out         | related: `B-093` (bugs-runtime.md:1799) | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-119** | unrated  | no            |
+| `:1064`                     | `PLAY` is enabled on a bound row whose template has left the registry — take fails at air time | related: `C-011` (caspar.md:166)        | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-120** | on-air   | no            |
+| `:1104`                     | `CG ADD` site 2 (reconnect reconciliation) is not rehearse-guarded — re-ADDs unmuted           | related: `R-022` (runtime.md:898)       | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-121** | on-air   | no            |
+| `:1539` + `:2456`           | `CLEAR ALL` filters on the very statuses that may be wrong — returns success having sent none  | related: `R-012` (runtime.md:523)       | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-122** | on-air   | no            |
+| `:1714`                     | `FailoverBanner` is `position: fixed` and overlays the monitor strip                           | none                                    | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-123** | low      | no            |
+| `:1722`                     | `clampInspector`'s `MIN_WORKSPACE_PX` ignores ~54px of shell chrome                            | none                                    | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-124** | low      | no            |
+| `:2207` + `:2456`           | Bound-row race: the unbound branch CLEARs a just-loaded producer, item state stays `loaded`    | none                                    | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-125** | on-air   | no            |
+| `DEBT.md:1531`              | Adopt-`CLEAR` returned 202, the following `CG ADD` returned 404, layer 71 left empty           | related: `B-056` (bugs-runtime.md:953)  | **CLAIMED** | `bugs-runtime.md` | `B-`   | **B-126** | on-air   | no            |
 
 **`B-115` is a regression caused by `B-046`, and the item must say so.** `B-046`
 ([bugs-runtime.md:628](docs/prd/bugs-runtime.md), `[x]`) shipped the dedupe: its own note records
@@ -211,13 +248,13 @@ seam — the CLEAR/ADD pair is not atomic — opposite failure modes. Merging th
 
 ## `bugs-designer.md` — `B-` (Designer defects; the census's `new D-` corrected)
 
-| source                 | description                                                                      | existing item?                             | verdict                | dest               | prefix | number    | severity | design-first? |
-| ---------------------- | -------------------------------------------------------------------------------- | ------------------------------------------ | ---------------------- | ------------------ | ------ | --------- | -------- | ------------- |
-| `:1321`                | Flake: Designer multi-select group-drag spec times out under a loaded gate       | **`B-078`** (bugs.md:728, `[ ]`)           | **MERGE INTO `B-078`** | —                  | —      | —         | medium   | no            |
-| `:1343`                | Flake: Designer VP8+alpha seek-fragile canvas test hits a decode error           | related: `B-078` (bugs.md:728)             | FILE                   | `bugs-designer.md` | `B-`   | **B-127** | medium   | no            |
-| external #3            | JSON save/import loses assets — owner has a reproduction, mechanism undiagnosed  | **`B-104`** (bugs-designer.md:1341, `[ ]`) | **MERGE INTO `B-104`** | —                  | —      | —         | high     | no            |
-| external #9            | The ticker separator combo lists every asset, including fonts and videos         | related: `D-039` (designer.md:1019)        | FILE                   | `bugs-designer.md` | `B-`   | **B-128** | medium   | no            |
-| external #10 + `:1190` | The canvas background colour leaks into the output; output must stay transparent | none                                       | FILE                   | `bugs-designer.md` | `B-`   | **B-129** | on-air   | **yes**       |
+| source                 | description                                                                      | existing item?                             | verdict           | dest               | prefix | number    | severity | design-first? |
+| ---------------------- | -------------------------------------------------------------------------------- | ------------------------------------------ | ----------------- | ------------------ | ------ | --------- | -------- | ------------- |
+| `:1321`                | Flake: Designer multi-select group-drag spec times out under a loaded gate       | **`B-078`** (bugs.md:728, `[ ]`)           | **DONE — merged** | —                  | —      | —         | medium   | no            |
+| `:1343`                | Flake: Designer VP8+alpha seek-fragile canvas test hits a decode error           | related: `B-078` (bugs.md:728)             | **CLAIMED**       | `bugs-designer.md` | `B-`   | **B-127** | medium   | no            |
+| external #3            | JSON save/import loses assets — owner has a reproduction, mechanism undiagnosed  | **`B-104`** (bugs-designer.md:1341, `[ ]`) | **DONE — merged** | —                  | —      | —         | high     | no            |
+| external #9            | The ticker separator combo lists every asset, including fonts and videos         | related: `D-039` (designer.md:1019)        | **CLAIMED**       | `bugs-designer.md` | `B-`   | **B-128** | medium   | no            |
+| external #10 + `:1190` | The canvas background colour leaks into the output; output must stay transparent | none                                       | **CLAIMED**       | `bugs-designer.md` | `B-`   | **B-129** | on-air   | **yes**       |
 
 **`B-127` (the VP8 flake) is deliberately NOT merged into `B-078`, though its own `DEBT.md`
 entry groups them.** `DEBT.md:1321` calls the group-drag timeout "the same class as the VP8 flake
@@ -237,9 +274,9 @@ and `[~]` states were included.
 
 ## `bugs.md` — `B-` (cross-cutting)
 
-| source      | description                                                                      | existing item?                     | verdict                | dest | prefix | number | severity | design-first? |
-| ----------- | -------------------------------------------------------------------------------- | ---------------------------------- | ---------------------- | ---- | ------ | ------ | -------- | ------------- |
-| external #5 | The app's UI font loads from a CDN; on a LAN-only or air-gapped machine it hangs | **`P-001`** (platform.md:5, `[ ]`) | **MERGE INTO `P-001`** | —    | —      | —      | high     | no            |
+| source      | description                                                                      | existing item?                     | verdict           | dest | prefix | number | severity | design-first? |
+| ----------- | -------------------------------------------------------------------------------- | ---------------------------------- | ----------------- | ---- | ------ | ------ | -------- | ------------- |
+| external #5 | The app's UI font loads from a CDN; on a LAN-only or air-gapped machine it hangs | **`P-001`** (platform.md:5, `[ ]`) | **DONE — merged** | —    | —      | —      | high     | no            |
 
 **No proposal survives in `bugs.md`, so this batch disappears.** `P-001` — "Bundle Vazirmatn
 offline" ⟨medium⟩, `[ ]` open — is the same defect stated as work: _"Ship the Vazirmatn font with
@@ -251,20 +288,20 @@ filing session should raise `P-001`'s priority rather than mint a number beside 
 
 ## `runtime.md` — `R-` (Runtime work items)
 
-| source            | description                                                                                    | existing item?                       | verdict                | dest         | prefix | number    | severity | design-first? |
-| ----------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------ | ---------------------- | ------------ | ------ | --------- | -------- | ------------- |
-| `:195`            | A version/shape marker on the persisted bridge configs — costed, judged its own change         | none                                 | FILE                   | `runtime.md` | `R-`   | **R-036** | medium   | **yes**       |
-| `:355`            | `dev-b6-inspector-finish` remainder: §3 `ROTATOR — ITEM 3` schema decision + the §7 split row  | related: `R-028` (runtime.md:1067)   | FILE                   | `runtime.md` | `R-`   | **R-037** | medium   | **yes**       |
-| `:686`            | Three clear-reason Zod enums cannot carry the real error code                                  | none                                 | FILE                   | `runtime.md` | `R-`   | **R-038** | medium   | **yes**       |
-| `:1360`           | No E2E covers the scrub DRAG, only `arrowStep`                                                 | none                                 | FILE                   | `runtime.md` | `R-`   | **R-039** | low      | no            |
-| `:1420`           | Two same-named sequences render identical Inspector headings — needs a wording decision        | none                                 | FILE                   | `runtime.md` | `R-`   | **R-040** | low      | no            |
-| `:1606` + `:2621` | No test on `#`-vs-alias divergence, alias stability, or gap-not-renumber                       | related: `R-033` (runtime.md:1203)   | FILE                   | `runtime.md` | `R-`   | **R-041** | medium   | no            |
-| `:1832`           | `mute-before-ADD` so LOAD can run during rehearse; on 2.5.0 volume must land BEFORE `CG ADD`   | related: `R-029` (runtime.md:1256)   | FILE                   | `runtime.md` | `R-`   | **R-042** | on-air   | **yes**       |
-| `:1891`           | The APASAI mark is an auto-trace of a raster — replace with real vector before release         | related: `R-035` (runtime.md:1385)   | FILE                   | `runtime.md` | `R-`   | **R-043** | medium   | no            |
-| `:2088` + `:2091` | Nothing asserts the migrated dialogs still OPEN, nor that `Cancel` leaves state byte-identical | none                                 | FILE                   | `runtime.md` | `R-`   | **R-044** | medium   | no            |
-| `:2107`           | `AWAITING_ROW_REASON` sits with the verbs, not in the shared `reachWording` module             | none                                 | FILE                   | `runtime.md` | `R-`   | **R-045** | low      | no            |
-| task §5.3         | The raster residual: a dead `window.innerWidth` fallback, and the `unreadable` silence         | **`R-030`** (runtime.md:1306, `[ ]`) | **MERGE INTO `R-030`** | —            | —      | —         | medium   | no            |
-| external #8       | `next` should not be offered on every sequence — keep `NEXT`, disable it, explain in tooltip   | related: `D-031` (designer.md:934)   | FILE                   | `runtime.md` | `R-`   | **R-046** | medium   | **yes**       |
+| source            | description                                                                                    | existing item?                       | verdict           | dest         | prefix | number    | severity | design-first? |
+| ----------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------ | ----------------- | ------------ | ------ | --------- | -------- | ------------- |
+| `:195`            | A version/shape marker on the persisted bridge configs — costed, judged its own change         | none                                 | FILE              | `runtime.md` | `R-`   | **R-036** | medium   | **yes**       |
+| `:355`            | `dev-b6-inspector-finish` remainder: §3 `ROTATOR — ITEM 3` schema decision + the §7 split row  | related: `R-028` (runtime.md:1067)   | FILE              | `runtime.md` | `R-`   | **R-037** | medium   | **yes**       |
+| `:686`            | Three clear-reason Zod enums cannot carry the real error code                                  | none                                 | FILE              | `runtime.md` | `R-`   | **R-038** | medium   | **yes**       |
+| `:1360`           | No E2E covers the scrub DRAG, only `arrowStep`                                                 | none                                 | FILE              | `runtime.md` | `R-`   | **R-039** | low      | no            |
+| `:1420`           | Two same-named sequences render identical Inspector headings — needs a wording decision        | none                                 | FILE              | `runtime.md` | `R-`   | **R-040** | low      | no            |
+| `:1606` + `:2621` | No test on `#`-vs-alias divergence, alias stability, or gap-not-renumber                       | related: `R-033` (runtime.md:1203)   | FILE              | `runtime.md` | `R-`   | **R-041** | medium   | no            |
+| `:1832`           | `mute-before-ADD` so LOAD can run during rehearse; on 2.5.0 volume must land BEFORE `CG ADD`   | related: `R-029` (runtime.md:1256)   | FILE              | `runtime.md` | `R-`   | **R-042** | on-air   | **yes**       |
+| `:1891`           | The APASAI mark is an auto-trace of a raster — replace with real vector before release         | related: `R-035` (runtime.md:1385)   | FILE              | `runtime.md` | `R-`   | **R-043** | medium   | no            |
+| `:2088` + `:2091` | Nothing asserts the migrated dialogs still OPEN, nor that `Cancel` leaves state byte-identical | none                                 | FILE              | `runtime.md` | `R-`   | **R-044** | medium   | no            |
+| `:2107`           | `AWAITING_ROW_REASON` sits with the verbs, not in the shared `reachWording` module             | none                                 | FILE              | `runtime.md` | `R-`   | **R-045** | low      | no            |
+| task §5.3         | The raster residual: a dead `window.innerWidth` fallback, and the `unreadable` silence         | **`R-030`** (runtime.md:1306, `[ ]`) | **DONE — merged** | —            | —      | —         | medium   | no            |
+| external #8       | `next` should not be offered on every sequence — keep `NEXT`, disable it, explain in tooltip   | related: `D-031` (designer.md:934)   | FILE              | `runtime.md` | `R-`   | **R-046** | medium   | **yes**       |
 
 **The raster residual is `R-030`'s own unmet acceptance, not a new item.** `R-030` is still `[ ]`
 OPEN, and its third acceptance bullet reads verbatim: _"WHEN the bridge supplies channel geometry
