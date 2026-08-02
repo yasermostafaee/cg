@@ -859,3 +859,149 @@ invented policy into shared config (the hook set, root `package.json`, CLAUDE.md
 happened. Do not treat the announcement as a spec. A throwaway PowerShell dump the owner runs to a
 scratch path OUTSIDE every worktree is not this change and does not unblock it — it commits
 nothing and touches no shared config.
+
+## [ ] P-022 — an item-number claim derives from the headings across EVERY ref, for all five prefixes, immediately before commit ⟨priority: medium⟩
+
+**What:** make the claiming procedure a numbered rule. A `B-`/`C-`/`D-`/`P-`/`R-` number is claimed
+by DERIVING it — the highest heading that exists, swept across every ref, immediately before the
+commit that writes the heading — never by reading a recorded value.
+
+**Why:** the rule exists because the failure is recorded three times. A "next free" value is a
+snapshot with a shelf life, never an allocation: it misled twice as a stale value someone READ, and
+once as a stale value someone WROTE that reached `main` and told the next session to take a number
+that was already gone. The `R-031` double-claim is the same failure in a prefix nobody was
+watching — a splash filed as `R-031` on one branch while `R-031` (the operator surface) already
+existed on another.
+
+**This is the DURABLE rule, not the fast-mode one — deliberately re-scoped.** `DEBT.md:180` words
+it as "a claim must check **both** branches", which was correct while `dev` held unmerged
+`docs/prd/*` edits. That framing is already obsolete: `main` is frozen, and
+[b-number-registry.md](b-number-registry.md) now carries an all-ref derivation that is a strict
+superset of "both branches". Filing the two-branch wording would date the rule on the day it
+landed.
+
+**Acceptance:**
+
+- The procedure is stated once, for all five prefixes, in
+  [b-number-registry.md](b-number-registry.md) — done, as of the 2026-08-02 audit entry.
+- A claim is derived immediately before the commit that writes the heading, not when the session
+  starts.
+- The sweep covers every ref (`git for-each-ref` over remotes and heads), not the current checkout.
+- A claim is never one number wide by assumption — a sibling session may claim a RANGE.
+
+**Why it is NOT [[B-075]], and the distinction is the whole reason this needs its own number.**
+`B-075` (`[x]`, [bugs.md](bugs.md)) built the CI guard that stops a duplicate `B-` number from being
+**MERGED**. That is ENFORCEMENT, and it covers **`B-` only, over the three bug files**. `P-022` is
+the **claiming PROCEDURE**, across all five prefixes. The procedure is documented but **not
+enforced** for `C-`, `D-`, `P-` and `R-` — which is precisely the gap `R-031` fell through: had the
+`B-` guard's equivalent existed for `R-`, the double-claim could not have merged.
+
+**Notes:** extending the audit guard to the other four prefixes is the obvious follow-up and is
+deliberately NOT folded in here — it is a code change to
+`tools/soak-runner/tests/bug-number-audit.test.ts` and wants its own item. Source: `DEBT.md:180`.
+
+## [ ] P-023 — a control test that reaches a different implementation than the one under test is not a control test ⟨priority: medium⟩
+
+**What:** record, as a rule with a worked example, that a control test only controls for something
+if it exercises the SAME implementation as the test it is validating.
+
+**Why — the incident, because the rule is only convincing with it.** A CasparCG 2.5.0 probe
+concluded that `CG ADD` could not take an http URL. The one result that looked like it exonerated
+the environment was a bare `PLAY "<url>"` returning `202 OK` while both `[HTML]` forms returned
+`404`. That reading was almost certainly the **ffmpeg** producer answering, because ffmpeg accepts
+http URLs too. So the "control" reached a different producer than the one under test, and it turned
+"the HTML producer is broken" into "CG ADD cannot take a URL". The invented mechanism then sounded
+plausible enough to write up **with a recommendation attached** — run 2.3.2 instead of 2.5.0.
+
+The real cause was that CEF was dead in that instance (`cef_executor Could not post task`), fixed by
+adding an `<html>` block with a writable `cache-path` to `casparcg.config`. 2.5.0 works.
+
+**The lesson, stated so it transfers:** the probe needed to establish **WHICH implementation
+answered** before drawing any conclusion from the fact that one form succeeded. **Confidence came
+from the crispness of the table, not from its validity** — a tidy result matrix reads as rigour and
+is not.
+
+**Acceptance:**
+
+- A recon or probe that compares two forms records which implementation served each one, or states
+  that it could not tell.
+- A conclusion drawn from a control that cannot be attributed is labelled as unattributed rather
+  than reported as a measurement.
+
+**Notes:** the void notice for the original entry is preserved in `DEBT.md` rather than deleted,
+because the mistake is more instructive than the conclusion was. [[B-126]] is the one finding from
+that session that SURVIVED the void — the event was real even though the diagnosis was not.
+Source: `DEBT.md:1456`.
+
+## [ ] P-024 — PATTERN (twice): an observer effect silently no-ops when its target is absent on the first render ⟨priority: medium⟩
+
+**What:** record as a **shape**, not an instance: a `ResizeObserver` (or similar) effect keyed on
+values that are ready before its target element is, so on the first pass the ref is `null`, the
+effect returns early, and **no observer is ever attached**. Nothing errors. The value it should
+have computed keeps its initial default forever.
+
+**Two occurrences, which is why it is a pattern:**
+
+1. **PVW's white page** (`RehearsalStage`) — the effect was keyed on
+   `[raster.width, raster.height]`, but the fit box only renders once `html` has arrived. On the
+   first pass `fitRef.current` was `null`, so `fit` stayed at its initial `1` and the rehearsal
+   rendered unscaled, filling the panel.
+2. **The b2 density bug** — an effect keyed on `[ref]` never re-ran because `bank` was `null` on
+   the first render.
+
+**Why:** both were **invisible in code review and obvious on screen**, and both were found by
+LOOKING rather than by a test. That combination is what makes it worth a numbered pattern: the
+class is not reachable by the review or the test discipline this repo already has.
+
+**Acceptance:**
+
+- An effect that attaches an observer keys on the presence of its TARGET, not only on the values it
+  will observe — or it re-runs when the target appears.
+- Where that shape is unavoidable, the effect fails loudly rather than returning early in silence.
+
+**Notes:** the general form is that an early `return` on a missing ref is indistinguishable, at
+runtime, from an effect that ran and found nothing to do. Source: `DEBT.md:1732`.
+
+## [ ] P-025 — PowerShell silently ALTERS arguments and file content, and does not necessarily error ⟨priority: medium⟩
+
+**What:** record the class, with its measured instances, and the rule that avoids it. On this
+Windows box PowerShell will change what a command receives or what a file contains, **without
+failing**, so the damage is discovered later by someone reading a wrong number or a corrupted file.
+
+**Four measured instances, one class:**
+
+1. **`Measure-Object -Line` silently under-counts.** It reported **2203** lines for `DEBT.md`
+   against a true **2707** — blank lines are not counted. A session sized its work from the wrong
+   number. (Verified here with git plumbing: `git grep -c "" HEAD -- DEBT.md` → `2707`,
+   `git cat-file -s HEAD:DEBT.md` → `179522` bytes.)
+2. **`Get-Content -Raw` / `Set-Content` corrupt non-ASCII text.** One rewrite turned **35
+   em-dashes into mojibake** and injected a BOM.
+3. **The BOM is still in the tree, so this is not a historical note.** Two files carry a UTF-8 BOM
+   (`EF BB BF`) today: **`docs/prd/bugs-runtime.md`** and **`docs/prd/runtime.md`** — both heavily
+   edited files. Prettier does not strip it and no gate step fails on it.
+4. **An unquoted `stash@{n}` is mangled before git sees it.** PowerShell parses `@{` as the start
+   of a hashtable literal, so the argument git receives is not the one that was typed.
+
+**Why:** the common property is that **PowerShell does not error**. A wrong line count looks like a
+line count; a mojibake em-dash looks like text; a mangled stash ref produces a git error that
+appears to be git's fault. Every one of these is discovered downstream, by which point a decision
+has already been made on the bad value.
+
+**THE RULE:** count and read with **git's own plumbing** (`git cat-file -s`, `git grep -c ""`,
+`git grep`) or with proper edit tooling. Do not use `Measure-Object -Line` to size a file, do not
+round-trip text through `Get-Content -Raw` / `Set-Content`, and always quote a `stash@{n}` argument.
+
+**Acceptance:**
+
+- File sizes and line counts quoted in any report come from git plumbing, not from
+  `Measure-Object`.
+- Text files are edited with tooling that preserves encoding; no rewrite introduces a BOM or
+  changes a non-ASCII character.
+- `stash@{n}` and any other `@{`-bearing argument is quoted.
+
+**Notes:** the two BOMs above are recorded as EVIDENCE, not fixed here — this item only files the
+class. Removing them is a separate, trivial change that should be verified not to disturb the
+diffs. This item applies to commands the OWNER runs by hand; CLAUDE.md already carries the
+shell-compatibility rule for that audience, and this is the content-corruption half of it, which
+that rule does not currently cover. Source: measured across the `DEBT.md` sweep sessions
+(2026-08-01 … 2026-08-03).
