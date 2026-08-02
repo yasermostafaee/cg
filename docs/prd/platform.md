@@ -2,7 +2,7 @@
 
 Cross-cutting items: shared packages, build/hosting, tests. See `README.md`.
 
-## [ ] P-001 — Bundle Vazirmatn offline ⟨priority: medium⟩
+## [ ] P-001 — Bundle Vazirmatn offline ⟨priority: high⟩
 
 **What:** Ship the Vazirmatn font with the apps instead of loading it from the
 jsdelivr CDN, and tighten the CSP accordingly.
@@ -14,6 +14,14 @@ rendering offline and forces a loose CSP.
 - WHEN the app loads THEN the CSP no longer needs `cdn.jsdelivr.net`
   **Notes:** add `@fontsource/vazirmatn`, import it in each app entry, drop the
   `<link>` in `index.html`. Touches `@cg/ui` font stack + both apps.
+
+**Priority RAISED medium → high (2026-08-02) — the raise came from a FIELD REPORT, not from
+re-reading this item.** The defect was reported independently during the `DEBT.md` sweep as the
+app's UI font loading from a CDN, and on a LAN-only or air-gapped machine **that request never
+returns** — the observed symptom is a hang, not a fallback to a system face. That is stronger than
+the `medium` recorded here: this item was written as a portability and CSP improvement, and the
+report shows the target deployment is the one that breaks. The `What`, `Why` and `Acceptance`
+above already describe the fix correctly and are unchanged; only the severity moved.
 
 ## [ ] P-002 — Lightweight routing / app shell ⟨priority: low⟩
 

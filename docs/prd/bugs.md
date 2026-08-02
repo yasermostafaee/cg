@@ -842,6 +842,19 @@ soak disproved. The mechanism is unchanged from "Where the original red actually
 `workers: undefined` gives Playwright ~half the cores (**6 on this 12-core box**), `fullyParallel`,
 `retries: 0`, all INSIDE turbo's `--concurrency=1`.
 
+**ANOTHER OCCURRENCE — 2026-08-01, the Designer's multi-select group-drag spec** (recorded by the
+`DEBT.md` sweep, `DEBT.md:1321`). `apps/designer/tests/e2e/multi-select.spec.ts:271` (D-054,
+"group-drag keyframes an animated member at the playhead") failed one `gate:e2e` run with a 30 s
+timeout on `getByTestId('multi-select-box').first()` — the selection box never appeared after
+`clickCanvas` + `shiftClickCanvas`. Same signature as every occurrence above: **a timeout, not a
+wrong-value assertion**, on a diff (`dev-pvw-white`) touching only `apps/runtime/**` and `DEBT.md`,
+so the Designer could not import a line of it. Re-run alone **7/7 green**; the whole gate re-run
+**22/22, 0 cached** (Designer 231, Runtime 52). The sweep entry independently reached this item's
+family — it names "the B-073/B-098 contention signature" — without naming the item, which is why it
+is folded in here rather than filed beside it. If it recurs, the useful direction is why the
+selection box is slow to appear under load (`multiBoxes` is read immediately after the second click
+with no settle), **not** a bigger budget — see the two FORBIDDEN answers below.
+
 **Stated honestly: the resource is not identified.** Serial-green is consistent with contention but
 does not name what is contended — and a sample taken while idle showed node+chrome at **1% of a
 12-core box**, which argues against CPU starvation specifically. Candidates not yet separated: I/O

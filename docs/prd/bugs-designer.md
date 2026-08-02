@@ -1366,6 +1366,19 @@ survived) MUST be pinned during the fix — the fix is not credible without them
 **Regression test:** persistence round-trip covering save → reload → asset resolution (bytes AND
 panel listing), including the restart boundary.
 
+**FIELD REPORT — 2026-08-02, from the owner (via the `DEBT.md` sweep).** Independently reported as
+"Designer JSON save/import loses assets": the project is saved and re-imported, and the assets do
+not come back. Folded in here rather than filed as a new number because it is this defect — the
+same save → reload → assets-missing boundary — reported from the other side of the same seam.
+
+**The mechanism is STILL NOT DIAGNOSED, and this report does not change that.** It supplies the
+reproduction this entry has been asking for, not a cause. **Do not promote either candidate (a) or
+(b) above to "the cause" because a repro now exists** — both remain candidates, and the item's own
+requirement stands unchanged: the exact conditions (external File System Access file vs OPFS
+project; same or different browser session; whether the remembered-directory permission survived)
+MUST be pinned before a fix is credible. What the report does add is that the loss is reproducible
+on demand for the owner, so those conditions can now actually be captured rather than guessed.
+
 ## [ ] B-105 — the sequence "Hide-show" transition produces no perceptible change ⟨priority: medium⟩
 
 **Repro:**

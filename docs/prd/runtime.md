@@ -1330,11 +1330,26 @@ currently changes where every graphic lands.
 **What already exists** (`packages/template-runtime/src/position.ts`): a scene is built at its
 own `scene.resolution` and translated onto the output frame by one of nine anchors, with the
 operator override arriving as a bridge-appended query. The Designer preview never calls it, so
-placement is output-only **by construction**. The gap is documented in that file's own comment:
-`OUTPUT_FRAME` is hardcoded `{ width: 1920, height: 1080 }` at `position.ts:25`, and
-`applyOutputPosition` force-sizes `html`/`body` to it at `position.ts:110-111`. **The seam is
-already there** — `outputTranslate` takes a `frame` parameter with a default
-(`position.ts:80`), so the plumbing is a matter of supplying it rather than inventing it.
+placement is output-only **by construction**.
+
+> **PROSE CORRECTED 2026-08-02 — the paragraph that stood here described code that no longer
+> exists.** It read: "`OUTPUT_FRAME` is hardcoded `{ width: 1920, height: 1080 }` at
+> `position.ts:25`, and `applyOutputPosition` force-sizes `html`/`body` to it at
+> `position.ts:110-111`." **`OUTPUT_FRAME` no longer exists anywhere in the code.** The two roles
+> it used to conflate are now separate and separately named:
+>
+> - **`REFERENCE_FRAME`** (`position.ts:41`) — the authored coordinate space, deliberately a
+>   constant 1920×1080. This is the reference the author sees, exactly as the DECIDED approach
+>   below requires, and a test pins it (`tests/output-position.test.ts:232`).
+> - **`resolveChannelRaster`** (`position.ts:153`) — the OUTPUT raster, resolved per channel.
+>   `applyOutputPosition` calls it (`position.ts:260`), derives `outputScale` / `outputLetterbox`
+>   (`:261`–`:262`), and sizes `html`/`body` to the **channel** raster (`:275`–`:276`).
+>
+> The rename was the point, not cosmetic: the old name asserted "output" while holding a constant,
+> which is what made it a lie on any non-1080 channel. The seam described below did get supplied —
+> the bridge reads `#channelSettings.rasterFor(slot.channel)` and appends `cw`/`ch` to the served
+> URL (`tools/caspar-bridge/src/caspar-runtime.ts:3689`). This item stays `[ ]` because of the
+> unmet acceptance recorded at the foot of this entry, not because nothing landed.
 
 **DECIDED approach:**
 
@@ -1353,6 +1368,35 @@ already there** — `outputTranslate` takes a `frame` parameter with a default
   This plant is 16:9 throughout.
 
 **Notes:** Filed from the C-018 recon; the approach is decided but no code rides this item yet.
+
+**UNMET ACCEPTANCE — measured 2026-08-02, and this is why the item stays `[ ]`.** The third
+acceptance bullet above specifies a three-source chain: _"WHEN the bridge supplies channel
+geometry as a query parameter THEN that is used; WHEN it is absent THEN
+`window.innerWidth`/`innerHeight`; WHEN neither is available THEN 1920×1080."_ Sources 1 and 3
+work. **Source 2 can never run.**
+
+The bridge appends `cw`/`ch` **unconditionally** — `caspar-runtime.ts:3689`, whose own comment
+states the query "is never empty" because `rasterFor` falls back to the reference frame for an
+unconfigured channel. `resolveChannelRaster` (`position.ts:153`) tries the query first and returns
+on a hit (`:154`–`:155`), so the `window.innerWidth` branch (`:156`–`:158`) is unreachable in the
+shipped product. It is exercised only by tests that pass an empty search string
+(`tests/output-position.test.ts:145`).
+
+**Why it matters, stated without overstating it.** Source 2 is the only source that would measure
+what CasparCG's CEF _actually_ sized the page to, so it is the branch that would self-correct a
+channel whose configured raster is wrong. Today an unconfigured channel is placed against
+1920×1080 and the reading that could contradict it is never consulted on the placement path. The
+mitigation is real and separate: `RasterMismatchBanner` compares the configured claim against
+`INFO <channel>`, and because `ChannelSettingsStore.hydrate` back-fills every DECLARED channel
+with the 1920×1080 default (`channel-settings-store.ts:106`), a declared-but-unconfigured 720p
+channel does produce a `mismatch` and the banner does fire. The gap that remains is a channel
+whose mode `INFO` cannot read: the verdict is `unreadable`, the banner stays silent **by design**,
+and placement silently uses 1920×1080.
+
+**This is recorded as an unmet acceptance of THIS item, not as a new defect** — the behaviour it
+describes is the behaviour this item was filed to deliver. Closing `R-030` means either making
+source 2 reachable (append `cw`/`ch` only when a channel is genuinely configured) or amending the
+acceptance to drop a source the design does not want — a decision, not a bug fix.
 
 ## [ ] R-034 — the delimiter list is CONFIGURABLE in settings, not hard-coded in the control ⟨priority: medium⟩
 
