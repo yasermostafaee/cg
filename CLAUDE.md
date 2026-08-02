@@ -80,6 +80,29 @@ pnpm openspec <cmd>                     # OpenSpec CLI (new change / validate / 
 - This applies only to commands the OWNER runs by hand. Commands CC runs in its own tool
   environment are unaffected.
 
+### PowerShell silently ALTERS arguments and file content, and does not necessarily error (`P-025`)
+
+The rule above is about commands that FAIL. This one is about commands that appear to succeed and
+quietly hand back something else. **Full evidence is in `P-025` (`docs/prd/platform.md`); it is not
+restated here.** Four measured instances, one class:
+
+- **`Measure-Object -Line` under-counts** — it reported **2203** lines for `DEBT.md` against a true
+  **2707**, because blank lines are not counted. A session sized its work from the wrong number.
+- **`Get-Content -Raw` / `Set-Content` corrupt non-ASCII** — one rewrite turned **35 em-dashes into
+  mojibake** and injected a BOM. **Seven** files were still carrying a BOM on 2026-08-03; prettier
+  does not strip one and no gate step fails on one, so they survived silently.
+- **An unquoted `stash@{n}` is mangled** — PowerShell parses `@{` as a hashtable literal, so git
+  never receives the argument that was typed.
+
+**THE RULE: count and read with git's own plumbing** (`git cat-file -s`, `git grep -c ""`,
+`git grep`) **or with proper edit tooling.** Never size a file with `Measure-Object -Line`, never
+round-trip text through `Get-Content -Raw` / `Set-Content`, and always quote a `stash@{n}`.
+
+**Why it is worth its own rule:** every instance is discovered DOWNSTREAM, after a decision has
+been made on the bad value. A wrong line count looks like a line count; a mojibake em-dash looks
+like text; a mangled stash ref produces what reads as git's fault. Nothing errors at the moment the
+damage is done.
+
 ## Green gate — definition of done
 
 `format:check` + `typecheck` + `lint` + `test` + `build` for every touched
@@ -293,6 +316,17 @@ history.
   read from. `--ff-only` is the point: in a squash-merge repo it refuses loudly
   rather than manufacturing a merge commit, and a plain `pull` here has already
   produced a spurious conflict once.
+- **`cg`'s freshness is VERIFIED after every merge, never assumed — and step 4 takes an
+  ABSOLUTE path.** Writing this down once already failed: the bullet above says `cg` "was two
+  commits stale", and on **2026-08-02 it was measured 30 commits behind `origin/main`**, reading
+  `B-106`/`R-026` where the truth was `B-114`/`R-035`. It then fell 2 behind again within the same
+  day. **A session that reads a stale `cg` states wrong numbers with full confidence** — that is
+  precisely the failure mode `cg` exists to prevent, arriving through `cg` itself. Two
+  consequences: (1) `git -C ../cg pull --ff-only` is correct only from a DIRECT SIBLING of `cg`
+  and resolves to nothing from a session worktree nested under `.claude/worktrees/`, so resolve
+  the `main` worktree from `git worktree list --porcelain` (as `/ship` already does) or use an
+  absolute path; (2) after any merge, **confirm** the fast-forward landed — read
+  `git -C <cg> rev-parse HEAD` against `origin/main` rather than trusting the command's exit code.
 - **Why `--delete-branch` cannot work in this layout:** gh deletes the LOCAL branch
   first and aborts before the remote deletion if that step fails — and here it always
   fails. On the branch, gh checks out the PR's base `main`, which `cg` holds

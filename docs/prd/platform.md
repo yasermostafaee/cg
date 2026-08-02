@@ -794,7 +794,7 @@ onto this checkout, which is silent corruption, not an error.
 **Notes:** cross-ref [[P-017]], whose audit Acceptance already requires worktree enumeration —
 this item is the general rule behind that one bullet.
 
-## [ ] P-020 — rescue tags exist only on this disk and a re-clone would destroy them ⟨priority: medium⟩
+## [x] P-020 — rescue tags exist only on this disk and a re-clone would destroy them ⟨priority: medium⟩ — CLOSED 2026-08-03, measured: zero local-only tags remain; see the closing note
 
 **What:** the "tag before deleting" pattern this repo now uses produced two LOCAL-ONLY tags:
 `parked/openspec-archive-2026-07-19` (the parked archive WIP whose PR #374 was closed, never
@@ -836,6 +836,32 @@ because `cg` permanently occupies `main`
 (no worktree can `git checkout main`) — if `cg` stops holding `main`, that rule must be DELETED,
 not left to mislead. [[P-013]]/[[P-015]]/[[P-016]] are unaffected: the gate lock is host-wide, so
 worktree count changes collision RATE, not correctness.
+
+### CLOSING NOTE — 2026-08-03. Measured, not assumed.
+
+**Both tags this item names are now on `origin`, and there are no local-only tags at all.**
+Measured by comparing `git tag -l` against `git ls-remote --tags origin`:
+
+```
+local tags: 16      origin tags: 22
+local-only tags (present locally, absent on origin):  NONE
+```
+
+`origin` is a strict SUPERSET — it additionally carries five `snapshot/2026-07-20-*` tags and
+`stash-rescue/2026-07-26-runtime-modal` that a plain `git fetch` does not pull into a checkout,
+because they point at commits outside `dev`'s history. That is the safe direction: the backup holds
+more than the disk.
+
+Both named tags are covered. `parked/openspec-archive-2026-07-19` is pushed, and
+`stash-rescue/2026-07-26-runtime-modal` — which this item recorded as _"as of filing this second
+tag has not actually been created yet"_ — exists on `origin`. The concrete debt is discharged in
+full, not partly.
+
+**What remains is a standing rule, and a standing rule does not belong in a permanently-open
+item.** It moves to two places that are actually read: `CLAUDE.md`'s worktree section, and
+[[P-025]]'s acceptance — **a rescue tag is pushed at creation; a tag that exists only on one disk
+is not a rescue.** Closing this item is therefore a relocation of the rule, not an abandonment of
+it.
 
 ## [ ] P-021 — the `cg:state` change was announced but its specification does not exist ⟨priority: low⟩
 
@@ -998,8 +1024,22 @@ round-trip text through `Get-Content -Raw` / `Set-Content`, and always quote a `
 - Text files are edited with tooling that preserves encoding; no rewrite introduces a BOM or
   changes a non-ASCII character.
 - `stash@{n}` and any other `@{`-bearing argument is quoted.
+- **A rescue tag is PUSHED at creation.** A tag that exists only on one disk is not a rescue — it
+  is a promise that survives exactly one disk. Where non-durability is deliberate, it is recorded
+  as a choice at creation time, never left implicit. _(Relocated here from [[P-020]] when that item
+  closed on 2026-08-03; it is the standing half of a debt whose concrete half is discharged.)_
 
-**Notes:** the two BOMs above are recorded as EVIDENCE, not fixed here — this item only files the
+**UPDATED 2026-08-03 — the sweep found SEVEN BOMs, not two.** The "two files" above was a
+measurement of two files, not of the repo. All 2180 tracked files were scanned; seven carried a
+BOM. `docs/prd/bugs-runtime.md` and `docs/prd/runtime.md` were stripped (three bytes each, nothing
+else touched). **Five remain**, left alone because that session shipped zero product code and did
+not edit archives:
+
+- `apps/designer/src/renderer/features/shell/Modal.css.ts` — **the one worth a second look**: a
+  BOM in a TypeScript source file is carried into the build rather than sitting in a doc.
+- four `openspec/changes/archive/2026-07-1*/tasks.md` files — historical records.
+
+**Notes:** the BOMs above are recorded as EVIDENCE, not fixed here — this item only files the
 class. Removing them is a separate, trivial change that should be verified not to disturb the
 diffs. This item applies to commands the OWNER runs by hand; CLAUDE.md already carries the
 shell-compatibility rule for that audience, and this is the content-corruption half of it, which
