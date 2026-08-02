@@ -4,6 +4,64 @@ Session 3 of the `DEBT.md` sweep. Turns the census in [DEBT-SWEEP.md](DEBT-SWEEP
 filing plan. **Nothing was filed by session 3.** Derived on `dev` at `2a1afe3e`; `dev` is the
 single source of truth for item numbers until the owner's final merge into frozen `main`.
 
+## STATUS — FILING COMPLETE (session 5, 2026-08-03)
+
+**Every proposal in this plan is now either CLAIMED or merged. No row is left as `FILE`.**
+
+| prefix | claimed | range                 | commit     |
+| ------ | ------- | --------------------- | ---------- |
+| `B-`   | 15      | `B-115` … `B-129`     | session 4  |
+| `R-`   | 11      | `R-036` … `R-046`     | `83c90e18` |
+| `D-`   | 5       | `D-142` … `D-146`     | `c8b531ec` |
+| `P-`   | 4       | `P-022` … **`P-025`** | `2dc5f941` |
+| `C-`   | 0       | —                     | —          |
+
+**34 claimed + 4 merged = the 38 proposals, all disposed.**
+
+**`P-025` is an ADDITION made during filing, not from this plan.** The plan proposed
+`P-022`–`P-024`; session 5 filed a fourth — _PowerShell silently alters arguments and file
+content, and does not necessarily error_ — so the `P-` range grew by one. Three of its four
+instances were re-measured rather than restated, and two of them are live artifacts in the tree:
+`docs/prd/bugs-runtime.md` and `docs/prd/runtime.md` both still carry a UTF-8 BOM.
+
+**Free numbers after the whole sweep:** `B-130`, `C-021`, `D-147`, `P-026`, `R-047`.
+
+### `DEBT.md` locators corrected while filing
+
+The plan is an index built by another session, and several of its locators point at a containing
+entry rather than the finding. Every correction made, so the plan is not trusted blind next time:
+
+| item    | plan said      | actual finding | what was at the plan's line                            |
+| ------- | -------------- | -------------- | ------------------------------------------------------ |
+| `B-120` | `DEBT.md:1064` | `DEBT.md:1092` | the sweep heading — it opens by measuring the OPPOSITE |
+| `R-037` | `DEBT.md:355`  | `:393`, `:406` | the `dev-b6-inspector-finish` entry heading            |
+| `R-038` | `DEBT.md:686`  | `DEBT.md:756`  | the `dev-offline-polish` entry heading                 |
+| `R-039` | `DEBT.md:1360` | `DEBT.md:1383` | the owner UI review batch heading                      |
+| `D-144` | `DEBT.md:1967` | `DEBT.md:1968` | the section heading above the bullet                   |
+| `D-146` | `DEBT.md:2044` | `DEBT.md:2045` | the section heading above the bullet                   |
+
+`B-120`'s was the one that mattered: `DEBT.md:1064` opens _"`PLAY` on a cleared row REACHES AIR …
+Nothing to fix there"_, so filing from that line would have described a non-defect. The residual is
+at `:1092`.
+
+### `DEBT.md` LIVE rows with no filed item — four, all deliberate
+
+The census found 36 LIVE rows. 32 got an item; the remaining four are disposed without one, and
+each is recorded here rather than left implicit:
+
+| row     | why no item                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------ |
+| `:1295` | **CLOSED — discharged.** Session 2 measured it; the residual landed on `R-030` in session 4.     |
+| `:33`   | Process, not a PRD item — an unwritten E2E and an owed Linux `gate:e2e`, on the sweep checklist. |
+| `:2125` | Process, not a PRD item — a stale header in a task file; the change dir does not exist.          |
+| `:936`  | **UNSURE, and still unresolved.** See §e — do not file it from the census summary.               |
+
+**`:936` is the one thing that blocks calling the sweep fully closed.** Session 2 measured that the
+seven-verb gating it lists as not-started is in fact present, so part of `dev-list-vs-layer` v3's
+§5–§8 has landed — but there is no `dev-list-vs-layer` directory in `openspec/changes/`, so which
+part cannot be recovered from the repo. It needs the original task prompt or a fresh re-scope from
+the code.
+
 ## STATUS — the `B-` run is CLAIMED (session 4, 2026-08-02)
 
 **Read this before deriving anything.** A row's `verdict` column now distinguishes a proposal
@@ -23,9 +81,9 @@ twelve in [bugs-runtime.md](docs/prd/bugs-runtime.md) and three in
 **Merged in session 4 (commit `7b3b3349`):** `B-078`, `B-104`, `P-001` (priority also raised
 medium → high), `R-030`. No numbers consumed.
 
-**Still proposals:** the `R-`, `D-` and `P-` batches below (19 rows). Those numbers —
-`R-036`…`R-046`, `D-142`…`D-146`, `P-022`…`P-024` — have **not** been claimed and must be
-re-derived before they are.
+~~**Still proposals:** the `R-`, `D-` and `P-` batches below (19 rows).~~ **Superseded by session
+5** — all three batches were claimed on 2026-08-03; see the STATUS section above. Left struck
+rather than deleted because it records what was true when session 4 ended.
 
 **One ordering correction session 4 had to make, recorded so it is not re-introduced.** The
 batching in §f puts `bugs-designer.md` first because `B-129` is on-air class. Filing in that order
@@ -56,7 +114,7 @@ The four merges are `B-127`→`B-078`, `B-129`→`B-104`, `B-132`→`P-001`, `R-
 as proposed _before_ this re-pack). That is **10.5% of the 38** — well under the one-third that
 would have meant the census was re-discovering known work, so the filing batches stand.
 
-**The `R-`, `D-` and `P-` numbers remain PROPOSALS** — each filing batch re-derives from the
+**Historical (session 3):** the `R-`, `D-` and `P-` numbers were proposals — each filing batch re-derives from the
 headings and confirms immediately before it claims; a proposal is not an allocation. **The `B-`
 range above was CLAIMED in session 4** and is no longer a proposal; see the STATUS section at the
 top of this file.
@@ -290,18 +348,18 @@ filing session should raise `P-001`'s priority rather than mint a number beside 
 
 | source            | description                                                                                    | existing item?                       | verdict           | dest         | prefix | number    | severity | design-first? |
 | ----------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------ | ----------------- | ------------ | ------ | --------- | -------- | ------------- |
-| `:195`            | A version/shape marker on the persisted bridge configs — costed, judged its own change         | none                                 | FILE              | `runtime.md` | `R-`   | **R-036** | medium   | **yes**       |
-| `:355`            | `dev-b6-inspector-finish` remainder: §3 `ROTATOR — ITEM 3` schema decision + the §7 split row  | related: `R-028` (runtime.md:1067)   | FILE              | `runtime.md` | `R-`   | **R-037** | medium   | **yes**       |
-| `:686`            | Three clear-reason Zod enums cannot carry the real error code                                  | none                                 | FILE              | `runtime.md` | `R-`   | **R-038** | medium   | **yes**       |
-| `:1360`           | No E2E covers the scrub DRAG, only `arrowStep`                                                 | none                                 | FILE              | `runtime.md` | `R-`   | **R-039** | low      | no            |
-| `:1420`           | Two same-named sequences render identical Inspector headings — needs a wording decision        | none                                 | FILE              | `runtime.md` | `R-`   | **R-040** | low      | no            |
-| `:1606` + `:2621` | No test on `#`-vs-alias divergence, alias stability, or gap-not-renumber                       | related: `R-033` (runtime.md:1203)   | FILE              | `runtime.md` | `R-`   | **R-041** | medium   | no            |
-| `:1832`           | `mute-before-ADD` so LOAD can run during rehearse; on 2.5.0 volume must land BEFORE `CG ADD`   | related: `R-029` (runtime.md:1256)   | FILE              | `runtime.md` | `R-`   | **R-042** | on-air   | **yes**       |
-| `:1891`           | The APASAI mark is an auto-trace of a raster — replace with real vector before release         | related: `R-035` (runtime.md:1385)   | FILE              | `runtime.md` | `R-`   | **R-043** | medium   | no            |
-| `:2088` + `:2091` | Nothing asserts the migrated dialogs still OPEN, nor that `Cancel` leaves state byte-identical | none                                 | FILE              | `runtime.md` | `R-`   | **R-044** | medium   | no            |
-| `:2107`           | `AWAITING_ROW_REASON` sits with the verbs, not in the shared `reachWording` module             | none                                 | FILE              | `runtime.md` | `R-`   | **R-045** | low      | no            |
+| `:195`            | A version/shape marker on the persisted bridge configs — costed, judged its own change         | none                                 | **CLAIMED**       | `runtime.md` | `R-`   | **R-036** | medium   | **yes**       |
+| `:355`            | `dev-b6-inspector-finish` remainder: §3 `ROTATOR — ITEM 3` schema decision + the §7 split row  | related: `R-028` (runtime.md:1067)   | **CLAIMED**       | `runtime.md` | `R-`   | **R-037** | medium   | **yes**       |
+| `:686`            | Three clear-reason Zod enums cannot carry the real error code                                  | none                                 | **CLAIMED**       | `runtime.md` | `R-`   | **R-038** | medium   | **yes**       |
+| `:1360`           | No E2E covers the scrub DRAG, only `arrowStep`                                                 | none                                 | **CLAIMED**       | `runtime.md` | `R-`   | **R-039** | low      | no            |
+| `:1420`           | Two same-named sequences render identical Inspector headings — needs a wording decision        | none                                 | **CLAIMED**       | `runtime.md` | `R-`   | **R-040** | low      | no            |
+| `:1606` + `:2621` | No test on `#`-vs-alias divergence, alias stability, or gap-not-renumber                       | related: `R-033` (runtime.md:1203)   | **CLAIMED**       | `runtime.md` | `R-`   | **R-041** | medium   | no            |
+| `:1832`           | `mute-before-ADD` so LOAD can run during rehearse; on 2.5.0 volume must land BEFORE `CG ADD`   | related: `R-029` (runtime.md:1256)   | **CLAIMED**       | `runtime.md` | `R-`   | **R-042** | on-air   | **yes**       |
+| `:1891`           | The APASAI mark is an auto-trace of a raster — replace with real vector before release         | related: `R-035` (runtime.md:1385)   | **CLAIMED**       | `runtime.md` | `R-`   | **R-043** | medium   | no            |
+| `:2088` + `:2091` | Nothing asserts the migrated dialogs still OPEN, nor that `Cancel` leaves state byte-identical | none                                 | **CLAIMED**       | `runtime.md` | `R-`   | **R-044** | medium   | no            |
+| `:2107`           | `AWAITING_ROW_REASON` sits with the verbs, not in the shared `reachWording` module             | none                                 | **CLAIMED**       | `runtime.md` | `R-`   | **R-045** | low      | no            |
 | task §5.3         | The raster residual: a dead `window.innerWidth` fallback, and the `unreadable` silence         | **`R-030`** (runtime.md:1306, `[ ]`) | **DONE — merged** | —            | —      | —         | medium   | no            |
-| external #8       | `next` should not be offered on every sequence — keep `NEXT`, disable it, explain in tooltip   | related: `D-031` (designer.md:934)   | FILE              | `runtime.md` | `R-`   | **R-046** | medium   | **yes**       |
+| external #8       | `next` should not be offered on every sequence — keep `NEXT`, disable it, explain in tooltip   | related: `D-031` (designer.md:934)   | **CLAIMED**       | `runtime.md` | `R-`   | **R-046** | medium   | **yes**       |
 
 **The raster residual is `R-030`'s own unmet acceptance, not a new item.** `R-030` is still `[ ]`
 OPEN, and its third acceptance bullet reads verbatim: _"WHEN the bridge supplies channel geometry
@@ -320,13 +378,13 @@ archive.
 
 ## `designer.md` — `D-` (Designer work items)
 
-| source       | description                                                                                | existing item?                          | verdict | dest          | prefix | number    | severity | design-first? |
-| ------------ | ------------------------------------------------------------------------------------------ | --------------------------------------- | ------- | ------------- | ------ | --------- | -------- | ------------- |
-| external #1  | Brand Pack Factory                                                                         | none                                    | FILE    | `designer.md` | `D-`   | **D-142** | unrated  | **yes**       |
-| external #2  | Designer `.vcg` import                                                                     | related: `R-001` (runtime.md:6)         | FILE    | `designer.md` | `D-`   | **D-143** | unrated  | **yes**       |
-| external #6  | The Designer splash never got a `D-` number — retroactive item for shipped work            | related: `R-035` (runtime.md:1385)      | FILE    | `designer.md` | `D-`   | **D-144** | low      | no            |
-| external #11 | A guide layer: canvas only, absent from preview and export; one predicate, three consumers | related: `D-015` / `D-072` — see note ↓ | FILE    | `designer.md` | `D-`   | **D-145** | unrated  | **yes**       |
-| `:2044`      | No in-app about/version surface in either product, though `__CG_BUILD__` is ready          | none                                    | FILE    | `designer.md` | `D-`   | **D-146** | low      | no            |
+| source       | description                                                                                | existing item?                          | verdict     | dest          | prefix | number    | severity | design-first? |
+| ------------ | ------------------------------------------------------------------------------------------ | --------------------------------------- | ----------- | ------------- | ------ | --------- | -------- | ------------- |
+| external #1  | Brand Pack Factory                                                                         | none                                    | **CLAIMED** | `designer.md` | `D-`   | **D-142** | unrated  | **yes**       |
+| external #2  | Designer `.vcg` import                                                                     | related: `R-001` (runtime.md:6)         | **CLAIMED** | `designer.md` | `D-`   | **D-143** | unrated  | **yes**       |
+| external #6  | The Designer splash never got a `D-` number — retroactive item for shipped work            | related: `R-035` (runtime.md:1385)      | **CLAIMED** | `designer.md` | `D-`   | **D-144** | low      | no            |
+| external #11 | A guide layer: canvas only, absent from preview and export; one predicate, three consumers | related: `D-015` / `D-072` — see note ↓ | **CLAIMED** | `designer.md` | `D-`   | **D-145** | unrated  | **yes**       |
+| `:2044`      | No in-app about/version surface in either product, though `__CG_BUILD__` is ready          | none                                    | **CLAIMED** | `designer.md` | `D-`   | **D-146** | low      | no            |
 
 **`D-143` is the Designer half of a capability the Runtime already has.** `R-001` ⟨`[x]`,
 [runtime.md:6](docs/prd/runtime.md)⟩ is _the Runtime_ importing a `.vcg` for playout; `D-143` is
@@ -342,11 +400,11 @@ it renders on canvas but is absent from preview and export (`G` icon beside hide
 
 ## `platform.md` — `P-` (process and tooling rules)
 
-| source  | description                                                                                     | existing item?                 | verdict | dest          | prefix | number    | severity | design-first? |
-| ------- | ----------------------------------------------------------------------------------------------- | ------------------------------ | ------- | ------------- | ------ | --------- | -------- | ------------- |
-| `:180`  | An item-number claim derives across EVERY ref, never from one branch — generalised (see below)  | related: `B-075` (bugs.md:373) | FILE    | `platform.md` | `P-`   | **P-022** | medium   | no            |
-| `:1456` | A control test that reaches a different implementation than the one under test is not a control | none                           | FILE    | `platform.md` | `P-`   | **P-023** | medium   | no            |
-| `:1732` | Pattern (twice): an observer effect silently no-ops when its target is absent on first render   | none                           | FILE    | `platform.md` | `P-`   | **P-024** | medium   | no            |
+| source  | description                                                                                     | existing item?                 | verdict     | dest          | prefix | number    | severity | design-first? |
+| ------- | ----------------------------------------------------------------------------------------------- | ------------------------------ | ----------- | ------------- | ------ | --------- | -------- | ------------- |
+| `:180`  | An item-number claim derives across EVERY ref, never from one branch — generalised (see below)  | related: `B-075` (bugs.md:373) | **CLAIMED** | `platform.md` | `P-`   | **P-022** | medium   | no            |
+| `:1456` | A control test that reaches a different implementation than the one under test is not a control | none                           | **CLAIMED** | `platform.md` | `P-`   | **P-023** | medium   | no            |
+| `:1732` | Pattern (twice): an observer effect silently no-ops when its target is absent on first render   | none                           | **CLAIMED** | `platform.md` | `P-`   | **P-024** | medium   | no            |
 
 **`P-022` vs `B-075` — enforcement is not procedure.** `B-075` ⟨`[x]`, [bugs.md:373](docs/prd/bugs.md)⟩
 built the CI guard that stops a duplicate `B-` number from being MERGED. It enforces uniqueness
