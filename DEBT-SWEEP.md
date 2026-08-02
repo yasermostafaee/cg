@@ -336,8 +336,11 @@ process debts, so nothing is lost to the strongest-demand rule.
 
 **Verification and reconciliation**
 
-- [ ] Verify `B-113`, `B-114` and `R-034` against `origin/main` and **every ref**
+- [x] Verify `B-113`, `B-114` and `R-034` against `origin/main` and **every ref**
       (`git for-each-ref` plus the `docs/prd/*` files on `main`) — DEBT.md:1625.
+      **DISCHARGED 2026-08-02 (session 2):** all three are real, unique headings and carry
+      IDENTICAL titles on every one of the 10 refs that has them — `B-113`
+      `bugs-runtime.md:2451`, `B-114` `:2494`, `R-034` `runtime.md:1357`. No competing claim.
 - [ ] Re-word `R-006` and `B-087` in `docs/prd/*` to name the air colour by role, not by hue, and
       audit the surface for reds that no longer mean danger (DEBT.md:1583).
 - [ ] Sweep the source for remaining retired `M<n>` milestone references (DEBT.md:1697).
@@ -509,3 +512,162 @@ only one of the two entries.
    ineffective appears at DEBT.md:1539 and again at DEBT.md:2558; `PRIMARY A` appears at
    DEBT.md:119, DEBT.md:248 and DEBT.md:409. Filing from this census must dedupe, or the same
    defect gets three numbers.
+
+---
+
+# CLOSING RECORD — the sweep, 2026-08-03 (session 6)
+
+## `DEBT.md` is now a FROZEN EVIDENCE ARCHIVE — do not edit it
+
+**`DEBT.md` is `179522` bytes and must stay that way.** Verify with
+`git cat-file -s dev:DEBT.md`.
+
+**Why, and it is not sentiment: 34 filed PRD items cite `DEBT.md:NNNN` as their evidence.**
+Inserting a header, reformatting, emptying it, or running a formatter over it shifts every line
+number and breaks all 34 citations **silently** — nothing errors, the numbers simply stop pointing
+at anything. So "empty `DEBT.md`" resolves to freezing it, and **its closure is recorded HERE
+rather than in it**.
+
+Prettier already accepts it as written (`pnpm exec prettier --check DEBT.md` passes), so no
+`.prettierignore` entry was needed. If a future formatting change ever wants to touch it, add the
+ignore rather than let it reformat.
+
+## The four LIVE census rows with no filed item — all correct
+
+| row     | disposition                                                                                          |
+| ------- | ---------------------------------------------------------------------------------------------------- |
+| `:1295` | **Closed, discharged.** Session 2 measured `OUTPUT_FRAME` gone; the residual landed on `R-030`.      |
+| `:33`   | **Process, not an item.** An unwritten E2E + an owed Linux `gate:e2e` — both on the checklist above. |
+| `:2125` | **Process, not an item.** A stale header in a task file whose change dir does not exist.             |
+| `:936`  | **RESOLVED 2026-08-03.** The spec was recovered; see below.                                          |
+
+## `:936` resolved — `dev-list-vs-layer` v3 §5–§8, measured against the source
+
+The specification was never in the repo, so it could not be recovered FROM the repo — it was
+supplied to session 6. Each section measured, nothing implemented:
+
+| §   | verdict               | evidence                                                                                                                             |
+| --- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| §5  | **PARTIAL → `B-130`** | menu entry gone, picker kept; but three E2E specs were DELETED rather than re-pointed against an explicit "do not delete them"       |
+| §6  | **LANDED in full**    | `layerRowActions.ts:253` (unknown = unreachable), verbs at `:503`/`:575`/`:588`/`:600`, **LOAD exempt** `:435`–`:455`, ON PVW `:560` |
+| §7  | **LANDED**            | the refusal was removed entirely; the pattern sweep produced `caspar-runtime.ts:3630`–`:3643`; remainder is `R-038`                  |
+| §8  | **LANDED**            | the bare green `LIVE` became `BRIDGE LIVE` — `LinkIndicator.tsx:72`, and `:82` for the checking state                                |
+
+## Final free number per prefix
+
+**`B-131` · `C-021` · `D-147` · `P-026` · `R-047`**
+
+`B-` moved to `B-131` because session 6 filed `B-130`. The other four are unchanged from session 5.
+
+## A pattern worth remembering: a locator can point at the containing entry
+
+Six of the plan's `DEBT.md` locators pointed at an entry heading rather than at the finding inside
+it. Five were harmless. **One was not:** `B-120`'s `DEBT.md:1064` opens by measuring the
+**opposite** of what the plan claimed — _"`PLAY` on a cleared row REACHES AIR … Nothing to fix
+there"_ — and the actual residual is at `:1092`. Filing from the cited line would have described a
+non-defect.
+
+| item    | plan said      | actual         |
+| ------- | -------------- | -------------- |
+| `B-120` | `DEBT.md:1064` | `DEBT.md:1092` |
+| `R-037` | `DEBT.md:355`  | `:393`, `:406` |
+| `R-038` | `DEBT.md:686`  | `DEBT.md:756`  |
+| `R-039` | `DEBT.md:1360` | `DEBT.md:1383` |
+| `D-144` | `DEBT.md:1967` | `DEBT.md:1968` |
+| `D-146` | `DEBT.md:2044` | `DEBT.md:2045` |
+
+**The rule it earns:** an index built by one session records where it LOOKED, not where the fact
+IS. Read the entry and find the line before citing it.
+
+## 🔴 A SECOND pattern, and it is the more expensive one: a debt note goes STALE
+
+**A debt note that was accurate when written becomes a FALSE CLAIM the moment its subject is
+resolved and nothing records the discharge.** Third instance in this sweep:
+
+1. **A stash described as live** that had in fact been rescued to a tag and dropped on 2026-07-26.
+2. **`R-030`'s `OUTPUT_FRAME` prose**, which survived the constant it named being deleted.
+3. **[[B-118]]** — filed 2026-08-02 from `DEBT.md:1012`, closed 2026-08-03 **with no work done**,
+   because `enterRehearse` had already stopped producing `mute-failed` entirely. The measurement
+   was true; the code it described had moved.
+
+### The exposure this implies, stated plainly and NOT acted on
+
+**Every filing session verified that a plan locator matched what `DEBT.md` said. NONE verified that
+the defect still existed in the code.** Those are different questions. `DEBT.md` was written across
+30 July – 1 August, and a row written early could have been fixed by a later fast-mode session two
+days later — which is exactly what happened to `B-118`.
+
+**So an unknown number of the other code-defect items among `B-115`–`B-129` and `R-036`–`R-046`
+carry the same exposure.** This is recorded as owed work, not discharged and not estimated: a
+re-verification pass — take each item, read the code it describes, confirm the defect is still
+present — is **the owner's call**, not session 6's. Session 6 measured only the items it had reason
+to open.
+
+## One line of owed HARDWARE measurement, deliberately not an item
+
+From [[B-118]]'s closure: the rehearse mute is best-effort and entry never fails on it, so with the
+mute unlanded a resident producer stays unmuted while the row claims PVW — and on 2.5.0 a resident
+producer's audio can be on air ([[R-029]]). **The code states this exchange deliberately and argues
+it is safe, so filing it as a defect would record a decision as a bug on no evidence** — something
+this repo has twice paid for. The question belongs with the [[C-018]] / [[C-019]] hardware work,
+where the plant is available:
+
+> **On 2.5.0, with the mute unlanded, does a resident producer stay AUDIBLE while the row claims
+> PVW?** If yes, it becomes an item then, with a measurement behind it.
+
+## The §5 checklist — disposition, 2026-08-03
+
+Only one box was ticked, because only one was verified. The rest are dispositioned rather than
+silently left open.
+
+**Discharged**
+
+- **Verify `B-113`/`B-114`/`R-034` across every ref** — ticked above; session 2 measured it.
+
+**Discharged for the CURRENT TREE only — deliberately NOT ticked**
+
+- **`pnpm gate` uncached** and **`pnpm openspec validate --all --strict`**. Session 6 ran both green
+  over the merged tree, which contains all the work listed. That is **not** the same as each change
+  having been green in isolation, which is what those entries asked for, so they are not ticked.
+  Whether a per-change re-run is worth it is a judgement call the owner should make; the tree is
+  green today.
+
+**Converted into numbered items — no longer loose process debt**
+
+- the scrub-DRAG E2E → **`R-039`**
+- `#`-vs-alias divergence, alias stability, gap-not-renumber → **`R-041`**
+- migrated dialogs still OPEN, and `Cancel` byte-identity → **`R-044`**
+- the §3 in-viewport refusal assertion is the one test entry still unnumbered; it rides with the
+  `dev-modal-primitive` artifacts below.
+
+**Cannot be discharged here, with what would settle each**
+
+- **Linux `gate:e2e` (9 items) · Windows `gate:e2e` for r022/r030 · splash suite-timing** — needs a
+  Linux/WSL box. A Windows run is explicitly non-authoritative.
+- **All six hardware entries** (720p5000 placement, real `INFO` XML, `MIXER VOLUME` on 2.3.2, a real
+  `CLEAR` to a real layer, the ten-second `PRIMARY A` refresh test, the `unknown`-while-LIVE
+  observation) — needs the plant, and two of them need the OWNER at the machine.
+- **Author the missing change artifacts** (`dev-modal-primitive`, `dev-awaiting-verbs`,
+  `dev-r030`/`dev-r022`, the Designer splash, `dev-clear-bank-scoped`, b4, b3-and-earlier) — seven
+  change dirs of authoring. Out of scope for a closing session by construction.
+- **Flip `R-030` and `R-022` to `[~]`** — out of session 6's scope fence (it may not edit existing
+  items beyond the two authorised). Note `R-030` should **not** be flipped blindly: session 4
+  recorded an UNMET acceptance on it, so it is arguably still `[ ]`.
+- **Re-word `R-006`/`B-087` air colour by role not hue** · **Engine doc-sync** — both need edits to
+  files outside the fence.
+- **Sweep retired `M<n>` milestone references** — **measured, still owed.** Genuine milestone
+  references remain in at least eleven places, e.g. `IssuesPanel.tsx:44` (M7.3),
+  `keyframe-helpers.ts:31` (M12), `ToolRail.tsx:38`–`:39` (M6/M6.4), `store.ts:32`–`:36`
+  (M7/M6/M6.5/M6.4), `AuditPanel.tsx:78` (M8.5), `FailoverBanner.tsx:40` (M9.0),
+  `LockOverlay.tsx:8`/`:160` (M8.4), `timeline/README.md:24` (M12). Discharging it means editing
+  product-code comments, which a docs session must not do.
+- **Owner action: clear the four Name fields in Configure** — only the owner can.
+- **Reconcile the `runtime-splash-screen` spec-delta** — **measured: this is MORE than a small
+  delta, so per instruction it is recorded and NOT authored.** It spans four files — `design.md`
+  (135 lines, §5 is titled "Three labels, a step counter"), `proposal.md` (68), `tasks.md` (109)
+  and `specs/runtime-ui/spec.md` — and the shipped model (a monotone PERCENTAGE, no terminal
+  `READY`) is barely represented in them. Reconciling means re-authoring the readout model across a
+  design doc, a proposal, a task list and a capability spec. **It wants its own numbered item
+  (`R-047` is free);** session 6 did not file it because filing a new number in the last commit of a
+  cleanup is the anti-pattern this record exists to name.
+- **"No archive is pending"** — a statement, not a task. Still true.
