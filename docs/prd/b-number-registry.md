@@ -1,8 +1,15 @@
-# B-number registry — the source of truth for bug IDs
+# Item-number registry — the source of truth for PRD item IDs
+
+Covers all five item-number spaces — **`B-`** (bugs), **`C-`** ([caspar.md](caspar.md)),
+**`D-`** ([designer.md](designer.md)), **`P-`** ([platform.md](platform.md)) and **`R-`**
+([runtime.md](runtime.md)). The filename still says `b-number-registry` because `B-` is where
+the collisions started and where the history lives; the doctrine has always applied to all
+five, and since 2026-08-02 the file says so out loud (the `R-031` double-claim is why).
 
 `B-` numbers are **global** across the three bug files
 ([bugs.md](bugs.md) · [bugs-designer.md](bugs-designer.md) · [bugs-runtime.md](bugs-runtime.md))
-and are **never reused**. Concurrent branches kept picking "the next free number" from
+and are **never reused**. The other four prefixes each live in a single file, and are equally
+never reused. Concurrent branches kept picking "the next free number" from
 different snapshots of `main` and colliding, so this file records the **verified** state of
 the number space and how to keep it clean.
 
@@ -11,14 +18,60 @@ Resolves the housekeeping half of [B-069](bugs.md).
 ## The audit — run this before filing
 
 ```bash
-grep -rhoE "^## \[.\] B-[0-9]+" docs/prd/ | grep -oE "B-[0-9]+" | sort | uniq -d
+# Duplicate audit. Run for EVERY prefix you are about to file into: B C D P R
+grep -rhoE "^## \[.\] B-[0-9]+" --include="*.md" docs/prd/ --exclude=README.md \
+  | grep -oE "B-[0-9]+" | sort | uniq -d
 ```
 
 It must print **exactly two lines: `B-056` and `B-080`** (the two known, accepted duplicates,
-below). Anything else is a NEW collision and must be renumbered **before merge**.
+below). The same command with `C`, `D`, `P` or `R` substituted must print **nothing at all**.
+Anything else is a NEW collision and must be renumbered **before merge**.
 
-Match only the number that **opens** a heading (`^## [.] B-NNN`). Trailing prose produces
+Match only the number that **opens** a heading (`^## [.] X-NNN`). Trailing prose produces
 false hits — the `B-056` heading itself cites "renumbered from B-054".
+
+**`--exclude=README.md` is load-bearing, and so is the `{3}` in the derivation below.** The
+sweep has two documented false positives, both of them FORMAT SPECIMENS rather than claims,
+and both found on 2026-08-02:
+
+- [README.md](README.md) carries a worked example, `## [ ] D-001 — Short title`, which the
+  bare command reports as a `D-001` duplicate against the real D-001 in
+  [designer.md](designer.md). Excluding the README removes it; nothing else in `docs/prd/`
+  needs excluding.
+- [bugs.md](bugs.md) carries the new-bug filing template inside an HTML comment,
+  `## [ ] B-0NN — Export blocked dialog shows wrong error count`. An HTML comment hides
+  nothing from a regex, so `B-[0-9]+` matches its leading `0` and invents a phantom `B-0`.
+  Anchoring the number to three digits (`B-[0-9]{3}`) is what drops it.
+
+Neither is a collision and neither should be "fixed" by editing the specimen — a filing
+template that does not look like a real heading teaches the wrong format. The commands here
+already account for both.
+
+## Deriving the next free number — the ONLY supported way
+
+There is no recorded "next free" pointer in this file, deliberately; see
+[the retirement note](#the-next-free-pointer-is-retired--implemented-2026-08-02) for why.
+Derive it, for whichever prefix you need, immediately before you commit:
+
+```bash
+# Highest heading currently claimed for a prefix — substitute B / C / D / P / R.
+grep -rhoE "^## \[.\] B-[0-9]{3}" --include="*.md" docs/prd/ --exclude=README.md \
+  | grep -oE "[0-9]{3}$" | sort -n | tail -1
+```
+
+Next free is that value **+ 1**. Then widen the sweep before you actually take it, because
+`docs/prd/` in your checkout is not the whole world:
+
+```bash
+git fetch origin
+# The same maximum across EVERY ref — merged, unpushed, or someone else's branch.
+for ref in $(git for-each-ref --format='%(refname)' refs/remotes refs/heads); do
+  git grep -hoE "^## \[.\] B-[0-9]{3}" "$ref" -- docs/prd/ 2>/dev/null
+done | grep -oE "[0-9]{3}$" | sort -n | tail -1
+```
+
+Also check `git stash list` — a stash can hold PRD headings, and on 2026-08-02 **both**
+entries on this repo's shared stash stack did. And never assume a claim is one number wide.
 
 ## Verified state of the number space
 
@@ -314,7 +367,9 @@ programmatically for `^## \[.\] B-113` across all 28 refs in this repo — branc
 and `refs/stash` — after a `git fetch origin`: zero hits, including THIS file, which had only
 ever carried `B-113` as its "next free" pointer. The highest heading anywhere was `B-112`. The
 space stays contiguous: `B-001` … `B-113`, no gaps. **Next free: `B-114`.** _(superseded — see
-the entry below; `B-114` is now taken and the pointer is `B-115`.)_
+the entry below; `B-114` is now taken. This marker used to name the following pointer value as
+well; that pointer was **retired 2026-08-02** and the naming is dropped with it — derive the
+number instead.)_
 
 **Re-audited 2026-07-29 (second mint of the day)** immediately before the commit that writes the
 heading. `B-114` is now taken — ONE runtime bug, [bugs-runtime.md](bugs-runtime.md): **B-114** (a
@@ -323,7 +378,10 @@ fixed coordinate with `reserve()`, which refuses fixed slots by construction). S
 programmatically for `^## \[.\] B-114` across all 28 refs in this repo — branches, remotes, tags
 and `refs/stash` — after a `git fetch origin`: zero hits, including THIS file, which had only
 ever carried `B-114` as its "next free" pointer. The highest heading anywhere was `B-113`. The
-space stays contiguous: `B-001` … `B-114`, no gaps. **Next free: `B-115`.**
+space stays contiguous: `B-001` … `B-114`, no gaps. _(This entry's closing "next free" pointer
+— the file's last LIVE one — was **retired 2026-08-02**; see
+[the retirement note](#the-next-free-pointer-is-retired--implemented-2026-08-02). Derive the
+number, never read it.)_
 
 **Three NON-`B` numbers were claimed in the same commit, recorded here although this file's
 title says B-numbers.** The same sweep was run for them, and there is no other registry to
@@ -340,7 +398,143 @@ ONE commit: they are two numbers rather than one because they are two unrelated 
 merely surfaced in the same hardware session (audio lifecycle vs. output raster), with different
 components and different fixes — the same split test this file applies to `B-100`/`B-101`.
 
-### RECOMMENDATION (recorded, not implemented): retire the "next free" pointer
+**Re-audited 2026-08-02 — ALL FIVE PREFIXES, and the first entry in this file to treat
+`C-`/`D-`/`P-`/`R-` as first-class spaces rather than as a footnote to a `B-` mint.** Run
+against freshly fetched `origin/main` (`1590318e`, after #436), from a branch cut directly
+from that ref rather than from a checkout. **This entry claims NO number and renumbers
+nothing** — it is an audit, and the one file it edits is this one.
+
+Derived state, every value computed from the headings that exist and nothing else:
+
+| Prefix | File                                         | Headings | Range           | Contiguity                                       | Next free |
+| ------ | -------------------------------------------- | -------- | --------------- | ------------------------------------------------ | --------- |
+| `B-`   | bugs.md + bugs-designer.md + bugs-runtime.md | 114      | `B-001`…`B-114` | contiguous, no gaps                              | `B-115`   |
+| `C-`   | [caspar.md](caspar.md)                       | 20       | `C-001`…`C-020` | contiguous, no gaps                              | `C-021`   |
+| `D-`   | [designer.md](designer.md)                   | 135      | `D-001`…`D-141` | **6 gaps** — `069` `070` `080` `090` `091` `095` | `D-142`   |
+| `P-`   | [platform.md](platform.md)                   | 21       | `P-001`…`P-021` | contiguous, no gaps                              | `P-022`   |
+| `R-`   | [runtime.md](runtime.md)                     | 35       | `R-001`…`R-035` | contiguous, no gaps                              | `R-036`   |
+
+**What was swept, stated so the next reader knows the reach of the claim.** The duplicate
+audit ran for all five prefixes and printed exactly `B-056` and `B-080` and nothing else —
+`C-`, `D-`, `P-` and `R-` are each duplicate-free. The maximum-heading sweep ran across **all
+24 refs** in this repo (`refs/remotes` + `refs/heads`, after `git fetch origin`), not just the
+two branches; the highest heading for every prefix is the one on `origin/main`, so **no
+unmerged branch holds a claim above it**. Both entries on the shared stash stack were read
+(read-only, neither touched). The three sibling worktrees were enumerated with
+`git worktree list --porcelain` and their statuses read: `cg` clean, `cg-designer` clean,
+`cg-runtime` clean. **Source and test files were included**, for the reason immediately below.
+
+**A markdown-only sweep is not enough, and `R-035` is the proof.** The splash renumber
+(`39872d6b`) touched **19 files, and 12 of them are source or test files** carrying the
+identifier in a header comment — `apps/runtime/index.html`, `main.tsx`, `splashTiming.ts`,
+`theme.ts`, `controls.css`, `vite.config.ts`, and six spec/test files. A `grep` confined to
+`docs/**` sees none of them. Identifiers are pervasive outside the PRD, and the scale is worth
+stating because it sets the cost of any future renumber:
+
+| Prefix | `apps/`+`packages/`+`tools/` (non-md) | CI / hooks / config | `openspec/` | other `*.md` |
+| ------ | ------------------------------------- | ------------------- | ----------- | ------------ |
+| `B-`   | 372                                   | 5                   | 282         | 10           |
+| `C-`   | 67                                    | 2                   | 63          | 3            |
+| `D-`   | 422                                   | 1                   | 330         | 10           |
+| `P-`   | 19                                    | 5                   | 20          | 3            |
+| `R-`   | 236                                   | 0                   | 139         | 2            |
+
+(File counts, not occurrence counts.) `CLAUDE.md` and `.claude/commands/ship.md` both cite
+`B-` and `P-` numbers as load-bearing rules, and `.github/workflows/b078-soak.yml` is named
+after one. **This is the standing argument for "renumber the IN-FLIGHT item, never the merged
+one"** — a merged number is not a string in three markdown files, it is a string in hundreds.
+
+**`origin/main` and `origin/dev` carry BYTE-IDENTICAL trees** (same tree hash
+`3cc0f30d`, and `git diff origin/main origin/dev -- docs/prd/` is empty). #433 and #436
+re-converged them. The two-branch hazard that produced the `R-031` double-claim is therefore
+CLOSED as of this audit — but only as of this audit: the branches diverge in ancestry (this
+repo squash-merges), so identical content today is a fact with a shelf life exactly like a
+pointer's, and re-deriving is still the rule.
+
+**This file had gone stale at `R-029`/`R-030` while the truth was `R-035` — six numbers
+behind, in a prefix it never claimed to track.** The 2026-07-29 entry above records claiming
+`C-020`, `R-029` and `R-030` "although this file's title says B-numbers", and that was the
+last word here on the `R-` space. Meanwhile `R-031` (the operator surface), `R-032` (a PLAYOUT
+tab), `R-033` (the Layers table), `R-034` (the configurable delimiter list) and `R-035` (the
+splash) were all filed on `dev`. **The cause was structural, not carelessness:** fast mode
+suspended PRD edits into `dev` while this file sat on `main`, so the headings moved and the
+registry could not see them. That is the "two branches, two snapshots" mode this file has
+documented since its first entry, running in a prefix that had no entry to go stale — which
+is exactly how a splash item came to be filed as `R-031` when `dev`'s `R-031` was invisible
+from `main`, and had to be renumbered to `R-035`.
+
+**There is NO `R-030`→`R-034` gap, and the sweep has been carrying a phantom one.**
+Confirmed from the headings, not from any file's claim about them: `R-031`
+([runtime.md](runtime.md):1124), `R-032` (:1161) and `R-033` (:1203) are all real, unique,
+open headings. The space is contiguous `R-001`…`R-035`. **How the phantom was born is worth
+recording, because the file will re-create it otherwise:** [runtime.md](runtime.md) is not in
+numeric order. `R-031`/`R-032`/`R-033` sit at lines 1124–1203, ABOVE `R-029` (:1256) and
+`R-030` (:1306), with `R-034` at :1357. A reader scanning downward from `R-030` meets `R-034`
+next and concludes the three between them are missing. **Heading ORDER is not heading
+EXISTENCE** — derive with a sort, never with an eye.
+
+**`B-113`, `B-114` and `R-034` are verified and their debt is discharged.** All three were
+claimed on `dev` during fast mode against the contract and had owed a full-ref verification
+since. Each is a real, unique heading — `B-113` at
+[bugs-runtime.md](bugs-runtime.md):2451 (`[ ]`), `B-114` at :2494 (`[x]`), `R-034` at
+[runtime.md](runtime.md):1357 (`[ ]`) — and each carries an IDENTICAL title on every one of
+the 10 refs that has it, so no ref filed a different item at the same number. Nothing to
+renumber.
+
+**The six `D-` gaps are facts, and four of them are explained.** `D-069` and `D-070` are
+deliberate: [designer.md](designer.md):2041 records them as "headerless import sub-labels (no
+own `##` entry; IDs reserved, not reused)". `D-095` was **absorbed** by `D-086` (:2361, "This
+item absorbs D-095", the same move by which `D-088` absorbed `D-002`/`D-003`) — note that the
+absorbed-into-`D-088` pair KEPT their headings while `D-095` did not, so absorption has been
+done two ways. `D-080` is referenced at :2528 as a planned timeline/layers item that was never
+filed. **`D-090` and `D-091` have zero occurrences anywhere in the repo** — no heading, no
+prose, no code — and are unexplained. None of the six exists as a heading on ANY ref. No gap
+is an error and none should be back-filled; they are recorded so the next audit does not
+re-investigate them.
+
+**Only `B-` has a CI guard, and that is why `R-031` is the collision that got through.**
+`tools/soak-runner/tests/bug-number-audit.test.ts` ([B-075](bugs.md)) enforces the duplicate
+rule in the ordinary gate — for `B-` alone, over the three bug files alone. `C-`, `D-`, `P-`
+and `R-` have no equivalent, so a collision in those four spaces is caught only if a human
+runs the audit. The `R-031` double-claim is that gap firing. Recorded as the standing
+observation with the evidence attached; extending the guard is a code change and belongs to a
+filing session, not to this audit. (Run here to confirm it still holds: 3 tests, green, and it
+sees 115 claims — see the `B-0NN` specimen note above for the one phantom in that count.)
+
+**Both stash entries hold PRD headings, and both would collide if applied.** Read-only, and
+neither was popped, dropped, applied or cleared. `stash@{0}` (2026-06-29,
+`On feat/designer-multiline-and-entry-comp`) adds a `## [ ] D-119` heading for `.vcg` font
+bundling — **that work shipped as `D-121`** (#298, archived), and `D-119` on `main` is an
+entirely different item ("Rebuild starter templates", #290, archived). `stash@{1}`
+(2026-06-28, `On feat/surface-nested-hold-content`) adds `## [ ] B-031` and `## [ ] B-032` to
+[bugs.md](bugs.md) — both bugs are on `main` already, with the same titles, both `[x]`, and in
+[bugs-designer.md](bugs-designer.md) rather than `bugs.md` (the bug files were split after the
+stash was taken). Both stashes are therefore REDUNDANT in content and ACTIVELY HAZARDOUS in
+number: applying either would mint a duplicate heading. Neither claims a number above the
+current maxima, so neither changes the derivation above. Disposition is the owner's call.
+
+### The "next free" pointer is RETIRED — implemented 2026-08-02
+
+**Decided by the owner on 2026-08-02**, accepting the standing recommendation recorded below.
+This entry carries it out: the file's last live forward-looking pointer (the closing sentence
+of the 2026-07-29 `B-114` entry) is gone, and
+[Deriving the next free number](#deriving-the-next-free-number--the-only-supported-way) at
+the top replaces it with the command that computes the answer for all five prefixes.
+
+The reason, in one line each: the pointer was a **cache of a value one `grep` computes
+exactly**; it **misled three times** — twice read stale (`B-088`→`B-089` against a range
+claim, then `B-097` read from a checkout) and once **written stale and merged**, telling `main`
+for a PR's width to take a number that was already gone; it **saved nobody a `grep`**; and it
+was this file's **only contended line**, the single line every filing session had to edit,
+which is precisely why concurrent sessions collided here and nowhere else in a document that
+is otherwise append-only.
+
+**Historical pointer values in the dated entries above are left exactly as written.** They
+record what each audit believed at the time and are part of the evidence for retiring the
+thing; scrubbing them would delete the argument. Only the live, forward-looking pointer was
+removed.
+
+### The original recommendation, as recorded (now implemented — see above)
 
 All three recorded drift modes are one disease, and the pointer is it. Look at what it actually
 is: a **cache** of a value the audit command at the top of this file computes exactly, in one
@@ -368,6 +562,14 @@ Not done here, deliberately: removing it touches every historical entry's closin
 is a rewrite of the file rather than an entry appended to it — and doing that inside a PR whose
 subject is an incident report would bury the report. Recorded as the standing recommendation with
 the three drift modes above as its evidence.
+
+> **Superseded 2026-08-02 — the obstacle in the paragraph above turned out to be imaginary, and
+> that is worth keeping.** Retiring the pointer did NOT require touching every historical entry's
+> closing sentence. Only ONE of them was ever live — the last — and the rest are dated records
+> that are correct as history and were left untouched. What made the job look like a file rewrite
+> was reading "the pointer" as the set of every line that ever stated one, when it is really the
+> single line a reader would act on today. The recommendation stood unimplemented for two weeks on
+> the strength of that misreading.
 
 **This entry collided TWICE before landing, and the second time proves the rule above is not
 enough.** It first took `B-088` (the then-current "next free" pointer) while a parallel Designer
