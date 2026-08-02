@@ -1486,3 +1486,333 @@ refuse-while-disconnected contract and the NOT CONNECTED / TEST MODE banners all
 The 20 s ceiling is the safety property: a stuck splash on an on-air tool means the operator has no
 door into the application at all. The test bypass is an init-script global and deliberately NOT a
 URL query parameter — a query parameter is a door an operator can reach by bookmark or typo.
+
+## [ ] R-036 — a version/shape marker on the persisted bridge configs ⟨priority: medium⟩
+
+**What:** give the persisted bridge configuration files a marker that lets the bridge tell a
+current file from one written under an older decision, and say so at boot.
+
+**Why:** the incident that prompted this was an office machine booting on a `count: 4` fixed-layer
+bank written before the bank decision changed. Nothing was corrupt; the file was simply older than
+the intent. The cheap half already shipped — the CLI prints the bank in force **and its source** at
+every boot, so "which bank am I on, and why" is answerable without opening a file. **That reports;
+it does not detect.**
+
+**Costed and deliberately not built — the cost is in the design, not the field.** A
+`schemaVersion` on `FixedLayerBankSchema` is the easy 10%. The other 90% is deciding what
+**stale** means: the office file was schema-VALID, so a shape-drift marker would have said nothing
+about the very file that caused the incident. Catching that case needs a written-at stamp compared
+against a decision-changed-at constant the codebase must then carry and maintain — a different and
+more invasive design than "add a version number".
+
+**Acceptance:**
+
+- A persisted config written before a decision change is distinguishable at boot from one written
+  after it.
+- The boot output says which it is, in words an operator can act on.
+- A config the bridge cannot interpret degrades to a stated default rather than refusing to boot.
+
+**DESIGN-FIRST — implementation needs an OpenSpec change before code.** It adds a field to a
+persisted schema and defines what staleness means across bridge restarts, which is a migration and
+a contract between the bridge and every config it has already written. Filed now so the debt is
+recorded; the design is authored when the work starts.
+
+**Notes:** do NOT ship a bare `schemaVersion` and call this done — that is the 10% that would not
+have caught the reported incident. Source: `DEBT.md:195`.
+
+## [ ] R-037 — the sequence item heading is technical, and the fix is a schema decision rather than a restyle ⟨priority: medium⟩
+
+**What:** the remainder of `dev-b6-inspector-finish`, which landed seven of nine. Two pieces are
+open and only the first is substantial:
+
+1. **`ROTATOR — ITEM 3` reads as a constant, not as content.** The string comes from
+   `sequenceItemNamespace(seq.name, index)` in `@cg/shared-schema`, where `seq.name` is the
+   SEQUENCE ELEMENT's authored name. [[D-083]] already replaced the older `ROTATOR[2]` form for
+   exactly this reason, so what remains is that a sequence named `ROTATOR` is itself technical.
+2. **The `Split on delimiter` row's own alignment** was never separately revisited — the chip, the
+   heights and the two-line gap were done to the owner's reference, that row was not.
+
+**Why:** the Inspector heading is what the operator reads to know which item they are editing
+under time pressure. A heading that shows an internal element name reads as a system label rather
+than as their content.
+
+**What is available, and why it is not a one-liner.** The COMPOSITION's authored name **is**
+reachable (`child.name`, the referenced composition), but using it is a `@cg/shared-schema` change
+that also moves the Designer form and the GDD — **and two items referencing the SAME composition
+would then carry identical headings, which is precisely the collision D-083's index exists to
+prevent.** The honest shape is probably `<composition name> — item N`.
+
+**Acceptance:**
+
+- A sequence item's Inspector heading names the authored content, not an internal element name.
+- Two items referencing the same composition remain distinguishable from each other.
+- The Designer form and the GDD move with the schema, not after it.
+
+**DESIGN-FIRST — implementation needs an OpenSpec change before code.** It is a
+`@cg/shared-schema` change with Designer and GDD ripples, not a restyle.
+
+**Notes:** whoever takes this should also remove the `text-transform: uppercase` on the group
+heading — it makes an authored `Rotator` read as a constant even after the naming is fixed.
+Related: [[R-040]] is the other half of the same naming seam (two same-named sequences colliding).
+Source: `DEBT.md:393` (§3) and `DEBT.md:406` (§7), inside the `dev-b6-inspector-finish` entry at
+`DEBT.md:355`.
+
+## [ ] R-038 — three clear-reason Zod enums narrow every failure to `amcp-error`, so the real code cannot ride out ⟨priority: medium⟩
+
+**What:** `layers.clear`, `fixedLayers.clearLayer` and `playoutLayers.clear` all narrow their
+failure reason to the literal `'amcp-error'` in a **Zod enum**
+(`FIXED_LAYERS_CLEAR_LAYER_REASONS` and its siblings), so the real error code cannot travel to the
+renderer **even though `#send` already has it**.
+
+**Why:** the operator is told a clear failed without being told how. The wording half was already
+fixed — the message is now honest ("it is not known whether…") — which was the part a
+words-and-states pass could reach. The remaining half is that the channel cannot CARRY the fact,
+so no amount of wording work can recover it.
+
+**Acceptance:**
+
+- A clear that fails with a known AMCP code reports that code to the renderer.
+- A clear that fails with no known code still reports honestly, and does not manufacture one.
+- The `amcp-<code>` passthrough that already works elsewhere is not weakened to accommodate this
+  — it is the one place the mechanism IS known and it says so precisely.
+
+**DESIGN-FIRST — implementation needs an OpenSpec change before code.** Widening the enums is a
+`@cg/shared-ipc` change across three channels: a contract between the bridge and both renderers.
+
+**Notes:** the honesty fix already shipped must not be "tidied" into making every failure vague —
+that would trade a narrow-but-true message for a broad-but-useless one. Source: `DEBT.md:756`,
+inside the `dev-offline-polish` entry at `DEBT.md:686`.
+
+## [ ] R-039 — no E2E covers the scrub DRAG, only `arrowStep` ⟨priority: low⟩
+
+**What:** the numeric/position inputs gained both a scrub drag and an arrow-key step. Only
+`arrowStep` — the pure half — has an E2E. The drag itself lives in window pointer listeners and is
+untested end to end.
+
+**Why:** the drag is the half an operator actually uses, and it is the half that can break from a
+change nowhere near the Inspector — window-level pointer handling is exactly the kind of thing a
+shell or overlay change disturbs silently.
+
+**Acceptance:**
+
+- A Playwright spec drives the scrub drag with a `mouse.move` sequence and asserts the committed
+  value.
+- The existing `arrowStep` coverage is unchanged.
+
+**Notes:** identified as worth adding at the time and not written. Source: `DEBT.md:1383`, inside
+the owner UI review batch at `DEBT.md:1360`.
+
+## [ ] R-040 — two same-named sequences produce IDENTICAL Inspector headings ⟨priority: low⟩
+
+**What:** a sequence composition item's display label is built from the sequence ELEMENT's name
+via `sequenceItemNamespace`, so two sequences both called `Sequence`, each with an item at
+position 1, both render the heading `Sequence — item 1`.
+
+**Why:** the operator cannot tell the two apart from the Inspector. **The data is fine** — the
+value keys are distinct and id-based, so nothing collides or collapses; this is purely a display
+limit. It is ASSERTED rather than assumed away
+(`packages/shared-schema/tests/composition-fields.test.ts`, the "TWO same-named sequences" case).
+
+**A previous comment claimed the operator disambiguates by element. They cannot** — the element
+name is not shown in the Inspector, only the label. That comment has been corrected in place to
+state the real limit, so this item is the fix, not the discovery.
+
+**Acceptance:**
+
+- Two same-named sequences produce headings an operator can tell apart.
+- The existing test is updated to assert the new distinction rather than the current collision.
+
+**Notes:** needs a wording decision before code — what the disambiguator is (position, parent, an
+index) is a UI call, not a technical one. Related: [[R-037]] is the other half of this naming seam
+and touches the same `sequenceItemNamespace`; a fix for either should consider both.
+Source: `DEBT.md:1420`.
+
+## [ ] R-041 — no test pins the `#`-versus-alias model: divergence, alias stability, or gap-not-renumber ⟨priority: medium⟩
+
+**What:** three properties of the layer `#` column and the default row alias are unpinned by any
+test:
+
+1. **They can DIVERGE.** `#` is plain DISPLAY ORDER — 1 at the top of the rendered list, counting
+   down. The default alias is `Layer <bankPosition>` — the layer's FIXED place in the bank,
+   counting down from its highest layer, so `Layer 1` is always layer 99. With the shipped bank
+   (70–99 declared, top five ticked) they read identically. **Untick 97 and the third visible row
+   is `#3` while still being `Layer 4`.**
+2. **Alias STABILITY.** The alias must never renumber when rows are ticked or unticked — the
+   owner's explicit constraint, because "`Layer 2` would mean different rows on different days".
+   Divergence is the accepted cost of that stability.
+3. **Gap-not-renumber.** Hiding a row leaves a GAP in the `#` sequence rather than renumbering the
+   rows past it, because a positional handle that silently renumbers is worse than none.
+
+**Why:** two derived integers on one row disagreeing about which row it is was the hazard the
+owner named directly — "fire layer 2" becomes a coin flip. The behaviour is correct today and
+nothing holds it there.
+
+**⚠ WRITE THIS FROM `DEBT.md:2621`, NOT FROM `DEBT.md:1606` — the two sources state OPPOSITE
+models and one is superseded.** `DEBT.md:1606` says `#` and the default alias "are ONE number by
+construction" and "cannot disagree". **That reading is SUPERSEDED.** `DEBT.md:2621` is the owner's
+final resolution — it opens "after two earlier readings were superseded" — and it establishes that
+they are two different questions answered separately, and that they CAN diverge.
+
+**This matters more than the usual stale-entry note.** The live debt in both sources is the same
+missing test. An item written from `:1606` would commission a test asserting "they cannot
+disagree" — the superseded invariant — and a green assertion pinning the wrong model into the
+suite is worse than no test at all, because it would then have to be argued down rather than
+merely written.
+
+**Acceptance:**
+
+- A test asserts that `#` and the default alias DIVERGE on a non-contiguous ticked set (untick 97;
+  the third visible row is `#3` and `Layer 4`).
+- A test asserts the alias does not renumber when rows are ticked or unticked.
+- A test asserts hiding a row leaves a gap in `#` rather than renumbering the rows past it.
+
+**Notes:** related to [[R-033]] (the Layers table this lives in). Source: `DEBT.md:2621` (current
+model, authoritative) and `DEBT.md:1606` (superseded reading — do NOT specify from it).
+
+## [ ] R-042 — mute-before-ADD, so LOAD can run during rehearse without a brief audible leak ⟨priority: medium — reaches air⟩
+
+**What:** rehearse currently REFUSES LOAD on a rehearsing row (fail closed), because LOAD on a
+cleared row is the one path that can put an UNMUTED producer under a row the UI shows as
+rehearsing. The better feature is to **mute as part of the load** instead of refusing it.
+
+**THE ORDERING CONSTRAINT, and it is the whole difficulty:** on 2.5.0 the volume must land
+**BEFORE** the `CG ADD`, **not after**. A bare `CG ADD` puts the template's audio on air, so an
+ADD-then-mute sequence is briefly audible on air — the exact leak the mute exists to prevent, just
+shorter. An implementation that gets the order wrong looks correct in every test that does not
+listen.
+
+**Why it was deferred, recorded so the cost is not re-discovered:** it puts a new
+ordering-sensitive path into the mute logic, which is the one path in this feature whose failure
+mode — a graphic that reaches air with sound nobody expected, or silent when it should not be —
+nobody notices until someone asks why there is no sound.
+
+**Acceptance:**
+
+- LOAD is permitted on a rehearsing row, and the producer it creates is muted before it can be
+  heard.
+- The `MIXER … VOLUME` lands before the `CG ADD` on the wire, asserted on the AMCP trace and not
+  only by the absence of an error.
+- A mute that fails does not proceed to the ADD.
+
+**DESIGN-FIRST — implementation needs an OpenSpec change before code.** The command ORDER is a
+contract between the bridge and the template runtime, and it is version-dependent (2.5.0), so it
+belongs in a spec rather than in a comment.
+
+**Notes — the same seam seen from three angles, and all three should be read together:**
+[[R-029]] (cueing puts a graphic's audio on air before the operator takes it) is the underlying
+behaviour; [[C-019]] (audio in templates, BLOCKED BY [[C-018]]) is the CasparCG-side question; this
+item is the load path. Fixing one without reading the others is how the ordering gets re-broken.
+Source: `DEBT.md:1832`.
+
+## [ ] R-043 — the APASAI mark is an auto-traced raster, not production brand artwork ⟨priority: medium⟩
+
+**What:** `apps/runtime/brand/apasai-logo.svg` is an **auto-trace of a 114×96 raster** the owner
+supplied, inlined into `index.html`. Curves are polygonised. It is faithful enough to sign a boot
+screen and it is **not vector artwork** — it will show its origin at large sizes or in print.
+
+**Why:** this is the first frame of the product and the company's own mark. Shipping a traced
+approximation to a customer is a brand defect, not a rendering one, and it is invisible until the
+moment it is enlarged.
+
+**Acceptance:**
+
+- The mark is the original vector (AI / EPS / SVG), not a trace.
+- `#00AEEF` is unchanged — **it is the company's exact blue and is not ours to alter**, not for
+  contrast, not for consistency, not for a theme. Only the bars and the swoosh are relit for the
+  dark ground.
+- The three class hooks (`.apasai-bars` / `.apasai-swoosh` / `.apasai-arc`) still exist — they are
+  the contract.
+- `tests/splashCss.test.ts` still passes: it asserts the inlined path data equals the file's, so
+  the swap must update both.
+
+**Why this is NOT part of [[R-035]].** R-035 is `[~]` and its acceptance is entirely about splash
+BEHAVIOUR — first paint, the phase readout, the monotone percentage, the 8000/3000 ms floors.
+Nothing in it specifies the mark's provenance. Replacing traced artwork with a real vector is an
+asset deliverable that will outlive R-035's archive, which is why it carries its own number.
+
+**Notes:** the swap is one file plus the inlined copy in `index.html`. **Do before any
+customer-facing release.** Source: `DEBT.md:1891`.
+
+## [ ] R-044 — the migrated dialogs have no test that they still OPEN, and `Cancel` byte-identity is asserted for only one of them ⟨priority: medium⟩
+
+**What:** two missing assertions in the E2E suite owed by `dev-modal-primitive`, which migrated
+five dialogs onto a shared `Modal`:
+
+1. **Nothing asserts the migrated dialogs still OPEN from their real entry points.** The specs
+   drive `ServerSettingsPanel` and `AuditPanel` directly. Their launchers — the status bar, the
+   audit button — are unchanged and typecheck clean, but nothing pins that they still work.
+2. **`Cancel` leaving state byte-identical is asserted only for the config dialog** (where the
+   refusal keeps the dialog open with all 30 rows intact). The task asked for it on "at least the
+   destructive ones"; the confirm dialogs' cancel path is unchanged code and was never separately
+   re-asserted.
+
+**Why:** a dialog that cannot be opened is indistinguishable from a dialog that does not exist,
+and "typechecks clean" is not evidence that a launcher still fires. The `Cancel` property matters
+on the destructive dialogs precisely because that is where a silent state mutation costs something.
+
+**Acceptance:**
+
+- Each migrated dialog is opened from its real entry point in an E2E spec, not driven directly.
+- `Cancel` is asserted to leave state byte-identical on the destructive dialogs, not only the
+  config dialog.
+
+**Notes:** a Linux `gate:e2e` is owed for this work regardless of these two specs — five dialogs
+changed layout, and a Windows run is not authoritative for that. Source: `DEBT.md:2088` and
+`DEBT.md:2091`.
+
+## [ ] R-045 — `AWAITING_ROW_REASON` sits with the verbs instead of in the shared `reachWording` module ⟨priority: low⟩
+
+**What:** `AWAITING_ROW_REASON` lives in `layerRowActions` alongside the verbs, like
+`MISSING_TEMPLATE_REASON`, rather than in the shared `reachWording` module where the other
+operator-facing refusal wordings live.
+
+**Why:** the drift risk is real — two surfaces saying the same refusal in two words is how an
+operator comes to believe they are two different conditions. **But no second consumer exists
+yet**, which is why this is `low` and not `medium`: today there is nothing to drift from.
+
+**Acceptance:**
+
+- If and when a second surface needs to say the `awaiting` reason, the wording moves to
+  `reachWording` at that moment and both surfaces read it from there.
+
+**Notes:** deliberately filed as a _watch_ rather than as work to schedule. Moving it now would be
+speculative; moving it at the moment a second consumer appears is the rule. Source: `DEBT.md:2107`.
+
+## [ ] R-046 — `NEXT` is offered on every sequence, including ones with no next step ⟨priority: medium⟩
+
+**What:** the `NEXT` verb is presented on rows whose template has no multi-step capability, so the
+operator is offered an action that cannot do anything.
+
+**THE RECONCILIATION IS ALREADY MADE — write it into the acceptance or an implementer will delete
+the control as dead UI.** Two shipped decisions appear to conflict: R-021 stage-2b says do not ship
+a control for a capability that does not exist, while the layer-UI clause 8 says keep it and
+**disable** it. **The resolution is: KEEP `NEXT`, DISABLE it, and explain why in the tooltip.**
+Removing the control entirely is the reading this item exists to prevent — a verb that vanishes on
+some rows and appears on others is harder to learn than one that is consistently present and
+sometimes unavailable.
+
+**THE MIGRATION DECISION IS ALSO ALREADY MADE, and it is the owner's:** the default is
+**"has it"**. That preserves today's behaviour for every template already delivered. Defaulting to
+"does not have it" would **silently strip a capability from templates already in the field**,
+which is a behaviour change nobody asked for arriving through a schema default.
+
+**Why:** an enabled control that does nothing teaches the operator that the console lies. A
+disabled control with a reason teaches them what the template can do.
+
+**Acceptance:**
+
+- A row whose template declares the capability offers `NEXT` enabled, as today.
+- A row whose template does not declare it shows `NEXT` **present and disabled**, with a tooltip
+  saying why — never absent.
+- A template that predates the field defaults to **"has it"**, so no already-delivered template
+  changes behaviour.
+
+**DESIGN-FIRST — implementation needs an OpenSpec change before code.** It adds a capability flag
+to the template schema and therefore crosses Designer → `.vcg` → Runtime: a contract between three
+packages plus a migration default. Filed now regardless, so the debt and both decisions above are
+recorded before the design exists.
+
+**Notes:** related to [[D-031]] (multi-step templates and a real `next()`), which is the other
+direction — D-031 ADDS the capability, this item governs the control where the capability is
+ABSENT. They are not the same work and neither blocks the other. Source: owner report via the
+`DEBT.md` sweep (no `DEBT.md` line — reported directly).
