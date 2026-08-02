@@ -1476,3 +1476,144 @@ which is why this surfaces locally — the same exposure asymmetry [B-078](bugs.
 **Regression test:** the fix is itself the test — `:19` must read `100` with `:181` running
 concurrently. Verify by running the file at `--workers=6` repeatedly, NOT at `--workers=1` (which
 removes the overlap and would pass vacuously).
+
+## [ ] B-127 — the VP8+alpha canvas spec fails with `PIPELINE_ERROR_DECODE` on a seek-fragile fixture ⟨priority: medium⟩
+
+**Repro:** (intermittent — one red observed, passed on immediate re-run and in the two gate runs
+before it)
+
+1. `pnpm gate:e2e`.
+2. `apps/designer/tests/e2e/video-canvas-render.spec.ts:146`.
+
+**Expected:** the clip decodes and the canvas renders it.
+**Actual:** `PipelineStatus::PIPELINE_ERROR_DECODE`.
+**Env:** Designer E2E, Chrome media pipeline. Observed once in `.gate-logs/8372aa2a-…log`
+(failing at log line 10600; green at 3530 and 7041 in the two preceding runs).
+
+**Not a regression, and not touched.** The failing diff was entirely Runtime-app CSS/TSX plus a
+Runtime E2E spec. `apps/designer/src` imports nothing from `apps/runtime/src/renderer/ui`, and the
+Runtime suite was 32/32 green in the same run.
+
+**Deliberately NOT filed under [[B-078]], and the distinction is the point.** `DEBT.md:1321`
+groups this with the multi-select group-drag timeout, and that other half genuinely IS B-078 — a
+_late_ assertion under harness contention, now recorded there as an occurrence. **This one is a
+different failure mode.** B-078's every observed instance is a timeout or element-not-found: a
+correct assertion arriving late because the machine is busy. `PIPELINE_ERROR_DECODE` is a Chrome
+**media-pipeline decode fault** — the decoder rejected the bitstream. A longer timeout or a worker
+cap would not change it.
+
+**Why that matters more than the taxonomy:** filing a decode fault under a known-flaky banner is
+how a real failure gets waved through. An intermittent red inside a shared gate already trains
+people to re-run rather than read; parking a genuine decode bug there guarantees nobody reads it.
+
+**Notes:** the fixture is named for this — the test's own wording calls the clip "seek-fragile"
+and "the canvas-blank class", so a decode failure is the mode that fixture exists to probe. That
+makes it a candidate to **stabilise or quarantine deliberately** (a fixture whose job is to be
+fragile should not be able to redden a shared gate), rather than to "fix". Decide which before
+touching it. Source: `DEBT.md:1343`.
+
+## [ ] B-128 — the ticker separator picker lists EVERY asset, and selecting a font or a video records it as `kind: 'image'` ⟨priority: medium⟩
+
+**Repro:**
+
+1. Import a font and a video into a project (alongside at least one image).
+2. Select a ticker element; in the Inspector set the separator mode to **image**.
+3. Open the separator picker.
+
+**Expected:** only assets that can be an image separator are offered.
+**Actual:** every project asset and every shared-library asset is listed, fonts and videos
+included.
+**Env:** Designer Inspector, ticker element.
+
+**MECHANISM: the picker half is MEASURED; the render half is NOT.** Stated separately on purpose.
+
+**Measured — why the list is unfiltered, and what a selection writes.**
+`apps/designer/src/renderer/features/inspector/TickerSeparatorControl.tsx:46` and `:51` map the
+project assets and the shared library into options with **no filter on asset kind**:
+
+```
+...project.map((a) => `project:${a.assetId}`),
+...shared.map((a) => `shared:${a.assetId}`),
+```
+
+And `pickImage` (`:65`–`:78`) writes the chosen asset with `kind: 'image'` **hardcoded**,
+whatever the asset actually is. The schema agrees only in form:
+`TickerImageSeparatorSchema` (`packages/shared-schema/src/elements.ts`) requires
+`kind: z.literal('image')`, and `separator` is `z.union([z.string(), TickerImageSeparatorSchema])`
+— **there is no non-image separator shape**. So choosing a font produces a valid-looking record
+that asserts a falsehood: an `image` separator pointing at a font.
+
+**NOT measured, and not guessed here:** what that record does at render time. The runtime resolves
+`url: options.assetUrls?.[separator.assetId]` (`packages/template-runtime/src/runtime.ts:621`) and
+the ticker driver lays the separator out from its **declared** `size` box rather than measuring
+the image (`packages/template-runtime/src/ticker-driver.ts:48`), so the visible outcome on air has
+not been established. **Establish it before fixing.**
+
+**THE PRIOR QUESTION, and the reason a picker filter is not obviously the fix.** If selecting a
+font or a video does _silently nothing_, there is a worse bug underneath and filtering the picker
+hides it. The measurement above already shows the data model is being lied to — a non-image asset
+is recorded as `kind: 'image'` — so a filter alone would stop _new_ bad records while leaving
+**every template already authored with one** carrying an image separator that is not an image.
+Any fix must say what happens to those.
+
+**Acceptance:**
+
+- The separator picker offers only assets that can serve as an image separator.
+- A project that already carries a non-image separator is handled deliberately — repaired,
+  or reported — not left asserting `kind: 'image'` over a font.
+- The on-air behaviour of an existing bad record is established and recorded before the fix
+  lands.
+
+**Related:** [[D-039]] is the feature that introduced image/logo separators. Source:
+`DEBT.md` sweep, external report (no `DEBT.md` line — reported directly by the owner).
+
+## [ ] B-129 — the Designer canvas background colour reaches the OUTPUT: air must stay transparent unless a real element was placed ⟨priority: high — reaches air⟩
+
+**What:** the canvas backdrop the author sees while editing is carried into the rendered output.
+Output must be **transparent** unless the author deliberately placed a large rectangle — which is
+a real element, with a real entry in the scene, and behaves like one.
+
+**Why:** a graphic that carries an opaque background onto air covers the video behind it. On a
+broadcast overlay that is the difference between a lower-third and a full-frame card, and nothing
+in the Designer tells the author it will happen — the editor looks the same either way.
+
+**MECHANISM NOT DIAGNOSED.** The owner has confirmed the behaviour; no cause is recorded here.
+
+**On `DEBT.md:1190` — that entry is NOT wrong, but its scope is narrower than it reads, and this
+item must not be closed by citing it.** It states that two candidate causes for a separate defect
+— an opaque authored `scene.background` painting `.cg-stage`, and the template's own `cg.css` —
+"are both DEAD, and were measured dead". What was actually measured: in the **PVW-white**
+reproduction, `.cg-stage` read `rgba(0, 0, 0, 0)`, **and both scenes involved were authored
+`background: 'transparent'`**. That establishes the background mechanism was not the cause **of
+the PVW white box**. It establishes nothing about a scene authored with a NON-transparent
+background, because no such scene was in the measurement. The entry closed one question; this item
+is the other one.
+
+**Acceptance:**
+
+- A scene whose author never placed a background element renders with a transparent output
+  background.
+- A deliberately placed full-frame rectangle still renders, unchanged — the fix must not make
+  "author wanted a background" unexpressible.
+- The editor's own backdrop is never a property of the exported scene.
+
+**FIX SHAPE — make the wrong state unrepresentable, do NOT keep two values in sync.** "Editor
+backdrop" and "authored background" are two different facts that have been collapsed into one
+field. The fix separates them so a scene cannot carry an editor preference into air by
+construction. Two values kept in sync is the shape that drifts, and drift here is silent and
+on-air.
+
+**DESIGN-FIRST — implementation needs an OpenSpec change before code.** It alters the scene schema
+(splitting one field into two facts) and therefore the `.vcg` contract between the Designer, the
+exporter and `@cg/template-runtime`. **Filed now regardless of that**, because a backlog entry
+must exist before the design does — otherwise the debt waits on the design and is lost.
+
+**MIGRATION WARNING — this changes ON-AIR behaviour for existing templates.** Every template that
+today carries a non-transparent `scene.background` will render differently once the split lands:
+what currently paints will stop painting unless it is converted into a real element. That
+conversion must be **deliberate and announced**, not a silent side effect of the fix — an operator
+whose station ident quietly turns transparent mid-programme has been handed a worse defect than
+the one being fixed.
+
+**Env:** Designer → export → CasparCG. Source: `DEBT.md:1190` (scope-limited, see above) plus the
+owner's direct report.
