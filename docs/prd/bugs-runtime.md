@@ -2536,3 +2536,353 @@ bound to an item that does not exist, occupied forever and clearable by nothing.
 - The item's slot is its own row's coordinate — never re-homed into the dynamic pool.
 - No other declared row is disturbed.
 - A restore the reconciler refuses leaves the row UNBOUND, not stuck.
+
+## [ ] B-115 — `PRIMARY A` sticks on `connecting`: `emitHealth`'s dedupe key collapses four FSM states into one, so only the first of them is ever published ⟨priority: high⟩
+
+**What:** remove backup B from the server settings and the footer pill freezes on
+`PRIMARY A CONNECTING` and stays there, while the link is in fact cycling normally. Reported by
+the owner from live use; **diagnosed by reading the path end to end, NOT reproduced** — there is
+one plant on this machine and no second box to fail over.
+
+`RedundancyAdapter.emitHealth()` (`packages/caspar-client/src/redundancy/redundancy-adapter.ts`)
+dedupes publishes on a key built from `effectiveState()`, and `effectiveState` collapses **four**
+distinct `ServerSession` FSM states — `disconnected | connecting | handshaking | resyncing` — into
+one value. `ConnectionHealth.primary.state` is rendered verbatim by `StatusBar.sessionLabel`, so
+whichever of the four is published first wins and the other three are never emitted. The pill is
+therefore reporting a state the bridge really sent; it is a state we fail to **re-report**, not one
+we fail to leave. Secondary, and separable: `AmcpTransport.connect()` has no timeout, so a connect
+that never completes is also never bounded.
+
+The `connecting` here is the bridge-side FSM state, **not** the renderer's `useCasparReach` boot
+window (which means "the bridge has not answered yet" and renders as `UNKNOWN` on this pill).
+
+**It does not need a backup to occur.** Any `setConfig` takes the same path, so a single-server
+plant can hit it. Removing B may simply be when a pre-existing A problem stopped being masked by
+auto-failover.
+
+**Why:** the pill is the operator's only readout of whether the playout link is alive. A pill
+frozen on a word that was true once teaches the operator to distrust it, which is worse than no
+pill — and it is indistinguishable, from the outside, from a link that really is stuck.
+
+**ORIGIN — this is the cost of [[B-046]], and B-046 must NOT be reverted.** `B-046`
+([bugs-runtime.md](bugs-runtime.md), `[x]`) introduced exactly this dedupe to kill health churn
+and a primary double-emit, and it achieved that: its own note records "`emitHealth` dedupes by
+effective liveness (churn + primary double-emit gone)", and its soak run publishes zero health
+churn in steady state. The defect is that the dedupe key is **lossy** where it needed to be merely
+**quiet**. Reverting the dedupe would revive the churn B-046 removed. The fix has to keep publishes
+bounded while preserving the four states — publish the raw state through a coalescing window
+rather than a lossy key.
+
+**Do NOT touch `effectiveState` for the FAILOVER decision** — that use of it is correct, and is a
+different question from what the pill displays.
+
+**The ten-second test that separates the two readings, and it has not been run:** with the pill
+stuck, **refresh the browser**. The word CHANGES → publish bug, as diagnosed. The word STAYS → A
+really is in `connecting` and this is a connection defect instead. Recorded so the next session
+runs it before writing code.
+
+**Env:** Runtime + bridge, owner's plant. Source: `DEBT.md:119`, `DEBT.md:248` (the full
+write-up), `DEBT.md:409`.
+
+## [ ] B-116 — every bridge boot warns that a template is corrupt and tells the operator to re-import it, because `delimiters.json` is stored inside the templates directory ⟨priority: medium⟩
+
+**What:** `DelimiterStore` persists to `delimiters.json` **inside** `--templates-dir`
+(`~/.cg-runtime/bridge-templates/`), and `TemplateRegistry`'s loader reads every `*.json` in that
+directory as a template. The delimiter file is not a template, so it fails schema validation and
+every single boot prints a warning naming it as an unusable persisted template and instructing the
+operator to re-import it.
+
+**Nothing is actually broken** — the delimiters load correctly from their own store.
+
+**Why:** the message is the loudest thing in the boot output and it is false. It tells the
+operator a template is corrupt and instructs them to re-import it, on a machine where nothing is
+wrong. A boot warning that is routinely untrue is worse than silence: it trains the operator to
+scroll past the one boot line that will one day be real.
+
+**Acceptance:**
+
+- A bridge boot on a machine with persisted delimiters prints no template warning.
+- A genuinely unusable persisted template still warns, with the same message.
+- Existing delimiter configurations keep working across the change.
+
+**Notes:** two candidate fixes and the choice is a small design call — skip the store's own
+filename in the registry loader, or move the delimiter file up to `~/.cg-runtime/` alongside the
+other bridge config. **The second is a migration** (an existing `delimiters.json` has to be moved
+or it is silently abandoned), so it is not the one-liner it looks like. Source: `DEBT.md:230`.
+
+## [ ] B-117 — a reachability gate disabled the ENTIRE console in TEST MODE, because it asked "is a real CasparCG healthy?" instead of "will this command be executed?" ⟨priority: medium⟩
+
+**What:** `useCasparReachable` answered from `useConnections()` alone. The offline mock reports a
+`disconnected` primary **deliberately** — `seedHealth` is `disconnected` so that test mode never
+wears a signal meaning a real server said something ([[R-006]]), and `testModeHonesty.dom.test.ts`
+pins exactly that. So in test mode every AMCP verb went disabled behind "CasparCG cannot be
+reached" while the mock stood ready to execute all of them. **14 E2E specs red** across
+`fixed-layers`, `inspect-list-field`, `nested-composition-fields`, `onair-position`,
+`rehearse-layout`, `server-settings`, `stage-inspector-edits` and `test-mode-honesty`.
+
+**Fixed** in `8613772`, the session after the gate landed. Filed here as a **bug class**, not as a
+fix note, because the shape will recur.
+
+**Why it is filed after the fix:** the gate violated, in the opposite direction, the exact rule it
+was built to enforce — a control refusing when it would have succeeded. The question a
+reachability gate asks is **"will this command be executed?"**, not "is a real CasparCG healthy?".
+In test mode the mock IS the executor, and `offline-mock` was already the honest wire signal for
+"the simulator is the far end". Reading the link as well as the health makes test mode reachable.
+**That is not an exception carved out of the rule — it is the rule stated correctly.**
+
+**The fix that would have been a lie, named because it is EASIER and was one line away:** making
+the mock report a `healthy` primary also turns the suite green, and is an [[R-006]] violation —
+the mock claiming a server it does not have. Any future reachability change must not reach for it.
+
+**Caught only by `gate:e2e`.** No unit or DOM test noticed that every verb in the app had gone
+dead, which is worth knowing when deciding what a future gate change owes.
+
+**Env:** Runtime, test mode. Source: `DEBT.md:796`.
+
+## [ ] B-118 — `enterRehearse` reports a flat `mute-failed`, but CasparCG never refuses `MIXER VOLUME` — the real cause is an unreachable server, and the error names the wrong thing ⟨priority: high⟩
+
+**What:** the rehearse path reports `mute-failed` as though CasparCG had rejected the mute.
+**Measured against the owner's own plant** (`127.0.0.1:5250`, `2.5.0 69e8ad5 Stable`), raw AMCP on
+layer 1-88 (outside the bank and outside the reservation, cleared afterwards):
+
+| command                                            | response       |
+| -------------------------------------------------- | -------------- |
+| `MIXER 1-88 VOLUME 0` — **empty layer**            | `202 MIXER OK` |
+| `MIXER 1-88 VOLUME 1` — empty layer                | `202 MIXER OK` |
+| `MIXER 1-88 VOLUME 0` — **producer resident**      | `202 MIXER OK` |
+| `MIXER 1-88 VOLUME 0` — **after `CG 1-88 STOP 0`** | `202 MIXER OK` |
+
+CasparCG accepts `MIXER VOLUME` in **every** state tested, including on an empty layer. So a
+`mute-failed` verdict cannot mean "the mute was refused"; on this plant it can only mean the
+command never reached a server at all.
+
+**Why:** the operator is shown a specific, confident, wrong cause. `mute-failed` sends them
+looking at audio and at the mute logic, when the actual condition is an unreachable server — a
+different problem with a different remedy. An error that names the wrong subsystem costs more time
+than a generic one.
+
+**Acceptance:**
+
+- A rehearse that fails because the server could not be reached says so, and does not attribute
+  the failure to the mute.
+- A `MIXER VOLUME` that genuinely returns a non-202 response still reports a mute failure.
+- The distinction is visible to the operator, not only in the log.
+
+**Notes:** this measurement is also load-bearing for [[B-119]] — it is what makes "unreachable
+server" the more likely reading there. Source: `DEBT.md:1012`.
+
+## [ ] B-119 — whether `unknown` was ever displayed while a server was CONNECTED is INFERRED, not observed — and the alternative reading is a second defect ⟨priority: unrated⟩
+
+**MECHANISM NOT DIAGNOSED. This entry records an open question and the one observation that
+settles it. No cause is written here on purpose.**
+
+**What:** the owner saw layer slots reading `unknown`. Two readings fit, and they need different
+fixes:
+
+1. **One root cause, both symptoms.** `MIXER VOLUME` succeeds in every state on this plant (see
+   [[B-118]]), so `mute-failed` can only have come from an **unreachable** server — and an
+   unreachable server is also exactly what makes the occupancy tap silent and every slot read
+   `unknown`. If this holds, the rule "show `unknown` only when we have positive reason to believe
+   the layer may be occupied" fixes the display and nothing else is owed.
+2. **A second defect.** Connected, occupancy reported the layer unoccupied, and `unknown` was
+   displayed anyway. **This is NOT ruled out**, and the rule in reading 1 would MASK it rather
+   than fix it.
+
+**Why it is `unrated`:** the severity depends entirely on which reading is true, and the evidence
+to choose does not exist. Rating it now would be inventing a number.
+
+**The observation that settles it, and it needs the owner:** when the slots read `unknown`, was
+the link indicator reading LIVE? That single observation separates a display bug from a second
+defect. It could not be taken by the session that filed this — it could not observe the owner's
+session, and this machine has one plant.
+
+**Do not implement the reading-1 rule until this is answered** — if reading 2 is true, shipping
+that rule hides the defect behind a correct-looking display.
+
+**Related:** [[B-093]] (`[x]`) fixed the safety consequence of a blind occupancy tap (a restart
+re-ADDing over a live layer). It did not answer the display question above.
+Source: `DEBT.md:1048`.
+
+## [ ] B-120 — `PLAY` is enabled on a bound row whose template has left the registry, so the operator is told the row will reach air and finds out otherwise at the take ⟨priority: high — reaches air⟩
+
+**What:** the PLAY verb is gated on `empty || playing || rehearsing` and knows nothing about
+whether the row's template can still be **resolved**. On a bound row whose template has left the
+registry, PLAY therefore invites a take that `take()` refuses with `unknown-template`.
+
+**Left open deliberately** by the `dev-cleared-row-state` sweep, which is otherwise complete: that
+sweep measured every layer-acting verb on a cleared row and found nothing else to fix (`PLAY` on a
+cleared row genuinely reaches air via `take()`'s B-039 pre-roll, asserted on the wire in
+`tools/caspar-bridge/tests/cleared-row-verbs.integration.test.ts`).
+
+**What it is NOT — recorded so the severity is not over-read.** The failure is **not silent**: the
+refusal surfaces as the command toast, and the row's template cell already reads
+"(not in this browser)". The operator is told — just at the moment air needs it.
+
+**Why it still rates high:** it is the dangerous direction. A control that says "this will go to
+air" and then refuses at the take is worse than one that refuses early, because the operator has
+already committed the slot in their head. This is a take-time failure on an on-air path.
+
+**Notes — the honest fix is a DECISION, not a patch,** which is why it was left open:
+
+- either PLAY gates on template availability — which re-opens "do not gate PLAY on
+  occupancy-adjacent facts", and note the renderer's view of the registry is **not** the bridge's,
+  so the gate would be built on the wrong side unless that is solved;
+- or the row refuses earlier and louder, and PLAY stays ungated.
+
+Source: `DEBT.md:1092` (the residual, inside the CLEARed-row sweep entry at `DEBT.md:1064`).
+
+## [ ] B-121 — `CG ADD` site 2, the reconnect reconciliation, is not rehearse-guarded, so a bridge blip re-ADDs an UNMUTED producer under a rehearsing row ⟨priority: high — reaches air⟩
+
+**What:** a sweep of every `CG ADD` call site in `caspar-runtime.ts` found four, and asked of each
+whether the rehearse guard covers it:
+
+| #   | site                          | what it is                                   | rehearse-guarded?                          |
+| --- | ----------------------------- | -------------------------------------------- | ------------------------------------------ |
+| 1   | `#loadOnto` (via `loadFixed`) | the operator's LOAD                          | **YES** — added by `dev-cleared-row-state` |
+| 2   | reconnect reconciliation      | a silent layer re-ADDed after a bridge blip  | **NO — this bug**                          |
+| 3   | `setPosition`                 | re-ADD so the new `?pos=` query takes effect | NO, and it is safe                         |
+| 4   | `take()` B-039 pre-roll       | PLAY's implicit ADD on a cleared row         | YES — `take()` refuses `rehearsing` first  |
+
+Site 2 runs without operator action, after a reconnect, and is the one uncovered path.
+
+**Why:** on 2.5.0 a bare `CG ADD` puts the template's audio on the channel ([[R-029]]). The whole
+point of the rehearse mute is that a rehearsing row never reaches air; a reconnect that silently
+re-ADDs an unmuted producer under a row the UI shows as rehearsing defeats it, without the
+operator doing anything. It is the same leak the guard on site 1 exists to prevent, arriving by a
+path nobody triggers on purpose.
+
+**Acceptance:**
+
+- A reconnect reconciliation that would re-ADD onto a rehearsing row either mutes before the ADD
+  or does not ADD.
+- The guard is asserted on the wire, not only in the renderer — a renderer-only guard is the shape
+  site 1's fix explicitly rejected.
+- Sites 1, 3 and 4 keep their current behaviour.
+
+**Notes:** related to [[R-022]] (the rehearse feature) and to the deferred `mute-before-ADD`
+upgrade, which would change the ordering constraint here — on 2.5.0 the volume must land BEFORE
+the `CG ADD`, never after. Source: `DEBT.md:1104`.
+
+## [ ] B-122 — `CLEAR ALL` is always ENABLED but is not always EFFECTIVE: it filters on the very statuses that may be wrong, and reports success having sent nothing ⟨priority: high — reaches air⟩
+
+**What:** the owner's decision was that CLEAR and CLEAR ALL are always enabled, because refusing
+the remedy when the state model is confused strands a graphic on air. The UI does that. The two
+halves do not deliver it equally:
+
+- **The per-row CLEAR is genuinely effective.** `caspar-runtime.out(itemId)` requires only that
+  the item has a bound slot — it does **not** inspect the status — so pressing CLEAR on a row
+  sends `CLEAR <ch>-<layer>` whatever the status claims.
+- **`CLEAR ALL` is not.** `caspar-runtime.clearAll()` filters on `status` before sending anything
+  — i.e. it is gated on **precisely the statuses that might be wrong in the situation the escape
+  hatch exists for**. If every item wrongly reads `idle`, CLEAR ALL sends nothing and returns a
+  success with a cleared count of zero.
+
+**Why:** a success report for a no-op is the worst available outcome — worse than a disabled
+button, which at least tells the truth. The operator presses the emergency control, is told it
+worked, and the graphic is still on air. Found by the adversarial self-review that
+`dev-clear-bank-scoped` required, not by a test.
+
+**Acceptance:**
+
+- `CLEAR ALL` sends a clear for **every item with a bound slot**, regardless of its believed
+  status.
+- Its report counts what was actually sent; it never reports success for a no-op.
+- The per-row CLEAR is unchanged.
+
+**Notes:** the predicate change is on-air bridge behaviour, which is why it was left out of the UI
+review that found it. It also needs a decision the fix cannot dodge: **should CLEAR ALL hard-cut
+rows the model believes are merely `loaded`** (not yet on air)? Related: [[R-012]] is the
+Clear-All feature this defect sits inside. Source: `DEBT.md:1539`, restated at `DEBT.md:2558`
+inside the `dev-clear-bank-scoped` DONE entry (`DEBT.md:2456`).
+
+## [ ] B-123 — the failover banner overlays the monitor strip instead of pushing it down ⟨priority: low⟩
+
+**What:** `FailoverBanner` is `position: fixed` (per `layout.ts`, deliberately, so it is not a grid
+item), so while `PRIMARY A unhealthy (degraded)` is showing it **covers** the top of the
+PREVIEW/PROGRAM panels rather than displacing them.
+
+**Why:** the banner appears exactly when the operator most needs to see the monitors, and it hides
+the top of both. Pre-existing and unrelated to the work that noticed it — but newly noticeable now
+that there is real content under it instead of a placeholder line.
+
+**Env:** Runtime, visible whenever the failover banner is up. Source: `DEBT.md:1714`.
+
+## [ ] B-124 — `MIN_WORKSPACE_PX` does not mean what its name says: `clampInspector` ignores ~54px of shell chrome ⟨priority: low⟩
+
+**What:** `MIN_WORKSPACE_PX` is treated as "viewport minus Inspector", but the shell also spends
+~54px on padding, the gap and the divider. The workspace COLUMN is therefore that much narrower
+than the floor implies.
+
+**Why:** harmless today — the table's `tight` density fits in ~360px, far below any reachable
+width — so this is filed as a **naming/correctness** defect rather than a layout failure. The
+constant is load-bearing for a future minimum-width decision, and a constant that silently means
+something narrower than its name is how that decision gets made on a wrong number.
+
+**Env:** Runtime shell, pre-existing. Source: `DEBT.md:1722`.
+
+## [ ] B-125 — a bound-row race lets the unbound branch CLEAR a just-loaded producer, and the item's state machine still reads `loaded` while the layer is empty ⟨priority: high — reaches air⟩
+
+**What:** the row routes on `item === null` **at click time**. If an item is loaded onto the row in
+the instant between render and click, the unbound branch sends a layer `CLEAR` that destroys the
+just-loaded producer **without** going through `stack.out`. The item's state machine therefore
+still reads `loaded` while the layer is empty, and the row misreports until the operator hits
+REMOVE.
+
+**Why:** it is not a safety hole in the bank sense — the layer is in the bank, not reserved, and
+the operator did ask for a clear — but it leaves the model and the wire disagreeing about what is
+on air, which is the condition every other honesty item in this file exists to prevent. A row that
+says `loaded` over an empty layer is a row an operator will take.
+
+**Acceptance:**
+
+- After a successful bank clear, any item bound to that layer is reconciled, so no item reports
+  `loaded` over a layer that was just cleared.
+- The per-row CLEAR keeps working without consulting item bookkeeping.
+
+**Notes — one fix was considered and REJECTED, recorded so it is not reproposed:** refusing the
+clear when the layer is owned. That reintroduces dependence on the very bookkeeping this escape
+hatch exists to bypass. The proper fix is to reconcile **after** a successful clear, which is
+on-air bookkeeping and wants its own diff. Source: `DEBT.md:2207`, with the full finding at
+`DEBT.md:2535` inside the `dev-clear-bank-scoped` DONE entry (`DEBT.md:2456`).
+
+## [ ] B-126 — the adopt-`CLEAR` succeeded and the `CG ADD` after it failed, leaving the layer empty: the CLEAR/ADD pair is not atomic in the other direction ⟨priority: high — reaches air⟩
+
+**What:** observed on the wire during a 2.5.0 recon session. The bridge sent its documented
+sequence and the two halves disagreed — `CLEAR 1-71` returned `202 CLEAR OK`, and the
+`CG 1-71 ADD 0 "<bridge-served http URL>" 0 "{…}"` after it returned `404 CG ADD FAILED`.
+
+Layer 71 was left **empty**. The row reported `ERROR` honestly and its description column read
+`empty`, so the UI did not lie — but a destructive step had committed before the constructive step
+that repairs it was known to succeed.
+
+**Why the diagnosis in the source log does NOT apply, and why this is still live.** That session
+concluded 2.5.0 refuses `CG ADD` with an http URL. **That conclusion is void** — the real cause was
+that CEF was dead in that CasparCG instance (`cef_executor Could not post task`), fixed by adding
+an `<html>` block with a writable `cache-path` to `casparcg.config`; `CG ADD` with a bridge-served
+http URL is fine. **The void kills the diagnosis, not the event.** The `CLEAR` did return 202 and
+the `ADD` did return 404, and that sequence is possible whenever an ADD fails for any reason. If
+anything the void makes this **broader**: a mere config fault is now a demonstrated way to fail an
+ADD, so ADD failure is an ordinary operational condition rather than an exotic version
+incompatibility.
+
+**Why it is not covered by the existing guards.** [[B-100]] fixed the _re-read boolean_ route to a
+CLEAR-then-nothing window — one condition gating both the destructive and the constructive step,
+read once. This is a **different route**: the boolean was read once and was correct, and CasparCG
+refused the ADD anyway.
+
+**The mirror of [[B-056]] (runtime), not a duplicate of it.** The runtime B-056 is _the
+adopt-`CLEAR` did not land and `load()` proceeded anyway_ — an unadopted live orphan renders under
+an owned slot. This is the opposite half: the CLEAR **did** land and the ADD failed, so the layer
+is empty. Same seam — the pair is not atomic — opposite failure modes. Neither subsumes the other.
+
+**Acceptance:**
+
+- A load whose `CG ADD` fails after its adopt-`CLEAR` succeeded does not leave the layer silently
+  empty: it either restores what was there or reports the layer as empty in a way the operator
+  cannot miss.
+- The behaviour is asserted against an AMCP mock that fails the ADD, not only against a
+  happy-path mock.
+
+**Notes:** two shapes are open — probe-then-clear (establish the ADD will be accepted before
+destroying), or restore-on-ADD-failure. Both are on-air bridge behaviour and want a decision.
+Source: `DEBT.md:1531`.
