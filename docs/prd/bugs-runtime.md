@@ -2639,7 +2639,7 @@ dead, which is worth knowing when deciding what a future gate change owes.
 
 **Env:** Runtime, test mode. Source: `DEBT.md:796`.
 
-## [ ] B-118 — `enterRehearse` reports a flat `mute-failed`, but CasparCG never refuses `MIXER VOLUME` — the real cause is an unreachable server, and the error names the wrong thing ⟨priority: high⟩
+## [x] B-118 — `enterRehearse` reports a flat `mute-failed`, but CasparCG never refuses `MIXER VOLUME` — the real cause is an unreachable server, and the error names the wrong thing ⟨priority: high⟩ — **CLOSED 2026-08-03 WITHOUT ANY WORK BEING DONE: the defect was already gone when this item was filed. See the closing note at the foot of this entry.**
 
 **What:** the rehearse path reports `mute-failed` as though CasparCG had rejected the mute.
 **Measured against the owner's own plant** (`127.0.0.1:5250`, `2.5.0 69e8ad5 Stable`), raw AMCP on
@@ -2670,6 +2670,55 @@ than a generic one.
 
 **Notes:** this measurement is also load-bearing for [[B-119]] — it is what makes "unreachable
 server" the more likely reading there. Source: `DEBT.md:1012`.
+
+---
+
+### CLOSING NOTE — 2026-08-03. **NO WORK WAS DONE FOR THIS ITEM.**
+
+**Read this before assuming a fix shipped.** A bare `[x]` on this entry would say "someone fixed
+it", and that would be a second false claim replacing the first. Nothing was implemented, nothing
+was changed in the rehearse path, and no test was added. **The defect described above had already
+been resolved by other work before this item was ever filed.**
+
+**What was measured on 2026-08-03:**
+
+- **`enterRehearse` no longer produces `mute-failed` at all.** Its only refusals are
+  `unknown-item`, `busy` and `on-air`. On the resident-producer branch the mute is **BEST EFFORT**
+  and **entry never fails on it** — see the `§4 — THE MUTE IS BEST-EFFORT. ENTRY NEVER FAILS ON IT`
+  block in `tools/caspar-bridge/src/caspar-runtime.ts`, inside `enterRehearse`.
+- **The wire contract says so explicitly.**
+  `packages/shared-ipc/src/channels/rehearse.ts:87` — _"NOTE — `mute-failed` CURRENTLY HAS NO
+  PRODUCER, and that is deliberate rather than an oversight. Entry no longer refuses when the mute
+  does not land."_ The code is kept in `REHEARSE_ENTER_REASONS` so that a future decision to fail
+  closed on a genuine server REFUSAL would use exactly this word, and because removing it would
+  silently narrow the wire.
+- **Why the refusal was dropped**, recorded there rather than inferred here: refusing made `ON PVW`
+  behave differently on two rows the operator considers identical — a row closed with `STOP` keeps
+  its producer so the mute branch ran and failed, while a row closed with `CLEAR` took the
+  zero-AMCP path and succeeded.
+
+**The original observation was ACCURATE and is now SUPERSEDED.** `DEBT.md:1012` measured, against
+the owner's own plant, that CasparCG never refuses `MIXER VOLUME` — that measurement stands and is
+still the load-bearing fact behind [[B-119]]. What changed is the code it described: the flat
+`mute-failed` report it complained about no longer exists. The entry was true when written and had
+been overtaken by the time it was filed.
+
+**The class, because this is its third instance in the `DEBT.md` sweep:** a debt note that was
+accurate when written becomes a **false claim** the moment its subject is resolved and nothing
+records the discharge. Filing from such a note produces a confident, wrong bug report. See
+`DEBT-SWEEP.md`'s closing section, where the class and the sweep-wide exposure it implies are
+recorded.
+
+**One thing deliberately NOT filed as a defect.** The best-effort exchange gives something up, and
+the code states it openly: with the mute unlanded, a resident producer stays unmuted while the row
+claims PVW, and on 2.5.0 a resident producer's audio can be on air ([[R-029]]). That is a
+**recorded decision with a stated rationale**, not an observed defect — PVW sends nothing to the
+layer, and the common case for a failed mute is an unreachable server where nothing reaches air
+anyway. Filing it would be recording a decision as a bug on no evidence. It is carried instead as
+one line of **owed measurement** in `DEBT-SWEEP.md`, to be answered on real hardware alongside the
+[[C-018]] / [[C-019]] work: _on 2.5.0, with the mute unlanded, does a resident producer stay
+audible while the row claims PVW?_ If the answer is yes, it becomes an item then, with a
+measurement behind it.
 
 ## [ ] B-119 — whether `unknown` was ever displayed while a server was CONNECTED is INFERRED, not observed — and the alternative reading is a second defect ⟨priority: unrated⟩
 
@@ -2886,3 +2935,65 @@ is empty. Same seam — the pair is not atomic — opposite failure modes. Neith
 **Notes:** two shapes are open — probe-then-clear (establish the ADD will be accepted before
 destroying), or restore-on-ADD-failure. Both are on-air bridge behaviour and want a decision.
 Source: `DEBT.md:1531`.
+
+## [ ] B-130 — three library E2E specs were DELETED rather than re-pointed, and [[B-083]]'s regression test went with them ⟨priority: medium⟩
+
+**What:** `R-028` folded the Library into the stack, so the Library panel stopped existing as a
+surface and the picker moved behind `LOAD`. The specification for that work
+(`dev-list-vs-layer` v3 §5) said, verbatim: _"Re-point the two E2E specs at the picker reached
+through `LOAD`. **Do not delete them** — their subject survives, only its entry point moved."_
+
+**Three specs were deleted** (in `ed3aedc2`, merged as `14bc793b`), not re-pointed:
+
+| deleted spec                         | what it asserted                                                                       |
+| ------------------------------------ | -------------------------------------------------------------------------------------- |
+| `library-inspector-dispatch.spec.ts` | Library + Inspector controls each dispatch on click                                    |
+| `library-name-and-remove.spec.ts`    | display names; refuses removing a REFERENCED template; removes an unreferenced one     |
+| `library-title-wrap.spec.ts`         | names wrap at WORD level, never one letter per line; every name stays within two lines |
+
+**What replaced them, and what did not.** `apps/runtime/tests/templatePicker.dom.test.ts` was added
+and covers three things — `LOAD` opens the picker and it offers both re-use and import; an empty
+list points at the import control; nothing on the row or in its menu still says LIBRARY. **None of
+those is any of the three subjects above.**
+
+**Where each subject actually stands, measured:**
+
+- **Remove semantics SURVIVED, one layer down.** `apps/runtime/tests/LibraryStore.test.ts:77`
+  asserts _"remove: unreferenced → ok and gone; referenced → in-use refusal; unknown →
+  unknown-template"_. That is the store, not the surface, but the property is pinned.
+- **Title wrapping is GONE, at every layer.** A sweep of `apps/runtime/tests` for `wrap` /
+  `two lines` / `per-character` / `word level` returns only unrelated hits (`asyncButton`,
+  `inspect-list-field`'s row-wrap, `rehearse-layout`). **Nothing asserts it any more.**
+
+**Why that matters: it was [[B-083]]'s regression test.** `B-083` (`[x]`, this file) is _"Library
+names render ONE LETTER PER LINE: two rigid `nowrap` buttons take 63% of the row and the name's
+`overflow-wrap: anywhere` lets it collapse to a one-character min-content"_. Its regression test
+was `library-title-wrap.spec.ts`. Deleting it removes the only thing standing between that defect
+and its return.
+
+**And the subject DID survive, which is the whole point of the "do not delete" instruction.** The
+picker renders each template's display name as the label of a `Button`, in a flex row beside a
+rigid `Remove` button — `apps/runtime/src/renderer/features/fixedLayers/useTemplatePicker.tsx:183`
+(`rowActions`, `display: flex`), with the name at `:190` and `Remove` at `:192`–`:198`. That is
+structurally the shape B-083 described: a variable-length name competing for width with a rigid
+button on one line.
+
+**MECHANISM NOT MEASURED, and deliberately not asserted.** Whether the picker actually reproduces
+B-083's per-character collapse depends on the shared `Button`'s own wrapping behaviour, which was
+**not** measured here. This item reports a **coverage hole** — a shipped fix whose regression test
+was deleted while its subject moved — not a reproduced defect. **Do not write "the picker wraps per
+character" into this item without measuring it.**
+
+**Acceptance:**
+
+- A test asserts template names in the picker wrap at word level and never collapse to one
+  character per line, at the widths the picker can actually reach.
+- A test asserts display names are shown in the picker (the surviving half of
+  `library-name-and-remove`).
+- If any of the three deleted subjects is judged genuinely obsolete, that is recorded as a decision
+  rather than left as a silent deletion.
+
+**Notes:** the store-level half needs nothing — `LibraryStore.test.ts:77` already holds it. The
+`library-inspector-dispatch` subject (controls dispatch on click) is likely covered incidentally by
+the picker specs, but that was **not** verified and is not claimed here. Source:
+`dev-list-vs-layer` v3 §5, recovered 2026-08-03; the census row is `DEBT.md:936`.
