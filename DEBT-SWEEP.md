@@ -559,6 +559,11 @@ supplied to session 6. Each section measured, nothing implemented:
 
 `B-` moved to `B-131` because session 6 filed `B-130`. The other four are unchanged from session 5.
 
+> ⚠ **SUPERSEDED 2026-08-03 by the re-verification pass** — `B-131` and `R-047` have since been
+> claimed. Current free numbers are **`B-132` · `C-021` · `D-147` · `P-026` · `R-048`**. See
+> "THE RE-VERIFICATION PASS" at the foot of this file. Derive before claiming regardless
+> ([[P-022]]); this pointer exists so the line above is not read as current.
+
 ## A pattern worth remembering: a locator can point at the containing entry
 
 Six of the plan's `DEBT.md` locators pointed at an entry heading rather than at the finding inside
@@ -671,3 +676,140 @@ silently left open.
   (`R-047` is free);** session 6 did not file it because filing a new number in the last commit of a
   cleanup is the anti-pattern this record exists to name.
 - **"No archive is pending"** — a statement, not a task. Still true.
+
+# THE RE-VERIFICATION PASS — 2026-08-03
+
+The exposure recorded above at "The exposure this implies, stated plainly and NOT acted on" was
+answered. Every in-scope item was read against the code it describes.
+
+## The headline number
+
+**30 in-scope items checked. 1 came back ALREADY FIXED.**
+
+- **29 STILL PRESENT**
+- **1 ALREADY FIXED** — [[B-117]]
+- **0 CANNOT TELL**
+
+**The `DEBT.md` file had drifted far less than [[B-118]] suggested it might.** That is the useful
+result, and it is worth stating in the direction it actually points: the sweep's filing sessions
+produced items that overwhelmingly describe real, present defects. One item in thirty was stale,
+and it was the one that already said so in its own body.
+
+## What was in scope, and what was not
+
+**In scope — 30 items,** each sourced from a `DEBT.md` row and describing behaviour in code:
+
+- `B-115`, `B-116`, `B-117`, `B-119`–`B-130` (15 items; `B-118` already closed on 2026-08-03)
+- `R-036`–`R-046` (11 items)
+- The four items the sweep MERGED evidence into: `B-078`, `B-104`, `P-001`, `R-030`. The items
+  predate the sweep; the **evidence folded into them during it** carries the same exposure, so the
+  folded blocks — not the whole entries — were what got verified.
+
+**Out of scope, named rather than silently skipped:**
+
+- `D-142`–`D-146` — features and stubs, not defects. There is no "still present" to measure.
+- `P-022`–`P-025` — process rules. A rule cannot be "already fixed".
+- Anything whose source is not a `DEBT.md` row.
+- **The context-menu wiring finding** (`claude/findings-context-menu-wiring.md`) — real, unfiled,
+  and its number claim is **deliberately deferred**. Not filed, not numbered, not fixed here.
+
+## The one closure — `B-117`
+
+Closed `[x]` with a closing note whose first line reads:
+
+> ### CLOSING NOTE — 2026-08-03. **NO WORK WAS DONE FOR THIS ITEM.**
+
+**Evidence for the fix:** `apps/runtime/src/renderer/hooks/useCasparReachable.ts:96` —
+`if (link === 'offline-mock') return 'reachable';` — the link branch inside `resolveCasparReach`
+(`:92-99`) precedes any health read, where the pre-fix version answered from `useConnections()`
+alone. Landed in `8613772` (2026-07-31), _"fix(runtime): test mode refused the verbs it exists to
+simulate"_, with a regression pin at `apps/runtime/tests/testModeHonesty.dom.test.ts:131`.
+
+**And it is a DIFFERENT failure from [[B-118]], which is the part worth recording.** B-118 was
+filed from a row whose subject had silently moved and the filing session did not know. **B-117's
+filing session DID know**: `docs/prd/bugs-runtime.md:2623-2624` reads _"**Fixed** in `8613772`, the
+session after the gate landed. Filed here as a **bug class**, not as a fix note."_ The body was
+correct and the **checkbox** contradicted it. So the sweep's stale-note class has a sibling: **an
+unchecked box left on an entry that documents its own fix.** Same symptom — a PRD carrying a
+resolved defect as open — different cause, and a cause no locator check would ever catch.
+
+## The verdict that was OVERTURNED, and why the adversarial pass paid for itself
+
+**`R-042` came back ALREADY FIXED on the first pass and was downgraded to STILL PRESENT on
+adversarial re-check.** Every citation in the original verdict was accurate; it failed on
+inference, not quotation. Three independent reasons, each sufficient:
+
+1. **The verdict contradicted itself** — it conceded two acceptance bullets were _"MOOT rather than
+   satisfied"_ and that the item is _"obsoleted by a DIFFERENT design than the one it specifies"_.
+   Unmet acceptance is not a fix, and whether a superseding design retires a `design-first` item is
+   an owner decision, not a verification outcome.
+2. **The hazard is live on a path never examined.** `tools/caspar-bridge/src/caspar-runtime.ts:1714-1751`
+   — `enterRehearse`'s mute has been BEST-EFFORT since `815e2e4` (2026-07-31), which landed **after**
+   the commit cited as the fix. Entry proceeds with `muted: false` over a resident producer, pinned
+   as intended at `tools/caspar-bridge/tests/rehearse.integration.test.ts:180`. The fix commit was
+   followed by a commit that widened the exposure.
+3. **Partial coverage of a shared method.** The removed guard protected `#loadOnto`'s `CG ADD`; only
+   one of its two callers passes `listOnly`, and `load()` at `caspar-runtime.ts:897` does not.
+   Covering one of several paths is STILL PRESENT by rule.
+
+**The lesson, stated because it generalises:** a first-pass verdict that closes an item deserves a
+second reader whose job is to overturn it. Here it was one verdict in thirty, and it would have
+erased an unwritten spec obligation plus two reachable routes to an on-air audio leak.
+
+## The four undiagnosed items held STILL PRESENT by rule
+
+`B-119`, `B-129`, `B-128`, and the evidence folded into `B-104` were filed with the mechanism
+explicitly undiagnosed. **Absence of a cause that was never had is not absence of a defect**, so
+each was held STILL PRESENT unless the code showed the behaviour to be impossible — and none did.
+`B-128`'s write path was re-confirmed rather than re-investigated:
+`apps/designer/src/renderer/features/inspector/TickerSeparatorControl.tsx:44-53` still maps every
+asset with no kind predicate, and `pickImage` at `:65-78` still writes `kind: 'image'` hardcoded.
+
+For `B-104` the pass recorded one **additional observation** without promoting it to a cause:
+`assets.setActiveProject` is driven only by `projects.activeChanged`
+(`apps/designer/src/platform/createDesignerBridge.ts:75-79`), which the D-088 disk paths `openDisk`
+(`:228-260`) and `openRecent`'s handle branch (`:262-276`) never trigger. That is a pointer for
+whoever diagnoses it, not a diagnosis.
+
+## Two stale-document findings surfaced along the way
+
+Both are cases of the same class this sweep exists to name — a note that was true when written.
+
+- **`DEBT.md:1301-1303`** claims `OUTPUT_FRAME` is hardcoded at `position.ts:25` and that
+  `applyOutputPosition` forces `html`/`body` to that size at `:110-111`. **Both halves are false
+  today** — the constant was renamed `REFERENCE_FRAME` and moved to `position.ts:41` by `3e9bbc9`
+  (2026-07-30), and `html`/`body` are sized to the **channel raster** at `:274-277`. `R-030`'s own
+  2026-08-02 prose correction (`docs/prd/runtime.md:1335-1352`) is the accurate account and was
+  verified line by line. `DEBT.md` is frozen, so this is recorded here rather than corrected there.
+- **`tools/caspar-bridge/src/caspar-runtime.ts:1646-1650`** still asserts that the rehearse mute
+  _"IS the safety condition… if it does not land, rehearse is REFUSED"_ — flatly contradicted by
+  the code sixty lines below at `:1710-1754`. A stale comment inside product code, adjacent to
+  `R-042`; not filed, because this session may not touch product code and the fact belongs with
+  whoever takes `R-042`.
+
+## Two owed items filed in the same session
+
+- **`R-047`** — `docs/prd/runtime.md:1820`. The `runtime-splash-screen` spec-delta was never
+  written; `design.md:50` specifies a step counter and argues against a percentage at `:54-55`,
+  while `apps/runtime/index.html:1017-1020` renders a monotone floored percentage. `design-first`.
+  Blocks `R-035`'s **archive**, not its delivery.
+- **`B-131`** — `docs/prd/bugs-designer.md:1621`. A UTF-8 BOM in
+  `apps/designer/src/renderer/features/shell/Modal.css.ts`, which is source that reaches the build.
+  **Not stripped**, and the item says so: the effect on emitted output was not measured, and the
+  `low` rating assumes no effect until it is. The BOM is present in every revision of the file
+  (`3ed7738`, `aa0138a`), so it is **not** a `P-025` PowerShell artifact — recorded because the
+  natural assumption is wrong and would send someone auditing the wrong commits.
+
+## Free numbers after this pass
+
+**`B-132` · `C-021` · `D-147` · `P-026` · `R-048`**
+
+Duplicate audit unchanged: exactly `B-056` and `B-080`, both deliberate and both explained in their
+entries. `B-` and `R-` are contiguous; `D-`'s gaps (`69`, `70`, `80`, `90`, `91`, `95`) are
+pre-existing and untouched.
+
+## Scope held
+
+No product code, no tests, no `openspec/` artifacts, and no `DEBT.md` byte were changed —
+`git cat-file -s dev:DEBT.md` is `179522` before and after. Work was done directly on `dev` in the
+single checkout; no branch, worktree, PR, merge, stash or tag was created or removed.
