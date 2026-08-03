@@ -2610,7 +2610,7 @@ filename in the registry loader, or move the delimiter file up to `~/.cg-runtime
 other bridge config. **The second is a migration** (an existing `delimiters.json` has to be moved
 or it is silently abandoned), so it is not the one-liner it looks like. Source: `DEBT.md:230`.
 
-## [ ] B-117 — a reachability gate disabled the ENTIRE console in TEST MODE, because it asked "is a real CasparCG healthy?" instead of "will this command be executed?" ⟨priority: medium⟩
+## [x] B-117 — a reachability gate disabled the ENTIRE console in TEST MODE, because it asked "is a real CasparCG healthy?" instead of "will this command be executed?" ⟨priority: medium⟩ — **CLOSED 2026-08-03 WITHOUT ANY WORK BEING DONE: the defect was already gone when this item was filed, and the item says so in its own text. See the closing note at the foot of this entry.**
 
 **What:** `useCasparReachable` answered from `useConnections()` alone. The offline mock reports a
 `disconnected` primary **deliberately** — `seedHealth` is `disconnected` so that test mode never
@@ -2638,6 +2638,52 @@ the mock claiming a server it does not have. Any future reachability change must
 dead, which is worth knowing when deciding what a future gate change owes.
 
 **Env:** Runtime, test mode. Source: `DEBT.md:796`.
+
+---
+
+### CLOSING NOTE — 2026-08-03. **NO WORK WAS DONE FOR THIS ITEM.**
+
+**Read this before assuming a fix shipped in response to this entry.** Nothing was implemented,
+nothing was changed in the reachability path, and no test was added. **The defect described above
+had already been resolved before this item was filed** — by `8613772`, the session after the gate
+landed.
+
+**What was measured on 2026-08-03:**
+
+- **The gate no longer asks the health question first.**
+  `apps/runtime/src/renderer/hooks/useCasparReachable.ts:96` —
+  `if (link === 'offline-mock') return 'reachable';` — the link branch precedes any health read
+  inside `resolveCasparReach` (`:92-99`), and `useCasparReachable()` (`:57-59`) is that resolver
+  folded to a boolean. `useCasparReach()` (`:75-79`) feeds it `useLink()` **and**
+  `useConnections()`, where the pre-fix version answered from `useConnections()` alone.
+- **The rationale is written into the file, not left to this item.**
+  `useCasparReachable.ts:40-45` — _"TEST MODE IS REACHABLE, AND THIS IS NOT AN EXCEPTION TO THE
+  RULE — IT IS THE RULE. The question is 'will this command be executed?', not 'is a real CasparCG
+  healthy?'"_ — and `:47-55` records why the mock was **not** changed instead, which is the
+  [[R-006]] violation this entry names as the easier wrong fix.
+- **The commit exists and carries a regression test.**
+  `8613772` (2026-07-31), _"fix(runtime): test mode refused the verbs it exists to simulate"_,
+  touching `useCasparReachable.ts`, `apps/runtime/tests/support/reachability.ts` and
+  `apps/runtime/tests/testModeHonesty.dom.test.ts` (+77/−6). The pin is at
+  `apps/runtime/tests/testModeHonesty.dom.test.ts:131` — `stubLink('offline-mock')`, then an AMCP
+  verb asserted **enabled**.
+- **The "caught only by `gate:e2e`" complaint at `:2637` is therefore also discharged**: the same
+  commit added the DOM-level coverage whose absence the entry records.
+- **[[R-006]] honesty is preserved.** The mock is untouched and still reports a `disconnected`
+  primary; nothing was made to claim a server it does not have.
+
+**HOW THIS DIFFERS FROM [[B-118]], because the difference matters.** B-118 was filed from a
+`DEBT.md` row whose subject had silently moved — the filing session did not know. **Here the filing
+session DID know and wrote it down**: `:2623-2624` reads _"**Fixed** in `8613772`, the session
+after the gate landed. Filed here as a **bug class**, not as a fix note, because the shape will
+recur."_ The entry was correct in its body and wrong only in its **checkbox**. That is a distinct
+failure — not a stale observation, but an unchecked box contradicting the prose beneath it — and it
+produces the same symptom: a PRD carrying an already-fixed defect at `[ ]`.
+
+**The bug-class record is the part worth keeping, and it survives this closure.** The rule the
+entry exists to state — _a reachability gate asks "will this command be executed?", not "is a real
+server healthy?"_ — is preserved above and is now also stated at the code (`:40-45`). Closing the
+box does not retire the rule.
 
 ## [x] B-118 — `enterRehearse` reports a flat `mute-failed`, but CasparCG never refuses `MIXER VOLUME` — the real cause is an unreachable server, and the error names the wrong thing ⟨priority: high⟩ — **CLOSED 2026-08-03 WITHOUT ANY WORK BEING DONE: the defect was already gone when this item was filed. See the closing note at the foot of this entry.**
 
