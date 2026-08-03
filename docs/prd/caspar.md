@@ -399,15 +399,28 @@ source is an INSTALLATION concern configured in the Runtime.
   or re-established consistently with the [[B-092]] occupancy-aware adopt (design.md decision —
   never a blind CLEAR of a live source)
 - WHEN Live Source layers exist THEN the occupancy model treats them as BRIDGE-OWNED non-html
-  layers: exempt from [[R-015]]'s foreign-refusal (the bridge may CLEAR what it owns), never
-  quarantined or counted as foreign by [[C-014]] allocation, and never an [[R-009]] reclaim
-  target
+  layers: never quarantined or counted as foreign by [[C-014]] allocation, and never an [[R-009]]
+  reclaim target. **CORRECTED 2026-08-03 (`live-source-multibox` design.md §4, C5):** this bullet
+  originally said "exempt from [[R-015]]'s foreign-refusal (the bridge may CLEAR what it owns)".
+  Applying that literally is BACKWARDS. `clearLayer` is the OPERATOR-facing `layers.clear` path
+  only — its own docstring says "clearing owned layers is Out/Remove's job"
+  (`caspar-runtime.ts:2649-2651`) and it refuses an owned layer at `:2682-2686` BEFORE the html
+  test at `:2690`. The bridge needs no exemption to clear what it owns (teardown calls
+  `#builder.out(slot)` directly), and granting one as worded would make Live Source layers
+  OPERATOR-clearable — inverting the protection. The correct behaviour is a REFUSAL with a
+  distinct `live-source` reason, following the owner-approved config-declared carve-out precedent
+  at `docs/prd/runtime.md:882-885` (`clearBankLayer`, which consults no producer kind at all).
 - WHEN DECKLINK / ROUTE / media sources are used THEN behavior is verified on real CasparCG 2.3.2
   hardware before archive; WHEN NDI is used THEN the FIRST step is verifying the NDI producer
   exists on the client's 2.3.2 build at all — record the finding either way
 
-**Notes:** **THE structural risk, flag it loudly:** today "non-html OSC producer kind" is the
-SOLE foreign/owned discriminator ([[R-015]], [[C-014]]). This feature deliberately creates
+**Notes:** **THE structural risk, flag it loudly:** "non-html OSC producer kind" is the PRIMARY
+foreign/owned discriminator ([[R-015]], [[C-014]]). **CORRECTED 2026-08-03: this said "SOLE" and
+that is stale.** Two config-declared notions already outrank it — `clearLayer` evaluates `reserved`
+(`caspar-runtime.ts:2679-2681`) then `owned` (`:2682-2686`) BEFORE the kind test, and
+`clearBankLayer` (`:2577-2643`) decides purely from config and never consults kind at all.
+`docs/prd/runtime.md:886-888` already names three composing ownership notions INCLUDING this item's
+ledger. The risk below is real; only the word "SOLE" was wrong. This feature deliberately creates
 bridge-OWNED non-html layers, so ownership must become explicit (the bridge's own ledger of
 Live Source layers) rather than inferred from producer kind — that interaction needs its own
 tests and careful design against the R-015/C-014/R-009/B-092 suite. Layer plan (reserved
@@ -420,9 +433,16 @@ behavior throughout ⇒ real-hardware verification is part of done. RECON-FIRST,
 design.md. **Naming (owner, 2026-07-23):** the user-facing name is **Live Source** — the plate
 is live/on-air ONLY (file video is the separate `video` element, D-128 on the designer track),
 so "plate" was misleading; this item's title/prose were renamed to match the designer track's
-D-137. The schema type remains `video-placeholder` (`VideoPlaceholderElementSchema`) — it is
-referenced by scene-builder, saved scenes on disk, and specs, so renaming the TYPE is a scene
-MIGRATION, not a label change, and is deliberately out of scope.
+D-137. The schema type remains `video-placeholder` (`VideoPlaceholderElementSchema`) — renaming the
+TYPE is a scene MIGRATION, not a label change, and is deliberately out of scope. **CORRECTED
+2026-08-03: the stated evidence for that was two-thirds wrong.** It said the type "is referenced by
+scene-builder, saved scenes on disk, and specs". Only scene-builder is true
+(`packages/template-runtime/src/scene-builder.ts:197`). It appears in **no living spec**
+(`git grep "video-placeholder" -- openspec/specs` → 0 hits) and in **no stored scene in the repo**
+(the two `fixtures/b034/*.scene.json`, `fixtures/b068/legacy-root-layers.cg.json` and all six
+tracked `.vcg` archives were byte-scanned; none contains it). The conclusion still stands, on
+scene-builder plus union membership (`packages/shared-schema/src/elements.ts:1121, 1142, 1188`) —
+only its evidence needed correcting.
 
 ## [ ] C-016 — operator PGM confidence view: periodic program-channel grabs served over the bridge's HTTP server ⟨priority: medium⟩
 

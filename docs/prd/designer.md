@@ -3588,17 +3588,34 @@ the runtime track: "live plate source routing").
   in export METADATA the runtime reads WITHOUT parsing the whole scene (the metadata surface — the
   manifest section name — is a design.md decision)
 - WHEN Live Sources overlap each other or exceed the frame THEN the existing issues/preflight path
-  warns
+  reports it as an ERROR. **CORRECTED 2026-08-03 (`live-source-multibox` design.md §9, C8):** this
+  said "warns", and a warning would not do the job for two measured reasons. (a) Only
+  `severity: 'error'` blocks an export
+  (`apps/designer/src/renderer/features/compositions/CompositionActionBar.tsx:41`), so a warning
+  ships the broken template. (b) The shipped behaviour for a FULLY off-frame element is the
+  OPPOSITE of a warning — it is a silent DELETE: `dropFullyOffFrameForExport`
+  (`apps/designer/src/renderer/state/off-frame.ts:186-197`, reached from `scene-doc.ts:170`)
+  removes it from both exports and the Preview modal with no message, which for a Live Source would
+  drop the runtime contract while leaving the template that depends on it. A Live Source is
+  therefore EXEMPT from that drop and raises an error instead.
 - WHEN a scene has multiple Live Sources THEN each is independent (own ids, own geometry)
 
 **Notes:** shapes stay as they are — a Live Source is a compositing CONTRACT with the runtime, not
 a fill mode on a shape. Cinegy parity is the NEED, not the UI — design the affordance our way.
 Default placeholder is SMPTE bars (owner decision — do not re-open). Rotation / non-rect Live
-Sources out of scope v1 (MIXER FILL is axis-aligned). Pairs with the Caspar-track "live plate
-source routing" item (cross-reference by title now; numbers when both are merged — that runtime
-item keeps its own wording, which this rename does not touch). Creation entry point: the unified
-Source selector (D-140) creates this element for Source=Live Source; standalone creation
-unchanged. **Naming (owner, 2026-07-23):** the user-facing name is **Live Source** — the plate is
+Sources out of scope v1 (MIXER FILL is axis-aligned). Pairs with **[[C-015]]** on the **Caspar**
+track (`docs/prd/caspar.md:365`). **CORRECTED 2026-08-03:** this said "the Caspar-track 'live plate
+source routing' item (cross-reference by title now; numbers when both are merged)" — that title
+resolves to nothing (`git grep -rni "live plate source routing"` returns only this sentence; the
+item was renamed to "Live Source routing" by the same owner decision this entry records), and both
+items are merged and numbered, so the condition for numbering was already met. Creation entry
+point: **this item owes its own**. **CORRECTED 2026-08-03 (C2):** this said "the unified Source
+selector (D-140) creates this element for Source=Live Source; standalone creation unchanged".
+There is no standalone creation to leave unchanged — `DesignerTool`
+(`apps/designer/src/renderer/state/store-core.ts:19-30`) has no entry and
+`element-defaults.ts` has 13 factories and none for `video-placeholder`, so the element is
+currently unreachable from the UI. D-140 is `[ ]` **medium** and is explicitly sequenced AFTER this
+item (`designer.md:3699`), so it cannot supply one either. **Naming (owner, 2026-07-23):** the user-facing name is **Live Source** — the plate is
 live/on-air ONLY (file video is the separate `video` element, D-128), so "Plate" was misleading.
 The schema type remains `video-placeholder` — renaming the type would require a scene migration
 and is deliberately out of scope. **RECON-FIRST, needs its own design.md** — schema (additive),
