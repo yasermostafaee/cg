@@ -163,9 +163,17 @@ questions in `design.md` are answered.
       contained; **(b)** what rounding/precision the server accepts for the four arguments, since
       §6 emits computed fractions and no recorded precision exists (`css()` uses 6 decimals for the
       CSS side, `position.ts:202-204`; whether AMCP matches is unknown).
-- [ ] 6.3b A **2.3.2 confirmation** of the `FILL` and `CLIP` facts. Both were measured on 2.5.0 and
-      both verbs are registered in the 2.3.2 binary, but registered is not measured. Rides with
-      `design.md` §12.1's hardware question.
+- [x] 6.3b **DONE 2026-08-03 — the `FILL` and `CLIP` facts hold on the TARGET build.** Measured on
+      the plant's CasparCG **2.3.2** (`D:\programs\CasparCG`), same machine, same clean-reset
+      procedure: `MIXER 1-2 FILL 0.5 0.5 0.5 0.5` → box bottom-right; `MIXER 1-2 CLIP 0 0 0.5 0.5`
+      → box disappears entirely. Same behaviour as 2.5.0, so the normalization basis and the
+      masking semantics both carry to the build the feature targets.
+      **Recorded as QUALITATIVE on 2.3.2** — box present, then absent, by eye. **The SEMANTICS
+      carried across builds; the ARITHMETIC was not re-measured there** (the pixel-accurate
+      `FILL 0.5 0.5 0.5 0.5` → (960, 540) sized 960×540 is a 2.5.0 measurement). Nothing in the
+      design depends on it having been: §6 needs the basis and the semantics, both confirmed, not
+      the pixel figure, whose job was to falsify the competing basis hypothesis. This task no
+      longer rides with §12.1, which remains open on its own terms (DECKLINK and fill+key).
 - [ ] 6.4 Clamp the FILL to the scene rect (`.cg-stage` has `overflow:hidden`; the live source
       behind the hole does not).
 - [ ] 6.5 **The audio rule:** every bridge-created producer is created muted; audio is raised only

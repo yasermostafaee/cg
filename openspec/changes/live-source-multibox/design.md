@@ -23,7 +23,9 @@ a **fully transparent hole**; **axis-aligned only in v1**, because `MIXER FILL` 
 ## 0b. Measured on hardware, 2026-08-03 — the two facts the design rests on
 
 Against CasparCG `2.5.0 69e8ad5`, `1080i5000` channel, two `route://1-1` producers read off the
-screen consumer:
+screen consumer. **Both facts were subsequently re-confirmed QUALITATIVELY on the target build,
+2.3.2 — see §3's cross-build check.** The pixel-accurate placement below is a 2.5.0 measurement and
+was deliberately not repeated; what the design needs from 2.3.2 is the semantics, and it has them.
 
 1. **`MIXER FILL x y x-scale y-scale` normalizes PER AXIS against the channel raster** — `x` and
    `x-scale` against width, `y` and `y-scale` against height. `FILL 0.1 0.2 0.3 0.4` on 1920×1080
@@ -298,9 +300,32 @@ settled, so what remains is:
 
 Neither needs capture hardware — two `route://` producers reproduce both.
 
-**Provenance, kept honest:** both this and §0b's `FILL` facts were measured on **2.5.0**, while
-C-015's target plant is **2.3.2**. Both verbs are registered in the 2.3.2 binary (scan above), but
-registered is not measured, and a 2.3.2 confirmation rides with §12.1's hardware question.
+### ✅ Cross-build check — DONE. Both facts hold on the target build.
+
+The measurements above were taken on the side-by-side **2.5.0** install, while C-015's target plant
+is **2.3.2**. That gap is now closed. **Measured 2026-08-03 on the plant build itself** —
+CasparCG **2.3.2** at `D:\programs\CasparCG`, same machine, same clean-reset procedure (`CLEAR` +
+`MIXER CLEAR` on both layers), one command at a time:
+
+| step                             | observed on 2.3.2        |
+| -------------------------------- | ------------------------ |
+| `MIXER 1-2 FILL 0.5 0.5 0.5 0.5` | box appears bottom-right |
+| `MIXER 1-2 CLIP 0 0 0.5 0.5`     | box disappears entirely  |
+
+**Same behaviour as 2.5.0.** So both load-bearing mixer facts now hold on the build the feature
+actually targets, not only on the side-by-side install: `FILL` places per-axis against the channel
+raster, and `CLIP` is a channel-space intersection mask that does not travel with `FILL`.
+
+🔴 **The distinction that must survive this, because it is the kind of thing a later reader
+flattens.** The 2.3.2 check is **QUALITATIVE** — box present, then absent, by eye. **What carried
+across builds is the SEMANTICS. The ARITHMETIC was not re-measured on 2.3.2**: the pixel-accurate
+placement in §0b — `FILL 0.5 0.5 0.5 0.5` landing at exactly (960, 540) sized 960×540 — was
+measured on **2.5.0 only**.
+
+**Nothing in this design depends on it having been.** §6's chain needs the _normalization basis_
+(per-axis against the raster) and the _masking semantics_, both of which are confirmed on 2.3.2.
+It does not need the pixel measurement repeated; that measurement's job was to falsify the
+competing basis hypothesis, and it did.
 
 ### ⭐ What `expectedAspect` MEANS under this decision
 
@@ -866,6 +891,12 @@ DECKLINK arm can only ever be parse-verified here, and fill+key cannot be valida
 **Either the acceptance narrows to parse-verification for DECKLINK, or the item stays open
 indefinitely on a card that is not coming.** This design's phase 7 is written to be _skippable_
 without blocking phases 1–6, but the item's own done-condition is the owner's to set.
+
+**What is NOT in this question, so the owner is deciding the smallest real thing.** The two mixer
+facts the geometry rests on — `FILL`'s per-axis normalization and `CLIP`'s masking semantics — are
+**confirmed on 2.3.2** (§3's cross-build check), so **phases 1–6 carry no 2.3.2 hardware debt at
+all**. What remains un-dischargeable here is exactly the DECKLINK arm, fill+key, and NDI live use.
+That is a narrower question than "C-015's hardware acceptance", and it is the one worth answering.
 
 ### 12.2 The rehearse contradiction (C4)
 
