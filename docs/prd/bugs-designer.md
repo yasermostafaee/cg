@@ -1617,3 +1617,58 @@ the one being fixed.
 
 **Env:** Designer → export → CasparCG. Source: `DEBT.md:1190` (scope-limited, see above) plus the
 owner's direct report.
+
+## [ ] B-131 — `Modal.css.ts` carries a UTF-8 BOM, and it is SOURCE that goes into the build ⟨priority: low⟩
+
+**What:** `apps/designer/src/renderer/features/shell/Modal.css.ts` begins with the three bytes
+`EF BB BF`. It is a vanilla-extract stylesheet module, so it is compiled and its output reaches
+emitted CSS.
+
+**Why:** a BOM is invisible in every editor and survives every gate this repo runs. `prettier` does
+not strip one and no gate step fails on one, which is precisely how seven of them accumulated
+unnoticed (`P-025`). A byte nothing checks, in a file that produces build output, is the shape that
+gets discovered downstream.
+
+**MEASURED 2026-08-03 — the full remainder, so nobody re-runs the scan.** A repo-wide first-three-
+byte check over every tracked file returns **five** BOMs. Two more were stripped from PRD docs
+during the `DEBT.md` sweep, giving the seven that sweep recorded.
+
+| file                                                                                   | class        | disposition        |
+| -------------------------------------------------------------------------------------- | ------------ | ------------------ |
+| `apps/designer/src/renderer/features/shell/Modal.css.ts`                               | **source**   | **this item**      |
+| `openspec/changes/archive/2026-07-10-harden-redundancy-single-and-two-server/tasks.md` | archived doc | harmless remainder |
+| `openspec/changes/archive/2026-07-10-runtime-server-settings/tasks.md`                 | archived doc | harmless remainder |
+| `openspec/changes/archive/2026-07-10-surface-orphan-layers/tasks.md`                   | archived doc | harmless remainder |
+| `openspec/changes/archive/2026-07-11-fix-setconfig-serve-restart/tasks.md`             | archived doc | harmless remainder |
+
+The four archived `tasks.md` are markdown in a frozen archive — they are compiled by nothing and
+rendered by tools that tolerate a BOM. They are listed so the count reconciles, **not** as owed
+work.
+
+**⚠ THE EFFECT ON EMITTED OUTPUT WAS NOT MEASURED.** This item records a byte, not a symptom. No
+build was run, no emitted CSS was diffed, and no rendering fault has been observed or reported. The
+`low` rating reflects that: it assumes no effect until measured, and **should be raised if the
+measurement shows one**. Stating this explicitly because filing an unmeasured byte at a high
+priority would be the same over-claim this repo has twice paid for.
+
+**NOT A SWEEP ARTIFACT — the BOM is old.** It is present in **every** revision of the file:
+`3ed7738` (_"Fix/style (#67)"_) and `aa0138a` (2026-07-23, D-128 Phase 2) both carry it. So this is
+not one of `P-025`'s PowerShell `Set-Content` injections; it predates that class and arrived with
+the file. Recorded because the natural assumption — "the sweep's tooling did this" — is wrong and
+would send someone auditing the wrong commits.
+
+**Acceptance:**
+
+- The emitted CSS for `Modal.css.ts` is diffed with and without the BOM, and the result is recorded
+  in this item — including "no difference" if that is the answer.
+- The BOM is removed in a change that carries that measurement, with the Designer's own gate green.
+- If the diff is non-empty, the item is re-rated and the visual effect is checked in the app before
+  the change lands.
+
+**DELIBERATELY NOT STRIPPED WHEN FILED.** A byte change to a `.css.ts` can reach emitted CSS, and a
+measurement session must not make a product change it cannot gate. Stripping it here would be a
+drive-by edit to shipped source inside a docs-only commit — exactly the kind of unmeasured change
+that produces the next entry in this file.
+
+**Env:** Designer, build. Source: the repo-wide BOM sweep recorded by the `DEBT.md` sweep's closing
+session and left unfiled.

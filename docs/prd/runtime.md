@@ -1816,3 +1816,62 @@ recorded before the design exists.
 direction — D-031 ADDS the capability, this item governs the control where the capability is
 ABSENT. They are not the same work and neither blocks the other. Source: owner report via the
 `DEBT.md` sweep (no `DEBT.md` line — reported directly).
+
+## [ ] R-047 — the splash screen shipped, but `runtime-splash-screen`'s spec-delta was never written, so the specs describe a readout the product does not have ⟨priority: medium⟩
+
+**What:** `openspec/changes/runtime-splash-screen/` still specifies the readout model that was
+designed, not the one that shipped. The change landed and the splash is on screen; its OpenSpec
+artifacts were never reconciled to it.
+
+**Why:** the spec is the memory and the prompt is ephemeral. A change dir that describes a
+different product than the one running is worse than an absent one — it reads as authoritative.
+The next session to touch the splash will implement against the step counter and reintroduce
+exactly what was deliberately replaced. This is also what blocks the change from being archived:
+folding a spec into `openspec/specs/` that contradicts the code would publish the contradiction
+into the living specs.
+
+**The divergence, measured 2026-08-03 (the code wins, and the code is the percentage):**
+
+| surface                                                  | says                                                                                                                                                            |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openspec/changes/runtime-splash-screen/design.md:50`    | §5 is titled **"Three labels, a step counter — and no terminal word"**                                                                                          |
+| `openspec/changes/runtime-splash-screen/design.md:54-55` | argues **against** a percentage: _"A percentage claims measured progress, and nothing here measures anything… A step counter says exactly as much as is true."_ |
+| `apps/runtime/index.html:1017`                           | `var pct = Math.floor(progress * 100);`                                                                                                                         |
+| `apps/runtime/index.html:1020`                           | `if (pctEl) pctEl.textContent = pct + '%';` — a **percentage**                                                                                                  |
+| `apps/runtime/index.html:1016`                           | `progress = Math.max(progress, …)` — and it is **monotone**                                                                                                     |
+
+The "no terminal word" half of §5 did survive: `index.html:1011-1012` records _"FLOOR rather than
+round: a screen reading 100 while the door is still shut is the same false claim as a terminal
+READY label."_ So the design's **reasoning** was carried forward into a different mechanism, while
+the spec text still describes the mechanism that was dropped.
+
+**SIZE — measured by the closing session and recorded rather than authored, which is why this is
+its own item.** The reconciliation spans **four files**: `design.md` (135 lines), `proposal.md`
+(68), `tasks.md` (109) and `specs/runtime-ui/spec.md` (174). The shipped model is barely
+represented in any of them, so this is a re-authoring of the readout model across a design doc, a
+proposal, a task list **and a capability spec** — not a small delta. Session 6 of the `DEBT.md`
+sweep judged it too large to fold into a cleanup commit and declined to author it there, on the
+grounds that filing a new number in the last commit of a cleanup is the anti-pattern that record
+exists to name.
+
+**Acceptance:**
+
+- `design.md` §5 describes the **monotone floored percentage** that shipped, and the rejected step
+  counter is recorded as a rejected alternative rather than as the design.
+- `specs/runtime-ui/spec.md`'s scenarios assert the readout the product produces, including
+  monotonicity and the absence of a terminal `READY`.
+- `proposal.md` and `tasks.md` no longer describe the step counter or the placeholder brand slot.
+- `pnpm openspec validate runtime-splash-screen --strict` passes, and the change is archivable —
+  the fold into `openspec/specs/` would publish the shipped behaviour, not the superseded design.
+
+**DESIGN-FIRST — this is a specification task, not a code task.** No product code changes. The
+splash is shipped and is not in question here; what is owed is the written record of it. If the
+reconciliation surfaces a behaviour the owner would rather change, that becomes its own item — it
+does not get fixed inside this one.
+
+**Notes:** related to [[R-035]] (the splash itself, `[~]`). This item does **not** block R-035's
+delivery, which is done; it blocks its **archive**. The sweep also recorded that
+`pnpm openspec validate --all --strict` was never run for the splash work (`DEBT.md:1871`) and
+that a Designer-splash change dir does not exist at all (`DEBT.md:1975`) — that second one is
+separate, larger, and is not folded in here. Source: `DEBT-SWEEP.md:665-672`, recorded as owed by
+the sweep's closing session and left unfiled.
