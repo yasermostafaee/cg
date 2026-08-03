@@ -77,8 +77,11 @@ questions in `design.md` are answered.
       (`tools/amcp-mock/src/handlers.ts:100-104`) with a real first-argument classifier.
 - [ ] 3.2 Make an unrecognised producer form a **refusal**, restoring the mock's own doctrine
       (`handlers.ts:36-38`) to `handlePlay`, which today refuses only on addressing.
-- [ ] 3.3 Model `MIXER … FILL` and add fill geometry to `LayerState`, so a test can assert the
-      normalized rect. Without this, `design.md` §6's arithmetic is uncheckable offline.
+- [ ] 3.3 Model `MIXER … FILL` **and `MIXER … CLIP`**, adding both rects to `LayerState`, so a test
+      can assert the normalized geometry. Without this, `design.md` §6's arithmetic is uncheckable
+      offline. Model `CLIP` as an INTERSECTION MASK in the same channel-normalized space as `FILL`
+      (measured, `design.md` §3) — including the disjoint case, where the layer renders nothing:
+      that is the state a test must be able to catch, because it is the on-air failure mode.
 - [ ] 3.4 Fix the `[HTML]` fidelity gap (`handlers.ts:102` compares `=== 'HTML'`), which starts
       mattering the moment the bridge emits `PLAY`.
 
@@ -122,8 +125,12 @@ questions in `design.md` are answered.
 
 ## 6. Phase 6 — Producer, geometry, audio
 
-- [ ] 6.1 `playSource` / `mixerFill` / `mixerClear` on `command-builder.ts`, all layer-scoped
+- [ ] 6.1 `playSource` / `mixerFit` / `mixerClear` on `command-builder.ts`, all layer-scoped
       through `target()`. Channel-scoped forms stay forbidden (`caspar-runtime.ts:2718-2724`).
+      **`mixerFit` emits the `FILL` and the `CLIP` as a PAIR from one computation** — NOT two
+      independent methods a caller could get half-right. Measured: `CLIP` masks in channel space and
+      does not travel with `FILL`, so a fill box that moves out from under its clip window renders
+      **nothing at all** — a black hole where a guest should be (`design.md` §3).
 - [ ] 6.2 The scene-px → `FILL` chain from `design.md` §6, with the per-axis normalization measured
       on hardware, and the bridge resolving the SAME three-step position chain the page does
       (override ?? carried `defaultPosition` ?? centred). **Do not use the naive
@@ -147,11 +154,18 @@ questions in `design.md` are answered.
       the mapping states none. Refuse the take with a distinct errorCode when the two disagree
       (`design.md` §3). Pillarbox was weighed and **rejected**: bars inside a designed frame read as
       a fault on air.
-- [ ] 6.3a **Verify `MIXER CLIP` on hardware BEFORE 6.3 is implemented.** `CLIP` and `CROP` are
-      registered on the 2.3.2 plant binary beside `FILL` (`casparcg.exe` utf16le `0x68a018`) but
-      **only `FILL` has been measured**. Confirm `CLIP`'s coordinate space and that it composes with
-      an oversized `FILL` in the assumed order; if it does not, fall back to `MIXER CROP`. Needs no
-      capture card — two `route://` producers and a 4:3 source reproduce it.
+- [ ] 6.3a **NARROWED 2026-08-03 — coordinate space and composition order are SETTLED by
+      measurement** (`design.md` §3: `CLIP`'s rect is channel-normalized like `FILL`'s, and it MASKS
+      rather than travelling with it; a disjoint clip window renders nothing). `MIXER CROP` is no
+      longer the fallback for either question. Two things remain, neither needing a capture card:
+      **(a)** is `CLIP` purely an INTERSECTION mask under PARTIAL overlap — the crop-to-fill case,
+      where the fill rect is larger than the clip rect on one axis and is neither disjoint nor
+      contained; **(b)** what rounding/precision the server accepts for the four arguments, since
+      §6 emits computed fractions and no recorded precision exists (`css()` uses 6 decimals for the
+      CSS side, `position.ts:202-204`; whether AMCP matches is unknown).
+- [ ] 6.3b A **2.3.2 confirmation** of the `FILL` and `CLIP` facts. Both were measured on 2.5.0 and
+      both verbs are registered in the 2.3.2 binary, but registered is not measured. Rides with
+      `design.md` §12.1's hardware question.
 - [ ] 6.4 Clamp the FILL to the scene rect (`.cg-stage` has `overflow:hidden`; the live source
       behind the hole does not).
 - [ ] 6.5 **The audio rule:** every bridge-created producer is created muted; audio is raised only

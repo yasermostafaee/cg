@@ -29,6 +29,10 @@ screen consumer:
    `x-scale` against width, `y` and `y-scale` against height. `FILL 0.1 0.2 0.3 0.4` on 1920×1080
    produced a box at ≈(192, 216) sized ≈576×432. The competing hypothesis (both axes against width)
    predicts 576×768 and was falsified.
+   **Re-measured independently and to the pixel from a second screenshot:**
+   `FILL 0.5 0.5 0.5 0.5` placed the box at exactly **(960, 540)** sized **960×540** on a 1920×1080
+   channel. Two measurements, different argument values, same conclusion — this is the one term the
+   whole geometry chain rests on, so it is recorded twice deliberately.
 2. 🔴 **`MIXER FILL` STRETCHES.** It does not letterbox, pillarbox or crop. A 4:3 rect and a 16:9
    rect fed from the same route showed identical framing edge to edge — nothing was cropped, so the
    image was scaled non-uniformly to fill the rect.
@@ -235,10 +239,10 @@ is the ordinary broadcast convention for a multi-box. The cost of crop-to-fill �
 of the source frame — is the cost every broadcaster already accepts for this shot, whereas the cost
 of pillarbox is a graphic that looks broken.
 
-### The mechanism — DOCUMENTED on the target build, NOT YET MEASURED
+### The mechanism — `FILL` + `CLIP`, MEASURED 2026-08-03
 
 `MIXER CLIP` and `MIXER CROP` are both registered on the plant's 2.3.2 binary, in the **same
-contiguous command block** as `FILL` — re-verified 2026-08-03 by a read-only UTF-16LE scan of
+contiguous command block** as `FILL` — verified by a read-only UTF-16LE scan of
 `D:\programs\CasparCG\casparcg.exe` at `0x68a018`:
 
 ```
@@ -251,12 +255,52 @@ therefore _oversized on one axis_, then `MIXER CLIP` to the hole rect so the ove
 coordinate space as `FILL`**, which is the space §6's chain already derives — so it composes with
 arithmetic already being computed, and needs no second coordinate model.
 
-⚠ **Registered is not measured.** Only `FILL` has been exercised on hardware (2026-08-03). `CLIP`'s
-exact semantics — its coordinate space, and whether it composes with `FILL` in the order assumed
-here — are **unverified**, and `MIXER CROP` is recorded as the fallback mechanism if `CLIP` does
-not behave as assumed. Verifying the pair is **in the same phase as the geometry work** (`tasks.md`
-6.3a), not a later one, because the fit policy is not implementable until it is settled. It needs
-no capture hardware: two `route://` producers and a 4:3 source reproduce it.
+**MEASURED, CasparCG `2.5.0 69e8ad5`, `1080i5000`.** From a clean reset (`CLEAR` + `MIXER CLEAR` on
+both layers first — mixer state survives `CLEAR`, so an unclean frame is how this gets misread),
+one command at a time with a look between each:
+
+| step                             | observed                                         |
+| -------------------------------- | ------------------------------------------------ |
+| `PLAY 1-1 "m" LOOP`              | full-frame background                            |
+| `PLAY 1-2 "route://1-1"`         | no visible change — identical full-frame overlay |
+| `MIXER 1-2 FILL 0.5 0.5 0.5 0.5` | box appears bottom-right                         |
+| `MIXER 1-2 CLIP 0 0 0.5 0.5`     | **box disappears entirely, nothing elsewhere**   |
+
+**CONFIRMED, and it is exactly what this design assumed: `CLIP`'s rect is in CHANNEL-NORMALIZED
+space, the same space as `FILL`, and it MASKS — it does not travel with `FILL`.** A top-left clip
+window and a bottom-right fill box do not intersect, so the layer renders nothing. That last row is
+the whole proof: had `CLIP` been source-relative, or had it moved with the fill rect, the box would
+have survived in some form.
+
+**`MIXER CROP` is therefore no longer needed as a fallback** for coordinate space or composition
+order. It stays recorded only as the alternative if the partial-overlap question below resolves
+against `CLIP`.
+
+🔴 **The coupling this creates, stated because it is the failure mode.** Because `CLIP` masks in
+channel space and does **not** travel with `FILL`, the two rects are **not independent** — they are
+two outputs of the same §6 derivation and must be emitted together from one computation. Changing
+one without the other does not degrade gracefully: a fill box that moves out from under its clip
+window renders **nothing at all**, which on air is a black hole where a guest should be. The spec
+delta therefore requires them emitted as a pair, and `tasks.md` 6.1 builds them as one call rather
+than two independent builder methods.
+
+⚠ **Still owed, and 6.3a is narrowed to exactly this** — coordinate space and composition order are
+settled, so what remains is:
+
+1. **Is `CLIP` purely an intersection mask under PARTIAL overlap?** The measurement above tests
+   disjoint rects (renders nothing) and, implicitly, containment. The crop-to-fill case is neither:
+   the fill rect is _larger_ than the clip rect on one axis, so the expected result is the
+   intersection. That specific geometry has not been looked at.
+2. **What rounding and precision does the server accept for the four arguments?** §6 emits computed
+   fractions, not round numbers, and no recorded precision exists. `css()` uses 6 decimals for the
+   CSS side (`packages/template-runtime/src/position.ts:202-204`); whether AMCP accepts the same is
+   unknown.
+
+Neither needs capture hardware — two `route://` producers reproduce both.
+
+**Provenance, kept honest:** both this and §0b's `FILL` facts were measured on **2.5.0**, while
+C-015's target plant is **2.3.2**. Both verbs are registered in the 2.3.2 binary (scan above), but
+registered is not measured, and a 2.3.2 confirmation rides with §12.1's hardware question.
 
 ### ⭐ What `expectedAspect` MEANS under this decision
 
@@ -449,17 +493,26 @@ way to send `PLAY 1-1 "program-feed.mov"`. The test is itself evidence of the ga
 ### DECISION — three new builder methods, all layer-scoped
 
 ```
-playSource(slot, producer)   →  PLAY <ch>-<layer> "<producer-argument>"
-mixerFill(slot, fill)        →  MIXER <ch>-<layer> FILL x y sx sy
+playSource(slot, producer)   →  PLAY  <ch>-<layer> "<producer-argument>"
+mixerFit(slot, fit)          →  MIXER <ch>-<layer> FILL x y sx sy
+                             +  MIXER <ch>-<layer> CLIP x y sx sy      ← ALWAYS both
 mixerClear(slot)             →  MIXER <ch>-<layer> CLEAR
 ```
 
 - `playSource` takes the **discriminated union from §2**, never a string, so the argument is built
   from a parsed shape. All user-supplied values go through `quote()` exactly once, as the class's
   existing contract requires (`command-builder.ts:44-52`).
+- 🔴 **`mixerFit` emits the `FILL` and the `CLIP` as a PAIR, from one computation — deliberately
+  NOT two independent methods.** Measured (§3): `CLIP` masks in channel space and does not travel
+  with `FILL`, so a caller that set one without the other could put the fill box outside its clip
+  window, and the layer would render **nothing at all**. Two methods make that a caller mistake;
+  one method makes it unrepresentable. This is the same reasoning as Golden Rule 7 — a single
+  condition that governs two commands is evaluated once.
 - `mixerClear` is **not optional tidiness**. Mixer state survives `CLEAR`
   (`command-builder.ts:128-130`, and measured on hardware), so a Live Source teardown that omits it
-  leaves a `FILL` on the layer that a later, unrelated graphic inherits.
+  leaves a `FILL` **and now a `CLIP`** on the layer that a later, unrelated graphic inherits — and
+  an inherited `CLIP` is the worse of the two, because it makes an otherwise-correct graphic
+  invisible with nothing on the wire explaining why.
 
 ### The channel-scoped safety doctrine applies unchanged
 
@@ -782,7 +835,7 @@ plus two `route://` producers.
 | **3 — Mock**                             | §8's three additions                                                                                                            | the mock's own suite; **blocks phase 4**                       |
 | **4 — Mapping store + settings surface** | `SourceMappingStore`, `sources.*` channel, CG Control modal, boot validation                                                    | integration + DOM tests                                        |
 | **5 — Ownership**                        | `#liveLayers`, the three door exemptions, the `live-source` clear reason                                                        | integration against the mock — **only possible after phase 3** |
-| **6 — Producer + geometry + audio**      | `playSource` / `mixerFill` / `mixerClear`, the §6 chain, the §7 mute rule                                                       | integration; then the two-box `route://` demo on real hardware |
+| **6 — Producer + geometry + audio**      | `playSource` / `mixerFit` / `mixerClear`, the §6 chain, the §7 mute rule                                                        | integration; then the two-box `route://` demo on real hardware |
 | **7 — Hardware**                         | fill+key, DECKLINK, NDI                                                                                                         | **cannot be closed on this installation** — see §12.1          |
 
 ---

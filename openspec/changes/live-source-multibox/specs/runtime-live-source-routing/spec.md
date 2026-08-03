@@ -177,6 +177,12 @@ states no aspect the declared aspect MAY be used as the assumed source aspect.
 WHEN the element's declared aspect and the mapping's aspect disagree, the take SHALL be refused with
 a distinct errorCode rather than silently cropping something the author did not anticipate.
 
+The scaled rect and the mask rect SHALL be emitted as a PAIR, computed together. They are expressed
+in the SAME channel-normalized space and the mask does NOT travel with the scaled rect, so they are
+not independently settable: a scaled rect that moves out from under its mask renders NOTHING, which
+on air is a black region where a source should be. No caller SHALL be able to set one without the
+other.
+
 #### Scenario: A 4:3 source fills a 16:9 window without distortion
 
 - **WHEN** a 4:3 source is mapped to a 16:9 Live Source **THEN** the picture fills the window edge to
@@ -192,6 +198,13 @@ a distinct errorCode rather than silently cropping something the author did not 
 
 - **WHEN** a mapping states no aspect **THEN** the fit uses the element's declared aspect, and the
   source still reaches air
+
+#### Scenario: The scaled rect and the mask cannot be set apart
+
+- **WHEN** a Live Source's geometry is applied **THEN** the scaled rect and the mask are emitted
+  together from one computation
+- **WHEN** either would be changed **THEN** both are recomputed, so the scaled rect can never end up
+  outside its mask and render nothing
 
 ### Requirement: Every producer the bridge creates is created MUTED
 

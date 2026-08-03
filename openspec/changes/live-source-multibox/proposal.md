@@ -39,8 +39,10 @@ again would repeat it.
    `DECKLINK` / `route://` / NDI / media producer, persisted bridge-side, edited by the operator.
    **This is the gap the owner named as the blocker**, and today it is two English sentences in
    `docs/prd/caspar.md:371-373` and nothing else.
-4. **A producer verb and a fill verb** on the AMCP command seam, which today can emit seven
-   commands, none of which can start a non-html producer.
+4. **A producer verb and a fit verb** on the AMCP command seam, which today can emit seven
+   commands, none of which can start a non-html producer. The fit verb emits `FILL` and `CLIP` as
+   an inseparable pair — measured, they are two halves of one geometry and setting either alone can
+   render the layer blank.
 5. **One audio rule** covering R-029, R-042 and Live Source audio, which the recon established are
    one problem, not three.
 
@@ -56,16 +58,16 @@ again would repeat it.
 
 ## Impact
 
-| Area                   | Effect                                                                                                               |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `@cg/shared-schema`    | additive fields on `VideoPlaceholderElementSchema`; one new `BindingTarget` variant; one new preflight code consumer |
-| `@cg/shared-ipc`       | a new `sources.*` channel; `TemplateInfo` gains a declaration block; new refusal reason codes                        |
-| `@cg/template-runtime` | a render mode seam (`buildScene` takes no mode argument today — `design.md` §9)                                      |
-| `@cg/caspar-client`    | no change to `LayerManager`'s two fences; a third declared class is bridge-side                                      |
-| `tools/caspar-bridge`  | a source-mapping store, the Live Source ledger, two new AMCP verbs, the geometry derivation                          |
-| `tools/amcp-mock`      | producer classification, `MIXER FILL` state — **without which none of the ownership work is testable**               |
-| `apps/designer`        | the element, its creation path (which does not exist today), SMPTE bars, preflight                                   |
-| `apps/runtime`         | the source-mapping settings surface                                                                                  |
+| Area                   | Effect                                                                                                                                    |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `@cg/shared-schema`    | additive fields on `VideoPlaceholderElementSchema`; one new `BindingTarget` variant; one new preflight code consumer                      |
+| `@cg/shared-ipc`       | a new `sources.*` channel; `TemplateInfo` gains a declaration block; new refusal reason codes                                             |
+| `@cg/template-runtime` | a render mode seam (`buildScene` takes no mode argument today — `design.md` §9)                                                           |
+| `@cg/caspar-client`    | no change to `LayerManager`'s two fences; a third declared class is bridge-side                                                           |
+| `tools/caspar-bridge`  | a source-mapping store, the Live Source ledger, three new AMCP commands (`PLAY` / `FILL`+`CLIP` / `MIXER CLEAR`), the geometry derivation |
+| `tools/amcp-mock`      | producer classification, `MIXER FILL` + `CLIP` state — **without which none of the ownership work is testable**                           |
+| `apps/designer`        | the element, its creation path (which does not exist today), SMPTE bars, preflight                                                        |
+| `apps/runtime`         | the source-mapping settings surface                                                                                                       |
 
 ## Relationship to R-028 (`runtime-unified-layer-rows`)
 
