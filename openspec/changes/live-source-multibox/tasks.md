@@ -51,11 +51,17 @@ questions in `design.md` are answered.
       the FULL ancestor chain **including composition-instance scale**, which `frameAabb` does not
       (`design.md` §6). Lift `localToParent`'s kernel (`off-frame.ts:50-60`); do not reuse the
       renderer-local function.
-- [ ] 2.2 Add `resolution` and a `liveSources` declaration block to `TemplateInfoSchema`
-      (`packages/shared-ipc/src/channels/templates.ts:14-70`), following the `hasNext` precedent
-      (`:53-69`).
-- [ ] 2.3 Populate both at import in `produceTemplateDelivery`
+- [ ] 2.2 Add `resolution`, `defaultPosition` and a `liveSources` declaration block to
+      `TemplateInfoSchema` (`packages/shared-ipc/src/channels/templates.ts:14-70`), following the
+      `hasNext` precedent (`:53-69`). **`defaultPosition` is REQUIRED, not optional-nice-to-have:**
+      the bridge appends the position query only when an override exists
+      (`caspar-runtime.ts:3685`), so without it the bridge and the page resolve different positions
+      for any authored-position template with no override, and the live box lands where the hole is
+      not (`design.md` §6).
+- [ ] 2.3 Populate all three at import in `produceTemplateDelivery`
       (`apps/runtime/src/renderer/features/library/templateDelivery.ts:177-189`).
+      `defaultPosition` is already extracted there at `:209` for the browser-local store — the same
+      value now also rides `TemplateInfo`.
 - [ ] 2.4 A template whose scene declares Live Sources but whose `TemplateInfo` block is absent
       reads as **re-import-required** on the row — absent must not silently mean "none".
 - [ ] 2.5 Define `LiveLayerRecord` and the `#liveLayers` ledger type (not yet wired).
@@ -79,7 +85,10 @@ questions in `design.md` are answered.
 ## 4. Phase 4 — The mapping store and its settings surface
 
 - [ ] 4.1 `SourceMappingsSchema` in `@cg/shared-ipc` — a discriminated union on producer `kind`
-      (`design.md` §2), never a free string.
+      (`design.md` §2), never a free string. Each entry carries an OPTIONAL `aspect`: the
+      installation's statement of what the plant actually delivers, which is the **fit input** for
+      §3's crop-to-fill. `expectedAspect` on the element is a declaration to validate against, not
+      the fit input — they are different fields (`design.md` §3).
 - [ ] 4.2 `SourceMappingStore` in the bridge: atomic mkdir → tmp → rename mirroring
       `fixed-layers-store.ts:305-310`; **absent file ⇒ NO MAPPINGS, no built-in default**;
       present-but-invalid ⇒ **hard boot failure**.
@@ -116,10 +125,33 @@ questions in `design.md` are answered.
 - [ ] 6.1 `playSource` / `mixerFill` / `mixerClear` on `command-builder.ts`, all layer-scoped
       through `target()`. Channel-scoped forms stay forbidden (`caspar-runtime.ts:2718-2724`).
 - [ ] 6.2 The scene-px → `FILL` chain from `design.md` §6, with the per-axis normalization measured
-      on hardware. **Do not use the naive `rect.x / scene.resolution.width` form** — it is wrong by
-      a fifth of the frame on a 4:3 raster.
-- [ ] 6.3 The aspect fit: pillarbox `expectedAspect` inside the hole rect, giving
-      `expectedAspect` its first consumer (`design.md` §3).
+      on hardware, and the bridge resolving the SAME three-step position chain the page does
+      (override ?? carried `defaultPosition` ?? centred). **Do not use the naive
+      `rect.x / scene.resolution.width` form** — it is wrong by a fifth of the frame on a 4:3
+      raster.
+- [ ] 6.2a **Duplication guard 1 — ONE implementation.** Move the DOM-free half of `position.ts`
+      (`REFERENCE_FRAME`, `ANCHOR_FRACTIONS`, `outputTranslate`, `outputScale`, `outputLetterbox`)
+      into `@cg/shared-schema` beside `positionQuery` (`packages/shared-schema/src/scene.ts:260`);
+      re-export from `@cg/template-runtime` so no page import churns. The bridge already depends on
+      `@cg/shared-schema`, so this adds no dependency. Follows the precedent the code itself argues
+      at `caspar-runtime.ts:3681-3684` — _"never a local spelling … two spellings of one override is
+      how a preview comes to place a graphic differently from air."_
+- [ ] 6.2b **Duplication guard 2 — a CONTRACT TEST** pinning the bridge's normalized FILL to the
+      page's composed transform over a fixed table of `(scene.resolution, raster, rect, position)`
+      triples. **MUST include at least one non-16:9 raster** — on 16:9 every term collapses
+      (`s = 1`, `pad = (0,0)`) and the test would pass against a wrong implementation. Use
+      `1440×1080` (already pinned page-side at `output-position.test.ts:162,169`) and `720×576`,
+      which pads on the other axis.
+- [ ] 6.3 The aspect fit: **crop-to-fill** — scale to cover the hole preserving proportions, clip
+      the overflow — driven by the MAPPING's `aspect`, falling back to `expectedAspect` only where
+      the mapping states none. Refuse the take with a distinct errorCode when the two disagree
+      (`design.md` §3). Pillarbox was weighed and **rejected**: bars inside a designed frame read as
+      a fault on air.
+- [ ] 6.3a **Verify `MIXER CLIP` on hardware BEFORE 6.3 is implemented.** `CLIP` and `CROP` are
+      registered on the 2.3.2 plant binary beside `FILL` (`casparcg.exe` utf16le `0x68a018`) but
+      **only `FILL` has been measured**. Confirm `CLIP`'s coordinate space and that it composes with
+      an oversized `FILL` in the assumed order; if it does not, fall back to `MIXER CROP`. Needs no
+      capture card — two `route://` producers and a 4:3 source reproduce it.
 - [ ] 6.4 Clamp the FILL to the scene rect (`.cg-stage` has `overflow:hidden`; the live source
       behind the hole does not).
 - [ ] 6.5 **The audio rule:** every bridge-created producer is created muted; audio is raised only

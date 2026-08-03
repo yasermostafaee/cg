@@ -119,7 +119,7 @@ unrelated graphic inherits the geometry.
   producer is swapped in place, and neither the template's layer nor any other Live Source is
   disturbed
 
-### Requirement: Fill geometry reproduces the page's own placement chain, and never stretches the picture
+### Requirement: Fill geometry reproduces the page's own placement chain, from ONE shared implementation
 
 The composited rect SHALL be derived by reproducing the SAME transform chain the exported page
 applies — the uniform output scale, the letterbox pad and the anchor translate — and then
@@ -127,9 +127,15 @@ normalizing PER AXIS against the channel raster. Normalizing the scene-pixel rec
 resolution alone is INSUFFICIENT and SHALL NOT be used: it omits the scale and the pad, and lands the
 picture in the wrong place on any channel whose raster is not the reference frame.
 
-Because the fill command STRETCHES rather than letterboxing, the declared aspect SHALL be fitted
-inside the hole rect — centred, preserving aspect — so a source whose real aspect differs from the
-authored hole is pillarboxed rather than distorted. A face SHALL NOT go on air stretched.
+The position SHALL be resolved through the SAME three-step chain the page uses — operator override,
+then the template's authored default position, then centred. The authored default SHALL therefore be
+carried to the bridge, because the position query is appended only when an override exists.
+
+The placement arithmetic SHALL have exactly ONE implementation, shared by the page and the bridge
+rather than copied. Where the two sides cannot share code — one emits CSS, the other emits AMCP —
+a contract test SHALL pin them to each other over a fixed set of scene, raster and rect
+combinations, INCLUDING at least one non-16:9 raster, because on a 16:9 raster every scaling term
+collapses to identity and a wrong implementation would pass.
 
 The composited rect SHALL be clamped to the scene rect, because the template layer clips at that
 boundary and the layer behind it does not.
@@ -140,15 +146,52 @@ boundary and the layer behind it does not.
   **THEN** the composited source sits exactly behind its hole, accounting for the output scale and
   the letterbox pad
 
-#### Scenario: A mismatched source aspect is pillarboxed, not stretched
+#### Scenario: An authored default position is honoured without an operator override
 
-- **WHEN** a source's declared aspect differs from the hole's aspect **THEN** the picture is fitted
-  inside the hole preserving its aspect, and the margin shows the channel background
+- **WHEN** a template declares a default position and the operator has set no override **THEN** the
+  composited source sits behind its hole, in the position the page itself resolves
+
+#### Scenario: The two implementations cannot silently diverge
+
+- **WHEN** the placement arithmetic changes on either side **THEN** a contract test fails if the
+  bridge and the page no longer place the same scene point at the same raster pixel
+- **WHEN** that test runs **THEN** it exercises at least one raster whose aspect is not 16:9
 
 #### Scenario: A hole partly outside the frame does not leak
 
 - **WHEN** a hole extends past the scene rect **THEN** the composited source is clamped to the scene
   rect, matching what the template layer clips
+
+### Requirement: A mismatched source is CROPPED to fill its window, never stretched and never barred
+
+The fill command stretches, so a source whose aspect differs from its window SHALL be scaled to
+COVER the window with its proportions intact and the overflow clipped away — crop-to-fill. A face
+SHALL NOT go on air distorted, and SHALL NOT go on air with bars inside a frame the designer drew:
+in a designed multi-box window, bars read as a fault rather than as an honest aspect.
+
+The fit SHALL be driven by the INSTALLATION's statement of what the mapped source delivers, because
+a crop discards picture and must be computed from what the source actually is. The element's
+declared aspect is an AUTHOR'S ASSERTION to validate against, not the fit input; where the mapping
+states no aspect the declared aspect MAY be used as the assumed source aspect.
+
+WHEN the element's declared aspect and the mapping's aspect disagree, the take SHALL be refused with
+a distinct errorCode rather than silently cropping something the author did not anticipate.
+
+#### Scenario: A 4:3 source fills a 16:9 window without distortion
+
+- **WHEN** a 4:3 source is mapped to a 16:9 Live Source **THEN** the picture fills the window edge to
+  edge with its proportions intact, and the parts that do not fit are clipped
+- **WHEN** the window is inspected **THEN** no bars appear inside it
+
+#### Scenario: A declared aspect that contradicts the installation refuses the take
+
+- **WHEN** an element declares one aspect and its mapping states another **THEN** the take is refused
+  with an errorCode naming the element and both aspects
+
+#### Scenario: An undescribed mapping still plays
+
+- **WHEN** a mapping states no aspect **THEN** the fit uses the element's declared aspect, and the
+  source still reaches air
 
 ### Requirement: Every producer the bridge creates is created MUTED
 

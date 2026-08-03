@@ -206,28 +206,86 @@ an **installation** concern, which is what both items promise (`docs/prd/caspar.
 `SEARCH:` `git --no-pager grep -rn -e "expectedAspect" -- packages tools apps` → **3 hits**: the declaration (`elements.ts:1018`) and two round-trip test fixtures (`elements.test.ts:298,310`). No renderer, exporter, bridge or runtime reads it.
 
 So today, if a source's real aspect differs from the authored hole, **a face goes on air stretched
-and nothing prevents it.** Three options were considered:
+and nothing prevents it.**
 
-| Option                                                                                               | Verdict                                                                                                                                                                                                                                                                                                                                 |
-| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Constrain the hole at authoring time** — the Inspector locks the hole's aspect to `expectedAspect` | **Rejected.** It forbids a legitimate design (a deliberately non-16:9 window with a pillarboxed feed) and it cannot help at all when the _source_ is not what the author expected — which is the actual failure, since the mapping is an installation fact the author never sees.                                                       |
-| **Warn at preflight**                                                                                | **Adopted as a supplement, not the answer.** A warning is checked against `expectedAspect`, which is an _authored guess_ about a source the author cannot see, and — decisively — **a warning does not block**: only `severity: 'error'` gates export (`apps/designer/src/renderer/features/compositions/CompositionActionBar.tsx:41`). |
-| **The runtime derives a PILLARBOXED `FILL` from the true aspect**                                    | **ADOPTED.**                                                                                                                                                                                                                                                                                                                            |
+**A correction to how this was first weighed.** The first three options below all answer _"how do
+we PREVENT a mismatch?"_. Only the last two answer _"a mismatch has happened — how do we RESOLVE
+it?"_, which is the question that actually matters, because the mapping is an installation fact the
+author never sees and therefore a mismatch is always possible.
 
-**The rule:** the bridge computes the hole's rect (§6), then **fits `expectedAspect` inside it,
-centred, preserving aspect** — deriving a smaller `FILL` rect than the hole where the aspects
-differ. The hole is the _bounding box_; the FILL is the _fitted rect inside it_. This makes the
-stretch impossible by construction rather than by warning, and it is the only option that survives
-the author not knowing the real source.
+| Option                                                                                               | Verdict                                                                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Constrain the hole at authoring time** — the Inspector locks the hole's aspect to `expectedAspect` | **Rejected.** It forbids a legitimate design (a deliberately non-16:9 window) and it cannot help at all when the _source_ is not what the author expected.                                                                                                                       |
+| **Warn at preflight**                                                                                | **Kept as a supplement, not the answer.** It checks an _authored_ value against nothing at author time, and — decisively — **a warning does not block**: only `severity: 'error'` gates export (`apps/designer/src/renderer/features/compositions/CompositionActionBar.tsx:41`). |
+| **Stretch (do nothing)**                                                                             | **Rejected.** This is today's behaviour, and it puts a distorted face on air.                                                                                                                                                                                                    |
+| **Pillarbox** — fit the source inside the hole, preserving aspect, leaving margins                   | **REJECTED — see below.**                                                                                                                                                                                                                                                        |
+| **Crop-to-fill** — scale to cover the hole, preserving aspect, clip the overflow                     | **ADOPTED.**                                                                                                                                                                                                                                                                     |
 
-**Its cost, stated:** where the aspects differ, the transparent hole is larger than the picture, so
-the channel background shows in the margin. That is correct behaviour (a pillarbox), and it is
-visible to the operator rather than silent. **`expectedAspect` therefore acquires its first
-consumer, and becomes load-bearing** — which is why §3's schema work and §6's geometry work are in
-the same phase.
+### DECISION — crop-to-fill
 
-**Open residual, recorded not guessed:** whether the _actual_ producer aspect can be read back at
-run time (so the fit could use truth rather than the authored guess) is unknown — see §12.3.
+**The rule:** scale the source so it **covers** the hole with its proportions intact — matched
+scale factors on both axes, sized by the _larger_ of the two required ratios — and clip the
+overflow to the hole rect.
+
+**Why not pillarbox, which an earlier draft of this document adopted.** A pillarbox is honest, but
+it puts **black bars inside a frame the designer drew**. A multi-box guest window is a designed
+graphic element, not a video player viewport: bars inside it do not read as "the source is 4:3",
+they read as **a fault on air**. Crop-to-fill preserves proportions _and_ fills the window, which
+is the ordinary broadcast convention for a multi-box. The cost of crop-to-fill — losing the edges
+of the source frame — is the cost every broadcaster already accepts for this shot, whereas the cost
+of pillarbox is a graphic that looks broken.
+
+### The mechanism — DOCUMENTED on the target build, NOT YET MEASURED
+
+`MIXER CLIP` and `MIXER CROP` are both registered on the plant's 2.3.2 binary, in the **same
+contiguous command block** as `FILL` — re-verified 2026-08-03 by a read-only UTF-16LE scan of
+`D:\programs\CasparCG\casparcg.exe` at `0x68a018`:
+
+```
+… MIXER CONTRAST | MIXER LEVELS | MIXER FILL | MIXER CLIP | MIXER ANCHOR | MIXER CROP | MIXER ROTATION …
+```
+
+**The chosen composition is `FILL` + `CLIP`:** emit a `FILL` whose rect is aspect-matched and
+therefore _oversized on one axis_, then `MIXER CLIP` to the hole rect so the overflow is not drawn.
+`CLIP` is chosen over `CROP` because `CLIP` takes a rect in the **same channel-normalized
+coordinate space as `FILL`**, which is the space §6's chain already derives — so it composes with
+arithmetic already being computed, and needs no second coordinate model.
+
+⚠ **Registered is not measured.** Only `FILL` has been exercised on hardware (2026-08-03). `CLIP`'s
+exact semantics — its coordinate space, and whether it composes with `FILL` in the order assumed
+here — are **unverified**, and `MIXER CROP` is recorded as the fallback mechanism if `CLIP` does
+not behave as assumed. Verifying the pair is **in the same phase as the geometry work** (`tasks.md`
+6.3a), not a later one, because the fit policy is not implementable until it is settled. It needs
+no capture hardware: two `route://` producers and a 4:3 source reproduce it.
+
+### ⭐ What `expectedAspect` MEANS under this decision
+
+The two readings are different fields that happen to share a name, and this design picks one:
+
+> **`expectedAspect` is a DECLARATION to validate the mapped source against. It is NOT the input to
+> the fit computation.**
+
+- **The fit input is the MAPPING's aspect** — an installation fact, recorded beside the producer in
+  §2's `SourceMappingsSchema` (an optional `aspect` on each mapping entry). The operator configuring
+  `guest-1` knows what the plant delivers; the author does not.
+- **`expectedAspect` is the author's assertion** — "this window is designed for a 16:9 feed". The
+  bridge compares it against the mapping's aspect and **refuses the take with a distinct errorCode
+  when they disagree**, rather than silently cropping something the author never anticipated.
+- **Fallback, recorded as a fallback:** where a mapping states no aspect, the fit uses
+  `expectedAspect` as the assumed source aspect. This keeps the feature usable before every mapping
+  is fully described, and it degrades to the author's best guess rather than to a stretch.
+
+This is what makes the decision coherent: crop-to-fill _discards picture_, so it must be driven by
+what the source actually is, not by what the author hoped. Driving a crop from an authored guess
+would silently cut the wrong part of a face.
+
+**`expectedAspect` therefore acquires its first consumer and becomes load-bearing** — which is why
+§3's schema work and §6's geometry work sit in the same phase.
+
+**Open residual, unchanged:** whether the producer's real raster can be read back at run time (so
+the fit could use measured truth rather than the mapping's declared aspect) is unknown — §12.3. If
+it can, it supersedes the mapping's `aspect` as the fit input and `expectedAspect` stays exactly
+what it is here: a declaration to validate against.
 
 ---
 
@@ -450,21 +508,79 @@ The `s = 0.75`, `pad = (0,135)` values are the ones
 They agree only on a 16:9 raster. The chain above reproduces the page's transform exactly, which is
 what makes them agree on every raster.
 
-### DECISION — the derivation lives in the BRIDGE, and one term must be added to the wire
+### DECISION — the derivation lives in the BRIDGE, and TWO terms must be added to the wire
 
-Everything on the right-hand side is already bridge-resolvable — `R` from
-`ChannelSettingsStore.rasterFor(channel)` (`channel-settings-store.ts:131-134`), `position` from
-`#positions.get(itemId)` (`caspar-runtime.ts:3680`), `REFERENCE_FRAME` a constant — **except
-`scene.resolution`**.
+Most of the right-hand side is already bridge-resolvable — `R` from
+`ChannelSettingsStore.rasterFor(channel)` (`channel-settings-store.ts:131-134`), the operator's
+override from `#positions.get(itemId)` (`caspar-runtime.ts:3680`), `REFERENCE_FRAME` a constant.
 
 `SEARCH:` `TemplateInfoSchema` (`packages/shared-ipc/src/channels/templates.ts:14-70`) read field by field: `templateId`, `name`, `sourceFileName`, `templateType`, `fields`, `groups`, `hasNext` — **no resolution, no defaultPosition**. `defaultPosition` is extracted in the browser (`templateDelivery.ts:209`) into a browser-local `Map` (`apps/runtime/src/renderer/features/stack/defaultPositionStore.ts:13-26`).
 
-So **`resolution` joins the `liveSources` declaration block** on `TemplateInfo` (§1) — it rides the
-same carrier, derived at the same moment, for the same reason.
+So **`resolution` AND `defaultPosition` both join the `liveSources` declaration block** on
+`TemplateInfo` (§1) — they ride the same carrier, derived at the same moment, for the same reason.
 
-`defaultPosition` is deliberately **not** added: the bridge already holds the operator's effective
-position in `#positions`, and R-011's fallback chain is the page's business. Where no override
-exists the bridge uses the same `centred` default the page does.
+🔴 **CORRECTION — an earlier draft of this document said `defaultPosition` was "deliberately not
+added", on the grounds that the bridge holds the operator's effective position in `#positions` and
+would otherwise use the same `centred` default the page does. That was WRONG, and it would have put
+the live box in a different place from its hole on every template whose author set a position.**
+
+The bridge appends the position query **only when an override exists** —
+`caspar-runtime.ts:3685`: `if (position !== undefined) params.push(positionQuery(position));`. With
+no override, no `pos` rides the URL, and the page then resolves its own fallback chain:
+
+```
+query override ?? scene.defaultPosition ?? centered        position.ts:92-97
+```
+
+So for an item with **no operator override on a template with an authored `defaultPosition`**, the
+page uses `scene.defaultPosition` while a bridge assuming `centred` would compute a different
+`Tx/Ty` — and the composited source lands somewhere the hole is not. The code already says as much
+one comment above: _"a graphic with no operator override still has an authored position"_
+(`caspar-runtime.ts:3672-3673`).
+
+The bridge therefore resolves the **same three-step chain the page does**, from the same inputs:
+`#positions.get(itemId)` ?? the carried `defaultPosition` ?? centred.
+
+### 🔴 The duplication guard — one arithmetic, not two copies
+
+Deriving the FILL bridge-side means the placement arithmetic exists on both sides of the seam. **If
+`position.ts` changes and the bridge copy does not, nothing errors: the live box simply slides off
+its hole on air.** There is no test that would catch it, and no operator signal — the hole is
+transparent, so the failure looks like a mis-authored template.
+
+**This repo has already solved this exact class once, in this exact code path, and wrote down why.**
+`caspar-runtime.ts:3681-3684`, on why the bridge calls `positionQuery` from `@cg/shared-schema`
+rather than formatting the string itself:
+
+> _"`positionQuery` (@cg/shared-schema), never a local spelling: PVW's rehearsal frame now hands the
+> SAME string to the page's own `applyOutputPosition`, and two spellings of one override is how a
+> preview comes to place a graphic differently from air."_
+
+**DECISION — the same remedy, applied to the arithmetic instead of the string. Two guards, both in
+the geometry phase:**
+
+1. **ONE IMPLEMENTATION.** The pure, DOM-free half of `position.ts` — `REFERENCE_FRAME`,
+   `ANCHOR_FRACTIONS`, `outputTranslate`, `outputScale`, `outputLetterbox` — moves into
+   `@cg/shared-schema` beside `positionQuery` (`packages/shared-schema/src/scene.ts:260`, already
+   the home of `PositionSchema` and `PositionAnchorSchema`). `@cg/template-runtime` re-exports them
+   so no page-side import churns, and the bridge imports them directly — **it already depends on
+   `@cg/shared-schema`** (`tools/caspar-bridge/package.json`), so this adds no dependency.
+   Only `applyOutputPosition` and `resolveChannelRaster` stay behind: they touch `document` and
+   `window` (`position.ts:246-247`, `:257-259`, `:274`) and are the page's alone.
+2. **A CONTRACT TEST** pinning the two computations to each other over a fixed table of
+   `(scene.resolution, channel raster, hole rect, position)` triples, asserting that the bridge's
+   normalized FILL and the page's composed CSS transform place the same scene-px point at the same
+   raster pixel. The table MUST include **at least one non-16:9 raster** — on a 16:9 raster `s = 1`
+   and `pad = (0,0)`, so every term collapses and the test would pass against a _wrong_
+   implementation. `1440×1080` is the case already pinned page-side at
+   `packages/template-runtime/tests/output-position.test.ts:162,169` (`s = 0.75`, `pad = (0,135)`),
+   which gives the test a known-good anchor on both sides. `720×576` (`pal`) is included as a second
+   non-16:9 case with a different pad axis.
+
+Guard 1 makes divergence impossible for the shared terms; guard 2 catches divergence in the
+_composition_ of them, which is the part that cannot be shared because one side emits CSS and the
+other emits AMCP. Both land in **phase 6 with the geometry work** (`tasks.md` 6.2a, 6.2b) — a guard
+written a phase later is a guard that was absent exactly when the arithmetic was first written.
 
 ### The hole's rect must be computed at IMPORT, not at take
 
