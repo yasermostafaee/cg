@@ -1174,15 +1174,63 @@ for the normal one-at-a-time cadence, not for a burst. The lever if that ever ma
 concurrency group — deliberately NOT taken, because it removes the serialization that keeps
 runner-minute spend bounded.
 
+**A SECOND, INDEPENDENT CAUSE — found by the acceptance test, which is the entire reason the fix is
+verified end to end rather than reasoned about.** With the base fixed, a docs-only push STILL ran
+`ci` and `e2e` (run 31257557820, whose only changed file was `docs/prd/bugs.md`). The filter's own
+log named the culprit: `Detected 1 changed files` … `Filter code = true` … `docs/prd/bugs.md
+[modified]`. The base was right — `Push base trusted: 0d438c3…` — and the filter matched the doc
+anyway.
+
+The filter's pattern list was documented in `pr.yml` as "last-match-wins picomatch":
+
+```yaml
+code:
+  - '**'
+  - '!openspec/**'
+  - '!docs/**'
+  - '!**/*.md'
+```
+
+**It is not last-match-wins. dorny/paths-filter ORs its patterns**, so `'**'` alone makes every file
+match and `code` could never be `false`. Confirmed against the repo's own pinned picomatch 2.3.2:
+that list returns `true` for `docs/prd/bugs.md`, `openspec/**`, `README.md` and source alike. **So
+P-008's docs-only skip had never worked at all** — the `main` merge-base masked it completely, since
+a base that always reported code changes meant a filter that always said `true` was never the
+visible cause. Two independent defects, one symptom; fixing only the base would have looked like a
+failed fix.
+
+`predicate-quantifier: every` (paths-filter v3) fixes the ORing and was REJECTED: `**` does not
+match dot-prefixed paths, so under `every` a change to `.github/**` or `.claude/**` classifies as
+docs-only and SKIPS the gate. That trades an over-run for an UNDER-run — the one direction this item
+exists to prevent — and it rests on an unverifiable assumption about the action's internal `dot`
+option.
+
+**The fix: on `push`, classify with the repo's OWN predicate.** `classifyChangedSet` from
+`tools/gate-hook/src/gate-decision.mjs` — the same unit-tested function the [[P-009]] Stop hook and
+CLAUDE.md's carve-out use — is fed the diff against the trusted base. It is zero-dependency plain
+ESM, so the runner's preinstalled node runs it straight off the checkout. This is CLAUDE.md golden
+rule 6 applied to CI: reuse the ONE canonical predicate, never re-derive it — and it means CI and the
+local gate cannot drift, which a second glob copy guarantees eventually ([[B-100]], [[P-012]]).
+`pull_request` keeps paths-filter unchanged: there is no local base for a PR, so the action's
+API-based diff is still the right tool, and that path was deliberately left alone.
+
+Verified locally against the exact script the workflow runs, before pushing it: `docs/prd/bugs.md`
+alone ⇒ `code=false`; that file PLUS `packages/ui/src/tokens.ts` ⇒ `code=true` (the STRICT condition
+survives — code bundled into a docs change is never skipped); `.github/workflows/pr.yml` alone ⇒
+`code=true` (the dotfile hole is closed); an empty diff ⇒ `code=false`.
+
 **How it is verified — end to end, not by reasoning.** The fix landed, then a docs-only commit was
 pushed and the resulting run was read: `ci` and `e2e` **skipped**, `docs-check` and `required`
 **green**. That is the whole point of the item, so it is the acceptance test, and anyone can re-run
-it: push a `docs/**`-only commit to `dev` and read the run.
+it: push a `docs/**`-only commit to `dev` and read the run. It is also what caught the second cause
+above — the first "fix" passed review and failed the test.
 
 **Acceptance:**
 
 - WHEN a push to `dev` changes only `openspec/**`, `docs/**` or `*.md` THEN `ci` and `e2e` are
   SKIPPED and `docs-check` + `required` pass
+- WHEN a push changes a dot-prefixed path (`.github/**`, `.claude/**`, `.husky/**`) THEN it counts
+  as CODE and the heavy gate runs — a glob-based filter gets this wrong by default
 - WHEN a push changes any non-docs file THEN `ci` and `e2e` run, exactly as before
 - WHEN a push's previous tip is all-zero, absent from history, or not an ancestor of HEAD THEN the
   workflow FAILS SAFE and runs everything
