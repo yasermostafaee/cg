@@ -9,8 +9,8 @@ change's `tasks.md` §0.
 ### Requirement: A Live Source is an axis-aligned region carrying a SYMBOLIC source id
 
 The Designer SHALL offer a **Live Source** element that can be placed and sized axis-aligned, and
-that carries a source id, an OPTIONAL key source id, an `expectedAspect` and an optional poster
-image. The schema type SHALL remain `video-placeholder` and SHALL be extended additively, so every
+that carries a source id, an OPTIONAL key source id, an OPTIONAL `expectedAspect` and an optional
+poster image. The schema type SHALL remain `video-placeholder` and SHALL be extended additively, so every
 stored scene continues to parse without a schema-version bump or a migration.
 
 The source id SHALL be **symbolic**: it SHALL match a plain identifier form and SHALL therefore
@@ -38,6 +38,55 @@ axis-aligned.
   value is refused at the schema boundary
 - **WHEN** a scene carrying such an id reaches export preflight **THEN** an error is raised naming
   the element, and the export is blocked
+
+### Requirement: The declared aspect is chosen by name, and the plate can be fitted to it
+
+The Inspector SHALL offer `expectedAspect` as a NAMED PRESET picker rather than as a bare decimal.
+The stored value SHALL remain a NUMBER — the presets are an authoring affordance over it, not a new
+representation. Every option label SHALL carry BOTH spellings of the value (the ratio and the
+decimal, e.g. `16:9 (1.78)`), because the field takes the decimal and the author reasons in ratios.
+
+The picker SHALL offer a `Custom…` option that reveals a numeric input, so an unusual ratio stays
+reachable, and a `— not specified —` option that writes the field **ABSENT**. Absent is a real third
+state: `expectedAspect` is the author's ASSERTION, which the runtime validates the installation's
+mapping against and refuses the take on mismatch, so an author who cannot see the feed SHALL be able
+to decline to assert rather than be forced into a guess. A new Live Source SHALL still store 16:9,
+shown as the selected preset.
+
+The Inspector SHALL offer an action that resizes the element so its EFFECTIVE rendered aspect —
+`(W × scaleX) / (H × scaleY)`, since the element carries a non-uniform scale — equals the selected
+aspect. It SHALL preserve `X`, `Y` and `W` and solve for `H`, SHALL NOT modify `scale`, and SHALL be
+ONE undo entry. Where preserving `W` would push the element past the frame's bottom edge it SHALL
+preserve `H` and solve for `W` instead, and SHALL state which side it preserved — an out-of-frame
+Live Source is a preflight error, so the action must never create the error it exists to avoid. It
+SHALL be disabled, with a stated reason, when no aspect is asserted or when the element already
+matches within tolerance.
+
+The `key id` field SHALL carry a hint stating that the key id is symbolic and pairs with the fill id,
+that it is left empty for an opaque source, and that both ids need their own mapping entry.
+
+#### Scenario: The aspect reads back as a named preset
+
+- **WHEN** a Live Source is selected **THEN** its aspect shows as a named preset whose label carries
+  both the ratio and the decimal
+- **WHEN** the stored number matches no preset **THEN** it shows as `Custom…` and the numeric input
+  is revealed
+
+#### Scenario: An author can decline to assert an aspect
+
+- **WHEN** the author picks `— not specified —` **THEN** `expectedAspect` is written ABSENT and
+  reloads as absent — never zero and never a sentinel number
+- **WHEN** no aspect is asserted **THEN** the fit action is disabled with a stated reason
+
+#### Scenario: The plate is fitted to the declared aspect
+
+- **WHEN** the author invokes the fit action **THEN** the element is resized so
+  `(W × scaleX) / (H × scaleY)` equals the selected aspect, preserving `X`, `Y` and `W`, leaving
+  `scale` unchanged, in ONE undo entry
+- **WHEN** preserving `W` would push the element past the frame's bottom edge **THEN** it preserves
+  `H` and solves for `W` instead, and says which side it preserved
+- **WHEN** the element already matches within tolerance **THEN** the action is disabled with a
+  stated reason
 
 ### Requirement: The source id is bindable through the existing fields/bindings model
 

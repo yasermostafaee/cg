@@ -65,6 +65,10 @@ test.describe('D-092 — shared vector Icon', () => {
       'Ellipse',
       'Pen', // D-109 — the pen draws an editable bézier path
       'Image (logo)',
+      // D-137 — the Live Source is a DRAWING tool (its authoring bars are
+      // procedural, so it carries no asset), which is why it sits with the drawing
+      // group rather than with the dynamic/data-driven ones below.
+      'Live Source',
       'Ticker',
       'Sequence',
       'Clock',

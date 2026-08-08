@@ -23,6 +23,17 @@ import type {
   VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { LiveSourceIdSchema } from '@cg/shared-schema';
+import {
+  ASPECT_CUSTOM,
+  ASPECT_PRESETS,
+  ASPECT_UNSPECIFIED,
+  effectiveAspect,
+  fitToAspect,
+  matchesAspect,
+  optionLabelFor,
+  presetKeyFor,
+  presetValueFor,
+} from './aspect-presets.js';
 import { columnsForFields } from '../fields/repeater-columns.js';
 import {
   SEQUENCE_PRESET_ORDER,
@@ -628,21 +639,159 @@ function LiveSourceSections({
           resetKey={`${id}-${String(rejectSeq)}`}
           onCommit={(v) => commitId('key', v)}
         />
-        <NumberField
-          label="expected aspect"
-          value={element.expectedAspect}
-          step={0.01}
-          min={0.01}
-          onCommit={(expectedAspect) =>
-            designerStore.updateElement(id, { expectedAspect } as Partial<Element>)
-          }
-        />
+        {/*
+          D-147 — the key id's shape is not guessable from an empty box. It is
+          SYMBOLIC like the fill id (a device name is a preflight error), it PAIRS
+          with the fill id by convention, it is EMPTY for any opaque source — which
+          is every route:// and media source — and, the part that surprises people,
+          BOTH ids need their own entry in CG Control's mapping.
+        */}
+        <p className={dds.hint}>
+          Leave empty unless the source is a fill+key PAIR. Symbolic like the source id —{' '}
+          <code>guest-1</code> / <code>guest-1-key</code>, never a device name — and each id needs
+          its own entry in CG Control&rsquo;s source mapping.
+        </p>
+        <AspectRow element={element} />
       </CollapseSection>
       <FilterSection
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
       />
+    </>
+  );
+}
+
+/**
+ * D-147 — the aspect PICKER and the fit action.
+ *
+ * The stored value stays a plain number; this is an affordance over it. Three
+ * states, and the third is the point of the item: a preset, `Custom…` (which
+ * reveals the numeric input that existed before), and `— not specified —`, which
+ * writes the field ABSENT.
+ *
+ * `— not specified —` is not "empty" — it is the author declining to assert. Under
+ * `live-source-multibox` design.md §3 the bridge compares `expectedAspect` against
+ * the installation's mapping and REFUSES THE TAKE when they disagree, so a required
+ * field forces an author who has never seen the feed into a guess that can refuse a
+ * take on air. Absent means no comparison and no refusal.
+ */
+function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+  const id = element.id;
+  const stored = element.expectedAspect;
+  const derivedKey = presetKeyFor(stored);
+  /*
+    `Custom…` is STICKY while the section is open. Picking it must reveal the numeric
+    input even before a number is typed, and a value typed there that happens to land
+    on a preset must not yank the input away mid-edit. Derived-from-value alone
+    cannot express either, so the explicit pick wins until the selection changes.
+  */
+  const [pick, setPick] = useState<string | null>(null);
+  const selected = pick ?? derivedKey;
+  // A different element in the same slot must not inherit the previous one's pick.
+  const [pickOwner, setPickOwner] = useState(id);
+  if (pickOwner !== id) {
+    setPickOwner(id);
+    setPick(null);
+  }
+
+  // The ACTIVE DOC's frame, not the project root's: a Live Source inside a
+  // composition is fitted against that composition's own resolution, which is the
+  // frame its off-frame preflight is measured against too.
+  const frameW = useDesignerSelector((s) =>
+    s.scene === null ? 0 : activeDocOf(s.scene).resolution.width,
+  );
+  const frameH = useDesignerSelector((s) =>
+    s.scene === null ? 0 : activeDocOf(s.scene).resolution.height,
+  );
+
+  const options = [...ASPECT_PRESETS.map((p) => p.key), ASPECT_CUSTOM, ASPECT_UNSPECIFIED] as const;
+
+  function onPick(key: string): void {
+    setPick(key);
+    if (key === ASPECT_UNSPECIFIED) {
+      // ABSENT, not zero and not a sentinel number: the schema field is optional
+      // and `undefined` is the only spelling of "no assertion".
+      designerStore.updateElement(id, { expectedAspect: undefined } as Partial<Element>);
+      return;
+    }
+    if (key === ASPECT_CUSTOM) {
+      // Reveal the input without changing the value. A custom pick over an absent
+      // value seeds the current RENDERED aspect — the most likely thing the author
+      // means by "custom", and better than making them read it off W and H.
+      if (stored === undefined) {
+        const eff = effectiveAspect(element.transform);
+        if (Number.isFinite(eff) && eff > 0) {
+          designerStore.updateElement(id, { expectedAspect: eff } as Partial<Element>);
+        }
+      }
+      return;
+    }
+    const value = presetValueFor(key);
+    if (value !== undefined) {
+      designerStore.updateElement(id, { expectedAspect: value } as Partial<Element>);
+    }
+  }
+
+  const fit =
+    stored === undefined || frameH <= 0
+      ? null
+      : fitToAspect(element.transform, stored, { width: frameW, height: frameH });
+  const already = stored !== undefined && matchesAspect(element.transform, stored);
+  const fitDisabled = stored === undefined || already || fit === null;
+  const fitTitle =
+    stored === undefined
+      ? 'Pick an aspect first — “not specified” asserts nothing to fit to.'
+      : already
+        ? 'The plate already renders at this aspect.'
+        : fit === null
+          ? 'This plate’s scale cannot be fitted (a zero or negative scale).'
+          : fit.preserved === 'width'
+            ? 'Resize the plate to this aspect — keeps X, Y and W, solves for H.'
+            : 'Resize the plate to this aspect — keeps X, Y and H, solves for W ' +
+              '(solving for H would push the plate past the bottom of the frame).';
+
+  function onFit(): void {
+    if (fit === null) return;
+    // ONE `updateElement` ⇒ ONE undo entry for the whole action. Writing `size` and
+    // re-reading in two steps would leave the author undoing a resize twice.
+    designerStore.updateElement(id, {
+      transform: { ...element.transform, size: fit.size },
+    } as Partial<Element>);
+  }
+
+  return (
+    <>
+      <SelectField
+        label="aspect"
+        value={selected}
+        options={options}
+        labels={options.map((k) => optionLabelFor(k, stored))}
+        onCommit={onPick}
+      />
+      {selected === ASPECT_CUSTOM && (
+        <NumberField
+          label="custom aspect"
+          value={stored ?? 0}
+          step={0.01}
+          min={0.01}
+          onCommit={(expectedAspect) =>
+            designerStore.updateElement(id, { expectedAspect } as Partial<Element>)
+          }
+        />
+      )}
+      <div className={fieldCss.row}>
+        <span className={fieldCss.label} />
+        <Button
+          variant="secondary"
+          onClick={onFit}
+          disabled={fitDisabled}
+          title={fitTitle}
+          aria-label="Fit plate to aspect"
+        >
+          Fit plate to aspect
+        </Button>
+      </div>
     </>
   );
 }

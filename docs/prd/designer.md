@@ -3944,3 +3944,61 @@ indistinguishable, from the operator's side, from one that is current.
 stamp on the Runtime — that is a boot-time surface that disappears, not something an operator can
 consult mid-session. Covers BOTH products; the Runtime half is the one that matters at 2 a.m.
 Source: `DEBT.md:2045`, inside the "Not done, and deliberately" section at `DEBT.md:2044`.
+
+## [~] D-147 — a Live Source's aspect is chosen by NAME, and the plate can be fitted to it ⟨priority: medium⟩ — in progress: `openspec/changes/live-source-multibox/` (phase 1 amendment, tasks 1.10–1.12)
+
+**What:** two authoring affordances on the Live Source Inspector section ([[D-137]]), plus one hint.
+(a) `expectedAspect` becomes a NAMED PRESET picker — `16:9` · `4:3` · `21:9` · `2.39:1` · `1:1` ·
+`9:16`, plus `Custom…` (which reveals today's numeric input) and `— not specified —`. The stored value
+stays a plain NUMBER; the presets are an affordance over it. (b) A "Fit plate to aspect" action that
+resizes the element so its EFFECTIVE rendered aspect equals the selected one. (c) The `key id` field
+gains a hint making its shape unambiguous.
+**Why:** the author is composing a frame, not doing arithmetic. Three separate costs, all measured on
+first real use of the phase-1 element:
+
+- **A decimal is not a format.** The field takes `1.7777777777777777`. Nothing on screen said that was
+  16:9, and nothing said whether `1.78` was a rounded 16:9 or a typo. Two spellings of one number,
+  with only one of them shown, is the ambiguity that prompted the item — so every label now prints
+  BOTH (`16:9 (1.78)`).
+- **There was no way to say "I don't know".** The field was REQUIRED, and under
+  `live-source-multibox` design.md §3 it is the author's ASSERTION that the bridge validates the
+  installation's mapping against — **refusing the take when they disagree**. So a required field
+  forced an author who has never seen the feed into a guess that can refuse a take on air.
+  `— not specified —` writes the field ABSENT: no assertion, no comparison, no refusal.
+- **Dragging the plate's corners breaks the declared aspect**, and recomputing the size by hand is
+  exactly the arithmetic this feature exists to remove — worse than it looks, because the element
+  carries a NON-UNIFORM `scale`, so the rendered aspect is `(W·scaleX)/(H·scaleY)` and not `W/H`.
+
+**Acceptance:**
+
+- WHEN a Live Source is selected THEN its aspect shows as a NAMED preset with both spellings in the
+  label (`16:9 (1.78)`), matched to the stored number within a small tolerance
+- WHEN the stored number matches no preset THEN it shows as `Custom…`, and the numeric input is
+  revealed so an unusual ratio stays reachable
+- WHEN the author picks `— not specified —` THEN `expectedAspect` is written ABSENT, and reloads as
+  absent — never zero and never a sentinel number
+- WHEN a new Live Source is created THEN it still stores 16:9, now shown as the selected preset — the
+  VALUE does not change, only what the author can see about it
+- WHEN the author invokes "Fit plate to aspect" THEN the element is resized so `(W·scaleX)/(H·scaleY)`
+  equals the selected aspect, preserving `X`, `Y` and `W` and solving for `H`, without touching `scale`
+- WHEN preserving `W` would push the plate past the scene's bottom edge THEN it preserves `H` and
+  solves for `W` instead, and the tooltip says which side it preserved — out-of-frame is a preflight
+  ERROR for a Live Source, so this action must never create the error it exists to help avoid
+- WHEN the action runs THEN it is ONE undo entry
+- WHEN the aspect is `— not specified —`, or the plate already matches within tolerance, THEN the
+  action is DISABLED with a title naming the reason
+- WHEN the `key id` field is shown THEN a hint states that it is SYMBOLIC and pairs with the fill id
+  (`guest-1` / `guest-1-key`), that it is left empty for any opaque source, and that BOTH ids need
+  their own entry in CG Control's mapping
+
+**Notes:** authoring UX on a brand-new, unreleased element. It changes **no decision** in
+`live-source-multibox` design.md, and touches neither the wire nor the bridge — the presets are a UI
+affordance over a number the schema already stored. **One schema change, and it is a WIDENING:**
+`expectedAspect` becomes OPTIONAL (`z.number().positive().optional()`). Every stored scene still
+parses; only the TypeScript type gains `| undefined`. The item's own prose assumed it was already
+optional — it was not, and making it so is what `— not specified —` requires. **One consequence for
+phase 6, recorded rather than solved here:** design.md §3's fit-input fallback chain is
+_mapping's `aspect` → `expectedAspect`_, and an absent `expectedAspect` on a mapping that states no
+aspect leaves that chain with no terminal value. Phase 6 owes that case a defined behaviour (task
+6.3 there); nothing in phase 1 depends on it. Implemented as an amendment to `live-source-multibox`
+phase 1 rather than as its own change: it edits one Inspector section of an unreleased element.

@@ -15,6 +15,7 @@ import type { DesignerApp } from './fixtures/designer.js';
  *   - "An animated hole is refused in v1"
  *   - "Overlapping Live Sources are reported"
  *   - "Multiple independent Live Sources"
+ *   - D-147's "the aspect is chosen by NAME" and "fit the plate to the aspect"
  *
  * The scenarios with NO UI to drive in phase 1 are pinned deterministically instead,
  * and named here so the mapping is complete rather than quietly partial:
@@ -58,6 +59,10 @@ async function openIssues(app: DesignerApp): Promise<void> {
   await expect(issuesModal(app)).toBeVisible();
 }
 
+/** The Inspector's W / H spinbuttons, for reading the fit action's result. */
+const sizeField = (app: DesignerApp, which: 'Width' | 'Height') =>
+  app.inspector.getByRole('spinbutton', { name: which });
+
 test.describe('Live Source (D-137 phase 1)', () => {
   test('placeable, carries its ids, and both round-trip through the Inspector', async ({ app }) => {
     await app.newProject('LiveSource');
@@ -97,8 +102,10 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(app.liveSourceIdInput).toHaveValue('guest-1');
     await expect(label(app)).toHaveText('guest-1');
 
-    // The refusal explains where the mapping DOES belong.
-    await expect(app.page.getByText(/CG Control/)).toBeVisible();
+    // The refusal explains where the mapping DOES belong. Matched on a phrase unique
+    // to the NOTICE: D-147's key-id hint also mentions CG Control, and an unscoped
+    // match would pass on the hint while the notice never appeared.
+    await expect(app.page.getByText(/is not a Live Source id/)).toBeVisible();
   });
 
   test('bars on the canvas and in the Preview modal; NOTHING in the export', async ({ app }) => {
@@ -107,20 +114,27 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.setLiveSourceId('guest-1');
 
     // CANVAS — procedural bars (a gradient, never a bundled bitmap) + the id label.
-    const canvasBg = await holes(app)
-      .first()
-      .evaluate((el) => getComputedStyle(el).backgroundImage);
-    expect(canvasBg).toContain('gradient');
+    // The label lands with the same re-render as the bars, so waiting on it first
+    // removes the race; the background is then POLLED rather than read once, because
+    // a single `evaluate` can catch the iframe between builds and read an empty
+    // string that means "not yet", not "no bars".
     await expect(label(app)).toHaveText('guest-1');
+    await expect
+      .poll(() =>
+        holes(app)
+          .first()
+          .evaluate((el) => getComputedStyle(el).backgroundImage),
+      )
+      .toContain('gradient');
 
     // PREVIEW MODAL — also an authoring surface, so also bars. (Play is not needed:
     // the element is static furniture, and the modal renders the same built scene.)
     await app.openPreviewModal();
     const previewHole = app.previewFrame.locator('[data-cg-placeholder-for="video-placeholder"]');
     await expect(previewHole).toHaveCount(1);
-    expect(
-      await previewHole.first().evaluate((el) => getComputedStyle(el).backgroundImage),
-    ).toContain('gradient');
+    await expect
+      .poll(() => previewHole.first().evaluate((el) => getComputedStyle(el).backgroundImage))
+      .toContain('gradient');
     await app.previewDialog.getByRole('button', { name: 'Close' }).click();
 
     // EXPORT — the element is still THERE (it is a contract with the runtime), and it
@@ -189,6 +203,73 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await openIssues(app);
     // One row per participant, so clicking either takes you to a real element.
     await expect(issueRows(app, /overlaps/)).toHaveCount(2);
+  });
+
+  test('the aspect is chosen by NAME, and “not specified” is a real third state', async ({
+    app,
+  }) => {
+    await app.newProject('LiveSourceAspect');
+    await app.addLiveSource({ x: 200, y: 160 });
+
+    // D-147 — a new plate shows its aspect as a NAMED preset, with the decimal
+    // beside it: `16:9` and `1.78` are two spellings of one number and the field
+    // takes the decimal, so printing only one of them is the ambiguity that
+    // prompted this item.
+    await expect(app.liveSourceAspectSelect).toHaveValue('16:9');
+    await expect(app.liveSourceAspectSelect.locator('option:checked')).toHaveText(/16:9.*1\.78/);
+
+    // `— not specified —` is the author declining to assert anything about the
+    // source. It writes the field ABSENT — which is why the fit action, whose whole
+    // input is that assertion, disables itself and says so.
+    await app.setLiveSourceAspect('unspecified');
+    await expect(app.liveSourceFitButton).toBeDisabled();
+    await expect(app.liveSourceFitButton).toHaveAttribute('title', /not specified|Pick an aspect/i);
+
+    // `Custom…` reveals the numeric input that existed before, so an unusual ratio
+    // stays reachable.
+    await app.setLiveSourceAspect('custom');
+    await expect(app.inspector.getByRole('spinbutton', { name: 'custom aspect' })).toBeVisible();
+
+    // Nothing here is a preflight error: declaring an aspect is not a geometry change.
+    await expect(errorPill(app)).toHaveCount(0);
+  });
+
+  test('“Fit plate to aspect” resizes the plate, and is disabled when it already matches', async ({
+    app,
+  }) => {
+    await app.newProject('LiveSourceFit');
+    await app.addLiveSource({ x: 200, y: 160 });
+    // Pin Y near the top. Where a canvas click lands in SCENE pixels depends on the
+    // zoom, and a plate low in the frame legitimately triggers the bottom-edge flip —
+    // which is its own test below. This one is about the ordinary width-preserving
+    // case, so it starts somewhere the ordinary case applies.
+    const yField = app.inspector.getByRole('spinbutton', { name: 'Y position' });
+    await yField.fill('100');
+    await yField.press('Enter');
+
+    // A fresh 640×360 plate already renders 16:9, so there is nothing to do.
+    await expect(app.liveSourceFitButton).toBeDisabled();
+    await expect(app.liveSourceFitButton).toHaveAttribute('title', /already/i);
+
+    // Declare 4:3 and the plate no longer matches — the action arms itself and says
+    // which side it will preserve.
+    await app.setLiveSourceAspect('4:3');
+    await expect(app.liveSourceFitButton).toBeEnabled();
+    await expect(app.liveSourceFitButton).toHaveAttribute('title', /keeps X, Y and W/);
+
+    await app.liveSourceFitButton.click();
+    // W preserved, H solved: 640 / (4/3) = 480. This is exactly the arithmetic the
+    // item exists to take off the author.
+    await expect(sizeField(app, 'Width')).toHaveValue('640');
+    await expect(sizeField(app, 'Height')).toHaveValue('480');
+    // …and having done it, the action disables itself again.
+    await expect(app.liveSourceFitButton).toBeDisabled();
+
+    // The ONE-undo-entry property is pinned in `live-source-aspect.dom.test.ts`, not
+    // here, and deliberately: the store coalesces writes within 300 ms into a single
+    // history entry, so an E2E undo assertion would be measuring Playwright's action
+    // latency against that window rather than the action's write count. The DOM test
+    // marks an explicit history boundary and asserts the real property.
   });
 
   test('MULTIPLE independent Live Sources each get their own id', async ({ app }) => {

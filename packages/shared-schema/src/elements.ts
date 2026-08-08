@@ -1069,7 +1069,22 @@ export const LiveSourceIdSchema = z
 export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   type: z.literal('video-placeholder'),
   posterAssetId: IdSchema.optional(),
-  expectedAspect: z.number().positive(),
+  /**
+   * D-147 — the author's DECLARATION about the source's shape, and now OPTIONAL.
+   *
+   * It was required. Making it optional is a WIDENING (every stored scene still
+   * parses; only the TypeScript type gains `| undefined`) and it exists because of
+   * what this field DOES downstream: under `live-source-multibox` design.md §3 the
+   * bridge compares it against the installation's mapping and **refuses the take**
+   * when the two disagree. A required field forces every author into that assertion
+   * — including one who has never seen the feed and is guessing — and a wrong guess
+   * becomes a refused take on air.
+   *
+   * Absent therefore means "I am not asserting anything about this source": no
+   * comparison, no refusal. It is a third state, not a missing value, and the
+   * Inspector offers it as `— not specified —`.
+   */
+  expectedAspect: z.number().positive().optional(),
   /** The FILL source's symbolic id, e.g. `guest-1`. */
   routeKey: LiveSourceIdSchema,
   /**

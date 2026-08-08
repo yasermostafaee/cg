@@ -226,6 +226,21 @@ export class DesignerApp {
     await input.press('Enter');
   }
 
+  /** D-147 — the Live Source Inspector's aspect PRESET picker. */
+  get liveSourceAspectSelect(): Locator {
+    return this.inspector.getByRole('combobox', { name: 'aspect' });
+  }
+
+  /** D-147 — the "Fit plate to aspect" action beside the picker. */
+  get liveSourceFitButton(): Locator {
+    return this.inspector.getByRole('button', { name: 'Fit plate to aspect' });
+  }
+
+  /** D-147 — choose an aspect preset by its option VALUE (`16:9`, `custom`, …). */
+  async setLiveSourceAspect(value: string): Promise<void> {
+    await this.liveSourceAspectSelect.selectOption(value);
+  }
+
   /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). */
   async addTicker(pos: { x: number; y: number } = { x: 120, y: 260 }): Promise<void> {
     await this.selectTool('Ticker');

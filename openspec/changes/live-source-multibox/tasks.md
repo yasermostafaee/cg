@@ -54,6 +54,30 @@ blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` 
       wire change: `ExportIssue.code` is an open string (`packages/shared-ipc/src/channels/export.ts:16-24`).
 - [x] 1.9 Unit tests + a Designer E2E mapping each `#### Scenario` in
       `specs/designer-live-source/spec.md`.
+- [x] 1.10 **D-147 (a) — the aspect PRESET picker.** `expectedAspect` becomes a named picker over the
+      SAME stored number: `16:9` · `4:3` · `21:9` · `2.39:1` · `1:1` · `9:16`, plus `Custom…` (which
+      reveals today's numeric input) and `— not specified —`. Every label prints BOTH spellings
+      (`16:9 (1.78)`), because the field takes the decimal and the author reasons in ratios — that
+      ambiguity is what prompted the item. Built on the shared `Select` (no raw `<select>`).
+      ⚠ **One schema change, a WIDENING:** `expectedAspect` becomes OPTIONAL. `— not specified —`
+      writes it ABSENT, and absent is a real third state — under `design.md` §3 the field is the
+      author's ASSERTION and the bridge REFUSES the take when it disagrees with the mapping, so a
+      required field forced an author who cannot see the feed into a guess that can refuse a take on
+      air. Every stored scene still parses; only the TS type gains `| undefined`.
+- [x] 1.11 **D-147 (b) — the "Fit plate to aspect" action.** Resizes so the EFFECTIVE aspect
+      `(W·scaleX)/(H·scaleY)` equals the selection, preserving `X`, `Y`, `W` and solving for `H`,
+      never touching `scale`, in ONE `updateElement` (⇒ one undo entry). **The bottom-edge flip:**
+      where solving for `H` would push the plate past the frame's bottom it preserves `H` and solves
+      for `W` instead, and the tooltip says which — out-of-frame is a preflight ERROR (1.7/1.8), so a
+      convenience action must never manufacture the error it exists to avoid. The bottom edge is
+      measured THROUGH the anchor and scale (`y + h·(ay + sy·(1−ay))`), mirroring `off-frame.ts`, so
+      the flip fires at the right moment. Disabled, with a stated reason, when the aspect is absent
+      or the plate already matches within tolerance.
+- [x] 1.12 **D-147 (c) — the `key id` hint.** States that the key id is SYMBOLIC and pairs with the
+      fill id (`guest-1` / `guest-1-key`), that it is empty for any opaque source, and that BOTH ids
+      need their own entry in CG Control's mapping — the last of which is the part that surprises
+      people. A device-shaped id is a preflight error (1.8); the hint is what makes that obvious
+      before the author hits it.
 
 **PHASE 1 LANDED 2026-08-08.** What each task actually produced, so the next reader does not have to
 re-derive it:
@@ -89,6 +113,13 @@ re-derive it:
   overhang as well as a full one. The sweep DEDUPES by element id, because `editSceneOf` aliases the
   open composition into both `scene.layers` and `scene.compositions` — without it every issue
   double-reports and every overlapping pair counts four times. Found by the E2E, pinned by a unit test.
+- **1.10–1.12** are D-147, an amendment on top of the above rather than a new change: authoring UX on
+  an unreleased element, changing no `design.md` decision and touching neither the wire nor the
+  bridge. **One consequence is recorded rather than solved:** §3's fit-input fallback is
+  _mapping's `aspect` → `expectedAspect`_, and an absent `expectedAspect` on a mapping that states no
+  aspect leaves that chain with no terminal value. **Phase 6 owes that case a defined behaviour**
+  (6.3) — nothing in phase 1 depends on it, and it is written down here rather than silently
+  widening §3.
 - **1.9** 28 designer unit tests + 12 template-runtime render tests + 15 schema tests, and
   `apps/designer/tests/e2e/live-source.spec.ts` (7 tests) mapping every `#### Scenario` that has a UI
   to drive; the four with no UI in phase 1 are named IN that spec's header with where each is pinned
@@ -198,6 +229,13 @@ re-derive it:
       (`s = 1`, `pad = (0,0)`) and the test would pass against a wrong implementation. Use
       `1440×1080` (already pinned page-side at `output-position.test.ts:162,169`) and `720×576`,
       which pads on the other axis.
+- [ ] 6.3 ⚠ **Define the case where NEITHER side states an aspect (D-147, 2026-08-08).** §3's fit
+      input is the MAPPING's `aspect`, falling back to `expectedAspect`. D-147 made
+      `expectedAspect` OPTIONAL — an author who cannot see the feed may now decline to assert — so a
+      mapping with no `aspect` and an element with no `expectedAspect` leaves the chain with no
+      terminal value. Pick and record the behaviour (assume the hole's own aspect ⇒ no crop; or
+      refuse the take with a distinct errorCode). Not solved in phase 1 and not silently folded into
+      §3.
 - [ ] 6.3 The aspect fit: **crop-to-fill** — scale to cover the hole preserving proportions, clip
       the overflow — driven by the MAPPING's `aspect`, falling back to `expectedAspect` only where
       the mapping states none. Refuse the take with a distinct errorCode when the two disagree
