@@ -230,13 +230,33 @@ blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` 
 
 ## 7. Cross-change obligation — R-028
 
-- [ ] 7.1 **R-028 gains a task 6.5: amend section 6 to a THREE-class declared model** before 6.1–6.3
+**SETTLED 2026-08-08.** All four landed in `openspec/changes/runtime-unified-layer-rows/tasks.md`,
+which is unimplemented in section 6 — so the amendment arrives BEFORE the code it constrains, which
+was the entire point of the obligation.
+
+- [x] 7.1 **R-028 gains a task 6.5: amend section 6 to a THREE-class declared model** before 6.1–6.3
       are implemented. As written, 6.2 would make a Live Source layer an R-009 reclaim candidate and
       6.3 would point R-015's foreign refusal at a layer the bridge owns (`design.md` §4).
-- [ ] 7.2 R-028's task 6.1 test is written to permit a **declared, non-operator** allocation.
-- [ ] 7.3 Confirm R-028's 6.4 frees 10–59, which is this design's chosen Live Source range.
-- [ ] 7.4 Cross-reference both ways: R-028's 8.3 already lists C-015 for `reservedLayers`; extend it
-      to name the ownership class.
+      **DONE:** R-028's 6.5 names the three classes (fixed operator rows 70–99 · reserved playout
+      60–69 · bridge-owned Live Source layers 10–59), carries the narrowing-order argument, and
+      warns in its own text that the third class is **not** `reservedLayers`. 6.2 and 6.3 were
+      amended in place to point at it.
+- [x] 7.2 R-028's task 6.1 test is written to permit a **declared, non-operator** allocation.
+      **DONE:** 6.1 now asserts the absence of an **operator-graphic** caller, not of every caller,
+      and says in its own text why "no caller at all" would be a silently correct-looking fixture
+      that forbids the third class.
+- [x] 7.3 Confirm R-028's 6.4 frees 10–59, which is this design's chosen Live Source range.
+      **CONFIRMED against the CODE, not against §c's prose.** `DEFAULT_LAYER_POLICY`
+      (`packages/caspar-client/src/layers/layer-manager.ts:49-56`) is `lower-third` 10–19 ·
+      `ticker` 20–29 · `breaking-news` 30–39 · `logo-bug` 40–49 · `fullscreen` 50–59 · `custom`
+      60–69. Descriptive ⇒ 10–69 released; `custom`'s 60–69 is the reserved playout range and stays
+      fenced. **Residue: exactly 10–59.** (`logo-bug` has MOVED from 90–99 to 40–49 since §c was
+      written — inside the freed span — so the confirmation does not rest on §c's "90–99" wording.)
+      Recorded on R-028's 6.4 itself.
+- [x] 7.4 Cross-reference both ways: R-028's 8.3 already lists C-015 for `reservedLayers`; extend it
+      to name the ownership class. **DONE:** 8.3 now names both halves and says explicitly that
+      naming only `reservedLayers` is what let task 1.2 read as "C-015 is handled" while the
+      ownership half was untouched.
 
 ## 8. Docs and PRD
 

@@ -391,12 +391,33 @@ does not invent a new mechanism so much as add a third member to an existing set
 
 Concretely:
 
-1. **This change merges as a design** (no product code — see `tasks.md` §0).
+1. **This change merges as a design** (no product code — see `tasks.md` §0). ✅ done.
 2. **R-028 section 6 is amended before implementation** to narrow the R-009 sweep against
    _three_ declared classes, and to write 6.1's test so it permits a declared non-operator
    allocation. That amendment is task **6.5** in R-028, defined in this change's `tasks.md` §7 as a
-   cross-change obligation.
-3. **This change's implementation phases** (§10) land after R-028 section 6.
+   cross-change obligation. ✅ **DONE 2026-08-08** — R-028's `tasks.md` now carries 6.5 (the
+   three-class model), a rewritten 6.1, a 6.4 confirmed against the code, and an 8.3 naming the
+   ownership class as well as `reservedLayers`.
+3. **This change's OWNERSHIP phases land after R-028 section 6 is implemented.**
+
+**Which phases that binds — SHARPENED 2026-08-08, because step 3 was written more broadly than its
+own argument supports.** The argument above is entirely about the layer-ownership doors: the R-009
+sweep, the C-014 quarantine and the R-015 refusal. That is **phases 5 and 6**, plus the range
+validation in phase 4. It is **not** about phases 1–3:
+
+| Phase                               | Touches an ownership door?    | Order constraint                                                |
+| ----------------------------------- | ----------------------------- | --------------------------------------------------------------- |
+| **1 — schema + authoring**          | no — Designer-only            | **none.** No bridge, no wire, no layer. Landed 2026-08-08.      |
+| **2 — declaration + carrier**       | no — a `TemplateInfo` field   | none (2.6 is a comment correction R-028's 6.5 explicitly cites) |
+| **3 — mock**                        | no — test infrastructure      | none; it BLOCKS 4 and 5                                         |
+| **4 — mapping store + settings**    | 4.5 only (range disjointness) | 4.5 wants R-028's 6.4 (the freed 10–59) to be real              |
+| **5 — ownership**                   | **yes, all three doors**      | **after R-028 section 6**                                       |
+| **6 — producer + geometry + audio** | yes (creates on those layers) | **after phase 5**                                               |
+
+**The rule, stated so it cannot be read as a licence to start phase 5 early:** what must not happen
+is a window in which a live guest box exists on a layer R-009's un-narrowed sweep can reclaim.
+Phases 1–3 create no such layer, so they carry no such window. Phase 5 does, and is the phase the
+landing order is about.
 
 **Why this order and not the reverse.** R-028's section 6 is a _narrowing_ — it removes candidates
 from a sweep and asserts an absence in a test. A narrowing written against an incomplete class list

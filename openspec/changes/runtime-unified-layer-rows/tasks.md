@@ -137,14 +137,57 @@ for what part A deliberately skipped or found un-runnable.**
 
 ## 6. Retiring the dynamic path (design.md §k — each piece keeps its recorded reason)
 
-- [ ] 6.1 `LayerManager.allocate()` keeps existing but MUST have no caller that puts an operator
-      graphic on air. Assert that in a test, rather than deleting code other items may need.
-- [ ] 6.2 R-009 orphan sweep NARROWED, still running: candidates become layers nobody declared.
-      Requires 1.2 first — otherwise it flags healthy playout graphics as orphans (§i).
+- [ ] 6.1 **REWRITTEN 2026-08-08** (`live-source-multibox` §7.2 — see 6.5 below).
+      `LayerManager.allocate()` keeps existing but MUST have no caller that puts an **operator
+      graphic** on air. Assert that in a test, rather than deleting code other items may need.
+      ⚠ **The test asserts the absence of an OPERATOR-graphic caller, NOT the absence of every
+      caller.** A **declared, non-operator** allocation is PERMITTED and the test must be written so
+      it passes — C-015's Live Source layers are exactly that: allocated by the bridge, on a declared
+      range, recorded in a bridge-owned ledger, and never an operator's graphic. Written as "no
+      caller at all", this test is a **silently correct-looking** fixture that forbids the third
+      ownership class, and nothing in review would flag it.
+- [ ] 6.2 R-009 orphan sweep NARROWED, still running: candidates become layers nobody declared —
+      **against all THREE declared classes** (6.5), not two. Requires 1.2 first — otherwise it flags
+      healthy playout graphics as orphans (§i) — and requires 6.5, or it flags live guest boxes as
+      orphans, which is an operator being invited to clear a face off air.
 - [ ] 6.3 R-015's foreign refusal unchanged outside declared ranges; regression-test the boundary.
+      **The Live Source range is INSIDE a declared range under 6.5**, so the refusal does not reach
+      it — and it is refused there for a different, distinct reason (`live-source`), never as
+      `foreign`. See `live-source-multibox` design.md §4 (C5): granting C-015's exemption as
+      originally worded would have made those layers operator-CLEARABLE, inverting the protection.
 - [ ] 6.4 `LayerPolicy` ranges become DESCRIPTIVE. Record that `logo-bug` remains a `templateType`
       in the scene schema (`scene.ts:123`) even when its 90–99 RANGE is freed — the type does not
       go with the range (§c).
+      ✅ **CONFIRMED 2026-08-08 that this frees 10–59** — `live-source-multibox` §7.3, and checked
+      against the CODE rather than against §c's prose. `DEFAULT_LAYER_POLICY`
+      (`packages/caspar-client/src/layers/layer-manager.ts:49-56`) is today `lower-third` 10–19 ·
+      `ticker` 20–29 · `breaking-news` 30–39 · `logo-bug` 40–49 · `fullscreen` 50–59 · `custom`
+      60–69. Making these descriptive releases **10–69**; `custom`'s 60–69 is the reserved playout
+      range, which stays fenced by `reservedLayers`. **The residue is exactly 10–59** — fifty layers,
+      directly below the 70–99 operator bank, which is the range C-015 needs (sources must sit BELOW
+      the template's layer). Note `logo-bug` has since MOVED from 90–99 to 40–49, inside the freed
+      span, so §c's "90–99" wording is about the bank and this confirmation does not rest on it.
+- [ ] 6.5 🔴 **AMEND SECTION 6 TO A THREE-CLASS DECLARED MODEL — BEFORE 6.1–6.3 ARE
+      IMPLEMENTED.** Added 2026-08-08 as `live-source-multibox`'s cross-change obligation (§7.1
+      there; the full argument is that change's design.md §4). Section 6 as originally written
+      cements a **TWO**-class model — fixed operator rows and the reserved playout range — with no
+      room for a **bridge-owned non-html layer**. The declared classes are **three**: 1. **fixed operator rows** (the candidate bank, 70–99) — declared config, today; 2. **the reserved playout range** (60–69) — declared config, wired by 1.2; 3. **bridge-owned Live Source layers** (10–59, freed by 6.4) — declared config PLUS a
+      bridge-owned ledger (`#liveLayers`), which is what makes them ownable at all.
+      **Why this order, and why the reverse does not work.** Section 6 is a NARROWING: it removes
+      candidates from a sweep and asserts an ABSENCE in a test. A narrowing written against an
+      incomplete class list is not a bug that shows up in review — it is a silently correct-looking
+      test that forbids the third class. Landing Live Sources first instead would leave a window in
+      which R-009's sweep flags live guest boxes as orphans. The doctrine being extended is R-028's
+      OWN — **"Declared, never detected"** (design.md §i): OSC carries producer KIND, not identity,
+      so a bridge-owned non-html layer is the same problem one step further out and gets the same
+      answer. This adds a third member to an existing set; it invents no mechanism.
+      ⚠ **The third class is NOT `reservedLayers`** — that is a fence AWAY from a foreign owner, the
+      exact inverse of a record of layers we own. A Live Source placed there would be unplaceable
+      (`layer-manager.ts:210`), unreservable (`:246`) and unclearable
+      (`caspar-runtime.ts:2679-2681`) through every existing door. 1.2's `[x]` tags calling
+      `reservedLayers` "the C-015 Live Source seam" are misleading and are corrected by
+      `live-source-multibox` phase 2.6; 1.2 satisfied C-015's **disjointness** half and none of its
+      **ownership** half.
 
 ## 7. Migration
 
@@ -159,7 +202,12 @@ for what part A deliberately skipped or found un-runnable.**
 - [ ] 8.2 `docs/prd/runtime.md` R-028 → `[~]` with an honest status note (on-air behaviour
       throughout; hardware verification owed).
 - [ ] 8.3 Cross-refs: R-021 (plumbing + stage 4), R-023 (per-row shortcuts bind to 5.2's
-      declaration point), R-024/C-002 (rundowns/presets reference rows), C-015 (`reservedLayers`).
+      declaration point), R-024/C-002 (rundowns/presets reference rows), C-015 — **BOTH halves,
+      extended 2026-08-08** (`live-source-multibox` §7.4): (a) `reservedLayers`, the playout fence
+      1.2 wired, and (b) the **OWNERSHIP CLASS** — C-015's bridge-owned Live Source layers are the
+      THIRD declared class 6.5 adds, on 10–59 freed by 6.4, recorded in a bridge-owned ledger rather
+      than inferred from producer kind. Naming only (a) is what let 1.2 read as "C-015 is handled"
+      while the ownership half was untouched.
 
 ## 9. Gate
 
