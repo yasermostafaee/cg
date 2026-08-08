@@ -34,9 +34,16 @@
       the wire; a Persian-typed port passes validation and submits canonical; LockOverlay
       release and StatusBar engage both deliver the normalized PIN.
 - [x] 3.3 E2E ripple only (no new spec): the number control's role is textbox now,
-      `stage-inspector-edits.spec.ts` selector updated. The edited assertion has NOT
-      executed (WSL absent) — ONE Linux `gate:e2e` run is owed (design.md D7; recorded in
-      R-020's status note).
+      `stage-inspector-edits.spec.ts` selector updated. The edited assertion had NOT
+      executed at the time this was written (WSL absent) — ONE Linux `gate:e2e` run was
+      owed (design.md D7; recorded in R-020's status note).
+      **DISCHARGED 2026-08-08, before archive.** A COMPLETED, GREEN `e2e` job on GitHub
+      Actions (`ubuntu-latest`), commit `a344cd2`:
+      <https://github.com/yasermostafaee/cg/actions/runs/31252541925>
+      The edited spec executed on Linux and passed — `stage-inspector-edits.spec.ts` 3/3
+      (the blur/Enter-sends-nothing, Discard-reverts and first-reorder-click specs), inside
+      a runtime suite of 62 passed (2.1m), 0 failed, 0 flaky. Not a cache replay:
+      `test:e2e` is `"cache": false` in `turbo.json`.
 
 ## 4. Docs
 
