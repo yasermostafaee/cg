@@ -52,11 +52,32 @@ env:
   CI: 'true'
 
 jobs:
-  # P-008 — detect whether any NON-docs file changed. The `code` filter matches
-  # everything and then un-matches the docs paths (last-match-wins picomatch), so
-  # `code` is 'true' iff at least one changed file is OUTSIDE docs. This is the
-  # STRICT condition ("no non-docs file changed"), so code accidentally bundled
-  # into a docs PR is NOT skipped.
+  # P-008 — detect whether any NON-docs file changed. `code` is 'true' iff at least
+  # one changed file is OUTSIDE the docs set. This is the STRICT condition, so code
+  # accidentally bundled into a docs change is NOT skipped.
+  #
+  # P-027 — HOW that is computed differs by event, and the split is deliberate:
+  #
+  #  - `push` → the repo's OWN classifier, `classifyChangedSet` from
+  #    `tools/gate-hook/src/gate-decision.mjs`, fed the diff against the trusted
+  #    base below. It is the same predicate the Stop hook and CLAUDE.md's carve-out
+  #    use, it is unit-tested, and reusing it means CI cannot drift from the local
+  #    gate (CLAUDE.md golden rule 6: reuse the ONE canonical predicate, never
+  #    re-derive it).
+  #  - `pull_request` → dorny/paths-filter, unchanged. There is no local base for a
+  #    PR, so the action's API-based diff is still the right tool there.
+  #
+  # Why the filter is no longer trusted on the push path: its pattern list
+  #   ['**', '!openspec/**', '!docs/**', '!**/*.md']
+  # was documented here as "last-match-wins picomatch". It is NOT. dorny/paths-filter
+  # ORs its patterns, so `'**'` alone makes every file match and `code` could never
+  # be false — measured on run 31257557820, where a push whose ONLY changed file was
+  # `docs/prd/bugs.md` reported `Filter code = true` with that file listed as the
+  # match. The docs-only skip had therefore never worked, independently of the base.
+  # `predicate-quantifier: every` would fix the ORing, but `**` does not match
+  # dot-prefixed paths, so `.github/**` and `.claude/**` would then classify as
+  # docs-only and SKIP the gate — trading an over-run for an under-run, which is the
+  # one direction that must never happen. The classifier has no such ambiguity.
   changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
@@ -111,16 +132,48 @@ jobs:
             echo "Push base trusted: $BEFORE (previous tip of this ref)."
           fi
 
+      # P-027 — the push path, using the canonical classifier rather than globs.
+      # `gate-decision.mjs` is zero-dependency plain ESM with no build step, so the
+      # runner's preinstalled node runs it directly off the checkout.
+      - name: Classify the push's changed paths
+        id: push_changes
+        if: github.event_name == 'push' && steps.base.outputs.trusted == 'true'
+        env:
+          BASE: ${{ steps.base.outputs.base }}
+        run: |
+          set -euo pipefail
+          git diff --name-only "$BASE"..HEAD > changed-files.txt
+          echo "Changed by this push ($(wc -l < changed-files.txt) files):"
+          cat changed-files.txt
+          cat > classify-push.mjs <<'CLASSIFY'
+          import { appendFileSync, readFileSync } from 'node:fs';
+          import {
+            classifyChangedSet,
+            parseNameOnly,
+          } from './tools/gate-hook/src/gate-decision.mjs';
+
+          const paths = parseNameOnly(readFileSync('changed-files.txt', 'utf8'));
+          const classification = classifyChangedSet(paths);
+          // 'code' runs the heavy gate. 'docs-only' takes the carve-out, and 'empty'
+          // (a push that changes nothing) has nothing to prove.
+          const code = classification.kind === 'code';
+          console.log(
+            `classification: kind=${classification.kind} ` +
+              `needsE2e=${classification.needsE2e} files=${paths.length} => code=${code}`,
+          );
+          appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\n`);
+          CLASSIFY
+          node classify-push.mjs
+          rm -f classify-push.mjs changed-files.txt
+
       - name: Filter changed paths
         id: filter
-        # Skipped when a push's base is untrusted - `decide` then forces code=true.
-        # `pull_request` events never reach the base step: paths-filter uses the
-        # GitHub API there, not a git base, so that path is untouched by P-027.
-        if: github.event_name != 'push' || steps.base.outputs.trusted == 'true'
+        # `pull_request` only — the push path is classified above. Left exactly as it
+        # was, per the standing instruction not to touch the PR path: paths-filter
+        # uses the GitHub API for a PR, where no local base exists.
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
-          # Empty on pull_request == unset, which is paths-filter's own default.
-          base: ${{ github.event_name == 'push' && steps.base.outputs.base || '' }}
           filters: |
             code:
               - '**'
@@ -133,18 +186,30 @@ jobs:
       - name: Decide whether the heavy gate runs
         id: decide
         env:
-          TRUSTED: ${{ github.event_name != 'push' || steps.base.outputs.trusted == 'true' }}
-          FILTERED: ${{ steps.filter.outputs.code }}
+          EVENT: ${{ github.event_name }}
+          TRUSTED: ${{ steps.base.outputs.trusted }}
           REASON: ${{ steps.base.outputs.reason }}
+          PUSH_CODE: ${{ steps.push_changes.outputs.code }}
+          FILTERED: ${{ steps.filter.outputs.code }}
         run: |
           set -uo pipefail
-          # An empty FILTERED means the filter did not run or produced nothing -
-          # unknown, which must mean "run it", never "skip it".
-          if [ "$TRUSTED" != 'true' ] || [ -z "${FILTERED:-}" ]; then
-            echo "code=true  (FAIL-SAFE: trusted=$TRUSTED filtered='${FILTERED:-}' reason='${REASON:-n/a}')"
+          if [ "$EVENT" = 'push' ]; then
+            if [ "${TRUSTED:-}" != 'true' ]; then
+              echo "code=true  (FAIL-SAFE: untrusted base - ${REASON:-unknown})"
+              echo 'code=true' >> "$GITHUB_OUTPUT"
+            elif [ -z "${PUSH_CODE:-}" ]; then
+              # The classifier did not report. Unknown must mean "run it".
+              echo 'code=true  (FAIL-SAFE: the push classifier produced no verdict)'
+              echo 'code=true' >> "$GITHUB_OUTPUT"
+            else
+              echo "code=$PUSH_CODE  (classifier, base=${REASON:-n/a})"
+              echo "code=$PUSH_CODE" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ -z "${FILTERED:-}" ]; then
+            echo 'code=true  (FAIL-SAFE: the paths filter produced no verdict)'
             echo 'code=true' >> "$GITHUB_OUTPUT"
           else
-            echo "code=$FILTERED  (from the paths filter; base='${REASON:-api}')"
+            echo "code=$FILTERED  (paths-filter, GitHub API base)"
             echo "code=$FILTERED" >> "$GITHUB_OUTPUT"
           fi
 
