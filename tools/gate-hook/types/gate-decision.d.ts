@@ -27,5 +27,11 @@ declare module '*gate-decision.mjs' {
   }
   export function classifyChangedSet(paths: readonly string[]): Classification;
   export function nextAttempt(prevContent: string | null | undefined): number;
-  export function commandsFor(classification: Classification): string[];
+  export const E2E_OPT_IN_ENV: string;
+  export function localE2eOptIn(env?: Record<string, string | undefined>): boolean;
+  export function commandsFor(
+    classification: Classification,
+    options?: { localE2e?: boolean },
+  ): string[];
+  export function e2eReminderFor(classification: Classification): string | null;
 }

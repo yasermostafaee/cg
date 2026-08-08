@@ -213,15 +213,18 @@ runs when a Claude Code turn ends and refuses to let it end red:
 - it classifies the turn's changed files (working tree ∪ the turn's commits vs the
   `origin/dev` merge-base — `origin/main`, then the working tree alone, are the
   fallbacks): **docs-only** → openspec validate strict + format:check
-  (the CLAUDE.md carve-out); **any code** → `pnpm gate`; **UI/render paths**
-  (renderer sources, template-runtime, lottie-bridge, ui, single-file-export,
-  `*.css.ts`, the E2E suites/configs) → `pnpm gate:e2e` too;
+  (the CLAUDE.md carve-out); **anything else** → `pnpm gate`;
+- **it does NOT run `pnpm gate:e2e`** (P-028). A **UI/render** diff (renderer sources,
+  template-runtime, lottie-bridge, ui, single-file-export, `*.css.ts`, the E2E
+  suites/configs) is still detected, and the hook prints a **non-blocking reminder**
+  that a Linux `gate:e2e` is owed — but the suite runs on **CI**, on Linux, on every
+  push to `dev`. A local Windows run cost ~224 s per turn and could never discharge the
+  debt, so it bought time rather than evidence. Set **`CG_GATE_HOOK_E2E=1`** to opt the
+  local run back into the hook for a turn;
 - a red gate **blocks the turn** and feeds the failing tail back to the session with
   repair rules that forbid deleting/skipping/loosening tests — at most **twice per
   session**, then it stands down and asks for human eyes (full logs in
-  `.gate-logs/`, gitignored);
-- a green `gate:e2e` on Windows is explicitly labelled **non-authoritative** (a
-  Linux/WSL run is still owed — see above).
+  `.gate-logs/`, gitignored).
 
 Escape hatch (yours, not the model's): `{"disableAllHooks": true}` in
 `.claude/settings.local.json`. The pure decision logic + its unit tests live in

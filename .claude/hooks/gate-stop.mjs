@@ -14,8 +14,11 @@
  *      to `origin/main`, then to the working tree alone); empty → exit 0 (read-only turns
  *      cost nothing).
  *   4. docs-only → the CLAUDE.md carve-out (openspec validate strict + format:check);
- *      otherwise `pnpm gate`, plus `pnpm gate:e2e` when UI/render paths changed.
- *   5. green → exit 0 (with a NON-AUTHORITATIVE note when gate:e2e ran on win32).
+ *      otherwise `pnpm gate`. A UI/render diff does NOT run `pnpm gate:e2e` here any
+ *      more (P-028) — CI runs the authoritative Linux suite on every push to `dev`;
+ *      set `CG_GATE_HOOK_E2E=1` to opt the local run back in for a turn.
+ *   5. green → exit 0, carrying any non-blocking notes (the OWED-Linux-E2E reminder on
+ *      a UI/render diff; the NON-AUTHORITATIVE note when the opt-in ran e2e on win32).
  *   6. red → per-session attempt counter: attempts ≤ 2 ⇒ exit 2 with the failing
  *      tail + repair rules on stderr; attempts > 2 ⇒ exit 0 + a systemMessage asking
  *      for human eyes. Never thrash.
@@ -40,6 +43,8 @@ import {
   classifyChangedSet,
   collectChangedPaths,
   commandsFor,
+  e2eReminderFor,
+  localE2eOptIn,
   nextAttempt,
 } from '../../tools/gate-hook/src/gate-decision.mjs';
 
@@ -87,8 +92,18 @@ function main() {
   if (paths === null) return 0; // not a repo / git broken — not ours to block on
 
   const classification = classifyChangedSet(paths);
-  const commands = commandsFor(classification);
-  if (commands.length === 0) return 0;
+  // P-028 — the local E2E suite is OPT-IN. The classification is unchanged: a UI/render
+  // diff still reports `needsE2e`, and the reminder below still states the debt. Only
+  // who RUNS the suite moved, to CI on `dev`.
+  const localE2e = localE2eOptIn(process.env);
+  const commands = commandsFor(classification, { localE2e });
+  // The reminder is computed BEFORE any early return so a turn that owes an E2E is told
+  // so even when the gate itself has nothing to run.
+  const reminder = e2eReminderFor(classification);
+  if (commands.length === 0) {
+    if (reminder) process.stdout.write(JSON.stringify({ systemMessage: reminder }));
+    return 0;
+  }
 
   const sessionId = String(input.session_id ?? 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
   const logDir = join(root, '.gate-logs');
@@ -156,17 +171,21 @@ function main() {
   } catch {
     /* best-effort */
   }
+  // Non-blocking notes, emitted as ONE systemMessage (the protocol allows a single
+  // JSON object on stdout, so they are joined rather than written twice).
+  const notes = [];
   if (ranE2e && process.platform === 'win32') {
     // Windows honesty (per CLAUDE.md/README): a local Windows E2E pass is evidence,
     // not the authoritative gate — pixel geometry differs (~19px) vs Linux.
-    process.stdout.write(
-      JSON.stringify({
-        systemMessage:
-          'Gate green, including gate:e2e — but this E2E run was on win32 and is ' +
-          'NON-AUTHORITATIVE for pixel geometry (~19px vs Linux). A Linux/WSL ' +
-          'gate:e2e run is still owed before merge.',
-      }),
+    notes.push(
+      `Gate green, including the opt-in gate:e2e — but this E2E run was on win32 and ` +
+        'is NON-AUTHORITATIVE for pixel geometry (~19px vs Linux). It does NOT ' +
+        'discharge the Linux debt.',
     );
+  }
+  if (reminder) notes.push(reminder);
+  if (notes.length > 0) {
+    process.stdout.write(JSON.stringify({ systemMessage: notes.join(' ') }));
   }
   return 0;
 }

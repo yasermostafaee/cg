@@ -167,12 +167,20 @@ green gate above.
 
 **The gate is enforced at turn end (P-009).** A committed Stop hook
 (`.claude/hooks/gate-stop.mjs`) runs when your turn ends: docs-only diffs get the
-carve-out above, code diffs get `pnpm gate`, UI/render diffs also get `pnpm gate:e2e`.
-If it blocks you: the gate is RED — fix the CODE per the repair rules it prints (never
-delete/skip/loosen a test to go green; port-4321 Playwright failures are usually a
-stale process, see B-078). It blocks at most twice per session, then defers to the
-human. A green Windows `gate:e2e` is non-authoritative — a Linux/WSL run is still owed.
-Logic + tests: `tools/gate-hook/`.
+carve-out above, every other diff gets `pnpm gate`. If it blocks you: the gate is RED —
+fix the CODE per the repair rules it prints (never delete/skip/loosen a test to go green;
+port-4321 Playwright failures are usually a stale process, see B-078). It blocks at most
+twice per session, then defers to the human. Logic + tests: `tools/gate-hook/`.
+
+**The hook does NOT run `pnpm gate:e2e` (P-028).** A UI/render diff is still CLASSIFIED
+as owing a Linux E2E, and the hook prints a NON-BLOCKING reminder saying so — but it no
+longer runs the suite. The local run cost ~224 s on top of the ~140 s `pnpm gate`, on
+EVERY turn of a multi-turn UI task, for a signal that could never discharge the debt,
+because a Windows pass is non-authoritative by the very rule that owes it. The
+authoritative Linux `e2e` now comes from CI on every push to `dev`; nothing about the
+discharge rule changed (see "E2E coverage"), only who runs the suite. `pnpm gate:e2e`
+remains a manual command, and `CG_GATE_HOOK_E2E=1` puts the local run back inside the
+hook for a turn when you want the fast signal.
 
 ## Feature workflow — PRD → OpenSpec → code
 

@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   DIFF_BASE_REFS,
+  E2E_OPT_IN_ENV,
   classifyChangedSet,
   collectChangedPaths,
   commandsFor,
+  e2eReminderFor,
   isDocsPath,
   isUiRenderPath,
+  localE2eOptIn,
   nextAttempt,
   normalizePath,
   parseNameOnly,
@@ -93,10 +96,29 @@ describe('classification → commands', () => {
     expect(commandsFor(c)).toEqual(['pnpm gate']);
   });
 
-  it('a UI/render path adds gate:e2e AFTER the fast gate', () => {
+  it('a UI/render path runs the fast gate ONLY — the E2E moved to CI (P-028)', () => {
     const c = classifyChangedSet(['packages/template-runtime/src/runtime.ts']);
+    // The CLASSIFICATION is unchanged: the debt is still owed, and still detected.
     expect(c).toEqual({ kind: 'code', needsE2e: true });
-    expect(commandsFor(c)).toEqual(['pnpm gate', 'pnpm gate:e2e']);
+    expect(commandsFor(c)).toEqual(['pnpm gate']);
+    expect(commandsFor(c, {})).toEqual(['pnpm gate']);
+    expect(commandsFor(c, { localE2e: false })).toEqual(['pnpm gate']);
+  });
+
+  it('the opt-in puts gate:e2e back, AFTER the fast gate', () => {
+    const c = classifyChangedSet(['apps/designer/src/renderer/theme.css.ts']);
+    expect(commandsFor(c, { localE2e: true })).toEqual(['pnpm gate', 'pnpm gate:e2e']);
+  });
+
+  it('the opt-in NEVER invents an E2E for a diff that does not owe one', () => {
+    const code = classifyChangedSet(['packages/shared-schema/src/scene.ts']);
+    expect(commandsFor(code, { localE2e: true })).toEqual(['pnpm gate']);
+    const docs = classifyChangedSet(['docs/prd/platform.md']);
+    expect(commandsFor(docs, { localE2e: true })).toEqual([
+      'pnpm openspec validate --all --strict',
+      'pnpm format:check',
+    ]);
+    expect(commandsFor(classifyChangedSet([]), { localE2e: true })).toEqual([]);
   });
 
   it('deduplicates and normalizes before classifying', () => {
@@ -258,6 +280,53 @@ describe("assembling the turn's changed set (P-026)", () => {
       'docs/a.md',
     ]);
     expect(collectChangedPaths(fakeGit({ statusOut: wt, diffFails: true }))).toEqual(['docs/a.md']);
+  });
+});
+
+/**
+ * P-028 — the local `gate:e2e` left the hook. The OBLIGATION did not: the classification
+ * still detects it and the reminder still states it. Only who runs the suite changed.
+ */
+describe('the owed-E2E reminder (P-028)', () => {
+  it('is emitted for a UI/render diff and names the conditions for discharge', () => {
+    const msg = e2eReminderFor(classifyChangedSet(['apps/runtime/src/renderer/App.tsx']));
+    expect(msg).not.toBeNull();
+    const text = String(msg);
+    expect(text).toContain('OWED');
+    expect(text).toContain('COMPLETED');
+    expect(text).toContain('GREEN');
+    expect(text).toContain('run URL');
+    expect(text).toContain('tasks.md');
+    expect(text).toContain(E2E_OPT_IN_ENV);
+  });
+
+  it('is silent for a code diff off the UI set, for docs-only, and for an empty set', () => {
+    expect(e2eReminderFor(classifyChangedSet(['packages/storage/src/index.ts']))).toBeNull();
+    expect(e2eReminderFor(classifyChangedSet(['docs/prd/bugs.md']))).toBeNull();
+    expect(e2eReminderFor(classifyChangedSet([]))).toBeNull();
+  });
+
+  it('does not block: it is a message, and the commands are unaffected by it', () => {
+    const c = classifyChangedSet(['packages/ui/src/tokens.ts']);
+    expect(e2eReminderFor(c)).not.toBeNull();
+    expect(commandsFor(c)).toEqual(['pnpm gate']);
+  });
+});
+
+describe('the local E2E opt-in (P-028)', () => {
+  it('is OFF by default — unset, empty, and unrelated values all mean off', () => {
+    expect(localE2eOptIn(undefined)).toBe(false);
+    expect(localE2eOptIn({})).toBe(false);
+    expect(localE2eOptIn({ [E2E_OPT_IN_ENV]: '' })).toBe(false);
+    expect(localE2eOptIn({ [E2E_OPT_IN_ENV]: '0' })).toBe(false);
+    expect(localE2eOptIn({ [E2E_OPT_IN_ENV]: 'false' })).toBe(false);
+    expect(localE2eOptIn({ [E2E_OPT_IN_ENV]: 'maybe' })).toBe(false);
+  });
+
+  it('accepts the usual truthy spellings, case- and whitespace-insensitively', () => {
+    for (const v of ['1', 'true', 'TRUE', 'yes', 'on', ' true ']) {
+      expect(localE2eOptIn({ [E2E_OPT_IN_ENV]: v })).toBe(true);
+    }
   });
 });
 

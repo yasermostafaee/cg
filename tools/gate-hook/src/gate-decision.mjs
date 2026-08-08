@@ -14,8 +14,10 @@
  *  - docs-only carve-out: every changed path under `openspec/**`, `docs/**`, or any
  *    `*.md` ⇒ only `openspec validate --all --strict` + `format:check`;
  *  - anything else ⇒ the full `pnpm gate`;
- *  - UI/render paths additionally ⇒ `pnpm gate:e2e` (CLAUDE.md: user-facing changes
- *    run their E2E).
+ *  - UI/render paths ⇒ still CLASSIFIED as owing an E2E, but the suite is NOT run
+ *    locally any more (P-028). It runs on CI, on Linux, on every push to `dev`; the
+ *    hook only prints the non-blocking reminder that the debt is unpaid until a
+ *    COMPLETED green run URL exists. `CG_GATE_HOOK_E2E=1` opts the local run back in.
  *
  * It also owns WHICH ref the turn's diff is measured against (`pickDiffBaseRef`). That
  * is a decision, not plumbing, so it is pinned by unit tests here rather than buried in
@@ -206,14 +208,70 @@ export function nextAttempt(prevContent) {
   return (Number.isFinite(n) && n >= 0 ? n : 0) + 1;
 }
 
-/** The commands for a classification, in run order. Pure — the hook executes them. */
-export function commandsFor(classification) {
+/**
+ * The env var that opts the LOCAL `gate:e2e` run back into the hook, for a turn where
+ * someone wants the fast local signal despite it not being authoritative.
+ */
+export const E2E_OPT_IN_ENV = 'CG_GATE_HOOK_E2E';
+
+/**
+ * Is the local `gate:e2e` opt-in set? Accepts the usual truthy spellings and treats
+ * everything else — including unset — as OFF, because OFF is the documented default.
+ *
+ * @param {Record<string, string | undefined>} [env] process.env, injected for tests
+ * @returns {boolean}
+ */
+export function localE2eOptIn(env) {
+  const raw = String(env?.[E2E_OPT_IN_ENV] ?? '')
+    .trim()
+    .toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
+/**
+ * The commands for a classification, in run order. Pure — the hook executes them.
+ *
+ * P-028: a UI/render change no longer runs `pnpm gate:e2e` HERE. The measurement that
+ * settled it — ~224 s per UI turn on top of ~140 s for `pnpm gate`, paid on EVERY turn
+ * of a multi-turn UI task — bought a signal that could never discharge anything, because
+ * a Windows run is non-authoritative by the same rule that owes the debt. CI runs the
+ * authoritative Linux suite on every push to `dev` instead. What is NOT weakened: the
+ * classification below still reports `needsE2e`, and `e2eReminderFor` still says the debt
+ * is owed — only WHO runs the suite changed.
+ *
+ * @param {{ kind: string, needsE2e: boolean }} classification
+ * @param {{ localE2e?: boolean }} [options] `localE2e` re-enables the local suite
+ * @returns {string[]}
+ */
+export function commandsFor(classification, options) {
   if (classification.kind === 'empty') return [];
   if (classification.kind === 'docs-only') {
     // The CLAUDE.md docs-only carve-out, verbatim: validation + formatting only.
     return ['pnpm openspec validate --all --strict', 'pnpm format:check'];
   }
   const cmds = ['pnpm gate'];
-  if (classification.needsE2e) cmds.push('pnpm gate:e2e');
+  if (classification.needsE2e && options?.localE2e === true) cmds.push('pnpm gate:e2e');
   return cmds;
+}
+
+/**
+ * The NON-BLOCKING reminder for a turn that owes a Linux E2E, or `null` when none is
+ * owed. It never gates anything: it exists so the obligation stays visible now that the
+ * hook no longer runs the suite, and it deliberately restates where the authority comes
+ * from rather than assuming the reader remembers.
+ *
+ * @param {{ kind: string, needsE2e: boolean }} classification
+ * @returns {string | null}
+ */
+export function e2eReminderFor(classification) {
+  if (classification.kind !== 'code' || !classification.needsE2e) return null;
+  return (
+    'This turn changed UI/render paths, so a Linux `gate:e2e` is OWED. The hook no ' +
+    'longer runs it locally (P-028): a Windows run is non-authoritative and never ' +
+    'discharged the debt. The authoritative run is the `e2e` job on GitHub Actions, ' +
+    'which runs on every push to `dev`. The debt stays UNPAID until a COMPLETED, GREEN ' +
+    'run exists for the commit carrying this change, and its run URL is written into ' +
+    "the change's tasks.md beside the ticked item (CLAUDE.md, \"E2E coverage\"). " +
+    `To run the suite locally on a turn anyway, set ${E2E_OPT_IN_ENV}=1.`
+  );
 }

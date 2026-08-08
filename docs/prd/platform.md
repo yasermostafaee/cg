@@ -1192,3 +1192,56 @@ it: push a `docs/**`-only commit to `dev` and read the run.
 **Notes:** cross-refs [[P-008]] (the docs-only skip this restores), [[P-026]] (the same failure one
 layer in, in the Stop hook), [[P-028]] (the sibling change that made CI the only place the Linux E2E
 runs — which is what raised the stakes on a push getting a completed run).
+
+## [x] P-028 — the Stop hook's local `gate:e2e` cost ~224 s per UI turn for a signal that could never discharge the debt ⟨priority: medium⟩ — done: `.claude/hooks/gate-stop.mjs` + `tools/gate-hook/`; living spec `openspec/specs/platform-local-gate/spec.md` updated in the same change
+
+**What:** the [[P-009]] Stop hook ran `pnpm gate:e2e` on any UI/render diff. It no longer does. The
+UI/render CLASSIFICATION stays, and the hook prints a NON-BLOCKING reminder that a Linux `gate:e2e`
+is owed; the suite itself runs on CI, on Linux, on every push to `dev`.
+
+**Why:** measured 2026-08-08 on this host — the local Windows `gate:e2e` takes **224 s**
+(`0 cached, 22 total`; designer 237 specs in 2.7 m), on top of **~140 s** for `pnpm gate`. That is
+~6 minutes per UI turn, paid on EVERY turn of a multi-turn UI task, not once. What it bought was a
+signal that **could never discharge anything**: CLAUDE.md's discharge rule makes a Windows pass
+non-authoritative, so the run that just cost six minutes left the debt exactly where it was. Since
+[[P-027]], CI runs the authoritative Linux suite on every push to `dev`, so a hard break is caught
+minutes later by a runner whose verdict actually counts.
+
+**What was deliberately NOT done, because each is a worse trade:**
+
+- **NOT replaced with the changed-app-only suite.** Half the cost for a signal that still cannot
+  discharge anything is the same bad trade at a discount.
+- **The hook does NOT force a push.** Pushing work-in-progress to `dev` to obtain a CI run is worse
+  than a late E2E signal: the owner merges `dev` into `main` at the end of a day and expects what is
+  there to be final.
+- **The OBLIGATION is untouched.** `classifyChangedSet` still reports `needsE2e`, the reminder still
+  states the debt and its discharge conditions, and CLAUDE.md's rule is unchanged. Only WHO runs the
+  suite moved. A future reader must not read "the hook stopped running E2E" as "the E2E stopped
+  being owed" — that inference is the one thing this item exists to prevent.
+
+**Kept:** `pnpm gate:e2e` as a manual command, and an opt-in — `CG_GATE_HOOK_E2E=1` — that puts the
+local run back inside the hook for a turn, for anyone who wants the fast local signal on a given
+change. Documented in CLAUDE.md and README beside the hook's behaviour.
+
+**Acceptance:**
+
+- WHEN a turn's changed set falls in the UI/render set THEN the hook runs `pnpm gate` and NOT
+  `pnpm gate:e2e`
+- WHEN it does THEN the hook emits a non-blocking reminder naming the owed Linux run, that CI on
+  push is the authoritative source, and that the debt is unpaid until a completed green run URL is
+  recorded beside the change's ticked task
+- WHEN `CG_GATE_HOOK_E2E` is truthy and the set is UI/render THEN `pnpm gate:e2e` runs after
+  `pnpm gate`
+- WHEN the set is NOT UI/render THEN the opt-in adds no E2E run
+- WHEN the reminder is emitted THEN the hook's exit status is unaffected by it
+
+**Tests:** `tools/gate-hook/tests/gate-decision.test.ts` — the UI/render case yields `['pnpm gate']`
+while the classification is still pinned as `{ kind: 'code', needsE2e: true }` (pinned SEPARATELY,
+so a future edit cannot quietly drop the detection while the command list still looks right); the
+opt-in restores `gate:e2e`; the opt-in never invents one for a non-UI set; the reminder is emitted
+only for UI/render and names its discharge conditions; and the opt-in parser treats unset, empty and
+garbage as OFF.
+
+**Notes:** cross-refs [[P-009]] (the hook), [[P-027]] (which made CI the authoritative Linux run on
+every push, and is what makes this safe), [[B-078]] (the local-gate flake this measurement sat
+beside — unaffected, since `pnpm gate:e2e` still exists and is still what reproduces it).

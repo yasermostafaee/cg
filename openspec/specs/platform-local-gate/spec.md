@@ -50,9 +50,19 @@ The hook SHALL classify the changed set exactly as CLAUDE.md's gate rules do —
 the docs-only carve-out, not redefining it. A docs-only set (every path under
 `openspec/**`, `docs/**`, or any `*.md`) SHALL run only
 `pnpm openspec validate --all --strict` and `pnpm format:check`. Any other set SHALL run
-`pnpm gate`; and when any changed path falls in the UI/render set (renderer sources,
+`pnpm gate`.
+
+The hook SHALL continue to DETECT the UI/render set (renderer sources,
 `template-runtime`, `lottie-bridge`, `ui`, `single-file-export`, any `*.css.ts`, the E2E
-suites and Playwright configs) the hook SHALL also run `pnpm gate:e2e`.
+suites and Playwright configs), but SHALL NOT run `pnpm gate:e2e` as part of the turn's
+gate. On a UI/render set the hook SHALL instead emit a NON-BLOCKING reminder that a Linux
+`gate:e2e` is owed and remains unpaid until a completed, green CI `e2e` run exists for the
+commit carrying the change. The reminder SHALL NOT affect the hook's exit status.
+
+An OPT-IN environment variable (`CG_GATE_HOOK_E2E`) SHALL restore the local
+`pnpm gate:e2e` run for a turn. When it is set and the changed set is in the UI/render
+set, the hook SHALL run `pnpm gate:e2e` after `pnpm gate`. The opt-in SHALL NOT introduce
+an E2E run for a changed set that does not fall in the UI/render set.
 
 #### Scenario: Docs-only runs the carve-out only
 
@@ -64,10 +74,21 @@ suites and Playwright configs) the hook SHALL also run `pnpm gate:e2e`.
 - **WHEN** any changed path is outside the docs-only set and outside the UI/render set
 - **THEN** the hook runs `pnpm gate` and does not run `pnpm gate:e2e`
 
-#### Scenario: A UI/render change owes the E2E gate
+#### Scenario: A UI/render change owes the E2E but does not run it locally
 
-- **WHEN** any changed path falls in the UI/render set
+- **WHEN** any changed path falls in the UI/render set and the opt-in is not set
+- **THEN** the hook runs `pnpm gate` and does NOT run `pnpm gate:e2e`
+- **AND** it emits a non-blocking reminder that a Linux `gate:e2e` is owed, that the
+  authoritative run is the CI `e2e` job on push, and that the debt is unpaid until a
+  completed green run URL is recorded beside the change's ticked task
+
+#### Scenario: The opt-in restores the local E2E run
+
+- **WHEN** any changed path falls in the UI/render set and `CG_GATE_HOOK_E2E` is set to a
+  truthy value
 - **THEN** the hook runs `pnpm gate` and then `pnpm gate:e2e`
+- **AND WHEN** the changed set is NOT in the UI/render set **THEN** the opt-in adds no
+  E2E run
 
 ### Requirement: Bounded, non-cheating self-repair
 
