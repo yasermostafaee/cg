@@ -340,7 +340,13 @@ unnecessarily. Hence medium.
 **Notes:** misclassification risk noted and contained: the classifier is the single shared
 definition and already unit-tested (`tools/gate-hook`). While GitHub Actions billing is
 exhausted the pre-push gate is the sole authoritative proof — the carve-out must therefore be
-provably equivalent to the Stop hook's, never a THIRD rule set. Sits beside [[P-010]]'s
+provably equivalent to the Stop hook's, never a THIRD rule set.
+
+**CORRECTION 2026-08-08:** the "sole authoritative proof" clause has lapsed — CI is back and runs
+on every push to `dev`, so the pre-push gate is fast local feedback, not the only proof. The
+DESIGN constraint it was arguing for is UNCHANGED and still the point of this item: one shared
+classifier, never a third rule set. If anything the case is stronger, since a divergent local
+carve-out would now also disagree with CI. Sits beside [[P-010]]'s
 all-deletions skip in the same hook (`pre-push-decision.mjs` is the natural home for the range
 classification plumbing); [[P-009]] is the Stop-hook sibling whose classifier this reuses.
 
@@ -401,6 +407,13 @@ policy existed and its three pause-and-flag classes — on-air/export/product so
 hardware or Linux `gate:e2e` run, and shared config the next session must pick up. Those are
 about RISK, not about PRs; CC still names them out loud when a commit falls in one. Read the
 body below as the record of the PR-era wording.
+
+**And the SECOND premise has lapsed too (2026-08-08).** The **Why** below reasons from "while
+GitHub Actions billing is out (~Aug) the local gate is the ONLY landing gate", and the Acceptance
+bullet "WHEN remote CI returns (~Aug) THEN the auto-merge-eligible class is revisited" is the
+condition that has now fired. CI is restored and `pr.yml` runs on every push to `dev`, so the
+independent check the policy was missing EXISTS: CC pushes to `dev`, CI verifies it, the owner
+merges to `main`. CLAUDE.md carries the current wording.
 
 **What:** A CLAUDE.md rule (under Branching → "PR & merge policy") codifying that every task
 ends with `gh pr create`, that CC does NOT merge by default (opens the PR and stops), that

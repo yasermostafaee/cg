@@ -1018,6 +1018,12 @@ gate:
    installed on this host, so no Linux run has been produced locally. This is a positive finding
    from the check record, not an assumption.
 
+   **UNBLOCKED 2026-08-08 (not yet discharged).** CI is running again and `pr.yml` triggers on
+   every push to `dev`, so the owed Linux run no longer needs WSL and no longer needs arranging —
+   it arrives with the next `dev` push that carries this code. The debt is still OPEN: discharge
+   it by citing a COMPLETED, GREEN `e2e` run URL for a commit containing the fix (CLAUDE.md, "E2E
+   coverage"). A cancelled run does not count.
+
 **Same debt as [[B-089]], and for the same reason** — both change playout timing in the
 template-runtime render path. B-089's hardware gate has since been discharged by owner report
 (2026-07-20); **that report covered B-089 and says nothing about this item.** Do not carry it across:
@@ -1047,6 +1053,10 @@ never taken from a prompt or a hand-off note as if it were a measurement this se
    per P-009's spec (`docs/prd/platform.md`), a `win32` `gate:e2e` pass is explicitly
    NON-AUTHORITATIVE and leaves a Linux/WSL run owed. GitHub Actions is billing-exhausted until
    ~2026-08-01, so CI cannot supply it either — the Linux run must be done locally.
+   **CORRECTION 2026-08-08: CI CAN supply it now.** Actions is restored and `pr.yml` runs on every
+   push to `dev`, so "the Linux run must be done locally" no longer holds — do not go install WSL
+   on the strength of that sentence. The debt is still OPEN and is discharged by a COMPLETED,
+   GREEN `e2e` run URL for a commit carrying this fix (CLAUDE.md, "E2E coverage").
 2. **Real-CasparCG hardware check (PREVIEW + SINGLE-FILE EXPORT) — DISCHARGED by OWNER REPORT,
    2026-07-20.** The owner ran the check on their own CasparCG hardware and reported it covering
    BOTH output paths — PREVIEW and SINGLE-FILE EXPORT. This project's definition of done is

@@ -2,8 +2,13 @@ name: PR
 
 on:
   pull_request:
+  # `dev` is where ALL work lands (see CLAUDE.md "Branching"): there are no
+  # per-change branches and no PRs, so without `dev` here CI fired only on the
+  # owner's end-of-day merge to `main` — always AFTER the fact. This job graph
+  # already runs the full Playwright suite on ubuntu-latest, so the Linux
+  # `gate:e2e` debt was never a missing capability, only a missing trigger.
   push:
-    branches: [main]
+    branches: [main, dev]
 
 # B-043 — paths-filter fetches a PR's changed files via the GitHub API, which
 # needs `pull-requests: read`. With no permissions block the token falls back
@@ -17,6 +22,15 @@ permissions:
 
 concurrency:
   # Cancel in-progress runs of the same workflow on the same ref.
+  #
+  # CONSEQUENCE ON A BUSY `dev`, stated because a debt is discharged from these
+  # runs: a run cancelled by a newer push is NOT A RESULT. It is neither a pass
+  # nor a fail — it proves nothing about either commit, and `conclusion` reads
+  # `cancelled`, not `success`. Only a COMPLETED run counts. This is not
+  # hypothetical: run 30761140987 on `main` was cancelled at 39s by the push
+  # behind it. So when several commits land in quick succession, only the LAST
+  # one is actually verified; cite a run URL as evidence only after confirming
+  # that run completed green (see CLAUDE.md, "E2E coverage").
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 

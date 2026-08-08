@@ -937,7 +937,11 @@ surface. This is a SIBLING surface, not a B-098 regression.
 **Priority RAISED medium → high (2026-07-27), reasoning recorded both ways.** For: it now sits on
 the critical path of queued work — a self-hosted Linux runner is being stood up specifically to
 discharge the nine-item Linux `gate:e2e` backlog, and while GitHub Actions billing is out the local
-gate is the ONLY landing gate. If those Linux runs are invoked the way CLAUDE.md describes the debt
+gate is the ONLY landing gate. _(CORRECTION 2026-08-08: that second clause has lapsed — CI is back
+and runs on every push to `dev`, so the Linux backlog is dischargeable from CI and a self-hosted
+runner is no longer on the critical path for it. The FIRST clause — that this flake sits on the
+critical path of queued work — is unaffected, and the `workers: undefined` trap below applies to
+any hand-run `pnpm gate:e2e` exactly as written.)_ If those Linux runs are invoked the way CLAUDE.md describes the debt
 ("a Linux/WSL run is still owed", i.e. a hand-run `pnpm gate:e2e`), then `CI` is UNSET,
 `workers: undefined` applies on that box too, and the Linux runs will be exactly as untrustworthy as
 the Windows ones — leaving the backlog undischargeable in practice. Against, recorded so the call

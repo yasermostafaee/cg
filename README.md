@@ -173,10 +173,18 @@ pnpm lint
 pnpm typecheck
 ```
 
-### Local gate (while CI minutes are exhausted)
+### CI is the authoritative gate; the local gate is pre-push feedback
 
-GitHub Actions minutes are currently exhausted (billing quota; resets ~2026-08-01),
-so CI **cannot run**. Until it's back, the merge gate is enforced **locally**:
+**GitHub Actions is running again**, and `.github/workflows/pr.yml` triggers on every
+push to `dev` (and to `main`) as well as on pull requests. CI is therefore the
+**authoritative** gate: it runs lint / typecheck / test / build **and the full Playwright
+suite on `ubuntu-latest`**, which is the only signal that settles pixel and layout
+geometry. A Linux `gate:e2e` debt is discharged only by a COMPLETED, GREEN `e2e` job for
+the commit carrying the change, cited by its run URL — a run cancelled by a newer push is
+not a result (`cancel-in-progress: true`). See CLAUDE.md, "E2E coverage".
+
+The local gate has NOT gone away, but its job is narrower: **fast feedback before you
+push**, so obvious breakage never reaches CI. It is not the landing gate.
 
 ```bash
 pnpm gate       # FAST full gate: typecheck + lint + test + build (uncached) + format:check + openspec validate
@@ -188,11 +196,11 @@ pnpm gate:e2e   # SLOW: the Playwright E2E suite (~6 min) — run manually, see 
   Emergency bypass: `git push --no-verify` (or `HUSKY=0 git push`). Use it only when
   you know why.
 - **E2E is NOT in the pre-push hook** (too slow at ~6 min) and is **not** run by
-  `pnpm gate`. You MUST run `pnpm gate:e2e` yourself for **any UI / layout / rendering
-  change** — that's the "passes locally by 19px of luck, red on CI" class of bug the
-  E2E suite exists to catch. Ideally run it in a **Linux-like environment (WSL/Docker)**:
-  CI runs on Linux and local (Windows) font/geometry differs, so a Windows-only E2E pass
-  is not authoritative.
+  `pnpm gate`. Running `pnpm gate:e2e` locally for a **UI / layout / rendering** change is
+  still useful early warning for the "passes locally by 19px of luck, red on CI" class of
+  bug — but a Windows pass is **not authoritative** and never discharges the Linux debt.
+  The Linux run now comes from CI on every `dev` push; you no longer need WSL/Docker to
+  obtain one.
 - `--force` is deliberate: it defeats a stale turbo cache (which has produced a false
   green before), so the gate genuinely re-runs every task rather than replaying a
   cached log.

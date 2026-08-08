@@ -267,11 +267,15 @@ count does not reset on its own.
 - **Every task ends with a commit and a push to `dev`.** No branch, no PR, no merge.
   Verify the push landed (see "Verify before claiming") — never report it otherwise.
 - **CC NEVER merges into `main`, and never asks to.** The owner performs that merge by
-  hand when the day's work is final. While GitHub Actions billing is out (~Aug) the local
-  gate is the ONLY landing gate, and it has known gaps: the B-098 load-flake class, a
-  Windows `gate:e2e` that is non-authoritative for pixel/a11y geometry, and reliance on
-  owner-eyes for judgment. One local-gate pass is therefore not an INDEPENDENT check — the
-  owner's read at merge time is the only independent gate there is.
+  hand when the day's work is final.
+- **The independent check is CI on `dev`, and it exists again.** GitHub Actions billing is
+  restored and `pr.yml` now runs on every push to `dev`, so the flow is: CC pushes to
+  `dev` → CI runs the authoritative Linux gate (`ci` + the full Playwright `e2e` job) →
+  the owner merges `dev` into `main`. The local `pnpm gate` is FAST PRE-PUSH FEEDBACK, not
+  the landing gate: it is the same host that gives a non-authoritative Windows `gate:e2e`
+  and carries the B-098 load-flake class, so a green local gate is a reason to push, never
+  a claim that the change is verified. CI is what verifies it; the owner's read at merge
+  is the judgment layer on top.
 - **CC PAUSES AND FLAGS — out loud, in its final report — when a commit falls in one of
   these three classes.** They are about RISK, not about PRs, so retiring the PR model does
   not retire them. CC still commits and pushes; what it must not do is let one of these
@@ -281,7 +285,8 @@ count does not reset on its own.
      debt is undischarged and must be named as still owed.
   3. **Shared config the next session must pick up** (root `package.json`, `turbo.json`,
      `pnpm-lock.yaml`, `CLAUDE.md`, the gate-hook) — say so, so the pull is not a surprise.
-- **After remote CI returns (~Aug), this is revisited** — an independent check will exist.
+- **Do not read a pushed commit as verified until its run COMPLETES green** — see the
+  discharge rule under "E2E coverage". A run cancelled by the next push is not a result.
 
 ## Verify before claiming
 
@@ -312,6 +317,23 @@ origin dev` matches local — and only claim CI green after seeing the check's
 - **A Linux `gate:e2e` is owed whenever a change alters UI, layout, or rendering — not
   only when an E2E spec is edited. A green Windows `gate:e2e` is a useful signal but
   never discharges the debt.**
+- **How that debt is DISCHARGED — one way only.** A Linux `gate:e2e` debt is discharged
+  ONLY by a **COMPLETED, GREEN `e2e` job on GitHub Actions for the specific commit that
+  carries the change**, cited by its **run URL**. Nothing else counts:
+  - a **CANCELLED** run does NOT discharge it. `.github/workflows/pr.yml` sets
+    `cancel-in-progress: true`, so a newer push to `dev` kills the run behind it; a
+    cancelled run is neither a pass nor a fail and proves nothing about either commit.
+    Check the run's `conclusion` reads `success`, never merely that a run exists.
+  - a green **Windows** run does NOT discharge it — that is the same rule as the bullet
+    above, restated here because this is where someone will look for the exception.
+  - a green run on a DIFFERENT commit does not discharge it unless that commit actually
+    carries the change (a later `dev` HEAD that contains the change is fine; an earlier
+    one is not).
+  - **Write the run URL into the change's `tasks.md`, beside the ticked item**, so the
+    evidence outlives the session that produced it. A ticked box with no URL is not a
+    discharge — it is a claim, and the next reader cannot check it.
+    CI runs the full Playwright suite on `ubuntu-latest` on every push to `dev`, so this is
+    now ordinary practice rather than something to arrange.
 
 ## Engine doc-sync
 
