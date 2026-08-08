@@ -96,8 +96,17 @@
 
 ## 8. Debt owed (NOT discharged by this change)
 
-- [ ] 8.1 **A Linux `gate:e2e` is OWED** — this change alters UI and rendering, and a green Windows
+- [x] 8.1 **A Linux `gate:e2e` is OWED** — this change alters UI and rendering, and a green Windows
       `gate:e2e` is a signal, never the discharge. Must run before archive.
+      **DISCHARGED 2026-08-08** by a COMPLETED, GREEN `e2e` job on GitHub Actions
+      (`ubuntu-latest`), commit `a344cd2`, which carries this change:
+      <https://github.com/yasermostafaee/cg/actions/runs/31252541925>
+      Run conclusion `success`; both Playwright suites ran for real (runtime **62 passed
+      (2.1m)**, designer **237 passed (7.7m)**, 0 failed, 0 flaky) — `test:e2e` is
+      `"cache": false` in `turbo.json`, so it cannot be a cache replay. This change's own
+      specs passed on Linux: `apps/runtime/tests/e2e/splash.spec.ts` all 6 (the 8s cold-start
+      hold, the phase-label handoff, the refused-bridge dismissal, the build stamp, and both
+      reduced-motion specs), plus the designer's 6 splash specs.
 - [ ] 8.2 The APASAI mark and brand colours are PLACEHOLDERS. The swap point is the single BRAND
       SLOT `<svg>` in `index.html`; replacing it is a later task once the real mark exists.
 - [ ] 8.3 No in-application about/version surface is built here. When one lands it reads

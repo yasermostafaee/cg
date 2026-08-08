@@ -74,9 +74,18 @@
 - [x] 7.1 `pnpm openspec validate runtime-field-from-file --strict`.
 - [x] 7.2 `pnpm gate` green (uncached, via the P-013 host gate lock) — direct run + again
       in the pre-push hook.
-- [ ] 7.3 ONE Linux `pnpm gate:e2e` (FULL suite), owed because this change alters UI
+- [x] 7.3 ONE Linux `pnpm gate:e2e` (FULL suite), owed because this change alters UI
       (FromFileControl mounts inside the Inspector and changes its content height; nine
       existing specs interact with the Inspector, `panel-scroll.spec.ts` is content-height
       sensitive) — a Linux run is owed for ANY UI/layout/rendering change, not only spec
-      edits. Run once WSL lands, alongside the #369/#370 Linux-gate debt. The Windows
-      `gate:e2e` 22/22 (0 cached) pass is non-authoritative evidence, NOT discharge.
+      edits. The Windows `gate:e2e` 22/22 (0 cached) pass is non-authoritative evidence,
+      NOT discharge.
+      **DISCHARGED 2026-08-08** by a COMPLETED, GREEN `e2e` job on GitHub Actions
+      (`ubuntu-latest`), commit `a344cd2`, which carries this change:
+      <https://github.com/yasermostafaee/cg/actions/runs/31252541925>
+      Run conclusion `success`; the `E2E (Playwright)` job ran BOTH suites for real —
+      runtime **62 passed (2.1m)**, designer **237 passed (7.7m)**, 0 failed, 0 flaky.
+      Not a cache replay: `test:e2e` is `"cache": false` in `turbo.json`, so it always
+      executes (turbo reported `20 cached, 22 total` — the 20 are the build graph). The
+      named risk was checked directly: `panel-scroll.spec.ts` (all 3 specs) and
+      `inspector-open-close.spec.ts` (all 6) passed on Linux.
