@@ -41,13 +41,12 @@ test-results/
 .claude/*
 !.claude/settings.json
 !.claude/hooks/
-# The `/ship` slash command is SHARED tooling, so it is tracked. Same re-inclusion
-# problem as above, one level deeper: re-include the `commands/` DIRECTORY, then
-# re-exclude its contents, then except the single file. This keeps the GENERATED
-# OpenSpec slash commands ignored — only `ship.md` is tracked.
-!.claude/commands/
-.claude/commands/*
-!.claude/commands/ship.md
+# No slash command is tracked any more: `/ship` automated the retired per-change
+# branch + PR ship sequence and was deleted with that model (see `P-026`). The
+# GENERATED OpenSpec slash commands stay ignored, so `.claude/commands/` needs no
+# re-inclusion at all. If a SHARED command is ever added back, restore the
+# three-line dance: re-include the directory, re-exclude its contents, then
+# except the single tracked file.
 .gate-logs/
 .DS_Store
 Thumbs.db
