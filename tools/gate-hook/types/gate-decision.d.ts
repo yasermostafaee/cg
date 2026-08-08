@@ -11,6 +11,16 @@ declare module '*gate-decision.mjs' {
   export function isDocsPath(path: string): boolean;
   export function isUiRenderPath(path: string): boolean;
   export const UI_RENDER_PATTERNS: readonly RegExp[];
+  export const DIFF_BASE_REFS: readonly string[];
+  export function pickDiffBaseRef(
+    resolves: (ref: string) => boolean,
+    refs?: readonly string[],
+  ): string | null;
+  export interface GitResult {
+    status: number | null;
+    stdout?: string;
+  }
+  export function collectChangedPaths(git: (args: readonly string[]) => GitResult): string[] | null;
   export interface Classification {
     kind: 'empty' | 'docs-only' | 'code';
     needsE2e: boolean;

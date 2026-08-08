@@ -202,8 +202,9 @@ pnpm gate:e2e   # SLOW: the Playwright E2E suite (~6 min) — run manually, see 
 A committed **Stop hook** (`.claude/settings.json` → `.claude/hooks/gate-stop.mjs`)
 runs when a Claude Code turn ends and refuses to let it end red:
 
-- it classifies the turn's changed files (working tree ∪ branch commits vs the
-  `origin/main` merge-base): **docs-only** → openspec validate strict + format:check
+- it classifies the turn's changed files (working tree ∪ the turn's commits vs the
+  `origin/dev` merge-base — `origin/main`, then the working tree alone, are the
+  fallbacks): **docs-only** → openspec validate strict + format:check
   (the CLAUDE.md carve-out); **any code** → `pnpm gate`; **UI/render paths**
   (renderer sources, template-runtime, lottie-bridge, ui, single-file-export,
   `*.css.ts`, the E2E suites/configs) → `pnpm gate:e2e` too;

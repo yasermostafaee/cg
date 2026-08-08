@@ -10,16 +10,27 @@ TBD - created by archiving change platform-gate-stop-hook. Update Purpose after 
 
 A committed Stop hook SHALL run when a Claude Code turn ends and SHALL verify the local
 merge gate that matches the turn's changed set — the union of the working tree and the
-branch's commits since the `origin/main` merge-base. The hook SHALL exit without running
-anything when the stop is a hook-driven continuation (`stop_hook_active`), when the
-session is in plan mode, or when the changed set is empty, so read-only turns cost
-nothing.
+commits `HEAD` carries since the merge-base with the DIFF BASE REF. The diff base SHALL be
+the first of `origin/dev`, then `origin/main`, that resolves in the repository; when
+neither resolves the changed set SHALL be the working tree alone. The hook SHALL exit
+without running anything when the stop is a hook-driven continuation
+(`stop_hook_active`), when the session is in plan mode, or when the changed set is empty,
+so read-only turns cost nothing.
 
 #### Scenario: A read-only turn is free
 
-- **WHEN** a turn ends with no working-tree changes and no branch commits beyond the
-  `origin/main` merge-base
+- **WHEN** a turn ends with no working-tree changes and no commits beyond the diff-base
+  merge-base
 - **THEN** the hook exits 0 without running any gate command
+
+#### Scenario: The diff base follows the branch work actually lands on
+
+- **WHEN** the hook computes the turn's changed set and `origin/dev` resolves
+- **THEN** it measures against the `origin/dev` merge-base, so a docs-only turn on a `dev`
+  that is many commits ahead of `main` still classifies as docs-only and takes the
+  carve-out
+- **AND WHEN** `origin/dev` does not resolve **THEN** it falls back to `origin/main`, and
+  when neither resolves it uses the working tree alone
 
 #### Scenario: A hook-driven continuation is not re-blocked
 

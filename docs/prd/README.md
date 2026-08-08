@@ -93,16 +93,19 @@ for each chosen item:
 - Respect the constraints in `CLAUDE.md` (no backend, browser-only, RTL, strict TS).
 - Never delete or renumber existing IDs; mark obsolete items `[!]` with a reason.
 
-## Parallel sessions
+## One session at a time
 
-The backlog is split by app so a **Designer** session and a **Runtime** session can run
-at the same time without merge conflicts:
+**Run ONE Claude Code session on this repo at a time.** There is one folder and one
+branch (`dev`), so a Designer session and a Runtime session can no longer run in
+parallel — two sessions would be editing the same checkout and the same branch.
 
-- **Designer session** edits `designer.md` + `bugs-designer.md`.
-- **Runtime session** edits `runtime.md` + `caspar.md` + `bugs-runtime.md`.
-- Both may touch shared files — `ROADMAP.md`, `bugs.md` (cross-cutting), and the living
-  specs under `openspec/`. Keep edits there **append-only** where possible, and **rebase
-  on `main`** before merging so the shared files reconcile cleanly.
+The per-app file split stays, but the reason has changed: it keeps the backlog
+**readable**, not parallel.
+
+- `designer.md` + `bugs-designer.md` — Designer.
+- `runtime.md` + `caspar.md` + `bugs-runtime.md` — Runtime.
+- `ROADMAP.md`, `bugs.md` (cross-cutting), `platform.md` and the living specs under
+  `openspec/` are shared by both.
 
 `B-` numbers are global across the three bug files (see the ID rule) — never reuse one.
 

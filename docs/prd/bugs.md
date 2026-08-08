@@ -691,7 +691,7 @@ the host slot) — hence the flip to `[x]`.
 **Note:** this is a REPO fragility, independent of what triggers it. "Don't background the push"
 is a mitigation (now recorded in `CLAUDE.md`), not the fix.
 
-**Regression test:** run two `pnpm gate` invocations concurrently in one worktree and assert both
+**Regression test:** run two `pnpm gate` invocations concurrently in one checkout and assert both
 terminate on their own merits — neither dies on a missing coverage temp file.
 
 ## [x] B-095 — `pnpm gate:e2e` starves itself: both Playwright suites run concurrently and flake specs that pass alone ⟨priority: medium⟩ — merged (#360, `5cb16c7`) (files + fixes in one PR)

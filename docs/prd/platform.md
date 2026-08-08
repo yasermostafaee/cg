@@ -393,6 +393,15 @@ path matches `UI_RENDER_PATTERNS`.
 
 ## [x] P-014 — PR/merge policy: CC opens, owner merges ⟨priority: medium⟩
 
+**PARTLY SUPERSEDED 2026-08-08 — the PR half is gone, the RISK half is not.** The per-change
+branch + PR model was retired ([[P-026]]): CC now commits and pushes to `dev`, and the owner
+merges `dev` → `main` by hand, so "CC opens a PR and stops" no longer describes anything. What
+SURVIVES verbatim, and is still carried in CLAUDE.md under this item's number, is the reason the
+policy existed and its three pause-and-flag classes — on-air/export/product source, an owed
+hardware or Linux `gate:e2e` run, and shared config the next session must pick up. Those are
+about RISK, not about PRs; CC still names them out loud when a commit falls in one. Read the
+body below as the record of the PR-era wording.
+
 **What:** A CLAUDE.md rule (under Branching → "PR & merge policy") codifying that every task
 ends with `gh pr create`, that CC does NOT merge by default (opens the PR and stops), that
 CC merges ONLY on explicit owner authorization for that task via [[P-011]]'s ship sequence
@@ -500,7 +509,14 @@ translation. Scope is the lock-path derivation in `gate-lock-cli.mjs` / `gate-lo
 [[B-098]] `bounded-turbo-cli` inner cap is untouched — this is the OUTER host-serialization
 layer, one level up.
 
-## [ ] P-017 — merged remote branches survive the ship sequence, and nothing detects the leak ⟨priority: high⟩
+## [!] P-017 — merged remote branches survive the ship sequence, and nothing detects the leak ⟨priority: high⟩ — obsolete: the per-change branch + PR model was retired 2026-08-08; there are no per-change remote branches left to leak
+
+**OBSOLETE 2026-08-08 — the model this item audited no longer exists.** All work now lands on `dev`
+in one folder; there are no per-change feature branches, no PRs, and no [[P-011]] ship sequence, so
+there is nothing left to leak and nothing for the audit to intersect. `main` moves only on the
+owner's hand-merge of `dev`. Everything below is kept as the RECORD of why the audit was wanted —
+it is evidence, not a live backlog. If a per-branch model ever returns, re-open rather than re-file.
+See [[P-026]] for the change that retired it.
 
 **What:** [[P-011]]'s four-step ship sequence ends with `git push origin --delete <branch>` then
 `git branch -D <branch>`, but NOTHING verifies either ran. A merged branch that survives on
@@ -749,7 +765,14 @@ force all worktrees to re-clone or hard-reset, and that price is not worth 26 MB
 RECORDED outcome, not a deferral — the third Acceptance bullet ticks on it and the item closes,
 once the owner ratifies it.
 
-## [ ] P-019 — CLAUDE.md's worktree model is missing two facts, each of which has already caused a wrong action ⟨priority: medium⟩
+## [!] P-019 — CLAUDE.md's worktree model is missing two facts, each of which has already caused a wrong action ⟨priority: medium⟩ — obsolete: the worktree model itself was retired 2026-08-08
+
+**OBSOLETE 2026-08-08 — the model these two facts were missing FROM has been retired.** There is one
+repo folder on `dev`; the `cg` / `cg-designer` / `cg-runtime` scheme is gone, and CLAUDE.md now states
+the new model instead. One half survives and was CARRIED FORWARD rather than dropped: tooling still
+creates worktrees under `.claude/worktrees/*`, so CLAUDE.md keeps the rule that worktrees are
+ENUMERATED via `git worktree list --porcelain`, never counted or assumed. The shared-stash half lapses
+with the two-track split that made it dangerous. Kept as the record. See [[P-026]].
 
 **What:** two verified facts about this multi-worktree layout that CLAUDE.md does not state.
 
@@ -1045,3 +1068,45 @@ diffs. This item applies to commands the OWNER runs by hand; CLAUDE.md already c
 shell-compatibility rule for that audience, and this is the content-corruption half of it, which
 that rule does not currently cover. Source: measured across the `DEBT.md` sweep sessions
 (2026-08-01 … 2026-08-03).
+
+## [x] P-026 — the Stop hook measured every turn against `origin/main`, so a dev-only model killed the docs-only carve-out ⟨priority: medium⟩ — done: no change dir; filed and fixed in one commit under CLAUDE.md's Spec discipline path, with the living spec `openspec/specs/platform-local-gate/spec.md` updated in the same change
+
+**What:** the [[P-009]] Stop hook computed the turn's changed set as the working tree UNION
+`git merge-base HEAD origin/main`..`HEAD`. That was correct while every task lived on its own
+short branch off `main`. It stopped being correct on 2026-08-08, when the repo moved to ONE folder
+with all work on `dev` and `main` advanced only by the owner's hand-merge at the end of a day.
+
+**Symptom:** `origin/main` became a high-water mark of finished DAYS, not of the turn. The
+merge-base therefore spanned every commit since the last hand-merge, and the turn's "changed set"
+became the entire unmerged backlog. A one-line PRD edit on a `dev` twenty commits ahead classified
+as `code` instead of `docs-only`, so the docs-only carve-out effectively DIED: every turn paid a
+full `pnpm gate` — and, as soon as any unmerged commit had touched a renderer path or a `*.css.ts`,
+`pnpm gate:e2e` as well — over files the turn never touched. Nothing failed and nothing warned; the
+gate simply ran long, on the wrong evidence, forever. The failure direction is over-gating, which is
+why it could have survived indefinitely unnoticed.
+
+**Fix:** the diff base is now the first ref that RESOLVES among `origin/dev`, then `origin/main`,
+and when neither resolves the changed set is the working tree alone (a fresh clone with no remote is
+a real state and must never throw). The ref order and the whole changed-set assembly moved OUT of
+the hook and into `tools/gate-hook/src/gate-decision.mjs` — `DIFF_BASE_REFS`, `pickDiffBaseRef()`
+and `collectChangedPaths(git)` — so the unit tests reach the SAME implementation the hook executes
+rather than a re-derivation of it ([[P-023]]). The hook now supplies only the git runner. Both
+`.claude/hooks/gate-stop.mjs` and the living spec `openspec/specs/platform-local-gate/spec.md` were
+updated in the same change, as was the README's description of the hook.
+
+**Test:** `tools/gate-hook/tests/gate-decision.test.ts` — "THE REGRESSION: a docs-only turn on a dev
+far ahead of main stays docs-only" drives `collectChangedPaths` with a fake `spawnSync`-shaped git
+and asserts (a) the set is the single docs path, (b) it classifies `docs-only` and yields exactly
+the carve-out commands, and (c) `merge-base` was invoked against `origin/dev` and NEVER against
+`origin/main`. Its twin, "the SAME turn measured against origin/main would have been a full code
+gate", pins the bug itself so nobody reinstates the old base. Alongside them: base-ref priority,
+the `origin/main` fallback, the no-ref case, a THROWING probe (a ref probe must never be able to
+fail a turn), probe ordering, and fail-soft degradation when `merge-base` or `diff` fails.
+
+**Why this is filed rather than left in the commit message:** the reason the base is `origin/dev`
+is a property of the WORKING MODEL, not of the code. A later session that finds `origin/dev` odd —
+or that restores per-change branches — needs to find the symptom and the test in one place, or it
+will "fix" the base back to `origin/main` and silently reinstate a gate that proves the wrong thing.
+Cross-refs [[P-009]] (the hook), [[P-012]] (the pre-push half, still open — `tools/gate-hook/src/pre-push-decision.mjs`
+is branch-agnostic by construction and needed NO change here), [[P-017]] and [[P-019]] (both marked
+obsolete by the same model change).

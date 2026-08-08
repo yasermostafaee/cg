@@ -379,91 +379,49 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Next — agreed order
 
-The save + import-polish, button-restyle, per-composition export + chrome,
-stop-clears, preview-blank, pasteboard, icon-pack, timeline/layers, and the
-guide-readout / arrow-nudge / split-exit / explicit-field-Update work
-([D-072](./prd/designer.md) / [D-073](./prd/designer.md) / [D-105](./prd/designer.md) /
-[D-106](./prd/designer.md)) is archived — see Done (recent). The agreed upcoming order
-(one line each; **full PRD entries authored per-item when started** — most of these IDs
-are not yet filed):
+The agreed sequence, top to bottom. It is ONE list: the Designer/Runtime split that used
+to head this section is gone with the two-worktree model — there is one session on one
+branch, so work is sequenced, not parallelised.
 
-1. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
-   Phase B; confirm scope vs. what D-086 delivered when filing). NOTE: neither ID is
-   filed in `docs/prd/designer.md` yet — author the PRD entries (or fold into D-086's
-   follow-ups) before starting.
+1. **Repo model + gate base** — retire the worktree / feature-branch / PR model in
+   `CLAUDE.md` and the docs, and repoint the Stop hook's diff base from `origin/main` to
+   `origin/dev` ([P-026](./prd/platform.md)). _(This entry; done when it lands.)_
+2. **`live-source-multibox` — [D-137](./prd/designer.md) + [C-015](./prd/caspar.md)**, the
+   owner's chosen next feature. Phases 1–6, with the audio cluster
+   ([R-029](./prd/runtime.md), [R-042](./prd/runtime.md),
+   [B-121](./prd/bugs-runtime.md)) folded in as **phase 6.5**. Change dir:
+   `openspec/changes/live-source-multibox/`.
+3. **The on-air honesty bug cluster** — [B-109](./prd/bugs-runtime.md),
+   [B-107](./prd/bugs-runtime.md), [B-126](./prd/bugs-runtime.md),
+   [B-122](./prd/bugs-runtime.md), [B-125](./prd/bugs-runtime.md),
+   [B-115](./prd/bugs-runtime.md), [B-120](./prd/bugs-runtime.md),
+   [R-017](./prd/runtime.md). All one theme: what the operator sees must be what is
+   actually on air.
+4. **The Designer output-parity bugs** — [B-129](./prd/bugs-designer.md),
+   [B-104](./prd/bugs-designer.md), [B-102](./prd/bugs-designer.md): preview and `.vcg`
+   output must agree with what CasparCG actually renders.
+5. **Close the near-complete changes, whenever convenient.** Each is a task or two from
+   done; none blocks anything above it (the exact remaining tasks are in each change's
+   `tasks.md`):
+   - `runtime-persian-digit-input` — 11/11, every task checked
+   - `runtime-field-from-file` — 20/21 (owes one Linux `gate:e2e`)
+   - `runtime-from-file-persistence` — 19/21 (owes an E2E + an owner check)
+   - `platform-gate-test-bound` — 17/18 (owes an owner confirmation over real runs)
+   - `runtime-splash-screen` — 21/25 (owes a Linux `gate:e2e` + three recorded follow-ups)
+6. **`runtime-unified-layer-rows` / [R-028](./prd/runtime.md) part B**, then
+   [R-031](./prd/runtime.md) / [R-032](./prd/runtime.md) / [R-033](./prd/runtime.md) —
+   the operator surface.
+7. **`add-azan-countdown` — [D-141](./prd/designer.md)**, currently 42/63.
+8. **[C-020](./prd/caspar.md) → [C-018](./prd/caspar.md) (CasparCG 2.5.0)** — owner +
+   hardware, not code. C-020 (2.5.0 removed the iVGA consumer, which is this plant's whole
+   air path) gates C-018.
 
-> **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
-> exists, so new control-bearing items reuse it.
-
-Previously-listed designer items not in this order — D-061, D-064,
-D-065 (sequence AFTER D-066), D-066, and [D-096](./prd/designer.md) (perf — animate position via CSS
-transform; belongs to the hardening wave) — remain **queued** in the PRD but are deprioritized below
-the above. (D-097–D-101 shipped in Group A — see Done. **D-102 is NOT queued** — Phase 2 shipped and
-archived 2026-07-14 (#320), so BOTH phases are done; see Done. **D-060 and D-046 are NOT queued** —
-both shipped and archived 2026-06-29; this line used to list D-060 as queued and D-046 as parked,
-corrected by the 2026-07-13 `[~]` audit. **D-059 is NOT queued** — shipped 2026-07-14 (#308) and
-archived 2026-07-18; this line used to list it as queued, corrected when D-059 was closed out.)
-
-### Designer — remaining, in order
-
-The concrete near-term Designer sequence (survives across sessions; the Runtime
-track is independent — see "Runtime — next" below).
-
-**Nothing is sequenced right now:** D-119 (rebuild starter templates) was the last
-item in the sequence and is done — merged #290, archived 2026-07-13 (see Done). The
-next Designer item is an owner call from the queued list below.
-
-The queued / deprioritized items already in `designer.md`:
-[D-061](./prd/designer.md), [D-064](./prd/designer.md),
-[D-096](./prd/designer.md), and [D-126](./prd/designer.md) (shared FONT library — device-level fonts
-in every project's font picker; builds on D-040 + D-121).
-([D-121](./prd/designer.md), bundle fonts in `.vcg` export, is done — merged #298, archived
-2026-07-13; see Done. [D-102](./prd/designer.md) **Phase 2** is done — merged #320, archived
-2026-07-14; see Done. [D-059](./prd/designer.md), friendly validation presets, is done — merged #308,
-archived 2026-07-18; see Done. [D-063](./prd/designer.md) is **DROPPED** — see the
-shared-image-library epic under Done.)
-
-### Runtime — next
-
-The independent Runtime-track sequence (worked from the `cg-runtime` worktree).
-
-**The whole previously-sequenced list is CLEARED (2026-07-13).** The hardware smoke
-pass on real **CasparCG 2.3.2 (build `4de6d18f`** — the build ADR-0006 was validated
-against**)** closed every item that was held on a live gate:
-
-- **[B-041](./prd/bugs-runtime.md)** — the escape-matrix sweep PASSED on 2.3.2:
-  backslash / quote / newline survive `CG ADD` + `CG UPDATE` byte-exact, no parse
-  break, Persian intact. The winner is unchanged from the 2.5.0 sweep, so no code
-  change followed. `fix-amcp-escaping-v2` archived (FIRST, per the held-pair
-  ordering pin); B-041 → `[x]`. Take 1 (#245) remains archived as superseded history
-  — the quotes-only rule was disproven on hardware (#246).
-- **[B-040](./prd/bugs-runtime.md)** — DONE, not pending: the structured list-field
-  editor (#243) was operator-validated on air (CasparCG 2.5.0 `69e8ad5`, 2026-07-07),
-  `fix-runtime-list-field-editor` is archived and B-040 is `[x]`. (This line
-  previously still asked for that validation — stale, now corrected.)
-- **B-038 follow-up** (browser-side retention + re-delivery of template HTML on
-  bridge reconnect) and the **[B-070](./prd/bugs-runtime.md)** half folded into it
-  — `reconnect-reconciliation` archived (SECOND, after B-041, so its superset delta
-  on "Template resolution is validated" folds on top of B-041's clauses rather than
-  being clobbered by them). B-070 → `[x]`: the ADR-0006 open question is ANSWERED on
-  hardware — `CG UPDATE` **does** land on a play-on-load=off producer, so
-  producer-existence means LOADED, not "loaded AND playing"; the shipped `#loaded`
-  branch is correct as written.
-- **[B-072](./prd/bugs-runtime.md)** — R-011 position-override read-back
-  (`position-override-readback`), live-confirmed: the picker now shows the applied
-  override on reselect, and a re-Apply no longer reverts a good on-air position.
-- Also live-confirmed on the same pass: **[B-066](./prd/bugs-runtime.md)** (no CEF
-  `replaceAll` boot abort; Persian renders), **[B-067](./prd/bugs-runtime.md)**
-  (nested-composition fields reach the operator form and edits reach air),
-  **[R-011](./prd/runtime.md)** (centered default + anchor/offset override),
-  **[B-064](./prd/bugs-runtime.md)** (`setConfig` serve-restart), and
-  **[B-054](./prd/bugs-runtime.md)** (CasparCG restart → the next take re-renders).
-
-**Nothing is sequenced right now** — the next Runtime item is an owner call. Still
-open and NOT covered by this pass: **[B-056](./prd/bugs-runtime.md)**'s live smoke
-(owned-slot occupancy under a downed primary — needs a mirror pair; not run),
-**[R-009](./prd/runtime.md)** (not run this session), and **[R-010](./prd/runtime.md)**
-(deferred — needs a second machine + JWT auth, tracked separately).
+**Still open, not sequenced above** — carried forward so they are not lost:
+[B-056](./prd/bugs-runtime.md)'s live smoke (owned-slot occupancy under a downed primary —
+needs a mirror pair), [R-009](./prd/runtime.md), and [R-010](./prd/runtime.md) (needs a
+second machine + JWT auth). Everything else previously listed here is either archived (see
+Done) or queued in the PRD without a slot in this order — the PRD files remain the backlog
+of record.
 
 ## Then — hardening wave (after features)
 

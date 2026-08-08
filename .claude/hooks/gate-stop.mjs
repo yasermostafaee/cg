@@ -10,8 +10,9 @@
  *      is itself the continuation of a previous block; the NEXT natural turn end
  *      re-verifies).
  *   2. plan mode → exit 0 (plans don't change files; don't tax them).
- *   3. changed set = working tree ∪ commits vs the `origin/main` merge-base;
- *      empty → exit 0 (read-only turns cost nothing).
+ *   3. changed set = working tree ∪ commits vs the `origin/dev` merge-base (falling back
+ *      to `origin/main`, then to the working tree alone); empty → exit 0 (read-only turns
+ *      cost nothing).
  *   4. docs-only → the CLAUDE.md carve-out (openspec validate strict + format:check);
  *      otherwise `pnpm gate`, plus `pnpm gate:e2e` when UI/render paths changed.
  *   5. green → exit 0 (with a NON-AUTHORITATIVE note when gate:e2e ran on win32).
@@ -37,10 +38,9 @@ import { fileURLToPath } from 'node:url';
 
 import {
   classifyChangedSet,
+  collectChangedPaths,
   commandsFor,
   nextAttempt,
-  parseNameOnly,
-  parsePorcelain,
 } from '../../tools/gate-hook/src/gate-decision.mjs';
 
 const REPAIR_RULES = `REPAIR RULES (non-negotiable):
@@ -78,19 +78,13 @@ function main() {
   const git = (args) =>
     spawnSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
 
-  // 3. Changed set = working tree ∪ branch commits vs the origin/main merge-base.
-  // -uall: porcelain COLLAPSES untracked directories to 'dir/' by default, which
-  // would hide a new renderer file inside a new folder from the UI/render match
-  // (found by the proof harness: '?? apps/' matched nothing). List every file.
-  const status = git(['status', '--porcelain', '-uall']);
-  if (status.status !== 0) return 0; // not a repo / git broken — not ours to block on
-  const paths = parsePorcelain(status.stdout);
-  const mergeBase = git(['merge-base', 'HEAD', 'origin/main']);
-  if (mergeBase.status === 0) {
-    const base = mergeBase.stdout.trim();
-    const diff = git(['diff', '--name-only', `${base}..HEAD`]);
-    if (diff.status === 0) paths.push(...parseNameOnly(diff.stdout));
-  }
+  // 3. Changed set = working tree ∪ this turn's commits vs the diff base. The base is
+  // `origin/dev` (P-026): all work lands on `dev` and the owner merges `dev` → `main` by
+  // hand at the end of a day, so `origin/main` measures the unmerged BACKLOG, not this
+  // turn. Both the ref order and the assembly live in `gate-decision.mjs`, where the
+  // unit tests reach the same code this runs; the hook supplies only the git runner.
+  const paths = collectChangedPaths(git);
+  if (paths === null) return 0; // not a repo / git broken — not ours to block on
 
   const classification = classifyChangedSet(paths);
   const commands = commandsFor(classification);

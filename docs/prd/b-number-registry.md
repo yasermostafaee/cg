@@ -642,10 +642,12 @@ is not claiming it, and a sibling session may claim a RANGE, not just the next n
 
 So "verified free before use" must mean, immediately BEFORE you commit (not when you start):
 
-1. `git fetch origin` and re-run the duplicate audit against **current `main`**, not the `main` you
-   branched from — a number can be claimed and merged while your branch is open;
-2. check sibling worktrees/branches (`git worktree list`, `git branch -a`) for uncommitted or
-   unmerged claims — those are invisible to a `main`-only audit;
+1. `git fetch origin` and re-run the duplicate audit against **current `dev`** — all work lands
+   there, so `dev`, not `main`, holds the newest claims (`main` only moves on the owner's
+   hand-merge, so a `main`-only audit is stale by a day);
+2. include the WORKING TREE — an uncommitted claim in this checkout is invisible to any
+   ref-based audit, and (per the entries below) so is a claim on any other ref that still
+   exists, so sweep `git for-each-ref` rather than one branch;
 3. never assume a claim is one number wide.
 
 Precedence when it happens anyway: **the committed claim wins** and the uncommitted one moves,

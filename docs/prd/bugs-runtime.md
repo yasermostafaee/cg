@@ -1260,8 +1260,8 @@ here; it is the house behavior this item extends to the Runtime.
 no Designer change beyond (optionally) re-pointing it at the lifted helper.
 
 **Notes:** Builds on **D-059** (which made `pattern` authorable). Filed as a BUG, not a feature: the
-fields already work, the correctness check is missing. Implementation happens in the `cg-runtime`
-worktree in its own chat — this entry is the filing only.
+fields already work, the correctness check is missing. This entry is the filing only —
+implementation is its own task, on `dev` like everything else.
 
 ## [x] B-079 — a FAILED take is outranked by stale OSC: the row badges ON AIR for a `CG PLAY` that never reached CasparCG ⟨priority: high⟩ — merged (#312, `fix/offline-mock-safety`) + archived: `openspec/changes/archive/2026-07-18-runtime-failed-take-truth/`
 

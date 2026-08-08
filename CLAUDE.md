@@ -72,7 +72,7 @@ pnpm openspec <cmd>                     # OpenSpec CLI (new change / validate / 
   `|| true` and `2>/dev/null` are NOT available in their shell and have been pasted and
   failed more than once.
 - Prefer git's own `--format` output over text-slicing
-  (`git for-each-ref --format="%(refname:short)|%(upstream:track)|%(worktreepath)"`), and
+  (`git for-each-ref --format="%(refname:short)|%(upstream:track)"`), and
   PowerShell cmdlets (`Where-Object`, `ForEach-Object`, `Select-String`) when slicing is
   unavoidable.
 - `<` is a RESERVED operator in PowerShell — never use it as a placeholder in a command handed
@@ -145,7 +145,7 @@ that reads exactly like a product regression (see `B-097` in `docs/prd/bugs.md`)
 and `pnpm gate:e2e` each acquire this host's exclusive gate slot (a host-wide advisory
 lock under `os.tmpdir()`, via `tools/gate-hook/src/gate-lock-cli.mjs` → `proper-lockfile`)
 before running, and hold it for the whole gate. A concurrent gate — the pre-push /
-Stop-hook double-fire above, or a gate in another worktree — WAITS for the slot
+Stop-hook double-fire above, or a gate in any other checkout on this host — WAITS for the slot
 (printing "waiting for host gate slot…") instead of racing it. The lock is a clean OUTER
 layer over B-098's `bounded-turbo-cli` (host serialization vs. intra-gate fan-out — keep
 both). It lives at the SINGLE `gate`/`gate:e2e` script chokepoint every entry point
@@ -225,221 +225,78 @@ behavior or a prior decision (outside the initial PRD flow above):
 5. When all tasks are checked **and** the gate is green, **remind me to
    archive**; do not archive automatically (workflow step 7).
 
-## Branching — one change per branch
+## Branching — everything lands on `dev`
 
-- Start every change/task on its OWN branch off **up-to-date** `main`
-  (`feat/…`, `fix/…`, `docs/…`, `chore/…`). One branch = one PR = one concern.
-- Don't stack unrelated work on an existing feature branch — it mixes concerns
-  and makes PRs hard to review/revert.
-- Never reuse a merged branch; after a merge, work continues from a fresh branch
-  off pulled `main`.
+- **All work happens on `dev`.** There are no per-change feature branches: a task
+  starts on `dev`, finishes on `dev`, and is pushed to `dev`.
+- **One logical change per COMMIT** (conventional commits). The unit that used to be a
+  branch is now a commit — don't roll unrelated concerns into one, or a revert takes
+  innocent work with it.
+- **Never commit to `main`.** `main` is written by exactly one thing: the owner's
+  hand-merge of `dev`, at the end of a day, when the work is final.
 
-### Worktrees — `cg` is READ-ONLY
+### Repo layout — one folder, one branch
 
-Three worktrees share one repo: `cg`, `cg-designer`, `cg-runtime`.
+ONE repo folder, checked out on `dev`. There are no `cg` / `cg-designer` / `cg-runtime`
+sibling worktrees and no per-track split: every branch there is lives in this folder, so
+"is this on `main`?" is answered right here.
 
-- **`cg` is READ-ONLY.** It stays on `main`, is never checked out to a branch, and
-  is never committed from. Its job is a clean current view of merged `main` — which
-  is exactly what the B-number audit and any "is this on main?" check need.
-- **Docs work happens in the OWNING TRACK's worktree**, on a docs-only branch —
-  Runtime docs in `cg-runtime`, Designer docs in `cg-designer`.
-- **A track worktree is NEVER on `main`; its resting state is DETACHED at merged
-  `main`.** git forbids one branch in two worktrees and `cg` holds `main`, so
-  `git checkout main` in a track worktree fails BY DESIGN. Finding `cg-runtime` or
-  `cg-designer` detached between tasks is CORRECT, not a fault to repair — the first
-  act of any task is to branch off up-to-date `main` anyway. Committing ON a detached
-  HEAD is what makes one dangerous; sitting on one is not.
-- **The cost, stated so nobody reverts this without knowing it:** a track cannot
-  hold a feature branch and a docs branch at once, so docs work waits for a commit
-  or a stash. That serialization is WITHIN one track with one driver — manageable.
-  The scheme it replaces put the serialization ACROSS two independent sessions,
-  which is not.
-- **Worktrees are ENUMERATED, never counted.** Tooling (Claude Code) creates
-  additional worktrees UNDER `cg/.claude/worktrees/*` holding `claude/*` branches —
-  nested inside the read-only worktree, so a scan of `cg`'s siblings misses them
-  entirely. Three appeared in a single day on 2026-07-26. Always resolve the current
-  set with `git worktree list --porcelain` before proposing any branch deletion.
-  `.claude/*` is gitignored, so these never dirty `cg`'s status.
-- **`refs/stash` is SHARED across all worktrees** (it lives in the common git dir),
-  so `git stash list` shows the same stack everywhere. A stash created on one track
-  is visible from the other and must NEVER be popped or applied from a worktree
-  other than its origin — the diff would land on the wrong checkout. Rescue an
-  unknown stash with `git tag <name> refs/stash`, which requires no checkout and no
-  clean tree.
+- **Uncommitted work is what a branch switch destroys silently.** This is the one lesson
+  worth carrying over from the retired worktree scheme, and it survives the change of
+  model intact: commit early and often rather than building one large uncommitted change.
+- **Worktrees are still ENUMERATED, never counted.** Tooling (Claude Code) can create its
+  own worktrees under `.claude/worktrees/*`; `.claude/*` is gitignored, so they never
+  dirty this folder's status and nothing announces them. Resolve the real set with
+  `git worktree list --porcelain` before proposing any branch deletion.
 
-Why the old scheme could not hold: routing all docs/archive/housekeeping into `cg`
-made it the ONE worktree two independent sessions were forced to share —
-`cg-designer` and `cg-runtime` are naturally exclusive (different code, they never
-meet). On 2026-07-19 a parallel session checked out its own branch in `cg` while an
-archive sweep sat uncommitted there, and the checkout silently destroyed four
-archives, two spec folds and every PRD flip. That is structural, not a discipline
-lapse: "one worktree, one session" does not prevent it, because the scheme itself
-manufactured the contention.
+### Is it on `main` yet? — ask the deliverable, not ancestry
 
-- **General form: uncommitted work is what a branch switch destroys silently.**
-  Commit early and often rather than building one large uncommitted change.
+`main` moves only when the owner merges `dev` into it by hand. Between merges `dev` reads
+"N commits ahead of `main`" — that is the normal resting state, not a backlog signal, and
+if the merge squashes, `dev`'s own commits never enter `main`'s history at all, so the
+count does not reset on its own.
 
-### Merge status: ask the PR, never ancestry
+- Judge whether something is on `main` by the DELIVERABLE's presence there — the archived
+  change dir, the PRD item flipped to `[x]`, the code itself — never by ancestry and never
+  by a commit count.
+- Never "correct" a `dev` that reads ahead of `main` by rebasing or resetting it. It is
+  supposed to read that way.
 
-This repo **squash-merges**, so a merged branch's own commits never enter `main`'s
-history.
+### Commit & merge policy — CC pushes `dev`, the owner merges (P-014)
 
-- `git log origin/main..<branch>` lists every one of them as unmerged, and the
-  branch reads "N commits behind / M ahead" forever. **Ancestry is NOT a merge
-  signal here.**
-- Judge merge status by the PR (`gh pr list --head <branch> --state all`) or by the
-  deliverable's presence on `main` (archived change dir, PRD item flipped, the code
-  itself) — never by ancestry.
-- **Ship in four explicit steps — never `gh pr merge --delete-branch` (see `P-011`).**
-  `gh pr merge <n> --admin --squash` (NO `--delete-branch`), then
-  `git push origin --delete <branch>`, then `git branch -D <branch>`, then
-  `git -C ../cg pull --ff-only`. The deletion push costs ~3 s, because an
-  all-deletions push skips the gate (`P-010`), and `-D` is required since a
-  squash-merged branch never reads as merged to `-d`. **If step 2 reports that the
-  remote ref does not exist, the deletion is SATISFIED, not failed** — the ref was
-  already removed by another path (GitHub's merge-page delete button, an earlier
-  manual delete). "Verify BOTH deletions" means both refs are ABSENT afterwards,
-  never that both delete commands printed success. Observed shipping PR #409 with
-  `delete_branch_on_merge` DISABLED, so this is not conditional on that setting
-  (`P-017`).
-- **The `--delete-branch` ban covers gh's INTERACTIVE prompt too, not just the flag.**
-  Given no flag, `gh pr merge` still asks "Delete the branch locally?" — always answer
-  **No**, or pass `--delete-branch=false` to suppress the prompt. Answering Yes fails
-  identically with `fatal: 'main' is already used by worktree at .../cg`, because gh
-  checks out the PR's base `main` before deleting and this layout can never allow that.
-  The local ref is deleted by hand at step 3, once the worktree has moved to its next
-  branch.
-- **The fourth step is what keeps `cg` honest.** Nothing else advances it, so `cg`
-  silently falls behind the `main` it is supposed to mirror — it was two commits
-  stale when the refs sweep found it — and a stale `cg` breaks its one job: being
-  the clean current view the B-number audit and every "is this on `main`?" check
-  read from. `--ff-only` is the point: in a squash-merge repo it refuses loudly
-  rather than manufacturing a merge commit, and a plain `pull` here has already
-  produced a spurious conflict once.
-- **`cg`'s freshness is VERIFIED after every merge, never assumed — and step 4 takes an
-  ABSOLUTE path.** Writing this down once already failed: the bullet above says `cg` "was two
-  commits stale", and on **2026-08-02 it was measured 30 commits behind `origin/main`**, reading
-  `B-106`/`R-026` where the truth was `B-114`/`R-035`. It then fell 2 behind again within the same
-  day. **A session that reads a stale `cg` states wrong numbers with full confidence** — that is
-  precisely the failure mode `cg` exists to prevent, arriving through `cg` itself. Two
-  consequences: (1) `git -C ../cg pull --ff-only` is correct only from a DIRECT SIBLING of `cg`
-  and resolves to nothing from a session worktree nested under `.claude/worktrees/`, so resolve
-  the `main` worktree from `git worktree list --porcelain` (as `/ship` already does) or use an
-  absolute path; (2) after any merge, **confirm** the fast-forward landed — read
-  `git -C <cg> rev-parse HEAD` against `origin/main` rather than trusting the command's exit code.
-- **Why `--delete-branch` cannot work in this layout:** gh deletes the LOCAL branch
-  first and aborts before the remote deletion if that step fails — and here it always
-  fails. On the branch, gh checks out the PR's base `main`, which `cg` holds
-  (`'main' is already used by worktree at .../cg`); detached, gh cannot resolve a
-  current branch and errors even earlier. Either way the merge LANDS and the PR
-  closes, so the remote branch survives with nothing announcing it — silent
-  accumulation (observed merging #382). `--repo` does skip gh's local half, but then
-  leaks the LOCAL branch instead: the exact hazard the next bullet exists to prevent.
-- **DELETE the local ref once its PR merges.** A stale merged branch is
-  indistinguishable from in-flight work. `fix/runtime-ux-batch-2` — merged as #317
-  on 2026-07-14 — still read "53 commits behind, 11 ahead" days later and cost a
-  full session's planning for a rebase of already-shipped code. Worse, its tip
-  commit is titled `revert(e2e): back out the B-078 budget bump` but touches only
-  `docs/prd/bugs.md`: the branch still carries the RAISED Playwright budgets
-  (`expect` 15s, test 60s, `webServer` 240s) that `main` has at 7s/30s/120s, so
-  rebasing it would have resurrected work B-078 records as "tried and reverted, do
-  not simply retry it".
-
-### PR & merge policy — CC opens, owner merges (P-014)
-
-- **Every task ends with a PR.** After the green gate + push, CC opens a PR with
-  `gh pr create` (title + a body summarizing what changed and the evidence). If `gh`
-  is unavailable, CC prints the manual compare URL and says the PR was not opened —
-  it never claims a PR it did not create (see "Verify before claiming").
-- **CC does NOT merge by default — it opens the PR and stops; the owner merges.**
-  While GitHub Actions billing is out (~Aug) the local gate is the ONLY landing gate,
-  and it has known gaps: the B-098 load-flake class, a Windows `gate:e2e` that is
-  non-authoritative for pixel/a11y geometry, and reliance on owner-eyes for judgment.
-  One local-gate pass is therefore not an INDEPENDENT check — a second human read at
-  merge is the only independent gate there is, so the owner performs it.
-- **CC merges ONLY when the owner authorizes it for that specific task**, and then via
-  P-011's ship sequence exactly — `gh pr merge <n> --admin --squash` (NO
-  `--delete-branch`; it always fails in this worktree layout and leaks a live remote
-  branch — the structural reason is in "Merge status" above), then
-  `git push origin --delete <branch>`, then `git branch -D <branch>`, then
-  `git -C ../cg pull --ff-only` — **verifying BOTH deletions** and the `cg` fast-forward.
-- **CC NEVER auto-merges — it pauses and flags even if told to merge — when the change:**
-  touches on-air / export / product source (a bad merge reaches broadcast output); owes a
-  hardware or a Linux `gate:e2e` run (Windows is non-authoritative); or is shared config
-  another worktree must rebase onto (root `package.json`, `turbo.json`, `pnpm-lock.yaml`,
-  CLAUDE.md, the gate-hook). The owner sequences shared-config merges so the other session
-  is told to pull.
-- **Docs-only PRs: auto-merge is NOT permitted either** (the owner may enable it later).
-- **After remote CI returns (~Aug), the auto-merge-eligible class widens** — an independent
-  check will exist, so this policy is revisited then.
-
-### `/ship <PR#>` — the four steps, automated
-
-`.claude/commands/ship.md` runs the P-011 sequence above end to end. It removes the
-manual toil; it does NOT change what may be merged.
-
-- **Typing `/ship <PR#>` IS the P-014 authorization for that specific PR** — the
-  "owner authorizes it for that task" condition above, expressed as the command
-  itself. It authorizes nothing else: not the next PR, not a re-run after a refusal.
-- **It hard-refuses the same three classes carved out above** — on-air/export/product
-  source, an owed hardware pass or Linux `gate:e2e`, and shared config another
-  worktree must rebase onto. These are ABSOLUTE: `/ship` refuses even though the
-  owner typed it, because the owner's authorization covers running the sequence, not
-  overriding a carve-out. The debt check **fails closed** — a debt reads as
-  discharged only when a checked `[x]` task states in words that it is not owed or
-  was discharged; anything ambiguous refuses. Those PRs still merge by hand.
-- **The debt class is skipped STRUCTURALLY when every changed path is under `docs/` or
-  `openspec/`, or is a root `*.md`.** A Linux `gate:e2e` is owed for a UI/layout/render
-  change and a hardware pass verifies on-air behaviour; a diff confined to those paths
-  can owe neither BY CONSTRUCTION — which is why a design-only change dir sails through
-  even though its `tasks.md` is full of unchecked future work. Derived from the file
-  list, so it cannot be lied about; deliberately NOT a checkbox saying "design-only, no
-  debt", which would extend the same trust-the-checkbox weakness the fail-closed rule
-  exists to contain. It is an ALLOWLIST because "outside `apps/`/`packages/`/`tools/`"
-  does NOT mean "cannot reach air" — a root `tsconfig.base.json` twenty workspaces
-  extend sits outside every workspace glob while deciding what they emit ([[B-066]]:
-  an `es2022` setting `SyntaxError`d on CEF 71).
-- **An ARCHIVE is never exempt, and is detected by its EFFECTS, not one path prefix** —
-  `openspec/changes/archive/` is merely where the CLI renames to, so a hand-rolled
-  archive has none of it. A fold into `openspec/specs/`, a delete of a change dir, or a
-  `docs/prd` item flipped to `[x]`/`DONE, archived` each re-arm the full check (D-125
-  and D-128 both held their archive until a hardware verdict landed; the `tasks.md`
-  items say "BEFORE ARCHIVE" in words). The exemption also never short-circuits the
-  fail-closed clauses — "change dir named but not found → REFUSE" still fires, or
-  deleting a dir would skip the check its deletion should trigger.
-- **It verifies after every step** (PR reads `MERGED`; both refs absent; `cg`'s HEAD
-  matches the merge commit) and stops at the first unverified step rather than
-  continuing. It knows the two benign signatures — `push --delete` reporting the
-  remote ref does not exist means already-deleted (satisfied), and `-d` reporting
-  "not fully merged" is why step 3 uses `-D`.
-- **Step 3 frees the branch before deleting it.** `git branch -D` fails while any
-  worktree holds the branch, which the session worktree that produced it almost always
-  does; `/ship` detaches that worktree at the merge commit first, and **stops instead if
-  it has uncommitted changes** — `checkout --detach` does not refuse on a dirty tree, it
-  carries the changes across silently. It never removes a worktree.
-- **Step 4 resolves the `main` worktree dynamically** by parsing
-  `git worktree list --porcelain` for `refs/heads/main`, and stops if that yields
-  zero or multiple hits. It never hardcodes `../cg`: that path is correct only from a
-  direct sibling of `cg`, and resolves to nothing from a session worktree nested
-  under `.claude/worktrees/`. The `git -C ../cg` written in the two step-4 lines
-  above stays as the HUMAN procedure, run from a sibling worktree.
+- **Every task ends with a commit and a push to `dev`.** No branch, no PR, no merge.
+  Verify the push landed (see "Verify before claiming") — never report it otherwise.
+- **CC NEVER merges into `main`, and never asks to.** The owner performs that merge by
+  hand when the day's work is final. While GitHub Actions billing is out (~Aug) the local
+  gate is the ONLY landing gate, and it has known gaps: the B-098 load-flake class, a
+  Windows `gate:e2e` that is non-authoritative for pixel/a11y geometry, and reliance on
+  owner-eyes for judgment. One local-gate pass is therefore not an INDEPENDENT check — the
+  owner's read at merge time is the only independent gate there is.
+- **CC PAUSES AND FLAGS — out loud, in its final report — when a commit falls in one of
+  these three classes.** They are about RISK, not about PRs, so retiring the PR model does
+  not retire them. CC still commits and pushes; what it must not do is let one of these
+  land silently:
+  1. **On-air / export / product source** — a bad change reaches broadcast output.
+  2. **An owed hardware run or a Linux `gate:e2e`** — Windows is non-authoritative, so the
+     debt is undischarged and must be named as still owed.
+  3. **Shared config the next session must pick up** (root `package.json`, `turbo.json`,
+     `pnpm-lock.yaml`, `CLAUDE.md`, the gate-hook) — say so, so the pull is not a surprise.
+- **After remote CI returns (~Aug), this is revisited** — an independent check will exist.
 
 ## Verify before claiming
 
-- Never report an external action (push, PR created, merged, archived, CI
-  green) as DONE without verifying it: after a push, confirm the remote head
-  (`git ls-remote origin <branch>` matches local); only cite a PR number/URL
-  after actually creating or viewing it (`gh pr view <n>`); only claim CI green
-  after seeing the check's real status.
-- If a step fails or can't be verified (e.g. `gh` unavailable), say exactly
-  that — "pushed branch X; PR not created, open it manually" — never invent or
-  guess an identifier.
-- **A GitHub write via `gh` is confirmed by reading the value back, never by an exit
-  code.** Observed 2026-07-27: `gh pr edit <n> --body-file` aborts on the deprecated
-  `projectCards` GraphQL field, exits WITHOUT applying the change, and prints only a
-  deprecation notice — it looks like success and did nothing, twice. Use
-  `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>` instead, then
-  re-read the body to confirm.
+- Never report an external action (push, merged, archived, CI green) as DONE
+  without verifying it: after a push, confirm the remote head — `git ls-remote
+origin dev` matches local — and only claim CI green after seeing the check's
+  real status.
+- If a step fails or can't be verified, say exactly that — "committed on `dev`;
+  the push was rejected, not pushed" — never invent or guess an identifier, and
+  never describe an unverified step as done.
+- **A write to GitHub via `gh` is confirmed by READING THE VALUE BACK, never by an exit
+  code.** Observed 2026-07-27: `gh` aborted on a deprecated `projectCards` GraphQL field,
+  exited WITHOUT applying the change, and printed only a deprecation notice — it looked
+  like success and did nothing, twice. The lesson outlives the PR workflow that produced
+  it: any `gh` mutation is claimed only after re-reading the mutated value.
 
 ## E2E coverage (Playwright)
 

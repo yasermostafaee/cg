@@ -16,6 +16,12 @@
  *  - anything else ⇒ the full `pnpm gate`;
  *  - UI/render paths additionally ⇒ `pnpm gate:e2e` (CLAUDE.md: user-facing changes
  *    run their E2E).
+ *
+ * It also owns WHICH ref the turn's diff is measured against (`pickDiffBaseRef`). That
+ * is a decision, not plumbing, so it is pinned by unit tests here rather than buried in
+ * the hook — see `P-026`: measuring against `origin/main` under a dev-only model made
+ * every turn's changed set the whole unmerged backlog, which silently killed the
+ * docs-only carve-out.
  */
 
 /**
@@ -55,6 +61,91 @@ export function parseNameOnly(stdout) {
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
     .map(normalizePath);
+}
+
+/**
+ * The refs the turn's diff base is taken from, in priority order.
+ *
+ * P-026 — all work lands on `dev`; the owner merges `dev` → `main` by hand at the end of
+ * a day. So `origin/main` is a HIGH-WATER MARK of finished days, not of this turn: a
+ * merge-base against it spans every commit since the last merge, and the turn's "changed
+ * set" becomes the entire unmerged backlog. One docs commit on a `dev` that is twenty
+ * commits ahead then classifies as `code` — the docs-only carve-out dies and every turn
+ * pays a full `pnpm gate`, often `gate:e2e` too, over files the turn never touched.
+ *
+ * `origin/main` stays as the FALLBACK because a fresh clone that has never pushed `dev`
+ * still has to gate something sensible.
+ */
+export const DIFF_BASE_REFS = ['origin/dev', 'origin/main'];
+
+/**
+ * Pick the ref to measure the turn's commits against: the first of `refs` that RESOLVES
+ * in this repo, or `null` when none does (the caller then falls back to the working tree
+ * alone — a real state on a fresh clone with no remote, and one that must never throw).
+ *
+ * Pure by injection: the caller supplies the resolver, so this stays deterministic and
+ * unit-testable while the actual `git rev-parse` lives in the hook. A resolver that
+ * THROWS is treated as "does not resolve" — probing a ref must never be able to fail the
+ * turn, and falling through to the next candidate is strictly safer than propagating.
+ *
+ * @param {(ref: string) => boolean} resolves true when the ref names a commit here
+ * @param {readonly string[]} [refs] candidates, highest priority first
+ * @returns {string | null} the ref to diff against, or null for "working tree alone"
+ */
+export function pickDiffBaseRef(resolves, refs = DIFF_BASE_REFS) {
+  for (const ref of refs) {
+    let ok = false;
+    try {
+      ok = resolves(ref) === true;
+    } catch {
+      ok = false; // an unprobeable ref is not a usable base — try the next one.
+    }
+    if (ok) return ref;
+  }
+  return null;
+}
+
+/**
+ * The turn's changed set: the working tree UNION the commits `HEAD` carries beyond the
+ * diff base. Returns `null` when `git status` itself fails (not a repo, git broken) —
+ * the caller must stand down then, never gate on a guess.
+ *
+ * Impure only through the INJECTED runner: `git(args)` must behave like `spawnSync`,
+ * returning `{ status, stdout }`. It lives here rather than inline in the hook so the
+ * tests reach the SAME implementation the hook executes ([[P-023]] — a control test that
+ * reaches a different implementation than the one under test is not a control test).
+ *
+ * Both halves are FAIL-SOFT by design: a failed `merge-base` (unrelated histories) or a
+ * failed `diff` degrades to the working tree alone rather than throwing. The working
+ * tree is always in the set, so degrading can only ever UNDER-count commits already
+ * pushed — never lose an uncommitted edit the turn just made.
+ *
+ * @param {(args: readonly string[]) => { status: number | null, stdout?: string }} git
+ * @returns {string[] | null} changed paths, or null when git status failed
+ */
+export function collectChangedPaths(git) {
+  // -uall: porcelain COLLAPSES untracked directories to 'dir/' by default, which would
+  // hide a new renderer file inside a new folder from the UI/render match (found by the
+  // proof harness: '?? apps/' matched nothing). List every file.
+  const status = git(['status', '--porcelain', '-uall']);
+  if (status.status !== 0) return null;
+  const paths = parsePorcelain(status.stdout ?? '');
+
+  // `rev-parse --verify --quiet <ref>^{commit}` is the resolution probe: silent, exits
+  // non-zero for an absent ref, and `^{commit}` rejects a same-named tag or tree that
+  // could never serve as a merge-base.
+  const baseRef = pickDiffBaseRef(
+    (ref) => git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).status === 0,
+  );
+  // No base ref at all (fresh clone, no remote) ⇒ the working tree alone IS the set.
+  if (baseRef === null) return paths;
+
+  const mergeBase = git(['merge-base', 'HEAD', baseRef]);
+  if (mergeBase.status !== 0) return paths;
+  const base = String(mergeBase.stdout ?? '').trim();
+  const diff = git(['diff', '--name-only', `${base}..HEAD`]);
+  if (diff.status === 0) paths.push(...parseNameOnly(diff.stdout ?? ''));
+  return paths;
 }
 
 /** CLAUDE.md docs-only carve-out membership for ONE path. */
