@@ -725,7 +725,7 @@ is ready, with no retry — load would merely expose that ordering, not cause it
 recurs after the concurrency fix, treat it as a REAL race to chase (the preview host's
 play-vs-ready handshake), not a flake.
 
-## [ ] B-078 — flaky: a Playwright E2E assertion fails intermittently on a LOCAL `pnpm gate:e2e` run — EITHER suite, in shifting tests (the B-073 family's remaining half) ⟨priority: high⟩ — **REPRODUCED UNDER MEASUREMENT 2026-07-27** (4 full runs on ONE commit; see that section). The remaining contention is INSIDE a single suite — Playwright's own unbounded per-suite worker count — because the previously-disproven cross-suite lever is ALREADY IN FORCE and the flake happens anyway. Two levers tried and rejected: a budget bump (REVERTED, #317) and a cross-suite concurrency bound (DISPROVEN by an 18-leg soak, 2026-07-14). "THE CONFOUND" below still invalidates CI-derived evidence (`pnpm test:e2e` replays cache) but NOT the local gate (`pnpm gate:e2e` runs `--force`).
+## [ ] B-078 — flaky: a Playwright E2E assertion fails intermittently on a LOCAL `pnpm gate:e2e` run — EITHER suite, in shifting tests (the B-073 family's remaining half) ⟨priority: high⟩ — **REPRODUCED UNDER MEASUREMENT 2026-07-27** (4 full runs on ONE commit; see that section). The remaining contention is INSIDE a single suite — Playwright's own unbounded per-suite worker count — because the previously-disproven cross-suite lever is ALREADY IN FORCE and the flake happens anyway. Two levers tried and rejected: a budget bump (REVERTED, #317) and a cross-suite concurrency bound (DISPROVEN by an 18-leg soak, 2026-07-14). "THE CONFOUND" below invalidated the CI-derived evidence gathered BEFORE 2026-08-08 but never the local gate (`pnpm gate:e2e` runs `--force`); as of 2026-08-08 the confound no longer applies to NEW CI runs either — `test:e2e` is `"cache": false`, so CI executes the suites for real (see the CONFOUND section).
 
 **Repro:** (intermittent — 1 red in 12 observed full runs; not reproducible on demand)
 
@@ -862,10 +862,30 @@ wait, memory pressure during `vite preview` + ffmpeg.wasm probes, or Windows pro
 at 6 workers. Until one is measured, bounding workers is **class mitigation, not a fix** — "it went
 away" is not a diagnosis (the [[B-098]] standard: root cause MEASURED, not inferred).
 
-**THE CONFOUND — why this bug's whole evidence base is unreliable (read this first):**
-The `e2e` job runs `turbo run test:e2e` **without `--force`**, so `@cg/designer#test:e2e` is
-usually a turbo **CACHE HIT**: the suite never executes and turbo replays a stale
-`209 passed (5.5m)` log. Census of 12 recent parseable runs: the designer suite actually ran in
+**THE CONFOUND — why this bug's HISTORICAL evidence base is unreliable (read this first).**
+
+> **CORRECTED 2026-08-08 — this no longer describes CI, and the correction is stated before the
+> original so nobody acts on the stale claim.** What this section used to assert, in the present
+> tense, was that the `e2e` job "runs `turbo run test:e2e` **without `--force`**, so
+> `@cg/designer#test:e2e` is usually a turbo **CACHE HIT**: the suite never executes and turbo
+> replays a stale `209 passed (5.5m)` log" — and therefore that no CI run could be trusted as
+> evidence. **That is now FALSE.** `test:e2e` is declared **`"cache": false`** in `turbo.json`, so
+> the task is not cacheable and ALWAYS executes; a replay is not a thing that can happen to it.
+> Confirmed on run **31252541925** (commit `a344cd2`, `ubuntu-latest`): turbo reported
+> `20 cached, 22 total` — the 20 are the build graph, and the 2 uncached are precisely the two
+> `test:e2e` tasks — while both suites streamed real per-test output, **designer 237 passed (7.7 m)**
+> and **runtime 62 passed (2.1 m)**, 0 failed, 0 flaky. So a CI `e2e` result IS usable evidence
+> now, and is what CLAUDE.md's discharge rule cites.
+>
+> **What still stands:** the historical census below, and every conclusion drawn from it. Runs
+> recorded BEFORE the `cache: false` setting really were mostly replays, so the old green record
+> remains a bad flake denominator and the `#317` reasoning below is still confounded. This section
+> is corrected, not deleted, because the old numbers are why those conclusions were drawn.
+> **B-078 itself stays OPEN** — the flake is a separate question from how its evidence was gathered.
+
+Historical text, as measured at the time: the `e2e` job ran `turbo run test:e2e` **without
+`--force`**, so `@cg/designer#test:e2e` was usually a turbo **CACHE HIT**: the suite never executed
+and turbo replayed a stale `209 passed (5.5m)` log. Census of 12 recent parseable runs: the designer suite actually ran in
 only **5**; the other 7 replayed the identical cached line. The `ci` job is the same — one green
 `main` run executed **2 of 40** `test` tasks and replayed 38 (the whole `pnpm test` step: 32s).
 Consequences:
