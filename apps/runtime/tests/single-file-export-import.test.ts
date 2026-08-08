@@ -42,7 +42,9 @@ describe('@cg/single-file-export is Runtime-importable', () => {
     const { html } = await exporter.produce(fixtureScene());
 
     expect(html).toContain('<!doctype html');
-    expect(html).toContain('CG.createRuntime(scene, { assetUrls:');
+    // D-137 §9 — the boot call now NAMES its render mode; 'output' is what makes a
+    // Live Source paint zero pixels in the artifact that goes on air.
+    expect(html).toContain("CG.createRuntime(scene, { mode: 'output', assetUrls:");
     expect(html).toContain('CG.installCasparGlobals');
     // The REAL @cg/template-runtime IIFE bundle (window.CG) is inlined — not a stub.
     expect(cgJsIife).toContain('var CG');

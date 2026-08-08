@@ -106,6 +106,8 @@ export { interpolateAtFrame, applyEasing, lerpHexColor, isColorProperty } from '
 export type {
   TemplateRuntime,
   RuntimeBootOptions,
+  /** D-137 §9 — `'author'` | `'output'`; every boot site names one. */
+  RenderMode,
   PlayOptions,
   UpdateOptions,
   StopOptions,

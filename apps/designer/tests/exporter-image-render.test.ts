@@ -100,7 +100,11 @@ describe('D-062 — .vcg image rendering', () => {
 
     // (b) the served index.html passes the assetId → relative path map to createRuntime
     const indexHtml = decode(files.get('index.html')!);
-    expect(indexHtml).toContain('createRuntime(scene, { assetUrls:');
+    // D-137 §9 — the boot call now NAMES its render mode, and 'output' is what makes
+    // a Live Source paint zero pixels in the package that goes on air. Asserted here
+    // (rather than only in `mode-boot-sites.test.ts`) because this is the test that
+    // reads the real emitted index.html.
+    expect(indexHtml).toContain("createRuntime(scene, { mode: 'output', assetUrls:");
     expect(indexHtml).toContain(ASSET_ID);
     expect(indexHtml).toContain(RELATIVE_PATH);
     // no external/absolute reference — relative packaged path only
@@ -118,7 +122,8 @@ describe('D-062 — single-file HTML image rendering', () => {
   it('base64-inlines the image and bakes it into the createRuntime assetUrls map', async () => {
     const { html, issues } = await makeHtmlExporter(true).produce(sceneWithImage());
     expect(html).toContain('data:image/png;base64,');
-    expect(html).toContain('CG.createRuntime(scene, { assetUrls:');
+    // D-137 §9 — as above, for the single-file export's own boot call.
+    expect(html).toContain("CG.createRuntime(scene, { mode: 'output', assetUrls:");
     expect(html).toContain(ASSET_ID);
     // self-contained: the inlined image is a data: URI, not an external ref
     expect(html).not.toContain(RELATIVE_PATH);

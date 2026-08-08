@@ -1,4 +1,5 @@
 import type { Element as SceneElement, Layer, Scene, ZoneColor } from '@cg/shared-schema';
+import type { RenderMode } from './types.js';
 
 /**
  * D-141 — compile a scene's colour ZONES into one stylesheet.
@@ -204,8 +205,19 @@ export function hasZonedCountdown(layers: readonly Layer[]): boolean {
   );
 }
 
-/** The slots an element both OWNS and actually overrides somewhere. */
-function usedTargets(element: SceneElement): ZoneColorTarget[] {
+/**
+ * The slots an element both OWNS and actually overrides somewhere.
+ *
+ * D-137 §9 — in `'output'` mode a **Live Source** owns NO slots at all. It carries
+ * a `background-color` slot below (the default arm's box tint), compiled into an
+ * `!important` rule that BOTH exporters ship. The fallback is `transparent`, so it
+ * is inert until a scene opts in — and `zoneOverrides` is reachable from no UI —
+ * but it is representable in a hand-edited scene, and a Live Source whose hole is
+ * painted on air is a lid over the guest's face. Excluding it here closes that at
+ * the compiler rather than relying on nobody writing the field.
+ */
+function usedTargets(element: SceneElement, mode: RenderMode): ZoneColorTarget[] {
+  if (mode === 'output' && element.type === 'video-placeholder') return [];
   const overrides = element.zoneOverrides;
   if (overrides === undefined || overrides.length === 0) return [];
   return zoneColorTargets(element).filter((t) => overrides.some((o) => o[t.slot] !== undefined));
@@ -230,7 +242,16 @@ export function assignZoneIndices(scene: Scene): ReadonlyMap<string, number> {
   const map = new Map<string, number>();
   for (const el of collectSceneElements(scene)) {
     if (map.has(el.id)) continue;
-    if (usedTargets(el).length === 0) continue;
+    // D-137 §9 — the NUMBERING is deliberately MODE-INDEPENDENT (`'author'`, the
+    // full slot set). Two reasons, and both are load-bearing:
+    //   - this map is cached per scene OBJECT, so a scene compiled in both modes
+    //     would otherwise get whichever numbering ran first;
+    //   - the builder stamps `data-cg-zone-el` from this map and the stylesheet is
+    //     compiled against it, so a mode-dependent numbering would shift every
+    //     LATER element's index in `'output'` and silently mis-target every rule.
+    // The Live Source exclusion belongs in what is EMITTED, not in how things are
+    // counted: in `'output'` its index is simply never referenced by any rule.
+    if (usedTargets(el, 'author').length === 0) continue;
     map.set(el.id, map.size);
   }
   indexCache.set(scene, map);
@@ -304,7 +325,7 @@ function resolveSlotColor(
  * text, which is what makes preview and single-file export byte-identical.
  * Returns an EMPTY stylesheet when no element opted in.
  */
-export function compileZoneCss(scene: Scene): ZoneCssResult {
+export function compileZoneCss(scene: Scene, mode: RenderMode = 'output'): ZoneCssResult {
   const warnings: string[] = [];
   const indices = assignZoneIndices(scene);
   if (indices.size === 0) return { css: '', warnings };
@@ -324,7 +345,7 @@ export function compileZoneCss(scene: Scene): ZoneCssResult {
     if (index === undefined || seen.has(el.id)) continue;
     seen.add(el.id);
 
-    for (const target of usedTargets(el)) {
+    for (const target of usedTargets(el, mode)) {
       const name = `--cgz-${String(index)}-${SLOT_SUFFIX[target.slot]}`;
       allVars.push(name);
       consumption.push(
@@ -379,8 +400,12 @@ export function compileZoneCss(scene: Scene): ZoneCssResult {
  * baseline block and by the same idempotent mechanism. Re-injecting the same scene
  * is a no-op; a scene with nothing to compile injects nothing at all.
  */
-export function ensureZoneCss(scene: Scene, doc: Document = document): ZoneCssResult {
-  const result = compileZoneCss(scene);
+export function ensureZoneCss(
+  scene: Scene,
+  doc: Document = document,
+  mode: RenderMode = 'output',
+): ZoneCssResult {
+  const result = compileZoneCss(scene, mode);
   const existing = doc.getElementById('cg-zones');
   if (result.css === '') {
     existing?.remove();

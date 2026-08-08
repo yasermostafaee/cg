@@ -1011,12 +1011,73 @@ export const LottieElementSchema = ElementBaseSchema.extend({
 });
 export type LottieElement = z.infer<typeof LottieElementSchema>;
 
-/** Video placeholder. Runtime injects an NDI/SDI source at playout. */
+/**
+ * D-137 / C-015 — a Live Source's SYMBOLIC id, and the format that makes it
+ * symbolic. A plain identifier: it must start alphanumeric, and may then carry
+ * alphanumerics, `_` and `-`.
+ *
+ * THE POINT IS WHAT IT REFUSES, not what it accepts. A scene may NOT name a
+ * concrete device, because binding an id to a producer is an INSTALLATION fact
+ * configured in CG Control, per plant — and a template that names `DECKLINK
+ * DEVICE 3` stops being portable the moment it is opened anywhere else. The form
+ * refuses all three device shapes by construction:
+ *
+ *   - `DECKLINK DEVICE 3` — spaces
+ *   - `route://1-1`       — colon and slashes
+ *   - `C:\media\guest.mp4` — colon and backslashes
+ *
+ * BEFORE this, `routeKey` was `z.string().min(1)` and all three parsed
+ * identically, with nothing anywhere validating it — no refinement, no preflight,
+ * no lint, no UI. Tightening it is deliberate and is NOT the additive half of this
+ * change: the fields below are additive, this refinement is a narrowing. It is
+ * safe to narrow because no stored scene in the repo carries the type at all (the
+ * two `fixtures/b034/*.scene.json`, `fixtures/b068/legacy-root-layers.cg.json` and
+ * all six tracked `.vcg` archives were byte-scanned; none contains it) and no
+ * living spec references it — see `live-source-multibox` design.md §11 (C1).
+ *
+ * The Designer ALSO refuses a device-shaped id at preflight, with a message that
+ * names the element. Two enforcement points, because the schema boundary is not
+ * reached by a hand-edited scene that never round-trips through a parse.
+ */
+export const LiveSourceIdSchema = z
+  .string()
+  .min(1)
+  .regex(
+    /^[a-z0-9][a-z0-9_-]*$/i,
+    'A Live Source id is symbolic: letters, digits, "_" and "-", starting alphanumeric. ' +
+      'A concrete device (DECKLINK DEVICE 3, route://1-1, a file path) is an installation ' +
+      'concern and never travels in the scene.',
+  );
+
+/**
+ * D-137 — a **Live Source**: an axis-aligned region that renders as NOTHING in
+ * both exports, so CasparCG can composite a live input on a LOWER layer behind the
+ * hole (C-015). The authoring surfaces show procedural SMPTE bars instead, because
+ * an invisible element is unusable to author against.
+ *
+ * The type stays `video-placeholder`. Renaming it is a scene MIGRATION, not a
+ * label change, and is deliberately out of scope — the D-128 freeze forbids
+ * REPURPOSING this type for file video (that is the separate `video` element), not
+ * IMPLEMENTING it for the purpose it was reserved for.
+ *
+ * `keySourceId` is ADDITIVE and optional, so every stored scene keeps parsing with
+ * no schema-version bump: the migration registry is empty and `holdOverrides` is
+ * the precedent. `expectedAspect` acquires its first consumer in phase 6 — it is
+ * the author's DECLARATION to validate the mapped source against, never the input
+ * to the fit computation, which is an installation fact (design.md §3).
+ */
 export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   type: z.literal('video-placeholder'),
   posterAssetId: IdSchema.optional(),
   expectedAspect: z.number().positive(),
-  routeKey: z.string().min(1),
+  /** The FILL source's symbolic id, e.g. `guest-1`. */
+  routeKey: LiveSourceIdSchema,
+  /**
+   * D-137 — the optional KEY source id, for a fill+key input pair. Additive.
+   * Absent ⇒ the source is fill-only, which is every `route://` and media case.
+   * Compositing the pair is C-021's (hardware-blocked), not this phase's.
+   */
+  keySourceId: LiveSourceIdSchema.optional(),
 });
 export type VideoPlaceholderElement = z.infer<typeof VideoPlaceholderElementSchema>;
 

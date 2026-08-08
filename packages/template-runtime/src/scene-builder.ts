@@ -21,8 +21,9 @@ import type {
   ShapeElement,
   Transform,
   VideoElement,
+  VideoPlaceholderElement,
 } from '@cg/shared-schema';
-import type { BuildSceneResult, FieldScope, LifecycleSource } from './types.js';
+import type { BuildSceneResult, FieldScope, LifecycleSource, RenderMode } from './types.js';
 import { clockInitialText } from './clock-driver.js';
 import { makeSequenceItemNode } from './sequence-driver.js';
 import { TEXT_NODE_DATASET } from './text-render-node.js';
@@ -56,6 +57,13 @@ interface BuildCtx {
    * RTL text box by its RIGHT edge via CSS `right` (D-060 §E).
    */
   resolutionWidth: number;
+  /**
+   * D-137 §9 — `'author'` (canvas / Preview modal) or `'output'` (both exporters).
+   * Read by exactly one builder, {@link buildLiveSource}. Carried on the ctx rather
+   * than passed down, so a nested composition instance inherits it by construction
+   * — a Live Source three instances deep cannot end up in the other mode.
+   */
+  mode: RenderMode;
 }
 
 function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
@@ -78,7 +86,11 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
 
 const MAX_COMPOSITION_DEPTH = 8;
 
-export function buildScene(scene: Scene, doc: Document = document): BuildSceneResult {
+export function buildScene(
+  scene: Scene,
+  doc: Document = document,
+  mode: RenderMode = 'output',
+): BuildSceneResult {
   const container = doc.createElement('div');
   container.className = 'cg-stage';
   container.style.width = `${scene.resolution.width}px`;
@@ -99,6 +111,7 @@ export function buildScene(scene: Scene, doc: Document = document): BuildSceneRe
     depth: 0,
     visited: new Set<string>(),
     resolutionWidth: scene.resolution.width,
+    mode,
   };
 
   for (const layer of scene.layers) {
@@ -194,11 +207,15 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
     case 'lottie':
       return buildLottie(element, ctx);
     case 'container':
-    case 'video-placeholder':
       // M3.2-α: not yet supported. Render a placeholder div so layout
       // doesn't shift and the element id can still be bound. Animation
-      // (M3.2-β) and video routing (post-v1) will replace these.
+      // (M3.2-β) will replace this.
       return buildPlaceholder(element, ctx.doc);
+    case 'video-placeholder':
+      // D-137 — a Live Source. Bars on the authoring surfaces, ZERO PAINTED
+      // PIXELS in both exports. No longer the bare `buildPlaceholder`, which
+      // painted nothing everywhere and so was unauthorable.
+      return buildLiveSource(element, ctx);
     case 'video':
       // D-128 Phase 3 — render a real <video> at its mid-clip poster frame; Phase
       // 4 registers it on the scope so createRuntime attaches a VideoDriver.
@@ -847,6 +864,10 @@ export function buildSequenceCompositionItem(
   box: { width: number; height: number },
   guard: { depth: number; visited: ReadonlySet<string> },
   doc: Document,
+  // D-137 §9 — the render mode, threaded because a stamped item is a real scope and
+  // may contain a Live Source. Defaults to `'output'` (paint nothing), the safe
+  // direction: a caller that forgets cannot put colour bars on air.
+  mode: RenderMode = 'output',
 ): SequenceCompositionItemBuild | null {
   const comp = scene.compositions?.find((c) => c.id === compositionId);
   if (
@@ -891,6 +912,7 @@ export function buildSequenceCompositionItem(
     depth: guard.depth + 1,
     visited: new Set([...guard.visited, compositionId]),
     resolutionWidth: comp.resolution.width,
+    mode,
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, itemCtx));
@@ -962,6 +984,9 @@ export function buildRepeaterRows(
   count: number,
   guard: { depth: number; visited: ReadonlySet<string> },
   doc: Document,
+  // D-137 §9 — as above: a stamped ROW is a real scope and may contain a Live
+  // Source, so the mode has to reach it. `'output'` by default, the safe direction.
+  mode: RenderMode = 'output',
 ): RepeaterRowBuild[] {
   const comp = scene.compositions?.find((c) => c.id === element.compositionId);
   if (
@@ -1027,6 +1052,7 @@ export function buildRepeaterRows(
       depth: guard.depth + 1,
       visited: new Set([...guard.visited, element.compositionId]),
       resolutionWidth: comp.resolution.width,
+      mode,
     };
     for (const layer of comp.layers) {
       inner.appendChild(buildLayer(layer, rowCtx));
@@ -1241,5 +1267,108 @@ function buildPlaceholder(element: SceneElement, doc: Document): HTMLElement {
   el.dataset['cgElementId'] = element.id;
   el.dataset['cgPlaceholderFor'] = element.type;
   applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  return el;
+}
+
+/**
+ * D-137 — the SMPTE-style colour bars, 75 % amplitude, in authored bar order:
+ * grey · yellow · cyan · green · magenta · red · blue.
+ *
+ * PROCEDURAL, never a bundled bitmap — the element's whole point is that it ships
+ * nothing to air, so shipping an image asset for its authoring look would be the
+ * wrong shape (and would need collecting, packaging and resolving for a thing that
+ * paints only in the Designer).
+ */
+const SMPTE_BARS = ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00000', '#0000c0'];
+
+/**
+ * The bars as one `linear-gradient`, written with EXPLICIT PAIRED STOPS
+ * (`c 0%, c 14.2857%, …`) rather than the shorter double-position syntax
+ * (`c 0% 14.2857%`).
+ *
+ * B-066 class, and it is not hypothetical: CasparCG's CEF is baseline Chromium 71,
+ * and double-position colour stops shipped in Chromium 72. The short form would
+ * render correctly in every browser we develop in and produce a broken gradient on
+ * air. The long form is universally supported and costs six extra stops.
+ */
+function smpteBarsGradient(): string {
+  const stops: string[] = [];
+  SMPTE_BARS.forEach((color, i) => {
+    const from = ((i / SMPTE_BARS.length) * 100).toFixed(4);
+    const to = (((i + 1) / SMPTE_BARS.length) * 100).toFixed(4);
+    stops.push(`${color} ${from}%`, `${color} ${to}%`);
+  });
+  return `linear-gradient(to right, ${stops.join(', ')})`;
+}
+
+/**
+ * D-137 — render a **Live Source**: the region CasparCG composites a live input
+ * behind (C-015).
+ *
+ * The two modes are not two styles of the same picture — they are opposite
+ * contracts, which is why they are branched here on an explicit
+ * {@link RenderMode} rather than differentiated by a stylesheet the host injects:
+ *
+ * - `'output'` (both exporters) — **ZERO PAINTED PIXELS.** No background, no
+ *   children, no border. The element still emits its box (positioned, sized, id'd)
+ *   so layout, bindings and the element map are unchanged, and so the hole's rect
+ *   is inspectable in the artifact. It paints nothing because a live guest goes
+ *   BEHIND it: anything painted here is a lid over the guest's face.
+ * - `'author'` (canvas + Preview modal) — procedural SMPTE bars with the source id
+ *   overlaid, or the poster image when one is set. Never an unmarked black box:
+ *   with several holes on one frame, an unlabelled black rectangle tells the author
+ *   nothing about WHICH source lands where.
+ *
+ * The label is `data-cg-live-source-label`, deliberately NOT part of the element's
+ * own text content, so nothing can bind to it or mistake it for authored copy.
+ */
+function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLElement {
+  const el = ctx.doc.createElement('div');
+  el.dataset['cgElementId'] = element.id;
+  el.dataset['cgPlaceholderFor'] = element.type;
+  // The declaration rides the DOM in BOTH modes: it is data, not paint, so it
+  // costs no pixels on air and lets an export be inspected for what it promises.
+  el.dataset['cgLiveSource'] = element.routeKey;
+  if (element.keySourceId !== undefined) el.dataset['cgLiveSourceKey'] = element.keySourceId;
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+
+  if (ctx.mode === 'output') return el;
+
+  el.style.overflow = 'hidden';
+  if (element.posterAssetId !== undefined) {
+    // The poster REPLACES the bars (D-137). `src` is left unset exactly as
+    // `buildImage` leaves it — the host resolves `data-cg-asset-id`, and the
+    // runtime's `applyAssetUrls` walk finds this nested `<img>` too.
+    const poster = ctx.doc.createElement('img');
+    poster.dataset['cgAssetId'] = element.posterAssetId;
+    poster.alt = '';
+    poster.style.width = '100%';
+    poster.style.height = '100%';
+    poster.style.objectFit = 'cover';
+    poster.style.display = 'block';
+    el.appendChild(poster);
+  } else {
+    el.style.backgroundImage = smpteBarsGradient();
+  }
+
+  const label = ctx.doc.createElement('div');
+  label.dataset['cgLiveSourceLabel'] = '';
+  label.textContent = element.routeKey;
+  label.style.position = 'absolute';
+  label.style.left = '0';
+  label.style.right = '0';
+  label.style.bottom = '0';
+  label.style.padding = '2px 6px';
+  label.style.background = 'rgba(0, 0, 0, 0.72)';
+  label.style.color = '#ffffff';
+  label.style.font = '600 14px/1.4 system-ui, sans-serif';
+  // The id is ASCII by schema (`LiveSourceIdSchema`), so it is pinned LTR: a Persian
+  // scene must not flip `guest-1` to `1-guest` around the surrounding RTL context.
+  label.style.direction = 'ltr';
+  label.style.textAlign = 'center';
+  label.style.whiteSpace = 'nowrap';
+  label.style.overflow = 'hidden';
+  label.style.textOverflow = 'ellipsis';
+  el.appendChild(label);
   return el;
 }

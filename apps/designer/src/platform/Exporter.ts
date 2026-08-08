@@ -21,6 +21,13 @@ import {
   type ImageAssetLibrary,
 } from '@cg/single-file-export';
 import { Emitter } from './emitter.js';
+// D-137 — the Live Source preflight, kept beside `off-frame.ts` because the two must
+// agree on what "off-frame" means and share ONE copy of the AABB flattening. The
+// import crosses platform → renderer/state, which is unusual here and deliberate:
+// that module is pure (no React, no store, no DOM), the SPA is a single lint tier by
+// `apps/designer/eslint.config.mjs`, and the alternative is a second spelling of the
+// same arithmetic — the failure CLAUDE.md rule 6 and P-012 exist to prevent.
+import { liveSourceIssues } from '../renderer/state/live-source-preflight.js';
 
 export interface ExporterOptions {
   assets: AssetStore;
@@ -301,6 +308,11 @@ export class Exporter {
         });
       }
     }
+
+    // D-137 — the four Live Source checks, ALL `severity: 'error'`: off-frame,
+    // overlap, a device-shaped id, and a geometry-keyframed hole. Costs no wire
+    // change — `ExportIssue.code` is an open string.
+    issues.push(...liveSourceIssues(scene));
 
     return issues;
   }
@@ -643,7 +655,10 @@ ${playerImport}      import { createRuntime, installCasparGlobals } from './cg.j
         for (const id of Object.keys(lottiePaths)) {
           lottieAssets[id] = await (await fetch('./' + lottiePaths[id])).json();
         }
-        const runtime = createRuntime(scene, { assetUrls: ${assetUrlsJson}, lottieAssets });
+        // D-137 §9 — 'output': a Live Source paints ZERO PIXELS in the package
+        // that goes on air, and is excluded from zone compilation so no authored
+        // zone can fill the hole. Named explicitly, never inferred.
+        const runtime = createRuntime(scene, { mode: 'output', assetUrls: ${assetUrlsJson}, lottieAssets });
         installCasparGlobals(runtime);
         await runtime.ready;
       })();

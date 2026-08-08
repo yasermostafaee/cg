@@ -420,7 +420,9 @@ ${playoutJson}
       (function () {
         var scene = ${sceneLiteral};
         try {
-          var runtime = CG.createRuntime(scene, { assetUrls: ${assetUrlsJson}, lottieAssets: ${lottieAssetsJson} });
+          /* D-137 §9 — 'output': zero painted pixels for a Live Source, and no
+             zone rule that could fill its hole. Named, never inferred. */
+          var runtime = CG.createRuntime(scene, { mode: 'output', assetUrls: ${assetUrlsJson}, lottieAssets: ${lottieAssetsJson} });
           CG.installCasparGlobals(runtime);
           // R-011 — output-only placement: operator query override (appended by
           // the bridge onto the served URL) ?? scene.defaultPosition ?? centered.

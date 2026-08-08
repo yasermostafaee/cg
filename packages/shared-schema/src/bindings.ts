@@ -90,6 +90,28 @@ const BindingTargetSchema = z.discriminatedUnion('kind', [
     kind: z.literal('clock-target'),
     elementId: IdSchema,
   }),
+  /**
+   * D-137 — a `text` field drives a **Live Source's** symbolic source id, so the
+   * Runtime operator chooses which source feeds a hole per take (Cinegy's
+   * variable-bound Live ID, in our model).
+   *
+   * `role` addresses WHICH of the element's two ids: the FILL source (the
+   * default, and the only one v1 composites) or the KEY source of a fill+key
+   * pair. It is one target kind with a role rather than two kinds, because the
+   * two ids are the same kind of thing addressed on the same element — and
+   * because a second kind is how the validation of one comes to differ from the
+   * other.
+   *
+   * There is NO DOM to write: the value reaches CasparCG through the bridge's
+   * source mapping, not through the element's node. Its `applyOne` arm is
+   * therefore a documented no-op, exactly like `clock-target` and
+   * `sequence-item-text` — see `@cg/template-runtime`'s `bindings.ts`.
+   */
+  z.object({
+    kind: z.literal('live-source-id'),
+    elementId: IdSchema,
+    role: z.enum(['fill', 'key']).default('fill'),
+  }),
 ]);
 
 /**

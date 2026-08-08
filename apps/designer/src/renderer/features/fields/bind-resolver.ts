@@ -37,6 +37,18 @@ export function resolveBinding(
     if (element.type === 'text') {
       return { fieldId: field.id, target: { kind: 'text', elementId: element.id } };
     }
+    // D-137 — a text field on a Live Source drives its symbolic source id: the
+    // Cinegy variable-bound Live ID, so the operator picks which source feeds the
+    // hole per take. Defaults to the FILL role — the only id v1 composites, and the
+    // one that exists on every Live Source; the KEY role is set by hand in the
+    // Inspector, because binding it by default would silently promise a fill+key
+    // pair on a source that has no key.
+    if (element.type === 'video-placeholder') {
+      return {
+        fieldId: field.id,
+        target: { kind: 'live-source-id', elementId: element.id, role: 'fill' },
+      };
+    }
     // D-125 Phase 3c — a text field on a Lottie targets the clip's FIRST text layer
     // (the natural default; the binding row shows `lottie <layer>.text` so the pick is
     // visible). A clip with no text layer can't take a text override — null, and the
@@ -167,5 +179,10 @@ export function describeBinding(binding: FieldBinding, nameOf?: (id: string) => 
     case 'clock-target':
       // D-141 — the countdown's target time, the clock's ONE bindable value.
       return `countdown target ${on(t.elementId)}`;
+    case 'live-source-id':
+      // D-137 — name the ROLE, always. "live source id on Guest box" would read the
+      // same for the fill and the key, and a key bound where a fill was meant is a
+      // hole that stays empty on air with the binding row looking correct.
+      return `live source ${t.role} id ${on(t.elementId)}`;
   }
 }

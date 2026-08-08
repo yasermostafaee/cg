@@ -125,12 +125,49 @@ export interface StopOptions {
   immediate?: boolean;
 }
 
+/**
+ * D-137 §9 — the render MODE, and the seam that did not exist before it.
+ *
+ * `buildScene` took no mode argument, so the only way a surface could differ from
+ * an export was CSS injected into the page by the Designer's preview host. That is
+ * fine for a pasteboard outline and catastrophic for a **Live Source**, whose whole
+ * contract is that it paints nothing on air: bars shipped inside an export's
+ * stylesheet would be one selector away from painting on air.
+ *
+ * - `'author'` — the Designer canvas and the Preview modal. A Live Source renders
+ *   procedural SMPTE bars plus its id label (or its poster), because an invisible
+ *   element cannot be authored against.
+ * - `'output'` — both exporters (`.vcg` and single-file HTML). A Live Source paints
+ *   **zero pixels**, and is excluded from zone compilation so no authored zone can
+ *   fill the hole.
+ *
+ * DEFAULTS TO `'output'`, and the direction is deliberate: a boot site that forgets
+ * to name its mode paints nothing, which is safe on air. The opposite default would
+ * make a forgotten export site paint colour bars on air. **That default is not a
+ * licence to omit it** — every production boot site names its mode explicitly, and
+ * `mode-boot-sites.test.ts` fails if one stops doing so. A mode the exporters
+ * DECLARE is auditable; a mode inferred from which stylesheet won is not.
+ *
+ * A third mode (`'rehearse'`) is deliberately ADDABLE here without reopening the
+ * decision that rehearse shows an empty region in PVW — which is why this is an
+ * enum and not a boolean (`live-source-multibox` design.md §12.2).
+ */
+export type RenderMode = 'author' | 'output';
+
 export interface RuntimeBootOptions {
   /**
    * Where the runtime renders. Defaults to `document.body`. In the
    * designer preview iframe this can be a sub-element instead.
    */
   root?: HTMLElement;
+
+  /**
+   * D-137 §9 — `'author'` (canvas / Preview modal) or `'output'` (both exporters).
+   * See {@link RenderMode}: it drives whether a Live Source paints SMPTE bars or
+   * nothing at all, and whether it participates in zone compilation. Absent ⇒
+   * `'output'`, the safe direction.
+   */
+  mode?: RenderMode;
 
   /**
    * D-062 — image `assetId` → resolved URL. After building the scene the runtime

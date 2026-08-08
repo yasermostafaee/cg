@@ -66,7 +66,9 @@ function buildIndexHtml(scene) {
         try {
           const res = await fetch('./template.json');
           const scene = await res.json();
-          const runtime = createRuntime(scene);
+          // D-137 §9 — a fixture package is a real on-air artifact, so 'output':
+          // a Live Source in one must paint nothing, exactly as the .vcg does.
+          const runtime = createRuntime(scene, { mode: 'output' });
           installCasparGlobals(runtime);
           await runtime.ready;
           // Auto-play after a short delay so the template is usable when

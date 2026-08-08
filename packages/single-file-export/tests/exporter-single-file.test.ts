@@ -53,7 +53,9 @@ describe('ExporterSingleFile', () => {
     expect(html).toContain('url(data:font/woff2;base64,');
     // Scene inlined as a JS literal + the IIFE runtime bootstrap.
     expect(html).toContain('var scene =');
-    expect(html).toContain('CG.createRuntime(scene, { assetUrls:');
+    // D-137 §9 — the boot call now NAMES its render mode; 'output' is what makes a
+    // Live Source paint zero pixels in the artifact that goes on air.
+    expect(html).toContain("CG.createRuntime(scene, { mode: 'output', assetUrls:");
     expect(html).toContain('CG.installCasparGlobals');
     // R-011 — the ON-AIR boot applies the output position (query override ??
     // scene.defaultPosition ?? centered). This boot script is the ONLY caller;
@@ -244,7 +246,9 @@ describe('ExporterSingleFile — D-027 clock is export/GDD-neutral', () => {
     // …and the element ships inside the inlined scene (the bundled runtime
     // carries its driver — no boot wiring in the emitted HTML changes).
     expect(b.html).toContain('"type":"clock"');
-    expect(b.html).toContain('CG.createRuntime(scene, { assetUrls:');
+    // D-137 §9 — the boot call now NAMES its render mode; 'output' is what makes a
+    // Live Source paint zero pixels in the artifact that goes on air.
+    expect(b.html).toContain("CG.createRuntime(scene, { mode: 'output', assetUrls:");
   });
 });
 
@@ -314,7 +318,9 @@ describe('ExporterSingleFile — D-029 sequence rides the existing list/GDD path
     // The element ships inside the inlined scene; the bundled runtime carries
     // its driver and the real next() — no emitted-boot changes.
     expect(html).toContain('"type":"sequence"');
-    expect(html).toContain('CG.createRuntime(scene, { assetUrls:');
+    // D-137 §9 — the boot call now NAMES its render mode; 'output' is what makes a
+    // Live Source paint zero pixels in the artifact that goes on air.
+    expect(html).toContain("CG.createRuntime(scene, { mode: 'output', assetUrls:");
     // The bound list field exports as the SAME typed GDD array D-028 defined.
     const m = /<script name="graphics-data-definition"[^>]*>([\s\S]*?)<\/script>/.exec(html);
     const gdd = JSON.parse((m?.[1] ?? '').trim()) as {
@@ -409,7 +415,11 @@ describe('ExporterSingleFile — D-125 Lottie inlining + conditional player bund
     expect(html).toContain('lottieAssets: {');
     expect(html).toContain('"lottie-asset"');
     expect(html).toContain('"op":60');
-    expect(html).toContain('CG.createRuntime(scene, { assetUrls: {}, lottieAssets: {');
+    // D-137 §9 — the boot call now NAMES its render mode; 'output' is what makes a
+    // Live Source paint zero pixels in the artifact that goes on air.
+    expect(html).toContain(
+      "CG.createRuntime(scene, { mode: 'output', assetUrls: {}, lottieAssets: {",
+    );
     // Self-contained under CEF from file:// — zero external requests.
     expect(html).not.toMatch(/\bfetch\(/);
     expect(html).not.toMatch(/import\s/);

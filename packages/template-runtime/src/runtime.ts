@@ -410,14 +410,19 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // boots this same code, so both carry byte-identical rules and neither exporter
   // needs a zone code path. A scene with no zone overrides injects nothing.
   // Runs AFTER the path migration so the compiler and the builder see one object.
-  const zoneCss = ensureZoneCss(scene, doc);
+  // D-137 §9 — the render mode, named once and threaded to BOTH consumers (the
+  // zone compiler and the builder). Absent ⇒ `'output'`: a forgotten boot site
+  // paints nothing, which is the safe direction on air. See `RenderMode`.
+  const mode = options.mode ?? 'output';
+
+  const zoneCss = ensureZoneCss(scene, doc, mode);
   for (const warning of zoneCss.warnings) {
     // A build-time drop (an unescapable key, a clash) degrades the styling, never
     // the render — reported, never thrown.
     console.warn(`[cg] zone stylesheet: ${warning}`);
   }
 
-  const built = buildScene(scene, doc);
+  const built = buildScene(scene, doc, mode);
   root.appendChild(built.container);
 
   // D-062 — wire image `src` from a host-supplied assetId→URL map. The scene
@@ -732,6 +737,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             { width: s.element.transform.size.w, height: s.element.transform.size.h },
             { depth: s.depth, visited: s.visited },
             doc,
+            mode,
           );
           if (built === null) {
             // Missing / over-deep / cyclic reference ⇒ an empty grid-cell box.
@@ -1403,6 +1409,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             items.length,
             { depth: entry.depth, visited: entry.visited },
             doc,
+            mode,
           );
           return rows.map((row, i) => {
             // D-102 Phase 2 — a repeater row is a STAMPED subtree: every row is built from the SAME

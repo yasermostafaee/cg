@@ -189,7 +189,9 @@ describe('produceTemplateDelivery', () => {
 
     expect(html).toContain('<!doctype html');
     // The REAL @cg/template-runtime IIFE + the scene literal are inlined.
-    expect(html).toContain('CG.createRuntime(scene, { assetUrls:');
+    // D-137 §9 — the boot call now NAMES its render mode; 'output' is what makes a
+    // Live Source paint zero pixels in the artifact that goes on air.
+    expect(html).toContain("CG.createRuntime(scene, { mode: 'output', assetUrls:");
     expect(html).toContain('CG.installCasparGlobals');
     // No external resource references — CasparCG fetches nothing extra.
     expect(html).not.toMatch(/<link\b/);

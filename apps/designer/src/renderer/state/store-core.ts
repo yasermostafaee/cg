@@ -27,6 +27,11 @@ export type DesignerTool =
   | 'ellipse'
   | 'pen'
   | 'image'
+  // D-137 — the Live Source tool. Filed as C2 in `live-source-multibox` design.md
+  // §11: before this the element was UNREACHABLE from the UI — no `DesignerTool`
+  // entry and no factory in `element-defaults.ts`, so "standalone creation
+  // unchanged" described a creation path that did not exist.
+  | 'live-source'
   | 'hand';
 
 export type DesignerView = 'landing' | 'studio';

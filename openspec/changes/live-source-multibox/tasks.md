@@ -27,33 +27,72 @@ blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` 
 
 ## 1. Phase 1 — Schema and authoring (no bridge, no wire)
 
-- [ ] 1.1 Extend `VideoPlaceholderElementSchema` additively
+- [x] 1.1 Extend `VideoPlaceholderElementSchema` additively
       (`packages/shared-schema/src/elements.ts:1015-1021`): an optional key source id, and the
       symbolic-id format refinement from `design.md` §3. No schema-version bump — the migration
       registry is empty (`packages/shared-schema/src/migrations/index.ts:19-32`) and the additive
       precedent is `holdOverrides` (`elements.ts:1096-1103`).
-- [ ] 1.2 Add a `BindingTarget` variant reaching the source id
+- [x] 1.2 Add a `BindingTarget` variant reaching the source id
       (`packages/shared-schema/src/bindings.ts:17-93`, which has 12 variants and none that can),
       plus its `applyOne` arm, its `bind-resolver` rule, and the `InspectorPanel` gate.
-- [ ] 1.3 Add the creation path that **does not exist today** (C2): a `DesignerTool` entry
+- [x] 1.3 Add the creation path that **does not exist today** (C2): a `DesignerTool` entry
       (`apps/designer/src/renderer/state/store-core.ts:19-30`) and a factory in
       `element-defaults.ts` beside the other 13.
-- [ ] 1.4 Add `mode: 'author' | 'output'` to `RuntimeBootOptions`
+- [x] 1.4 Add `mode: 'author' | 'output'` to `RuntimeBootOptions`
       (`packages/template-runtime/src/runtime.ts:394`), threaded to `buildScene`
       (`packages/template-runtime/src/scene-builder.ts:81`), and name the mode at all four boot
       sites. **`design.md` §9 — this seam does not exist and the bars requirement depends on it.**
-- [ ] 1.5 Render procedural SMPTE bars + the id label in `'author'` mode; zero painted pixels in
+- [x] 1.5 Render procedural SMPTE bars + the id label in `'author'` mode; zero painted pixels in
       `'output'` mode. Bars are CSS/inline-SVG, never a bundled bitmap.
-- [ ] 1.6 Exclude a Live Source from zone compilation in `'output'` mode, closing the
+- [x] 1.6 Exclude a Live Source from zone compilation in `'output'` mode, closing the
       `zone-css.ts:159-169` background-colour hazard (`design.md` §9).
-- [ ] 1.7 Exempt a Live Source from `dropFullyOffFrameForExport`
+- [x] 1.7 Exempt a Live Source from `dropFullyOffFrameForExport`
       (`apps/designer/src/renderer/state/off-frame.ts:186-197`) and make out-of-frame a preflight
       **error** instead (C8). An element that is a contract must not be silently deleted.
-- [ ] 1.8 Preflight codes: out-of-frame, overlap, a device-shaped id, and a geometry-keyframed hole
+- [x] 1.8 Preflight codes: out-of-frame, overlap, a device-shaped id, and a geometry-keyframed hole
       (all `severity: 'error'` — a warning does not block, `CompositionActionBar.tsx:41`). Costs no
       wire change: `ExportIssue.code` is an open string (`packages/shared-ipc/src/channels/export.ts:16-24`).
-- [ ] 1.9 Unit tests + a Designer E2E mapping each `#### Scenario` in
+- [x] 1.9 Unit tests + a Designer E2E mapping each `#### Scenario` in
       `specs/designer-live-source/spec.md`.
+
+**PHASE 1 LANDED 2026-08-08.** What each task actually produced, so the next reader does not have to
+re-derive it:
+
+- **1.1** `LiveSourceIdSchema` (`/^[a-z0-9][a-z0-9_-]*$/i`) + an additive `keySourceId`
+  (`packages/shared-schema/src/elements.ts`). The FIELDS are additive; the id refinement is a
+  deliberate NARROWING, safe because no stored scene carries the type (design.md §11, C1).
+- **1.2** the `live-source-id` target with a `role: 'fill' | 'key'` (defaulting to `fill`), its
+  `applyOne` arm (a documented NO-OP — there is no DOM to write; the value reaches the bridge through
+  the take's field values), its `bind-resolver` rule and its `describeBinding` case. The
+  `InspectorPanel` gate needed no change: the variant carries `elementId`, which is the only thing
+  `bindingTargetsElement` asks.
+- **1.3** the creation path that did not exist: a `live-source` `DesignerTool`, `defaultLiveSource`,
+  the two toolbars, and the canvas placement — with ids handed out `live-1`, `live-2`, … swept
+  SCENE-WIDE (one installation-wide mapping resolves them, so a per-composition sweep would hand out a
+  duplicate that looks unique).
+- **1.4** `RenderMode` on `RuntimeBootOptions`, threaded to `buildScene`, `compileZoneCss` and the two
+  stamped-scope builders. **FIVE** boot sites name it, not four — `tools/template-fixtures/build.mjs`
+  emits a real on-air artifact and was missing from the design's count.
+  `tests/live-source-mode-boot-sites.test.ts` fails if any site stops naming it, or if a NEW one
+  appears unlisted.
+- **1.5** procedural bars with PAIRED gradient stops, never the Chromium-72 double-position form —
+  CasparCG's CEF is baseline Chromium 71, so the short form would render here and break on air (B-066
+  class). The id label is pinned `direction: ltr` so a Persian scene cannot flip `guest-1`.
+- **1.6** `usedTargets` returns NO slots for a `video-placeholder` in `'output'`. The zone NUMBERING
+  stays mode-independent on purpose: it is cached per scene object and the builder stamps from it, so a
+  mode-dependent count would shift every later element's index and mis-target every rule.
+- **1.7** exempt in `filterChildren` — **and its CONTAINER is exempt too** when the subtree holds one,
+  which the design did not call out and which is the same silent loss by the back door.
+- **1.8** `live-source-off-frame` · `live-source-overlap` · `live-source-device-id` ·
+  `live-source-animated`, all `severity: 'error'`, in `renderer/state/live-source-preflight.ts`
+  (beside `off-frame.ts` so both share ONE copy of the AABB flattening). Off-frame fires on a PARTIAL
+  overhang as well as a full one. The sweep DEDUPES by element id, because `editSceneOf` aliases the
+  open composition into both `scene.layers` and `scene.compositions` — without it every issue
+  double-reports and every overlapping pair counts four times. Found by the E2E, pinned by a unit test.
+- **1.9** 28 designer unit tests + 12 template-runtime render tests + 15 schema tests, and
+  `apps/designer/tests/e2e/live-source.spec.ts` (7 tests) mapping every `#### Scenario` that has a UI
+  to drive; the four with no UI in phase 1 are named IN that spec's header with where each is pinned
+  instead, so the mapping is complete rather than quietly partial.
 
 ## 2. Phase 2 — Declaration and carrier
 

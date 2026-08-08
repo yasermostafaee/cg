@@ -20,7 +20,9 @@ import type {
   TextElement,
   TickerElement,
   VideoElement,
+  VideoPlaceholderElement,
 } from '@cg/shared-schema';
+import { LiveSourceIdSchema } from '@cg/shared-schema';
 import { columnsForFields } from '../fields/repeater-columns.js';
 import {
   SEQUENCE_PRESET_ORDER,
@@ -162,10 +164,18 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
         selectedKeyframe={selectedKeyframe}
       />
     );
-  // composition / container / video-placeholder have no kind-specific style section,
-  // but the universal CSS Filter is animatable on every kind — render it so the right
-  // inspector's keyframe-able set matches the timeline-left (D-051 parity). Transform
-  // comes from InspectorPanel's TransformSection.
+  if (element.type === 'video-placeholder')
+    return (
+      <LiveSourceSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  // composition / container have no kind-specific style section, but the universal
+  // CSS Filter is animatable on every kind — render it so the right inspector's
+  // keyframe-able set matches the timeline-left (D-051 parity). Transform comes from
+  // InspectorPanel's TransformSection.
   return (
     <FilterSection
       element={element}
@@ -535,6 +545,98 @@ function ImageSections({
           onCommit={(fit) => designerStore.updateElement(id, { fit } as Partial<Element>)}
         />
         <SharedImagePicker element={element} />
+      </CollapseSection>
+      <FilterSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+//                           LIVE SOURCE (D-137)
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-137 — the Live Source's own Inspector section: the source id, the optional key
+ * source id, and `expectedAspect`.
+ *
+ * The id is validated HERE as well as at the schema boundary, and rejects rather
+ * than corrects. `LiveSourceIdSchema` is the SAME schema the scene parses through —
+ * imported, never re-spelt as a local regex — because two spellings of one format is
+ * how the Inspector comes to accept what the file refuses (the `B-100` / `P-012`
+ * shape). A refused value is reverted with a notice naming what a symbolic id is,
+ * rather than silently sanitised: an author who typed `DECKLINK DEVICE 3` meant
+ * something by it and needs to be told why a template may not name a device.
+ *
+ * `expectedAspect` is the author's DECLARATION about the source, not a fit input and
+ * not a constraint on the box (design.md §3). The label says so, because the natural
+ * reading — "this locks my hole to 16:9" — is wrong, and the field acquires its real
+ * consumer only in phase 6, where the bridge refuses a take whose mapped source
+ * disagrees with it.
+ */
+function LiveSourceSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<VideoPlaceholderElement>): JSX.Element {
+  const id = element.id;
+  // Bumped on a REFUSED id, and folded into each input's key: an uncontrolled input
+  // that committed a bad value keeps the bad text on screen otherwise (the committed
+  // value did not change, so nothing re-mounts it), leaving the author looking at a
+  // value the scene does not hold. Reverting is the honest feedback; the notice says
+  // why.
+  const [rejectSeq, setRejectSeq] = useState(0);
+  const commitId = (role: 'fill' | 'key', raw: string): void => {
+    const value = raw.trim();
+    if (role === 'key' && value === '') {
+      // Clearing the KEY id is legitimate — absent means fill-only, which is every
+      // `route://` and media source. Clearing the FILL id is not: it is required.
+      designerStore.updateElement(id, { keySourceId: undefined } as Partial<Element>);
+      return;
+    }
+    if (!LiveSourceIdSchema.safeParse(value).success) {
+      designerStore.showNotice(
+        `“${value}” is not a Live Source id. Use letters, digits, “_” and “-”, starting ` +
+          'with a letter or digit — a template names sources SYMBOLICALLY (e.g. “guest-1”). ' +
+          'Which device or channel that id resolves to is set per installation, in CG Control.',
+      );
+      setRejectSeq((n) => n + 1);
+      return;
+    }
+    designerStore.updateElement(
+      id,
+      (role === 'fill' ? { routeKey: value } : { keySourceId: value }) as Partial<Element>,
+    );
+  };
+  return (
+    <>
+      <CollapseSection title="Live Source" defaultExpanded>
+        <TextField
+          label="source id"
+          ariaLabel="Live Source source id"
+          value={element.routeKey}
+          resetKey={`${id}-${String(rejectSeq)}`}
+          onCommit={(v) => commitId('fill', v)}
+        />
+        <TextField
+          label="key id"
+          ariaLabel="Live Source key source id"
+          value={element.keySourceId ?? ''}
+          resetKey={`${id}-${String(rejectSeq)}`}
+          onCommit={(v) => commitId('key', v)}
+        />
+        <NumberField
+          label="expected aspect"
+          value={element.expectedAspect}
+          step={0.01}
+          min={0.01}
+          onCommit={(expectedAspect) =>
+            designerStore.updateElement(id, { expectedAspect } as Partial<Element>)
+          }
+        />
       </CollapseSection>
       <FilterSection
         element={element}

@@ -12,6 +12,7 @@ import {
   defaultClock,
   defaultEllipse,
   defaultImage,
+  defaultLiveSource,
   defaultLottie,
   fitVideoElement,
   defaultRepeater,
@@ -72,6 +73,36 @@ function logoSize(image: AssetMeta): { width: number; height: number } {
   if (w === undefined || h === undefined || w <= 0 || h <= 0) return { width: 320, height: 320 };
   const scale = 320 / Math.max(w, h);
   return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
+}
+
+/**
+ * D-137 — the first free `live-N` id, swept across the WHOLE scene: the root layers
+ * AND every composition, recursing into containers.
+ *
+ * Scene-wide and not composition-local on purpose. A source id is resolved by the
+ * BRIDGE against one installation-wide mapping, so two holes carrying `live-1` in
+ * two different compositions still name ONE producer. Scoping the sweep to the open
+ * composition would hand out a duplicate that looks unique while you are authoring
+ * and is not once both are on air.
+ *
+ * The id is only a starting point — the author renames it in the Inspector, and
+ * nothing forbids a deliberate duplicate (two windows showing the same feed is a
+ * real shot). This picks a default that is not a collision.
+ */
+function nextLiveSourceId(scene: Scene): string {
+  const taken = new Set<string>();
+  const walk = (children: readonly Element[]): void => {
+    for (const el of children) {
+      if (el.type === 'video-placeholder') taken.add(el.routeKey);
+      else if (el.type === 'container') walk(el.children);
+    }
+  };
+  for (const layer of scene.layers) walk(layer.children);
+  for (const comp of scene.compositions ?? [])
+    for (const layer of comp.layers) walk(layer.children);
+  let n = 1;
+  while (taken.has(`live-${String(n)}`)) n += 1;
+  return `live-${String(n)}`;
 }
 
 /**
@@ -509,6 +540,20 @@ export function CanvasOverlay({
     if (tool === 'ellipse') {
       const id = `el-${String(Date.now())}`;
       designerStore.addElement(defaultEllipse(id, scenePoint.x, scenePoint.y));
+      designerStore.setTool('cursor');
+      return;
+    }
+    if (tool === 'live-source') {
+      // D-137 — the Live Source's creation path, which did not exist before this
+      // change (design.md §11, C2). The id is made UNIQUE per existing hole in the
+      // open composition (`live-1`, `live-2`, …): a multi-box show places several,
+      // and two holes sharing an id would map to ONE producer with nothing saying
+      // so — the bars carry the id as their label, so a duplicate is at least
+      // visible, but a collision should not be the default the tool hands you.
+      const id = `el-${String(Date.now())}`;
+      designerStore.addElement(
+        defaultLiveSource(id, scenePoint.x, scenePoint.y, nextLiveSourceId(scene)),
+      );
       designerStore.setTool('cursor');
       return;
     }

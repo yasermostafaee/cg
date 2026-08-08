@@ -11,6 +11,7 @@ import {
   Rows3,
   Square,
   Type,
+  Video,
   type LucideIcon,
 } from 'lucide-react';
 import { designerStore, type DesignerTool } from '../../state/store.js';
@@ -44,6 +45,9 @@ const TOOLS: readonly ToolEntry[] = [
   // D-040 — the logo/image tool stamps the selected Shared Library image (the
   // shared source it needed now exists); empty library ⇒ a hint, no silent insert.
   { id: 'image', label: 'Image (logo)', icon: Image },
+  // D-137 — the Live Source tool. Drawn, not imported: it carries no asset (its
+  // authoring bars are procedural), so unlike Lottie it earns a toolbar button.
+  { id: 'live-source', label: 'Live Source', icon: Video },
   // D-125 — there is deliberately NO Lottie drawing tool: a Lottie is asset-backed,
   // so it enters via Project Assets (import → allowlist-validated) and drag-drop onto
   // the canvas, not a toolbar button (which would be a redundant no-op needing an

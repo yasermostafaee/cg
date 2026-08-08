@@ -284,6 +284,21 @@ function applyOne(
       // `sequence-item-text` above.
       return;
     }
+    case 'live-source-id': {
+      // D-137 — a Live Source's source id has NO DOM to write. The element renders
+      // nothing in `'output'` mode by contract, and what the value actually selects
+      // is a CasparCG producer the BRIDGE places on a lower layer — a decision made
+      // in another process entirely. Writing anything into this element's node would
+      // paint over the hole, which is the one thing it must never do.
+      //
+      // The value reaches the bridge through the take's field values (the same route
+      // every bound field takes) and is resolved against the installation's source
+      // mapping there — phase 6 of `live-source-multibox`. Documented no-op, exactly
+      // like `clock-target` and `sequence-item-text` above: an unhandled case here
+      // would be an exhaustiveness error, and a silent `default` is how a target
+      // comes to look wired when it is not.
+      return;
+    }
     case 'repeater-items': {
       // D-030 — route a list value to the repeater driver: positional live
       // VALUES into the stamped rows mid-run (shorter hides surplus rows,

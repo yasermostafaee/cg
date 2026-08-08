@@ -118,6 +118,7 @@ export class DesignerApp {
       | 'Ellipse'
       | 'Pen'
       | 'Image (logo)'
+      | 'Live Source'
       | 'Hand (pan)',
   ): Promise<void> {
     await this.page.getByRole('button', { name: label, exact: true }).click();
@@ -197,6 +198,32 @@ export class DesignerApp {
   async addEllipse(pos: { x: number; y: number } = { x: 240, y: 200 }): Promise<void> {
     await this.selectTool('Ellipse');
     await this.canvas.click({ position: pos });
+  }
+
+  /**
+   * D-137 — add a Live Source by placing the Live Source tool (auto-selected).
+   * Ids are handed out `live-1`, `live-2`, … per existing hole in the scene.
+   */
+  async addLiveSource(pos: { x: number; y: number } = { x: 200, y: 160 }): Promise<void> {
+    await this.selectTool('Live Source');
+    await this.canvas.click({ position: pos });
+  }
+
+  /** D-137 — the Live Source Inspector's source-id input. */
+  get liveSourceIdInput(): Locator {
+    return this.inspector.getByRole('textbox', { name: 'Live Source source id' });
+  }
+
+  /** D-137 — the Live Source Inspector's KEY source-id input. */
+  get liveSourceKeyIdInput(): Locator {
+    return this.inspector.getByRole('textbox', { name: 'Live Source key source id' });
+  }
+
+  /** D-137 — commit a value into one of the two id inputs (blur commits). */
+  async setLiveSourceId(value: string, which: 'fill' | 'key' = 'fill'): Promise<void> {
+    const input = which === 'fill' ? this.liveSourceIdInput : this.liveSourceKeyIdInput;
+    await input.fill(value);
+    await input.press('Enter');
   }
 
   /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). */

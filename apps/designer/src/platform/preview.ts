@@ -550,6 +550,13 @@ export class Preview {
             document.body.classList.remove('cg-removed');
             document.body.classList.remove('cg-pending');
             runtime = createRuntime(scene, {
+              // D-137 §9 — this ONE document serves BOTH authoring surfaces: the
+              // editor canvas (authoring=true) and the Preview modal
+              // (broadcast=true). Both are 'author': the modal previews what the
+              // AUTHOR is building, not what the exporter will emit, so a Live
+              // Source shows its bars in both and an invisible box in neither.
+              // The exports name 'output' at their own boot sites.
+              mode: 'author',
               playoutOverride: playoutOverride,
               scopeOverrides: scopeOverrides,
               // D-039ext — give the runtime the current asset URLs so the ticker driver can

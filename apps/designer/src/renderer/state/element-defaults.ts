@@ -14,6 +14,7 @@ import type {
   TickerElement,
   Transform,
   VideoElement,
+  VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { pathVisualBBox } from '@cg/shared-schema';
 
@@ -264,6 +265,41 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
     transform: baseTransform(x, y, 200, 200),
     shape: 'ellipse',
     fill: { kind: 'solid', color: '#BEBEBE' },
+  };
+}
+
+/**
+ * D-137 — a **Live Source**: the transparent hole CasparCG composites a live input
+ * behind (C-015). The 14th factory, and the element's FIRST creation path.
+ *
+ * The default box is 16:9 at a third of a 1080p frame — the multi-box guest window
+ * this feature exists for, rather than an arbitrary square — and `expectedAspect`
+ * matches it, so a freshly drawn hole is self-consistent before the author touches
+ * anything.
+ *
+ * `routeKey` defaults to `live-1`, NOT to an empty string: the id is required by
+ * the schema and symbolic by refinement, so an empty default would create an
+ * element that cannot be saved. `live-1` is also visible on the canvas (it is the
+ * bars' label), which is what tells the author there is something to set. Callers
+ * that place several pass their own id.
+ */
+export function defaultLiveSource(
+  id: string,
+  x: number,
+  y: number,
+  routeKey = 'live-1',
+): VideoPlaceholderElement {
+  return {
+    id,
+    name: 'Live Source',
+    type: 'video-placeholder',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    zIndex: 0,
+    transform: baseTransform(x, y, 640, 360),
+    expectedAspect: 16 / 9,
+    routeKey,
   };
 }
 

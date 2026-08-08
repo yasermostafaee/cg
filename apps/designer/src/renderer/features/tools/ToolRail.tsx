@@ -8,6 +8,7 @@ import {
   Rows3,
   Square,
   Type,
+  Video,
   type LucideIcon,
 } from 'lucide-react';
 import { designerStore, type DesignerTool } from '../../state/store.js';
@@ -28,6 +29,9 @@ const tools: { id: DesignerTool; label: string; icon: LucideIcon }[] = [
   { id: 'shape', label: 'Rectangle', icon: Square },
   { id: 'ellipse', label: 'Ellipse', icon: Circle },
   { id: 'image', label: 'Image', icon: Image },
+  // D-137 — a Live Source: the transparent hole CasparCG composites a live input
+  // behind. A drawing tool (not asset-backed like Lottie), so it belongs here.
+  { id: 'live-source', label: 'Live Source', icon: Video },
   { id: 'ticker', label: 'Ticker', icon: MoveHorizontal },
   { id: 'sequence', label: 'Sequence', icon: ArrowDownUp },
   { id: 'clock', label: 'Clock', icon: Clock },
