@@ -356,6 +356,19 @@ was the entire point of the obligation.
 
 - [ ] 9.1 `pnpm openspec validate live-source-multibox --strict`.
 - [ ] 9.2 Full green gate (uncached) + `gate:e2e` per phase that touches UI or render.
-- [ ] 9.3 A Linux `gate:e2e` is owed for phases 1 and 9 — a Windows run is non-authoritative.
+- [x] 9.3 A Linux `gate:e2e` is owed for phases 1 and 9 — a Windows run is non-authoritative.
+      **PHASE 1's DEBT IS DISCHARGED.** Run:
+      <https://github.com/yasermostafaee/cg/actions/runs/31265371911> — `ubuntu-latest`, commit
+      `d91add3`, **`conclusion: success`, the `e2e` job COMPLETED and green** (not skipped, not
+      cancelled). That commit carries phase 1 in full plus its D-147 amendment, so it is the
+      later-`dev`-HEAD case the discharge rule permits.
+      **The previous push (`72c8b38`) went RED and is recorded rather than hidden**
+      (<https://github.com/yasermostafaee/cg/actions/runs/31264006795>): phase 1 added the Live
+      Source tool to the canvas toolbar and `icon-pack.spec.ts` pins that toolbar's ORDER. A
+      targeted local run of the new spec could not see it; the full suite would have. Fixed in
+      `d91add3`, and the whole 246-test suite now runs green locally before a push as well.
+      Phase 9's own debt is still owed — it is a later phase.
+- [ ] 9.3a Phases 2–8: each still owes its own completed green Linux `e2e`, cited by run URL beside
+      the ticked item. A green run on THIS commit says nothing about a later phase's diff.
 - [ ] 9.4 **Hardware:** the phase-6 `route://` demo is dischargeable here; **phase 7 is not** —
       see `design.md` §12.1, which is an owner decision, not work.
