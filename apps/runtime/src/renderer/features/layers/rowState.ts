@@ -353,7 +353,7 @@ export function rowState({
       tone: 'idle',
       /*
         SHORT ON PURPOSE. This was six lines covering the interlock, the mute, the
-        pixel-fidelity caveat and the Live Source placeholder — a paragraph on a
+        pixel-fidelity caveat and the Live Source hole — a paragraph on a
         hover, which an operator under time pressure does not read, and which
         pushed the wire's own report (the part `withWire` appends, and the reason
         this tooltip exists at all) off the bottom.

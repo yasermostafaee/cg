@@ -92,12 +92,25 @@ import { frameZIndex, rehearsalCaption, type RehearsalSubject } from './rehearsa
  * ── NOT AN AIR CHECK ─────────────────────────────────────────────────────────
  *
  * Browser rendering versus CasparCG's CEF 71 is faithful but NOT pixel-identical
- * (the B-066 class), and after C-015 a Live Source region renders as a labelled
- * placeholder rather than video. Rehearse catches wrong values, broken layouts
- * and bad motion; it is not a confidence monitor (that is C-016). Those caveats
- * are stated IN the panel below and not only in this comment — R-022's own
- * acceptance requires it, and it matters more precisely because rehearse looks
- * authoritative.
+ * (the B-066 class), and a Live Source region renders as NOTHING — an empty,
+ * fully transparent hole.
+ *
+ * That last clause said the opposite until 2026-08-08: "after C-015 a Live
+ * Source region renders as a labelled placeholder rather than video". It
+ * described a render path that was never built, and could not be, on this
+ * surface: rehearse renders the RETAINED EXPORTED PAGE VERBATIM (`srcDoc={html}`
+ * in `RehearsalFrame`), and D-137 requires that page to paint zero pixels where a
+ * Live Source is. DECIDED 2026-08-08, owner — `openspec/changes/live-source-multibox/`
+ * design.md §12.2: v1 shows the empty region, and no second render path is built.
+ * The hole is honest rather than incomplete — what fills it on air is a CasparCG
+ * layer the bridge composites BEHIND the template, which no browser preview was
+ * ever going to show. (`buildScene`'s `mode` seam is an enum, not a boolean, so a
+ * third `'rehearse'` mode can be added later without reopening the decision.)
+ *
+ * Rehearse catches wrong values, broken layouts and bad motion; it is not a
+ * confidence monitor (that is C-016). Those caveats are stated IN the panel below
+ * and not only in this comment — R-022's own acceptance requires it, and it
+ * matters more precisely because rehearse looks authoritative.
  */
 
 const styles = {
@@ -453,9 +466,10 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
           <p id={CAVEATS_ID} style={styles.caveats}>
             Rehearsal — rendered in this browser at {raster.width}×{raster.height}, not on air.
             Faithful but <strong>not pixel-identical</strong> to the on-air render, and a Live
-            Source region shows as a labelled placeholder, not video. Only{' '}
-            <strong>rehearsing</strong> rows are shown, composited in channel layer order — nothing
-            that is on air is composited here. CasparCG composites each template over a{' '}
+            Source region shows as an <strong>empty transparent hole</strong> — what fills it on air
+            is a CasparCG layer composited behind the template, which no browser preview can show.
+            Only <strong>rehearsing</strong> rows are shown, composited in channel layer order —
+            nothing that is on air is composited here. CasparCG composites each template over a{' '}
             <strong>transparent base</strong>; a browser instead forces an opaque canvas on an
             embedded page whose colour scheme differs from the page embedding it, so this panel
             matches the two — without that, every graphic would sit on flat white and hide the ones

@@ -52,11 +52,22 @@ import { definePublishChannel } from '../publish.js';
  *
  * NOT AN AIR CHECK. What rehearse catches is wrong values, broken layouts and
  * bad motion. Browser rendering versus CasparCG's CEF 71 is faithful, NOT
- * pixel-identical (the B-066 class), and after C-015 a Live Source region renders
- * as a labelled placeholder rather than video. The confidence monitor is C-016,
- * which is a different thing. Those caveats are stated IN the panel, not only
- * here — R-022's own acceptance requires it, and it matters more once rehearse
- * looks authoritative.
+ * pixel-identical (the B-066 class), and a Live Source region renders as NOTHING
+ * — an empty, fully transparent hole.
+ *
+ * That last clause said the opposite until 2026-08-08 ("after C-015 a Live Source
+ * region renders as a labelled placeholder rather than video"), describing a
+ * render path that was never built. Rehearse renders the RETAINED EXPORTED PAGE
+ * VERBATIM and D-137 requires that page to paint zero pixels there, so the
+ * placeholder had nowhere to come from. DECIDED 2026-08-08, owner —
+ * `openspec/changes/live-source-multibox/` design.md §12.2: v1 shows the empty
+ * region and builds no second render path. What fills the hole on air is a
+ * CasparCG layer the bridge composites behind the template; a browser preview
+ * cannot show it, and pretending otherwise would be the misleading option.
+ *
+ * The confidence monitor is C-016, which is a different thing. Those caveats are
+ * stated IN the panel, not only here — R-022's own acceptance requires it, and it
+ * matters more once rehearse looks authoritative.
  */
 
 /**
