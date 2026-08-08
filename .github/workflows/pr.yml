@@ -84,6 +84,9 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.decide.outputs.code }}
+      # P-029 — does this diff owe the authoritative Linux E2E? Separate from `code`:
+      # a change can need the unit gate without being able to alter what renders.
+      needs_e2e: ${{ steps.decide.outputs.needs_e2e }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -161,7 +164,10 @@ jobs:
             `classification: kind=${classification.kind} ` +
               `needsE2e=${classification.needsE2e} files=${paths.length} => code=${code}`,
           );
-          appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\n`);
+          appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `code=${code}\nneeds_e2e=${classification.needsE2e}\n`,
+          );
           CLASSIFY
           node classify-push.mjs
           rm -f classify-push.mjs changed-files.txt
@@ -190,9 +196,21 @@ jobs:
           TRUSTED: ${{ steps.base.outputs.trusted }}
           REASON: ${{ steps.base.outputs.reason }}
           PUSH_CODE: ${{ steps.push_changes.outputs.code }}
+          PUSH_E2E: ${{ steps.push_changes.outputs.needs_e2e }}
           FILTERED: ${{ steps.filter.outputs.code }}
         run: |
           set -uo pipefail
+          # P-029 — `needs_e2e` decides whether the AUTHORITATIVE suite runs, so every
+          # path that is not a definite 'false' from the classifier resolves to TRUE.
+          # `pull_request` has no classifier (paths-filter computes only `code`), so PRs
+          # always run the E2E, exactly as before.
+          needs_e2e='true'
+          if [ "$EVENT" = 'push' ] && [ "${TRUSTED:-}" = 'true' ] && [ "${PUSH_E2E:-}" = 'false' ]; then
+            needs_e2e='false'
+          fi
+          echo "needs_e2e=$needs_e2e" >> "$GITHUB_OUTPUT"
+          echo "needs_e2e=$needs_e2e"
+
           if [ "$EVENT" = 'push' ]; then
             if [ "${TRUSTED:-}" != 'true' ]; then
               echo "code=true  (FAIL-SAFE: untrusted base - ${REASON:-unknown})"
@@ -271,9 +289,13 @@ jobs:
   # no native dialogs); Playwright serves the built app via `vite preview`.
   e2e:
     name: E2E (Playwright)
-    # P-008 — same skip-on-docs-only condition as the unit gate.
+    # P-008 — skip on docs-only, same as the unit gate.
+    # P-029 — AND skip when the diff cannot change what renders. `needs_e2e` comes from
+    # the repo's own `classifyChangedSet`, whose render set is derived from the two apps'
+    # runtime dependency closure and whose default for an UNRECOGNISED path is `true`, so
+    # this can only skip a diff that is positively known to be render-safe.
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.needs_e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -385,10 +407,11 @@ jobs:
       - name: Aggregate results
         run: |
           code='${{ needs.changes.outputs.code }}'
+          needs_e2e='${{ needs.changes.outputs.needs_e2e }}'
           ci='${{ needs.ci.result }}'
           e2e='${{ needs.e2e.result }}'
           docs='${{ needs.docs-check.result }}'
-          echo "code=$code | ci=$ci | e2e=$e2e | docs-check=$docs"
+          echo "code=$code | needs_e2e=$needs_e2e | ci=$ci | e2e=$e2e | docs-check=$docs"
           if [ "$code" = 'false' ]; then
             if [ "$docs" = 'success' ]; then
               echo 'Docs-only change: docs-check passed → required OK.'
@@ -397,9 +420,20 @@ jobs:
             echo 'Docs-only change: docs-check did not pass → required FAIL.'
             exit 1
           fi
-          if [ "$ci" = 'success' ] && [ "$e2e" = 'success' ]; then
+          if [ "$ci" != 'success' ]; then
+            echo 'Code change: ci did not pass → required FAIL.'
+            exit 1
+          fi
+          # P-029 — a DELIBERATELY skipped e2e is a pass; a skipped e2e that was OWED is
+          # not. The `needs_e2e = false` test is what separates them, so a job that fails
+          # to start still reddens this gate.
+          if [ "$e2e" = 'success' ]; then
             echo 'Code change: ci + e2e passed → required OK.'
             exit 0
           fi
-          echo 'Code change: ci or e2e did not pass → required FAIL.'
+          if [ "$e2e" = 'skipped' ] && [ "$needs_e2e" = 'false' ]; then
+            echo 'Code change with no render surface: ci passed, e2e not owed → required OK.'
+            exit 0
+          fi
+          echo 'Code change: e2e was owed and did not pass → required FAIL.'
           exit 1

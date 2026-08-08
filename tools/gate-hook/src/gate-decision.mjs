@@ -158,31 +158,106 @@ export function isDocsPath(path) {
 
 /**
  * The UI/RENDER set — a changed path here means the diff can alter what the user (or
- * the CasparCG output) SEES, so the E2E gate is owed. Derived from the repo, not
- * guessed:
- *  - `apps/[*]/src/renderer/` — both SPAs' UI (CLAUDE.md's renderer seam);
- *  - `packages/template-runtime/` — how every scene renders + plays out;
- *  - `packages/lottie-bridge/` — the mounted Lottie players the preview/exports render;
- *  - `packages/ui/` — shared tokens/theme;
- *  - `packages/single-file-export/` — the exported HTML the E2E suite exercises;
- *  - any vanilla-extract stylesheet (`*.css.ts`) anywhere;
- *  - the Playwright suites + configs themselves (a spec/config edit must re-run).
+ * the CasparCG output) SEES, so the E2E gate is owed.
+ *
+ * P-029 — this list was WIDENED when `needsE2e` was promoted from a local hint into the
+ * sole decision of whether the authoritative Linux suite runs at all. It is DERIVED from
+ * the two apps' real runtime `dependencies` closure, read out of the package manifests,
+ * not from memory:
+ *
+ *   @cg/caspar-client · @cg/lottie-bridge · @cg/shared-ipc · @cg/shared-schema
+ *   @cg/single-file-export · @cg/splash-kit · @cg/starter-templates · @cg/storage
+ *   @cg/template-runtime · @cg/text-shaping · @cg/ui · @cg/vcg-format
+ *
+ * Two of those are easy to miss and are called out deliberately: `@cg/splash-kit` lives
+ * under `tools/`, so any "tools/** is not render" shortcut would silently drop the
+ * package that draws the splash screen; and `@cg/caspar-client` is a runtime dependency
+ * of the Runtime app, which decides what actually reaches air.
+ *
+ * Beyond the closure: ALL of `apps/[*]/src/` (not just `renderer/` — `platform/` is the
+ * browser implementation behind the bridge and `shared/` is the bridge contract itself),
+ * each app's `index.html`, `public/` assets and Vite config, any vanilla-extract
+ * stylesheet anywhere, and the Playwright suites and configs themselves.
+ *
+ * This list is an ALLOWLIST of things KNOWN to affect render. It is no longer what
+ * decides the answer on its own — see `affectsRender`, where anything unrecognised
+ * counts as render-affecting.
  */
 export const UI_RENDER_PATTERNS = [
-  /^apps\/[^/]+\/src\/renderer\//,
-  /^packages\/template-runtime\//,
+  // Both SPAs, entire source tree + the shell/assets Vite builds around it.
+  /^apps\/[^/]+\/src\//,
+  /^apps\/[^/]+\/index\.html$/,
+  /^apps\/[^/]+\/public\//,
+  /^apps\/[^/]+\/vite\.config\./,
+  // The apps' runtime dependency closure, derived from their package manifests.
+  /^packages\/caspar-client\//,
   /^packages\/lottie-bridge\//,
-  /^packages\/ui\//,
+  /^packages\/shared-ipc\//,
+  /^packages\/shared-schema\//,
   /^packages\/single-file-export\//,
+  /^packages\/starter-templates\//,
+  /^packages\/storage\//,
+  /^packages\/template-runtime\//,
+  /^packages\/text-shaping\//,
+  /^packages\/ui\//,
+  /^packages\/vcg-format\//,
+  /^tools\/splash-kit\//,
+  // Anywhere.
   /\.css\.ts$/,
   /^apps\/[^/]+\/tests\/e2e\//,
   /^apps\/[^/]+\/playwright\.config\.ts$/,
 ];
 
-/** Does ONE path fall in the UI/render set? */
+/**
+ * Paths KNOWN not to be able to change what the apps render. Deliberately SHORT: this is
+ * the only list whose membership can cause the authoritative suite to be skipped, so a
+ * wrong entry here is the one mistake that costs coverage. Everything on it is
+ * documentation, or tooling that cannot reach the built apps.
+ *
+ * Notably NOT here, and that is on purpose: root config (`package.json`, `turbo.json`,
+ * `tsconfig.base.json`, the lockfile) decides what twenty workspaces emit — [[B-066]] is
+ * an `es2022` setting in a root tsconfig that `SyntaxError`d on CEF 71 — and everything
+ * under `tools/` other than the gate hook, because `tools/splash-kit` proves that
+ * directory is not uniformly harmless.
+ */
+export const NON_RENDER_PATTERNS = [
+  /^docs\//,
+  /^openspec\//,
+  /\.md$/,
+  /^\.github\//,
+  /^\.husky\//,
+  /^\.claude\//,
+  /^tools\/gate-hook\//,
+];
+
+/** Does ONE path fall in the KNOWN UI/render set? */
 export function isUiRenderPath(path) {
   const p = normalizePath(path);
   return UI_RENDER_PATTERNS.some((re) => re.test(p));
+}
+
+/** Is ONE path KNOWN to be unable to affect what the apps render? */
+export function isKnownNonRenderPath(path) {
+  const p = normalizePath(path);
+  return NON_RENDER_PATTERNS.some((re) => re.test(p));
+}
+
+/**
+ * Does ONE path affect what the apps render — i.e. does it owe the E2E suite?
+ *
+ * P-029 — the DEFAULT for an unrecognised path is `true`. This is the whole point of the
+ * predicate and it is the opposite of what the old `isUiRenderPath`-only test did: that
+ * one answered `false` for anything it did not recognise, so a new package, a renamed
+ * directory, or a root config file would silently answer "no E2E owed". That was
+ * tolerable while `needsE2e` merely decided whether to ALSO run a local suite that could
+ * not discharge anything ([[P-028]]); it is a defect once the answer decides whether the
+ * authoritative run happens at all. Unknown must fail TOWARD running the suite.
+ *
+ * @param {string} path
+ * @returns {boolean}
+ */
+export function affectsRender(path) {
+  return isUiRenderPath(path) || !isKnownNonRenderPath(path);
 }
 
 /**
@@ -195,7 +270,8 @@ export function classifyChangedSet(paths) {
   const normalized = [...new Set(paths.map(normalizePath).filter((p) => p.length > 0))];
   if (normalized.length === 0) return { kind: 'empty', needsE2e: false };
   if (normalized.every(isDocsPath)) return { kind: 'docs-only', needsE2e: false };
-  return { kind: 'code', needsE2e: normalized.some(isUiRenderPath) };
+  // `affectsRender`, NOT `isUiRenderPath`: an unrecognised path owes the E2E (P-029).
+  return { kind: 'code', needsE2e: normalized.some(affectsRender) };
 }
 
 /**
@@ -271,7 +347,7 @@ export function e2eReminderFor(classification) {
     'discharged the debt. The authoritative run is the `e2e` job on GitHub Actions, ' +
     'which runs on every push to `dev`. The debt stays UNPAID until a COMPLETED, GREEN ' +
     'run exists for the commit carrying this change, and its run URL is written into ' +
-    "the change's tasks.md beside the ticked item (CLAUDE.md, \"E2E coverage\"). " +
+    'the change\'s tasks.md beside the ticked item (CLAUDE.md, "E2E coverage"). ' +
     `To run the suite locally on a turn anyway, set ${E2E_OPT_IN_ENV}=1.`
   );
 }

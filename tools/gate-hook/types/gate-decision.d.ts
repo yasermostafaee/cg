@@ -10,7 +10,10 @@ declare module '*gate-decision.mjs' {
   export function parseNameOnly(stdout: string): string[];
   export function isDocsPath(path: string): boolean;
   export function isUiRenderPath(path: string): boolean;
+  export function isKnownNonRenderPath(path: string): boolean;
+  export function affectsRender(path: string): boolean;
   export const UI_RENDER_PATTERNS: readonly RegExp[];
+  export const NON_RENDER_PATTERNS: readonly RegExp[];
   export const DIFF_BASE_REFS: readonly string[];
   export function pickDiffBaseRef(
     resolves: (ref: string) => boolean,

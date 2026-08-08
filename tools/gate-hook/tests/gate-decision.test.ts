@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   DIFF_BASE_REFS,
   E2E_OPT_IN_ENV,
+  affectsRender,
   classifyChangedSet,
   collectChangedPaths,
   commandsFor,
   e2eReminderFor,
   isDocsPath,
+  isKnownNonRenderPath,
   isUiRenderPath,
   localE2eOptIn,
   nextAttempt,
@@ -68,13 +70,116 @@ describe('UI/render set membership', () => {
     expect(isUiRenderPath(p)).toBe(true);
   });
 
+  // P-029 MOVED two of these INTO the render set, deliberately: `src/platform/` is the
+  // browser implementation behind the bridge, and `@cg/shared-schema` is a runtime
+  // dependency of both apps. They are asserted as render paths above/below rather than
+  // deleted, so the change of verdict is visible in the diff rather than silent.
   it.each([
-    'apps/designer/src/platform/ProjectStore.ts',
-    'packages/shared-schema/src/scene.ts',
     'tools/gate-hook/src/gate-decision.mjs',
     'apps/designer/tests/inspector-color-hierarchy.test.ts',
-  ])('%s is NOT ui/render', (p) => {
+  ])('%s is NOT in the KNOWN ui/render allowlist', (p) => {
     expect(isUiRenderPath(p)).toBe(false);
+  });
+
+  it.each(['apps/designer/src/platform/ProjectStore.ts', 'packages/shared-schema/src/scene.ts'])(
+    '%s IS ui/render as of P-029 (it was not before)',
+    (p) => {
+      expect(isUiRenderPath(p)).toBe(true);
+    },
+  );
+});
+
+/**
+ * P-029 — `needsE2e` was promoted from a local hint into the SOLE decision of whether the
+ * authoritative Linux suite runs at all, so the predicate behind it is pinned here in
+ * two halves: every workspace the apps actually import, and the unknown-path default.
+ */
+describe("the render set covers the apps' real runtime dependency closure (P-029)", () => {
+  // Derived from apps/{designer,runtime}/package.json `dependencies`, not from memory.
+  it.each([
+    ['@cg/shared-schema', 'packages/shared-schema/src/scene.ts'],
+    ['@cg/shared-ipc', 'packages/shared-ipc/src/channels.ts'],
+    ['@cg/vcg-format', 'packages/vcg-format/src/pack.ts'],
+    ['@cg/storage', 'packages/storage/src/index.ts'],
+    ['@cg/text-shaping', 'packages/text-shaping/src/index.ts'],
+    ['@cg/starter-templates', 'packages/starter-templates/src/index.ts'],
+    ['@cg/caspar-client', 'packages/caspar-client/src/reconciler.ts'],
+    ['@cg/splash-kit (under tools/, easy to miss)', 'tools/splash-kit/src/index.ts'],
+    ['@cg/template-runtime', 'packages/template-runtime/src/runtime.ts'],
+    ['@cg/lottie-bridge', 'packages/lottie-bridge/src/runtime.ts'],
+    ['@cg/ui', 'packages/ui/src/tokens.ts'],
+    ['@cg/single-file-export', 'packages/single-file-export/src/exporter-single-file.ts'],
+  ])('%s owes the E2E', (_name, path) => {
+    expect(isUiRenderPath(path)).toBe(true);
+    expect(affectsRender(path)).toBe(true);
+    expect(classifyChangedSet([path])).toEqual({ kind: 'code', needsE2e: true });
+  });
+
+  it.each([
+    'apps/designer/src/renderer/App.tsx',
+    'apps/designer/src/platform/Exporter.ts',
+    'apps/runtime/src/platform/MockRuntime.ts',
+    'apps/runtime/src/shared/runtime-bridge.ts',
+    'apps/designer/index.html',
+    'apps/runtime/public/fonts/vazirmatn.woff2',
+    'apps/designer/vite.config.ts',
+  ])('app source and shell owe the E2E: %s', (path) => {
+    expect(affectsRender(path)).toBe(true);
+  });
+});
+
+describe('an UNRECOGNISED path owes the E2E (P-029 — fail toward running)', () => {
+  it.each([
+    'packages/brand-new-package/src/index.ts',
+    'some/unknown/path.txt',
+    'package.json',
+    'turbo.json',
+    'tsconfig.base.json',
+    'pnpm-lock.yaml',
+    'tools/caspar-bridge/src/index.ts',
+  ])('%s is not in either list, so it counts as render-affecting', (path) => {
+    expect(isUiRenderPath(path)).toBe(false);
+    expect(isKnownNonRenderPath(path)).toBe(false);
+    expect(affectsRender(path)).toBe(true);
+    expect(classifyChangedSet([path]).needsE2e).toBe(true);
+  });
+
+  it('root config is NOT treated as harmless — B-066 was a root tsconfig setting', () => {
+    expect(affectsRender('tsconfig.base.json')).toBe(true);
+  });
+
+  it('only the SHORT known-safe list can skip the suite', () => {
+    for (const p of [
+      'docs/prd/bugs.md',
+      'openspec/specs/x/spec.md',
+      'README.md',
+      '.github/workflows/pr.yml',
+      '.husky/pre-push',
+      '.claude/hooks/gate-stop.mjs',
+      'tools/gate-hook/src/gate-decision.mjs',
+    ]) {
+      expect(isKnownNonRenderPath(p)).toBe(true);
+      expect(affectsRender(p)).toBe(false);
+    }
+  });
+
+  it('ONE render path in a set of safe ones still owes the E2E', () => {
+    const c = classifyChangedSet([
+      '.github/workflows/pr.yml',
+      'tools/gate-hook/src/gate-decision.mjs',
+      'packages/shared-schema/src/scene.ts',
+    ]);
+    expect(c).toEqual({ kind: 'code', needsE2e: true });
+  });
+
+  it('a code set that is entirely known-safe does NOT owe the E2E', () => {
+    expect(classifyChangedSet(['.github/workflows/pr.yml'])).toEqual({
+      kind: 'code',
+      needsE2e: false,
+    });
+    expect(
+      classifyChangedSet(['tools/gate-hook/src/gate-decision.mjs', '.claude/hooks/gate-stop.mjs']),
+    ).toEqual({ kind: 'code', needsE2e: false });
   });
 });
 
@@ -90,8 +195,10 @@ describe('classification → commands', () => {
     expect(commandsFor(c)).toEqual(['pnpm openspec validate --all --strict', 'pnpm format:check']);
   });
 
-  it('one non-docs path makes it a code change (full gate, no e2e off the UI set)', () => {
-    const c = classifyChangedSet(['docs/prd/platform.md', 'packages/shared-schema/src/scene.ts']);
+  it('one non-docs path makes it a code change (full gate, no e2e off the render set)', () => {
+    // P-029: the non-render example must now come from the SHORT known-safe list -
+    // `packages/shared-schema` is a runtime dependency of both apps and owes an E2E.
+    const c = classifyChangedSet(['docs/prd/platform.md', '.github/workflows/pr.yml']);
     expect(c).toEqual({ kind: 'code', needsE2e: false });
     expect(commandsFor(c)).toEqual(['pnpm gate']);
   });
@@ -111,7 +218,7 @@ describe('classification → commands', () => {
   });
 
   it('the opt-in NEVER invents an E2E for a diff that does not owe one', () => {
-    const code = classifyChangedSet(['packages/shared-schema/src/scene.ts']);
+    const code = classifyChangedSet(['.github/workflows/pr.yml']);
     expect(commandsFor(code, { localE2e: true })).toEqual(['pnpm gate']);
     const docs = classifyChangedSet(['docs/prd/platform.md']);
     expect(commandsFor(docs, { localE2e: true })).toEqual([
@@ -300,8 +407,10 @@ describe('the owed-E2E reminder (P-028)', () => {
     expect(text).toContain(E2E_OPT_IN_ENV);
   });
 
-  it('is silent for a code diff off the UI set, for docs-only, and for an empty set', () => {
-    expect(e2eReminderFor(classifyChangedSet(['packages/storage/src/index.ts']))).toBeNull();
+  it('is silent for a code diff off the render set, for docs-only, and for an empty set', () => {
+    // P-029: `packages/storage` moved INTO the render set (both apps depend on it), so
+    // the silent example now comes from the known-safe list.
+    expect(e2eReminderFor(classifyChangedSet(['.github/workflows/pr.yml']))).toBeNull();
     expect(e2eReminderFor(classifyChangedSet(['docs/prd/bugs.md']))).toBeNull();
     expect(e2eReminderFor(classifyChangedSet([]))).toBeNull();
   });
