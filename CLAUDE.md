@@ -328,20 +328,42 @@ origin dev` matches local — and only claim CI green after seeing the check's
 - **How that debt is DISCHARGED — one way only.** A Linux `gate:e2e` debt is discharged
   ONLY by a **COMPLETED, GREEN `e2e` job on GitHub Actions for the specific commit that
   carries the change**, cited by its **run URL**. Nothing else counts:
-  - a **CANCELLED** run does NOT discharge it. `.github/workflows/pr.yml` sets
-    `cancel-in-progress: true`, so a newer push to `dev` kills the run behind it; a
-    cancelled run is neither a pass nor a fail and proves nothing about either commit.
-    Check the run's `conclusion` reads `success`, never merely that a run exists.
+  - a **CANCELLED** run does NOT discharge it — it is neither a pass nor a fail and
+    proves nothing about the commit. Check the run's `conclusion` reads `success`, never
+    merely that a run exists. (Push runs are no longer cancelled by a newer push;
+    `cancel-in-progress` is now PR-only, per `P-027`. A run can still be cancelled by
+    hand, and a burst of pushes can still supersede a PENDING run.)
   - a green **Windows** run does NOT discharge it — that is the same rule as the bullet
     above, restated here because this is where someone will look for the exception.
   - a green run on a DIFFERENT commit does not discharge it unless that commit actually
     carries the change (a later `dev` HEAD that contains the change is fine; an earlier
     one is not).
+  - a run whose `e2e` job was **SKIPPED** does not discharge it. CI skips `e2e` when the
+    diff is classified as unable to affect rendering (`P-029`); that is a statement about
+    the diff, not evidence about the suite.
   - **Write the run URL into the change's `tasks.md`, beside the ticked item**, so the
     evidence outlives the session that produced it. A ticked box with no URL is not a
     discharge — it is a claim, and the next reader cannot check it.
-    CI runs the full Playwright suite on `ubuntu-latest` on every push to `dev`, so this is
-    now ordinary practice rather than something to arrange.
+
+  CI runs the full Playwright suite on `ubuntu-latest` on every push to `dev` whose diff
+  can affect what renders, so obtaining one is ordinary practice rather than something to
+  arrange.
+
+- **The daily merge to `main` is the COMPLETENESS BACKSTOP — a red run there is a red
+  day.** Two holes are known, and neither is closed at the per-push level: (1) GitHub keeps
+  only ONE pending run per concurrency group, so in a burst of pushes a middle commit's
+  changes get no run of their own; and (2) a push whose changed set is classified as unable
+  to affect rendering skips the `e2e` job entirely (`P-029`). Both are caught by the same
+  thing: **a push to `main` is classified against the previous `main` tip**, so the owner's
+  `dev` → `main` merge classifies the WHOLE span since the last merge and runs whatever
+  that span needs. **Verified, not assumed** — `main` is an ancestor of `dev`, so the merge
+  keeps the old `main` tip as the base, and running the classifier over a real `main..dev`
+  span reproduced it (37 files ⇒ `kind=code needsE2e=true`, forced by one unrecognised
+  path). Two consequences worth stating plainly: that run is the last line of defence for
+  everything the day skipped, so **it is not a formality to skim past** — read it, and
+  treat a failure as a failure of the whole day's work rather than of the merge commit
+  alone; and a debt that no per-push run covered is only covered once that merge run
+  completes green.
 
 ## Engine doc-sync
 

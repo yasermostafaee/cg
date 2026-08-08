@@ -1293,3 +1293,80 @@ garbage as OFF.
 **Notes:** cross-refs [[P-009]] (the hook), [[P-027]] (which made CI the authoritative Linux run on
 every push, and is what makes this safe), [[B-078]] (the local-gate flake this measurement sat
 beside — unaffected, since `pnpm gate:e2e` still exists and is still what reproduces it).
+
+## [x] P-029 — `needsE2e` was promoted from a local hint to the sole decision of whether the authoritative suite runs, so it had to be widened and inverted first ⟨priority: medium⟩ — done: `tools/gate-hook/` + `.github/workflows/pr.yml`; living spec `openspec/specs/platform-ci/spec.md` updated in the same change
+
+**What:** the `e2e` job now runs only when the change can affect what the apps render
+(`needs.changes.outputs.needs_e2e`), instead of on any non-docs change. `ci` is untouched and still
+gates on `code` alone.
+
+**Why the ORDER mattered, and why this is not a one-line change.** `needsE2e` already existed, but
+it decided whether to ALSO run a local Windows suite that could never discharge anything
+([[P-028]]). A hint that is merely useful is not good enough to decide whether the AUTHORITATIVE run
+happens at all. Two defects had to be fixed before it could carry that weight:
+
+**1. The render set was too narrow.** It listed five workspaces. The two apps' real runtime
+`dependencies` closure — read out of the package manifests, not from memory — is TWELVE:
+
+```
+@cg/caspar-client · @cg/lottie-bridge · @cg/shared-ipc · @cg/shared-schema
+@cg/single-file-export · @cg/splash-kit · @cg/starter-templates · @cg/storage
+@cg/template-runtime · @cg/text-shaping · @cg/ui · @cg/vcg-format
+```
+
+Two of those were NOT on the list I was given, and both matter:
+
+- **`@cg/splash-kit` lives under `tools/`.** Any "tools/\*\* is not render" shortcut drops the package
+  that draws the splash screen. It is a runtime dependency of BOTH apps.
+- **`@cg/caspar-client`** is a runtime dependency of the Runtime app — the thing that decides what
+  reaches air.
+
+Also added beyond the named list: ALL of `apps/[*]/src/` rather than only `renderer/` (`platform/` is
+the browser implementation behind the bridge, `shared/` is the bridge contract itself), plus each
+app's `index.html`, `public/` and Vite config.
+
+**2. The default for an unrecognised path was BACKWARDS — a defect in its own right.**
+`needsE2e` was `paths.some(isUiRenderPath)`, an allowlist test, so anything it did not recognise
+answered "no E2E owed". A new workspace, a renamed directory or a root config file therefore
+silently opted OUT. Tolerable while the answer only chose whether to run a redundant local suite;
+not tolerable when it decides whether the authoritative run happens. Now `affectsRender(path)` =
+`isUiRenderPath(path) || !isKnownNonRenderPath(path)` — **unknown fails TOWARD running the suite**.
+
+The known-safe list is deliberately SHORT, because it is the only list whose membership can cause
+the authoritative suite to be skipped: `docs/**`, `openspec/**`, `**/*.md`, `.github/**`,
+`.husky/**`, `.claude/**`, `tools/gate-hook/**`. Root config is deliberately NOT on it — [[B-066]]
+is an `es2022` setting in a root tsconfig that `SyntaxError`d on CEF 71 — and neither is the rest of
+`tools/`, because `@cg/splash-kit` proves that directory is not uniformly harmless.
+
+**A necessary ripple, stated because it was not in the brief:** `required` had to learn the
+difference between a DELIBERATE skip and a missing run. A skipped `e2e` passes only when
+`needs_e2e` is `false`; a skipped `e2e` that was OWED still fails the aggregator, so a job that
+fails to start can never be mistaken for a deliberate skip. Without that, every skipping run would
+have gone red.
+
+**Acceptance:**
+
+- WHEN a push changes a workspace in the apps' runtime dependency closure THEN `needs_e2e` is true
+  and the `e2e` job runs
+- WHEN a push changes a path in NEITHER list — a new workspace, a rename, a root config file — THEN
+  `needs_e2e` is true
+- WHEN a push changes only paths known to be unable to affect the built apps THEN `e2e` is SKIPPED
+  and `required` still passes
+- WHEN `e2e` is skipped while `needs_e2e` is true THEN `required` FAILS
+- WHEN the event is a `pull_request` THEN `needs_e2e` is true, so PRs are unaffected
+- WHEN the `ci` job's condition is read THEN it is unchanged — gated on `code` alone
+
+**Tests:** `tools/gate-hook/tests/gate-decision.test.ts`, +30 (160 → 190): every one of the twelve
+workspaces asserted individually by name; app `src/`, `index.html`, `public/` and Vite config; the
+unknown-path default across new workspaces, unknown files and root config; that ONE render path
+among safe ones still owes the suite; and that only the short known-safe list can skip it. **Five
+pre-existing tests changed their expected verdict** — they asserted the OLD narrow behaviour
+(`packages/shared-schema` and `apps/*/src/platform/` as NOT render). They were rewritten rather than
+deleted, with the two moved paths re-asserted as render paths, so the change of verdict is visible
+in the diff instead of silent.
+
+**Notes:** cross-refs [[P-028]] (which made CI the only place the suite runs, and so created the
+stakes), [[P-027]] (the push classifier this rides on), [[P-008]] (the docs/code split `ci` still
+uses), and the completeness backstop now recorded in CLAUDE.md and
+`openspec/specs/platform-ci/spec.md` — the daily `dev` → `main` merge classifies the whole span, so
+anything an individual push skipped is still caught there.
