@@ -53,10 +53,27 @@ delimiter}`, with save / delete / load / prune. Every failure resolves rather th
 
 ## 6. Owed before archive
 
-- [ ] 6.1 **An E2E is owed and NOT written.** The flow needs a real `showOpenFilePicker` grant
+- [x] 6.1 **An E2E is owed and NOT written.** The flow needs a real `showOpenFilePicker` grant
       and a page reload that preserves the profile's IndexedDB and its FSA permission state;
       Playwright's default context discards both. Decide whether to drive it with a persistent
       context or to accept the DOM tests as the coverage, and say which.
+      **DECIDED BY THE OWNER, 2026-08-08 — the DOM tests ARE the accepted coverage.** No
+      `showOpenFilePicker` E2E is written and no Playwright persistent-context profile is
+      built. This closes the task by DECISION, not by building the thing; the ticked box
+      means "we chose what covers this", not "an E2E now exists".
+      **Accepted as the coverage:** `fromFileRestore.dom.test.ts` (write-through, restore
+      after a wipe, the needs-gesture case, prune of dead items, live-attachment-wins,
+      detach-forgets-durably), `fromFileReload.dom.test.ts` and `fromFileContent.test.ts`.
+      Between them they exercise the persistence state machine against a fake handle.
+      **Deliberately NOT tested, stated so nobody reads the tick as more than it is:** the
+      real browser `showOpenFilePicker` grant; the real FSA permission state surviving a
+      real reload; and the real re-prompt path in a real profile. Those live in the browser,
+      not in our code, and the fake handle cannot prove them.
+      **Why this is acceptable:** a persistent-context profile is a large, flaky harness
+      whose upkeep exceeds what it would prove, and the residual risk is browser behaviour
+      rather than our logic. The one part that DOES need real-browser eyes is kept open as
+      6.2 below — so the risk is not dismissed, it is moved to the check that can actually
+      see it.
 - [ ] 6.2 **Owner check on a Chromium that does NOT auto-grant.** The needs-gesture path is
       covered by unit test against a fake handle; the real prompt's wording and timing on this
       station's Chromium has not been seen. Verify the restored row reads sensibly before the
