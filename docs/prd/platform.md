@@ -1123,3 +1123,72 @@ will "fix" the base back to `origin/main` and silently reinstate a gate that pro
 Cross-refs [[P-009]] (the hook), [[P-012]] (the pre-push half, still open — `tools/gate-hook/src/pre-push-decision.mjs`
 is branch-agnostic by construction and needed NO change here), [[P-017]] and [[P-019]] (both marked
 obsolete by the same model change).
+
+## [x] P-027 — CI's paths-filter diffed against `main`, so P-008's docs-only skip was dead on every `dev` push ⟨priority: medium⟩ — done: `.github/workflows/pr.yml`; no change dir (filed and fixed in one commit under CLAUDE.md's Spec discipline path)
+
+**What:** `.github/workflows/pr.yml`'s `changes` job uses `dorny/paths-filter`, which — given no
+explicit `base` — diffs a push against the **merge-base with the DEFAULT BRANCH**. Its own log says
+so: `Searching for merge-base main...dev`. On the dev-only model that base spans every commit since
+the last `dev` → `main` merge, so the "changed files" set is the entire unmerged backlog and `code`
+is `true` forever once ANY code commit is unmerged.
+
+**Symptom:** [[P-008]]'s docs-only skip was effectively DEAD on `dev` pushes. Measured 2026-08-08:
+push `4bd0a0a` changed only `openspec/**` and `docs/prd/runtime.md`, and still ran `ci` AND the full
+Playwright `e2e` job — ~9 minutes of runner time to prove nothing about a markdown edit. Nothing
+failed and nothing warned; the skip silently stopped skipping.
+
+**This is [[P-026]]'s failure in a SECOND TOOL, which is why it earns its own number.** P-026 was
+the Stop hook measuring the turn against `origin/main`; this is CI measuring the push against
+`main`. Same root cause — a base that measures the unmerged BACKLOG rather than the event — in two
+independently written tools that share no code. The lesson generalises: **on a dev-only model, any
+tool that defaults its diff base to the default branch is wrong by construction, and the failure is
+silent because it over-reports rather than under-reports.** A third instance should be looked for,
+not waited for.
+
+**Why the OBVIOUS fix was wrong on its own.** `base: ${{ github.event.before }}` alone opens a hole,
+because `concurrency` had `cancel-in-progress: true`. Once the filter looks only at what a push
+changed, a code push whose run is CANCELLED by a newer push — followed by a docs-only push, which
+now correctly skips the heavy jobs — leaves that code commit with **NO completed run at all**. The
+old always-run behaviour hid this, because the next push re-proved the same files anyway. Since
+CLAUDE.md discharges Linux `e2e` debts from exactly these runs, that hole would have manufactured
+false discharges. **Both halves therefore changed in ONE commit**, and the second is not garnish:
+
+1. **Base** — on `push`, the previous tip of the ref, so "changed files" means changed BY THIS PUSH.
+2. **Concurrency** — `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`: cancel PR
+   runs, never push runs, so every push gets its own completed run.
+
+**Fail-safe, one-directional.** Over-running costs minutes; under-running lets an unproven commit
+through. Every case where the previous tip cannot be trusted therefore falls back to the OLD
+always-run behaviour: an all-zero `before` (new branch), a `before` absent from the fetched history
+(shallow clone, expired object), and a `before` that is **not an ancestor of HEAD** (a force-push or
+history rewrite, where a diff against an abandoned line of history is meaningless rather than merely
+wide). An empty filter output is likewise unknown ⇒ run everything. All of it funnels through ONE
+`decide` step, so the fail-safe is a single rule rather than a condition copied onto each heavy job
+([[B-100]] / [[P-012]]: a second copy is how a rule drifts). `pull_request` events are untouched —
+paths-filter uses the GitHub API there, not a git base.
+
+**RESIDUAL, recorded rather than glossed:** with `cancel-in-progress: false` the IN-PROGRESS run
+always completes, but GitHub keeps only ONE pending run per concurrency group, so a burst of three
+pushes still supersedes the middle one while it is PENDING. "Every push gets a completed run" holds
+for the normal one-at-a-time cadence, not for a burst. The lever if that ever matters is a per-SHA
+concurrency group — deliberately NOT taken, because it removes the serialization that keeps
+runner-minute spend bounded.
+
+**How it is verified — end to end, not by reasoning.** The fix landed, then a docs-only commit was
+pushed and the resulting run was read: `ci` and `e2e` **skipped**, `docs-check` and `required`
+**green**. That is the whole point of the item, so it is the acceptance test, and anyone can re-run
+it: push a `docs/**`-only commit to `dev` and read the run.
+
+**Acceptance:**
+
+- WHEN a push to `dev` changes only `openspec/**`, `docs/**` or `*.md` THEN `ci` and `e2e` are
+  SKIPPED and `docs-check` + `required` pass
+- WHEN a push changes any non-docs file THEN `ci` and `e2e` run, exactly as before
+- WHEN a push's previous tip is all-zero, absent from history, or not an ancestor of HEAD THEN the
+  workflow FAILS SAFE and runs everything
+- WHEN the event is a `pull_request` THEN the filter's API-based behaviour is unchanged
+- WHEN a push run is in progress and another push arrives THEN the first run is NOT cancelled
+
+**Notes:** cross-refs [[P-008]] (the docs-only skip this restores), [[P-026]] (the same failure one
+layer in, in the Stop hook), [[P-028]] (the sibling change that made CI the only place the Linux E2E
+runs — which is what raised the stakes on a push getting a completed run).

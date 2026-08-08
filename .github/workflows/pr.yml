@@ -21,18 +21,32 @@ permissions:
   pull-requests: read
 
 concurrency:
-  # Cancel in-progress runs of the same workflow on the same ref.
-  #
-  # CONSEQUENCE ON A BUSY `dev`, stated because a debt is discharged from these
-  # runs: a run cancelled by a newer push is NOT A RESULT. It is neither a pass
-  # nor a fail — it proves nothing about either commit, and `conclusion` reads
-  # `cancelled`, not `success`. Only a COMPLETED run counts. This is not
-  # hypothetical: run 30761140987 on `main` was cancelled at 39s by the push
-  # behind it. So when several commits land in quick succession, only the LAST
-  # one is actually verified; cite a run URL as evidence only after confirming
-  # that run completed green (see CLAUDE.md, "E2E coverage").
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # P-027 — cancel PR runs, NEVER push runs.
+  #
+  # A cancelled run is NOT A RESULT: neither pass nor fail, `conclusion` reads
+  # `cancelled`. That was tolerable while every push ran everything, because the
+  # next push re-proved the same files. It is NOT tolerable now that the filter
+  # below only looks at what a push changed: a code push whose run is cancelled,
+  # followed by a docs-only push, would leave that code commit with NO completed
+  # run at all — and CLAUDE.md discharges Linux `e2e` debts from exactly these
+  # runs. The two halves therefore changed together, in one commit.
+  #
+  # Observed before the change: run 30761140987 on `main` was cancelled at 39s by
+  # the push behind it.
+  #
+  # On a PR, cancelling is still right — only the head commit's verdict matters
+  # and the branch is not what anyone merges from.
+  #
+  # RESIDUAL, stated so nobody reads more into this than it gives: with
+  # cancel-in-progress false the IN-PROGRESS run always completes, but GitHub
+  # keeps only ONE pending run per group, so pushing three times in quick
+  # succession still supersedes the middle one while it is PENDING. Every push
+  # getting its own completed run holds for the normal one-at-a-time cadence, not
+  # for a burst. If a burst ever needs full coverage, the lever is a per-SHA
+  # concurrency group — deliberately not taken here, because it removes the
+  # serialization that keeps runner-minute spend bounded.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CI: 'true'
@@ -48,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      code: ${{ steps.filter.outputs.code }}
+      code: ${{ steps.decide.outputs.code }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,16 +70,83 @@ jobs:
           # paths-filter needs git history to diff push events; PRs use the API.
           fetch-depth: 0
 
+      # P-027 — WHICH base a push is diffed against. Left to itself, paths-filter
+      # takes the merge-base with the DEFAULT BRANCH: on the dev-only model that
+      # is every commit since the last `dev` -> `main` merge, so `code` is `true`
+      # forever once any code commit is unmerged and the P-008 skip is dead. It is
+      # P-026's failure in a second tool - a base that measures the unmerged
+      # BACKLOG rather than the event.
+      #
+      # The base is therefore the PREVIOUS TIP of the ref, so "changed files"
+      # means changed BY THIS PUSH. Every case where that tip cannot be trusted
+      # FAILS SAFE to the old always-run behaviour; over-running costs minutes,
+      # under-running lets an unproven commit through, so the asymmetry is
+      # deliberate and one-directional.
+      - name: Resolve the push diff base
+        id: base
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          untrusted() {
+            echo "trusted=false" >> "$GITHUB_OUTPUT"
+            echo "reason=$1" >> "$GITHUB_OUTPUT"
+            echo "Push base NOT trusted: $1 - failing safe (run everything)."
+          }
+          if [ -z "${BEFORE:-}" ] || printf '%s' "$BEFORE" | grep -qE '^0+$'; then
+            # A brand-new ref has an all-zero `before`; there is no previous tip.
+            untrusted 'no previous tip (new branch / all-zero before)'
+          elif ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            # Shallow clone, expired object, or a rewritten ref: not diffable.
+            untrusted 'previous tip is not present in the fetched history'
+          elif ! git merge-base --is-ancestor "$BEFORE" HEAD 2>/dev/null; then
+            # A FORCE-PUSH rewrote the ref, so `before` sits on an abandoned line
+            # of history and a diff against it is meaningless, not merely wide.
+            untrusted 'previous tip is not an ancestor of HEAD (force-push / history rewrite)'
+          else
+            echo "base=$BEFORE" >> "$GITHUB_OUTPUT"
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+            echo "reason=previous tip of this ref" >> "$GITHUB_OUTPUT"
+            echo "Push base trusted: $BEFORE (previous tip of this ref)."
+          fi
+
       - name: Filter changed paths
         id: filter
+        # Skipped when a push's base is untrusted - `decide` then forces code=true.
+        # `pull_request` events never reach the base step: paths-filter uses the
+        # GitHub API there, not a git base, so that path is untouched by P-027.
+        if: github.event_name != 'push' || steps.base.outputs.trusted == 'true'
         uses: dorny/paths-filter@v3
         with:
+          # Empty on pull_request == unset, which is paths-filter's own default.
+          base: ${{ github.event_name == 'push' && steps.base.outputs.base || '' }}
           filters: |
             code:
               - '**'
               - '!openspec/**'
               - '!docs/**'
               - '!**/*.md'
+
+      # The single place `code` is decided, so every fail-safe funnels through one
+      # rule instead of being spread across `if:` conditions on the heavy jobs.
+      - name: Decide whether the heavy gate runs
+        id: decide
+        env:
+          TRUSTED: ${{ github.event_name != 'push' || steps.base.outputs.trusted == 'true' }}
+          FILTERED: ${{ steps.filter.outputs.code }}
+          REASON: ${{ steps.base.outputs.reason }}
+        run: |
+          set -uo pipefail
+          # An empty FILTERED means the filter did not run or produced nothing -
+          # unknown, which must mean "run it", never "skip it".
+          if [ "$TRUSTED" != 'true' ] || [ -z "${FILTERED:-}" ]; then
+            echo "code=true  (FAIL-SAFE: trusted=$TRUSTED filtered='${FILTERED:-}' reason='${REASON:-n/a}')"
+            echo 'code=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "code=$FILTERED  (from the paths filter; base='${REASON:-api}')"
+            echo "code=$FILTERED" >> "$GITHUB_OUTPUT"
+          fi
 
   ci:
     name: Lint • Typecheck • Test • Build
