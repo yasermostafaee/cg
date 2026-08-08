@@ -362,7 +362,7 @@ layer is NOT knowably free, and real CasparCG goes silent for empty layers (B-05
 restart-misadoption limit (recorded in `openspec/changes/runtime-protect-video-layers/design.md`):
 both need the bridge to reason about producer KINDS it did not place.
 
-## [ ] C-015 — Live Source routing: map Live Source ids to DECKLINK / ROUTE / media / NDI (fill+key capable) and composite them behind the template ⟨priority: high⟩
+## [~] C-015 — Live Source routing: map Live Source ids to DECKLINK / ROUTE / media / NDI (fill+key capable) and composite them behind the template ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (design + phase 1 landed; DECKLINK / NDI / fill+key split out to [[C-021]])
 
 **What:** The Designer track is adding a "Live Source" element — a template region exported as a
 FULLY TRANSPARENT hole plus metadata (geometry in scene px, a source id, an optional key source
@@ -410,9 +410,24 @@ source is an INSTALLATION concern configured in the Runtime.
   OPERATOR-clearable — inverting the protection. The correct behaviour is a REFUSAL with a
   distinct `live-source` reason, following the owner-approved config-declared carve-out precedent
   at `docs/prd/runtime.md:882-885` (`clearBankLayer`, which consults no producer kind at all).
-- WHEN DECKLINK / ROUTE / media sources are used THEN behavior is verified on real CasparCG 2.3.2
-  hardware before archive; WHEN NDI is used THEN the FIRST step is verifying the NDI producer
-  exists on the client's 2.3.2 build at all — record the finding either way
+- WHEN a template declaring N Live Sources is configured THEN CG Control can assign **each of them
+  individually** to a concrete producer, persisted bridge-side
+- WHEN the two-box `route://` demo is run THEN it works on the plant's real CasparCG **2.3.2** —
+  which needs no capture card
+
+**NARROWED 2026-08-08 (owner, `live-source-multibox` design.md §12.1).** The two bullets above
+REPLACE the original _"WHEN DECKLINK / ROUTE / media sources are used THEN behavior is verified on
+real CasparCG 2.3.2 hardware before archive; WHEN NDI is used THEN the FIRST step is verifying the
+NDI producer exists on the client's 2.3.2 build at all"_. The reasoning is the owner's and it is
+structural, not a concession: **the Designer never names a concrete device.** A template declares
+SYMBOLIC ids only, and binding an id to a producer is an INSTALLATION act performed in CG Control —
+so this item's done-condition is about ASSIGNMENT, which is fully testable here, not about capture
+hardware, which is not. The DECKLINK and NDI arms are **parse-verified only** on this installation
+and **fill+key cannot be validated here at all** (no Decklink card; fill+key reaches air over
+NewTek iVGA into a TriCaster, [[C-020]]); all three moved to **[[C-021]]**, `[!]` blocked on
+hardware. With that split, `live-source-multibox` phases 1–6 carry **no undischargeable hardware
+debt** — the two mixer facts the geometry rests on (`FILL`'s per-axis normalization and `CLIP`'s
+masking semantics) are already confirmed on 2.3.2.
 
 **Notes:** **THE structural risk, flag it loudly:** "non-html OSC producer kind" is the PRIMARY
 foreign/owned discriminator ([[R-015]], [[C-014]]). **CORRECTED 2026-08-03: this said "SOLE" and
@@ -791,3 +806,40 @@ Validating a replacement against a guessed destination would produce evidence ab
 Until then [[C-018]] stays open and **nothing on air depends on 2.5.0**: the plant keeps
 running 2.3.2, the 2.5.0 install is side-by-side, and no config is cut over. The cost of the
 delay is only that [[C-019]] stays blocked.
+
+## [!] C-021 — DECKLINK, NDI and fill+key for Live Sources: the arms this installation cannot validate ⟨priority: high⟩ — BLOCKED: no capture card, and fill+key rides [[C-020]]
+
+**What:** the three Live Source producer arms that [[C-015]] cannot discharge on this plant, split
+out so C-015 can close on what it CAN prove. Verify, on hardware: (a) the **DECKLINK** producer form
+and a real Decklink input as a Live Source; (b) the **NDI** producer — first that it exists on the
+target build at all, then as a Live Source; (c) **fill+key** — a Live Source declaring a KEY source
+id composited as a fill+key pair, alpha confirmed by looking at the switcher.
+**Why:** [[C-015]]'s acceptance was NARROWED on 2026-08-08 (owner, `live-source-multibox` design.md
+§12.1) to per-source assignment in CG Control plus the two-box `route://` demo, because the Designer
+never names a concrete device: a template declares symbolic ids and binding one to a producer is an
+installation act. That narrowing is only honest if the arms it drops are **filed**, not deleted —
+otherwise "C-015 is done" would quietly come to mean "DECKLINK works", which nobody will have
+checked. This item is where that debt lives, and it is blocked on hardware that is not in the
+building rather than on anything anyone can code.
+**Acceptance:**
+
+- WHEN a Decklink card is present THEN a Live Source mapped to a `DECKLINK DEVICE <n>` producer
+  plays behind the hole, its `MIXER FILL` + `CLIP` geometry correct, verified on real CasparCG 2.3.2
+- WHEN NDI is attempted THEN the FIRST step is verifying the NDI producer exists on the client's
+  build at all — record the finding either way, including a negative
+- WHEN a Live Source declares a KEY source id THEN fill and key are composited as a pair and alpha
+  is confirmed **by looking at the switcher**, never inferred from the format's specification
+  ([[B-066]] class: verify, never assume)
+- WHEN any arm is verified THEN the exact AMCP producer form it was verified with is recorded here
+  verbatim — a form that was reasoned about is not a form that was verified
+
+**Notes — why this is `[!]` and not `[ ]`.** The block is physical. `D:\programs\CasparCG\casparcg.config:15-19`
+declares consumers `<system-audio />` + `<newtek-ivga />` + `<screen />`: **there is no Decklink in
+this plant**, and fill+key reaches air over NewTek iVGA into a TriCaster, which is exactly the path
+[[C-020]] is deferred on. So the DECKLINK arm can only be parse-verified here, and fill+key cannot
+be validated here at all — running it against a guessed destination would produce evidence about the
+guess. **Ordering:** this item is downstream of [[C-015]]'s phases 1–6 (`live-source-multibox`
+`tasks.md` §10, phase 7) and does not block any of them; its own unblocking rides [[C-020]]'s
+integration with the company's playout software. **Parse-verification is still worth doing before
+the hardware arrives** and is not this item's acceptance: it proves the command is well-formed, not
+that a picture appeared.

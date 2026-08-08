@@ -1253,7 +1253,7 @@ candidate ceiling is currently four layers (70–73) while R-028's design record
 available — if the demo needs more than four simultaneous rows that is a config decision to take
 before the demo. Filed from `dev-r028-b2`; see `openspec/changes/runtime-unified-layer-rows/DEBT.md`.
 
-## [ ] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩
+## [~] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (task 6.5a; CONTAINMENT only — the head bullet is NOT discharged, see below)
 
 **What:** Make template audio start at the **take**, not at the **cue**. Today `CG ADD` with no
 `PLAY` already produces audio on the channel, so an operator preparing a graphic is heard on air
@@ -1281,6 +1281,29 @@ Confirmed by ear at the box on **2026-07-28** during the same owner checklist th
 audible audio and working `MIXER VOLUME` (see [[C-018]]'s owner-checklist results). This is
 2.5.0 behaviour and it is a direct consequence of the fix C-018 wants: on 2.3.x template audio
 never reached the channel at all, so the defect could not exist there.
+
+**MECHANISM CHOSEN 2026-08-08 — option 2, bridge-side, inside `live-source-multibox`.** The owner
+folded this item, [[R-042]] and [[B-121]] into one wave (`live-source-multibox` design.md §7 and
+§12.4): **every producer the bridge creates is created muted; audio is raised only by an explicit,
+recorded intent naming the layer.** For `CG ADD` the `MIXER … VOLUME 0` lands **BEFORE the ADD** on
+the wire (an ADD-then-mute is the same leak, shorter — [[R-042]]). The unmute is not newly built:
+`take()` already re-asserts `INTENDED_VOLUME` unconditionally on every take
+(`caspar-runtime.ts:1597-1601`), and that re-assert IS the explicit intent.
+
+**Command sources it does NOT cover, stated as this item's third acceptance bullet requires:** the
+company's PLAYOUT system sends `CG ADD` / `PLAY` to CasparCG directly, on layers this bridge never
+touches. Nothing bridge-side can mute those, and no template-side convention binds a template we did
+not author. That is option 3's gap and it remains open by construction.
+
+🔴 **NOT DISCHARGED — the second acceptance bullet, the head.** _"WHEN that cued item is then
+taken THEN its audio is audible, from the start of the audio — containment must not eat the head."_
+A bridge-side mute cannot deliver this and `live-source-multibox` does not claim it: on 2.5.0 the
+audio is **already running** at `CG ADD` (that is the defect), so a mute held from ADD to take
+unmutes **mid-stream** — the head is eaten by however long the operator cued ahead. Closing it needs
+**option 1**, gating audio on the template's own `play()` lifecycle and **enforcing that at
+export/validate time**, which is a `@cg/template-runtime` + exporter change and is deliberately out
+of `live-source-multibox`'s scope. **This item therefore stays `[~]` carrying exactly that residual**
+— read the `[~]` as "the leak is contained", never as "the audio question is answered".
 
 **Containment options — recorded, NONE chosen:**
 
@@ -1669,7 +1692,7 @@ merely written.
 **Notes:** related to [[R-033]] (the Layers table this lives in). Source: `DEBT.md:2621` (current
 model, authoritative) and `DEBT.md:1606` (superseded reading — do NOT specify from it).
 
-## [ ] R-042 — mute-before-ADD, so LOAD can run during rehearse without a brief audible leak ⟨priority: medium — reaches air⟩
+## [~] R-042 — mute-before-ADD, so LOAD can run during rehearse without a brief audible leak ⟨priority: medium — reaches air⟩ — in progress: `openspec/changes/live-source-multibox/` (task 6.5b)
 
 **What:** rehearse currently REFUSES LOAD on a rehearsing row (fail closed), because LOAD on a
 cleared row is the one path that can put an UNMUTED producer under a row the UI shows as
@@ -1693,6 +1716,13 @@ nobody notices until someone asks why there is no sound.
 - The `MIXER … VOLUME` lands before the `CG ADD` on the wire, asserted on the AMCP trace and not
   only by the absence of an error.
 - A mute that fails does not proceed to the ADD.
+
+**THE OPENSPEC CHANGE EXISTS — `openspec/changes/live-source-multibox/`, task 6.5b (2026-08-08).**
+The owner folded this item, [[R-029]] and [[B-121]] into one wave, under one rule (design.md §7):
+every bridge-created producer is created muted, audio raised only by explicit recorded intent. The
+ordering constraint above is carried verbatim into 6.5b, including the requirement that the
+`MIXER … VOLUME` be asserted **on the AMCP trace** rather than by the absence of an error. Nothing
+about this item's substance changed — only its home.
 
 **DESIGN-FIRST — implementation needs an OpenSpec change before code.** The command ORDER is a
 contract between the bridge and the template runtime, and it is version-dependent (2.5.0), so it

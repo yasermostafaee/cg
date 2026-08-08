@@ -2826,7 +2826,7 @@ already committed the slot in their head. This is a take-time failure on an on-a
 
 Source: `DEBT.md:1092` (the residual, inside the CLEARed-row sweep entry at `DEBT.md:1064`).
 
-## [ ] B-121 — `CG ADD` site 2, the reconnect reconciliation, is not rehearse-guarded, so a bridge blip re-ADDs an UNMUTED producer under a rehearsing row ⟨priority: high — reaches air⟩
+## [~] B-121 — `CG ADD` site 2, the reconnect reconciliation, is not rehearse-guarded, so a bridge blip re-ADDs an UNMUTED producer under a rehearsing row ⟨priority: high — reaches air⟩ — in progress: `openspec/changes/live-source-multibox/` (task 6.5c, and 6.5d pins all four sites)
 
 **What:** a sweep of every `CG ADD` call site in `caspar-runtime.ts` found four, and asked of each
 whether the rehearse guard covers it:
@@ -2853,6 +2853,14 @@ path nobody triggers on purpose.
 - The guard is asserted on the wire, not only in the renderer — a renderer-only guard is the shape
   site 1's fix explicitly rejected.
 - Sites 1, 3 and 4 keep their current behaviour.
+
+**FOLDED INTO `live-source-multibox` 2026-08-08 (owner).** This bug, [[R-029]] and [[R-042]] are one
+problem under one rule (design.md §7): every bridge-created producer is created muted, audio raised
+only by explicit recorded intent. Site 2 is fixed under that rule — **mute before the re-ADD, or do
+not ADD** — asserted on the wire, since a renderer-only guard is the shape site 1's fix explicitly
+rejected. Task **6.5d** additionally pins **all four** sites with one test, so site 3's "unchanged
+and safe" stops being a claim in a table and becomes an assertion — a table that is not pinned is
+re-derived by the next sweep.
 
 **Notes:** related to [[R-022]] (the rehearse feature) and to the deferred `mute-before-ADD`
 upgrade, which would change the ordering constraint here — on 2.5.0 the volume must land BEFORE

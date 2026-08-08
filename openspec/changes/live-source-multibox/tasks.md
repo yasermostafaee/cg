@@ -1,19 +1,29 @@
 # Tasks — Live Source multi-box
 
-## 0. Status — DESIGN-FIRST
+## 0. Status — authored DESIGN-FIRST; phase 1 is now UNBLOCKED
 
-**This change is authored as a design. No implementation task below is ready to start**, and none
-should be started until §7's cross-change obligation on R-028 is settled and §12's two owner
-questions in `design.md` are answered.
+**This change was authored as a design**, with no implementation task ready to start until §7's
+cross-change obligation on R-028 was settled and §12's two owner questions in `design.md` were
+answered. **Both happened on 2026-08-08** — see `design.md` §12.1 and §12.2 (DECIDED), plus a third
+decision at §12.4 folding the audio cluster into this wave, and §7 below (all four ticked).
+
+**Phase 1 is therefore ready to start.** Phases 2–7 stay gated on their own predecessors — the mock
+blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` §12.1) — never on
+§0 again.
 
 - [x] 0.1 Author `proposal.md`, `design.md` and the spec deltas from the 2026-08-03 recon and the
       2026-08-03 hardware measurements, as ONE change spanning D-137 and C-015.
 - [x] 0.2 Record every DOES-NOT-EXIST claim with the search that established it (`design.md`
       carries a `SEARCH:` line beside each).
 - [x] 0.3 Settle the ten decisions in the task's §5, each with its rejected alternatives.
-- [ ] 0.4 **Owner:** answer `design.md` §12.1 (C-015's hardware acceptance on a plant with no
-      Decklink card) and §12.2 (the rehearse contradiction). **Blocking for phase 7 and phase 1
-      respectively.**
+- [x] 0.4 **Owner:** answer `design.md` §12.1 (C-015's hardware acceptance on a plant with no
+      Decklink card) and §12.2 (the rehearse contradiction). **ANSWERED 2026-08-08**, recorded in
+      `design.md` §12 and not re-openable: §12.1 narrows C-015 to per-source assignment in CG Control
+      plus the two-box `route://` demo, splitting DECKLINK / NDI / fill+key out to **C-021**
+      (`[!]` blocked on hardware) — so phases 1–6 carry NO undischargeable hardware debt; §12.2
+      decides v1 shows an EMPTY, TRANSPARENT region in PVW, rendering the retained exported page
+      verbatim, with no second render path built now. A third decision, §12.4, lands the audio
+      cluster (R-029 / R-042 / B-121) inside this wave — see 6.5 below.
 
 ## 1. Phase 1 — Schema and authoring (no bridge, no wire)
 
@@ -176,9 +186,41 @@ questions in `design.md` are answered.
       longer rides with §12.1, which remains open on its own terms (DECKLINK and fill+key).
 - [ ] 6.4 Clamp the FILL to the scene rect (`.cg-stage` has `overflow:hidden`; the live source
       behind the hole does not).
-- [ ] 6.5 **The audio rule:** every bridge-created producer is created muted; audio is raised only
-      by explicit recorded intent. `playSource` is immediately followed by `VOLUME 0` in the same
-      batch (`design.md` §7).
+- [ ] 6.5 **The audio rule — WIDENED 2026-08-08 (owner, `design.md` §12.4). It is not a Live
+      Source rule; it is THE rule, and it discharges the whole cluster in this wave.** Every
+      bridge-created producer is created muted; audio is raised only by explicit recorded intent.
+      It covers **both** producer-creating verbs, and the two orders differ for a measured reason
+      (`design.md` §7): `playSource` is immediately followed by `VOLUME 0` **in the same batch**
+      (the producer does not exist before the `PLAY`), while `CG ADD` is **preceded** by it on the
+      wire (a bare `CG ADD` already airs the audio on 2.5.0, so ADD-then-mute is the same leak,
+      shorter). The unmute half is NOT rebuilt: `take()` already re-asserts `INTENDED_VOLUME`
+      unconditionally on every take (`caspar-runtime.ts:1597-1601`) and that re-assert IS the
+      explicit intent — a second unmute path would be the `B-100` / `P-012` one-rule-two-spellings
+      failure.
+- [ ] 6.5a **R-029** (`docs/prd/runtime.md`, high): the rule covers the **`CG ADD` path**, not only
+      `playSource`, so cueing no longer puts a template's audio on air before the take. Records
+      WHICH containment mechanism was chosen (option 2, bridge-side) and, in words, which command
+      sources it does **not** cover — the playout system's own `CG ADD` is outside it.
+- [ ] 6.5b **R-042** (`docs/prd/runtime.md`): **mute-before-ADD**, so LOAD is permitted on a
+      rehearsing row instead of refused, with no audible leak. **The `MIXER … VOLUME` lands BEFORE
+      the `CG ADD` on the wire, asserted on the AMCP trace** — not by the absence of an error — and
+      a mute that fails does not proceed to the ADD.
+- [ ] 6.5c **B-121** (`docs/prd/bugs-runtime.md`): `CG ADD` **call site 2**, the reconnect
+      reconciliation (`#decidePendingRestores`, `caspar-runtime.ts:1394`), is not rehearse-guarded,
+      so a bridge blip re-ADDs an UNMUTED producer under a rehearsing row. Fix it under the same
+      rule — mute before the re-ADD, or do not ADD — and assert it **on the wire**, since a
+      renderer-only guard is the shape site 1's fix explicitly rejected.
+- [ ] 6.5d **Pin all four `CG ADD` sites with one test** (`design.md` §7's table): site 1
+      `#loadOnto` guarded, site 2 fixed by 6.5c, **site 3 `setPosition` unchanged and pinned so it
+      STAYS unchanged**, site 4 `take()`'s pre-roll unchanged. A per-site table that is not pinned
+      is a comment, and the next sweep re-derives it.
+- [ ] 6.5e ⚠ **Do NOT close R-029's head bullet here, and say so in the item.** _"audible … from
+      the start of the audio — containment must not eat the head"_ is **not** dischargeable by a
+      bridge-side mute: the audio is already running at `CG ADD` on 2.5.0, so the take unmutes
+      mid-stream. Preserving the head needs R-029's option 1 — gating audio on the template's own
+      `play()` lifecycle, enforced at export/validate time — which is a `@cg/template-runtime` +
+      exporter change and is OUT of this design's scope (`design.md` §7, _"What this rule does NOT
+      close"_). R-029 stays `[~]` carrying exactly that residual.
 - [ ] 6.6 `mixerClear` on teardown — mixer state survives `CLEAR`
       (`command-builder.ts:128-130`, measured on hardware), so omitting it leaves a `FILL` a later
       graphic inherits.
@@ -198,8 +240,18 @@ questions in `design.md` are answered.
 
 ## 8. Docs and PRD
 
-- [ ] 8.1 Correct C1, C2, C5, C6 and C8 in D-137 / C-015 (`design.md` §11).
-- [ ] 8.2 Flip D-137 and C-015 to `[~]` naming this change dir.
+- [x] 8.1 Correct C1, C2, C5, C6 and C8 in D-137 / C-015 (`design.md` §11). **VERIFIED in place
+      2026-08-08**, each by its own marker: **C1** the migration-cost evidence
+      (`caspar.md`, _"the stated evidence for that was two-thirds wrong"_), **C2** the
+      "standalone creation unchanged" claim (`designer.md`, _"CORRECTED 2026-08-03 (C2)"_),
+      **C5** the R-015 exemption (`caspar.md`, _"design.md §4, C5"_), **C6** the "SOLE
+      discriminator" wording (`caspar.md:433-438`), **C8** out-of-frame warns-vs-deletes
+      (`designer.md`, _"design.md §9, C8"_).
+- [x] 8.2 Flip D-137 and C-015 to `[~]` naming this change dir. **DONE 2026-08-08.** C-015's
+      hardware acceptance bullet is NARROWED in the same edit per `design.md` §12.1, and the
+      arms it drops are filed as **C-021** (`[!]` blocked on hardware), cross-referenced from
+      C-015 in both directions. R-029, R-042 and B-121 also flip to `[~]` naming this change
+      dir per §12.4 — R-029 carrying its undischarged head bullet in writing (6.5e).
 - [ ] 8.3 Engine doc-sync: `packages/template-runtime/README.md` for the `mode` seam, and
       `docs/engines/overview.md`.
 

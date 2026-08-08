@@ -749,6 +749,64 @@ Three consequences, each deliberate:
    Choosing 10–59 (§4) avoids it. This is recorded because it is a non-obvious second reason for the
    range choice, and a future move of the range would silently reintroduce it.
 
+### ⭐ What the rule must cover — WIDENED 2026-08-08 (owner, §12.4)
+
+The rule above was written for `playSource`. **It is not a Live Source rule; it is THE rule**, and
+the owner's third call makes that explicit: R-029, R-042 and B-121 are closed by this one rule, in
+this wave, not by three separate fixes later. So it applies to **both** producer-creating verbs:
+
+| Verb                            | Where the mute goes                                                                                          | Closes               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------- |
+| `playSource` (new, §5)          | `MIXER … VOLUME 0` **immediately after**, in the same batch, before the layer can be composited              | Live Source audio    |
+| `CG ADD` (existing, `#sendAdd`) | `MIXER … VOLUME 0` **BEFORE the ADD**, on the wire, asserted on the trace and not by the absence of an error | **R-029**, **R-042** |
+
+🔴 **The orders differ, and the difference is not cosmetic.** For `playSource` the producer does not
+exist until the `PLAY`, so the mute cannot precede it and "same batch, before compositing" is the
+strongest available guarantee. For `CG ADD` the mute **must precede the ADD**: a bare `CG ADD` puts
+the template's audio on air on 2.5.0 (measured at 0.24 s, `docs/prd/runtime.md` R-029), so
+ADD-then-mute is the same leak, just shorter — _"an implementation that gets the order wrong looks
+correct in every test that does not listen"_ (R-042). MIXER state is channel state and survives
+`CLEAR` / `CG REMOVE` (`command-builder.ts:128-130`), which is what makes a mute-first order legal
+at all: the volume can be set on a layer before anything is on it.
+
+**All four `CG ADD` call sites, and what each gets — B-121 is the third row.** `#sendAdd`
+(`caspar-runtime.ts:3644`) is the single emit chokepoint, which is why the rule is implementable at
+one place; the guard question is nonetheless per-site and is pinned per-site by test:
+
+| #   | site                                         | today                                    | under this rule                                                     |
+| --- | -------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
+| 1   | `#loadOnto` (via `loadFixed`) `:1121`        | rehearse-guarded                         | guard stays; the mute makes the guard's job survivable (R-042)      |
+| 2   | `#decidePendingRestores` `:1394` — reconnect | **NOT guarded** — a blip re-ADDs unmuted | **B-121:** mute before the re-ADD, or do not ADD                    |
+| 3   | `setPosition` `:1436`                        | not guarded, and safe                    | unchanged behaviour; **pinned by test so it stays that way**        |
+| 4   | `take()`'s pre-roll `:1550`                  | `take()` refuses `rehearsing` first      | unchanged; `take()` already re-asserts `INTENDED_VOLUME` at `:1597` |
+
+**The unmute half already exists and is deliberately not rebuilt.** `take()` re-asserts
+`INTENDED_VOLUME` **unconditionally on every take** (`caspar-runtime.ts:1597-1601`), with a comment
+arguing at length why it is in the play path rather than in a rehearse-exit step. That re-assert
+**is** the "explicit recorded intent" this rule names. Adding a second unmute path would be the
+`B-100`/`P-012` failure — one rule, two spellings.
+
+### ⚠ What this rule does NOT close — stated, not silently widened
+
+**R-029's second acceptance bullet is NOT discharged by a bridge-side mute, and this design does not
+attempt it.** That bullet reads: _"WHEN that cued item is then taken (`PLAY`) THEN its audio is
+audible, from the start of the audio — containment must not eat the head."_
+
+- A bridge-side mute **contains** the leak for every template regardless of who authored it — that
+  is R-029's containment option 2, and it is what this rule adopts.
+- It does **not** rewind anything. On 2.5.0 the audio is already running at `CG ADD` (that is the
+  defect), so a mute held from ADD to take means the take unmutes **mid-stream**: the head is eaten
+  by however long the operator cued ahead.
+- Preserving the head needs R-029's option **1** — gating audio on the template's own `play()`
+  lifecycle rather than on load — which is a **`@cg/template-runtime` + export-validation** change,
+  enforced at export time per R-029's own fourth acceptance bullet. **None of that is in this
+  design's scope**, and it is not added here.
+
+So: **R-029's containment is discharged by this wave; R-029's head bullet is not, and R-029 stays
+`[~]` carrying exactly that residual.** It is recorded in the item itself, so the next reader does
+not read `[~]` as "the audio question is answered". R-042 and B-121 are closed in full — neither
+depends on the head.
+
 **Not fixed here, recorded:** `caspar-runtime.ts:1646-1650` still asserts the rehearse mute _"IS the
 safety condition … if it does not land, rehearse is REFUSED"_, flatly contradicted by the code ~64
 lines below where entry proceeds with `muted: false`. Product code is out of scope for this change;
@@ -818,6 +876,20 @@ preview" as one bucket opposite export; the code splits three ways.
 Preview modal pass `'author'`; `packages/single-file-export/src/exporter-single-file.ts:429` and the
 `.vcg` boot (`apps/designer/src/platform/Exporter.ts:636-649`) pass `'output'`.
 
+**The mode is an ENUM, not a boolean, and that is deliberate — DECIDED 2026-08-08 (§12.2).** v1 has
+exactly two modes and a boolean would carry them. It is an enum so a third — `'rehearse'` — can be
+added later **without reopening §12.2's decision**, which is that rehearse shows an empty
+transparent region in PVW and no second render path is built now.
+
+Stated precisely, because the seam alone is not the whole of it: rehearse renders the **retained
+exported page verbatim** (`RehearsalFrame.tsx:236`, `srcDoc={html}`), and that page was built in
+`'output'` mode at export time. So adding `'rehearse'` later means either a third exported artifact
+or a boot mode the retained page can be told at load — and this seam is the one named point where
+that choice lands, instead of an argument about what "preview" means spread across three surfaces.
+§1's rejected option D (a `<script type="application/json">` block) is retained as the carrier that
+would then already exist. **v1 builds neither.** Both are kept cheap so the decision can be
+revisited as a feature rather than as a redesign.
+
 **Rejected: CSS-only bars** (matching how the canvas already differs). The bars would then ship
 inside both exports' stylesheet and be one selector away from painting on air — for an element whose
 entire contract is that it paints nothing. A mode the exporters _declare_ is auditable; a mode
@@ -877,44 +949,101 @@ by `3e9bbc9` — but **`DEBT.md` is a frozen evidence archive and must not be ed
 
 ---
 
-## 12. Open questions — owner decisions, deliberately not guessed
+## 12. Owner decisions
 
-### 12.1 C-015's acceptance cannot be discharged on this installation
+**§12.1 and §12.2 were authored as open questions and are ANSWERED — DECIDED 2026-08-08.** A third
+decision (§12.4) was made at the same time. §12.3 remains open on its own terms. They are recorded
+here rather than left in the prompt that carried them, because a prompt is ephemeral and the spec is
+the memory. **Do not re-open 12.1, 12.2 or 12.4.**
 
-C-015 makes real-hardware verification part of done (`docs/prd/caspar.md:405`, and the Notes at
-`:404`: _"On-air behavior throughout ⇒ real-hardware verification is part of done."_). But
-**this plant has no Decklink card** — C-020 records the config declares `<system-audio />` +
-`<newtek-ivga />` + `<screen />`, and fill+key reaches air over NewTek iVGA into a TriCaster
-(`docs/prd/caspar.md:753-754`). C-020 is itself **deferred** pending that integration. So the
-DECKLINK arm can only ever be parse-verified here, and fill+key cannot be validated at all.
+### 12.1 C-015's acceptance on a plant with no Decklink card — DECIDED 2026-08-08
 
-**Either the acceptance narrows to parse-verification for DECKLINK, or the item stays open
-indefinitely on a card that is not coming.** This design's phase 7 is written to be _skippable_
-without blocking phases 1–6, but the item's own done-condition is the owner's to set.
+**The question as it was asked.** C-015 makes real-hardware verification part of done
+(`docs/prd/caspar.md:405`, and the Notes at `:404`: _"On-air behavior throughout ⇒ real-hardware
+verification is part of done."_). But **this plant has no Decklink card** — C-020 records the config
+declares `<system-audio />` + `<newtek-ivga />` + `<screen />`, and fill+key reaches air over NewTek
+iVGA into a TriCaster (`docs/prd/caspar.md:753-754`). C-020 is itself **deferred** pending that
+integration. So the DECKLINK arm can only ever be parse-verified here, and fill+key cannot be
+validated at all.
 
-**What is NOT in this question, so the owner is deciding the smallest real thing.** The two mixer
-facts the geometry rests on — `FILL`'s per-axis normalization and `CLIP`'s masking semantics — are
-**confirmed on 2.3.2** (§3's cross-build check), so **phases 1–6 carry no 2.3.2 hardware debt at
-all**. What remains un-dischargeable here is exactly the DECKLINK arm, fill+key, and NDI live use.
-That is a narrower question than "C-015's hardware acceptance", and it is the one worth answering.
+**DECIDED, in the owner's framing: the Designer never names a concrete device, so C-015's
+done-condition is about ASSIGNMENT, not about capture hardware.** A template declares **symbolic**
+live source ids only (§3, enforced at the schema boundary and again at preflight); binding each id
+to a concrete producer happens in **CG Control**, per installation (§2). C-015's acceptance
+therefore narrows to two conditions, and **both are dischargeable on this plant**:
 
-### 12.2 The rehearse contradiction (C4)
+- **(a)** for a template declaring N live sources, CG Control can assign **each of them
+  individually** to a concrete producer, persisted bridge-side — §2's `SourceMappingStore` plus its
+  settings surface (`tasks.md` §4).
+- **(b)** the two-box `route://` demo runs on the plant's real CasparCG **2.3.2**, which needs no
+  capture card (§10, `tasks.md` 6.8).
 
+**What is split OUT, and where it went.** The DECKLINK and NDI arms are **parse-verified only** on
+this installation, and **fill+key cannot be validated here at all**. Those three are filed as their
+own item — **C-021** (`docs/prd/caspar.md`), `[!]` blocked on hardware, cross-referenced from C-015
+in both directions. They are not deleted from the product; they are moved to the item that can
+actually own a hardware debt.
+
+🔴 **The consequence worth stating plainly, because it is what the decision buys: with that split,
+phases 1–6 carry NO undischargeable hardware debt.** The two mixer facts the geometry rests on —
+`FILL`'s per-axis normalization and `CLIP`'s masking semantics — are confirmed **on 2.3.2** (§3's
+cross-build check). What remains un-dischargeable here is exactly DECKLINK, NDI live use, and
+fill+key, and that is now C-021's to carry rather than a fog over the whole feature.
+
+### 12.2 The rehearse contradiction (C4) — DECIDED 2026-08-08
+
+**The question as it was asked.**
 `apps/runtime/src/renderer/features/monitors/RehearsalStage.tsx:95-96` and
-`packages/shared-ipc/src/channels/rehearse.ts:55-56` both state, in identical words, that _"after
+`packages/shared-ipc/src/channels/rehearse.ts:55-56` both stated, in identical words, that _"after
 C-015 a Live Source region renders as a labelled placeholder rather than video"_. But rehearse
 renders the **retained exported page verbatim** (`RehearsalFrame.tsx:236`, `srcDoc={html}`), and
-D-137 requires that page to paint nothing.
+D-137 requires that page to paint nothing. Either the operator sees an empty transparent region in
+PVW, or a separate render path must be built.
 
-**Either the operator sees an empty transparent region in PVW, or a separate render path must be
-built.** The design does not pick. §9's `mode` seam is written so that a third mode (`'rehearse'`)
-could be added without reopening the decision, and §1's rejected option D is retained as the
-fallback carrier if a separate render path is chosen.
+**DECIDED — v1 shows an EMPTY, TRANSPARENT region in PVW. No second render path is built now.**
+The retained exported page is rendered **verbatim** and paints nothing where a Live Source is —
+which is the same thing the template itself puts on air. PVW therefore shows the operator exactly
+what the template contributes, and the live box's absence in rehearse is a true statement about the
+template rather than a rendering gap: what fills the hole on air is a CasparCG layer the bridge
+places, which no browser preview was ever going to show.
 
-### 12.3 Can the true producer aspect be read at run time?
+Two consequences, both carried out in this change:
 
-§3's pillarbox fit uses `expectedAspect` — an **authored guess** about a source the author cannot
-see. Whether CasparCG reports a producer's real raster (via `INFO <ch>-<layer>` or OSC) is
-**unknown**, and nothing in this repo records it. If it can, the fit should use truth and
-`expectedAspect` becomes a fallback. This is a hardware recon question, answerable with
-`amcp-poke` in the same session as phase 6.
+1. **The two comments that asserted the opposite are CORRECTED**, in the same wave that records this
+   decision. They now say what v1 actually does and name the decision, so the next reader does not
+   re-derive a placeholder that was never built.
+2. **§9's `mode: 'author' | 'output'` seam stays written so a third `'rehearse'` mode can be added
+   later WITHOUT reopening this decision.** The seam is an explicit, declared enum on
+   `RuntimeBootOptions` — not a CSS accident and not a boolean — so adding `'rehearse'` is a widening
+   at one named point rather than an argument about what preview means. §1's rejected option D (a
+   `<script type="application/json">` block parsed bridge-side) is likewise retained as the fallback
+   carrier if a separate rehearse render path is ever chosen. **v1 does neither**; both are kept
+   cheap so the decision above can be revisited as a feature rather than as a redesign.
+
+### 12.3 Can the true producer aspect be read at run time? — STILL OPEN
+
+§3's **crop-to-fill** uses the mapping's `aspect`, falling back to `expectedAspect` — an **authored
+guess** about a source the author cannot see. Whether CasparCG reports a producer's real raster (via
+`INFO <ch>-<layer>` or OSC) is **unknown**, and nothing in this repo records it. If it can, the fit
+should use truth, the mapping's `aspect` becomes the fallback, and `expectedAspect` stays exactly
+what §3 makes it: a declaration to validate against. This is a hardware recon question, answerable
+with `amcp-poke` in the same session as phase 6. **It blocks nothing** — the fallback chain is
+defined without it.
+
+### 12.4 The audio cluster lands inside THIS wave — DECIDED 2026-08-08
+
+`proposal.md` already states that **R-029, R-042 and Live Source audio are one problem, not three**,
+and §7 states the rule. The owner's third call makes that operational: **the cluster is not a
+follow-up wave — §7's rule is implemented here, and it must discharge all of it.**
+
+Concretely, `tasks.md` 6.5 is widened from "the audio rule" into the rule plus the three items it
+closes:
+
+| Item                                    | What it needs from §7's rule                                                                                                                              |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **R-029** (`docs/prd/runtime.md`, high) | the rule must cover the **`CG ADD` path**, not only `playSource` — `CG ADD` with no `PLAY` already produces audio on 2.5.0, so cueing airs the audio.     |
+| **R-042** (`docs/prd/runtime.md`)       | **mute BEFORE the ADD**, so LOAD can run during rehearse with no audible leak. Ordering is the whole difficulty; ADD-then-mute is the same leak, shorter. |
+| **B-121** (`docs/prd/bugs-runtime.md`)  | `CG ADD` **call site 2**, the reconnect reconciliation, is not rehearse-guarded, so a bridge blip re-ADDs an UNMUTED producer under rehearse.             |
+
+All three flip to `[~]` naming this change dir. §7 carries the rule, the four call sites, and the
+one residual the rule does **not** close — see §7's _"What this rule does NOT close"_.
