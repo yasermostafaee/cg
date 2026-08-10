@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
-  Clapperboard,
   Clock,
   Component,
   Film,
@@ -19,6 +18,7 @@ import {
   Stamp,
   Triangle,
   Type,
+  Video,
   type LucideIcon,
 } from 'lucide-react';
 import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
@@ -224,15 +224,18 @@ export function layerTypeIcon(element: Element): LucideIcon {
     case 'repeater':
       return Rows3;
     case 'lottie':
-    case 'video-placeholder':
       return Film;
+    case 'video-placeholder':
+      // D-137 — a LIVE SOURCE, and it wears the SAME glyph the Live Source tool
+      // wears at the top of the canvas (`CanvasToolbar` / `ToolRail`, lucide
+      // `Video`). One element, one glyph, wherever the author meets it: the tool
+      // that creates it and the timeline row that represents it are the same
+      // thing, and two glyphs for one element is a thing to learn twice.
+      return Video;
     case 'video':
-      // D-128 — an imported video FILE. The clapperboard is the conventional
-      // "video file" glyph in editing tools; it reads distinctly from the image
-      // element's icon AND is deliberately NOT a camera — camera-style imagery is
-      // reserved for the live-source element (`video-placeholder`, the film strip
-      // below). The cyan lifespan colour (TYPE_COLORS) reinforces the distinction.
-      return Clapperboard;
+      // D-128 — an imported video FILE. Camera-style imagery is reserved for the
+      // live-source element above, so this takes the film strip.
+      return Film;
     case 'container':
       return Group;
     case 'composition':

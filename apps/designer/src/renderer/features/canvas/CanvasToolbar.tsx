@@ -4,12 +4,12 @@ import {
   Circle,
   Clock,
   Hand,
-  Image,
   MousePointer2,
   MoveHorizontal,
   PenTool,
   Rows3,
   Square,
+  Stamp,
   Type,
   Video,
   type LucideIcon,
@@ -42,9 +42,16 @@ const TOOLS: readonly ToolEntry[] = [
   { id: 'ellipse', label: 'Ellipse', icon: Circle },
   // D-109 — the Pen tool draws an editable bézier `path` element.
   { id: 'pen', label: 'Pen', icon: PenTool },
-  // D-040 — the logo/image tool stamps the selected Shared Library image (the
-  // shared source it needed now exists); empty library ⇒ a hint, no silent insert.
-  { id: 'image', label: 'Image (logo)', icon: Image },
+  // D-040 — the IMAGE LOADER stamps the selected Shared Library image (the shared
+  // source it needed now exists); empty library ⇒ a hint, no silent insert.
+  //
+  // It wears `Stamp`, NOT `Image`, and that is the whole point of the glyph: this
+  // tool loads from the SHARED LIBRARY, while a project-asset image arrives through
+  // Project Assets and keeps `Image`. The timeline already drew the distinction
+  // (`layerTypeIcon` gives a `source: 'shared'` image the stamp); the toolbar was
+  // showing the other element's glyph, so the two surfaces disagreed about which
+  // thing this button makes.
+  { id: 'image', label: 'Image loader', icon: Stamp },
   // D-137 — the Live Source tool. Drawn, not imported: it carries no asset (its
   // authoring bars are procedural), so unlike Lottie it earns a toolbar button.
   { id: 'live-source', label: 'Live Source', icon: Video },

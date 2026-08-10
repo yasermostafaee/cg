@@ -117,7 +117,7 @@ export class DesignerApp {
       | 'Rectangle'
       | 'Ellipse'
       | 'Pen'
-      | 'Image (logo)'
+      | 'Image loader'
       | 'Live Source'
       | 'Hand (pan)',
   ): Promise<void> {
@@ -169,7 +169,7 @@ export class DesignerApp {
 
   /** Place the logo tool on the canvas (stamps the active/first library image). */
   async placeLogo(pos: { x: number; y: number } = { x: 240, y: 200 }): Promise<void> {
-    await this.selectTool('Image (logo)');
+    await this.selectTool('Image loader');
     await this.canvas.click({ position: pos });
   }
 

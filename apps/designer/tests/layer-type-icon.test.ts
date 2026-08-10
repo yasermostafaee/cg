@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   ArrowDownUp,
   Circle,
-  Clapperboard,
   Clock,
   Component,
   Group,
@@ -10,9 +9,11 @@ import {
   MoveHorizontal,
   PenTool,
   Rows3,
+  Film,
   Square,
   Stamp,
   Type,
+  Video,
 } from 'lucide-react';
 import type { Element } from '@cg/shared-schema';
 import { layerTypeIcon } from '../src/renderer/features/timeline/ElementRow.js';
@@ -54,10 +55,27 @@ describe('layerTypeIcon (B-052)', () => {
     expect(layerTypeIcon({ type: 'repeater' } as unknown as Element)).toBe(Rows3);
   });
 
-  it('D-128 — an imported video FILE maps to the clapperboard (distinct from image, not a camera)', () => {
+  it('D-128 — an imported video FILE maps to the film strip (distinct from image, not a camera)', () => {
     const video = { type: 'video', assetId: 'x', durationMs: 1000 } as unknown as Element;
-    expect(layerTypeIcon(video)).toBe(Clapperboard);
+    expect(layerTypeIcon(video)).toBe(Film);
     expect(layerTypeIcon(video)).not.toBe(Square);
     expect(layerTypeIcon(video)).not.toBe(Image); // distinct from the image element
+    // Camera-style imagery is reserved for the Live Source below.
+    expect(layerTypeIcon(video)).not.toBe(Video);
+  });
+
+  /**
+   * D-137 — the timeline row and the tool that CREATES the element wear the same
+   * glyph. `CanvasToolbar` and `ToolRail` both give the Live Source tool lucide's
+   * `Video`; this pins the row to it, so the two cannot drift into being two things
+   * the author has to learn separately.
+   */
+  it('D-137 — a Live Source maps to the SAME icon its canvas tool wears', () => {
+    const live = {
+      type: 'video-placeholder',
+      routeKey: 'guest-1',
+    } as unknown as Element;
+    expect(layerTypeIcon(live)).toBe(Video);
+    expect(layerTypeIcon(live)).not.toBe(Film); // no longer the film strip
   });
 });
