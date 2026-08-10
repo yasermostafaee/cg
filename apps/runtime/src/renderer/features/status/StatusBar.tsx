@@ -13,6 +13,16 @@ interface Props {
   onOpenAudit?: () => void;
   /** R-010 — opens the server connection settings panel. */
   onOpenSettings?: () => void;
+  /**
+   * D-137 / C-015 — opens the Live Source mapping.
+   *
+   * Beside SERVERS, and that placement is the point: both are INSTALLATION
+   * config that decides what a command does when it reaches CasparCG, and this
+   * one is the surface without which a template declaring a live source cannot
+   * be taken at all. It is not a per-row or per-field concern, so it does not
+   * belong beside a control the way the delimiter gear does.
+   */
+  onOpenSources?: () => void;
 }
 
 const styles = {
@@ -203,7 +213,7 @@ function staleTitle(state: string): string {
 }
 
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
-export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Element {
+export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props = {}): JSX.Element {
   const health = useConnections();
   const lock = useLock();
   const link = useLink();
@@ -384,6 +394,11 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
       {onOpenSettings !== undefined && (
         <Button onClick={onOpenSettings} aria-label="Open server settings">
           SERVERS
+        </Button>
+      )}
+      {onOpenSources !== undefined && (
+        <Button onClick={onOpenSources} aria-label="Open live sources">
+          SOURCES
         </Button>
       )}
       {/* LOG, not AUDIT (owner). "Audit" names the FILE FORMAT the bridge writes;

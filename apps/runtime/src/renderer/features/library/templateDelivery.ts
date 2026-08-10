@@ -253,6 +253,12 @@ export async function importTemplateFromBytes(
   warnings: string[];
   defaultPosition?: Position;
   listFieldTargets: ListFieldTargets;
+  /**
+   * A9 / D-137 — the plate ids THIS version declares, so the caller can
+   * reconcile the template's existing assignments against them. Empty for a
+   * template with no live plates, which is a real answer and not an absence.
+   */
+  declaredPlateIds: readonly string[];
 }> {
   const { template, html, warnings, defaultPosition, listFieldTargets } =
     await produceTemplateDelivery(bytes, opts);
@@ -263,5 +269,6 @@ export async function importTemplateFromBytes(
     warnings,
     ...(defaultPosition !== undefined ? { defaultPosition } : {}),
     listFieldTargets,
+    declaredPlateIds: (template.liveSources?.sources ?? []).map((s) => s.sourceId),
   };
 }

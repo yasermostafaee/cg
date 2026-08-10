@@ -111,18 +111,6 @@ const styles = {
     // fight the declared track and reintroduce per-row sizing.
     minWidth: 0,
   },
-  refusal: {
-    border: '1px solid #B45309',
-    background: 'rgba(180, 83, 9, 0.12)',
-    borderRadius: '0.25rem',
-    padding: '0.5rem 0.75rem',
-    fontSize: '0.85rem',
-    color: '#FCD34D',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.25rem',
-  },
-  refusalDetail: { color: colors.textMuted, fontSize: '0.8rem' },
 } as const;
 
 /**
@@ -368,17 +356,21 @@ function BankEditor({
         already there, because that is where he just clicked. Nothing about the
         message is shortened: it names the cause AND the remedy, which is what makes
         it worth showing at all.
+
+        THE TREATMENT MOVED TOO. This dialog used to hand the region a styled NODE,
+        and the amber box that node wore was its own local copy — the one the other
+        dialogs went around, each inventing a red that measures 2.13:1 on this
+        surface. It is now `Notice`'s `refusal` role: byte-identical in appearance
+        (11.21:1) and spelled in exactly one place. What is passed here is DATA, and
+        there is no seam left to style it through.
       */
       {...(refusal !== null
         ? {
-            message: (
-              <div style={styles.refusal}>
-                <span>{refusal.rule ?? 'Not accepted.'}</span>
-                {refusal.detail !== undefined && (
-                  <span style={styles.refusalDetail}>{refusal.detail}</span>
-                )}
-              </div>
-            ),
+            message: {
+              role: 'refusal' as const,
+              text: refusal.rule ?? 'Not accepted.',
+              ...(refusal.detail !== undefined ? { detail: refusal.detail } : {}),
+            },
           }
         : {})}
       footer={

@@ -56,6 +56,12 @@ import {
   RehearseExitChannel,
   RehearseStateChangedChannel,
   RehearseStateChannel,
+  SourcesAssignmentsChangedChannel,
+  SourcesAssignmentsChannel,
+  SourcesConfigChangedChannel,
+  SourcesConfigChannel,
+  SourcesSetAssignmentsChannel,
+  SourcesSetConfigChannel,
   TemplatesChangedChannel,
   TemplatesGetChannel,
   TemplatesImportChannel,
@@ -75,6 +81,8 @@ import {
   type ConnectionConfig,
   type FixedLayerBank,
   type ReservedLayers,
+  type SourceAssignments,
+  type SourceCatalog,
   type WsPublishFrame,
   type WsResponseFrame,
 } from '@cg/shared-ipc';
@@ -88,6 +96,19 @@ import {
   validateFixedBank,
 } from './fixed-layers-store.js';
 import { loadReservedLayers } from './reserved-layers-store.js';
+import {
+  resolveSourceCatalog,
+  saveSourceCatalog,
+  validateSourceCatalog,
+  type SourceCatalogSource,
+} from './source-catalog-store.js';
+import {
+  pruneAssignmentsForCatalog,
+  resolveSourceAssignments,
+  saveSourceAssignments,
+  validateSourceAssignments,
+  type SourceAssignmentsSource,
+} from './source-assignments-store.js';
 import type { TemplateServeOverride } from './template-http-server.js';
 
 export interface BridgeOptions {
@@ -149,6 +170,41 @@ export interface BridgeOptions {
    */
   templatesDir?: string;
   /**
+   * D-137 / C-015 — the installation's SOURCE CATALOG, explicit. Highest
+   * precedence (tests, embedders); see {@link resolveSourceCatalog}.
+   */
+  sourceCatalog?: SourceCatalog;
+  /**
+   * D-137 / C-015 — where the source catalog persists (JSON).
+   *
+   * An ABSENT file means **NO SOURCES**, and there is deliberately no built-in
+   * default: a default input definition is a guess about hardware this project
+   * cannot see, and a wrong guess puts the wrong camera behind a guest's frame.
+   * A PRESENT-but-unusable file is a HARD boot failure — a partially parsed
+   * catalog is worse than none.
+   *
+   * ⚠ It must NOT be inside {@link templatesDir}: the template registry reads
+   * every `*.json` there as a template (B-116).
+   */
+  sourceCatalogPath?: string;
+  /**
+   * D-137 / C-015 — the per-template, per-plate ASSIGNMENTS, explicit. Highest
+   * precedence (tests, embedders); see {@link resolveSourceAssignments}.
+   */
+  sourceAssignments?: SourceAssignments;
+  /**
+   * D-137 / C-015 — where the assignments persist (JSON).
+   *
+   * Same doctrine as the catalog above, with one deliberate difference: an
+   * assignment naming a source the catalog does not define is PRUNED loudly at
+   * load rather than made a boot failure — it has a clear reading (that plate is
+   * unassigned) and an unassigned plate already refuses its take legibly.
+   *
+   * ⚠ It must NOT be inside {@link templatesDir}, and the trap is closest here
+   * because this file is ABOUT templates (B-116).
+   */
+  sourceAssignmentsPath?: string;
+  /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
    */
@@ -173,6 +229,31 @@ export interface BridgeHandle {
    * and the source is the half that does.
    */
   readonly fixedBankSource: { bank: FixedLayerBank | null; source: FixedBankSource };
+  /**
+   * D-137 / C-015 — the source catalog in force AND where it came from, so the
+   * CLI can SAY it at boot.
+   *
+   * Same reason the fixed bank carries its provenance: an installation's source
+   * list is exactly the class of config that differs silently between two
+   * machines, and the value alone cannot answer "why this one, and what do I
+   * change?". Here it also answers a question with no other surface — a station
+   * where NOTHING reaches air because the file was never written looks, from
+   * every screen, like a station whose sources are simply not configured yet.
+   */
+  readonly sourceCatalog: { value: SourceCatalog; source: SourceCatalogSource };
+  /**
+   * D-137 / C-015 — the assignments in force, where they came from, and what
+   * the boot PRUNED because the catalog no longer defines its source.
+   *
+   * `pruned` is not diagnostics: each entry is a plate that was bound and now is
+   * not, so the boot line names them. Silence there would be a station starting
+   * with a plate the operator believes is assigned.
+   */
+  readonly sourceAssignments: {
+    value: SourceAssignments;
+    source: SourceAssignmentsSource;
+    pruned: readonly { templateId: string; plateId: string; sourceId: string }[];
+  };
   /** Force-close every client socket — used by tests to simulate a mid-session drop. */
   dropConnections(): void;
   /** Stop the WebSocket server, the CasparCG session, and close all clients. */
@@ -334,15 +415,49 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           reservedLayers,
         })
       : [];
+  // D-137 / C-015 — the installation's Live Source mapping, loaded and
+  // VALIDATED here, BEFORE the WebSocket binds and against the SAME bank and
+  // reserved list the fixed-bank validator just saw. Both halves are deliberate:
+  // an unusable file must stop the boot rather than serve a station that
+  // resolves three of its four ids, and a band overlapping the bank or the
+  // reservation must resolve loudly at startup rather than at a take.
+  const sourceCatalog = resolveSourceCatalog(options);
+  validateSourceCatalog(sourceCatalog.value, { fixedBank, reservedLayers });
+  // The ASSIGNMENTS half, loaded against the catalog just resolved. A dangling
+  // reference is PRUNED rather than fatal — see `source-assignments-store.ts`'s
+  // header — but a duplicated plate is still a refusal, because two answers for
+  // one hole is not a state anything downstream can read.
+  const resolvedAssignments = resolveSourceAssignments(options);
+  // PRUNE FIRST, then validate. The order is the doctrine: a dangling reference
+  // is dropped (it has a clear reading — that plate is unassigned) while a
+  // DUPLICATED plate is still fatal, because two answers for one hole is not a
+  // state anything downstream can read. Validating first would make the ordinary
+  // restored-file case a boot failure.
+  const prunedAssignments = pruneAssignmentsForCatalog(
+    resolvedAssignments.value,
+    sourceCatalog.value,
+  );
+  validateSourceAssignments(prunedAssignments.value, { catalog: sourceCatalog.value });
   const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
     fixedSlots,
     layerPolicy,
     reservedLayers,
     ...(fixedBank !== null ? { fixedBank } : {}),
     ...(options.templatesDir !== undefined ? { templatesDir: options.templatesDir } : {}),
+    sourceCatalog: sourceCatalog.value,
+    sourceAssignments: prunedAssignments.value,
     ...(options.runtimeTuning ?? {}),
   });
-  const routes = buildRoutes(runtime, options.persistPath, options.fixedLayersPath);
+  const routes = buildRoutes(runtime, {
+    ...(options.persistPath !== undefined ? { persistPath: options.persistPath } : {}),
+    ...(options.fixedLayersPath !== undefined ? { fixedLayersPath: options.fixedLayersPath } : {}),
+    ...(options.sourceCatalogPath !== undefined
+      ? { sourceCatalogPath: options.sourceCatalogPath }
+      : {}),
+    ...(options.sourceAssignmentsPath !== undefined
+      ? { sourceAssignmentsPath: options.sourceAssignmentsPath }
+      : {}),
+  });
 
   const wss = new WebSocketServer({
     host,
@@ -402,6 +517,12 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     templateServe,
     runtime,
     fixedBankSource: { bank: fixedBank, source: fixedBankSource },
+    sourceCatalog,
+    sourceAssignments: {
+      value: prunedAssignments.value,
+      source: resolvedAssignments.source,
+      pruned: prunedAssignments.dropped,
+    },
     dropConnections() {
       for (const client of wss.clients) client.terminate();
     },
@@ -486,6 +607,13 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.delimitersChanged.subscribe((d) => push(DelimitersChangedChannel, d)),
     // R-030 — the per-channel raster + the configured-vs-real mode reading.
     backing.channelSettingsChanged.subscribe((s) => push(ChannelSettingsChangedChannel, s)),
+    // D-137 / C-015 — the installation's Live Source mapping, so a second
+    // console sees the binding an operator just made without reloading.
+    backing.sourceCatalogChanged.subscribe((c) => push(SourcesConfigChangedChannel, c)),
+    // …and the assignments, which a catalog DELETION changes without any
+    // browser asking. A console still showing the old binding is a console
+    // showing a plate as bound that is not.
+    backing.sourceAssignmentsChanged.subscribe((a) => push(SourcesAssignmentsChangedChannel, a)),
     // R-022 — the rehearsing set, so a second browser never sees a rehearsing row
     // as an ordinary loaded one and loads onto it.
     backing.rehearseChanged.subscribe((r) => push(RehearseStateChangedChannel, r)),
@@ -502,13 +630,51 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
  */
 export function buildRoutes(
   b: CasparRuntime,
-  persistPath?: string,
-  fixedLayersPath?: string,
+  paths: {
+    persistPath?: string;
+    fixedLayersPath?: string;
+    sourceCatalogPath?: string;
+    sourceAssignmentsPath?: string;
+  } = {},
 ): Map<string, Route> {
+  // NAMED, not positional. Four optional string paths in a row is a signature
+  // where transposing two of them type-checks and writes each config into the
+  // other's file.
+  const { persistPath, fixedLayersPath, sourceCatalogPath, sourceAssignmentsPath } = paths;
   const route = (channel: AnyChannel, handle: (req: never) => unknown): Route => ({
     channel,
     handle: handle as (req: unknown) => unknown,
   });
+
+  /**
+   * Persist an accepted config value, NON-FATALLY: the change is already in
+   * force in memory and refusing it now would undo an operator action that
+   * already succeeded. What must not happen is SILENCE — a station that saves
+   * nothing looks identical to one that saves fine, right up until it restarts.
+   */
+  const persistFailed = (what: string, filePath: string, err: unknown): void => {
+    process.stderr.write(
+      `[caspar-bridge] ⚠ failed to persist ${what} to ${filePath}: ` +
+        `${err instanceof Error ? err.message : String(err)} — the change is live in memory ` +
+        `but will not survive a bridge restart\n`,
+    );
+  };
+  const persistCatalog = (filePath: string | undefined, value: SourceCatalog): void => {
+    if (filePath === undefined) return;
+    try {
+      saveSourceCatalog(filePath, value);
+    } catch (err) {
+      persistFailed('the source catalog', filePath, err);
+    }
+  };
+  const persistAssignments = (filePath: string | undefined, value: SourceAssignments): void => {
+    if (filePath === undefined) return;
+    try {
+      saveSourceAssignments(filePath, value);
+    } catch (err) {
+      persistFailed('the source assignments', filePath, err);
+    }
+  };
 
   const entries: Route[] = [
     route(AppInfoChannel, () => ({ name: 'cg Bridge', version: '0.0.0', platform: 'node' })),
@@ -637,6 +803,32 @@ export function buildRoutes(
     // graphics land, and it has to survive a bridge restart.
     route(ChannelSettingsGetChannel, () => b.channelSettingsState()),
     route(ChannelSettingsSetChannel, (r: ChannelSettings) => b.setChannelSettings(r)),
+
+    // D-137 / C-015 — the installation's SOURCE CATALOG. The order on an applied
+    // change is the fixed-bank one: validate → apply → persist (non-fatal) →
+    // publish (the runtime publishes from `setSourceCatalog` itself, after the
+    // apply).
+    route(SourcesConfigChannel, () => b.sourceCatalog()),
+    route(SourcesSetConfigChannel, (r: SourceCatalog) => {
+      const result = b.setSourceCatalog(r);
+      if (result.ok) {
+        persistCatalog(sourceCatalogPath, r);
+        // A DELETION cascaded through the assignments, so the OTHER file is
+        // stale on disk too. Persisting only the catalog would resurrect the
+        // dropped bindings on the next boot — the dangle this cascade exists to
+        // prevent, arriving one restart later.
+        if (result.droppedAssignments !== undefined) {
+          persistAssignments(sourceAssignmentsPath, b.sourceAssignments());
+        }
+      }
+      return result;
+    }),
+    route(SourcesAssignmentsChannel, () => b.sourceAssignments()),
+    route(SourcesSetAssignmentsChannel, (r: SourceAssignments) => {
+      const result = b.setSourceAssignments(r);
+      if (result.ok) persistAssignments(sourceAssignmentsPath, r);
+      return result;
+    }),
 
     // R-022 — REHEARSE. Bridge-owned so several browsers agree about which rows
     // are interlocked, and every guard (on-air, not-loaded, mute-failed) lives

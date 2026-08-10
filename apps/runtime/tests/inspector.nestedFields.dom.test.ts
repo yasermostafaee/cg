@@ -72,7 +72,10 @@ async function render(info: TemplateInfo): Promise<HTMLDivElement> {
     // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
     link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
     connections: connectionsStub('both-up'),
-    templates: { get: vi.fn(() => Promise.resolve(info)) },
+    templates: {
+      get: vi.fn(() => Promise.resolve(info)),
+      list: vi.fn(() => Promise.resolve([info])),
+    },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;

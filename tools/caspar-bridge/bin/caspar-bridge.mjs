@@ -12,6 +12,8 @@
 //   caspar-bridge --fixed-layers-path C:\cg\fixed.json  # R-021: the fixed operator layer bank
 //   caspar-bridge --reserved-layers 60-69             # R-028/C-015: the playout system's layers
 //   caspar-bridge --templates-dir C:\cg\templates     # R-028: where the template library persists
+//   caspar-bridge --source-catalog-path C:\cg\sources.json      # D-137/C-015: the lives this plant has
+//   caspar-bridge --source-assignments-path C:\cg\plates.json   # D-137/C-015: which live each plate uses
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -36,6 +38,30 @@
 // R-028: the template library persists under --templates-dir
 // (~/.cg-runtime/bridge-templates by default), one JSON file per template, so
 // a bridge restart does not empty the library any browser sees.
+//
+// D-137/C-015: LIVE SOURCES are TWO files, because they are two independent
+// facts. The CATALOG (--source-catalog-path,
+// ~/.cg-runtime/bridge-source-catalog.json by default) is the list of lives this
+// plant HAS — each with a generated id, a human name and its producer. The
+// ASSIGNMENTS (--source-assignments-path,
+// ~/.cg-runtime/bridge-source-assignments.json by default) say which of those
+// lives each template's each PLATE uses. The catalog is built with no reference
+// to any template; one deliberate operator action joins them.
+//
+// ABSENT file = NOTHING DEFINED / NOTHING ASSIGNED, and NO built-in default — a
+// default input definition is a guess about hardware nobody here can see, and a
+// wrong guess puts the wrong camera behind a guest's frame; with none, nothing
+// reaches air and each take refuses legibly. PRESENT but invalid = HARD boot
+// failure, because a partially parsed config is worse than none.
+//
+// ONE deliberate exception, on the assignments alone: an assignment naming a
+// source the catalog does not define is PRUNED (loudly, on this line) rather
+// than fatal. It has a clear reading — that plate is unassigned — and an
+// unassigned plate already refuses its take.
+//
+// ⚠ NEITHER is under --templates-dir: the template registry reads EVERY *.json
+// there as a template, so a config file placed beside the templates warns
+// "skipping unusable persisted template" on every boot (B-116).
 
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -80,6 +106,18 @@ const templatesDir =
   typeof args['templates-dir'] === 'string'
     ? args['templates-dir']
     : path.join(os.homedir(), '.cg-runtime', 'bridge-templates');
+
+// D-137/C-015 — the Live Source catalog and the per-plate assignments. Each has
+// its own path, NEVER inside templatesDir (see the header): the registry would
+// read either of them as a template.
+const sourceCatalogPath =
+  typeof args['source-catalog-path'] === 'string'
+    ? args['source-catalog-path']
+    : path.join(os.homedir(), '.cg-runtime', 'bridge-source-catalog.json');
+const sourceAssignmentsPath =
+  typeof args['source-assignments-path'] === 'string'
+    ? args['source-assignments-path']
+    : path.join(os.homedir(), '.cg-runtime', 'bridge-source-assignments.json');
 
 // Build the CasparCG connection from flags, falling back to defaults.
 // B-046 — server B exists ONLY when a --backup-* flag declares it; the
@@ -131,10 +169,14 @@ const handle = await createBridge({
   reservedLayers,
   reservedLayersPath,
   templatesDir,
+  sourceCatalogPath,
+  sourceAssignmentsPath,
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
 console.error(`[caspar-bridge] candidate layers: ${describeFixedBank(handle.fixedBankSource)}`);
+console.error(`[caspar-bridge] live sources: ${describeSourceCatalog(handle.sourceCatalog)}`);
+console.error(`[caspar-bridge] plate assignments: ${describeAssignments(handle.sourceAssignments)}`);
 console.error(
   `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
     (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)'),
@@ -179,6 +221,68 @@ function describeFixedBank({ bank, source }) {
     `channel ${bank.channel}, layers ${bank.start}-${end} ` +
     `(${bank.count} declared, ${shown} shown) - from ${where}`
   );
+}
+
+/**
+ * The source CATALOG in force, in one line, WITH WHERE IT CAME FROM.
+ *
+ * The `candidate layers:` line above is the precedent and this reads the same
+ * way, for the same reason plus one that is sharper here: with NO sources,
+ * nothing reaches air, and there is no screen anywhere that distinguishes "this
+ * station was never configured" from "these plates are simply not bound yet".
+ * A machine misconfigured this way is otherwise diagnosable only with a
+ * debugger — the operator presses take and gets a refusal naming a plate.
+ *
+ * ASCII only, deliberately: the Windows console this prints to renders an
+ * en-dash as mojibake, and a line whose whole job is to be READ must not arrive
+ * with garbage in the middle of a layer range.
+ */
+function describeSourceCatalog({ value, source }) {
+  const band =
+    value.layerRange === undefined
+      ? 'no layer band declared'
+      : `layers ${value.layerRange.start}-${value.layerRange.end}`;
+  if (value.sources.length === 0) {
+    const why =
+      source === 'absent'
+        ? `no file at ${sourceCatalogPath}`
+        : source === 'none'
+          ? 'no --source-catalog-path configured'
+          : `from ${source === 'file' ? sourceCatalogPath : source}`;
+    // Said plainly, because it is the state in which the feature does nothing:
+    // no plate can be assigned, and every take carrying one refuses.
+    return `NONE DEFINED (${why}) - a template declaring a Live Source will refuse its take`;
+  }
+  const names = value.sources.map((s) => s.name).join(', ');
+  const where = source === 'file' ? sourceCatalogPath : source;
+  return `${value.sources.length} defined (${names}), ${band} - from ${where}`;
+}
+
+/**
+ * The per-plate ASSIGNMENTS in force, and — the half with no other surface —
+ * WHAT THE BOOT PRUNED.
+ *
+ * A pruned entry is a plate that WAS bound and now is not, because the catalog
+ * beside it no longer defines the source (two hand-editable files, restorable
+ * apart). It is dropped rather than dangling, and dropping it silently would
+ * start a station with a plate the operator believes is assigned.
+ */
+function describeAssignments({ value, source, pruned }) {
+  const where =
+    source === 'absent'
+      ? `no file at ${sourceAssignmentsPath}`
+      : source === 'none'
+        ? 'no --source-assignments-path configured'
+        : source === 'file'
+          ? sourceAssignmentsPath
+          : source;
+  const head =
+    value.assignments.length === 0
+      ? `NONE ASSIGNED (${where})`
+      : `${value.assignments.length} assigned - from ${where}`;
+  if (pruned.length === 0) return head;
+  const lost = pruned.map((a) => `${a.templateId}/${a.plateId} -> ${a.sourceId}`).join(', ');
+  return `${head} - DROPPED ${pruned.length} naming a source this catalog does not define (${lost})`;
 }
 
 function parseArgs(argv) {

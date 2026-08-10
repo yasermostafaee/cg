@@ -228,6 +228,19 @@ export function createMockBridge(): RuntimeBridge {
     // "survives a restart". Cross-browser sharing is the one property the mock
     // genuinely cannot model — there is no shared party in offline mode — and
     // that is a property of test mode, not a gap in the contract.
+    // D-137 / C-015 — offline parity for both halves. The mock shares the
+    // bridge's VALIDATORS (`checkSourceCatalog` / `checkSourceAssignments`) and
+    // its delete CASCADE (`pruneAssignmentsForCatalog`), so a refusal the
+    // operator meets here is the one the real station would give.
+    sources: {
+      config: () => Promise.resolve(mock.sourceCatalog()),
+      setConfig: (req) => Promise.resolve(mock.setSourceCatalog(req)),
+      onConfigChanged: (handler) => mock.sourceCatalogChanged.subscribe(handler),
+      assignments: () => Promise.resolve(mock.sourceAssignments()),
+      setAssignments: (req) => Promise.resolve(mock.setSourceAssignments(req)),
+      onAssignmentsChanged: (handler) => mock.sourceAssignmentsChanged.subscribe(handler),
+    },
+
     delimiters: {
       list: () => Promise.resolve(mock.delimitersList()),
       set: (req) => Promise.resolve(mock.delimitersSet(req.delimiters)),

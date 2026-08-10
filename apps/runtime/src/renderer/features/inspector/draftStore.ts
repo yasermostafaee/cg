@@ -18,12 +18,49 @@ import { isFieldNamespace, type FieldValue, type FieldValues } from '@cg/shared-
  * fields live under that instance's namespace (`['زیرنویس', 'name']`), which is the same
  * address the GDD advertises and `@cg/template-runtime` resolves at render. A top-level
  * field is just a path of length 1, so flat templates behave exactly as before.
+ *
+ * ── ⭐ D-137 / C-015 — LIVE PLATE ASSIGNMENTS STAGE HERE TOO ────────────────
+ *
+ * A plate's source picker is an Inspector control, and it drafts like every other
+ * one: staged locally, dirty-marked, discarded by Discard, written by Update.
+ *
+ * 🔴 **IT IS THE SAME STORE, NOT A SECOND ONE**, and that is the requirement
+ * rather than tidiness (golden rule 6). One version counter, one `subscribeDrafts`,
+ * one `clearDraft`, one `pruneDrafts`, one answer to "is this item dirty?". A
+ * parallel draft path that agrees today is how the two come to disagree later —
+ * and the failure mode here is an operator's unapplied edit destroyed with no
+ * undo, which is precisely what the round-trip prune already did once
+ * (`useStackHousekeeping`'s header).
+ *
+ * ⚠ IT IS A SEPARATE MAP INSIDE THIS MODULE, deliberately, and NOT a key in the
+ * `FieldValues` overlay: that overlay IS the `stack.update` payload, so a plate
+ * assignment living in it would be sent to the template as a field it never
+ * declared. The assignment goes to `sources.set-assignments`, a different channel
+ * with a different owner — `applyDraft` writes both from one operator action.
+ *
+ * ⚠ AND IT IS KEYED BY ITEM, even though the assignment it stages is
+ * TEMPLATE-level. The DRAFT belongs to the editing session the operator is in —
+ * it is theirs until they apply it — and keying it by item is what makes it
+ * inherit, unchanged, every guard the field drafts already have: it survives a
+ * selection switch, it survives a panel or fullscreen round-trip, and it is
+ * dropped only by Discard or by a prune that can PROVE the item has left the
+ * stack. The moment it is APPLIED it becomes template-level, which is the point
+ * at which other rows see it.
  */
 
 /** Address of one editable field: the namespace chain, then the field id. */
 export type FieldPath = readonly string[];
 
 const drafts = new Map<string, FieldValues>();
+/**
+ * D-137 / C-015 — staged plate assignments, per item: `plateId → sourceId`,
+ * where the EMPTY STRING is a real staged value meaning "not assigned".
+ *
+ * It has to be distinguishable from "nothing staged": un-assigning a plate that
+ * currently has a source is an edit like any other, and an absent entry would
+ * make it indistinguishable from never having touched the control.
+ */
+const plateDrafts = new Map<string, Map<string, string>>();
 let version = 0;
 const listeners = new Set<() => void>();
 
@@ -122,6 +159,64 @@ export function stagedValue(itemId: string, path: FieldPath): FieldValue | undef
 }
 
 /**
+ * D-137 / C-015 — stage one plate's source. `''` stages "not assigned", which is
+ * a real edit and not an absence.
+ */
+export function stagePlateSource(itemId: string, plateId: string, sourceId: string): void {
+  const item = plateDrafts.get(itemId) ?? new Map<string, string>();
+  item.set(plateId, sourceId);
+  plateDrafts.set(itemId, item);
+  bump();
+}
+
+/**
+ * The plate value to render: the draft when staged, else the APPLIED assignment.
+ * The same rule the fields follow, so a push from another console can never
+ * clobber an in-progress draft.
+ */
+export function effectivePlateSource(
+  itemId: string,
+  plateId: string,
+  applied: string | null,
+): string {
+  const staged = plateDrafts.get(itemId)?.get(plateId);
+  return staged ?? applied ?? '';
+}
+
+/** True iff the plate is staged AND different from the applied assignment. */
+export function isPlateDirty(itemId: string, plateId: string, applied: string | null): boolean {
+  const staged = plateDrafts.get(itemId)?.get(plateId);
+  return staged !== undefined && staged !== (applied ?? '');
+}
+
+/** A copy of the item's staged plate assignments (what an apply will write). */
+export function snapshotPlateDraft(itemId: string): ReadonlyMap<string, string> {
+  return new Map(plateDrafts.get(itemId) ?? []);
+}
+
+/**
+ * Clear ONLY the staged plates whose value still equals the snapshot — the
+ * `clearStagedMatching` rule, for the same reason: a plate the operator re-picked
+ * DURING the in-flight round-trip must survive rather than be silently dropped.
+ */
+export function clearStagedPlatesMatching(
+  itemId: string,
+  snapshot: ReadonlyMap<string, string>,
+): void {
+  const item = plateDrafts.get(itemId);
+  if (item === undefined) return;
+  let changed = false;
+  for (const [plateId, value] of snapshot) {
+    if (item.get(plateId) === value) {
+      item.delete(plateId);
+      changed = true;
+    }
+  }
+  if (item.size === 0) plateDrafts.delete(itemId);
+  if (changed) bump();
+}
+
+/**
  * The value to render: the draft when staged, else the applied value. The single
  * source the controls read so a push can never clobber an in-progress draft.
  */
@@ -151,12 +246,32 @@ export function isFieldDirty(
   return !valuesEqual(valueAt(item, path), applied);
 }
 
-/** True iff any staged field of the item differs from its applied value. */
-export function isItemDirty(itemId: string, applied: FieldValues): boolean {
+/**
+ * True iff any staged edit of the item differs from its applied value — FIELDS
+ * and PLATES alike.
+ *
+ * `appliedPlates` is optional because most callers hold no assignment map (the
+ * stack row's dirty dot, for one) and MUST still answer correctly for the fields.
+ * Omitting it means "I am not asking about plates" — never "this item has none",
+ * which is why an absent map does not read a staged plate as clean by accident:
+ * a staged plate with no applied value to compare against is dirty on its own.
+ */
+export function isItemDirty(
+  itemId: string,
+  applied: FieldValues,
+  appliedPlates?: ReadonlyMap<string, string | null>,
+): boolean {
   const item = drafts.get(itemId);
-  if (item === undefined) return false;
-  for (const path of leafPaths(item)) {
-    if (!valuesEqual(valueAt(item, path), valueAt(applied, path))) return true;
+  if (item !== undefined) {
+    for (const path of leafPaths(item)) {
+      if (!valuesEqual(valueAt(item, path), valueAt(applied, path))) return true;
+    }
+  }
+  const plates = plateDrafts.get(itemId);
+  if (plates !== undefined) {
+    for (const [plateId, value] of plates) {
+      if (value !== (appliedPlates?.get(plateId) ?? '')) return true;
+    }
   }
   return false;
 }
@@ -195,9 +310,11 @@ export function buildOverlayPayload(applied: FieldValues, overlay: FieldValues):
   return deepMerge(applied, overlay);
 }
 
-/** Drop an item's entire draft (on Discard). */
+/** Drop an item's entire draft — fields AND plates — on Discard. */
 export function clearDraft(itemId: string): void {
-  if (drafts.delete(itemId)) bump();
+  const hadFields = drafts.delete(itemId);
+  const hadPlates = plateDrafts.delete(itemId);
+  if (hadFields || hadPlates) bump();
 }
 
 /** A deep copy of the item's current draft (the fields an apply will send). */
@@ -267,18 +384,26 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
   if (!snapshot.ready) return;
   const live = snapshot.liveItemIds;
   let changed = false;
-  for (const itemId of [...drafts.keys()]) {
-    if (!live.has(itemId)) {
-      drafts.delete(itemId);
-      changed = true;
+  // BOTH maps, from the one guard. A plate draft that outlived this sweep would
+  // be an unapplied edit the operator can no longer see or reach.
+  for (const map of [drafts, plateDrafts] as {
+    delete: (k: string) => boolean;
+    keys: () => IterableIterator<string>;
+  }[]) {
+    for (const itemId of [...map.keys()]) {
+      if (!live.has(itemId)) {
+        map.delete(itemId);
+        changed = true;
+      }
     }
   }
   if (changed) bump();
 }
 
-/** Test-only: wipe all drafts. */
+/** Test-only: wipe all drafts, both kinds. */
 export function __resetDraftsForTest(): void {
   drafts.clear();
+  plateDrafts.clear();
   bump();
 }
 

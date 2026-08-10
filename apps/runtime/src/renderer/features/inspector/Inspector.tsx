@@ -24,6 +24,8 @@ import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
 import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
+import { LivePlatesSection } from './LivePlatesSection.js';
+import { appliedPlateSources } from './livePlates.js';
 import { PositionPicker } from './PositionPicker.js';
 import {
   draftsVersion,
@@ -39,6 +41,37 @@ import {
 /** The shared field class, plus the dirty accent (border only — no layout shift). */
 function fieldClass(dirty: boolean): string {
   return dirty ? 'cg-field is-dirty' : 'cg-field';
+}
+
+/**
+ * How many characters of the template id are enough to tell two of them apart.
+ * Six of a UUID is comfortably distinguishing and short enough to read at a
+ * glance beside a name.
+ */
+const ID_STUB_LENGTH = 6;
+
+/**
+ * ⭐ R-040's CLASS, ARRIVING ON A SECOND SURFACE — a display label derived from a
+ * non-unique human name, with the unique key present but hidden.
+ *
+ * The owner's report: two imported templates both render as `seghab` and cannot
+ * be told apart. `templateDisplayName` prefers the imported FILE name, and two
+ * packages can perfectly well arrive from files called the same thing; the
+ * `templateId` that separates them is on the heading's `title` attribute, which
+ * is to say nowhere an operator looks.
+ *
+ * ⚠ SAME CLASS, DIFFERENT ROOT CAUSE, and the distinction is the point. R-040 is
+ * `sequenceItemNamespace` colliding two same-named sequence ELEMENTS inside ONE
+ * template's field tree; this is two same-named TEMPLATES. Neither fix reaches
+ * the other, so this one is recorded ON R-040 rather than folded into it.
+ *
+ * The stub appears ONLY when it is earning its place — when another template in
+ * this browser's registry shares the display name. A suffix on every heading
+ * would be noise on the overwhelmingly common single-template case, and noise is
+ * what makes the real signal unreadable.
+ */
+function templateIdStub(templateId: string): string {
+  return templateId.slice(0, ID_STUB_LENGTH);
 }
 
 /**
@@ -94,6 +127,12 @@ const styles = {
     margin: '0 0 var(--r-space-3)',
     overflowWrap: 'anywhere' as const,
   },
+  /**
+   * The id stub that separates two same-named templates. Muted and lighter than
+   * the name: it is a DISAMBIGUATOR, not part of what the template is called,
+   * and rendering it at the name's weight would read as a longer name.
+   */
+  titleStub: { color: colors.textMuted, fontWeight: 400 },
   /** The item's own headline, under the template name — content, not metadata. */
   contentTitle: {
     color: colors.text,
@@ -264,6 +303,12 @@ function MetaChip({
  */
 export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Element {
   const [info, setInfo] = useState<TemplateInfo | null>(null);
+  /**
+   * Every template this browser holds — read ONLY to answer "does another
+   * template share this one's display name?". Browser-local (B-085), so it
+   * resolves offline and costs nothing.
+   */
+  const [siblings, setSiblings] = useState<readonly TemplateInfo[]>([]);
   // THE SECOND HOP — Update reaches air, so it needs CasparCG. Editing does not.
   const casparReach = useCasparReach();
   const linkDown = useLink() === 'disconnected';
@@ -294,6 +339,16 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
       },
       () => {
         if (!cancelled) setInfo(null);
+      },
+    );
+    // Same guard, same reason: a failed lookup leaves the heading without its
+    // disambiguator rather than throwing.
+    void window.cg.templates.list().then(
+      (list) => {
+        if (!cancelled) setSiblings(list);
+      },
+      () => {
+        if (!cancelled) setSiblings([]);
       },
     );
     return () => {
@@ -339,7 +394,15 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
     ? (schema ?? []).map((f) => ({ field: f, key: f.id }))
     : inferredRows;
 
-  const dirty = isItemDirty(itemId, item.fields);
+  // D-137 / C-015 — the plate drafts are the SAME draft state, so the commit bar
+  // has to see them: an Update the operator cannot press, or a Discard that
+  // reads as nothing-to-discard, would be the panel disagreeing with its own
+  // controls about whether there is an unapplied edit.
+  const dirty = isItemDirty(
+    itemId,
+    item.fields,
+    appliedPlateSources(item.templateId, info?.liveSources?.sources ?? []),
+  );
   const isEmpty = rootFields.length === 0 && groups.length === 0;
 
   // R-004 — the header names the template. The `TemplateInfo` was already in hand here and
@@ -348,12 +411,22 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
   const rawTitle = item.fields['title'];
   const contentTitle = typeof rawTitle === 'string' ? rawTitle.trim() : '';
   const label = info !== null ? templateDisplayName(info) : 'Unnamed template';
+  // See `templateIdStub`: shown only when another template answers to the same
+  // name, so the ordinary heading stays a name and nothing else.
+  const ambiguous =
+    info !== null && siblings.filter((t) => templateDisplayName(t) === label).length > 1;
 
   return (
     <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
       <div style={styles.scroll}>
         <h3 style={styles.title} title={item.templateId}>
           {label}
+          {ambiguous && (
+            <span style={styles.titleStub} data-template-stub={templateIdStub(item.templateId)}>
+              {' '}
+              · {templateIdStub(item.templateId)}
+            </span>
+          )}
         </h3>
         {contentTitle !== '' && <div style={styles.contentTitle}>{contentTitle}</div>}
         {/* ALWAYS SHOWN, including the no-layer case: "no layer" is not an absence of
@@ -381,6 +454,9 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
         </div>
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
         <PositionPicker key={`pos-${itemId}`} item={item} />
+        {/* D-137 / C-015 — bind this template's live plates. Renders nothing at
+            all for a template that declares none, which is most of them. */}
+        <LivePlatesSection item={item} info={info} />
         {/* `cg-inspector-section` carries the shared rhythm — the heading's rule,
             its tracking, and the largest gap in the gradient beneath it. Same
             class as POSITION, so the two sections cannot drift apart. */}

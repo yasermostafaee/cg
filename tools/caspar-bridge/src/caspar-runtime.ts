@@ -44,6 +44,16 @@ import {
   type TemplateInfo,
   type ChannelSettings,
   type ChannelSettingsState,
+  EMPTY_SOURCE_ASSIGNMENTS,
+  EMPTY_SOURCE_CATALOG,
+  checkSourceAssignments,
+  checkSourceCatalog,
+  pruneAssignmentsForCatalog,
+  type SourceAssignments,
+  type SourceCatalog,
+  type SourcesSetAssignmentsReason,
+  type SourcesSetConfigReason,
+  type TemplateSourceAssignment,
   type CHANNEL_SETTINGS_SET_REASONS,
   type Rehearsal,
   type REHEARSE_ENTER_REASONS,
@@ -264,6 +274,18 @@ export class CasparRuntime {
   /** R-034 — emitted with the full delimiter list whenever a browser changes it. */
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
   /**
+   * D-137 / C-015 — emitted with the FULL source catalog whenever a browser
+   * changes it, so every connected console converges without polling.
+   */
+  readonly sourceCatalogChanged = new Emitter<SourceCatalog>();
+  /**
+   * D-137 / C-015 — emitted with the FULL assignment set whenever it changes,
+   * INCLUDING when a catalog deletion cascaded through it. That case is the
+   * reason this is a push and not a poll: no browser asked for the change, and
+   * every browser is showing plates it now affects.
+   */
+  readonly sourceAssignmentsChanged = new Emitter<SourceAssignments>();
+  /**
    * R-030 — emitted when a browser changes the channel raster AND when a fresh
    * `INFO <channel>` reading lands. Both, because the mismatch verdict is a
    * function of the two together: a new reading can turn a settled `match` into
@@ -426,6 +448,20 @@ export class CasparRuntime {
   /** R-030 — the per-channel output raster + what `INFO` reports, persisted. */
   readonly #channelSettings: ChannelSettingsStore;
   /**
+   * D-137 / C-015 — the installation mapping in force.
+   *
+   * LOADED AND VALIDATED IN `createBridge`, before the WebSocket binds, and
+   * handed in here already-good: an unusable file is a hard boot failure and a
+   * band that overlaps the bank or the reservation is refused at startup, not
+   * adjudicated at take time (the fixed-bank governing principle).
+   */
+  #sourceCatalog: SourceCatalog;
+  /**
+   * D-137 / C-015 — which catalog entry each template's each PLATE uses.
+   * LOADED, VALIDATED and PRUNED in `createBridge`, before the WebSocket binds.
+   */
+  #sourceAssignments: SourceAssignments;
+  /**
    * R-030 — which server label produced the video-mode reading we hold for each
    * channel.
    *
@@ -552,6 +588,17 @@ export class CasparRuntime {
        * template). Absent = in-memory only (unit tests).
        */
       templatesDir?: string;
+      /**
+       * D-137 / C-015 — the VALIDATED source catalog (resolved and checked in
+       * `createBridge` before the WebSocket binds). Absent = NO SOURCES, which
+       * is the fail-closed default and never a guessed one.
+       */
+      sourceCatalog?: SourceCatalog;
+      /**
+       * D-137 / C-015 — the VALIDATED and PRUNED assignments. Absent = NOTHING
+       * ASSIGNED, which is exactly what a freshly imported library has.
+       */
+      sourceAssignments?: SourceAssignments;
     } = {},
   ) {
     this.#reservedLayers = options.reservedLayers ?? [];
@@ -580,6 +627,10 @@ export class CasparRuntime {
     // nobody would think to look for.
     this.#channelSettings = new ChannelSettingsStore(options.templatesDir);
     this.#channelSettings.hydrate(this.#declaredChannels());
+    // D-137 / C-015 — already loaded and validated by `createBridge`; absent
+    // files resolved to the EMPTY value there, never to a guessed default.
+    this.#sourceCatalog = options.sourceCatalog ?? EMPTY_SOURCE_CATALOG;
+    this.#sourceAssignments = options.sourceAssignments ?? EMPTY_SOURCE_ASSIGNMENTS;
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
@@ -3213,6 +3264,85 @@ export class CasparRuntime {
     if (refusal !== null) return { ok: false, reason: refusal.reason, message: refusal.message };
     // Every connected browser converges, the `templates.changed` precedent.
     this.delimitersChanged.emit(this.#delimiters.list());
+    return { ok: true };
+  }
+
+  /**
+   * D-137 / C-015 — the installation's source catalog in force. An EMPTY
+   * `sources` list is a real answer and means nothing can be assigned; it is
+   * never a "not loaded yet".
+   */
+  sourceCatalog(): SourceCatalog {
+    return this.#sourceCatalog;
+  }
+
+  /** D-137 / C-015 — which catalog entry each template's each plate uses. */
+  sourceAssignments(): SourceAssignments {
+    return this.#sourceAssignments;
+  }
+
+  /**
+   * Replace the source catalog: validate → apply → CASCADE → publish
+   * (`bridge.ts` persists after the ok, the R-010 order).
+   *
+   * THE VALIDATION IS THE SAME FUNCTION THE BOOT PATH CALLS, against the SAME
+   * bank and reserved list resolved once in `createBridge`. At-change is the
+   * half that gets forgotten, and it is the half an operator can trigger with a
+   * graphic on air: a band edited into the candidate bank would put a live
+   * producer on top of an operator row, at 21:59, with no boot in between.
+   *
+   * 🔴 **DELETING A SOURCE CASCADES, HERE, IN THE SAME OPERATION.** The delete
+   * is not refused — an installation must be able to retire a live — and it is
+   * not left to dangle until air, which is the failure this project exists to
+   * prevent. Every assignment the new catalog orphans is dropped and RETURNED,
+   * so the caller can name at the moment of deletion which templates referenced
+   * it; those plates then read as unassigned and their take refuses naming the
+   * plate. The prune is `@cg/shared-ipc`'s, the SAME one the boot path uses —
+   * two spellings of "which assignments does this catalog orphan" is how they
+   * come to disagree.
+   */
+  setSourceCatalog(next: SourceCatalog): {
+    ok: boolean;
+    reason?: SourcesSetConfigReason;
+    message?: string;
+    droppedAssignments?: TemplateSourceAssignment[];
+  } {
+    const verdict = checkSourceCatalog(next, {
+      fixedBank: this.#fixedBank,
+      reservedLayers: this.#reservedLayers,
+    });
+    if (!verdict.ok) return verdict;
+    this.#sourceCatalog = next;
+    this.sourceCatalogChanged.emit(next);
+    const pruned = pruneAssignmentsForCatalog(this.#sourceAssignments, next);
+    if (pruned.dropped.length > 0) {
+      this.#sourceAssignments = pruned.value;
+      this.sourceAssignmentsChanged.emit(pruned.value);
+      return { ok: true, droppedAssignments: [...pruned.dropped] };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Replace the assignments: validate against the catalog IN FORCE → apply →
+   * publish (`bridge.ts` persists after the ok).
+   *
+   * An assignment naming a source this installation does not define is REFUSED
+   * here rather than pruned: the product's own surface cannot produce one, so a
+   * caller that does is stale or hand-written, and silently dropping its request
+   * would report a success the caller did not get. The LOAD path prunes instead,
+   * and `pruneAssignmentsForCatalog`'s docstring records why the two doors
+   * answer differently.
+   */
+  setSourceAssignments(next: SourceAssignments): {
+    ok: boolean;
+    reason?: SourcesSetAssignmentsReason;
+    message?: string;
+  } {
+    const verdict = checkSourceAssignments(next, { catalog: this.#sourceCatalog });
+    if (!verdict.ok) return verdict;
+    this.#sourceAssignments = next;
+    this.sourceAssignmentsChanged.emit(next);
     return { ok: true };
   }
 

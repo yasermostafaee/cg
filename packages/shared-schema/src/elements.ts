@@ -1060,9 +1060,8 @@ export const LiveSourceIdSchema = z
  * REPURPOSING this type for file video (that is the separate `video` element), not
  * IMPLEMENTING it for the purpose it was reserved for.
  *
- * `keySourceId` is ADDITIVE and optional, so every stored scene keeps parsing with
- * no schema-version bump: the migration registry is empty and `holdOverrides` is
- * the precedent. `expectedAspect` acquires its first consumer in phase 6 — it is
+ * `keySourceId` is now DEPRECATED (see the field): never written, still parsed, so
+ * every stored scene keeps loading with no schema-version bump. `expectedAspect` acquires its first consumer in phase 6 — it is
  * the author's DECLARATION to validate the mapped source against, never the input
  * to the fit computation, which is an installation fact (design.md §3).
  */
@@ -1088,9 +1087,19 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   /** The FILL source's symbolic id, e.g. `guest-1`. */
   routeKey: LiveSourceIdSchema,
   /**
-   * D-137 — the optional KEY source id, for a fill+key input pair. Additive.
-   * Absent ⇒ the source is fill-only, which is every `route://` and media case.
-   * Compositing the pair is C-021's (hardware-blocked), not this phase's.
+   * ⚠ DEPRECATED (owner, 2026-08-10; `live-source-multibox` design.md §1a).
+   *
+   * **Never written by a new document, still parsed so every stored scene keeps
+   * loading.** A template declares ONE symbolic id; whether it resolves to a
+   * single device or to a fill/key DEVICE PAIR is a property of the
+   * installation's MAPPING, never of the scene — the author cannot know how a
+   * source arrives at a plant. The Inspector's control for it is gone, and
+   * `collectLiveSources` no longer emits it onto the declaration.
+   *
+   * ⚠ NOT REMOVED, and that is deliberate: it shipped and it is optional, so
+   * deleting it is a MIGRATION with its own decision, not a tidy-up. A field
+   * that stops being written but stays on screen is worse than either state —
+   * which is why the control went and this did not.
    */
   keySourceId: LiveSourceIdSchema.optional(),
 });

@@ -172,14 +172,20 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
     for (const el of children) {
       if (el.type === 'video-placeholder') {
         const roles = dynamicRoles.get(el.id);
+        // ⚠ `keySourceId` / `keyDynamic` are DELIBERATELY NOT EMITTED (owner,
+        // 2026-08-10; design.md §1a). A template declares ONE symbolic id, and
+        // whether it resolves to a single device or to a fill/key DEVICE PAIR is
+        // a property of the installation's MAPPING. Both fields survive on the
+        // schemas so stored scenes and persisted `TemplateInfo` records keep
+        // parsing; emitting them here would carry a scene's guess about a plant
+        // it cannot see all the way to the bridge, where it would compete with
+        // the mapping that actually knows.
         out.push({
           elementId: el.id,
           sourceId: el.routeKey,
-          ...(el.keySourceId !== undefined ? { keySourceId: el.keySourceId } : {}),
           rect: sceneRect(el, ancestors),
           ...(el.expectedAspect !== undefined ? { expectedAspect: el.expectedAspect } : {}),
           dynamic: roles?.has('fill') ?? false,
-          keyDynamic: roles?.has('key') ?? false,
         });
         continue;
       }

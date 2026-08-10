@@ -43,7 +43,6 @@ const styles = {
   field: { display: 'flex', flexDirection: 'column' as const, gap: '0.15rem' },
   fieldLabel: { fontSize: '0.72rem', color: colors.textMuted },
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: '0.5rem 0 0' },
-  error: { fontSize: '0.75rem', color: colors.error, margin: '0.4rem 0 0' },
 } as const;
 
 export function DelimitersModal({ onClose }: { onClose: () => void }): JSX.Element {
@@ -65,6 +64,21 @@ export function DelimitersModal({ onClose }: { onClose: () => void }): JSX.Eleme
     <Modal
       title="Text file delimiters"
       onClose={onClose}
+      /*
+        §3 — THE REFUSAL MOVES OUT OF THE BODY.
+
+        It was the LAST CHILD of the dialog's content: `<p style={styles.error}
+        role="alert">` after the delimiter list, the add row and the hint. Two
+        defects in one line, and this dialog had both — the placement the primitive
+        exists to prevent (inside the scroll container, so a long delimiter list
+        puts the reason for a refusal below the fold) and a local `colors.error`,
+        which measures 2.13:1 on this surface.
+
+        The dialog was ON the primitive and went around its message region, which
+        is the drift worth naming: adopting a primitive's CHROME while re-deciding
+        one of its contracts leaves a surface that reads consistent and is not.
+      */
+      {...(error !== null ? { message: { role: 'refusal' as const, text: error } } : {})}
       footer={
         <>
           {/*
@@ -137,11 +151,7 @@ export function DelimitersModal({ onClose }: { onClose: () => void }): JSX.Eleme
         on exactly the characters you type. Removing a delimiter does not change any field already
         using it.
       </p>
-      {error !== null && (
-        <p style={styles.error} role="alert">
-          {error}
-        </p>
-      )}
+      {/* The refusal is NOT rendered here any more — see the `message` prop above. */}
     </Modal>
   );
 }

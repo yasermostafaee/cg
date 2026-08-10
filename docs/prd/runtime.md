@@ -1657,6 +1657,23 @@ index) is a UI call, not a technical one. Related: [[R-037]] is the other half o
 and touches the same `sequenceItemNamespace`; a fix for either should consider both.
 Source: `DEBT.md:1420`.
 
+⭐ **THE SAME CLASS ARRIVED ON A SECOND SURFACE 2026-08-10, AND WAS FIXED THERE — read this before
+assuming one fix covers both.** The owner reported two imported TEMPLATES both rendering as `seghab`
+in the Inspector heading, indistinguishable. `templateDisplayName` prefers the imported FILE name,
+and two packages can arrive from files called the same thing; the `templateId` that separates them
+sat on the heading's `title` attribute, which is nowhere an operator looks. Fixed in
+`openspec/changes/live-source-multibox/` (task 4d): the heading carries a short id STUB, shown ONLY
+when another template in the registry shares the display name — a suffix on every heading is noise on
+the overwhelmingly common single-template case.
+
+🔴 **SAME CLASS, DIFFERENT ROOT CAUSE, and the distinction is why this item stays open.** The shared
+class is _a display label derived from a non-unique human name, with the unique key present but
+hidden_. **This** item is `sequenceItemNamespace` colliding two same-named sequence ELEMENTS inside
+ONE template's field tree; that one was two same-named TEMPLATES. Neither implementation reaches the
+other, so the 4d fix does not discharge this item — but its shape (disambiguate only when ambiguous,
+using the key that is already in hand) is the obvious candidate for the wording decision this item
+still owes.
+
 ## [ ] R-041 — no test pins the `#`-versus-alias model: divergence, alias stability, or gap-not-renumber ⟨priority: medium⟩
 
 **What:** three properties of the layer `#` column and the default row alias are unpinned by any
@@ -1922,12 +1939,17 @@ later prioritisation pass cannot read it as a nice-to-have and defer it.
 must be able to point **that ONE plate** at a different source, **fast**, **without taking the
 graphic off air** and **without disturbing the other two plates**.
 
-**Why the MAPPING is the WRONG lever — recorded so it is not proposed later.** The obvious move is
-"edit `guest-2`'s mapping to point at the spare camera". It is wrong twice: a mapping is
-**installation-wide configuration**, so editing it changes **every template** using that id — and it
-**persists**, so an emergency substitution made at 19:58 is still in force next week. Both are wrong
-for a temporary swap. This is a **PER-ITEM OVERRIDE**, the same shape as the existing position
-override: the configured value is untouched and **only this run changes**.
+**Why THE CONFIGURATION is the WRONG lever — recorded so it is not proposed later.** The obvious
+move is "point guest 2 at the spare camera" in one of the two places that configure it. Both are
+wrong, and for the same two reasons. Editing the installation's SOURCE changes **every template**
+that uses it; editing the template's ASSIGNMENT changes **every row carrying that template** — and
+both **persist**, so an emergency substitution made at 19:58 is still in force next week.
+
+⭐ **STATE THE LAYERING (C-015 design.md §2z / §2d), because it is what makes this item coherent:**
+the template's ASSIGNMENT is the **DEFAULT** for every use of that template; this swap is the
+**PER-RUN OVERRIDE** on top of it, the same shape as the existing position override — the configured
+values are untouched and **only this run changes**; and the override **does NOT write back**, so an
+emergency substitution can never silently become the permanent configuration.
 
 **The mechanism, which the existing structures already support.** [[C-015]] phase 5's `#liveLayers`
 ledger keys by **itemId** and holds one record per plate — `{ slot, sourceId, role, producer, fill }`
@@ -1946,13 +1968,15 @@ the graphic itself never reloads.
   a prior clear — do NOT assume it; record the measurement.** Run it in the same `amcp-poke` session
   as `live-source-multibox` design.md §3b's `DEFER`/`COMMIT` question.
 - WHEN the substituted source carries a different format THEN **the fit recomputes automatically**,
-  in the same action: crop-to-fill re-derives from the new mapping (design.md §3a's chain). The
+  in the same action: crop-to-fill re-derives from the new source (design.md §3a's chain). The
   operator must not have a second step — under pressure, a second step is a step that does not
   happen.
 - WHEN the operator had deliberately raised that plate's audio THEN **the swap re-applies it**.
   Every bridge-created producer is born muted (C-015 phase 6.5), and the intent belonged to the
   **PLATE**, not to the producer instance — a swap that silently mutes a guest is its own on-air
   fault.
+- WHEN the operator applies the swap THEN the template's ASSIGNMENT and the installation's catalog
+  are both **unchanged**, and the UI does not suggest otherwise — the override is this run's alone
 - WHEN the bridge restarts THEN **the override survives**. Retention must carry it, or a momentary
   bridge blip silently reverts the plate to the **dead** source. This is the [[B-107]] / [[B-109]]
   class — retention dropping state it did not model — so it is stated as a requirement with a test,

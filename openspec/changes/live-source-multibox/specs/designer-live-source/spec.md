@@ -6,16 +6,26 @@ change's `tasks.md` §0.
 
 ## ADDED Requirements
 
-### Requirement: A Live Source is an axis-aligned region carrying ONE SYMBOLIC source id
+### Requirement: A Live Source is an axis-aligned region carrying ONE SYMBOLIC plate id
 
 The Designer SHALL offer a **Live Source** element that can be placed and sized axis-aligned, and
 that carries **exactly one** source id, an OPTIONAL `expectedAspect` and an optional poster image.
 The schema type SHALL remain `video-placeholder` and SHALL be extended additively, so every stored
 scene continues to parse without a schema-version bump or a migration.
 
-The source id SHALL be **symbolic**: it SHALL match a plain identifier form and SHALL therefore
+**AMENDED 2026-08-10 (owner, `design.md` §2z) — that id is a PLATE IDENTIFIER, not an installation
+key.** It names a hole in THIS template and nothing outside it, and the author picks it for the
+LAYOUT. It SHALL NOT be matched by name against the installation's list of sources: a name match
+silently requires the author to guess the installation's naming convention, which the Designer
+cannot know. The installation binds a plate to one of its own named sources by a deliberate operator
+action. The schema field is NOT renamed — that is a scene migration — and every rule below is
+unchanged; only what the id MEANS is restated.
+
+The plate id SHALL be **symbolic**: it SHALL match a plain identifier form and SHALL therefore
 reject a concrete device reference such as `DECKLINK DEVICE 3`, a `route://` URL or a file path.
-Mapping an id to a concrete producer is an INSTALLATION concern and never travels in the scene.
+Resolving a plate to a concrete producer is an INSTALLATION concern and never travels in the scene —
+a device-shaped plate id is an author writing an installation fact into a scene whether or not
+anything would ever have matched it.
 
 **AMENDED 2026-08-10 (owner) — whether an id resolves to a single device or to a FILL/KEY DEVICE
 PAIR is a property of the installation's MAPPING, never of the scene.** The scene SHALL NOT declare
@@ -46,9 +56,9 @@ axis-aligned.
 - **WHEN** a scene written before the additive fields existed is loaded **THEN** it parses
   unchanged and no migration runs
 
-#### Scenario: A device reference is refused as a source id
+#### Scenario: A device reference is refused as a plate id
 
-- **WHEN** a source id is set to `DECKLINK DEVICE 3`, a `route://` URL or a file path **THEN** the
+- **WHEN** a plate id is set to `DECKLINK DEVICE 3`, a `route://` URL or a file path **THEN** the
   value is refused at the schema boundary
 - **WHEN** a scene carrying such an id reaches export preflight **THEN** an error is raised naming
   the element, and the export is blocked
@@ -63,7 +73,7 @@ decimal, e.g. `16:9 (1.78)`), because the field takes the decimal and the author
 The picker SHALL offer a `Custom…` option that reveals a numeric input, so an unusual ratio stays
 reachable, and a `— not specified —` option that writes the field **ABSENT**. Absent is a real third
 state: `expectedAspect` is the author's ASSERTION, which the runtime validates the installation's
-mapping against and refuses the take on mismatch, so an author who cannot see the feed SHALL be able
+assigned source against and refuses the take on mismatch, so an author who cannot see the feed SHALL be able
 to decline to assert rather than be forced into a guess. A new Live Source SHALL still store 16:9,
 shown as the selected preset.
 
@@ -75,9 +85,6 @@ preserve `H` and solve for `W` instead, and SHALL state which side it preserved 
 Live Source is a preflight error, so the action must never create the error it exists to avoid. It
 SHALL be disabled, with a stated reason, when no aspect is asserted or when the element already
 matches within tolerance.
-
-The `key id` field SHALL carry a hint stating that the key id is symbolic and pairs with the fill id,
-that it is left empty for an opaque source, and that both ids need their own mapping entry.
 
 #### Scenario: The aspect reads back as a named preset
 

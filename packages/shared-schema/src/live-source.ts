@@ -41,7 +41,20 @@ export const LiveSourceDeclarationSchema = z.object({
   elementId: IdSchema,
   /** The FILL source's symbolic id, e.g. `guest-1`. Never a device (see {@link LiveSourceIdSchema}). */
   sourceId: LiveSourceIdSchema,
-  /** The optional KEY source id of a fill+key pair. Absent ⇒ the source is fill-only. */
+  /**
+   * ⚠ DEPRECATED (owner, 2026-08-10; `live-source-multibox` design.md §1a) —
+   * NEVER EMITTED by `collectLiveSources`, still PARSED so every persisted
+   * `TemplateInfo` from before the decision keeps loading.
+   *
+   * A template declares ONE symbolic id, and whether it resolves to a single
+   * device or to a fill/key DEVICE PAIR is a property of the installation's
+   * MAPPING (`SourceMappingsSchema`'s DECKLINK arm), never of the scene. The
+   * author cannot know how a source arrives at a plant, which is §12.1's
+   * principle and §3's, applied one step further.
+   *
+   * Reading it is not the same as honouring it: the bridge resolves fill/key
+   * from the MAPPING. This field survives only so a stored record parses.
+   */
   keySourceId: LiveSourceIdSchema.optional(),
   /** The hole, flattened to scene pixels through its FULL ancestor chain. */
   rect: LiveSourceRectSchema,
@@ -63,7 +76,15 @@ export const LiveSourceDeclarationSchema = z.object({
    * A static id can be resolved once, at load.
    */
   dynamic: z.boolean(),
-  /** The same question for the KEY id (`role: 'key'`). False whenever there is no key id. */
-  keyDynamic: z.boolean(),
+  /**
+   * ⚠ DEPRECATED alongside {@link keySourceId}, and now OPTIONAL — a WIDENING,
+   * so every declaration persisted before the decision still parses while new
+   * ones omit it entirely.
+   *
+   * It was required, and it had to stop being required rather than stay pinned
+   * at `false`: a required field that is always the same value is a field that
+   * looks like it still means something.
+   */
+  keyDynamic: z.boolean().optional(),
 });
 export type LiveSourceDeclaration = z.infer<typeof LiveSourceDeclarationSchema>;

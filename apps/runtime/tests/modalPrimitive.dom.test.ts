@@ -94,7 +94,7 @@ describe('§1 — every dialog gets its chrome from the primitive', () => {
       createElement(Modal, {
         title: 'Some dialog',
         onClose: () => undefined,
-        message: 'why it did not happen',
+        message: { role: 'refusal' as const, text: 'why it did not happen' },
         footer: [
           createElement(ModalAction, { actionRole: 'cancel', key: 'c' }, 'Cancel'),
           createElement(ModalAction, { actionRole: 'primary', key: 'p' }, 'Apply'),
@@ -208,7 +208,12 @@ describe('§2 — each role resolves to exactly ONE treatment', () => {
  * the property the old code violated and the new code has, and unlike a geometry
  * assertion it cannot silently pass.
  *
- * The true in-viewport assertion belongs in Playwright; recorded in DEBT.md.
+ * THE TRUE IN-VIEWPORT ASSERTION NOW EXISTS, and it is no longer owed: it lives in
+ * `tests/e2e/modal-message-in-viewport.spec.ts`, where a real layout engine scrolls a
+ * genuinely-overflowing dialog body to the top and asserts the refusal is still in
+ * the viewport — with a negative control proving the check can fail. This spec keeps
+ * the mechanism assertion beside it deliberately: the structural property is what a
+ * future dialog breaks, and it fails in milliseconds rather than in a browser.
  */
 describe('§3 — a refusal is pinned beside the action row, never appended to the scroll', () => {
   const BANK: FixedLayerBank = {

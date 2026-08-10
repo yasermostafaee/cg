@@ -35,10 +35,19 @@ want a different colour.
 **Nothing is half-done in the tree** — every commit is self-contained and the working tree
 is clean. What is OWED is listed under _Skipped process_; the two that matter:
 
-- **🔴 The §3 E2E is not written.** The task asked for an in-viewport assertion on the
-  scrolled refusal. jsdom computes no layout, so the DOM spec pins the MECHANISM instead
-  (message outside the scroll container, immediately above the action row). The real
-  assertion needs Playwright's `toBeInViewport()`.
+- **✅ The §3 E2E is WRITTEN — discharged 2026-08-10.** It was owed because jsdom computes
+  no layout, so the DOM spec could only pin the MECHANISM (message outside the scroll
+  container, immediately above the action row) while the task's own wording asked for a
+  visibility claim. It is now `apps/runtime/tests/e2e/modal-message-in-viewport.spec.ts`:
+  six mapped sources make the `Live sources` body genuinely overflow (asserted, not
+  assumed), the bridge's real validator refuses an overlapping band, the body is scrolled
+  back to the top, and the refusal is asserted `toBeInViewport({ ratio: 1 })` — with a
+  negative control asserting the last element INSIDE that body, where the refusal used to
+  be appended, is out of view at the same scroll position. Verified red against the
+  reintroduced in-body placement before being claimed green. `Live sources` rather than
+  `Candidate layers` because the mock's `setFixedLayers` accepts everything and there is no
+  shared fixed-layers validator to refuse with; the mechanism under test is the
+  primitive's, so it is the same mechanism. **Linux CI run:** see `Gate results` below.
 - **A Linux `gate:e2e` is owed.** Five dialogs changed layout. The Windows run is recorded
   below and is non-authoritative for pixel/geometry.
 
@@ -2079,12 +2088,15 @@ Per the fast-mode contract, all of this was deliberately not done.
 - **No OpenSpec change artifacts and no PRD item.** The `Modal` primitive gained a public
   contract (the three roles, the message region) and five dialogs changed appearance — that
   is spec-worthy and none of it is written down outside the code and this file.
-- **🔴 THE §3 E2E IS OWED, and it is the assertion the task actually asked for.** The DOM
-  spec pins the MECHANISM (the message is outside the scroll container, immediately above
-  the action row) because jsdom computes no layout. The task's own wording — "assert the
-  message is in the viewport without scrolling … assert visibility, not presence in the
-  DOM" — needs Playwright's `toBeInViewport()` against a scrolled `Candidate layers` list.
-  **Not written.** A Linux `gate:e2e` is owed regardless: five dialogs changed layout.
+- **✅ THE §3 E2E IS WRITTEN — DISCHARGED 2026-08-10.** The DOM spec pinned the MECHANISM
+  (the message is outside the scroll container, immediately above the action row) because
+  jsdom computes no layout. The task's own wording — "assert the message is in the viewport
+  without scrolling … assert visibility, not presence in the DOM" — needed Playwright's
+  `toBeInViewport()`, and now has it:
+  `apps/runtime/tests/e2e/modal-message-in-viewport.spec.ts`. See the discharge note near
+  the top of this file for why it drives `Live sources` rather than `Candidate layers`, and
+  for the negative control that gives the viewport check teeth. A Linux `gate:e2e` is owed
+  for the dialogs changed in the SAME commit that discharges this, and is cited there.
 - **No test asserts the migrated dialogs still OPEN from their real entry points.** The
   specs drive `ServerSettingsPanel` and `AuditPanel` directly. Their launchers (the status
   bar, the audit button) are unchanged and typecheck clean, but nothing pins it.

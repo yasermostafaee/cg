@@ -167,6 +167,7 @@ describe('Inspector fields — R-020', () => {
       link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
       connections: connectionsStub('both-up'),
       templates: {
+        list: vi.fn(() => Promise.resolve([])),
         get: vi.fn(() =>
           Promise.resolve({
             templateId: 'tpl-1',

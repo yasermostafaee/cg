@@ -21,6 +21,8 @@ import { StatusBar } from './features/status/StatusBar.js';
 import { Tooltip } from './ui/Tooltip.js';
 import { useConnections } from './hooks/useConnections.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
+import { initSources } from './features/sources/sourceStore.js';
+import { SourcesModal } from './features/sources/SourcesModal.js';
 import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
 import { useLink } from './hooks/useLink.js';
 import { useLock } from './hooks/useLock.js';
@@ -83,6 +85,7 @@ export function App(): JSX.Element {
   const layout = useShellLayout();
   const [auditOpen, setAuditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const selected = useMemo(
     () => items.find((i) => i.itemId === selectedId) ?? null,
     [items, selectedId],
@@ -118,6 +121,13 @@ export function App(): JSX.Element {
   // field, and a subscription per rendered field would open and close one every
   // time the operator changed selection.
   useEffect(() => initDelimiters(window.cg), []);
+
+  // D-137 / C-015 — the installation's source CATALOG and the per-plate
+  // ASSIGNMENTS, pulled once and kept subscribed for the same reason: both are
+  // per-STATION, a second console must gain a binding this one just made without
+  // either operator reloading, and a catalog DELETION cascades into the
+  // assignments without any browser asking.
+  useEffect(() => initSources(window.cg), []);
 
   // Stack housekeeping — the prune of per-item state for items that have left the
   // stack, plus the file-attachment restore. HERE because `App` is the one
@@ -374,6 +384,7 @@ export function App(): JSX.Element {
         <StatusBar
           onOpenAudit={() => setAuditOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSources={() => setSourcesOpen(true)}
         />
         <CommandToast />
         {/* THE tooltip, mounted ONCE. Every control carrying a `title` inherits it
@@ -382,6 +393,7 @@ export function App(): JSX.Element {
         <Tooltip />
         <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
         <ServerSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        {sourcesOpen && <SourcesModal onClose={() => setSourcesOpen(false)} />}
         <LockOverlay
           engaged={lock.engaged}
           {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}
