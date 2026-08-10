@@ -12,6 +12,7 @@
 //   caspar-bridge --fixed-layers-path C:\cg\fixed.json  # R-021: the fixed operator layer bank
 //   caspar-bridge --reserved-layers 60-69             # R-028/C-015: the playout system's layers
 //   caspar-bridge --templates-dir C:\cg\templates     # R-028: where the template library persists
+//   caspar-bridge --source-mappings-path C:\cg\sources.json  # D-137/C-015: symbolic id -> producer
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -36,6 +37,19 @@
 // R-028: the template library persists under --templates-dir
 // (~/.cg-runtime/bridge-templates by default), one JSON file per template, so
 // a bridge restart does not empty the library any browser sees.
+//
+// D-137/C-015: the Live Source mapping (which producer each symbolic source id
+// resolves to, and the layer band those producers are placed on) loads from
+// --source-mappings-path (~/.cg-runtime/bridge-source-mappings.json by
+// default). ABSENT file = NO MAPPINGS and NO built-in default — a default input
+// mapping is a guess about hardware nobody here can see, and a wrong guess puts
+// the wrong camera behind a guest's frame; with none, nothing reaches air and
+// each take refuses legibly. PRESENT but invalid = HARD boot failure, because a
+// partially parsed mapping is worse than none.
+//
+// ⚠ It is deliberately NOT under --templates-dir: the template registry reads
+// EVERY *.json there as a template, so a config file placed beside the
+// templates warns "skipping unusable persisted template" on every boot (B-116).
 
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -80,6 +94,13 @@ const templatesDir =
   typeof args['templates-dir'] === 'string'
     ? args['templates-dir']
     : path.join(os.homedir(), '.cg-runtime', 'bridge-templates');
+
+// D-137/C-015 — the Live Source mapping. Its own path, NEVER inside
+// templatesDir (see the header): the registry would read it as a template.
+const sourceMappingsPath =
+  typeof args['source-mappings-path'] === 'string'
+    ? args['source-mappings-path']
+    : path.join(os.homedir(), '.cg-runtime', 'bridge-source-mappings.json');
 
 // Build the CasparCG connection from flags, falling back to defaults.
 // B-046 — server B exists ONLY when a --backup-* flag declares it; the
@@ -131,10 +152,12 @@ const handle = await createBridge({
   reservedLayers,
   reservedLayersPath,
   templatesDir,
+  sourceMappingsPath,
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
 console.error(`[caspar-bridge] candidate layers: ${describeFixedBank(handle.fixedBankSource)}`);
+console.error(`[caspar-bridge] live sources: ${describeSourceMappings(handle.sourceMappings)}`);
 console.error(
   `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
     (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)'),
@@ -179,6 +202,41 @@ function describeFixedBank({ bank, source }) {
     `channel ${bank.channel}, layers ${bank.start}-${end} ` +
     `(${bank.count} declared, ${shown} shown) - from ${where}`
   );
+}
+
+/**
+ * The Live Source mapping in force, in one line, WITH WHERE IT CAME FROM.
+ *
+ * The `candidate layers:` line above is the precedent and this reads the same
+ * way, for the same reason plus one that is sharper here: with NO mapping,
+ * nothing reaches air, and there is no screen anywhere that distinguishes "this
+ * station was never configured" from "these sources are simply not bound yet".
+ * A machine misconfigured this way is otherwise diagnosable only with a
+ * debugger — the operator presses take and gets a refusal naming an id.
+ *
+ * ASCII only, deliberately: the Windows console this prints to renders an
+ * en-dash as mojibake, and a line whose whole job is to be READ must not arrive
+ * with garbage in the middle of a layer range.
+ */
+function describeSourceMappings({ value, source }) {
+  const band =
+    value.layerRange === undefined
+      ? 'no layer band declared'
+      : `layers ${value.layerRange.start}-${value.layerRange.end}`;
+  if (value.mappings.length === 0) {
+    const why =
+      source === 'absent'
+        ? `no file at ${sourceMappingsPath}`
+        : source === 'none'
+          ? 'no --source-mappings-path configured'
+          : `from ${source === 'file' ? sourceMappingsPath : source}`;
+    // Said plainly, because it is the state in which the feature does nothing:
+    // every declared id is unmapped, and every take carrying one refuses.
+    return `NONE MAPPED (${why}) - a template declaring a Live Source will refuse its take`;
+  }
+  const ids = value.mappings.map((m) => m.id).join(', ');
+  const where = source === 'file' ? sourceMappingsPath : source;
+  return `${value.mappings.length} mapped (${ids}), ${band} - from ${where}`;
 }
 
 function parseArgs(argv) {

@@ -53,3 +53,6 @@ export * from './channels/delimiters.js';
 export * from './channels/channelSettings.js';
 // R-022 — REHEARSE: a bridge-owned mode with a PLAY-to-air interlock.
 export * from './channels/rehearse.js';
+// D-137 / C-015 — the installation's symbolic-id → producer mapping, and the
+// layer band those producers are placed on. ABSENT means NO MAPPINGS.
+export * from './channels/sources.js';

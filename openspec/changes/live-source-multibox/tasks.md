@@ -350,24 +350,56 @@ clip)` returns `null` — not an empty rect — when the two do not intersect, a
 
 ## 4. Phase 4 — The mapping store and its settings surface
 
-- [ ] 4.1 `SourceMappingsSchema` in `@cg/shared-ipc` — a discriminated union on producer `kind`
+- [x] 4.1 `SourceMappingsSchema` in `@cg/shared-ipc` — a discriminated union on producer `kind`
       (`design.md` §2), never a free string. Each entry carries an OPTIONAL `aspect`: the
       installation's statement of what the plant actually delivers, which is the **fit input** for
       §3's crop-to-fill. `expectedAspect` on the element is a declaration to validate against, not
       the fit input — they are different fields (`design.md` §3).
-- [ ] 4.2 `SourceMappingStore` in the bridge: atomic mkdir → tmp → rename mirroring
+- [x] 4.2 `SourceMappingStore` in the bridge: atomic mkdir → tmp → rename mirroring
       `fixed-layers-store.ts:305-310`; **absent file ⇒ NO MAPPINGS, no built-in default**;
       present-but-invalid ⇒ **hard boot failure**.
-- [ ] 4.3 A new `--source-mappings-path` flag, default `~/.cg-runtime/bridge-source-mappings.json`.
+- [x] 4.3 A new `--source-mappings-path` flag, default `~/.cg-runtime/bridge-source-mappings.json`.
       ⚠ **NOT inside `templatesDir`** — `TemplateRegistry.loadPersisted` reads every `*.json` there
       as a template (`tools/caspar-bridge/src/template-registry.ts:75,87`).
-- [ ] 4.4 Load + validate **before** the WebSocket binds, with a `{ value, source }` provenance
+- [x] 4.4 Load + validate **before** the WebSocket binds, with a `{ value, source }` provenance
       handle and a boot line, following `describeFixedBank` (`bin/caspar-bridge.mjs:162-182`).
       Pinning test shaped like `fixed-layers-boot.integration.test.ts:134-165`.
-- [ ] 4.5 Validate the Live Source layer range disjoint from the fixed bank AND the reserved range,
+- [x] 4.5 Validate the Live Source layer range disjoint from the fixed bank AND the reserved range,
       at load and at change, extending `validateFixedBank` (`fixed-layers-store.ts:145-166`).
-- [ ] 4.6 A `sources.*` IPC channel with refusal reason codes derived from a wire const, so store
+- [x] 4.6 A `sources.*` IPC channel with refusal reason codes derived from a wire const, so store
       and channel cannot drift.
+
+**Five things settled while implementing 4.1–4.6, recorded because a later reader will otherwise
+re-derive them (or wonder why the code and §2's sketch differ):**
+
+1. **ONE format, at the ENTRY — the DECKLINK arm's own `format` is NOT carried.** §2's shape block
+   is pre-amendment on that line: it showed `format?` on the decklink arm AND, after the 2026-08-10
+   amendment, `format?` on the entry. Carrying both would be two spellings of one fact with nothing
+   to say which one the crop was computed from — precisely the drift §3a's decision exists to
+   prevent. `tasks.md` 4.7's own wording already names only `keyDevice` on that arm.
+2. **`ChannelInput` → `Format` has 37 values, not 39.** `design.md` §3a said 39; the list it quotes
+   was always right and is 37 long, and the artifact was re-counted (`docs/recon/ciab-client-tools.json`).
+   §3a is corrected in place. `sources.test.ts` pins the count and pins that **AUTO is the only
+   format yielding no aspect** — a format added without a raster beside it would otherwise be
+   indistinguishable downstream from an operator who chose AUTO.
+3. **`SourceMappingStore` is module functions, not a class** — because 4.2 names
+   `fixed-layers-store.ts` as the model and that store IS module functions: pure exported
+   validators, the value in force held by `CasparRuntime`, persistence in `bridge.ts` after the ok.
+4. **The layer band is DECLARED, never defaulted.** §4 says "declared config", so an absent band
+   means no band. `SUGGESTED_LIVE_SOURCE_LAYER_RANGE` carries §4's 10–59 for the editor to offer
+   and nothing applies it: a built-in band would be this project choosing layer numbers for a plant
+   it cannot see, and any station whose reservation already sits inside 10–59 would fail to boot on
+   upgrade. The band also carries **no channel** (a Live Source lands on whatever channel its
+   template is on), so overlap is tested on layer NUMBERS across every channel — it refuses more
+   than strictly necessary, which is the right direction here.
+5. **"At change" needed NO door outside this change.** The other two layer classes are both
+   immutable mid-session — `validateFixedBankChange` refuses a start/channel/count change
+   (`renumber-refused` / `channel-change-refused` / `resize-refused`), and the reserved layers have
+   no set channel at all (`git grep` over `packages/shared-ipc/src/channels` finds none). So
+   `sources.set-config` is the ONLY runtime door that can create an overlap, and it calls the SAME
+   validator the boot path calls, against the SAME bank and reserved list resolved once in
+   `createBridge`.
+
 - [ ] 4.7 A CG Control settings modal modelled on `DelimitersModal`: **no optimistic local update**
       (`delimiterStore.ts:134-140`) and an older-bridge translation for the unknown-channel refusal
       (`:162-171`), which every station whose bridge predates this feature will hit.

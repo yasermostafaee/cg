@@ -44,12 +44,16 @@ import {
   type TemplateInfo,
   type ChannelSettings,
   type ChannelSettingsState,
+  EMPTY_SOURCE_MAPPINGS,
+  type SourceMappings,
+  type SourcesSetConfigReason,
   type CHANNEL_SETTINGS_SET_REASONS,
   type Rehearsal,
   type REHEARSE_ENTER_REASONS,
   type REHEARSE_EXIT_REASONS,
 } from '@cg/shared-ipc';
 import { ChannelSettingsStore } from './channel-settings-store.js';
+import { SourceMappingsConfigError, validateSourceMappings } from './source-mapping-store.js';
 import {
   validateFixedBank,
   validateFixedBankChange,
@@ -264,6 +268,11 @@ export class CasparRuntime {
   /** R-034 — emitted with the full delimiter list whenever a browser changes it. */
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
   /**
+   * D-137 / C-015 — emitted with the FULL installation mapping whenever a
+   * browser changes it, so every connected console converges without polling.
+   */
+  readonly sourceMappingsChanged = new Emitter<SourceMappings>();
+  /**
    * R-030 — emitted when a browser changes the channel raster AND when a fresh
    * `INFO <channel>` reading lands. Both, because the mismatch verdict is a
    * function of the two together: a new reading can turn a settled `match` into
@@ -426,6 +435,15 @@ export class CasparRuntime {
   /** R-030 — the per-channel output raster + what `INFO` reports, persisted. */
   readonly #channelSettings: ChannelSettingsStore;
   /**
+   * D-137 / C-015 — the installation mapping in force.
+   *
+   * LOADED AND VALIDATED IN `createBridge`, before the WebSocket binds, and
+   * handed in here already-good: an unusable file is a hard boot failure and a
+   * band that overlaps the bank or the reservation is refused at startup, not
+   * adjudicated at take time (the fixed-bank governing principle).
+   */
+  #sourceMappings: SourceMappings;
+  /**
    * R-030 — which server label produced the video-mode reading we hold for each
    * channel.
    *
@@ -552,6 +570,12 @@ export class CasparRuntime {
        * template). Absent = in-memory only (unit tests).
        */
       templatesDir?: string;
+      /**
+       * D-137 / C-015 — the VALIDATED installation mapping (resolved and checked
+       * in `createBridge` before the WebSocket binds). Absent = NO MAPPINGS,
+       * which is the fail-closed default and never a guessed one.
+       */
+      sourceMappings?: SourceMappings;
     } = {},
   ) {
     this.#reservedLayers = options.reservedLayers ?? [];
@@ -580,6 +604,9 @@ export class CasparRuntime {
     // nobody would think to look for.
     this.#channelSettings = new ChannelSettingsStore(options.templatesDir);
     this.#channelSettings.hydrate(this.#declaredChannels());
+    // D-137 / C-015 — already loaded and validated by `createBridge`; an absent
+    // file resolved to the EMPTY mapping there, never to a guessed default.
+    this.#sourceMappings = options.sourceMappings ?? EMPTY_SOURCE_MAPPINGS;
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
@@ -3213,6 +3240,45 @@ export class CasparRuntime {
     if (refusal !== null) return { ok: false, reason: refusal.reason, message: refusal.message };
     // Every connected browser converges, the `templates.changed` precedent.
     this.delimitersChanged.emit(this.#delimiters.list());
+    return { ok: true };
+  }
+
+  /**
+   * D-137 / C-015 — the installation mapping in force. An EMPTY `mappings` list
+   * is a real answer and means nothing resolves; it is never a "not loaded yet".
+   */
+  sourceMappings(): SourceMappings {
+    return this.#sourceMappings;
+  }
+
+  /**
+   * Replace the installation mapping: validate → apply → publish (`bridge.ts`
+   * persists after the ok, the R-010 order).
+   *
+   * THE VALIDATION IS THE SAME FUNCTION THE BOOT PATH CALLS, against the SAME
+   * bank and reserved list resolved once in `createBridge`. At-change is the
+   * half that gets forgotten, and it is the half an operator can trigger with a
+   * graphic on air: a band edited into the candidate bank would put a live
+   * producer on top of an operator row, at 21:59, with no boot in between.
+   */
+  setSourceMappings(next: SourceMappings): {
+    ok: boolean;
+    reason?: SourcesSetConfigReason;
+    message?: string;
+  } {
+    try {
+      validateSourceMappings(next, {
+        fixedBank: this.#fixedBank,
+        reservedLayers: this.#reservedLayers,
+      });
+    } catch (err) {
+      if (err instanceof SourceMappingsConfigError) {
+        return { ok: false, reason: err.code, message: err.message };
+      }
+      throw err;
+    }
+    this.#sourceMappings = next;
+    this.sourceMappingsChanged.emit(next);
     return { ok: true };
   }
 

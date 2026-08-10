@@ -56,6 +56,9 @@ import {
   RehearseExitChannel,
   RehearseStateChangedChannel,
   RehearseStateChannel,
+  SourcesConfigChangedChannel,
+  SourcesConfigChannel,
+  SourcesSetConfigChannel,
   TemplatesChangedChannel,
   TemplatesGetChannel,
   TemplatesImportChannel,
@@ -75,6 +78,7 @@ import {
   type ConnectionConfig,
   type FixedLayerBank,
   type ReservedLayers,
+  type SourceMappings,
   type WsPublishFrame,
   type WsResponseFrame,
 } from '@cg/shared-ipc';
@@ -88,6 +92,12 @@ import {
   validateFixedBank,
 } from './fixed-layers-store.js';
 import { loadReservedLayers } from './reserved-layers-store.js';
+import {
+  resolveSourceMappings,
+  saveSourceMappings,
+  validateSourceMappings,
+  type SourceMappingsSource,
+} from './source-mapping-store.js';
 import type { TemplateServeOverride } from './template-http-server.js';
 
 export interface BridgeOptions {
@@ -149,6 +159,24 @@ export interface BridgeOptions {
    */
   templatesDir?: string;
   /**
+   * D-137 / C-015 — the installation's Live Source mapping, explicit. Highest
+   * precedence (tests, embedders); see {@link resolveSourceMappings}.
+   */
+  sourceMappings?: SourceMappings;
+  /**
+   * D-137 / C-015 — where the Live Source mapping persists (JSON).
+   *
+   * An ABSENT file means **NO MAPPINGS**, and there is deliberately no built-in
+   * default: a default input mapping is a guess about hardware this project
+   * cannot see, and a wrong guess puts the wrong camera behind a guest's frame.
+   * A PRESENT-but-unusable file is a HARD boot failure — a partially parsed
+   * mapping is worse than none.
+   *
+   * ⚠ It must NOT be inside {@link templatesDir}: the template registry reads
+   * every `*.json` there as a template (B-116).
+   */
+  sourceMappingsPath?: string;
+  /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
    */
@@ -173,6 +201,18 @@ export interface BridgeHandle {
    * and the source is the half that does.
    */
   readonly fixedBankSource: { bank: FixedLayerBank | null; source: FixedBankSource };
+  /**
+   * D-137 / C-015 — the Live Source mapping in force AND where it came from, so
+   * the CLI can SAY it at boot.
+   *
+   * Same reason the fixed bank carries its provenance: an installation mapping
+   * is exactly the class of config that differs silently between two machines,
+   * and the value alone cannot answer "why this one, and what do I change?".
+   * Here it also answers a question with no other surface — a station where
+   * NOTHING reaches air because the file was never written looks, from every
+   * screen, like a station whose sources are simply not configured yet.
+   */
+  readonly sourceMappings: { value: SourceMappings; source: SourceMappingsSource };
   /** Force-close every client socket — used by tests to simulate a mid-session drop. */
   dropConnections(): void;
   /** Stop the WebSocket server, the CasparCG session, and close all clients. */
@@ -334,15 +374,29 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           reservedLayers,
         })
       : [];
+  // D-137 / C-015 — the installation's Live Source mapping, loaded and
+  // VALIDATED here, BEFORE the WebSocket binds and against the SAME bank and
+  // reserved list the fixed-bank validator just saw. Both halves are deliberate:
+  // an unusable file must stop the boot rather than serve a station that
+  // resolves three of its four ids, and a band overlapping the bank or the
+  // reservation must resolve loudly at startup rather than at a take.
+  const sourceMappings = resolveSourceMappings(options);
+  validateSourceMappings(sourceMappings.value, { fixedBank, reservedLayers });
   const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
     fixedSlots,
     layerPolicy,
     reservedLayers,
     ...(fixedBank !== null ? { fixedBank } : {}),
     ...(options.templatesDir !== undefined ? { templatesDir: options.templatesDir } : {}),
+    sourceMappings: sourceMappings.value,
     ...(options.runtimeTuning ?? {}),
   });
-  const routes = buildRoutes(runtime, options.persistPath, options.fixedLayersPath);
+  const routes = buildRoutes(
+    runtime,
+    options.persistPath,
+    options.fixedLayersPath,
+    options.sourceMappingsPath,
+  );
 
   const wss = new WebSocketServer({
     host,
@@ -402,6 +456,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     templateServe,
     runtime,
     fixedBankSource: { bank: fixedBank, source: fixedBankSource },
+    sourceMappings,
     dropConnections() {
       for (const client of wss.clients) client.terminate();
     },
@@ -486,6 +541,9 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.delimitersChanged.subscribe((d) => push(DelimitersChangedChannel, d)),
     // R-030 — the per-channel raster + the configured-vs-real mode reading.
     backing.channelSettingsChanged.subscribe((s) => push(ChannelSettingsChangedChannel, s)),
+    // D-137 / C-015 — the installation's Live Source mapping, so a second
+    // console sees the binding an operator just made without reloading.
+    backing.sourceMappingsChanged.subscribe((m) => push(SourcesConfigChangedChannel, m)),
     // R-022 — the rehearsing set, so a second browser never sees a rehearsing row
     // as an ordinary loaded one and loads onto it.
     backing.rehearseChanged.subscribe((r) => push(RehearseStateChangedChannel, r)),
@@ -504,6 +562,7 @@ export function buildRoutes(
   b: CasparRuntime,
   persistPath?: string,
   fixedLayersPath?: string,
+  sourceMappingsPath?: string,
 ): Map<string, Route> {
   const route = (channel: AnyChannel, handle: (req: never) => unknown): Route => ({
     channel,
@@ -637,6 +696,27 @@ export function buildRoutes(
     // graphics land, and it has to survive a bridge restart.
     route(ChannelSettingsGetChannel, () => b.channelSettingsState()),
     route(ChannelSettingsSetChannel, (r: ChannelSettings) => b.setChannelSettings(r)),
+
+    // D-137 / C-015 — the installation's symbolic-id → producer mapping. The
+    // order on an applied change is the fixed-bank one: validate → apply →
+    // persist (non-fatal) → publish (the runtime publishes from
+    // `setSourceMappings` itself, after the apply).
+    route(SourcesConfigChannel, () => b.sourceMappings()),
+    route(SourcesSetConfigChannel, (r: SourceMappings) => {
+      const result = b.setSourceMappings(r);
+      if (result.ok && sourceMappingsPath !== undefined) {
+        try {
+          saveSourceMappings(sourceMappingsPath, r);
+        } catch (err) {
+          process.stderr.write(
+            `[caspar-bridge] ⚠ failed to persist source mappings to ${sourceMappingsPath}: ` +
+              `${err instanceof Error ? err.message : String(err)} — the mapping is live in ` +
+              `memory but will not survive a bridge restart\n`,
+          );
+        }
+      }
+      return result;
+    }),
 
     // R-022 — REHEARSE. Bridge-owned so several browsers agree about which rows
     // are interlocked, and every guard (on-air, not-loaded, mute-failed) lives

@@ -438,7 +438,9 @@ what it is here: a declaration to validate against.
 ### 3a. AMENDED 2026-08-10 — the mapping carries the FORMAT, and the fit aspect DERIVES from it
 
 **The previous automation's live definition carried a format**, and the artifact shows the exact
-vocabulary. `ciab-client-tools.json`, `ChannelInput` → `Format` is a 39-value combo, default `PAL`:
+vocabulary. `ciab-client-tools.json`, `ChannelInput` → `Format` is a **37**-value combo, default
+`PAL` (this document said 39 when it was authored; the artifact was re-counted in phase 4 and the
+list quoted below — which was always right — is 37 long):
 
 ```
 AUTO · PAL · NTSC · 576p2500
