@@ -85,6 +85,96 @@ describe('§6 — LOAD opens the template picker', () => {
     expect(dialog?.textContent).toContain('Import a .vcg');
   });
 
+  /**
+   * D-137 / C-015 phase 2.4 — ABSENT IS NOT "NONE".
+   *
+   * A template imported before the Live Source carrier existed says nothing about
+   * its holes, and nothing left in the product can answer the question: the scene
+   * is discarded after import and the bridge parses no HTML. Reading that silence
+   * as "has none" is what would take a template with real holes on air with
+   * nothing composited behind them — invisibly, because the hole is transparent.
+   *
+   * So the row must SAY unknown. These three cases pin all three carrier states
+   * against each other; asserting only the unknown one would pass against an
+   * implementation that badged every row.
+   */
+  it('a template with NO Live Source carrier reads re-import-required on its row', async () => {
+    await renderUnboundRow();
+    (
+      window as unknown as { cg: { templates: { list: () => Promise<unknown[]> } } }
+    ).cg.templates.list = () =>
+      Promise.resolve([
+        // No `liveSources` block at all — imported by an older build.
+        { templateId: 'tpl-old', name: 'Old', templateType: 'clock', fields: [] },
+      ]);
+
+    await pressLoad();
+
+    const row = openDialog()?.querySelector('[data-template-id="tpl-old"]');
+    expect(row?.querySelector('[data-live-sources="unknown"]')).not.toBeNull();
+    expect(row?.textContent).toContain('Re-import required');
+  });
+
+  it('a template that declares NO Live Sources is not badged — empty is a real answer', async () => {
+    await renderUnboundRow();
+    (
+      window as unknown as { cg: { templates: { list: () => Promise<unknown[]> } } }
+    ).cg.templates.list = () =>
+      Promise.resolve([
+        {
+          templateId: 'tpl-none',
+          name: 'None',
+          templateType: 'clock',
+          fields: [],
+          liveSources: {
+            resolution: { width: 1920, height: 1080 },
+            defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+            sources: [],
+          },
+        },
+      ]);
+
+    await pressLoad();
+
+    const row = openDialog()?.querySelector('[data-template-id="tpl-none"]');
+    expect(row?.querySelector('[data-live-sources="none"]')).not.toBeNull();
+    expect(row?.textContent).not.toContain('Re-import required');
+  });
+
+  it('a template that DECLARES a Live Source is not badged either', async () => {
+    await renderUnboundRow();
+    (
+      window as unknown as { cg: { templates: { list: () => Promise<unknown[]> } } }
+    ).cg.templates.list = () =>
+      Promise.resolve([
+        {
+          templateId: 'tpl-live',
+          name: 'Live',
+          templateType: 'clock',
+          fields: [],
+          liveSources: {
+            resolution: { width: 1920, height: 1080 },
+            defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+            sources: [
+              {
+                elementId: 'el-1',
+                sourceId: 'guest-1',
+                rect: { x: 0, y: 0, width: 640, height: 360 },
+                dynamic: false,
+                keyDynamic: false,
+              },
+            ],
+          },
+        },
+      ]);
+
+    await pressLoad();
+
+    const row = openDialog()?.querySelector('[data-template-id="tpl-live"]');
+    expect(row?.querySelector('[data-live-sources="declared"]')).not.toBeNull();
+    expect(row?.textContent).not.toContain('Re-import required');
+  });
+
   it('nothing on the row or in its menu still says LIBRARY', async () => {
     rendered = await renderLayerRow({ item: itemWith('loaded') });
     const text = rendered.container.textContent ?? '';

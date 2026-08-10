@@ -127,28 +127,71 @@ re-derive it:
 
 ## 2. Phase 2 — Declaration and carrier
 
-- [ ] 2.1 `collectLiveSources(scene)` in `@cg/vcg-format`, beside `buildPlayoutMetadata`. Composes
+- [x] 2.1 `collectLiveSources(scene)` in `@cg/vcg-format`, beside `buildPlayoutMetadata`. Composes
       the FULL ancestor chain **including composition-instance scale**, which `frameAabb` does not
       (`design.md` §6). Lift `localToParent`'s kernel (`off-frame.ts:50-60`); do not reuse the
       renderer-local function.
-- [ ] 2.2 Add `resolution`, `defaultPosition` and a `liveSources` declaration block to
+- [x] 2.2 Add `resolution`, `defaultPosition` and a `liveSources` declaration block to
       `TemplateInfoSchema` (`packages/shared-ipc/src/channels/templates.ts:14-70`), following the
       `hasNext` precedent (`:53-69`). **`defaultPosition` is REQUIRED, not optional-nice-to-have:**
       the bridge appends the position query only when an override exists
       (`caspar-runtime.ts:3685`), so without it the bridge and the page resolve different positions
       for any authored-position template with no override, and the live box lands where the hole is
       not (`design.md` §6).
-- [ ] 2.3 Populate all three at import in `produceTemplateDelivery`
+- [x] 2.3 Populate all three at import in `produceTemplateDelivery`
       (`apps/runtime/src/renderer/features/library/templateDelivery.ts:177-189`).
       `defaultPosition` is already extracted there at `:209` for the browser-local store — the same
       value now also rides `TemplateInfo`.
-- [ ] 2.4 A template whose scene declares Live Sources but whose `TemplateInfo` block is absent
+- [x] 2.4 A template whose scene declares Live Sources but whose `TemplateInfo` block is absent
       reads as **re-import-required** on the row — absent must not silently mean "none".
-- [ ] 2.5 Define `LiveLayerRecord` and the `#liveLayers` ledger type (not yet wired).
-- [ ] 2.6 Correct the misleading `C-015` tags on `#reservedLayers`
+- [x] 2.5 Define `LiveLayerRecord` and the `#liveLayers` ledger type (not yet wired).
+- [x] 2.6 Correct the misleading `C-015` tags on `#reservedLayers`
       (`tools/caspar-bridge/src/caspar-runtime.ts:295-300`) and in
       `tools/caspar-bridge/tests/fixed-layers-store.test.ts:76`: `reservedLayers` is a fence AWAY
       from a foreign owner, not a record of layers we own (`design.md` §4).
+
+**PHASE 2 LANDED 2026-08-10.** What each task actually produced:
+
+- **2.1** `collectLiveSources` (`packages/vcg-format/src/live-sources.ts`) with `localToParent`
+  lifted from `off-frame.ts:50-60`, and the ancestor chain modelled as a `{ transform, preScale }`
+  LEVEL rather than a bare `Transform` — `preScale` is `(1,1)` for a container and
+  `(size.w/comp.resolution.width, size.h/comp.resolution.height)` for a composition instance, which
+  is the term `frameAabb` has no concept of. It also inherits the builder's own three instance
+  guards (missing reference, `MAX_COMPOSITION_DEPTH`, cycle), so a declaration is derived from the
+  same subtree the page renders. **A repeater subtree is deliberately NOT walked** and the reason is
+  in the module docstring: a stamped row has no static scene-px rect, and every stamp would carry
+  the same source id.
+- **2.2** ONE optional block, `TemplateInfoSchema.liveSources = { resolution, defaultPosition,
+sources }`, with `defaultPosition` REQUIRED **inside** it. ⚠ **A top-level required
+  `defaultPosition` would have broken a real consumer** — `TemplateRegistry.loadPersisted` re-parses
+  every persisted record through `PersistedTemplateSchema` (`template-registry.ts:19-30,:90-99`) and
+  SKIPS one that fails, so it would have emptied every station's library on the first boot after
+  upgrade. Nesting keeps the on-air guarantee the task asks for (the bridge can never hold a
+  declaration without the position chain) while leaving pre-carrier records parsing. The
+  per-declaration shape lives in `@cg/shared-schema` (`live-source.ts`), because `@cg/vcg-format`
+  produces it and cannot see `@cg/shared-ipc`.
+- **2.3** derived in `produceTemplateDelivery` beside `hasNext`, and **always emitted** — an empty
+  `sources` array for a template with none. `defaultPosition` uses the new canonical
+  `resolveDefaultPosition` (`@cg/shared-schema`), which `position.ts`'s `resolveOutputPosition` now
+  calls too, so "centred" has ONE spelling across the seam. `apps/runtime`'s offline seed derives
+  the block as well: a starter synthesised from a scene in hand is not a pre-carrier record and must
+  not wear that state.
+- **2.4** `liveSourceCarrierState` (`@cg/shared-ipc`) is THE reading of the block —
+  `'declared' | 'none' | 'unknown'` — so no caller collapses three states into two. The template
+  picker row shows `Re-import required` in the palette's ATTENTION amber for `'unknown'`, with the
+  state also on `data-live-sources` so tests assert the state and not the wording.
+- **2.5** `tools/caspar-bridge/src/live-layers.ts` — `LiveLayerRecord` / `LiveLayerLedger` /
+  `NormalizedRect`, types only, nothing wired. The record carries `clip` as well as `fill`: they are
+  two outputs of ONE computation (`design.md` §3), and a ledger holding half of a pair is how they
+  come to be re-emitted apart, which renders nothing at all.
+- **2.6** both named sites corrected, with the reason recorded in place rather than just the tag
+  removed — the mislabel is what let R-028's task 1.2 satisfy C-015's DISJOINTNESS half and read as
+  having satisfied its OWNERSHIP half.
+- **Spec** gained the requirement the tasks implied and the delta never encoded: _"A template
+  CARRIES its Live Source declaration, and an absent carrier is UNKNOWN"_, with three scenarios.
+- **Tests** 16 `collectLiveSources` unit tests (every nesting case SCALED — on an unscaled fixture a
+  wrong implementation passes), 8 carrier schema/predicate tests, 3 delivery tests, 3 picker DOM
+  tests, and `apps/runtime/tests/e2e/live-source-carrier.spec.ts`.
 
 ## 3. Phase 3 — The mock (blocks phase 5)
 

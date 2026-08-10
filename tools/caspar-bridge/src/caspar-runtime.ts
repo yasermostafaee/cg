@@ -291,9 +291,26 @@ export class CasparRuntime {
   #fixedBank: FixedLayerBank | null;
   readonly #layerPolicy: LayerPolicy;
   /**
-   * R-028 / C-015 — the reserved playout layer numbers, from real config.
-   * The SAME list the boot validator saw and the LayerManager fences on —
-   * resolved once in `createBridge`, never re-derived here.
+   * R-028 — the reserved playout layer numbers, from real config. The SAME list
+   * the boot validator saw and the LayerManager fences on — resolved once in
+   * `createBridge`, never re-derived here.
+   *
+   * ⚠ **THIS IS NOT THE C-015 / D-137 LIVE SOURCE SEAM, and it used to say it
+   * was.** `reservedLayers` is _"the layer numbers the **company's playout
+   * system** owns"_ (`packages/shared-ipc/src/channels/fixedLayers.ts`), i.e. a
+   * fence AWAY from a foreign owner — the exact INVERSE of a record of layers
+   * **we** own, which is what a Live Source layer is.
+   *
+   * The mis-tag was load-bearing, not cosmetic: R-028's task 1.2 wired this list
+   * and marked C-015 done with the list empty, which satisfied C-015's
+   * DISJOINTNESS half and none of its OWNERSHIP half — and the mislabel is what
+   * made that read as complete. It also invites a fix that breaks three doors at
+   * once: a Live Source placed in here is unplaceable (`allocate()` skips
+   * reserved layers), unreservable (`reserve()` refuses them) and unclearable
+   * (`clearLayer` refuses them as `reserved`).
+   *
+   * Bridge-owned Live Source layers are a THIRD ownership class with its own
+   * ledger — see `live-layers.ts` and `live-source-multibox` design.md §4.
    */
   readonly #reservedLayers: readonly number[];
   /** The same list as a Set, for the sweep/clear/restore membership checks. */

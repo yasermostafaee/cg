@@ -45,6 +45,40 @@ PRESENT but unusable SHALL be a HARD startup failure, before the socket accepts 
 - **WHEN** the bridge starts **THEN** it prints which mapping is in force and where it came from, so
   two machines running different mappings cannot disagree silently
 
+### Requirement: A template CARRIES its Live Source declaration, and an absent carrier is UNKNOWN
+
+The import path SHALL derive the template's Live Source declaration at the one moment it holds the
+unpacked scene, and carry it on the template's registry metadata alongside the scene's **resolution**
+and its **resolved authored default position**. No `.vcg` reaches the bridge, the bridge parses no
+HTML, and the scene is discarded after import, so a fact not captured there is not recoverable.
+
+The carried default position SHALL be present whenever the carrier is — never optional within it.
+The bridge appends an operator's position override to the served URL only when one exists, so with
+no override the page falls back to the authored default; a bridge that assumed centred would place
+the composited source against a different origin from the hole it must sit behind.
+
+The carrier SHALL be emitted for EVERY import, including a template with no Live Source, which
+carries an EMPTY declaration list. An **absent** carrier SHALL therefore mean **UNKNOWN** — the
+template was imported before the carrier existed — and SHALL NOT be read as "no Live Sources". The
+operator-facing template list SHALL say so on the affected row.
+
+#### Scenario: The declaration is derived once, at import
+
+- **WHEN** a template is imported **THEN** its registry metadata carries the scene resolution, the
+  resolved authored default position, and one declaration per Live Source
+- **WHEN** the author set no position **THEN** the carried default is the centred fallback, never
+  absent
+
+#### Scenario: No Live Sources is a real answer, not a gap
+
+- **WHEN** a template with no Live Source is imported **THEN** its carrier is present with an empty
+  declaration list
+
+#### Scenario: A template imported before the carrier existed says so
+
+- **WHEN** a template holds no carrier at all **THEN** the template list marks that row as needing a
+  re-import, rather than presenting it as having no Live Sources
+
 ### Requirement: Live Source layers are a DECLARED, bridge-owned ownership class
 
 The bridge SHALL keep its own ledger of the layers it has placed Live Sources on. Ownership SHALL be

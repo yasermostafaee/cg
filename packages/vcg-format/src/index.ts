@@ -25,3 +25,5 @@ export type { GddSchema, GddProperty, SchemaExporter } from './gdd.js';
 
 export { buildPlayoutMetadata } from './playout-metadata.js';
 export type { PlayoutMetadata } from './playout-metadata.js';
+
+export { collectLiveSources } from './live-sources.js';

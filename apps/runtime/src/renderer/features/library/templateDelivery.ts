@@ -8,10 +8,11 @@ import type {
 import {
   aggregateCompositionFields,
   hasNextStep,
+  resolveDefaultPosition,
   type Manifest,
   type Position,
 } from '@cg/shared-schema';
-import { unpack, verify } from '@cg/vcg-format';
+import { collectLiveSources, unpack, verify } from '@cg/vcg-format';
 import {
   ExporterSingleFile,
   cgCss,
@@ -186,6 +187,26 @@ export async function produceTemplateDelivery(
     // It rides `TemplateInfo` (not a browser-local store like R-011/R-018) so
     // the bridge persists it and every browser gets the same answer.
     hasNext: hasNextStep(scene, scene.compositions),
+    // D-137 / C-015 — the Live Source carrier, derived at the SAME moment and for
+    // the same reason as `hasNext`: this is the only point in the product where
+    // the unpacked scene is in hand. `LibraryEntry` is `{ template, html }`, the
+    // bridge parses no HTML, and no `.vcg` ever reaches the bridge — so a fact not
+    // captured here is not recoverable later.
+    //
+    // ALWAYS EMITTED, including with an EMPTY `sources`. That is what makes the
+    // absent block mean "imported before this existed" rather than "has none":
+    // collapsing the two would let a template with real holes go to air with
+    // nothing composited behind them (see `liveSourceCarrierState`).
+    //
+    // `defaultPosition` is the RESOLVED authored default via the canonical
+    // `resolveDefaultPosition`, never a local `{ anchor: 'center' }`: the page
+    // falls through to that same function, and two spellings of "centred" is how
+    // the composited box comes to sit somewhere the transparent hole is not.
+    liveSources: {
+      resolution: scene.resolution,
+      defaultPosition: resolveDefaultPosition(scene),
+      sources: collectLiveSources(scene),
+    },
   };
 
   try {

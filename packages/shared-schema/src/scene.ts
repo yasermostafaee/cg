@@ -265,6 +265,31 @@ export function positionQuery(position: Position): string {
   ].join('&');
 }
 
+/**
+ * R-011 — where a scene sits when NOBODY has said otherwise: dead centre, no
+ * nudge. The last step of the page's own `query override ?? scene.defaultPosition
+ * ?? centered` chain (`@cg/template-runtime`'s `resolveOutputPosition`).
+ */
+export const CENTERED_POSITION: Position = { anchor: 'center', offset: { x: 0, y: 0 } };
+
+/**
+ * The AUTHORED default position, resolved — `scene.defaultPosition` when the
+ * author set one, else {@link CENTERED_POSITION}.
+ *
+ * ONE spelling, for the same reason {@link positionQuery} is one builder. The
+ * `live-source-multibox` carrier records this value on `TemplateInfo` at import
+ * so the bridge can resolve the SAME position chain the page does; the page
+ * resolves its own tail through `resolveOutputPosition`. If the two spelled
+ * "centred" separately, a template with no operator override would place its
+ * live box against one origin and paint its hole against another — and the hole
+ * is transparent, so nothing on air would say why (design.md §6).
+ */
+export function resolveDefaultPosition(scene: {
+  defaultPosition?: Position | undefined;
+}): Position {
+  return scene.defaultPosition ?? CENTERED_POSITION;
+}
+
 /** Scene — root of the editor's domain model. */
 export const SceneSchema = z
   .object({

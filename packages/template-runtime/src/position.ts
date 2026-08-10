@@ -1,4 +1,9 @@
-import { PositionAnchorSchema, type Position, type Scene } from '@cg/shared-schema';
+import {
+  PositionAnchorSchema,
+  resolveDefaultPosition,
+  type Position,
+  type Scene,
+} from '@cg/shared-schema';
 
 /**
  * R-011 — output-only stage placement ("author small, place anywhere").
@@ -88,12 +93,17 @@ export function parsePositionQuery(search: string): Position | null {
   };
 }
 
-/** query override ?? scene.defaultPosition ?? centered (never 0,0). */
+/**
+ * query override ?? scene.defaultPosition ?? centered (never 0,0).
+ *
+ * The tail of the chain is `resolveDefaultPosition` (`@cg/shared-schema`), never
+ * a local `{ anchor: 'center' }` literal: the bridge records that same resolved
+ * default on `TemplateInfo` at import so it can place a Live Source against the
+ * origin the page uses, and two spellings of "centred" is how the composited box
+ * comes to sit somewhere the hole is not (`live-source-multibox` design.md §6).
+ */
 export function resolveOutputPosition(scene: Scene, search: string): Position {
-  return (
-    parsePositionQuery(search) ??
-    scene.defaultPosition ?? { anchor: 'center', offset: { x: 0, y: 0 } }
-  );
+  return parsePositionQuery(search) ?? resolveDefaultPosition(scene);
 }
 
 /**

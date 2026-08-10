@@ -8,6 +8,7 @@ export {
 export { CasparRuntime } from './caspar-runtime.js';
 export { CommandBuilder } from './command-builder.js';
 export type { CommandSlot } from './command-builder.js';
+export type { LiveLayerLedger, LiveLayerRecord, NormalizedRect } from './live-layers.js';
 export { TemplateRegistry } from './template-registry.js';
 export {
   TemplateHttpServer,

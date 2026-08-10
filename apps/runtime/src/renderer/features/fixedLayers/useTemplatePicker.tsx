@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import type { TemplateInfo } from '@cg/shared-ipc';
+import { liveSourceCarrierState, type TemplateInfo } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
@@ -59,8 +59,38 @@ const styles = {
   row: { display: 'flex', flexDirection: 'column' as const, alignItems: 'stretch' },
   rowActions: { display: 'flex', gap: '0.35rem', alignItems: 'center' },
   meta: { fontSize: '0.75rem', color: colors.textMuted },
+  /**
+   * D-137 / C-015 — the re-import notice. AMBER (`pending`), not the muted meta
+   * grey it sits beside: amber is this palette's ATTENTION role — the one it
+   * already carries for OCCUPIED / UNKNOWN / UNCONFIRMED — and an unreadable
+   * carrier is exactly an UNKNOWN. Not red, which means error and destructive
+   * intent only: nothing is broken, the answer is simply not recorded yet.
+   */
+  stale: { fontSize: '0.75rem', color: colors.pending },
   empty: { fontSize: '0.85rem', color: colors.textMuted, margin: 0 },
 } as const;
+
+/**
+ * D-137 / C-015 — what the operator is told when a template's Live Source carrier
+ * is ABSENT (`liveSourceCarrierState` → `'unknown'`).
+ *
+ * ABSENT IS NOT "NONE", AND THIS ROW IS WHERE THAT DISTINCTION BECOMES VISIBLE.
+ * A template imported before the carrier existed carries no statement about its
+ * holes at all — the scene is discarded after import and the bridge parses no
+ * HTML, so nothing left in the product can answer the question. Reading that
+ * silence as "this template has no Live Sources" would take a template with real
+ * holes on air with nothing composited behind them: a black rectangle where a
+ * guest should be, with no error anywhere, because the hole is transparent by
+ * design.
+ *
+ * So the row says what is true — the answer is unknown and a re-import is what
+ * produces it — rather than filling the gap with the comfortable assumption.
+ */
+const STALE_CARRIER_LABEL = 'Re-import required';
+const STALE_CARRIER_TITLE =
+  'This template was imported before Live Sources were recorded, so the runtime cannot tell ' +
+  'whether it has any. Re-import the .vcg to record them — until then a Live Source in it ' +
+  'would be left with nothing behind it on air.';
 
 interface PickRequest {
   title: string;
@@ -178,6 +208,7 @@ export function useTemplatePicker(): {
                 the one they are looking for. */}
             {[...request.templates].reverse().map((t) => {
               const label = templateDisplayName(t);
+              const carrier = liveSourceCarrierState(t);
               return (
                 <div key={t.templateId} style={styles.row} data-template-id={t.templateId}>
                   <div style={styles.rowActions}>
@@ -198,6 +229,22 @@ export function useTemplatePicker(): {
                     </Button>
                   </div>
                   <span style={styles.meta}>{t.templateType}</span>
+                  {/*
+                    D-137 / C-015 — said on the row, not hidden behind a hover.
+                    `data-live-sources` carries the state machine-readably so the
+                    E2E asserts the STATE rather than the wording.
+                  */}
+                  {carrier === 'unknown' ? (
+                    <span
+                      style={styles.stale}
+                      data-live-sources="unknown"
+                      title={STALE_CARRIER_TITLE}
+                    >
+                      {STALE_CARRIER_LABEL}
+                    </span>
+                  ) : (
+                    <span hidden data-live-sources={carrier} />
+                  )}
                 </div>
               );
             })}

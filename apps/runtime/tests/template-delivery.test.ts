@@ -431,3 +431,161 @@ describe('produceTemplateDelivery — D-121 packaged fonts reach the on-air HTML
     expect(html).not.toMatch(/url\(['"]?(https?:|file:|\/fonts\/)/);
   });
 });
+
+/**
+ * D-137 / C-015 phase 2 — the LIVE SOURCE CARRIER is derived at import.
+ *
+ * This is the ONLY moment the app holds the unpacked scene: the bridge parses no
+ * HTML and `LibraryEntry` keeps `{ template, html }` and nothing else, so a fact
+ * missed here is unrecoverable. These tests assert the block is emitted for every
+ * import — including one with no Live Source at all, which is what makes an
+ * ABSENT block mean "imported by an older build" rather than "has none".
+ */
+async function buildVcgWithLiveSource(
+  templateId: string,
+  over: { defaultPosition?: Scene['defaultPosition'] } = {},
+): Promise<Uint8Array> {
+  const scene: Scene = {
+    ...fixtureScene(),
+    ...(over.defaultPosition !== undefined ? { defaultPosition: over.defaultPosition } : {}),
+    // A 960×540 composition instanced into a 480×270 box ⇒ ×0.5 on both axes.
+    compositions: [
+      {
+        id: 'comp-box',
+        name: 'box',
+        resolution: { width: 960, height: 540 },
+        frameRate: 50,
+        frameRange: { in: 0, out: 50 },
+        background: 'transparent',
+        layers: [
+          {
+            id: 'comp-layer',
+            name: 'live',
+            visible: true,
+            locked: false,
+            blendMode: 'normal',
+            children: [
+              {
+                id: 'el-live',
+                name: 'guest',
+                type: 'video-placeholder',
+                transform: {
+                  position: { x: 200, y: 100 },
+                  size: { w: 400, h: 200 },
+                  scale: { x: 1, y: 1 },
+                  rotation: 0,
+                  anchor: { x: 0, y: 0 },
+                },
+                opacity: 1,
+                visible: true,
+                locked: false,
+                zIndex: 0,
+                routeKey: 'guest-1',
+                expectedAspect: 16 / 9,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    layers: [
+      {
+        id: 'layer-1',
+        name: 'Content',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: [
+          {
+            id: 'inst-1',
+            name: 'box instance',
+            type: 'composition',
+            transform: {
+              position: { x: 1000, y: 600 },
+              size: { w: 480, h: 270 },
+              scale: { x: 1, y: 1 },
+              rotation: 0,
+              anchor: { x: 0, y: 0 },
+            },
+            opacity: 1,
+            visible: true,
+            locked: false,
+            zIndex: 0,
+            compositionId: 'comp-box',
+          },
+        ],
+      },
+    ],
+  };
+  const fontDeps: readonly FontReference[] = [];
+  const assetIndex: readonly AssetEntry[] = [];
+  const manifestExtras = {
+    id: templateId,
+    name: 'live-source-delivery',
+    authoring: {
+      designerVersion: '0.0.0',
+      createdAt: '2026-08-09T00:00:00.000Z',
+      exportedAt: '2026-08-09T00:01:00.000Z',
+    },
+    compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    fontDeps,
+    assetIndex,
+  } satisfies Pick<Manifest, 'id' | 'name' | 'authoring' | 'compatibility'> & {
+    fontDeps: readonly FontReference[];
+    assetIndex: readonly AssetEntry[];
+  };
+  return pack({
+    scene,
+    manifestExtras,
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
+describe('produceTemplateDelivery — D-137 the Live Source carrier', () => {
+  it('carries the scene resolution, the resolved default position, and every declaration', async () => {
+    const { template } = await produceTemplateDelivery(
+      await buildVcgWithLiveSource('tpl-live-1', {
+        defaultPosition: { anchor: 'bottom-left', offset: { x: 12, y: -8 } },
+      }),
+    );
+
+    expect(template.liveSources?.resolution).toEqual({ width: 1920, height: 1080 });
+    // The AUTHORED position rides the carrier verbatim. Without it the bridge —
+    // which appends `pos` only when an OPERATOR override exists — would place the
+    // live box against `centered` while the page placed the hole against this.
+    expect(template.liveSources?.defaultPosition).toEqual({
+      anchor: 'bottom-left',
+      offset: { x: 12, y: -8 },
+    });
+    expect(template.liveSources?.sources).toEqual([
+      {
+        elementId: 'el-live',
+        sourceId: 'guest-1',
+        // Composition-local (200,100)+400×200, through a ×0.5 instance at (1000,600).
+        rect: { x: 1100, y: 650, width: 200, height: 100 },
+        expectedAspect: 16 / 9,
+        dynamic: false,
+        keyDynamic: false,
+      },
+    ]);
+  });
+
+  it('falls back to CENTRED when the author set no position — never absent', async () => {
+    const { template } = await produceTemplateDelivery(await buildVcgWithLiveSource('tpl-live-2'));
+    expect(template.liveSources?.defaultPosition).toEqual({
+      anchor: 'center',
+      offset: { x: 0, y: 0 },
+    });
+  });
+
+  it('emits the block with an EMPTY sources array for a template with no Live Source', async () => {
+    const { template } = await produceTemplateDelivery(await buildVcgWithImage('tpl-live-none'));
+    // Present-and-empty, NOT absent. Absent is reserved for "imported before this
+    // existed", and collapsing the two is what would put a template with real
+    // holes on air with nothing behind them.
+    expect(template.liveSources).toBeDefined();
+    expect(template.liveSources?.sources).toEqual([]);
+  });
+});

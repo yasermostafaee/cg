@@ -7,6 +7,7 @@ export * from './animation.js';
 export * from './elements.js';
 export * from './fields.js';
 export * from './bindings.js';
+export * from './live-source.js';
 export * from './scene.js';
 export * from './composition-fields.js';
 export * from './path-migration.js';

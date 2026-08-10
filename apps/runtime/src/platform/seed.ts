@@ -1,5 +1,6 @@
-import type { StackItemState } from '@cg/shared-schema';
+import { resolveDefaultPosition, type StackItemState } from '@cg/shared-schema';
 import type { ConnectionConfig, ConnectionHealth, TemplateInfo } from '@cg/shared-ipc';
+import { collectLiveSources } from '@cg/vcg-format';
 import { STARTER_TEMPLATES } from '@cg/starter-templates';
 
 /**
@@ -18,6 +19,16 @@ export function seedTemplates(): TemplateInfo[] {
     name: s.label,
     templateType: s.scene.templateType,
     fields: s.scene.fields,
+    // D-137 / C-015 — DERIVED here, not omitted. A seeded starter is synthesised
+    // from a scene this function is holding, so it is not a "pre-carrier" record
+    // and must not wear that state: leaving the block off would make every
+    // starter read "Re-import required" in the offline mock, which is the mock
+    // wearing a signal that means something real (R-006's own doctrine).
+    liveSources: {
+      resolution: s.scene.resolution,
+      defaultPosition: resolveDefaultPosition(s.scene),
+      sources: collectLiveSources(s.scene),
+    },
   }));
 }
 

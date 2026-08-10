@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { CompositionFieldGroupSchema, DynamicFieldSchema, IdSchema } from '@cg/shared-schema';
+import {
+  CompositionFieldGroupSchema,
+  DynamicFieldSchema,
+  IdSchema,
+  LiveSourceDeclarationSchema,
+  PositionSchema,
+  ResolutionSchema,
+} from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -10,6 +17,63 @@ import { definePublishChannel } from '../publish.js';
  * render the right editor controls. M7.2 introduces `templates.fields`
  * to expose that schema to the Renderer.
  */
+
+/**
+ * D-137 / C-015 — the LIVE SOURCE CARRIER: everything the bridge needs to place a
+ * live producer behind a template's holes, derived once at import.
+ *
+ * ── WHY ONE BLOCK AND NOT THREE FIELDS ──────────────────────────────────────
+ *
+ * `resolution` and `defaultPosition` are not general-purpose additions to
+ * `TemplateInfo`; they exist because the Live Source geometry chain needs them
+ * (`live-source-multibox` design.md §6 — _"they ride the same carrier, derived at
+ * the same moment, for the same reason"_). Grouping them makes the ONE thing a
+ * reader must check — "did this template come through an importer that knew about
+ * Live Sources?" — a single question with a single answer, instead of three
+ * independently-absent fields whose combinations mean nothing.
+ *
+ * ── `defaultPosition` IS REQUIRED, AND WHY THAT IS ON-AIR ────────────────────
+ *
+ * The bridge appends the position query to the served URL **only when an operator
+ * override exists** (`caspar-runtime.ts:3685`). With no override no `pos` rides
+ * the URL and the PAGE resolves its own chain — `query override ??
+ * scene.defaultPosition ?? centered`. A bridge that assumed `centered` would
+ * therefore compute a different origin from the page for every template whose
+ * author set a position, and the composited live box would land where the hole is
+ * NOT — invisibly, because the hole is transparent.
+ *
+ * So the value carried here is the RESOLVED authored default —
+ * `resolveDefaultPosition(scene)` (`@cg/shared-schema`), the same function whose
+ * result the page's own `resolveOutputPosition` falls through to. It is never
+ * absent inside this block: a declaration the bridge can act on without knowing
+ * where the scene sits is not a declaration, it is a guess.
+ *
+ * ── WHY THE BLOCK ITSELF IS OPTIONAL ────────────────────────────────────────
+ *
+ * `TemplateInfo` is not only a wire shape: the bridge PERSISTS it and re-parses it
+ * at boot through `PersistedTemplateSchema` (`template-registry.ts:19-30`), and a
+ * record that fails that parse is SKIPPED with a warning. A newly-required
+ * top-level field would therefore empty every existing station's library on the
+ * first boot after upgrade. Optional at the block boundary keeps those records
+ * parsing while keeping `defaultPosition` unconditionally present wherever a Live
+ * Source declaration exists — which is the guarantee the on-air argument above
+ * actually asks for.
+ *
+ * Absent is NOT "no live sources" — see {@link liveSourceCarrierState}.
+ */
+export const TemplateLiveSourcesSchema = z.object({
+  /** The scene's own pixel raster — the space `sources[].rect` is expressed in. */
+  resolution: ResolutionSchema,
+  /** The RESOLVED authored default position (see above). Never absent. */
+  defaultPosition: PositionSchema,
+  /**
+   * One declaration per Live Source, in document order. EMPTY is a real and
+   * common answer: this template has none. The distinction between an empty
+   * array and an absent block is the whole point of the block.
+   */
+  sources: z.array(LiveSourceDeclarationSchema),
+});
+export type TemplateLiveSources = z.infer<typeof TemplateLiveSourcesSchema>;
 
 export const TemplateInfoSchema = z.object({
   templateId: IdSchema,
@@ -67,8 +131,48 @@ export const TemplateInfoSchema = z.object({
    * bit predates this field simply does not offer NEXT until re-imported.
    */
   hasNext: z.boolean().optional(),
+  /**
+   * D-137 / C-015 — the Live Source carrier. See {@link TemplateLiveSourcesSchema}
+   * for why it is one block, why `defaultPosition` inside it is required, and why
+   * the block itself is optional.
+   *
+   * The `hasNext` precedent (above) applies in full: derived ONCE at import, the
+   * one moment the app holds the unpacked scene, and carried on `TemplateInfo`
+   * rather than in a browser-local store — so the bridge persists it and every
+   * browser gets the same answer instead of the operator who imported getting one
+   * answer and everyone else another.
+   *
+   * Where it DIVERGES from `hasNext` is the meaning of absent, and the divergence
+   * is deliberate. `hasNext` absent means NO next step — the safe direction, since
+   * the cost of being wrong is a control that is not offered. Absent HERE cannot
+   * take the same shortcut: reading it as "no live sources" would put a template
+   * with real holes on air with nothing composited behind them, which is a black
+   * rectangle where a guest should be. Absent therefore means UNKNOWN and the
+   * operator is told to re-import.
+   */
+  liveSources: TemplateLiveSourcesSchema.optional(),
 });
 export type TemplateInfo = z.infer<typeof TemplateInfoSchema>;
+
+/**
+ * D-137 / C-015 — what a template's Live Source carrier actually says. THE
+ * canonical reading of {@link TemplateInfo.liveSources}, so no caller re-derives
+ * the three-way distinction and quietly collapses it to two.
+ *
+ * - `'declared'` — the block is present and names at least one Live Source.
+ * - `'none'` — the block is present and empty: this template genuinely has none.
+ * - `'unknown'` — the block is ABSENT. The template was imported by a build that
+ *   did not derive it, so nothing here can say whether it has holes. **This is
+ *   not `'none'`.** The scene is discarded after import and the bridge parses no
+ *   HTML, so the answer is not recoverable from anything the runtime still
+ *   holds — only a re-import can produce it.
+ */
+export function liveSourceCarrierState(
+  template: Pick<TemplateInfo, 'liveSources'>,
+): 'declared' | 'none' | 'unknown' {
+  if (template.liveSources === undefined) return 'unknown';
+  return template.liveSources.sources.length > 0 ? 'declared' : 'none';
+}
 
 export const TemplatesGetChannel = defineChannel(
   'templates.get',

@@ -73,7 +73,12 @@ describe('validateFixedBank', () => {
     expect(message).toContain('custom');
   });
 
-  it('T9 — overlap with reservedLayers (the C-015 Live Source seam) is refused, naming both', () => {
+  // ⚠ NOT "the C-015 Live Source seam", which is what this test used to call it.
+  // `reservedLayers` is the range the company's PLAYOUT SYSTEM owns — a fence away
+  // from a FOREIGN owner. A Live Source layer is the inverse: one the bridge owns,
+  // tracked in its own ledger (`live-layers.ts`, design.md §4). The old name is how
+  // the disjointness half of C-015 came to read as the whole of it.
+  it('T9 — overlap with reservedLayers (the foreign PLAYOUT range) is refused, naming both', () => {
     const { code, message } = codeOf(() =>
       validateFixedBank(bank(), { policy: POLICY, reservedLayers: [72, 73] }),
     );
