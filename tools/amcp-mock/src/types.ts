@@ -30,6 +30,41 @@ export interface LayerSlot {
 export type CgAddResolution = 'pending' | 'resolved' | 'failed';
 
 /**
+ * D-137 / C-015 — a rect in CHANNEL-NORMALIZED space, as `MIXER … FILL` and
+ * `MIXER … CLIP` both take it: each component a fraction of the channel raster
+ * on its OWN axis (`x`/`width` against width, `y`/`height` against height).
+ *
+ * Measured on hardware (`live-source-multibox` design.md §0b, fact 1):
+ * `FILL 0.1 0.2 0.3 0.4` on a 1920×1080 channel produced a box at ≈(192, 216)
+ * sized ≈576×432. The competing hypothesis — both axes normalized against WIDTH
+ * — predicts 576×768 and was falsified.
+ */
+export interface MixerRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The identity rect: the whole channel. What both `FILL` and `CLIP` are before
+ * anything sets them, and what `MIXER … CLEAR` restores.
+ */
+export const FULL_FRAME: MixerRect = { x: 0, y: 0, width: 1, height: 1 };
+
+/**
+ * The producer KIND a layer is carrying — what real CasparCG reports per layer
+ * over OSC, and the signal the bridge's ownership work discriminates on.
+ *
+ * D-137 / C-015 widened this from `'empty' | 'html' | 'ffmpeg'`. Before, a
+ * routed Live Source layer (`PLAY 1-11 "route://1-10"`) was recorded as
+ * `'ffmpeg'` — indistinguishable from a foreign video layer, which is exactly
+ * the discriminator the ownership phases turn on. A mock that cannot tell those
+ * apart cannot test them.
+ */
+export type ProducerKind = 'empty' | 'html' | 'ffmpeg' | 'route' | 'decklink' | 'ndi';
+
+/**
  * Observable layer state. Mirrors what CasparCG 2.3.x emits via OSC
  * (see ADR 0004) — `producer` is the load-bearing signal.
  */
@@ -39,9 +74,11 @@ export interface LayerState {
    * `'empty'` when the slot is idle; `'html'` when an HTML page is loaded;
    * `'ffmpeg'` when a media file is playing (R-015 — real CasparCG reports the
    * producer KIND per layer over OSC, and the video-layer protection keys on
-   * exactly this discriminator, so the mock must tell the truth about media).
+   * exactly this discriminator, so the mock must tell the truth about media);
+   * and `'route'` / `'decklink'` / `'ndi'` for the live-input producers D-137 /
+   * C-015 places behind a template's holes.
    */
-  producer: 'empty' | 'html' | 'ffmpeg';
+  producer: ProducerKind;
   /** Loaded file path (URL string). Only meaningful when `producer !== 'empty'`. */
   filePath: string;
   /** Background "next-up" producer. CasparCG emits this on every framerate tick. */
@@ -83,6 +120,37 @@ export interface LayerState {
    * property is the whole reason the restore has to be explicit.
    */
   volume: number;
+  /**
+   * D-137 / C-015 — the layer's `MIXER … FILL` rect, channel-normalized.
+   *
+   * MODELLED BECAUSE `design.md` §6's ARITHMETIC IS OTHERWISE UNCHECKABLE
+   * OFFLINE. The bridge derives this rect from the scene's hole through the
+   * page's own placement chain; nothing else on the wire reveals whether it got
+   * it right, and the failure — a live guest box sitting beside the transparent
+   * hole it should fill — has no operator signal at all.
+   *
+   * Like `volume`, it SURVIVES `CLEAR` and `CG REMOVE`: mixer state belongs to
+   * the channel's mixer, not to the producer on the layer. That is precisely why
+   * teardown must emit `MIXER … CLEAR` explicitly, and a test can only catch the
+   * omission if the mock keeps the state around to be caught.
+   */
+  fill: MixerRect;
+  /**
+   * D-137 / C-015 — the layer's `MIXER … CLIP` MASK, in the SAME
+   * channel-normalized space as {@link fill}.
+   *
+   * 🔴 **It does not travel with `FILL`.** Measured on 2.5.0 and re-confirmed
+   * qualitatively on the plant's 2.3.2: with the box at `FILL 0.5 0.5 0.5 0.5`
+   * (bottom-right), `CLIP 0 0 0.5 0.5` (top-left) made it **disappear entirely**.
+   * Two rects that do not intersect render NOTHING — which on air is a black
+   * hole where a guest should be, and is why the bridge must emit the pair from
+   * one computation rather than as two independent commands.
+   *
+   * Survives `CLEAR` for the same reason {@link fill} does — and an inherited
+   * `CLIP` is the worse of the two, because it makes an otherwise-correct later
+   * graphic invisible with nothing on the wire explaining why.
+   */
+  clip: MixerRect;
 }
 
 /** B-041 — why the mock's second-layer (html_cg_proxy → V8) emulation rejected a CG data arg. */
@@ -158,6 +226,21 @@ export interface MockHandle {
   setHandler(verb: string, handler: AmcpHandler): void;
   /** Snapshot of the layer the slot currently has. */
   layerState(slot: LayerSlot): LayerState | undefined;
+  /**
+   * D-137 / C-015 — what the layer's `FILL` and `CLIP` actually put on the
+   * channel: their INTERSECTION, or `null` when the two do not intersect and
+   * the layer therefore renders NOTHING.
+   *
+   * `null` is the answer worth having. `CLIP` masks in channel space and does
+   * not travel with `FILL`, so a fill box moved out from under its clip window
+   * disappears completely — and because the template's hole is transparent by
+   * design, that looks on air exactly like a correctly-authored empty region.
+   * A test asserting only on `layerState().fill` cannot catch it.
+   *
+   * `undefined` when the slot has never been touched (no layer at all), which
+   * is a different statement from `null` (a layer that renders nothing).
+   */
+  layerRenderedRect(slot: LayerSlot): MixerRect | null | undefined;
   /**
    * R-022 — set a layer's volume WITHOUT an AMCP command. Test hook.
    *

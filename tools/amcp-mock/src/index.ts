@@ -9,10 +9,14 @@ export type {
   HandlerContext,
   LayerSlot,
   LayerState,
+  MixerRect,
   MockHandle,
   MockOptions,
   OscArgValue,
+  ProducerKind,
 } from './types.js';
+export { FULL_FRAME } from './types.js';
+export { renderedRect } from './mixer-rect.js';
 export { decodeCgData } from './cg-data.js';
 export { encodeBundle, encodeMessage } from './osc-encode.js';
 export type { OscMessage } from './osc-encode.js';

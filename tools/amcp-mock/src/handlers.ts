@@ -1,7 +1,15 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
 import { decodeCgData } from './cg-data.js';
-import type { AmcpHandler, AmcpRequest, HandlerContext, AmcpResponse } from './types.js';
+import {
+  FULL_FRAME,
+  type AmcpHandler,
+  type AmcpRequest,
+  type HandlerContext,
+  type AmcpResponse,
+  type MixerRect,
+  type ProducerKind,
+} from './types.js';
 
 /**
  * Built-in handler set. Models the subset of CasparCG 2.3.x AMCP that
@@ -25,38 +33,85 @@ export function defaultHandlers(): Map<string, AmcpHandler> {
 
 /**
  * R-022 — `MIXER <ch>-<layer> VOLUME <value>`.
+ * D-137 / C-015 — `MIXER <ch>-<layer> FILL|CLIP <x> <y> <x-scale> <y-scale>`
+ * and `MIXER <ch>-<layer> CLEAR`.
  *
- * Modelled because rehearse depends on it and its failure mode is SILENCE ON
- * AIR: rehearse leaves the producer resident and mutes the layer, so a mute that
- * is never restored is a graphic that airs with no sound. Without a MIXER handler
- * the mock answered `400 ERROR` to the mute, which would have made the bridge's
- * fail-closed refusal fire in every test and hidden the real behaviour behind a
- * plumbing failure.
+ * VOLUME is modelled because rehearse depends on it and its failure mode is
+ * SILENCE ON AIR: rehearse leaves the producer resident and mutes the layer, so
+ * a mute that is never restored is a graphic that airs with no sound. Without a
+ * MIXER handler the mock answered `400 ERROR` to the mute, which would have made
+ * the bridge's fail-closed refusal fire in every test and hidden the real
+ * behaviour behind a plumbing failure.
  *
- * Only the VOLUME sub-verb is implemented. Anything else is `400`, deliberately:
- * an unimplemented sub-verb that silently `202`s would let a wrong command look
+ * FILL and CLIP are modelled for the same shape of reason one layer out: the
+ * geometry chain in `live-source-multibox` design.md §6 is otherwise
+ * UNCHECKABLE OFFLINE, and its failure mode — a live box placed beside the
+ * transparent hole it should fill, or masked away entirely — produces no error
+ * and no operator signal.
+ *
+ * Anything OTHER than these four sub-verbs is still `400`, deliberately: an
+ * unimplemented sub-verb that silently `202`s would let a wrong command look
  * correct, which is the one thing a mock must never do.
  *
- * The volume is applied to the layer's mixer state and NOT reset by `CLEAR` or
+ * All mixer state here is applied to the layer and NOT reset by `CLEAR` or
  * `CG REMOVE` (those handlers patch specific fields), which is the real
  * behaviour — mixer state belongs to the channel, not to the producer — and is
- * precisely why the restore has to be explicit.
+ * precisely why both the volume restore and the geometry reset have to be
+ * explicit.
  */
 function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = parseChannelLayer(req.args[0]);
   if (!slot) return { kind: 'err', code: 401, verb: 'MIXER' };
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'MIXER' };
-  if ((req.args[1] ?? '').toUpperCase() !== 'VOLUME') {
-    return { kind: 'err', code: 400, verb: 'MIXER' };
+  const sub = (req.args[1] ?? '').toUpperCase();
+
+  if (sub === 'VOLUME') {
+    const raw = req.args[2];
+    if (raw === undefined) return { kind: 'err', code: 402, verb: 'MIXER' };
+    const volume = Number(raw);
+    // A non-numeric or negative volume is a REFUSAL, not a clamp: silently
+    // coercing it would let a malformed mute read as a successful one.
+    if (!Number.isFinite(volume) || volume < 0) return { kind: 'err', code: 401, verb: 'MIXER' };
+    ctx.setLayer(slot, { volume });
+    return { kind: 'ok', code: 202, verb: 'MIXER' };
   }
-  const raw = req.args[2];
-  if (raw === undefined) return { kind: 'err', code: 402, verb: 'MIXER' };
-  const volume = Number(raw);
-  // A non-numeric or negative volume is a REFUSAL, not a clamp: silently
-  // coercing it would let a malformed mute read as a successful one.
-  if (!Number.isFinite(volume) || volume < 0) return { kind: 'err', code: 401, verb: 'MIXER' };
-  ctx.setLayer(slot, { volume });
-  return { kind: 'ok', code: 202, verb: 'MIXER' };
+
+  if (sub === 'FILL' || sub === 'CLIP') {
+    const rect = parseMixerRect(req.args.slice(2));
+    // Same doctrine as VOLUME's refusal: four numbers or nothing. A rect with a
+    // silently-coerced component is a geometry nobody declared, and half a
+    // placement is worse than none — it looks applied.
+    if (rect === null) return { kind: 'err', code: 401, verb: 'MIXER' };
+    ctx.setLayer(slot, sub === 'FILL' ? { fill: rect } : { clip: rect });
+    return { kind: 'ok', code: 202, verb: 'MIXER' };
+  }
+
+  if (sub === 'CLEAR') {
+    // Resets the layer's GEOMETRY, not its volume: `MIXER CLEAR` on real
+    // CasparCG resets the mixer for the layer, and this mock models the two
+    // geometry terms it carries. Volume is deliberately left alone here so the
+    // R-022 restore path keeps being tested on its own terms.
+    ctx.setLayer(slot, { fill: FULL_FRAME, clip: FULL_FRAME });
+    return { kind: 'ok', code: 202, verb: 'MIXER' };
+  }
+
+  return { kind: 'err', code: 400, verb: 'MIXER' };
+}
+
+/**
+ * `<x> <y> <x-scale> <y-scale>` → a normalized rect, or `null` when the four
+ * arguments are not four finite numbers.
+ *
+ * NOT clamped to `[0,1]`. A `FILL` may legitimately hang off the frame, and a
+ * mock that clamped would hide exactly the bridge bug (an unclamped scene rect)
+ * that the real server would show as a box running off the raster.
+ */
+function parseMixerRect(args: readonly string[]): MixerRect | null {
+  if (args.length < 4) return null;
+  const nums = args.slice(0, 4).map(Number);
+  if (!nums.every((n) => Number.isFinite(n))) return null;
+  const [x, y, width, height] = nums as [number, number, number, number];
+  return { x, y, width, height };
 }
 
 const VERSION_STRING = '2.3.2 Stable';
@@ -90,30 +145,117 @@ function handleInfo(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   return { kind: 'ok-multi', code: 200, verb: 'INFO', lines: xml };
 }
 
+/** A classified producer argument, or the reason the mock refuses to build one. */
+type ProducerVerdict =
+  | { ok: true; kind: Exclude<ProducerKind, 'empty'> }
+  | { ok: false; code: number; detail: string };
+
+/** `route://<channel>` or `route://<channel>-<layer>`, both 1-based. */
+const ROUTE_TARGET = /^(\d+)(?:-(\d+))?$/;
+/** Anything that ANNOUNCES itself as a scheme: `<word>://`. */
+const SCHEME = /^([a-z][a-z0-9+.-]*):\/\//i;
+
 /**
- * R-015 — which producer real CasparCG would build for a `PLAY`/`LOAD`
- * argument: the `[HTML]` keyword or an http(s) URL yields the html producer;
- * anything else is the media path (`ffmpeg`). The kind is load-bearing — the
- * video-layer protection discriminates on exactly this OSC signal — so the
- * mock must not flatten media to `html` (the pre-R-015 M4 shortcut).
+ * R-015 / D-137 — which producer real CasparCG would build for a `PLAY` /
+ * `LOAD` argument.
+ *
+ * ── WHY THIS IS A CLASSIFIER AND NOT A TWO-WAY TEST ─────────────────────────
+ *
+ * It used to answer `'html' | 'ffmpeg'` and nothing else, so
+ * `PLAY 1-11 "route://1-10"` was recorded as `'ffmpeg'` — indistinguishable
+ * from a foreign video layer, which is the exact discriminator the D-137 /
+ * C-015 ownership work turns on. Every ownership test would have been asserting
+ * against a state the mock could not represent.
+ *
+ * ── AND WHY AN UNRECOGNISED FORM IS A REFUSAL ───────────────────────────────
+ *
+ * This module's own doctrine, written for `handleMixer`: _"an unimplemented
+ * sub-verb that silently 202s would let a wrong command look correct, which is
+ * the one thing a mock must never do."_ `handlePlay` did not obey it — it
+ * refused only on ADDRESSING (bad slot, bad channel) and then `202`d ANY
+ * producer argument, so `rout://1-1` and `DECKLINK DEVIC 3` both read as
+ * success. That never mattered while the bridge only ever emitted `CG ADD`; it
+ * starts mattering the moment the bridge emits `PLAY`, which is what phase 6
+ * does.
+ *
+ * The line drawn is: a bare token with **no scheme and no keyword** is a media
+ * FILE NAME and stays `'ffmpeg'`, exactly as CasparCG treats it (this is what
+ * the existing foreign-layer fixtures like `"program-feed.mov"` rely on). A
+ * token that announces a structured form — a `scheme://`, or a `DECKLINK` /
+ * `NDI` keyword — and then fails to parse is REFUSED, because there is no
+ * reading of it under which the server would have done what was asked.
+ *
+ * ⚠ **The DECKLINK and NDI argument spellings are MODELLED, NOT MEASURED.** No
+ * capture card or NDI source exists on this plant — that is precisely what C-021
+ * is blocked on. The forms accepted here (`DECKLINK DEVICE <n>`, `NDI NAME
+ * <source>`) are what the bridge will emit; when hardware confirms or corrects
+ * them, this classifier and the mapping schema change together.
  */
-function producerFor(args: readonly string[]): 'html' | 'ffmpeg' {
-  const url = args[1] ?? '';
-  const htmlKeyword = args.some((a) => a.toUpperCase() === 'HTML');
-  return htmlKeyword || /^https?:\/\//i.test(url) ? 'html' : 'ffmpeg';
+function classifyProducer(args: readonly string[]): ProducerVerdict {
+  const first = args[1] ?? '';
+  if (first === '') {
+    return { ok: false, code: 402, detail: 'MISSING PRODUCER ARGUMENT' };
+  }
+
+  // B-038-era fidelity gap, fixed: real CasparCG's keyword is written `[HTML]`
+  // in its own documentation and logs, and the old test compared `=== 'HTML'`,
+  // so the real spelling never matched and every mock-facing test had to use a
+  // non-CasparCG argument order to get an html producer at all.
+  const keyword = (a: string): string => a.toUpperCase().replace(/^\[|\]$/g, '');
+  if (args.some((a) => keyword(a) === 'HTML') || /^https?:\/\//i.test(first)) {
+    return { ok: true, kind: 'html' };
+  }
+
+  const upper = first.toUpperCase();
+  if (upper === 'DECKLINK') {
+    const device = args[2]?.toUpperCase() === 'DEVICE' ? Number(args[3]) : NaN;
+    if (!Number.isInteger(device) || device < 1) {
+      return { ok: false, code: 404, detail: 'DECKLINK NEEDS DEVICE <n>' };
+    }
+    return { ok: true, kind: 'decklink' };
+  }
+  if (upper === 'NDI') {
+    const named = args[2]?.toUpperCase() === 'NAME' && (args[3] ?? '') !== '';
+    if (!named) return { ok: false, code: 404, detail: 'NDI NEEDS NAME <source>' };
+    return { ok: true, kind: 'ndi' };
+  }
+
+  const scheme = SCHEME.exec(first);
+  if (scheme !== null) {
+    if (scheme[1]?.toLowerCase() !== 'route') {
+      return { ok: false, code: 404, detail: `UNKNOWN PRODUCER SCHEME ${scheme[1] ?? ''}` };
+    }
+    const target = ROUTE_TARGET.exec(first.slice(scheme[0].length));
+    if (target === null || Number(target[1]) < 1) {
+      return { ok: false, code: 404, detail: 'ROUTE NEEDS <channel>[-<layer>]' };
+    }
+    return { ok: true, kind: 'route' };
+  }
+
+  // No scheme, no keyword — a media file name, which is what CasparCG assumes.
+  return { ok: true, kind: 'ffmpeg' };
 }
 
 /**
- * `PLAY <channel>-<layer> "<url|file>" [HTML]`
+ * `PLAY <channel>-<layer> "<url|file|route://…>" [HTML]`
+ * `PLAY <channel>-<layer> DECKLINK DEVICE <n>`
+ * `PLAY <channel>-<layer> NDI NAME "<source>"`
  */
 function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = parseChannelLayer(req.args[0]);
   if (!slot) return { kind: 'err', code: 401, verb: 'PLAY' };
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'PLAY' };
+  const verdict = classifyProducer(req.args);
+  // The layer is left UNTOUCHED on a refusal — a refused PLAY that had already
+  // written the producer would be the "looks acked, renders nothing" gap in
+  // reverse: looks refused, layer changed anyway.
+  if (!verdict.ok) {
+    return { kind: 'err', code: verdict.code, verb: 'PLAY', detail: verdict.detail };
+  }
   const url = req.args[1] ?? '';
   // Non-fetching media/producer path — the page state is inertly 'resolved'.
   ctx.setLayer(slot, {
-    producer: producerFor(req.args),
+    producer: verdict.kind,
     filePath: url,
     paused: false,
     onAir: true,
@@ -126,10 +268,17 @@ function handleLoad(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = parseChannelLayer(req.args[0]);
   if (!slot) return { kind: 'err', code: 401, verb: 'LOAD' };
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'LOAD' };
+  // ONE classifier for both verbs — `PLAY` and `LOAD` build the same producers,
+  // and two copies of the acceptance rule is how they come to disagree about
+  // what is a valid form.
+  const verdict = classifyProducer(req.args);
+  if (!verdict.ok) {
+    return { kind: 'err', code: verdict.code, verb: 'LOAD', detail: verdict.detail };
+  }
   const url = req.args[1] ?? '';
   // LOAD primes the foreground but pauses immediately — PLAY is required to resume.
   ctx.setLayer(slot, {
-    producer: producerFor(req.args),
+    producer: verdict.kind,
     filePath: url,
     paused: true,
     onAir: false,

@@ -195,18 +195,51 @@ sources }`, with `defaultPosition` REQUIRED **inside** it. ⚠ **A top-level req
 
 ## 3. Phase 3 — The mock (blocks phase 5)
 
-- [ ] 3.1 Widen `LayerState.producer` to include `'route' | 'decklink' | 'ndi'`
+- [x] 3.1 Widen `LayerState.producer` to include `'route' | 'decklink' | 'ndi'`
       (`tools/amcp-mock/src/types.ts:44`) and replace `producerFor`
       (`tools/amcp-mock/src/handlers.ts:100-104`) with a real first-argument classifier.
-- [ ] 3.2 Make an unrecognised producer form a **refusal**, restoring the mock's own doctrine
+- [x] 3.2 Make an unrecognised producer form a **refusal**, restoring the mock's own doctrine
       (`handlers.ts:36-38`) to `handlePlay`, which today refuses only on addressing.
-- [ ] 3.3 Model `MIXER … FILL` **and `MIXER … CLIP`**, adding both rects to `LayerState`, so a test
+- [x] 3.3 Model `MIXER … FILL` **and `MIXER … CLIP`**, adding both rects to `LayerState`, so a test
       can assert the normalized geometry. Without this, `design.md` §6's arithmetic is uncheckable
       offline. Model `CLIP` as an INTERSECTION MASK in the same channel-normalized space as `FILL`
       (measured, `design.md` §3) — including the disjoint case, where the layer renders nothing:
       that is the state a test must be able to catch, because it is the on-air failure mode.
-- [ ] 3.4 Fix the `[HTML]` fidelity gap (`handlers.ts:102` compares `=== 'HTML'`), which starts
+- [x] 3.4 Fix the `[HTML]` fidelity gap (`handlers.ts:102` compares `=== 'HTML'`), which starts
       mattering the moment the bridge emits `PLAY`.
+
+**PHASE 3 LANDED 2026-08-10.** What each task actually produced:
+
+- **3.1** `ProducerKind` = `'empty' | 'html' | 'ffmpeg' | 'route' | 'decklink' | 'ndi'`, and
+  `classifyProducer` replacing `producerFor`. **`PLAY` and `LOAD` share the ONE classifier** — two
+  copies of the acceptance rule is how they come to disagree about what a valid form is.
+- **3.2** the refusal, with the line drawn explicitly: a bare token with **no scheme and no
+  keyword** stays `'ffmpeg'` (a media FILE NAME, which is what CasparCG assumes and what the
+  existing foreign-layer fixtures like `"program-feed.mov"` depend on); a token that ANNOUNCES a
+  structured form — a `scheme://`, or a `DECKLINK` / `NDI` keyword — and then fails to parse is
+  REFUSED, because there is no reading of it under which the server would have done what was asked.
+  A refused `PLAY` leaves the layer **untouched**: writing the producer and then refusing would be
+  the "looks acked, renders nothing" gap in reverse.
+  ⚠ **The DECKLINK and NDI argument spellings are MODELLED, NOT MEASURED** — no capture card or NDI
+  source exists on this plant, which is exactly what C-021 is blocked on. Said in the classifier's
+  own docstring rather than left to be discovered.
+- **3.3** `fill` and `clip` on `LayerState`, both channel-normalized, both SURVIVING `CLEAR` (mixer
+  state belongs to the channel's mixer — which is why teardown must emit `MIXER … CLEAR`, and a test
+  can only catch the omission if the mock keeps the state to be caught). `MIXER … CLEAR` resets both
+  geometry terms and deliberately leaves VOLUME alone, so R-022's restore path keeps being tested on
+  its own terms. A `FILL` is **not clamped** to the frame: clamping would hide the unclamped-scene-rect
+  bug the real server would show as a box running off the raster.
+  **The disjoint case is a first-class answer, not an edge case rounded off.** `renderedRect(fill,
+clip)` returns `null` — not an empty rect — when the two do not intersect, and
+  `MockHandle.layerRenderedRect` exposes it. Zero area is nothing rendered, and `width: 0` reads as
+  "very small" to a naive assertion. The test that pins it also asserts that a test reading only
+  `fill` would have seen a perfectly good box.
+- **3.4** the keyword match now strips the brackets, so CasparCG's real `[HTML]` tag matches as well
+  as the bare word. It never mattered while the bridge only emitted `CG ADD`; it starts mattering
+  the moment the bridge emits `PLAY`.
+- **Tests** `tools/amcp-mock/tests/live-producers.test.ts` — 27 tests over the classifier, the
+  refusals, the geometry and `renderedRect`. The 51-file / 286-test `@cg/caspar-bridge` suite runs
+  green against the changed mock, which is what says the refusal did not narrow an existing form.
 
 ## 4. Phase 4 — The mapping store and its settings surface
 
@@ -411,7 +444,13 @@ was the entire point of the obligation.
       targeted local run of the new spec could not see it; the full suite would have. Fixed in
       `d91add3`, and the whole 246-test suite now runs green locally before a push as well.
       Phase 9's own debt is still owed — it is a later phase.
-- [ ] 9.3a Phases 2–8: each still owes its own completed green Linux `e2e`, cited by run URL beside
-      the ticked item. A green run on THIS commit says nothing about a later phase's diff.
+- [~] 9.3a Phases 2–8: each still owes its own completed green Linux `e2e`, cited by run URL beside
+  the ticked item. A green run on THIS commit says nothing about a later phase's diff.
+  **PHASE 2's DEBT IS DISCHARGED.** Run:
+  <https://github.com/yasermostafaee/cg/actions/runs/31370079041> — `ubuntu-latest`, commit
+  `7e595ac`, **`conclusion: success`, the `E2E (Playwright)` job COMPLETED and green** (not
+  skipped, not cancelled). That commit carries phase 2 in full, including the new
+  `apps/runtime/tests/e2e/live-source-carrier.spec.ts` that 2.4 owes.
+  Phases 3–8 still owe their own.
 - [ ] 9.4 **Hardware:** the phase-6 `route://` demo is dischargeable here; **phase 7 is not** —
       see `design.md` §12.1, which is an owner decision, not work.

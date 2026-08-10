@@ -1,4 +1,4 @@
-import type { LayerSlot, LayerState } from './types.js';
+import { FULL_FRAME, type LayerSlot, type LayerState } from './types.js';
 
 /**
  * In-memory registry of (channel, layer) → LayerState. The mock owns
@@ -25,6 +25,11 @@ export class LayerRegistry {
       // R-022 — a fresh layer is at FULL volume, as on real CasparCG. Defaulting
       // to 0 would have made a missing restore look correct in every test.
       volume: 1,
+      // D-137 — an untouched layer fills the whole frame and masks nothing, which
+      // is the identity for both terms. Defaulting to anything smaller would have
+      // made a MISSING `MIXER FILL` look like a placed box.
+      fill: FULL_FRAME,
+      clip: FULL_FRAME,
     };
     this.slots.set(key, fresh);
     return fresh;

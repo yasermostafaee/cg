@@ -3,6 +3,7 @@ import { AmcpServer, type TraceEntry } from './server.js';
 import { OscEmitter } from './osc-emitter.js';
 import { LayerRegistry } from './layer-state.js';
 import { defaultHandlers } from './handlers.js';
+import { renderedRect } from './mixer-rect.js';
 import type {
   AmcpHandler,
   CgAddResolution,
@@ -10,6 +11,7 @@ import type {
   HandlerContext,
   LayerSlot,
   LayerState,
+  MixerRect,
   MockHandle,
   MockOptions,
   OscArgValue,
@@ -156,6 +158,11 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     },
     layerState(slot: LayerSlot): LayerState | undefined {
       return registry.peek(slot);
+    },
+    layerRenderedRect(slot: LayerSlot): MixerRect | null | undefined {
+      const layer = registry.peek(slot);
+      if (layer === undefined) return undefined;
+      return renderedRect(layer.fill, layer.clip);
     },
     setLayerVolume(slot: LayerSlot, volume: number): void {
       registry.patch(slot, { volume });
