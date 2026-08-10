@@ -1515,6 +1515,13 @@ URL query parameter — a query parameter is a door an operator can reach by boo
 **What:** give the persisted bridge configuration files a marker that lets the bridge tell a
 current file from one written under an older decision, and say so at boot.
 
+**A SECOND SURFACE with the same concern, filed 2026-08-10:** [[C-022]] serves the installation's
+live source list over HTTP for the plant's playout client to read. There the ambiguity is one hop
+further out — a playout client must be able to tell _"this bridge does not have the feature"_ from
+_"this installation has no sources"_ — so that endpoint carries a version or shape marker for the
+same reason this item gives one to the files. Cross-referenced rather than merged: the mechanisms
+differ (a file field vs. a response field) even though the failure they prevent is identical.
+
 **Why:** the incident that prompted this was an office machine booting on a `count: 4` fixed-layer
 bank written before the bank decision changed. Nothing was corrupt; the file was simply older than
 the intent. The cheap half already shipped — the CLI prints the bank in force **and its source** at
@@ -1905,3 +1912,64 @@ delivery, which is done; it blocks its **archive**. The sweep also recorded that
 that a Designer-splash change dir does not exist at all (`DEBT.md:1975`) — that second one is
 separate, larger, and is not folded in here. Source: `DEBT-SWEEP.md:665-672`, recorded as owed by
 the sweep's closing session and left unfiled.
+
+## [ ] R-048 — swap a plate's input WHILE the template is ON AIR ⟨priority: high⟩ — ⭐ CLIENT REQUIREMENT, implemented in [[C-015]] phase 6
+
+🔴 **This is a CLIENT REQUIREMENT, not a preference.** Recorded as such 2026-08-10 (owner) so a
+later prioritisation pass cannot read it as a nice-to-have and defer it.
+
+**What:** a three-plate template is on air, one input drops and its plate goes black. The operator
+must be able to point **that ONE plate** at a different source, **fast**, **without taking the
+graphic off air** and **without disturbing the other two plates**.
+
+**Why the MAPPING is the WRONG lever — recorded so it is not proposed later.** The obvious move is
+"edit `guest-2`'s mapping to point at the spare camera". It is wrong twice: a mapping is
+**installation-wide configuration**, so editing it changes **every template** using that id — and it
+**persists**, so an emergency substitution made at 19:58 is still in force next week. Both are wrong
+for a temporary swap. This is a **PER-ITEM OVERRIDE**, the same shape as the existing position
+override: the configured value is untouched and **only this run changes**.
+
+**The mechanism, which the existing structures already support.** [[C-015]] phase 5's `#liveLayers`
+ledger keys by **itemId** and holds one record per plate — `{ slot, sourceId, role, producer, fill }`
+(`tools/caspar-bridge/src/live-layers.ts`). A swap **replaces `producer` on ONE record and re-issues
+on that same slot**. The template's HTML is never touched, which is what makes it safe to do on air:
+the graphic itself never reloads.
+
+**Acceptance — five requirements, each with the reason it exists:**
+
+- WHEN a plate is swapped THEN it is a **REPLACE, never a clear-then-add**: `PLAY` substitutes the
+  producer in place on the occupied layer. A `CLEAR` followed by a `PLAY` that fails is exactly the
+  [[B-126]] window, **arriving during an emergency** — a destructive step committed before the
+  constructive one was known to succeed. WHEN the replace fails THEN the previous (black) producer
+  stays and the row **says so honestly** rather than reporting a success it did not achieve.
+  ⚠ **VERIFY on the plant's 2.3.2 that `PLAY` on an OCCUPIED layer substitutes rather than requiring
+  a prior clear — do NOT assume it; record the measurement.** Run it in the same `amcp-poke` session
+  as `live-source-multibox` design.md §3b's `DEFER`/`COMMIT` question.
+- WHEN the substituted source carries a different format THEN **the fit recomputes automatically**,
+  in the same action: crop-to-fill re-derives from the new mapping (design.md §3a's chain). The
+  operator must not have a second step — under pressure, a second step is a step that does not
+  happen.
+- WHEN the operator had deliberately raised that plate's audio THEN **the swap re-applies it**.
+  Every bridge-created producer is born muted (C-015 phase 6.5), and the intent belonged to the
+  **PLATE**, not to the producer instance — a swap that silently mutes a guest is its own on-air
+  fault.
+- WHEN the bridge restarts THEN **the override survives**. Retention must carry it, or a momentary
+  bridge blip silently reverts the plate to the **dead** source. This is the [[B-107]] / [[B-109]]
+  class — retention dropping state it did not model — so it is stated as a requirement with a test,
+  not left to be discovered.
+- WHEN the operator needs it THEN it is **reachable in one or two actions from the row**. This is
+  used under pressure, on air: it must not live in settings, behind a modal chain, or anywhere the
+  operator must first find the item.
+
+**Recorded as v2, deliberately NOT in scope:** a **pre-armed backup source** per plate. In a real
+failure the operator often needs a source nobody predicted, and an **open list beats a pre-chosen
+wrong one**. Revisit only if use shows otherwise.
+
+**Also out of scope, and filed as its own thought rather than widening this item:** automatic
+**DETECTION** of a dead input. The client asked for a fast SWAP; detection is a separate capability,
+and [[C-023]]'s per-source confidence thumbnails already give the operator eyes on which plate died
+and which source is healthy. C-023 is the diagnosis half; this item is the repair.
+
+**Where it is implemented:** inside `openspec/changes/live-source-multibox/` **phase 6** (tasks
+6.9–6.9f), cross-referenced both ways — the same pattern D-147 used to ride phase 1 rather than
+opening a change of its own.

@@ -3554,7 +3554,7 @@ this).
 **Notes:** implementation (canvas readback vs filter) is design-time; depends on D-128's video
 element existing. A Lottie variant may follow as its own item — out of scope here.
 
-## [~] D-137 — Live Source element (multi-box live windows; implements the reserved video-placeholder) ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (authored with [[C-015]] as ONE change; phase 1 — schema + authoring — landed)
+## [~] D-137 — Live Source element (multi-box live windows; implements the reserved video-placeholder) ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (authored with [[C-015]] as ONE change; phases 1–3 landed — schema + authoring, the declaration carrier on `TemplateInfo`, and the offline AMCP mock that makes the geometry checkable)
 
 **What:** A **Live Source** element: an axis-aligned frame with a FULLY TRANSPARENT HOLE in export,
 carrying a source id (and optionally a key source id) the runtime uses to composite a live input

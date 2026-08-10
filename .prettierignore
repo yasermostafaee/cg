@@ -35,3 +35,10 @@ caspar-amcp-probe-*.wire.ndjson
 # newline and collapses short arrays onto one line, so the committed file stops
 # being the artifact the run produced.
 tools/*/evidence/**
+
+# Captured evidence, same rule as `tools/*/evidence/**` above: the plant's CIAB
+# client (a MODIFIED CasparCG Client) tool definitions, kept byte-identical to the
+# artifact the owner captured. Formatting it would edit the record — and this one
+# is cited by entry name from `live-source-multibox` design.md and from C-021/C-023,
+# so its line numbers are load-bearing.
+docs/recon/ciab-client-tools.json

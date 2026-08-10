@@ -96,6 +96,43 @@ whose declaration block is absent is **re-import-required**, and the Runtime say
 
 ---
 
+## 1a. ⭐ AMENDED 2026-08-10 — a template declares ONE id; fill+key is a property of the MAPPING
+
+**DECIDED 2026-08-10 (owner). This supersedes the optional KEY SOURCE ID on the element**, which §0
+lists among the things D-137 and C-015 had settled. It is not a new principle; it is this design's
+own principle applied one step further.
+
+**The decision.** A template declares **ONE symbolic source id**. Whether that id resolves to a
+single device or to a fill/key **DEVICE PAIR** is a property of the **MAPPING** in CG Control, never
+of the scene.
+
+**The reasoning, which is §12.1's and §3's, re-run.** §12.1 already settled that the Designer never
+names a concrete device. Fill+key is exactly that kind of fact: it is how a source ARRIVES at a
+particular plant, and the author cannot know it — the same argument §3 makes for `expectedAspect`
+being an assertion rather than the fit input. An author asked "is guest 2 fill+key here?" is being
+asked an installation question, and a wrong answer is a wrong take on air. The previous automation
+had this right: ONE preset carrying MASTER and SLAVE (`ciab-client-tools.json`, `ChannelInput` —
+`MasterNumber` and `SlaveNumber` on one entry).
+
+It is also strictly less to carry: **one fewer field for the author, one fewer concept for the
+operator, one fewer arm in the schema.**
+
+**Consequences — all DOCS-ONLY in this change; nothing here is implemented yet.**
+
+- The element declares one id. §1's carrier and §3's rules follow.
+- ⚠ **`keySourceId` is NOT removed from the schema.** It shipped in phase 1 and it is OPTIONAL, so
+  deleting it is a MIGRATION, not a tidy-up. It is marked **DEPRECATED — never written by new
+  documents**, and stays parseable so every stored scene keeps loading. Removing it is a later,
+  separate decision with its own migration.
+- The Inspector's **`key id` control and its hint (D-147 task 3, `tasks.md` 1.12) are REMOVED** when
+  this amendment is implemented. That is filed as an explicit UN-DO task (`tasks.md` 4.8) under the
+  phase that owns the Inspector, not left as a silent deletion — a control that stops being written
+  but stays on screen is worse than either state.
+- The device pair lands on §2's `SourceMappingsSchema`, on the **DECKLINK arm** (`keyDevice`).
+- **C-021**'s subject changes: it is now a MAPPING-LEVEL device pair, not a second declared id.
+
+---
+
 ## 2. ⭐ How `guest-1` becomes a real producer
 
 Today this is **two English sentences** (`docs/prd/caspar.md:371-373` and its acceptance
@@ -140,14 +177,20 @@ the case where **every** id is unmapped, and it resolves through that same rule.
 
 ### Shape
 
+**AMENDED 2026-08-10 (owner) — two additions, both taken from how the plant's PREVIOUS automation
+actually defined a live.** See §2a below for the architecture that motivates them.
+
 ```
 SourceMappingsSchema = {
   mappings: Array<{
     id: string,                     // symbolic, e.g. "guest-1" — see §3
     label?: string,                 // operator-facing, e.g. "Studio camera 2"
+    format?: string,                // AMENDED — the SIGNAL format, e.g. '1080i5000'.
+                                    //   The fit aspect DERIVES from this (§3).
+    aspect?: number,                // fallback when `format` yields none (AUTO / unlisted)
     producer:
       | { kind: 'route',    channel: number, layer?: number }
-      | { kind: 'decklink', device: number, format?: string }
+      | { kind: 'decklink', device: number, keyDevice?: number, format?: string }
       | { kind: 'ndi',      source: string, lowBandwidth?: boolean }
       | { kind: 'media',    file: string },
   }>,
@@ -157,6 +200,40 @@ SourceMappingsSchema = {
 A **discriminated union on `kind`**, not a free string, so an unreachable producer form is a parse
 error at the boundary rather than an AMCP `400` at take time. `route` carries an optional `layer`
 because the measured grammar `route://(?<CHANNEL>\d+)(-(?<LAYER>\d+))?` makes it optional.
+
+**`keyDevice` on the DECKLINK arm is where fill+key now lives** — it moved off the element, see §1a.
+It is on that arm ALONE and deliberately: a fill/key pair is two physical SDI inputs. A `route` or
+an `ndi` source carries its own alpha or none, and offering the field there would invite an operator
+to configure a pair that cannot exist.
+
+### 2a. Where this shape comes from — the plant's PREVIOUS automation
+
+**RECORDED 2026-08-10 (owner), and it is the reason §1a and §3's amendment are corrections rather
+than preferences.** The system this project replaces defined lives like this:
+
+- Each live was **created in CG Control**: the operator set its **type**, its **master** and
+  **slave** devices, its **format**, and so on.
+- It was saved as a **preset in a DATABASE**.
+- The **playout application read that list** and added entries to its own **RUNDOWN**. Playout here
+  is the **CIAB client** (a modified CasparCG Client), and it keeps that role.
+
+So `SourceMappingStore` (phase 4) is the successor to that database table, and it gains a **SECOND
+CONSUMER**: playout. That is filed as **C-022** (a read-only HTTP view of the list on the server the
+bridge already runs) rather than letting playout open the JSON by path, which would couple it to
+this machine's filesystem layout and give it no stable shape to read.
+
+**The corroborating artifact** is `docs/recon/ciab-client-tools.json`, the CIAB client's tool
+definitions — `ChannelInput` carries exactly `Type`, `StreamPath`, `MasterNumber`, `SlaveNumber`,
+`Format`, `Transition`, `Duration`, `Tween`. MASTER + SLAVE on ONE entry is the fill/key pair; the
+per-entry `Format` is the format field above.
+
+🔴 **Read that file with the care its provenance demands.** It describes a **MODIFIED client**, not
+the CasparCG **server**, and its capture date is unknown (the owner says it may be out of date). Its
+`Matrix / Route` tool drives an external **Samim / BlackMagic VideoHub over IP** and is **not AMCP at
+all**; `ATEM / *` addresses a Blackmagic switcher; `ChannelInput` / `ChannelRecord` /
+`ChannelSnapshot` are the product's own tools. Only the **`Mixers`** folder tracks AMCP's `MIXER`
+surface closely enough to be evidence about the server. Nothing below reads a client tool as a
+server capability.
 
 ### Following the store precedent exactly
 
@@ -335,8 +412,10 @@ The two readings are different fields that happen to share a name, and this desi
 > the fit computation.**
 
 - **The fit input is the MAPPING's aspect** — an installation fact, recorded beside the producer in
-  §2's `SourceMappingsSchema` (an optional `aspect` on each mapping entry). The operator configuring
-  `guest-1` knows what the plant delivers; the author does not.
+  §2's `SourceMappingsSchema`. The operator configuring `guest-1` knows what the plant delivers; the
+  author does not.
+  **AMENDED 2026-08-10 (owner): that aspect is DERIVED FROM THE MAPPING'S `format`, not typed.**
+  See §3a below for the chain and the reason.
 - **`expectedAspect` is the author's assertion** — "this window is designed for a 16:9 feed". The
   bridge compares it against the mapping's aspect and **refuses the take with a distinct errorCode
   when they disagree**, rather than silently cropping something the author never anticipated.
@@ -355,6 +434,80 @@ would silently cut the wrong part of a face.
 the fit could use measured truth rather than the mapping's declared aspect) is unknown — §12.3. If
 it can, it supersedes the mapping's `aspect` as the fit input and `expectedAspect` stays exactly
 what it is here: a declaration to validate against.
+
+### 3a. AMENDED 2026-08-10 — the mapping carries the FORMAT, and the fit aspect DERIVES from it
+
+**The previous automation's live definition carried a format**, and the artifact shows the exact
+vocabulary. `ciab-client-tools.json`, `ChannelInput` → `Format` is a 39-value combo, default `PAL`:
+
+```
+AUTO · PAL · NTSC · 576p2500
+720p2398 · 720p2400 · 720p2500 · 720p2997 · 720p3000 · 720p5000 · 720p5994 · 720p6000
+1080p2398 · 1080p2400 · 1080p2500 · 1080p2997 · 1080p3000 · 1080p5000 · 1080p5994 · 1080p6000
+1080i5000 · 1080i5994 · 1080i6000
+1556p2398 · 1556p2400 · 1556p2500
+2160p2398 · 2160p2400 · 2160p2500 · 2160p2997 · 2160p3000
+dci1080p2398 · dci1080p2400 · dci1080p2500 · dci2160p2398 · dci2160p2400 · dci2160p2500
+```
+
+and `ChannelInput` → `Type` is exactly five values, quoted **verbatim from the file**:
+
+```
+Stream · Ndi · Decklink · BlueFish · Rout
+```
+
+⚠ **`Rout`, not `Route` — that is what the artifact literally says** (and the owner's description
+said "Route"). Recorded as the file has it, because this list is the reason to have the file at all;
+whether the client's own spelling is a typo is not something this document can settle.
+
+**DECISION — the fit aspect is DERIVED from `format`, never typed by hand.** A hand-entered aspect
+is a number that can be wrong on air, and it can be wrong while looking entirely reasonable:
+`1080i5000` is 16:9 whatever anyone types beside it. The operator already has to state the format —
+the previous system asked for it, and it is the field that actually determines the raster.
+
+**The chain, in order, recorded so no reader re-derives it:**
+
+1. **the mapping's `format`** → its aspect (`1080i5000` → 16:9, `PAL` → 4:3, …);
+2. **the mapping's explicit `aspect`** — the fallback where the format yields none, i.e. `AUTO` or a
+   format outside the list above;
+3. **the element's `expectedAspect`** — the author's best guess, last;
+4. **neither side states anything** → still open, and still `tasks.md` 6.3's to settle.
+
+🔴 **`expectedAspect` IS UNCHANGED BY THIS, and this sentence exists so a later reader does not
+collapse the two.** It remains the AUTHOR'S ASSERTION that the bridge VALIDATES the mapping against,
+refusing the take with a distinct errorCode when the two disagree (above). It appearing at step 3 of
+the fit chain is a FALLBACK for an undescribed mapping, not a promotion to fit input. The two roles
+are different questions about the same number: "what shape is this feed?" (the mapping) and "what
+shape did the author design for?" (the element).
+
+### 3b. OPEN RECON QUESTION — `DEFER` / `COMMIT`, and whether `FILL` and `CLIP` land on ONE frame
+
+**Not a decision. A question, with its risk, recorded because it bears on task 6.1.**
+
+The plant's client exposes a **`Defer` boolean on 14 of its `Mixers` tools** (`ciab-client-tools.json`
+— `AnchorPoint`, `Brightness`, `Clipping`, `Contrast`, `Crop`, `Distort`, `Grid`, `Levels`, `Mask`,
+`Opacity`, `Rotation`, `Saturation`, `Transform`, `Volume`) plus a bare **`Commit`** tool with no
+properties at all. That is the AMCP `MIXER … DEFER` / `MIXER <ch> COMMIT` pair.
+
+**Why it matters here.** Task 6.1 requires `FILL` and `CLIP` to be emitted as a PAIR from one
+computation. Sending them together in one batch is **not** the same as their landing on the SAME
+FRAME, and the failure if they do not is the one §3 already measured: a fill box that is momentarily
+out from under its clip window renders **nothing at all**. Deferring both and committing once is the
+mechanism that would make it atomic.
+
+🔴 **The risk, which is why this is not already a decision.** `COMMIT` is **CHANNEL-scoped**, and
+this project forbids channel-scoped MIXER commands (`caspar-runtime.ts:2718-2724`). Worse, per
+R-021's own rationale **this plant runs several Runtime stations against one CasparCG** — so a
+`COMMIT` we send might apply **another controller's** deferred changes. That is the same class of
+harm the channel-scoped ban exists to prevent.
+
+**The question, answerable with `amcp-poke` on the plant's 2.3.2 and needing no capture card:**
+
+> Does `MIXER <ch> COMMIT` apply only the DEFERRING CONNECTION's queued changes, or every deferred
+> change on the channel?
+
+Run it alongside phase 6 and **in the SAME session as R-048's replace measurement** — both are AMCP
+probes on the same build, and pairing them costs one session instead of two.
 
 ---
 

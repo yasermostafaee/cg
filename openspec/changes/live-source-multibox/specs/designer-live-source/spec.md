@@ -6,26 +6,40 @@ change's `tasks.md` §0.
 
 ## ADDED Requirements
 
-### Requirement: A Live Source is an axis-aligned region carrying a SYMBOLIC source id
+### Requirement: A Live Source is an axis-aligned region carrying ONE SYMBOLIC source id
 
 The Designer SHALL offer a **Live Source** element that can be placed and sized axis-aligned, and
-that carries a source id, an OPTIONAL key source id, an OPTIONAL `expectedAspect` and an optional
-poster image. The schema type SHALL remain `video-placeholder` and SHALL be extended additively, so every
-stored scene continues to parse without a schema-version bump or a migration.
+that carries **exactly one** source id, an OPTIONAL `expectedAspect` and an optional poster image.
+The schema type SHALL remain `video-placeholder` and SHALL be extended additively, so every stored
+scene continues to parse without a schema-version bump or a migration.
 
 The source id SHALL be **symbolic**: it SHALL match a plain identifier form and SHALL therefore
 reject a concrete device reference such as `DECKLINK DEVICE 3`, a `route://` URL or a file path.
 Mapping an id to a concrete producer is an INSTALLATION concern and never travels in the scene.
 
+**AMENDED 2026-08-10 (owner) — whether an id resolves to a single device or to a FILL/KEY DEVICE
+PAIR is a property of the installation's MAPPING, never of the scene.** The scene SHALL NOT declare
+a second, key source id: the author cannot know how a source arrives at a given plant, which is the
+same argument that makes `expectedAspect` an assertion rather than the fit input. The shipped
+optional `keySourceId` schema field SHALL be treated as **DEPRECATED** — never written by a new
+document, still parsed so stored scenes keep loading — and the Inspector SHALL NOT offer a control
+for it.
+
 Rotation and non-rectangular Live Sources are OUT of scope in v1, because `MIXER FILL` is
 axis-aligned.
 
-#### Scenario: The element carries its ids and is placeable
+#### Scenario: The element carries its id and is placeable
 
 - **WHEN** the operator creates a Live Source **THEN** it can be placed and sized axis-aligned and
-  carries a source id, an optional key source id, an `expectedAspect` and an optional poster
+  carries one source id, an `expectedAspect` and an optional poster
 - **WHEN** a scene containing a Live Source is saved and reloaded **THEN** every field round-trips
   unchanged
+
+#### Scenario: The scene never declares a key source
+
+- **WHEN** the author inspects a Live Source **THEN** no key-source-id control is offered
+- **WHEN** a stored scene carrying the deprecated `keySourceId` is loaded **THEN** it parses
+  unchanged, and re-saving the document does not write the field back
 
 #### Scenario: A stored scene authored before this change still parses
 

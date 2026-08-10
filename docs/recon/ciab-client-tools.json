@@ -1,0 +1,4390 @@
+[
+    {
+        "id": 1,
+        "parent_id": 0,
+        "name": "Mixers",
+        "title": "Mixers",
+        "type": "folder"
+    },
+    {
+        "id": 2,
+        "parent_id": 1,
+        "name": "AnchorPoint",
+        "title": "Anchor Point",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "PositionX",
+                    "title": "Position X",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "PositionY",
+                    "title": "Position Y",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 3,
+        "parent_id": 1,
+        "name": "BlendMode",
+        "title": "Blend Mode",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "BlendMode",
+                    "title": "Blend Mode",
+                    "value": "Normal",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Normal",
+                            "title": "Normal"
+                        },
+                        {
+                            "value": "Lighten",
+                            "title": "Lighten"
+                        },
+                        {
+                            "value": "Darken",
+                            "title": "Darken"
+                        },
+                        {
+                            "value": "Multiply",
+                            "title": "Multiply"
+                        },
+                        {
+                            "value": "Average",
+                            "title": "Average"
+                        },
+                        {
+                            "value": "Add",
+                            "title": "Add"
+                        },
+                        {
+                            "value": "Subtract",
+                            "title": "Subtract"
+                        },
+                        {
+                            "value": "Difference",
+                            "title": "Difference"
+                        },
+                        {
+                            "value": "Negation",
+                            "title": "Negation"
+                        },
+                        {
+                            "value": "Exclusion",
+                            "title": "Exclusion"
+                        },
+                        {
+                            "value": "Screen",
+                            "title": "Screen"
+                        },
+                        {
+                            "value": "Overlay",
+                            "title": "Overlay"
+                        },
+                        {
+                            "value": "Soft_Light",
+                            "title": "Soft_Light"
+                        },
+                        {
+                            "value": "Hard_Light",
+                            "title": "Hard_Light"
+                        },
+                        {
+                            "value": "Color_Dodge",
+                            "title": "Color_Dodge"
+                        },
+                        {
+                            "value": "Color_Burn",
+                            "title": "Color_Burn"
+                        },
+                        {
+                            "value": "Linear_Dodge",
+                            "title": "Linear_Dodge"
+                        },
+                        {
+                            "value": "Linear_Burn",
+                            "title": "Linear_Burn"
+                        },
+                        {
+                            "value": "Linear_Light",
+                            "title": "Linear_Light"
+                        },
+                        {
+                            "value": "Vivid_Light",
+                            "title": "Vivid_Light"
+                        },
+                        {
+                            "value": "Pin_Light",
+                            "title": "Pin_Light"
+                        },
+                        {
+                            "value": "Hard_Mix",
+                            "title": "Hard_Mix"
+                        },
+                        {
+                            "value": "Reflect",
+                            "title": "Reflect"
+                        },
+                        {
+                            "value": "Glow",
+                            "title": "Glow"
+                        },
+                        {
+                            "value": "Phoenix",
+                            "title": "Phoenix"
+                        },
+                        {
+                            "value": "Contrast",
+                            "title": "Contrast"
+                        },
+                        {
+                            "value": "Saturation",
+                            "title": "Saturation"
+                        },
+                        {
+                            "value": "Color",
+                            "title": "Color"
+                        },
+                        {
+                            "value": "Luminosity",
+                            "title": "Luminosity"
+                        }
+                    ]
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 4,
+        "parent_id": 1,
+        "name": "Brightness",
+        "title": "Brightness",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Brightness",
+                    "title": "Brightness",
+                    "value": "100",
+                    "type": "number",
+                    "min": "0",
+                    "max": "200"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 5,
+        "parent_id": 1,
+        "name": "ChromaKey",
+        "title": "ChromaKey",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Key",
+                    "title": "Key",
+                    "value": "None",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "None",
+                            "title": "None"
+                        },
+                        {
+                            "value": "Green",
+                            "title": "Green"
+                        },
+                        {
+                            "value": "Blue",
+                            "title": "Blue"
+                        },
+                        {
+                            "value": "Black",
+                            "title": "Black"
+                        }
+                    ]
+                },
+                {
+                    "name": "Threshold",
+                    "title": "Threshold",
+                    "value": "34",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Softness",
+                    "title": "Softness",
+                    "value": "44",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Spill",
+                    "title": "Spill",
+                    "value": "100",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 6,
+        "parent_id": 1,
+        "name": "Clipping",
+        "title": "Clipping",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Left",
+                    "title": "Left",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Width",
+                    "title": "Width",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Top",
+                    "title": "Top",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Height",
+                    "title": "Height",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 7,
+        "parent_id": 1,
+        "name": "Commit",
+        "title": "Commit",
+        "type": "tools",
+        "subType": "Mixers"
+    },
+    {
+        "id": 8,
+        "parent_id": 1,
+        "name": "Contrast",
+        "title": "Contrast",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Contrast",
+                    "title": "Contrast",
+                    "value": "100",
+                    "type": "number",
+                    "min": "0",
+                    "max": "200"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 9,
+        "parent_id": 1,
+        "name": "Crop",
+        "title": "Crop",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Left",
+                    "title": "Left",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Top",
+                    "title": "Top",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Right",
+                    "title": "Right",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Bottom",
+                    "title": "Bottom",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 10,
+        "parent_id": 1,
+        "name": "Distort",
+        "title": "Distort",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "UpperLeftX",
+                    "title": "Upper Left X",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "UpperLeftY",
+                    "title": "Upper Left Y",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "UpperRightX",
+                    "title": "Upper Right X",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "UpperRightY",
+                    "title": "Upper Right Y",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "LowerRightX",
+                    "title": "Lower Right X",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "LowerRightY",
+                    "title": "Lower Right Y",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "LowerLeftX",
+                    "title": "Lower Left X",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "LowerLeftY",
+                    "title": "Lower Left Y",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "TriggerOnNext",
+                    "title": "Trigger on next",
+                    "value": false,
+                    "type": "boolean"
+                },
+                {
+                    "name": "UseMipmapping",
+                    "title": "Use Mipmapping",
+                    "value": false,
+                    "type": "boolean"
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 11,
+        "parent_id": 1,
+        "name": "Grid",
+        "title": "Grid",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Grid",
+                    "title": "Grid",
+                    "value": "2",
+                    "type": "number",
+                    "min": "1",
+                    "max": "99"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 12,
+        "parent_id": 1,
+        "name": "Levels",
+        "title": "Levels",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "MinIn",
+                    "title": "Min in",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "MaxIn",
+                    "title": "Max in",
+                    "value": "100",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "MinOut",
+                    "title": "Min out",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "MaxOut",
+                    "title": "Max out",
+                    "value": "100",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Gamma",
+                    "title": "Gamma",
+                    "value": "100",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 13,
+        "parent_id": 1,
+        "name": "Mask",
+        "title": "Mask",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 14,
+        "parent_id": 1,
+        "name": "Opacity",
+        "title": "Opacity",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Opacity",
+                    "title": "Opacity",
+                    "value": "100",
+                    "type": "number",
+                    "min": "0",
+                    "max": "100"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "TriggerOnNext",
+                    "title": "Trigger on next",
+                    "value": false,
+                    "type": "boolean"
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 15,
+        "parent_id": 1,
+        "name": "Reset",
+        "title": "Reset",
+        "type": "tools",
+        "subType": "Mixers"
+    },
+    {
+        "id": 16,
+        "parent_id": 1,
+        "name": "Rotation",
+        "title": "Rotation",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Rotation",
+                    "title": "Rotation",
+                    "value": "0.00",
+                    "type": "number",
+                    "min": "-360.00",
+                    "max": "360.00"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "TriggerOnNext",
+                    "title": "Trigger on next",
+                    "value": false,
+                    "type": "boolean"
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 17,
+        "parent_id": 1,
+        "name": "Saturation",
+        "title": "Saturation",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Saturation",
+                    "title": "Saturation",
+                    "value": "100",
+                    "type": "number",
+                    "min": "0",
+                    "max": "200"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 18,
+        "parent_id": 1,
+        "name": "Transform",
+        "title": "Transform",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "PositionX",
+                    "title": "Position X",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "PositionY",
+                    "title": "Position Y",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "SizeX",
+                    "title": "Size X",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "SizeY",
+                    "title": "Size Y",
+                    "value": "0",
+                    "type": "number",
+                    "min": "0",
+                    "max": "99"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "TriggerOnNext",
+                    "title": "Trigger on next",
+                    "value": false,
+                    "type": "boolean"
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 19,
+        "parent_id": 1,
+        "name": "Volume",
+        "title": "Volume",
+        "type": "tools",
+        "subType": "Mixers",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Volume",
+                    "title": "Volume",
+                    "value": "100",
+                    "type": "number",
+                    "min": "0",
+                    "max": "200"
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "Defer",
+                    "title": "Defer",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 20,
+        "parent_id": 0,
+        "name": "ATEM",
+        "title": "ATEM",
+        "type": "folder"
+    },
+    {
+        "id": 21,
+        "parent_id": 20,
+        "name": "FadeToBlack",
+        "title": "Fade to Black",
+        "type": "tools",
+        "subType": "ATEM",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Rate",
+                    "title": "Rate/speed",
+                    "value": "25",
+                    "type": "Text"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 22,
+        "parent_id": 20,
+        "name": "PlayMacro",
+        "title": "Play Macro",
+        "type": "tools",
+        "subType": "ATEM",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Input",
+                    "title": "Input",
+                    "value": "",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "",
+                            "title": ""
+                        }
+                    ]
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 23,
+        "parent_id": 20,
+        "name": "SelectInput",
+        "title": "Select Input",
+        "type": "tools",
+        "subType": "ATEM",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Program",
+                    "title": "program",
+                    "value": "Blank",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Blank",
+                            "title": "Blank"
+                        },
+                        {
+                            "value": "Cam1",
+                            "title": "Cam1"
+                        },
+                        {
+                            "value": "Cam2",
+                            "title": "Cam2"
+                        },
+                        {
+                            "value": "Cam3",
+                            "title": "Cam3"
+                        },
+                        {
+                            "value": "Cam4",
+                            "title": "Cam4"
+                        },
+                        {
+                            "value": "Cam5",
+                            "title": "Cam5"
+                        },
+                        {
+                            "value": "Cam6",
+                            "title": "Cam6"
+                        },
+                        {
+                            "value": "Cam7",
+                            "title": "Cam7"
+                        },
+                        {
+                            "value": "Cam8",
+                            "title": "Cam8"
+                        },
+                        {
+                            "value": "Cam9",
+                            "title": "Cam9"
+                        },
+                        {
+                            "value": "Cam10",
+                            "title": "Cam10"
+                        },
+                        {
+                            "value": "Col1",
+                            "title": "Col1"
+                        },
+                        {
+                            "value": "SSRC",
+                            "title": "SSRC"
+                        },
+                        {
+                            "value": "MP1",
+                            "title": "MP1"
+                        },
+                        {
+                            "value": "MP2",
+                            "title": "MP2"
+                        },
+                        {
+                            "value": "M/E2",
+                            "title": "M/E2"
+                        }
+                    ]
+                },
+                {
+                    "name": "Preview",
+                    "title": "preview",
+                    "value": "Blank",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Blank",
+                            "title": "Blank"
+                        },
+                        {
+                            "value": "Cam1",
+                            "title": "Cam1"
+                        },
+                        {
+                            "value": "Cam2",
+                            "title": "Cam2"
+                        },
+                        {
+                            "value": "Cam3",
+                            "title": "Cam3"
+                        },
+                        {
+                            "value": "Cam4",
+                            "title": "Cam4"
+                        },
+                        {
+                            "value": "Cam5",
+                            "title": "Cam5"
+                        },
+                        {
+                            "value": "Cam6",
+                            "title": "Cam6"
+                        },
+                        {
+                            "value": "Cam7",
+                            "title": "Cam7"
+                        },
+                        {
+                            "value": "Cam8",
+                            "title": "Cam8"
+                        },
+                        {
+                            "value": "Cam9",
+                            "title": "Cam9"
+                        },
+                        {
+                            "value": "Cam10",
+                            "title": "Cam10"
+                        },
+                        {
+                            "value": "Col1",
+                            "title": "Col1"
+                        },
+                        {
+                            "value": "SSRC",
+                            "title": "SSRC"
+                        },
+                        {
+                            "value": "MP1",
+                            "title": "MP1"
+                        },
+                        {
+                            "value": "MP2",
+                            "title": "MP2"
+                        },
+                        {
+                            "value": "M/E2",
+                            "title": "M/E2"
+                        }
+                    ]
+                },
+                {
+                    "name": "OnAir",
+                    "title": "OnAir",
+                    "value": false,
+                    "type": "boolean"
+                },
+                {
+                    "name": "BKGD",
+                    "title": "BKGD",
+                    "value": false,
+                    "type": "boolean"
+                },
+                {
+                    "name": "Key1",
+                    "title": "Key1",
+                    "value": false,
+                    "type": "boolean"
+                },
+                {
+                    "name": "Key2",
+                    "title": "Key2",
+                    "value": false,
+                    "type": "boolean"
+                },
+                {
+                    "name": "PrevTrans",
+                    "title": "PrevTrans",
+                    "value": false,
+                    "type": "boolean"
+                },
+                {
+                    "name": "NextTransitionStyle",
+                    "title": "NextTransitionStyle",
+                    "value": "MIX",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "MIX",
+                            "title": "MIX"
+                        },
+                        {
+                            "value": "DIP",
+                            "title": "DIP"
+                        },
+                        {
+                            "value": "WIPE",
+                            "title": "WIPE"
+                        },
+                        {
+                            "value": "STING",
+                            "title": "STING"
+                        },
+                        {
+                            "value": "DVE",
+                            "title": "DVE"
+                        }
+                    ]
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 24,
+        "parent_id": 20,
+        "name": "SetAudioGain",
+        "title": "Set Audio Gain",
+        "type": "tools",
+        "subType": "ATEM",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Gain",
+                    "title": "Gain",
+                    "value": "-6",
+                    "type": "Text"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 25,
+        "parent_id": 20,
+        "name": "SetAudioInputState",
+        "title": "Set Audio Input State",
+        "type": "tools",
+        "subType": "ATEM",
+        "properties": {
+            "statics": [
+                {
+                    "name": "AudioState",
+                    "title": "Audio state",
+                    "type": "combo",
+                    "value": "on",
+                    "options": [
+                        {
+                            "value": "on",
+                            "title": "on"
+                        },
+                        {
+                            "value": "off",
+                            "title": "off"
+                        },
+                        {
+                            "value": "AFV",
+                            "title": "AFV"
+                        }
+                    ]
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 26,
+        "parent_id": 20,
+        "name": "SetAudioInputBalance",
+        "title": "Set Audio Input Balance",
+        "type": "tools",
+        "subType": "ATEM",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Balance",
+                    "title": "Balance",
+                    "value": "0",
+                    "type": "Text"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 27,
+        "parent_id": 20,
+        "name": "SetKeyerState",
+        "title": "Set Keyer State",
+        "type": "tools",
+        "subType": "ATEM",
+        "properties": {
+            "statics": [
+                {
+                    "name": "TriggerOnNext",
+                    "title": "Trigger on next",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 28,
+        "parent_id": 20,
+        "name": "SetVideoFormat",
+        "title": "Set Video Format",
+        "type": "tools",
+        "subType": "ATEM",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Format",
+                    "title": "Format",
+                    "value": "Blank",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "bmdSwitcherVideoMode1080i50",
+                            "title": "bmdSwitcherVideoMode1080i50"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode1080i5994",
+                            "title": "bmdSwitcherVideoMode1080i5994"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode1080p50",
+                            "title": "bmdSwitcherVideoMode1080p50"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode1080p2398",
+                            "title": "bmdSwitcherVideoMode1080p2398"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode1080p24",
+                            "title": "bmdSwitcherVideoMode1080p24"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode1080p25",
+                            "title": "bmdSwitcherVideoMode1080p25"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode1080p2997",
+                            "title": "bmdSwitcherVideoMode1080p2997"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode1080p5994",
+                            "title": "bmdSwitcherVideoMode1080p5994"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode4KHDp2398",
+                            "title": "bmdSwitcherVideoMode4KHDp2398"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode4KHDp24",
+                            "title": "bmdSwitcherVideoMode4KHDp24"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode4KHDp25",
+                            "title": "bmdSwitcherVideoMode4KHDp25"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode4KHDp2997",
+                            "title": "bmdSwitcherVideoMode4KHDp2997"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode4KHDp50",
+                            "title": "bmdSwitcherVideoMode4KHDp50"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode4KHDp5994",
+                            "title": "bmdSwitcherVideoMode4KHDp5994"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode720p50",
+                            "title": "bmdSwitcherVideoMode720p50"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode720p5994",
+                            "title": "bmdSwitcherVideoMode720p5994"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode8KHDp2398",
+                            "title": "bmdSwitcherVideoMode8KHDp2398"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode8KHDp24",
+                            "title": "bmdSwitcherVideoMode8KHDp24"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode8KHDp25",
+                            "title": "bmdSwitcherVideoMode8KHDp25"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode8KHDp2997",
+                            "title": "bmdSwitcherVideoMode8KHDp2997"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode8KHDp50",
+                            "title": "bmdSwitcherVideoMode8KHDp50"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode8KHDp5994",
+                            "title": "bmdSwitcherVideoMode8KHDp5994"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode525i5994Anamorphic",
+                            "title": "bmdSwitcherVideoMode525i5994Anamorphic"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode525i5994NTSC",
+                            "title": "bmdSwitcherVideoMode525i5994NTSC"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode625i50Anamorphic",
+                            "title": "bmdSwitcherVideoMode625i50Anamorphic"
+                        },
+                        {
+                            "value": "bmdSwitcherVideoMode625i50PAL",
+                            "title": "bmdSwitcherVideoMode625i50PAL"
+                        }
+                    ]
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 29,
+        "parent_id": 20,
+        "name": "TriggerAuto",
+        "title": "Trigger Auto",
+        "type": "tools",
+        "subType": "ATEM",
+        "properties": {}
+    },
+    {
+        "id": 30,
+        "parent_id": 20,
+        "name": "TriggerCut",
+        "title": "Trigger Cut",
+        "type": "tools",
+        "subType": "ATEM",
+        "properties": {}
+    },
+    {
+        "id": 31,
+        "parent_id": 0,
+        "name": "Add",
+        "title": "Add",
+        "type": "folder"
+    },
+    {
+        "id": 32,
+        "parent_id": 31,
+        "name": "ChannelSnapshot",
+        "title": "Channel Snapshot",
+        "type": "tools",
+        "subType": "Add",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Output",
+                    "title": "Output",
+                    "value": "Snapshot",
+                    "type": "text"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 33,
+        "parent_id": 0,
+        "name": "Channel",
+        "title": "Channel",
+        "type": "folder"
+    },
+    {
+        "id": 34,
+        "parent_id": 33,
+        "name": "ChannelInput",
+        "title": "Channel Input",
+        "type": "tools",
+        "subType": "Channel",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Type",
+                    "title": "Type",
+                    "value": "Stream",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Stream",
+                            "title": "Stream"
+                        },
+                        {
+                            "value": "Ndi",
+                            "title": "Ndi"
+                        },
+                        {
+                            "value": "Decklink",
+                            "title": "Decklink"
+                        },
+                        {
+                            "value": "BlueFish",
+                            "title": "BlueFish"
+                        },
+                        {
+                            "value": "Rout",
+                            "title": "Rout"
+                        }
+                    ]
+                },
+                {
+                    "name": "StreamPath",
+                    "title": "Stream Path",
+                    "value": "",
+                    "type": "text"
+                },
+                {
+                    "name": "MasterNumber",
+                    "title": "Master Number",
+                    "value": "1",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "1",
+                            "title": "1"
+                        },
+                        {
+                            "value": "2",
+                            "title": "2"
+                        },
+                        {
+                            "value": "3",
+                            "title": "3"
+                        },
+                        {
+                            "value": "4",
+                            "title": "4"
+                        },
+                        {
+                            "value": "5",
+                            "title": "5"
+                        },
+                        {
+                            "value": "6",
+                            "title": "6"
+                        },
+                        {
+                            "value": "7",
+                            "title": "7"
+                        },
+                        {
+                            "value": "8",
+                            "title": "8"
+                        }
+                        ,{
+                            "value": "9",
+                            "title": "9"
+                        },
+                        {
+                            "value": "10",
+                            "title": "10"
+                        }
+                        ,{
+                            "value": "11",
+                            "title": "11"
+                        },
+                        {
+                            "value": "12",
+                            "title": "12"
+                        },
+                        {
+                            "value": "13",
+                            "title": "13"
+                        },
+                        {
+                            "value": "14",
+                            "title": "14"
+                        },
+                        {
+                            "value": "15",
+                            "title": "15"
+                        },
+                        {
+                            "value": "16",
+                            "title": "16"
+                        },
+                        {
+                            "value": "17",
+                            "title": "17"
+                        },
+                        {
+                            "value": "18",
+                            "title": "18"
+                        }
+                    ]
+                },
+                {
+                    "name": "SlaveNumber",
+                    "title": "Slave Number",
+                    "value": "1",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "1",
+                            "title": "1"
+                        },
+                        {
+                            "value": "2",
+                            "title": "2"
+                        },
+                        {
+                            "value": "3",
+                            "title": "3"
+                        },
+                        {
+                            "value": "4",
+                            "title": "4"
+                        },
+                        {
+                            "value": "5",
+                            "title": "5"
+                        },
+                        {
+                            "value": "6",
+                            "title": "6"
+                        },
+                        {
+                            "value": "7",
+                            "title": "7"
+                        },
+                        {
+                            "value": "8",
+                            "title": "8"
+                        }
+                        ,{
+                            "value": "9",
+                            "title": "9"
+                        },
+                        {
+                            "value": "10",
+                            "title": "10"
+                        }
+                        ,{
+                            "value": "11",
+                            "title": "11"
+                        },
+                        {
+                            "value": "12",
+                            "title": "12"
+                        },
+                        {
+                            "value": "13",
+                            "title": "13"
+                        },
+                        {
+                            "value": "14",
+                            "title": "14"
+                        },
+                        {
+                            "value": "15",
+                            "title": "15"
+                        },
+                        {
+                            "value": "16",
+                            "title": "16"
+                        },
+                        {
+                            "value": "17",
+                            "title": "17"
+                        },
+                        {
+                            "value": "18",
+                            "title": "18"
+                        }
+                    ]
+                },
+                {
+                    "name": "Format",
+                    "title": "Format",
+                    "value": "PAL",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "AUTO",
+                            "title": "AUTO"
+                        },
+                        {
+                            "value": "PAL",
+                            "title": "PAL"
+                        },
+                        {
+                            "value": "NTSC",
+                            "title": "NTSC"
+                        },
+                        {
+                            "value": "576p2500",
+                            "title": "576p2500"
+                        },
+                        {
+                            "value": "720p2398",
+                            "title": "720p2398"
+                        },
+                        {
+                            "value": "720p2400",
+                            "title": "720p2400"
+                        },
+                        {
+                            "value": "720p2500",
+                            "title": "720p2500"
+                        },
+                        {
+                            "value": "720p2997",
+                            "title": "720p2997"
+                        },
+                        {
+                            "value": "720p3000",
+                            "title": "720p3000"
+                        },
+                        {
+                            "value": "720p5000",
+                            "title": "720p5000"
+                        },
+                        {
+                            "value": "720p5994",
+                            "title": "720p5994"
+                        },
+                        {
+                            "value": "720p6000",
+                            "title": "720p6000"
+                        },
+                        {
+                            "value": "1080p2398",
+                            "title": "1080p2398"
+                        },
+                        {
+                            "value": "1080p2400",
+                            "title": "1080p2400"
+                        },
+                        {
+                            "value": "1080p2500",
+                            "title": "1080p2500"
+                        },
+                        {
+                            "value": "1080p2997",
+                            "title": "1080p2997"
+                        },
+                        {
+                            "value": "1080p3000",
+                            "title": "1080p3000"
+                        },
+                        {
+                            "value": "1080p5000",
+                            "title": "1080p5000"
+                        },
+                        {
+                            "value": "1080p5994",
+                            "title": "1080p5994"
+                        },
+                        {
+                            "value": "1080p6000",
+                            "title": "1080p6000"
+                        },
+                        {
+                            "value": "1080i5000",
+                            "title": "1080i5000"
+                        },
+                        {
+                            "value": "1080i5994",
+                            "title": "1080i5994"
+                        },
+                        {
+                            "value": "1080i6000",
+                            "title": "1080i6000"
+                        },
+                        {
+                            "value": "1556p2398",
+                            "title": "1556p2398"
+                        },
+                        {
+                            "value": "1556p2400",
+                            "title": "1556p2400"
+                        },
+                        {
+                            "value": "1556p2500",
+                            "title": "1556p2500"
+                        },
+                        {
+                            "value": "2160p2398",
+                            "title": "2160p2398"
+                        },
+                        {
+                            "value": "2160p2400",
+                            "title": "2160p2400"
+                        },
+                        {
+                            "value": "2160p2500",
+                            "title": "2160p2500"
+                        },
+                        {
+                            "value": "2160p2997",
+                            "title": "2160p2997"
+                        },
+                        {
+                            "value": "2160p3000",
+                            "title": "2160p3000"
+                        },
+                        {
+                            "value": "dci1080p2398",
+                            "title": "dci1080p2398"
+                        },
+                        {
+                            "value": "dci1080p2400",
+                            "title": "dci1080p2400"
+                        },
+                        {
+                            "value": "dci1080p2500",
+                            "title": "dci1080p2500"
+                        },
+                        {
+                            "value": "dci2160p2398",
+                            "title": "dci2160p2398"
+                        },
+                        {
+                            "value": "dci2160p2400",
+                            "title": "dci2160p2400"
+                        },
+                        {
+                            "value": "dci2160p2500",
+                            "title": "dci2160p2500"
+                        }
+                    ]
+                },
+                {
+                    "name": "Transition",
+                    "title": "Transition",
+                    "value": "CUT",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "CUT",
+                            "title": "CUT"
+                        },
+                        {
+                            "value": "MIX",
+                            "title": "MIX"
+                        },
+                        {
+                            "value": "PUSH",
+                            "title": "PUSH"
+                        },
+                        {
+                            "value": "SLIDE",
+                            "title": "SLIDE"
+                        },
+                        {
+                            "value": "WIPE",
+                            "title": "WIPE"
+                        }
+                    ]
+                },
+                {
+                    "name": "Duration",
+                    "title": "Duration",
+                    "value": "0",
+                    "type": "number",
+                    "prefix": "ms",
+                    "min": 0,
+                    "max": 999
+                },
+                {
+                    "name": "Tween",
+                    "title": "Tween",
+                    "value": "Linear",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "Linear",
+                            "title": "Linear"
+                        },
+                        {
+                            "value": "EaseNone",
+                            "title": "EaseNone"
+                        },
+                        {
+                            "value": "EaseInQuad",
+                            "title": "EaseInQuad"
+                        },
+                        {
+                            "value": "EaseOutQuad",
+                            "title": "EaseOutQuad"
+                        },
+                        {
+                            "value": "EaseInOutQuad",
+                            "title": "EaseInOutQuad"
+                        },
+                        {
+                            "value": "EaseOutInQuad",
+                            "title": "EaseOutInQuad"
+                        },
+                        {
+                            "value": "EaseInCubic",
+                            "title": "EaseInCubic"
+                        },
+                        {
+                            "value": "EaseOutCubic",
+                            "title": "EaseOutCubic"
+                        },
+                        {
+                            "value": "EaseInOutCubic",
+                            "title": "EaseInOutCubic"
+                        },
+                        {
+                            "value": "EaseOutInCubic",
+                            "title": "EaseOutInCubic"
+                        },
+                        {
+                            "value": "EaseInQuart",
+                            "title": "EaseInQuart"
+                        },
+                        {
+                            "value": "EaseOutQuart",
+                            "title": "EaseOutQuart"
+                        },
+                        {
+                            "value": "EaseInOutQuart",
+                            "title": "EaseInOutQuart"
+                        },
+                        {
+                            "value": "EaseOutInQuart",
+                            "title": "EaseOutInQuart"
+                        },
+                        {
+                            "value": "EaseInQuint",
+                            "title": "EaseInQuint"
+                        },
+                        {
+                            "value": "EaseOutQuint",
+                            "title": "EaseOutQuint"
+                        },
+                        {
+                            "value": "EaseInOutQuint",
+                            "title": "EaseInOutQuint"
+                        },
+                        {
+                            "value": "EaseOutInQuint",
+                            "title": "EaseOutInQuint"
+                        },
+                        {
+                            "value": "EaseInSine",
+                            "title": "EaseInSine"
+                        },
+                        {
+                            "value": "EaseOutSine",
+                            "title": "EaseOutSine"
+                        },
+                        {
+                            "value": "EaseInOutSine",
+                            "title": "EaseInOutSine"
+                        },
+                        {
+                            "value": "EaseOutInSine",
+                            "title": "EaseOutInSine"
+                        },
+                        {
+                            "value": "EaseInExpo",
+                            "title": "EaseInExpo"
+                        },
+                        {
+                            "value": "EaseOutExpo",
+                            "title": "EaseOutExpo"
+                        },
+                        {
+                            "value": "EaseInOutExpo",
+                            "title": "EaseInOutExpo"
+                        },
+                        {
+                            "value": "EaseOutInExpo",
+                            "title": "EaseOutInExpo"
+                        },
+                        {
+                            "value": "EaseInCirc",
+                            "title": "EaseInCirc"
+                        },
+                        {
+                            "value": "EaseOutCirc",
+                            "title": "EaseOutCirc"
+                        },
+                        {
+                            "value": "EaseInOutCirc",
+                            "title": "EaseInOutCirc"
+                        },
+                        {
+                            "value": "EaseOutInCirc",
+                            "title": "EaseOutInCirc"
+                        },
+                        {
+                            "value": "EaseInElastic",
+                            "title": "EaseInElastic"
+                        },
+                        {
+                            "value": "EaseOutElastic",
+                            "title": "EaseOutElastic"
+                        },
+                        {
+                            "value": "EaseInOutElastic",
+                            "title": "EaseInOutElastic"
+                        },
+                        {
+                            "value": "EaseOutInElastic",
+                            "title": "EaseOutInElastic"
+                        },
+                        {
+                            "value": "EaseInBack",
+                            "title": "EaseInBack"
+                        },
+                        {
+                            "value": "EaseOutBack",
+                            "title": "EaseOutBack"
+                        },
+                        {
+                            "value": "EaseInOutBack",
+                            "title": "EaseInOutBack"
+                        },
+                        {
+                            "value": "EaseOutInBack",
+                            "title": "EaseOutInBack"
+                        },
+                        {
+                            "value": "EaseInBounce",
+                            "title": "EaseInBounce"
+                        },
+                        {
+                            "value": "EaseOutBounce",
+                            "title": "EaseOutBounce"
+                        },
+                        {
+                            "value": "EaseInOutBounce",
+                            "title": "EaseInOutBounce"
+                        },
+                        {
+                            "value": "EaseOutInBounce",
+                            "title": "easeOutInBounce"
+                        }
+                    ]
+                },
+                {
+                    "name": "Direction",
+                    "title": "Direction",
+                    "value": "RIGHT",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "RIGHT",
+                            "title": "RIGHT"
+                        },
+                        {
+                            "value": "LEFT",
+                            "title": "LEFT"
+                        }
+                    ]
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 35,
+        "parent_id": 33,
+        "name": "ChannelRecord",
+        "title": "Channel Record",
+        "type": "tools",
+        "subType": "Channel",
+        "properties": {
+            "statics": [
+                {
+                    "name": "FileName",
+                    "title": "File Name",
+                    "value": "ApasaiCIAB_out.mov",
+                    "type": "text"
+                },
+                {
+                    "name": "Preset",
+                    "title": "Preset",
+                    "value": "-codec:v dnxhd -b:v 120M -threads:v 4 -pix_fmt yuv422p",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "-codec:v dnxhd -b:v 120M -threads:v 4 -pix_fmt yuv422p",
+                            "title": "DNX-HD"
+                        },
+                        {
+                            "value": "-codec:v libx264 -threads:v 4 -preset:v veryfast -pix_fmt yuv420p",
+                            "title": "H264"
+                        }
+                    ]
+                },
+                {
+                    "name": "WithAlpha",
+                    "title": "With alpha",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 36,
+        "parent_id": 0,
+        "name": "ChannelCommand",
+        "title": "ChannelCommand",
+        "type": "folder"
+    },
+    {
+        "id": 37,
+        "parent_id": 36,
+        "name": "DirectCommand",
+        "title": "Direct Command",
+        "type": "tools",
+        "subType": "ChannelCommand",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Command",
+                    "title": "Command",
+                    "value": "",
+                    "type": "text"
+                },
+                {
+                    "name": "Option",
+                    "title": "Option",
+                    "value": "",
+                    "type": "text"
+                },
+                {
+                    "name": "TriggerOnNext",
+                    "title": "Trigger on next",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 38,
+        "parent_id": 36,
+        "name": "ClearOutput",
+        "title": "Clear Output",
+        "type": "tools",
+        "subType": "ChannelCommand",
+        "properties": {
+            "statics": [
+                {
+                    "name": "ClearChannel",
+                    "title": "Clear Channel",
+                    "value": true,
+                    "type": "boolean"
+                },
+                {
+                    "name": "TriggerOnNext",
+                    "title": "Trigger on next",
+                    "value": false,
+                    "type": "boolean"
+                }
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 39,
+        "parent_id": 0,
+        "name": "Device",
+        "title": "Device",
+        "type": "folder"
+    },
+    {
+        "id": 40,
+        "parent_id": 39,
+        "name": "Matrix",
+        "title": "Video Hub Matrix",
+        "type": "folder"
+    },
+    {
+        "id": 41,
+        "parent_id": 40,
+        "name": "Route",
+        "title": "Route",
+        "type": "tools",
+        "subType": "Matrix",
+        "properties": {
+            "statics": [
+                {
+                    "name": "Ip",
+                    "title": "IP Address",
+                    "value": "",
+                    "type": "Text"
+                },
+                {
+                    "name": "Type",
+                    "title": "Switch Type",
+                    "value": "SamimVideoHub",
+                    "type": "combo",
+                    "options": [
+                        {
+                            "value": "SamimVideoHub",
+                            "title": "Samim VideoHub"
+                        },
+                        {
+                            "value": "BlackMagicVideoHub",
+                            "title": "Black Magic VideoHub"
+                        }
+                    ]
+                },
+                {
+                    "name": "Input",
+                    "title": "Input",
+                    "value": "",
+                    "type": "number",
+                    "min": "0"
+                },
+                {
+                    "name": "Output",
+                    "title": "Output",
+                    "value": "",
+                    "type": "number",
+                    "min": "0"
+                }
+
+            ],
+            "dynamics": []
+        }
+    },
+    {
+        "id": 42,
+        "parent_id": 33,
+        "name": "PlayFile",
+        "title": "Play File",
+        "type": "tools",
+        "subType": "Channel",
+        "properties": {
+            "statics": [
+                {
+                    "name": "File",
+                    "title": "File",
+                    "value": "",
+                    "type": "file"
+                }
+            ],
+            "dynamics": []
+        }
+    }
+]

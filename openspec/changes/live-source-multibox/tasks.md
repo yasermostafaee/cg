@@ -264,6 +264,21 @@ clip)` returns `null` — not an empty rect — when the two do not intersect, a
 - [ ] 4.7 A CG Control settings modal modelled on `DelimitersModal`: **no optimistic local update**
       (`delimiterStore.ts:134-140`) and an older-bridge translation for the unknown-channel refusal
       (`:162-171`), which every station whose bridge predates this feature will hit.
+      **AMENDED 2026-08-10 — the modal's entry editor carries the mapping's `format` (the
+      `ChannelInput` → `Format` vocabulary, `docs/recon/ciab-client-tools.json`) and, on the DECKLINK
+      arm, the optional `keyDevice`. Both are the amendment in §1a/§3a made operable: this modal is
+      where an installation now says "guest-1 is a fill/key pair at 1080i5000".**
+- [ ] 4.8 ⚠ **UN-DO, filed explicitly rather than deleted silently (owner, 2026-08-10, `design.md`
+      §1a).** Remove the Inspector's **`key id` control and its hint** — D-147 task (c), landed as
+      1.12 — because a template now declares ONE id and the fill/key pair is a property of the
+      MAPPING (4.1/4.7). This is the phase that owns that surface, so the removal belongs here and
+      not wherever it is next noticed.
+      **What must NOT happen with it:** `keySourceId` is NOT removed from
+      `VideoPlaceholderElementSchema`. It shipped, it is optional, and deleting it is a MIGRATION.
+      It becomes DEPRECATED — never written by a new document, still parsed so every stored scene
+      keeps loading — and `collectLiveSources` stops emitting `keySourceId` / `keyDynamic` on the
+      declaration. A control that stops being written but stays on screen is worse than either
+      state, which is why this is a task and not a footnote.
 
 ## 5. Phase 5 — Ownership (requires phase 3)
 
@@ -380,6 +395,36 @@ clip)` returns `null` — not an empty rect — when the two do not intersect, a
 - [ ] 6.7 The take refuses legibly with a distinct `errorCode` when a declared id has no mapping —
       never a silent empty hole on air (`docs/prd/caspar.md:396-397`).
 - [ ] 6.8 The two-box `route://` demo on real hardware, which needs no capture card.
+- [ ] 6.9 ⭐ **R-048 — swap a plate's input WHILE THE TEMPLATE IS ON AIR. A CLIENT REQUIREMENT**,
+      filed in `docs/prd/runtime.md` and implemented here, the same pattern D-147 used for phase 1.
+      A PER-ITEM OVERRIDE — the installation mapping is untouched, exactly like the position
+      override — replacing `producer` on ONE `#liveLayers` record and re-issuing on that same slot.
+      The template's HTML is never touched.
+- [ ] 6.9a **A REPLACE, never a clear-then-add.** `PLAY` on the occupied layer substitutes the
+      producer in place. A `CLEAR` then a `PLAY` that fails is the `B-126` window arriving during an
+      emergency: a destructive step committed before the constructive one was known to succeed. On
+      failure the previous (black) producer stays and the row says so honestly.
+      ⚠ **VERIFY on the plant's 2.3.2 that `PLAY` on an OCCUPIED layer substitutes rather than
+      requiring a prior clear — do not assume it, and record the measurement.** Run it in the SAME
+      `amcp-poke` session as `design.md` §3b's `DEFER`/`COMMIT` question; both are AMCP probes on the
+      same build and pairing them costs one session instead of two.
+- [ ] 6.9b **The fit recomputes automatically**, in the same action: the new source may carry a
+      different format, so crop-to-fill re-derives through §3a's chain. The operator must not have a
+      second step — under pressure a second step is a step that does not happen.
+- [ ] 6.9c **Audio intent survives the swap.** Every bridge-created producer is born muted (6.5), so
+      a deliberately-raised plate must be re-raised by the swap itself: the intent belonged to the
+      PLATE, not to the producer instance, and a swap that silently mutes a guest is its own on-air
+      fault.
+- [ ] 6.9d **The override survives a bridge restart.** Retention must carry it, or a momentary blip
+      silently reverts the plate to the DEAD source. This is the `B-107` / `B-109` class — retention
+      dropping state it did not model — so it is a requirement with a test, not an assumption.
+- [ ] 6.9e **Reachable in one or two actions from the row.** Used under pressure, on air: not in
+      settings, not behind a modal chain, not anywhere the operator must first find the item.
+- [ ] 6.9f **Recorded as OUT of scope, so neither is re-proposed as part of this:** a PRE-ARMED
+      backup source per plate (v2 — in a real failure the operator often needs a source nobody
+      predicted, and an open list beats a pre-chosen wrong one; revisit only if use shows otherwise),
+      and automatic DETECTION of a dead input (a separate capability; C-023's thumbnails already give
+      the operator eyes).
 
 ## 7. Cross-change obligation — R-028
 
@@ -410,6 +455,24 @@ was the entire point of the obligation.
       to name the ownership class. **DONE:** 8.3 now names both halves and says explicitly that
       naming only `reservedLayers` is what let task 1.2 read as "C-015 is handled" while the
       ownership half was untouched.
+
+## 7a. Filed 2026-08-10 alongside this change — where the new items live
+
+The owner's 2026-08-10 session recorded the plant's PREVIOUS automation (lives created in CG
+Control, saved as DB presets, read by the playout application into its rundown — `design.md` §2a).
+Four things came out of it, and only ONE is implemented here:
+
+| Item                                                                | Where it lives                                          |
+| ------------------------------------------------------------------- | ------------------------------------------------------- |
+| **R-048** — swap a plate's input while ON AIR                       | **HERE**, phase 6 (tasks 6.9–6.9f). Client requirement. |
+| **C-022** — the source list served READ-ONLY over HTTP              | `docs/prd/caspar.md`, depends on this change's phase 4  |
+| **C-023** — a confidence thumbnail per live source                  | `docs/prd/caspar.md`, rides `C-016`                     |
+| **C-021** — SUBJECT AMENDED to a mapping-level fill/key device pair | `docs/prd/caspar.md`                                    |
+
+Also recorded, so neither is re-proposed: a rundown INSIDE this Runtime was **rejected** (noted on
+`C-002` — CIAB owns the programme bed, and two applications each believing they own the channel is
+worse than two with clear roles), and a second output channel this Runtime alone would drive does
+not exist today and justifies nothing now.
 
 ## 8. Docs and PRD
 

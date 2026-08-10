@@ -12,6 +12,10 @@ The bridge SHALL persist an installation-level mapping from a symbolic source id
 producer, expressed as a discriminated union over `route` / `decklink` / `ndi` / `media` so an
 unreachable producer form is refused at the boundary rather than at take time.
 
+Each mapping entry SHALL carry the source's **signal FORMAT**, and MAY carry a fill/key **DEVICE
+PAIR** on the arm where such a pair can physically exist. The scene declares one symbolic id and
+never states either: how a source arrives at a plant is an installation fact.
+
 The mapping SHALL be **product-writable** through an IPC channel and editable by the operator in a
 Runtime settings surface. It SHALL NOT be stored in the bridge's templates directory, because the
 template registry reads every JSON file there as a template.
@@ -39,6 +43,13 @@ PRESENT but unusable SHALL be a HARD startup failure, before the socket accepts 
 - **WHEN** the bridge restarts **THEN** the mapping is still in force
 - **WHEN** the connected bridge predates this feature **THEN** the surface says so specifically
   rather than reporting a generic failure
+
+#### Scenario: One id can resolve to a fill/key device pair
+
+- **WHEN** an installation configures a source id as a fill/key pair **THEN** it is expressed on the
+  MAPPING and the template that names the id is unchanged
+- **WHEN** the same template is used at a plant where that source is a single device **THEN** it
+  needs no edit
 
 #### Scenario: The mapping's provenance is visible at boot
 
@@ -217,6 +228,22 @@ not independently settable: a scaled rect that moves out from under its mask ren
 on air is a black region where a source should be. No caller SHALL be able to set one without the
 other.
 
+The aspect driving the fit SHALL be **DERIVED** from the mapping's declared format rather than
+typed as a number, falling back — in order — to the mapping's explicit aspect where the format
+yields none, then to the element's `expectedAspect`. A hand-entered aspect is a value that can be
+wrong on air while looking reasonable.
+
+`expectedAspect` SHALL remain the AUTHOR'S ASSERTION that the bridge validates the mapping against;
+its appearance at the end of the fit chain is a fallback for an undescribed mapping, never a
+promotion to fit input.
+
+#### Scenario: The fit aspect comes from the mapping's format
+
+- **WHEN** a mapping declares a format that determines a raster **THEN** the crop-to-fill uses the
+  aspect derived from it, and no aspect is typed by hand
+- **WHEN** the format determines no raster **THEN** the mapping's explicit aspect is used, and only
+  then the element's `expectedAspect`
+
 #### Scenario: A 4:3 source fills a 16:9 window without distortion
 
 - **WHEN** a 4:3 source is mapped to a 16:9 Live Source **THEN** the picture fills the window edge to
@@ -239,6 +266,48 @@ other.
   together from one computation
 - **WHEN** either would be changed **THEN** both are recomputed, so the scaled rect can never end up
   outside its mask and render nothing
+
+### Requirement: A plate's input can be swapped WHILE the template is on air
+
+The operator SHALL be able to point ONE plate of an on-air template at a different source without
+taking the graphic off air and without disturbing the other plates.
+
+**R-048 — a CLIENT REQUIREMENT, not a preference.** The case is a three-plate template on air, one
+input drops, and that plate goes black while the other two are fine.
+
+The swap SHALL be a **PER-ITEM OVERRIDE**, never an edit to the installation mapping. A mapping is
+installation-wide configuration: editing it changes every template using that id and it persists,
+both wrong for a temporary emergency substitution. The configured value SHALL be untouched and only
+this run SHALL change — the same shape as the existing position override.
+
+The swap SHALL be a **REPLACE, never a clear-then-add**: the producer is substituted in place on the
+occupied layer. A clear followed by a play that fails is a destructive step committed before the
+constructive one was known to succeed. When the replace fails, the previous producer SHALL remain
+and the row SHALL say so rather than reporting success.
+
+The fit SHALL be re-derived for the new source as part of the SAME action, because the new source
+may carry a different format. Audio intent SHALL survive the swap: a plate whose audio the operator
+deliberately raised SHALL still be audible afterwards, since the intent belonged to the PLATE and
+not to the producer instance. The override SHALL survive a bridge restart. The action SHALL be
+reachable in one or two actions from the row.
+
+#### Scenario: One plate is repointed while the graphic stays on air
+
+- **WHEN** the operator swaps one plate's source on an on-air template **THEN** that layer's producer
+  is replaced in place, the template's layer is untouched, and the other plates are undisturbed
+- **WHEN** the replace fails **THEN** the previous producer remains and the row reports the failure
+
+#### Scenario: The swap carries the fit and the audio with it
+
+- **WHEN** the substituted source declares a different format **THEN** the crop-to-fill is
+  re-derived in the same action, with no second operator step
+- **WHEN** that plate's audio had been deliberately raised **THEN** it is audible after the swap
+
+#### Scenario: The override is per-item and survives a restart
+
+- **WHEN** a plate is swapped **THEN** the installation mapping is unchanged and every other template
+  using that id is unaffected
+- **WHEN** the bridge restarts **THEN** the swapped plate is still pointed at the substituted source
 
 ### Requirement: Every producer the bridge creates is created MUTED
 

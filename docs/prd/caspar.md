@@ -48,6 +48,19 @@ sequence and fire presets on air.
 override seam already exists in `@cg/template-runtime` (`scopeOverrides`). This is the
 home for D-029/D-031 sequencing on air.
 
+🔴 **RECORDED 2026-08-10 (owner) — a rundown INSIDE this Runtime was considered and REJECTED. Do
+not re-propose it.** The **CIAB client** (the plant's modified CasparCG Client) owns the programme
+bed and keeps that role, and **two applications each believing they own the channel is worse for the
+operator than two with clear roles** — the operator would have to hold in their head which surface
+last touched the output. The division stands: CIAB drives the bed and its rundown; this Runtime
+drives the graphics. [[C-022]] is the seam between them — the bridge serves the live source list
+that CIAB reads INTO its rundown, which is the role the shared database played in the previous
+automation.
+
+**And a second output channel this Runtime alone would drive** — a studio monitor, a video wall, a
+stream — **does not exist today, so it justifies nothing now.** Recorded so it is not used as
+motivation for a feature; if such a channel ever appears, this note is where to start.
+
 ## [ ] C-003 — On-air per-child timing override ⟨priority: medium⟩
 
 **What:** Expose the runtime's per-scope playout overrides (mode / holdMs / repeat,
@@ -362,7 +375,7 @@ layer is NOT knowably free, and real CasparCG goes silent for empty layers (B-05
 restart-misadoption limit (recorded in `openspec/changes/runtime-protect-video-layers/design.md`):
 both need the bridge to reason about producer KINDS it did not place.
 
-## [~] C-015 — Live Source routing: map Live Source ids to DECKLINK / ROUTE / media / NDI (fill+key capable) and composite them behind the template ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (design + phase 1 landed; DECKLINK / NDI / fill+key split out to [[C-021]])
+## [~] C-015 — Live Source routing: map Live Source ids to DECKLINK / ROUTE / media / NDI (fill+key capable) and composite them behind the template ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (design + phases 1–3 landed — authoring, the declaration carrier, and the mock; DECKLINK / NDI / fill+key split out to [[C-021]])
 
 **What:** The Designer track is adding a "Live Source" element — a template region exported as a
 FULLY TRANSPARENT hole plus metadata (geometry in scene px, a source id, an optional key source
@@ -467,6 +480,11 @@ captures the program channel via a CasparCG grab/print-class command, serves the
 over its existing HTTP server, and the Runtime shows it in a PGM panel refreshing ~1 s. OWNER
 DECISION recorded: stills-at-~1 s IS the v1 bar; full-motion return (STREAM consumer + relay
 transcode) is RECORDED IN THIS ITEM as an explicit later phase, not a v1 requirement.
+**A SECOND CONSUMER, filed 2026-08-10:** [[C-023]] wants the same grab path pointed at a live
+SOURCE rather than at the programme channel, for a per-source confidence thumbnail. It rides this
+item deliberately instead of building a second mechanism — **and if this design turns out not to
+generalise beyond the programme channel, that is a finding for THIS item**, not a licence for C-023
+to fork its own grab path.
 **Why:** The operator currently confirms what the viewer sees by looking at a separate monitor
 (or guessing from row badges). A confidence view inside the console closes that loop — and a
 Live-Source-heavy composite ([[C-015]]) makes PGM confidence MORE valuable, because the browser
@@ -812,8 +830,17 @@ delay is only that [[C-019]] stays blocked.
 **What:** the three Live Source producer arms that [[C-015]] cannot discharge on this plant, split
 out so C-015 can close on what it CAN prove. Verify, on hardware: (a) the **DECKLINK** producer form
 and a real Decklink input as a Live Source; (b) the **NDI** producer — first that it exists on the
-target build at all, then as a Live Source; (c) **fill+key** — a Live Source declaring a KEY source
-id composited as a fill+key pair, alpha confirmed by looking at the switcher.
+target build at all, then as a Live Source; (c) **fill+key** — a MAPPING whose DECKLINK arm names a
+fill/key DEVICE PAIR, composited as a pair, alpha confirmed by looking at the switcher.
+
+⚠ **AMENDED 2026-08-10 (owner) — arm (c)'s SUBJECT CHANGED and the old wording would send someone
+looking for a field that no longer exists.** Fill+key is no longer "a Live Source declaring a KEY
+source id": a template declares ONE symbolic id, and whether it resolves to one device or to a
+fill/key pair is a property of the **MAPPING** in CG Control (`live-source-multibox` design.md §1a —
+the author cannot know how a source arrives at a plant, which is the same argument §3 makes for
+`expectedAspect`). What this item must now verify is the **mapping-level device pair**
+(`SourceMappingsSchema`'s `decklink` arm gains `keyDevice`). The shipped `keySourceId` element field
+is DEPRECATED, not removed, and is not what gets tested.
 **Why:** [[C-015]]'s acceptance was NARROWED on 2026-08-08 (owner, `live-source-multibox` design.md
 §12.1) to per-source assignment in CG Control plus the two-box `route://` demo, because the Designer
 never names a concrete device: a template declares symbolic ids and binding one to a producer is an
@@ -827,9 +854,12 @@ building rather than on anything anyone can code.
   plays behind the hole, its `MIXER FILL` + `CLIP` geometry correct, verified on real CasparCG 2.3.2
 - WHEN NDI is attempted THEN the FIRST step is verifying the NDI producer exists on the client's
   build at all — record the finding either way, including a negative
-- WHEN a Live Source declares a KEY source id THEN fill and key are composited as a pair and alpha
+- WHEN a MAPPING names a fill/key DEVICE PAIR THEN fill and key are composited as a pair and alpha
   is confirmed **by looking at the switcher**, never inferred from the format's specification
-  ([[B-066]] class: verify, never assume)
+  ([[B-066]] class: verify, never assume) — and the template that names the id is UNCHANGED between
+  a plant where that source is a pair and one where it is a single device
+- WHEN `MIXER CHROMA` is evaluated (see the note below) THEN the finding is recorded either way —
+  an alternative that was reasoned about is not an alternative that was tried
 - WHEN any arm is verified THEN the exact AMCP producer form it was verified with is recorded here
   verbatim — a form that was reasoned about is not a form that was verified
 
@@ -843,3 +873,106 @@ guess. **Ordering:** this item is downstream of [[C-015]]'s phases 1–6 (`live-
 integration with the company's playout software. **Parse-verification is still worth doing before
 the hardware arrives** and is not this item's acceptance: it proves the command is well-formed, not
 that a picture appeared.
+
+**An ALTERNATIVE route to transparency worth evaluating, added 2026-08-10 — an option, not a plan.**
+CasparCG has its own **`MIXER CHROMA`**, and it needs neither a fill+key path nor a capture card.
+The plant's client exposes it as `ChromaKey` (`docs/recon/ciab-client-tools.json`, `Mixers` folder,
+entry `ChromaKey`) with `Key` ∈ `None | Green | Blue | Black`, plus `Threshold` (default 34),
+`Softness` (default 44) and `Spill` (default 100), all 0–100. A green- or blue-screen source keyed
+server-side would give a transparent live plate over the graphic bed without a second SDI feed.
+It is **not equivalent** — a chroma key is a different picture-quality proposition from a real alpha
+channel, and it constrains what can be in front of the camera — so it is filed as something to
+EVALUATE against arm (c), not as a substitute for it.
+⚠ `ChromaKey` sits in the artifact's `Mixers` folder, which is the ONE folder that tracks AMCP's
+`MIXER` surface; the same file's `Route`, `ATEM/*` and `ChannelInput` entries are the CLIENT's own
+tools and say nothing about the server. Do not read one as the other.
+
+## [ ] C-022 — the installation's live source list, served READ-ONLY over the bridge's HTTP server ⟨priority: medium⟩ — depends on [[C-015]] phase 4
+
+**What:** the bridge exposes the installation's live source list as a **read-only HTTP endpoint** on
+the server it already runs (`tools/caspar-bridge/src/template-http-server.ts`), so the **CIAB
+client** — the plant's playout application, a modified CasparCG Client — can list the defined lives
+and add them to its own rundown.
+
+**Why:** this is not a new idea, it is a role the previous automation already had. Recorded by the
+owner 2026-08-10: in the system this project replaces, each live was **created in CG Control** (type,
+master, slave, format), saved as a **preset in a DATABASE**, and the **playout application read that
+list** into its rundown. [[C-015]] phase 4's `SourceMappingStore`
+(`~/.cg-runtime/bridge-source-mappings.json`) IS the successor to that database table — so it gains
+a **SECOND CONSUMER**, and that consumer needs a way in.
+
+Playout is a **separate application and may be on a separate machine**. Having it open the JSON by
+path couples it to this machine's filesystem layout and gives it no stable shape to read: the file's
+on-disk form is a store's private business and changes when the store changes. **The file stays the
+source of truth; the endpoint is a VIEW.**
+
+**Acceptance:**
+
+- WHEN the endpoint is defined THEN its response shape is **DERIVED from `SourceMappingsSchema`**,
+  never hand-written — two spellings of one contract is how they drift, and this drift would be
+  invisible until a playout client showed the wrong source list
+- WHEN any client calls it THEN it is **READ-ONLY**: there is no write path, and the operator's CG
+  Control settings surface remains the only writer
+- WHEN the store is ABSENT THEN the endpoint answers **"no mappings"**, not an error — matching
+  phase 4's absent-file rule exactly (absent ⇒ NO MAPPINGS, fail-closed at take time, not a boot or
+  request failure)
+- WHEN a playout client calls an OLDER bridge THEN it can tell: the endpoint is **versioned or
+  shape-marked**, so a client can distinguish "this bridge does not have the feature" from "this
+  installation has no sources". This is [[R-036]]'s concern (a version/shape marker on the persisted
+  bridge configs) on a **second surface** — cross-referenced deliberately, because the same silent
+  ambiguity is what it exists to prevent
+- WHEN the endpoint serves an entry THEN it carries the fields a rundown needs — the id, the
+  operator-facing label, and the format — and never invents any the store does not hold
+
+**Provenance, so this is not over-read.** The master/slave/format shape comes from
+`docs/recon/ciab-client-tools.json`, the CIAB client's tool definitions (`ChannelInput`: `Type`,
+`StreamPath`, `MasterNumber`, `SlaveNumber`, `Format`, …). That file describes a **MODIFIED CLIENT**,
+not the CasparCG **server**, and its capture date is unknown. It is evidence about **what playout
+expects to consume**, which is exactly what this item needs it for — it is NOT evidence about server
+capability.
+
+## [ ] C-023 — a confidence THUMBNAIL per live source in CG Control ⟨priority: medium⟩ — rides [[C-016]]
+
+**What:** beside each entry in CG Control's source list, a small **periodically-refreshed still**
+showing what that source is delivering **right now**, so the operator can confirm a feed before it is
+needed and identify a failed one during a programme.
+
+**Why:** the operator's real question is _"has guest 2's feed arrived, and is it the right camera?"_
+A reachable/unreachable indicator **cannot answer it** — a black feed and a colour-bar feed are both
+"present" and both wrong. Only a picture settles it.
+
+It is also the **diagnosis half of [[R-048]]**: the thumbnails say WHICH plate died and which source
+is healthy; R-048 performs the repair. Filed as a pair deliberately — an operator who can swap a
+dead plate but cannot see which source to swap it to is being asked to guess on air.
+
+**This REPLACES the parked "LIVE row" idea entirely.** The ad-hoc picture-in-picture use that
+justified a LIVE row is explicitly not needed; do not re-file it.
+
+**Two constraints that SHAPE the solution — part of the item, not footnotes:**
+
+1. **The Runtime's PVW cannot be its home.** Rehearse renders the retained exported HTML in a
+   browser iframe (`RehearsalFrame.tsx`, `srcDoc={html}`), and **a browser cannot display SDI or
+   NDI** — the same wall `live-source-multibox` design.md §12.2 settled when it decided PVW shows an
+   EMPTY, transparent region for a Live Source. Anyone reaching for "just show it in PVW" must be
+   stopped by this item.
+2. **Producing a picture means PLAYING the source somewhere**, and doing that on the air channel
+   risks putting it on air. It needs a channel with **no air-carrying consumer**. ⚠ Whether this
+   installation's CasparCG config has, or can gain, such a channel is a **RECON QUESTION — recorded
+   OPEN, not assumed**. (`D:\programs\CasparCG\casparcg.config` declares `<system-audio />` +
+   `<newtek-ivga />` + `<screen />`; whether an additional consumer-less channel is available or
+   addable has not been established.)
+
+**Mechanism:** rides [[C-016]]'s frame-grab-over-HTTP work rather than building a second mechanism;
+cross-referenced both ways. If C-016's design does not generalise beyond the programme channel, that
+is a **finding for C-016**, not a reason to fork a second grab path.
+
+**Acceptance:**
+
+- WHEN the source list is shown THEN each entry carries a periodically-refreshed still of that
+  source, and a stale or unavailable still is shown AS stale rather than as a black picture
+- WHEN a thumbnail is produced THEN it is produced on a channel with no air-carrying consumer, and
+  the mechanism is C-016's grab path
+- WHEN the recon question above is answered THEN the answer is recorded here, including a negative
+
+**Explicitly OUT of scope:** any path that puts the checked source on the **programme channel**, and
+any **continuous video stream** to the browser. A periodic still is the deliverable.
