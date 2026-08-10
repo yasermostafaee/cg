@@ -52,7 +52,10 @@
 
 - [x] 5.1 `pnpm openspec validate designer-image-fit-axis --strict`.
 - [x] 5.2 Full green gate (uncached).
-- [ ] 5.3 ⚠ **A Linux `gate:e2e` is OWED** — this alters what renders. A Windows run is
-      non-authoritative. Discharged only by a COMPLETED, GREEN `e2e` job on GitHub Actions for the
-      commit carrying this change, cited by its run URL **here**.
-      Run: _pending — CI on the push to `dev`._
+- [x] 5.3 ✅ **THE LINUX `gate:e2e` DEBT IS DISCHARGED.** This change alters what renders, so a
+      Linux run was owed and the Windows run does not count.
+      **Run: https://github.com/yasermostafaee/cg/actions/runs/31414808016** — commit `bd88ede`, the
+      commit that carries this change. `status: completed`, `conclusion: success`, and the
+      **`E2E (Playwright)` job's own conclusion is `success`** (not `skipped`) on `ubuntu-latest`,
+      alongside `Lint • Typecheck • Test • Build=success` and `required=success`. Checked by reading
+      the job conclusions, not merely that a run exists.
