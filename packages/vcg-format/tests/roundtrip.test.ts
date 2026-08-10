@@ -113,4 +113,54 @@ describe('pack → unpack round-trip', () => {
     const result = await verify(buf);
     expect(result.ok).toBe(true);
   });
+  it.each(['contain', 'cover', 'fill', 'none', 'fit-width', 'fit-height'])(
+    "D-149 — an image element's fit `%s` survives the .vcg round-trip",
+    async (fit) => {
+      // Both new modes and every pre-existing one, through the SAME assertion:
+      // `fit-width` / `fit-height` are ordinary enum widenings, so a package
+      // written with one must unpack to exactly the value that went in — and
+      // `none` must NOT drift to the Designer's "original" LABEL.
+      const baseLayer = fixtureScene.layers[0];
+      if (!baseLayer) throw new Error('fixture missing layer 0');
+      const image = {
+        id: 'img-1',
+        name: 'Logo',
+        type: 'image',
+        visible: true,
+        locked: false,
+        opacity: 1,
+        zIndex: 0,
+        transform: {
+          position: { x: 10, y: 20 },
+          size: { w: 320, h: 180 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+          anchor: { x: 0, y: 0 },
+        },
+        assetId: 'a1',
+        source: 'project',
+        fit,
+        preserveAspect: true,
+      } as unknown as Element;
+      const scene: Scene = {
+        ...fixtureScene,
+        layers: [
+          { ...baseLayer, children: [...baseLayer.children, image] },
+          ...fixtureScene.layers.slice(1),
+        ],
+      };
+      const buf = await pack({
+        scene,
+        manifestExtras: fixtureManifestExtras,
+        indexHtml: fixtureIndexHtml,
+        cgJs: fixtureCgJs,
+        cgCss: fixtureCgCss,
+      });
+      const out = (await unpack(buf)).scene;
+      const packed = out.layers[0]?.children.find((c) => c.id === 'img-1') as
+        | { fit?: unknown }
+        | undefined;
+      expect(packed?.fit).toBe(fit);
+    },
+  );
 });

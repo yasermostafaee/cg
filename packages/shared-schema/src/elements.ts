@@ -705,7 +705,28 @@ export const ImageElementSchema = ElementBaseSchema.extend({
   type: z.literal('image'),
   assetId: IdSchema,
   source: z.enum(['project', 'shared']).default('project'),
-  fit: z.enum(['contain', 'cover', 'fill', 'none']),
+  /**
+   * D-149 — how the asset is scaled inside the element's box.
+   *
+   * The first four are CSS `object-fit` values, written straight through. The
+   * last two are NOT CSS keywords and are resolved by the renderer:
+   *
+   * - `'fit-width'` — scale so the WIDTH matches the box; the height overflows
+   *   (or falls short) and the overflow is CLIPPED.
+   * - `'fit-height'` — the mirror: the HEIGHT matches the box, the width
+   *   overflows, clipped.
+   *
+   * ⚠ `'none'` is LABELLED **"original"** in the Designer and its STORED value
+   * is deliberately unchanged. A rename of the stored value would be a scene
+   * migration for a label, and the migration registry is empty
+   * (`migrations/index.ts`) — see D-149. Do NOT "tidy" this to `'original'`:
+   * every scene ever saved carries `'none'`.
+   *
+   * Widening an enum is additive, so no schema-version bump and no migration:
+   * a document written before D-149 parses unchanged, and one written after is
+   * only unreadable by an older build if it actually USES a new value.
+   */
+  fit: z.enum(['contain', 'cover', 'fill', 'none', 'fit-width', 'fit-height']),
   preserveAspect: z.boolean(),
   tint: HexColorSchema.optional(),
 });

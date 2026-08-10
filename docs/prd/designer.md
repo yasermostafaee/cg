@@ -4078,3 +4078,67 @@ work is commit **`e1e2d03`**: `apps/runtime/src/renderer/ui/Modal.tsx` (the regi
 `apps/runtime/tests/modalMessageRegion.dom.test.ts` and
 `apps/runtime/tests/e2e/modal-message-in-viewport.spec.ts` (the tests), and
 `openspec/changes/runtime-modal-message-region/` for the spec delta.
+
+## [~] D-149 — image `fit` gains **fit width** / **fit height**, and `none` is relabelled **original** ⟨priority: medium — reaches air⟩ — in progress: `openspec/changes/designer-image-fit-axis/`
+
+**What:** two changes to the image element's `fit` control, both agreed with the owner.
+
+1. **Add `fit width` and `fit height` beside the existing options.** Fit width scales the image so
+   its **WIDTH matches the box** and lets the height overflow; fit height is the mirror. **The
+   overflow is clipped** to the authored rect.
+2. **Rename the `none` option to `original` in the UI.** The **STORED value is unchanged** — this is
+   a **label, not a schema change**, and there is **no migration**.
+
+**Why:** an author who wants an image to fill a box's width and let the height run off — a masthead
+strip, a full-bleed band — has no option that does it. `contain` fits the whole image inside
+(letterboxing one axis) and `cover` fills both (cropping whichever axis is proportionally longer);
+neither is _"match this ONE axis"_. And `none` is a poor label for what it does: it reads as "no fit
+applied", which is equally true of `fill`. What it means is **the image at its original size**.
+
+### 🔴 The constraint that matters more than the feature
+
+A previous look concluded that fit width/height needs a wrapper element with `overflow: hidden`, and
+noted that this adds a DOM node to **EVERY** image in the export — **which changes the rendered
+output of templates that do not use the new options at all. That is an on-air change bought for
+nothing.**
+
+> **Emit the wrapper — or any new DOM or CSS — ONLY when the chosen fit actually requires it.**
+
+**A no-wrapper implementation was sought and rejected with reasons** (both recorded on
+`buildImageFitAxis` in `packages/template-runtime/src/scene-builder.ts`):
+
+- **Picking `contain` vs `cover` from the asset's intrinsic size** would need no extra node at all —
+  `fit-width` **IS** `contain` when the image is proportionally wider than the box and `cover` when
+  it is narrower, because `contain` takes the MIN of the two axis ratios and `cover` the MAX.
+  Rejected because those dimensions **are not in the scene**: `defaultImage` uses them to size the
+  element at import and stores nothing, so this needs a new schema field that goes **STALE the moment
+  the asset behind the id is replaced**.
+- **Deciding it in JS at asset-load time**, where `naturalWidth` is known, needs every host that
+  resolves `data-cg-asset-id` to cooperate — and the Designer's preview walk and the runtime's own
+  are **separate code**. That is the **[[B-102]] class** exactly: renders in preview, absent on
+  hardware.
+
+So the conditional wrapper is the answer, and it is **genuinely conditional** — `buildImage` returns
+through an early guard, so the legacy body is reached **unchanged** for every pre-existing mode.
+
+### Acceptance
+
+- WHEN an image's fit is `fit-width` THEN the rendered width matches the box, the height overflows or
+  falls short, **the overflow is clipped to the authored rect**, and the image is centred on the
+  vertical axis. `fit-height` is the mirror.
+- WHEN a document uses `original`, `contain`, `cover` or `fill` THEN it exports output **IDENTICAL**
+  to what it exports today. 🔴 **Proven by a test that renders a fixture in each pre-existing mode
+  and compares against output captured BEFORE the change — not by inspection.**
+- WHEN the author selects "original" THEN the stored `fit` is **`none`**, and a document saved before
+  this change loads showing "original". No migration.
+- WHEN each new mode is exported THEN it round-trips through the schema and **both exporters**
+  (`.vcg` pack/unpack and the single-file HTML).
+- WHEN the same scene is rendered in the Designer preview and in the export THEN **the geometry
+  agrees**. ⚠ Asserted rather than assumed: [[B-102]] is the standing example of this class — an
+  image that renders in preview and is absent on hardware. The mechanism is applied at
+  **scene-build** time so the canvas, the Preview modal and both exports derive it from the one
+  `buildScene` call they already share.
+- A Designer **E2E** covers the two new options end to end.
+
+**⚠ Reaches air** — the image element renders into the export and onto the programme channel. The
+byte-identity test is what makes the change safe to merge.

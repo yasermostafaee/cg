@@ -677,3 +677,81 @@ describe('ExporterSingleFile — D-028 finite ticker under a TIMED hold (info)',
     expect(issues.some((i) => i.code === 'ticker-finite-with-timed-hold')).toBe(false);
   });
 });
+
+describe('ExporterSingleFile — D-149 image fit width / height', () => {
+  /** An asset source that resolves `a1`, so the image path actually runs. */
+  function fitExporter(): ExporterSingleFile {
+    return new ExporterSingleFile({
+      cgJsIife: 'var CG = {};',
+      cgCss: 'html,body{background:transparent}',
+      fontsCss: '',
+      assets: {
+        get: async () => ({ id: 'a1', filename: 'logo.png', mime: 'image/png' }) as AssetMeta,
+        bytes: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+      } as unknown as ImageAssetSource,
+      fetchUrl: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+    });
+  }
+
+  function sceneWithFit(fit: string): Scene {
+    const base = makeScene();
+    return {
+      ...base,
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'img-1',
+              name: 'Logo',
+              type: 'image',
+              visible: true,
+              locked: false,
+              opacity: 1,
+              zIndex: 0,
+              transform: {
+                position: { x: 10, y: 20 },
+                size: { w: 320, h: 180 },
+                scale: { x: 1, y: 1 },
+                rotation: 0,
+                anchor: { x: 0, y: 0 },
+              },
+              assetId: 'a1',
+              source: 'project',
+              fit,
+              preserveAspect: true,
+            },
+          ],
+        },
+      ],
+    } as unknown as Scene;
+  }
+
+  it.each(['contain', 'cover', 'fill', 'none', 'fit-width', 'fit-height'])(
+    'the exported scene literal carries fit `%s` verbatim',
+    async (fit) => {
+      // The single-file export bakes the SCENE and builds the DOM at load, so
+      // "round-trips through the exporter" means the value reaches the page
+      // unchanged — including `none`, which the Designer merely LABELS
+      // "original" (D-149: the stored value never changes).
+      const { html } = await fitExporter().produce(sceneWithFit(fit));
+      expect(html).toContain(`"fit":"${fit}"`);
+    },
+  );
+
+  it('a pre-existing fit mode adds NO wrapper markup to the export', async () => {
+    // The on-air guarantee, asserted on the exporter rather than only on the
+    // builder: a template that uses none of the new options must export what it
+    // always did. The DOM-level byte-identity proof is
+    // `@cg/template-runtime` tests/image-fit.test.ts.
+    for (const fit of ['contain', 'cover', 'fill', 'none']) {
+      const { html } = await fitExporter().produce(sceneWithFit(fit));
+      expect(html).not.toContain('fit-width');
+      expect(html).not.toContain('fit-height');
+    }
+  });
+});

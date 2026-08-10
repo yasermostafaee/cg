@@ -545,10 +545,20 @@ function ImageSections({
   return (
     <>
       <CollapseSection title="Image" defaultExpanded>
+        {/*
+          D-149 — `fit width` / `fit height` scale one axis to the box and clip the
+          overflow on the other.
+
+          ⚠ `none` is LABELLED "original" and its STORED VALUE IS UNCHANGED. This is
+          a label, not a schema change: every scene ever saved carries `'none'`, and
+          renaming the stored value would be a migration bought for a word. The
+          `labels` prop exists for exactly this — the option's `value` stays `none`.
+        */}
         <SelectField
           label="fit"
           value={element.fit}
-          options={['contain', 'cover', 'fill', 'none'] as const}
+          options={['contain', 'cover', 'fill', 'none', 'fit-width', 'fit-height'] as const}
+          labels={['contain', 'cover', 'fill', 'original', 'fit width', 'fit height']}
           onCommit={(fit) => designerStore.updateElement(id, { fit } as Partial<Element>)}
         />
         <SharedImagePicker element={element} />

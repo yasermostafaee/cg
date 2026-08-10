@@ -1070,7 +1070,87 @@ export function repeaterItemValues(item: ListItem): Record<string, unknown> {
   return values;
 }
 
+/**
+ * D-149 — `fit-width` / `fit-height`: scale so ONE axis matches the box and let
+ * the other overflow, clipped.
+ *
+ * 🔴 **THE CONSTRAINT THAT SHAPES THIS FUNCTION: the extra node is emitted ONLY
+ * for the two modes that need it.** `contain` / `cover` / `fill` / `none` return
+ * from {@link buildImage}'s legacy path BEFORE this is reached, byte-for-byte as
+ * they always did. A wrapper on every image would change the rendered output of
+ * templates that do not use these options at all — an ON-AIR change bought for
+ * nothing — and `tests/image-fit.test.ts` pins the pre-change DOM for all four
+ * old modes against a golden captured before this landed.
+ *
+ * **Why a wrapper is needed at all, and why the no-wrapper forms were rejected.**
+ * CSS `object-fit` cannot express "scale by the WIDTH ratio": `contain` takes the
+ * MIN of the two axis ratios and `cover` the MAX, and which of them equals the
+ * width ratio depends on the image's intrinsic aspect versus the box's. So:
+ *
+ * - **Picking `contain` vs `cover` from the asset's intrinsic size** would give
+ *   exactly this geometry with NO extra node — `fit-width` IS `contain` when the
+ *   image is relatively wider than the box and `cover` when it is narrower. It is
+ *   rejected because those dimensions are **not in the scene**: `defaultImage`
+ *   uses them to size the element at import and stores nothing
+ *   (`element-defaults.ts`), so the renderer would need a new schema field that
+ *   goes STALE the moment the asset behind the id is replaced.
+ * - **Deciding it in JS at asset-load time** (`naturalWidth` is known there) needs
+ *   every host that resolves `data-cg-asset-id` to cooperate — the Designer's
+ *   preview walk and the runtime's own are separate code — which is the B-102
+ *   class exactly: renders in preview, absent on hardware. CSS decided at BUILD
+ *   time reaches canvas, Preview modal and export through the one `buildScene`
+ *   call all three already share.
+ *
+ * The declarations used are `width`/`height: auto`, `overflow: hidden` and a
+ * `translate` centring — all baseline CSS 2.1, so nothing here depends on a
+ * feature younger than CasparCG's CEF 71 (the B-066 lesson).
+ */
+function buildImageFitAxis(element: ImageElement, doc: Document): HTMLElement {
+  const box = doc.createElement('div');
+  box.dataset['cgElementId'] = element.id;
+  applyBaseStyles(box, element.transform, element.opacity, element.visible, element.filter);
+  // The whole point of the extra node: the overflowing axis is clipped to the
+  // authored rect, so the element still occupies exactly the box it was drawn as.
+  box.style.overflow = 'hidden';
+  if (element.tint) {
+    // Same v1 approximation as the legacy path, applied to the box so it covers
+    // the image it wraps (see buildImage).
+    box.style.filter = `drop-shadow(0 0 0 ${element.tint})`;
+  }
+
+  const el = doc.createElement('img');
+  el.alt = element.name;
+  el.style.position = 'absolute';
+  if (element.fit === 'fit-width') {
+    // Width pinned to the box, height free — then centred on the overflowing
+    // axis, which is what `cover` does for its own overflow and is the only
+    // choice that makes fit-width and cover agree where they coincide.
+    el.style.left = '0';
+    el.style.top = '50%';
+    el.style.width = '100%';
+    el.style.height = 'auto';
+    el.style.transform = 'translateY(-50%)';
+  } else {
+    el.style.top = '0';
+    el.style.left = '50%';
+    el.style.height = '100%';
+    el.style.width = 'auto';
+    el.style.transform = 'translateX(-50%)';
+  }
+  // Stays on the <img>, never on the box: every host resolves the asset by
+  // walking `img[data-cg-asset-id]` (runtime.ts, preview.ts), and moving it
+  // would silently break the src resolution this element depends on.
+  el.dataset['cgAssetId'] = element.assetId;
+  box.appendChild(el);
+  return box;
+}
+
 function buildImage(element: ImageElement, doc: Document): HTMLElement {
+  // D-149 — the ONLY two modes that need an extra node take it; everything below
+  // this line is untouched, and is asserted byte-identical by `image-fit.test.ts`.
+  if (element.fit === 'fit-width' || element.fit === 'fit-height') {
+    return buildImageFitAxis(element, doc);
+  }
   const el = doc.createElement('img');
   el.dataset['cgElementId'] = element.id;
   applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
