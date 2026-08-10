@@ -6,7 +6,8 @@ import { useStack } from '../../hooks/useStack.js';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
-import { Modal, ModalAction, modalActionVariant } from '../../ui/Modal.js';
+import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../../ui/Modal.js';
+import { Notice } from '../../ui/Notice.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 
 interface Props {
@@ -46,24 +47,20 @@ const styles = {
   label: { width: 92, color: colors.textMuted },
   host: { flex: 1, minWidth: 120 },
   port: { width: 88 },
-  warning: {
-    border: '1px solid #B45309',
-    background: 'rgba(180, 83, 9, 0.12)',
-    color: '#FCD34D',
-    borderRadius: '0.25rem',
-    padding: '0.5rem 0.6rem',
-    fontSize: '0.8rem',
-  },
-  blocked: {
-    border: `1px solid ${colors.border}`,
-    background: 'rgba(127, 29, 29, 0.25)',
-    color: '#FCA5A5',
-    borderRadius: '0.25rem',
-    padding: '0.5rem 0.6rem',
-    fontSize: '0.8rem',
-  },
+  /*
+    THREE MESSAGE SPELLINGS ARE GONE FROM HERE — `warning`, `blocked` and `error`.
+
+    This panel had FOUR treatments for what is one thing: a sentence explaining
+    the state of the form or the fate of Apply. `blocked` was a red-tinted box,
+    `error` was bare `colors.error` text (2.13:1 on this dialog — the illegible
+    one), `warning` was a hand-copied duplicate of `Candidate layers`' amber box,
+    and `status` was a muted line. The ROLE decides the treatment now, and
+    `ui/Notice` is the only place it is written down.
+
+    `status` survives ONLY as body text for a structural fact about the form ("no
+    backup declared"), which is not a message about an action at all.
+  */
   status: { fontSize: '0.8rem', color: colors.textMuted },
-  error: { fontSize: '0.8rem', color: colors.error },
 } as const;
 
 interface EndpointDraft {
@@ -244,23 +241,28 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
     a bridge refusal are why nothing happened; the on-air block is why the button is
     disabled; the status line is what happened when it worked.
 
-    None of the wording changes.
+    None of the WORDING changes; what changes is that four private treatments
+    become two roles, and the illegible red goes.
   */
-  const messages = (
-    <>
-      {onAirCount > 0 && (
-        <div style={styles.blocked}>
-          Apply is blocked: {onAirCount} item(s) are on air or unsettled. Use Remove All (or Out
-          each item) first.
-        </div>
-      )}
-      {validationError !== null && <span style={styles.error}>{validationError}</span>}
-      {refusal !== null && <span style={styles.error}>{refusal}</span>}
-      {status !== null && <span style={styles.status}>{status}</span>}
-    </>
-  );
-  const hasMessage =
-    onAirCount > 0 || validationError !== null || refusal !== null || status !== null;
+  const messages: readonly ModalMessage[] = [
+    // WHY APPLY WILL NOT HAPPEN is a REFUSAL, not a second red. It wore a
+    // red-tinted box of its own; red in this palette means error or destructive
+    // intent, and a gate holding a save until the output is clear is neither. It
+    // is the ATTENTION case — the same amber `OCCUPIED` and `UNKNOWN` carry.
+    ...(onAirCount > 0
+      ? [
+          {
+            role: 'refusal' as const,
+            text: `Apply is blocked: ${String(onAirCount)} item(s) are on air or unsettled. Use Remove All (or Out each item) first.`,
+          },
+        ]
+      : []),
+    ...(validationError !== null ? [{ role: 'refusal' as const, text: validationError }] : []),
+    ...(refusal !== null ? [{ role: 'refusal' as const, text: refusal }] : []),
+    // The OUTCOME of a successful Apply. Never amber: dressing a success as a
+    // warning drains the warning everywhere it is real.
+    ...(status !== null ? [{ role: 'notice' as const, text: status }] : []),
+  ];
 
   return (
     <Modal
@@ -274,7 +276,7 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
       ariaLabel="Server connection settings"
       size="wide"
       onClose={onClose}
-      {...(hasMessage ? { message: messages } : {})}
+      {...(messages.length > 0 ? { message: messages } : {})}
       footer={
         <>
           {/*
@@ -387,13 +389,20 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
 
       {/* The remote-host note stays in the BODY: it describes the configuration
           being edited, not the outcome of pressing Apply. The message region is for
-          "why that did or did not happen". */}
+          "why that did or did not happen".
+
+          Its TREATMENT is no longer local, though — the amber box here was a
+          hand-copied duplicate of the one `Candidate layers` used, i.e. the second
+          spelling that makes a shared rule stop being a rule. Placement is this
+          dialog's call; what a message LOOKS like is not. `role="note"` keeps it out
+          of the alert channel: it is a standing property of the draft, not something
+          to announce. */}
       {remoteHosts.length > 0 && (
-        <div style={styles.warning} role="note">
-          ⚠ Remote server ({remoteHosts.join(', ')}): the template server and OSC listener will use
-          a LAN address so CasparCG can reach this machine. The control connection stays on
-          127.0.0.1.
-        </div>
+        <Notice
+          noticeRole="refusal"
+          aria="note"
+          text={`Remote server (${remoteHosts.join(', ')}): the template server and OSC listener will use a LAN address so CasparCG can reach this machine. The control connection stays on 127.0.0.1.`}
+        />
       )}
     </Modal>
   );

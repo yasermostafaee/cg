@@ -173,12 +173,12 @@ consistently, not of treating this section differently.
 
 **`dev-modal-primitive`:**
 
-| line         | summary                                                                                 | bucket  | target     | evidence |
-| ------------ | --------------------------------------------------------------------------------------- | ------- | ---------- | -------- |
-| DEBT.md:2079 | No OpenSpec artifacts and no PRD item for the `Modal` contract and five changed dialogs | PROCESS | openspec   |          |
-| DEBT.md:2082 | The §3 in-viewport E2E is owed (`toBeInViewport`); a Linux `gate:e2e` owed regardless   | PROCESS | openspec   |          |
-| DEBT.md:2088 | Nothing asserts the migrated dialogs still OPEN from their real entry points            | LIVE    | runtime.md |          |
-| DEBT.md:2091 | `Cancel` leaving state byte-identical is asserted only for the config dialog            | LIVE    | runtime.md |          |
+| line         | summary                                                                                 | bucket  | target     | evidence                                                                            |
+| ------------ | --------------------------------------------------------------------------------------- | ------- | ---------- | ----------------------------------------------------------------------------------- |
+| DEBT.md:2079 | No OpenSpec artifacts and no PRD item for the `Modal` contract and five changed dialogs | PROCESS | openspec   |                                                                                     |
+| DEBT.md:2082 | ~~The §3 in-viewport E2E is owed (`toBeInViewport`)~~ — **DISCHARGED 2026-08-10**       | PROCESS | openspec   | `apps/runtime/tests/e2e/modal-message-in-viewport.spec.ts`; CI run cited in DEBT.md |
+| DEBT.md:2088 | Nothing asserts the migrated dialogs still OPEN from their real entry points            | LIVE    | runtime.md |                                                                                     |
+| DEBT.md:2091 | `Cancel` leaving state byte-identical is asserted only for the config dialog            | LIVE    | runtime.md |                                                                                     |
 
 **`dev-awaiting-verbs`:**
 
@@ -325,8 +325,17 @@ process debts, so nothing is lost to the strongest-demand rule.
 
 **Tests owed**
 
-- [ ] Write the §3 in-viewport refusal assertion with Playwright's `toBeInViewport()` against a
+- [x] Write the §3 in-viewport refusal assertion with Playwright's `toBeInViewport()` against a
       scrolled `Candidate layers` list (DEBT.md:2082, DEBT.md:38).
+      **DISCHARGED 2026-08-10:** `apps/runtime/tests/e2e/modal-message-in-viewport.spec.ts`.
+      Driven against `Live sources` rather than `Candidate layers` — the offline mock's
+      `setFixedLayers` accepts everything and no shared fixed-layers validator exists to
+      refuse with, whereas `Live sources` refuses through `checkSourceMappings`, the same
+      validator the bridge runs. Same primitive, same mechanism, and its body genuinely
+      overflows (asserted). Includes a negative control: the last element inside the
+      scrolled body — where the refusal used to be appended — is asserted OUT of the
+      viewport at the same scroll position, so the check can fail. Verified red against the
+      reintroduced in-body placement.
 - [ ] Assert the migrated dialogs still open from their real entry points (DEBT.md:2088).
 - [ ] Assert `Cancel` leaves state byte-identical for the destructive dialogs, not only the
       config dialog (DEBT.md:2091).

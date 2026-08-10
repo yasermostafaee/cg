@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { colors } from '../theme.js';
 import { Button, type ButtonVariant } from './Button.js';
 import { Icon } from './Icon.js';
+import { Notice, type NoticeRole } from './Notice.js';
 
 /**
  * The Runtime's modal primitive.
@@ -127,7 +128,9 @@ const styles = {
     flexShrink: 0,
     maxHeight: '30vh',
     overflowY: 'auto' as const,
-    fontSize: '0.85rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.4rem',
   },
   footer: {
     display: 'flex',
@@ -210,6 +213,28 @@ export function ModalAction({
   );
 }
 
+/**
+ * §3 — THE MESSAGE ROLES, and the same rule as the action roles: the ROLE decides
+ * the treatment, so a dialog says what KIND of thing it is telling the operator and
+ * never what colour to say it in.
+ *
+ * `refusal` — why the last action did not happen. `notice` — a neutral statement
+ * about what did (`Applied. All listeners remain loopback-only.`). Two roles,
+ * because two treatments already existed and each was earning its keep; the three
+ * unreadable red spellings were not a third role, they were the same role written
+ * down badly. See {@link Notice} for the measured ratios.
+ */
+export type ModalMessageRole = NoticeRole;
+
+/** One message in the pinned region. Strings, deliberately — see `ModalProps.message`. */
+export interface ModalMessage {
+  role: ModalMessageRole;
+  /** The rule, or the outcome. One sentence. */
+  text: string;
+  /** The specifics, when there are any — the bridge's own message, which names the layer. */
+  detail?: string;
+}
+
 interface ModalProps {
   /**
    * SENTENCE case, not shouting — see the module note. The primitive supplies the
@@ -228,8 +253,23 @@ interface ModalProps {
    *
    * Never rendered into `children`: that is the scrolling body, and a refusal the
    * operator has to scroll to find is a silent one. See `styles.message`.
+   *
+   * ── IT IS NOT A `ReactNode` ANY MORE, AND THAT IS THE FIX ──────────────────
+   *
+   * It was, and every one of the four dialogs that used it passed a node carrying
+   * its OWN style — three of them `color: colors.error`, which measures 2.13:1 on
+   * this dialog's surface. The region was adopted; the treatment was not, because
+   * a `ReactNode` prop asks each caller to decide what a message looks like, and
+   * four callers gave four answers.
+   *
+   * So the region takes DATA. `text` and `detail` are strings and there is no seam
+   * to pass a `style` through: the ROLE decides the treatment and {@link Notice}
+   * is where that decision is written down — exactly as {@link ModalActionRole}
+   * decides a button's. An array is accepted because `Server connection` genuinely
+   * has more than one thing to say at once (Apply is blocked AND a port is
+   * invalid); the region stacks them and owns the spacing.
    */
-  message?: ReactNode;
+  message?: ModalMessage | readonly ModalMessage[];
   /** Cancel — Escape, backdrop click, and the dialog's own dismiss all route here. */
   onClose: () => void;
   children?: ReactNode;
@@ -257,6 +297,9 @@ export function Modal({
   size = 'prose',
 }: ModalProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
+  // One shape downstream, so the region never has to ask which form it was given.
+  const messages: readonly ModalMessage[] =
+    message === undefined ? [] : Array.isArray(message) ? message : [message as ModalMessage];
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -343,17 +386,22 @@ export function Modal({
         {/*
           §3 — OUTSIDE `body`, ABOVE `footer`. The order of these two elements IS
           the fix: a message rendered into `children` above would scroll away with
-          the content, which is the defect. `role="alert"` because it is always the
-          consequence of something the operator just did.
+          the content, which is the defect.
+
+          The ARIA role sits on each `Notice`, not on this wrapper: a refusal is an
+          `alert` and a neutral outcome is a `status`, and a wrapper that announced
+          both as one would re-flatten the distinction the roles exist to keep.
         */}
-        {message !== undefined && message !== null && message !== false && (
-          <div
-            style={styles.message}
-            className="cg-modal-message"
-            data-modal-message=""
-            role="alert"
-          >
-            {message}
+        {messages.length > 0 && (
+          <div style={styles.message} className="cg-modal-message" data-modal-message="">
+            {messages.map((m, i) => (
+              <Notice
+                key={`${m.role}:${String(i)}`}
+                noticeRole={m.role}
+                text={m.text}
+                {...(m.detail !== undefined ? { detail: m.detail } : {})}
+              />
+            ))}
           </div>
         )}
         <div style={styles.footer} className="cg-modal-footer">

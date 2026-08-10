@@ -49,7 +49,6 @@ import {
  */
 
 const styles = {
-  intro: { fontSize: '0.8rem', color: colors.textMuted, margin: '0 0 0.6rem' },
   empty: {
     border: `1px solid ${colors.border}`,
     borderRadius: '0.25rem',
@@ -90,7 +89,6 @@ const styles = {
     marginBottom: '0.35rem',
   },
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: '0.5rem 0 0' },
-  error: { fontSize: '0.75rem', color: colors.error, margin: '0.4rem 0 0' },
 } as const;
 
 /** The producer kinds, in the order an operator is most likely to need them. */
@@ -228,23 +226,33 @@ export function SourceMappingsModal({ onClose }: { onClose: () => void }): JSX.E
       title="Live sources"
       size="wide"
       onClose={onClose}
-      {...(error !== null ? { message: <span style={styles.error}>{error}</span> } : {})}
+      {...(error !== null ? { message: { role: 'refusal' as const, text: error } } : {})}
       footer={
         <ModalAction actionRole="primary" onClick={onClose}>
           Done
         </ModalAction>
       }
     >
-      <p style={styles.intro}>
-        A template declares a source by name — <code>guest-1</code> — and never says what it is.
-        This is where this station says it. An id with no mapping here refuses its take rather than
-        going to air as an empty box.
-      </p>
+      {/*
+        §5 — ONE line, not three paragraphs.
 
+        The three that were here explained the FEATURE (what a declared source is,
+        that the scene deliberately withholds it, what happens on air without a
+        mapping). All of it was true and none of it was needed at the moment of
+        acting: an operator opens this to bind an id, and three paragraphs sharing
+        one muted grey is why nothing on the surface stood out even before the
+        colour question. What survives is the single fact that changes what they
+        do — an unmapped id does not go to air.
+
+        The rest moved to where it is asked for: the band's rule is a hint on the
+        band control, and the derived aspect is beside the format picker. A hint
+        attached to the control it concerns is read; a paragraph above the form is
+        scrolled past.
+      */}
       {mappings.mappings.length === 0 ? (
         <div style={styles.empty} role="status">
-          Nothing is mapped yet, so no template declaring a live source can be taken. Add the id the
-          template declares, then say what it is on this station.
+          Nothing is mapped yet — a template that declares a live source cannot be taken until its
+          id is bound here.
         </div>
       ) : (
         <div style={styles.list}>
@@ -389,10 +397,14 @@ export function SourceMappingsModal({ onClose }: { onClose: () => void }): JSX.E
             Apply band
           </Button>
         </div>
+        {/* The rule an operator needs BEFORE typing two numbers — that the band must
+            clear the candidate bank and the playout range — stays. What went is the
+            sentence promising that the bridge names both ranges on a clash: it does,
+            and that refusal is now legible in the pinned region, so saying it in
+            advance was one more grey paragraph competing with the thing it describes. */}
         <p style={styles.hint}>
-          The layers live sources are placed on, below the template&rsquo;s own layer. It must not
-          overlap the candidate layer bank or the layers the playout system owns — the bridge
-          refuses an overlap and names both ranges.{' '}
+          Placed below the template&rsquo;s own layer; must not overlap the candidate layer bank or
+          the playout system&rsquo;s range.{' '}
           {band === undefined
             ? `Nothing is declared yet; ${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}–${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)} is the usual choice.`
             : `Currently ${String(band.start)}–${String(band.end)}.`}
