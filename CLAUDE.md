@@ -365,6 +365,21 @@ origin dev` matches local — and only claim CI green after seeing the check's
   alone; and a debt that no per-push run covered is only covered once that merge run
   completes green.
 
+  ⭐ **MODIFIED by `P-030` — the merge run SKIPS its heavy jobs when, and only when, the
+  tip's own run already discharged them in full.** `dev` → `main` is a `--ff-only` merge,
+  so `main`'s new HEAD is the SAME COMMIT as `dev`'s tip — same SHA, same tree — and
+  re-running ~15 metered runner-minutes against a tree nothing changed buys nothing.
+  **The backstop itself is NOT weakened, and this is the distinction to hold on to:**
+  the guard skips only on a **positive, complete match** — a prior run for that exact
+  `head_sha` that is `completed` + `success` **AND in which the `ci` and `e2e` jobs both
+  actually RAN**. A prior run that was green having **SKIPPED** `e2e` (the P-029 case, and
+  precisely the hole this backstop exists to close) does **NOT** match, so the merge run
+  does the work. Every uncertainty — API error, missing permission, unreadable jobs, a
+  renamed job — resolves to running everything. **A merge run is never optional; it is
+  only ever satisfied in advance**, and when it is, it says so in its summary with the
+  prior run's URL, so a green merge run that did nothing can never be mistaken for one
+  that passed.
+
 ## Engine doc-sync
 
 When a change alters an engine's **structure, contracts, or extension points**,

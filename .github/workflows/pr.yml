@@ -19,6 +19,11 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  # P-030 — the merge-run reuse guard reads this workflow's own past runs and
+  # their jobs. Read-only, and the guard FAILS SAFE (runs everything) if the
+  # grant is ever missing, so a permission regression costs minutes, never
+  # coverage.
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -87,6 +92,11 @@ jobs:
       # P-029 — does this diff owe the authoritative Linux E2E? Separate from `code`:
       # a change can need the unit gate without being able to alter what renders.
       needs_e2e: ${{ steps.decide.outputs.needs_e2e }}
+      # P-030 — this exact SHA already has a completed, successful run that RAN
+      # both heavy jobs, so the heavy jobs are skipped and `required` passes
+      # citing it. Only ever 'true' on a push to `main`.
+      reuse: ${{ steps.reuse.outputs.reuse }}
+      prior_run_url: ${{ steps.reuse.outputs.prior_run_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -172,6 +182,87 @@ jobs:
           node classify-push.mjs
           rm -f classify-push.mjs changed-files.txt
 
+      # P-030 — `dev` -> `main` is a `--ff-only` merge, so `main`'s new HEAD is the
+      # SAME COMMIT as `dev`'s tip: same SHA, same tree, and a full run has usually
+      # already passed on it. That second run costs ~15 metered runner-minutes a
+      # day to re-prove a tree nothing changed. `[skip ci]` cannot help — a
+      # fast-forward creates no commit whose message could carry it — so the
+      # question is put to the Actions API instead.
+      #
+      # 🔴 GREEN IS NOT ENOUGH. `e2e` is gated on `needs_e2e` (P-029), so a
+      # docs-only push to `dev` yields a completed, successful run in which the
+      # suite never ran — and the merge run is exactly the COMPLETENESS BACKSTOP
+      # for the day's render changes. The prior run must have RUN what this run
+      # would need. `reuse-decision.mjs` owns that rule and is unit-tested against
+      # REAL captured API responses for all three shapes (both ran / e2e skipped /
+      # e2e failed); this step only fetches and reports.
+      #
+      # Every uncertainty — API error, missing permission, unreadable jobs, a
+      # renamed job — resolves to `reuse=false`, i.e. run everything. The guard may
+      # only ever skip on a positive, complete match.
+      - name: Reuse a prior green run for this SHA (push to main only)
+        id: reuse
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          runs_json="$(gh api "repos/$REPO/actions/workflows/pr.yml/runs?head_sha=$HEAD_SHA&per_page=20" 2>/dev/null || echo 'null')"
+          printf '%s' "$runs_json" > runs.json
+
+          cat > reuse.mjs <<'REUSE'
+          import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          import { decideReuse } from './tools/gate-hook/src/reuse-decision.mjs';
+
+          let runs = null;
+          try {
+            runs = JSON.parse(readFileSync('runs.json', 'utf8'))?.workflow_runs ?? null;
+          } catch {
+            runs = null;
+          }
+
+          const jobsFor = (id) => {
+            try {
+              return JSON.parse(
+                execFileSync('gh', ['api', `repos/${process.env.REPO}/actions/runs/${id}/jobs`], {
+                  encoding: 'utf8',
+                }),
+              );
+            } catch {
+              return null;
+            }
+          };
+
+          const d = decideReuse({ runs, jobsFor, currentRunId: process.env.CURRENT_RUN_ID });
+          console.log(`P-030: reuse=${d.reuse} — ${d.reason}`);
+          appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `reuse=${d.reuse}\nprior_run_url=${d.priorRunUrl ?? ''}\n`,
+          );
+          // Constraint 5 — a merge run that is green because it did NOTHING must
+          // never read the same as one that is green because it PASSED.
+          writeFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            d.reuse
+              ? `### P-030 — heavy jobs skipped\n\nThis commit (\`${process.env.HEAD_SHA}\`) was already verified by a completed, successful run that ran both the unit gate and the Playwright suite:\n\n**${d.priorRunUrl}**\n\n_${d.reason}_\n`
+              : `### P-030 — running the full gate\n\n_${d.reason}_\n`,
+            { flag: 'a' },
+          );
+          REUSE
+          node reuse.mjs || echo 'P-030: the guard itself failed - running everything.'
+          # The fail-safe, written LAST and only if nothing wrote the key — so the
+          # value never depends on duplicate-key precedence in $GITHUB_OUTPUT. If
+          # the node step died before reporting, this is what the job reads.
+          if ! grep -q '^reuse=' "$GITHUB_OUTPUT" 2>/dev/null; then
+            echo 'P-030: the guard produced no verdict - running everything.'
+            printf 'reuse=false\nprior_run_url=\n' >> "$GITHUB_OUTPUT"
+          fi
+          rm -f reuse.mjs runs.json
+
       - name: Filter changed paths
         id: filter
         # `pull_request` only — the push path is classified above. Left exactly as it
@@ -235,7 +326,9 @@ jobs:
     name: Lint • Typecheck • Test • Build
     # P-008 — heavy gate runs only when a non-docs file changed (skips docs-only).
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # P-030 — and skip when this exact SHA already has a completed run that RAN
+    # this job. Only ever true on a push to `main`; see the `reuse` step.
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.reuse != 'true'
     # Browser SPAs build + test cross-platform; no Electron means no Windows
     # requirement, so CI runs on Linux (faster + cheaper).
     runs-on: ubuntu-latest
@@ -295,7 +388,8 @@ jobs:
     # runtime dependency closure and whose default for an UNRECOGNISED path is `true`, so
     # this can only skip a diff that is positively known to be render-safe.
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.needs_e2e == 'true'
+    # P-030 — and skip when this exact SHA already has a completed run that RAN it.
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.needs_e2e == 'true' && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -408,10 +502,30 @@ jobs:
         run: |
           code='${{ needs.changes.outputs.code }}'
           needs_e2e='${{ needs.changes.outputs.needs_e2e }}'
+          reuse='${{ needs.changes.outputs.reuse }}'
+          prior='${{ needs.changes.outputs.prior_run_url }}'
           ci='${{ needs.ci.result }}'
           e2e='${{ needs.e2e.result }}'
           docs='${{ needs.docs-check.result }}'
-          echo "code=$code | needs_e2e=$needs_e2e | ci=$ci | e2e=$e2e | docs-check=$docs"
+          echo "code=$code | needs_e2e=$needs_e2e | reuse=$reuse | ci=$ci | e2e=$e2e | docs-check=$docs"
+          # P-030 — the SAME SHA already has a completed run that RAN both heavy
+          # jobs, so this run deliberately did not repeat them. This is a THIRD
+          # kind of skip, distinct from P-008's docs-only and P-029's not-owed,
+          # and it is only ever reachable on a push to `main`.
+          #
+          # It is reported with the prior run's URL because a merge run that is
+          # green because it did NOTHING must never read the same as one that is
+          # green because it PASSED — a human needs to see what verified it.
+          if [ "$reuse" = 'true' ]; then
+            echo "Already verified by a completed, successful run of this workflow for this SHA:"
+            echo "  $prior"
+            {
+              echo '### required — OK (verified by a prior run)'
+              echo ''
+              echo "This commit was verified by **$prior**, which ran both the unit gate and the Playwright suite. The heavy jobs were not repeated (P-030)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if [ "$code" = 'false' ]; then
             if [ "$docs" = 'success' ]; then
               echo 'Docs-only change: docs-check passed → required OK.'

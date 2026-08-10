@@ -1,0 +1,12 @@
+{
+  "workflow_runs": [
+    {
+      "conclusion": "success",
+      "event": "push",
+      "head_sha": "7237b70efae5599e1284b04a0a277e9f96448006",
+      "html_url": "https://github.com/yasermostafaee/cg/actions/runs/31411394748",
+      "id": 31411394748,
+      "status": "completed"
+    }
+  ]
+}

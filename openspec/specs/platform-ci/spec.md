@@ -107,6 +107,41 @@ whole span, not of the merge commit alone.
 - **AND** whatever that span requires — the heavy jobs, and the E2E when any path in it
   can affect what renders — runs, even where an individual push in the span skipped it
 
+### Requirement: A merge run may reuse a prior run only on a positive, complete match
+
+On a push to the default branch ONLY, the workflow SHALL skip its heavy jobs when this
+workflow already has a run for the same `head_sha` that is `completed` AND `success` AND in
+which the unit-gate and E2E jobs BOTH actually RAN and succeeded. It SHALL NOT skip on any
+other basis. This exists because `dev` -> `main` is a fast-forward, so the merge commit is
+frequently the SAME SHA that already has a completed run.
+
+A prior run that was green having SKIPPED the E2E SHALL NOT satisfy this, because that is
+precisely the case the backstop above exists to catch. Every uncertainty — an API error, a
+missing permission, an unreadable or empty result, a job the guard cannot find — SHALL
+resolve to running everything.
+
+When the heavy jobs are skipped on this basis, the run SHALL report why, with the prior
+run's URL, in both its log and its job summary, so a run that is green because it did
+nothing is never indistinguishable from one that is green because it passed.
+
+#### Scenario: The tip's own run already ran everything
+
+- **WHEN** a fast-forward merge pushes to the default branch a commit whose run already
+  completed successfully with both the unit gate and the E2E executed
+- **THEN** the heavy jobs are skipped and the aggregator passes, citing the prior run's URL
+  in the run's log and summary
+
+#### Scenario: The tip's own run skipped the E2E
+
+- **WHEN** the prior run for that SHA was successful but its E2E job was skipped
+- **THEN** the merge run does NOT skip, and runs the full gate as that span's backstop
+
+#### Scenario: The guard cannot establish a match
+
+- **WHEN** the Actions API errors, the permission is absent, or the result is empty or
+  ambiguous
+- **THEN** every job runs, exactly as it would without the guard
+
 ### Requirement: A single required aggregator status gates merge
 
 The workflow SHALL expose ONE aggregator status check (`required`) intended to be

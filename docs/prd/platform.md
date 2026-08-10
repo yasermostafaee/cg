@@ -1370,3 +1370,88 @@ stakes), [[P-027]] (the push classifier this rides on), [[P-008]] (the docs/code
 uses), and the completeness backstop now recorded in CLAUDE.md and
 `openspec/specs/platform-ci/spec.md` — the daily `dev` → `main` merge classifies the whole span, so
 anything an individual push skipped is still caught there.
+
+## [~] P-030 — the `dev` → `main` merge re-runs a full gate against a SHA that already has a green one ⟨priority: medium⟩ — in progress: `.github/workflows/pr.yml` (the `reuse` step)
+
+**The symptom.** `dev` → `main` is a **`--ff-only`** merge, so `main`'s new HEAD is the **SAME
+COMMIT** as `dev`'s tip — **same SHA, same tree**. The push to `main` fires a full run against a tree
+that already has a completed green run.
+
+**The measured cost.** Roughly **15 runner-minutes** a time, **once a day**. On a private repo those
+minutes are metered, so this is a recurring bill for re-proving a tree nothing changed.
+
+⚠ **`[skip ci]` cannot help**, and this is why the fix has to be a workflow-level guard rather than a
+commit-message convention: **a fast-forward creates no commit** whose message could carry it.
+
+### The three-part match condition — and the third is the one a naive version gets wrong
+
+The guard asks the Actions API whether **this workflow** already has a run for the same `head_sha`,
+and may skip the heavy jobs **only** on a positive, complete match:
+
+1. **The run is for the same `head_sha`**, and is not this run (a run can never verify itself — on a
+   re-run it would otherwise find its own record and skip the work it was re-run to do).
+2. **`status: completed` AND `conclusion: success`.** A **cancelled** or in-progress run is **not a
+   result**: `concurrency` cancels PR runs and a burst can supersede a queued one, so the conclusion
+   is read explicitly rather than inferred from a run merely existing.
+3. 🔴 **The prior run must have actually EXECUTED what this run would need.** `e2e` is gated on
+   `needsE2e` ([[P-029]]), so **a `dev` run can be green having SKIPPED it** — a docs-only push
+   produces exactly that. And **the merge run is the completeness backstop** that would otherwise
+   catch the day's render changes. So: skip only when the prior run's **`ci` AND `e2e` both RAN and
+   succeeded**; if either was **skipped** there, do **not** skip here. **Fail toward running.**
+
+**Every uncertainty runs everything.** An API error, a missing permission, unreadable jobs, an
+ambiguous or empty result, a job renamed in the workflow without mirroring it in the guard — all
+resolve to `reuse=false`. The guard may only ever skip on a **positive, complete match**, never on
+the absence of a negative.
+
+**Scope: `push` to `main` only.** Not `dev`, not `pull_request`. Every `dev` push has its own SHA so
+it would never match anyway, but restricting it **states the intent** and keeps re-run requests
+predictable.
+
+### Acceptance
+
+- WHEN a `--ff-only` merge pushes to `main` a SHA whose `dev`-tip run **executed both** `ci` and
+  `e2e` green THEN the merge run **skips both heavy jobs** and `required` passes.
+- WHEN the prior run for that SHA was green but **SKIPPED `e2e`** THEN the merge run **does not
+  skip** — it runs the full gate, because it is that commit's backstop.
+- WHEN the API errors, the permission is missing, or the result is ambiguous or empty THEN
+  **everything runs**.
+- WHEN the guard skips THEN the run **says why, with the prior run's URL**, in **both** its log and
+  its **job summary**. 🔴 A requirement, not a nicety: **a merge run that is green because it did
+  nothing must never be indistinguishable from one that is green because it passed.**
+- The guard reuses the existing notion of a DELIBERATE skip in the `required` job (built for
+  [[P-029]]'s `needs_e2e`) rather than inventing a second "not run but fine" — extended, not
+  duplicated.
+- `actions: read` is added to the permissions block, which previously granted only `contents` and
+  `pull-requests`.
+
+### How it is verified
+
+The decision is a **pure module** (`tools/gate-hook/src/reuse-decision.mjs`), unit-tested against
+**REAL Actions API responses captured from this repository's own runs** — not invented shapes:
+
+- **both ran** — `c16d25f`, run `31408479929`: `ci` and `e2e` both executed, both green ⇒ **reuse**.
+- **e2e skipped** — `7237b70`, run `31411394748`: green, both heavy jobs `skipped` ([[P-029]]
+  classified the diff as unable to affect rendering) ⇒ **do NOT reuse**. This is the backstop case,
+  and it needed no construction: an ordinary docs-only push produces it.
+- **e2e failed** — `ab7d12e`, run `31406199136`: `ci` green, `e2e` `failure` ⇒ **do NOT reuse**.
+
+Plus a test that reads `pr.yml` itself and asserts the job names the guard matches on still exist
+there, so a rename fails loudly instead of silently turning the guard into a permanent
+"run everything".
+
+### ⚠ UNDISCHARGED — the live end-to-end run on `main`
+
+**Both directions are verified against real API data; NEITHER has been observed on a real `push` to
+`main` run, and CC cannot produce one.** CLAUDE.md is explicit that **CC never commits to, or merges
+into, `main`** — the owner performs that merge by hand — and the guard fires on **no other event by
+design** (constraint 1). So the one thing that cannot be self-tested here is the live firing.
+
+What that leaves unproven is narrow and one-directional: the `gh api` invocation and the
+`actions: read` grant have not been exercised on a runner. **Both fail SAFE** — an API error or a
+missing permission yields `reuse=false` and the full gate runs, i.e. exactly today's behaviour — so
+the untested path can cost minutes, never coverage.
+
+**To discharge:** on the next `dev` → `main` merge, read the `main` run's summary. It states either
+_"heavy jobs skipped … verified by \<url\>"_ or _"running the full gate — \<reason\>"_. Record which,
+with the run URL, here.

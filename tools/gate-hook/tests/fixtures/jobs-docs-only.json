@@ -1,0 +1,9 @@
+{
+  "jobs": [
+    { "conclusion": "success", "name": "Docs check", "status": "completed" },
+    { "conclusion": "success", "name": "Detect changed paths", "status": "completed" },
+    { "conclusion": "skipped", "name": "E2E (Playwright)", "status": "completed" },
+    { "conclusion": "skipped", "name": "Lint • Typecheck • Test • Build", "status": "completed" },
+    { "conclusion": "success", "name": "required", "status": "completed" }
+  ]
+}
