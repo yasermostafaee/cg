@@ -155,6 +155,10 @@ blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` 
       nag forever, and `point` was already optional (the multi-select editor omits it) so an absent
       diamond leaves no gap that could read as a rendering fault. ⚠ `keySourceId` is NOT removed
       from the schema — deprecated and never written; removing it is a migration (4.8).
+      **Linux e2e DISCHARGED:** <https://github.com/yasermostafaee/cg/actions/runs/31376780917> —
+      `ubuntu-latest`, commit `fd89922`, **`conclusion: success`, the `E2E (Playwright)` job COMPLETED
+      and green** (not skipped, not cancelled). That commit carries 1.8a and 1.8b in full, including
+      the restructured `live-source.spec.ts`.
 - [x] 1.9 Unit tests + a Designer E2E mapping each `#### Scenario` in
       `specs/designer-live-source/spec.md`.
 - [x] 1.10 **D-147 (a) — the aspect PRESET picker.** `expectedAspect` becomes a named picker over the
@@ -617,6 +621,11 @@ not exist today and justifies nothing now.
   `7e595ac`, **`conclusion: success`, the `E2E (Playwright)` job COMPLETED and green** (not
   skipped, not cancelled). That commit carries phase 2 in full, including the new
   `apps/runtime/tests/e2e/live-source-carrier.spec.ts` that 2.4 owes.
-  Phases 3–8 still owe their own.
+  **PHASE 3's DEBT IS DISCHARGED** —
+  <https://github.com/yasermostafaee/cg/actions/runs/31371520195>, `ubuntu-latest`, commit
+  `4f4853a`, `conclusion: success`, `E2E (Playwright)` COMPLETED and green.
+  **The 1.8a / 1.8b Inspector + preflight work is discharged** by
+  <https://github.com/yasermostafaee/cg/actions/runs/31376780917> (`fd89922`), cited beside 1.8b.
+  Phases 4–8 still owe their own.
 - [ ] 9.4 **Hardware:** the phase-6 `route://` demo is dischargeable here; **phase 7 is not** —
       see `design.md` §12.1, which is an owner decision, not work.
