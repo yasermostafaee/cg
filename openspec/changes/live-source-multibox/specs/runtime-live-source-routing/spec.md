@@ -163,6 +163,34 @@ surface SHALL present it as guaranteed.
   anywhere points at a source that no longer exists
 - **WHEN** one of those items is taken **THEN** the take is refused for that reason
 
+The assignments of a template SHALL be OWNED BY ITS LIBRARY ENTRY. Deleting the entry from the
+station SHALL delete them, once the removal is confirmed and never when it is refused. Re-importing
+the same template SHALL KEEP them — an author fixing something and re-exporting must not cost the
+operator every binding — and the surface SHALL SAY they were carried over, because the operator did
+nothing to produce them. An assignment for a plate id the re-imported version no longer declares
+SHALL be DROPPED: a dangling record can later match a plate it was never meant for.
+
+A refusal from the surface that deletes a library entry SHALL reach the operator IN THAT SURFACE.
+A reason rendered behind the dialog that produced it is not a reason the operator has been given.
+
+#### Scenario: Deleting a library entry takes its bindings with it
+
+- **WHEN** the operator deletes a template from the station **THEN** its plate bindings are deleted
+  with it, and no other template's bindings are touched
+- **WHEN** the deletion is REFUSED **THEN** the bindings are left exactly as they were, and the
+  reason is shown in the surface that refused it
+- **WHEN** a ROW holding the template is cleared **THEN** the library entry and its bindings are
+  unaffected
+
+#### Scenario: A re-import keeps the bindings, says so, and drops what no longer exists
+
+- **WHEN** the same template is imported again **THEN** its bindings survive and the surface states
+  that they were carried over from the previous import
+- **WHEN** the re-imported version no longer declares a plate **THEN** that plate's binding is
+  dropped and the operator is told
+- **WHEN** the re-imported version declares a plate the previous one did not **THEN** that plate
+  reads as unassigned
+
 #### Scenario: A dangling assignment at boot is pruned, not fatal
 
 - **WHEN** the assignments file names a source the catalog does not define **THEN** the bridge starts,

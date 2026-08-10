@@ -3,7 +3,12 @@ import type { TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { DraftChip } from '../../ui/DraftChip.js';
-import { currentSourceCatalog, sourcesVersion, subscribeSources } from '../sources/sourceStore.js';
+import {
+  assignmentsWereCarriedOver,
+  currentSourceCatalog,
+  sourcesVersion,
+  subscribeSources,
+} from '../sources/sourceStore.js';
 import {
   draftsVersion,
   effectivePlateSource,
@@ -76,6 +81,16 @@ const styles = {
   needs: { fontSize: '11px', color: colors.pending },
   scope: { color: colors.textMuted, fontSize: 'var(--r-text-sm)', margin: '0 0 var(--r-space-3)' },
   timing: { color: colors.pending, fontSize: 'var(--r-text-sm)', margin: 'var(--r-space-2) 0 0' },
+  /**
+   * A9 — the carried-over notice. MUTED, not amber: nothing needs attention,
+   * something merely happened that the operator did not do. Amber here would
+   * compete with the plates that genuinely still need a source.
+   */
+  carried: {
+    color: colors.textMuted,
+    fontSize: 'var(--r-text-sm)',
+    margin: '0 0 var(--r-space-3)',
+  },
   empty: { color: colors.textMuted, fontSize: 'var(--r-text-sm)', margin: 0 },
 } as const;
 
@@ -107,6 +122,16 @@ export function LivePlatesSection({
       <p style={styles.scope}>
         Set for the template, not this row — every row using it takes the same sources.
       </p>
+      {/*
+        A9 — a re-import KEEPS the bindings, and it has to SAY so. The owner met
+        it as a silent restore: the plates came back bound with no action and no
+        notice, which is indistinguishable from the product having invented them.
+      */}
+      {assignmentsWereCarriedOver(item.templateId) && (
+        <p style={styles.carried} data-plates-carried-over="">
+          These bindings were carried over from this template&rsquo;s previous import.
+        </p>
+      )}
       {catalog.sources.length === 0 ? (
         <p style={styles.empty}>
           No sources are defined on this station yet — define them under Live sources first.

@@ -361,6 +361,72 @@ the normal case on this panel, so leaving that unsaid would let an operator pres
 `Update`, see nothing change on air, and reasonably conclude it had not worked. The
 section says so while a plate draft is staged, and names the on-air case explicitly.
 
+### 2f. ⭐ ASSIGNMENTS ARE OWNED BY THE LIBRARY ENTRY (owner, 2026-08-10)
+
+**DECIDED after a template with live plates could not be deleted from the library at all.**
+Three rules, and each exists because the state it prevents is invisible.
+
+**1. Deleting the entry from the library deletes its assignments too.** That is what makes
+"delete from this station" mean something; without it there is state on this machine with
+nothing left that refers to it, and a later import of the same id silently inherits bindings
+nobody chose to keep. It runs ONLY after the removal is confirmed by its owner — a REFUSED
+deletion must leave the bindings exactly where they were, because the template is still there.
+
+**2. A re-import KEEPS its assignments — and SAYS SO.** The useful case is an author fixing
+something and re-exporting, with the operator not re-binding every plate. But the owner met
+that as a SILENT restore: the plates came back bound with no action and no notice, which is
+indistinguishable from the product having invented them. The surface now states, where the
+assignments appear, that they were carried over from a previous import.
+
+**3. 🔴 A plate id the new version no longer declares is DROPPED, at import.** A dangling
+record can later match a plate it was never meant for — the author re-uses `guest-1` for a
+different box and a binding nobody made comes back on air. Plates the new version declares and
+the old did not simply read as UNASSIGNED, which is the ordinary state of a plate nobody has
+bound. **What happened before this decision:** nothing. The import path did not consult the
+assignments at all, so a re-import both restored bindings silently (rule 2) and kept a binding
+for a plate that no longer existed (rule 3).
+
+### 2g. 🔴 THE REFUSAL NOBODY COULD SEE — measured, and it is GENERIC
+
+The reported symptom was that a template declaring live sources could not be deleted from the
+library: pressing the button did nothing and said nothing, while other entries in the same list
+deleted normally.
+
+**The mechanism, traced rather than assumed.** The deletion is REFUSED `in-use` while any stack
+item still references the template (`caspar-runtime.ts` `templateRemove`, and the mock's twin).
+The refusal was reported through `reportCommandError` → the **command toast**, which is
+`zIndex: 50`, while `Modal`'s backdrop is `zIndex: 1000` (`ui/Modal.tsx:58`,
+`features/status/CommandToast.tsx:15`). **The reason was rendered underneath the dialog that
+produced it.**
+
+⚠ **THE FIRST SUSPECT WAS WRONG, and that is worth recording.** The assignment store was not
+the blocker: nothing in the removal path read it. What made it look live-source-specific is the
+CONSTRUCTION of the feature — a template with plates is on a row by necessity, because binding
+its plates requires selecting it, which requires loading it (§2d) — so it is the one that meets
+`in-use`, while templates that were only imported delete freely. Clearing a row does not remove
+its item either; that is CLEAR, and the item stays on the row by design.
+
+🔴 **The invisibility is NOT this button's.** Any `reportCommandError` raised while a modal is
+open is behind it. Every refusal the template picker can produce now goes to the dialog's own
+pinned message region; the toast is kept for the SUCCESS line alone, which is a statement about
+a dialog the operator is leaving rather than a reason they must read.
+
+### 2h. TWO VERBS THAT SHARED ONE WORD
+
+The ROW's `REMOVE` takes a template off THAT ROW; the picker's took it out of the STATION's
+library, for every row, undoable only by re-importing the file. They read identically.
+
+**The picker's is renamed to `Delete from station`**, and its confirm names the fallout — the
+scope, the bound plate bindings that go with it, and that a row still holding it must be freed
+with the row's own REMOVE first. It uses the existing destructive treatment (`useConfirm` with
+`tone: 'remove'`), not a new one.
+
+**The row's word is deliberately unchanged.** It is accurate for what it does, and its own
+confirm already names the row it acts on (`LayerRow.tsx` — _"Remove “X” from Layer 95?"_).
+Renaming it as well would churn the layer table's fixed verb column (sized to "REMOVE",
+`layerTable.ts:41`) and every spec that presses it, for no additional clarity once the pair
+reads differently.
+
 ### 2a. Where this shape comes from — the plant's PREVIOUS automation
 
 **RECORDED 2026-08-10 (owner), and it is the reason §1a and §3's amendment are corrections rather

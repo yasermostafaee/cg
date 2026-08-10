@@ -2,11 +2,12 @@ import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
 import { liveSourceCarrierState, unassignedPlateIds, type TemplateInfo } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
-import { Modal, ModalAction } from '../../ui/Modal.js';
+import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { useConfirm } from '../../ui/useDialog.js';
-import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
+import { reportCommandSuccess } from '../status/commandFeedback.js';
 import {
   currentSourceAssignments,
+  forgetTemplateAssignments,
   sourcesVersion,
   subscribeSources,
 } from '../sources/sourceStore.js';
@@ -49,8 +50,42 @@ import { templateDisplayName } from '../library/templateName.js';
  * operator's own "no": no success flash, no error toast.
  *
  * R-028 part B — this dialog is the ONLY template list in the product, so
- * R-005's REMOVE lives here too. The bridge stays authoritative for the refusal
- * (refuse-while-referenced) and the wording is surfaced verbatim.
+ * R-005's library deletion lives here too. The bridge stays authoritative for the
+ * refusal (refuse-while-referenced) and the wording is surfaced verbatim.
+ *
+ * ── 🔴 A9 — TWO THINGS THIS SURFACE GOT WRONG, BOTH MEASURED ────────────────
+ *
+ * **1. The refusal was invisible.** A template still referenced by a row is
+ * refused `in-use` by the bridge (`caspar-runtime.ts` `templateRemove`, and the
+ * mock's twin), and this dialog reported that through `reportCommandError` — the
+ * COMMAND TOAST, which is `zIndex: 50` while `Modal`'s backdrop is `zIndex: 1000`
+ * (`ui/Modal.tsx:58`, `features/status/CommandToast.tsx:15`). The refusal was
+ * rendered UNDERNEATH the dialog that produced it, so pressing the button did
+ * nothing and said nothing.
+ *
+ * ⚠ **THAT IS GENERIC, NOT THIS BUTTON'S.** Any `reportCommandError` raised while
+ * a modal is open is behind it. Every refusal THIS dialog can produce now goes to
+ * the dialog's OWN pinned message region instead; the toast is kept only for the
+ * SUCCESS line, which is a statement about a dialog the operator is about to
+ * leave rather than a reason they must read.
+ *
+ * **2. Why it looked live-source-specific.** It is not, and the mechanism says
+ * why it looked it: a template with live plates is on a row BY CONSTRUCTION —
+ * binding its plates requires selecting it, which requires loading it — so it is
+ * the one that meets `in-use`, while templates that were only imported delete
+ * freely. Clearing a row does not remove its item (that is CLEAR, and the item
+ * stays on the row by design); the row's own REMOVE is what frees it.
+ *
+ * ── A9 — AND THE TWO VERBS NO LONGER SHARE ONE WORD ────────────────────────
+ *
+ * The ROW's `REMOVE` takes a template off THAT ROW; this one deletes it from the
+ * STATION'S library, for every row, undoable only by re-importing the file. This
+ * one is renamed, because it is the one whose meaning surprises — the row's verb
+ * is accurate for what it does and its own confirm already names the row it acts
+ * on (`LayerRow.tsx`, "Remove “X” from Layer 95?"). Renaming the row's word as
+ * well would churn the layer table's fixed verb column (sized to "REMOVE",
+ * `layerTable.ts:41`) and every spec that presses it, for no additional clarity
+ * once the pair reads differently.
  */
 
 const styles = {
@@ -143,6 +178,12 @@ export function useTemplatePicker(): {
   const [request, setRequest] = useState<PickRequest | null>(null);
   const resolver = useRef<((choice: TemplateChoice) => void) | null>(null);
   const { confirm, confirmDialog } = useConfirm();
+  /**
+   * A9 — the dialog's OWN message region. A refusal reported to the command
+   * toast is rendered under this modal's backdrop and never read; this is where
+   * a reason the operator must act on has to land.
+   */
+  const [message, setMessage] = useState<ModalMessage | null>(null);
   // D-137 / C-015 — SUBSCRIBED, unlike the template list beside it, because the
   // assignments are bridge-owned and a second console can bind a plate while
   // this dialog is open. The list is browser-local, so a snapshot is right for
@@ -171,29 +212,62 @@ export function useTemplatePicker(): {
    * refuses while any row still references the template) and supplies the
    * operator-facing reason; this only asks, then re-lists.
    */
-  const removeTemplate = useCallback(
+  const deleteTemplate = useCallback(
     async (template: TemplateInfo): Promise<void> => {
       const label = templateDisplayName(template);
+      const bound = currentSourceAssignments().assignments.filter(
+        (a) => a.templateId === template.templateId,
+      ).length;
       const ok = await confirm({
-        title: 'Remove this template?',
+        title: `Delete “${label}” from this station?`,
         // §6 — the word "library" named a panel that no longer exists. What is
         // true, and what the operator needs to know, is the SCOPE: this is not a
-        // local tidy-up, it removes the template everywhere.
-        body: `“${label}” is removed for every browser. This cannot be undone — the .vcg must be re-imported.`,
-        confirmLabel: 'Remove',
+        // local tidy-up, it deletes the template everywhere.
+        //
+        // A9 — …and the FALLOUT, named rather than discovered: the plate bindings
+        // go with it, because an assignment to an entry that no longer exists is
+        // state with nothing left that refers to it.
+        body:
+          `“${label}” is deleted for every browser. This cannot be undone — the .vcg must be ` +
+          `re-imported.` +
+          (bound > 0
+            ? ` Its ${String(bound)} plate binding${bound === 1 ? '' : 's'} ${bound === 1 ? 'is' : 'are'} deleted with it.`
+            : '') +
+          ` A row still holding it must be cleared with the row's own REMOVE first.`,
+        confirmLabel: 'Delete from station',
+        tone: 'remove',
       });
       if (!ok) return;
+      setMessage(null);
       try {
         const res = await window.cg.templates.remove({ templateId: template.templateId });
         if (!res.ok) {
-          reportCommandError(res.message ?? 'The template could not be removed.');
+          // IN THE DIALOG, not the toast. The entry is still listed, because it
+          // is still there — the two together are the honest report.
+          setMessage({
+            role: 'refusal',
+            text: res.message ?? 'The template could not be deleted.',
+          });
           return;
         }
-        reportCommandSuccess(`Removed “${label}”.`);
+        // The bindings go ONLY after the owner confirmed the removal. A refused
+        // deletion must leave them exactly where they were.
+        const refusal = await forgetTemplateAssignments(template.templateId);
+        reportCommandSuccess(`Deleted “${label}”.`);
+        if (refusal !== null) {
+          setMessage({
+            role: 'notice',
+            text: `“${label}” was deleted, but its plate bindings could not be cleared.`,
+            detail: refusal.text,
+          });
+        }
         const templates = await window.cg.templates.list();
         setRequest((current) => (current === null ? null : { ...current, templates }));
       } catch (err) {
-        reportCommandError(err instanceof Error ? err.message : 'Remove failed.');
+        setMessage({
+          role: 'refusal',
+          text: err instanceof Error ? err.message : 'The template could not be deleted.',
+        });
       }
     },
     [confirm],
@@ -201,6 +275,7 @@ export function useTemplatePicker(): {
 
   const settle = useCallback((choice: TemplateChoice): void => {
     setRequest(null);
+    setMessage(null);
     const resolve = resolver.current;
     resolver.current = null;
     resolve?.(choice);
@@ -211,6 +286,7 @@ export function useTemplatePicker(): {
       <Modal
         title={request.title}
         onClose={() => settle(null)}
+        {...(message !== null ? { message } : {})}
         footer={
           <>
             {/*
@@ -266,10 +342,10 @@ export function useTemplatePicker(): {
                     </Button>
                     <Button
                       variant="danger"
-                      aria-label={`Remove ${label}`}
-                      onClick={() => void removeTemplate(t)}
+                      aria-label={`Delete ${label} from this station`}
+                      onClick={() => void deleteTemplate(t)}
                     >
-                      Remove
+                      Delete from station
                     </Button>
                   </div>
                   <span style={styles.meta}>{t.templateType}</span>

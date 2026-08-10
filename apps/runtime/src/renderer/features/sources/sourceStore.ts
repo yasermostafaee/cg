@@ -197,3 +197,81 @@ export function __resetSourcesForTest(): void {
   assignments = EMPTY_SOURCE_ASSIGNMENTS;
   bump();
 }
+
+/**
+ * A9 — ASSIGNMENTS ARE OWNED BY THE LIBRARY ENTRY.
+ *
+ * Deleting a template from this station deletes its plate bindings with it. That
+ * is what makes "delete from this station" mean something: without it there is
+ * state on this machine with nothing left that refers to it, and a later import
+ * of the same id would silently inherit bindings nobody chose to keep.
+ *
+ * Called ONLY after the removal is CONFIRMED by its owner. A refused removal must
+ * leave the bindings exactly where they were — the template is still there.
+ */
+export async function forgetTemplateAssignments(templateId: string): Promise<CommitRefusal | null> {
+  const kept = assignments.assignments.filter((a) => a.templateId !== templateId);
+  if (kept.length === assignments.assignments.length) return null;
+  return commitSourceAssignments({ assignments: kept });
+}
+
+/**
+ * A9 — the templates whose bindings SURVIVED a re-import in this session.
+ *
+ * A re-import KEEPS its assignments: the useful case is an author fixing
+ * something and re-exporting, with the operator not re-binding every plate. But
+ * the owner met that as a silent restore — no action, no notice — so the surface
+ * has to SAY the bindings were carried over from a previous import.
+ *
+ * Session-local on purpose: it is a statement about what just happened in front
+ * of this operator, not a durable property of the template.
+ */
+const carriedOver = new Set<string>();
+
+/** True iff this template's bindings were carried over by an import this session. */
+export function assignmentsWereCarriedOver(templateId: string): boolean {
+  return carriedOver.has(templateId);
+}
+
+/**
+ * A9 — reconcile a template's assignments against the plate set it NOW declares,
+ * at import.
+ *
+ * 🔴 **A PLATE ID THE NEW VERSION NO LONGER DECLARES IS DROPPED.** A dangling
+ * record can later match a plate it was never meant for — the author re-uses
+ * `guest-1` for a different box, and a binding nobody made comes back to life on
+ * air. Plates the new version declares and the old did not simply read as
+ * unassigned, which is the ordinary state of a plate nobody has bound.
+ *
+ * Returns the plate ids it dropped, so the caller can say so.
+ */
+export async function reconcileAssignmentsForImport(
+  templateId: string,
+  declaredPlateIds: readonly string[],
+): Promise<readonly string[]> {
+  const declared = new Set(declaredPlateIds);
+  const mine = assignments.assignments.filter((a) => a.templateId === templateId);
+  if (mine.length === 0) {
+    carriedOver.delete(templateId);
+    return [];
+  }
+  const dropped = mine.filter((a) => !declared.has(a.plateId));
+  if (dropped.length > 0) {
+    await commitSourceAssignments({
+      assignments: assignments.assignments.filter(
+        (a) => a.templateId !== templateId || declared.has(a.plateId),
+      ),
+    });
+  }
+  // Anything that survived was carried over from the previous import, and the
+  // operator has to be told: they did nothing to produce it.
+  if (mine.length > dropped.length) carriedOver.add(templateId);
+  else carriedOver.delete(templateId);
+  bump();
+  return dropped.map((a) => a.plateId);
+}
+
+/** Test seam — forget the carried-over marks. */
+export function __resetCarriedOverForTest(): void {
+  carriedOver.clear();
+}

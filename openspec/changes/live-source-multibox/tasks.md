@@ -541,6 +541,48 @@ response for`) and says the one thing that is true of all of them. Checked as a 
       `livePlates.dom.test.ts` covers the control's wiring; the Runtime E2E covers
       edit-then-apply and edit-then-abandon.
 
+### 4f. 🔴 A TEMPLATE WITH LIVE PLATES COULD NOT BE DELETED FROM THE LIBRARY (owner, 2026-08-10)
+
+- [x] 4f.1 **The mechanism, TRACED — and the first suspect was wrong.** The deletion is refused
+      `in-use` while any stack item still references the template (`caspar-runtime.ts`
+      `templateRemove` and the mock's twin). The ASSIGNMENT STORE was not involved: nothing in
+      the removal path read it. What made it look live-source-specific is the construction of
+      the feature — a template with plates is on a row BY NECESSITY, because binding its plates
+      requires selecting it, which requires loading it — so it is the one that meets `in-use`
+      while templates that were only imported delete freely. Clearing a row does not remove its
+      item either; that is CLEAR, and the item stays on the row by design.
+- [x] 4f.2 🔴 **The refusal was INVISIBLE, and the invisibility is GENERIC.** It went to
+      `reportCommandError` → the command toast, `zIndex: 50`, while `Modal`'s backdrop is
+      `zIndex: 1000` (`ui/Modal.tsx:58`, `features/status/CommandToast.tsx:15`) — rendered
+      UNDER the dialog that produced it. **Anything routed through `reportCommandError` while a
+      modal is open is silent**, so this is not this button's defect alone. Every refusal the
+      picker can produce now lands in the dialog's OWN pinned message region; the toast keeps
+      the SUCCESS line only, which is a statement about a dialog the operator is leaving.
+- [x] 4f.3 **ASSIGNMENTS ARE OWNED BY THE LIBRARY ENTRY** (`design.md` §2f). Deleting the entry
+      deletes its bindings — only after the removal is CONFIRMED, so a refused deletion leaves
+      them untouched. A re-import KEEPS them, because the useful case is an author fixing
+      something and re-exporting with the operator not re-binding every plate — **and says so**,
+      because the owner met it as a silent restore. And a plate id the new version no longer
+      declares is DROPPED at import: a dangling record can later match a plate it was never
+      meant for. **What happened before:** nothing at all — the import path never consulted the
+      assignments, so both the silent restore and the stale binding were live.
+- [x] 4f.4 **The two verbs no longer share one word.** The picker's is `Delete from station`,
+      with a confirm naming the scope, the bindings that go with it, and the row's own REMOVE as
+      the way to free a row that still holds it — through the existing `useConfirm` +
+      `tone: 'remove'` treatment, not a new one. The ROW's word is deliberately unchanged: it is
+      accurate, its own confirm already names the row, and renaming it would churn the layer
+      table's fixed verb column (`layerTable.ts:41`) and every spec that presses it for no
+      additional clarity once the pair reads differently.
+- [x] 4f.5 **Clearing a ROW still leaves the library untouched** — R-021's flow imports once and
+      reuses, and the E2E asserts it in the same pass as the deletion.
+- [x] 4f.6 **The regression test FAILED against the code that had the bug**, which is the point
+      of writing it first: `templateRemoval.dom.test.ts`'s seven cases all failed before the fix
+      (the library verb did not exist under its new name, and the refusal never reached the
+      dialog). They cover: deletion works with plates or without, the bindings go with it,
+      another template's bindings survive, a refusal is SAID in the dialog, a thrown call is
+      said too, a refused deletion keeps the bindings, and the confirm names the fallout.
+      `templateImportAssignments.test.ts` covers the three import rules.
+
 **Five things settled while implementing 4.1–4.6, recorded because a later reader will otherwise
 re-derive them (or wonder why the code and §2's sketch differ). ALL FIVE SURVIVE THE RESHAPE
 UNCHANGED:**

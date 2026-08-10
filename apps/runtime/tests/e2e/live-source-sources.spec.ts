@@ -194,3 +194,54 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
     app.inspector.locator('[aria-label="Live plates"] [data-plate-unassigned]'),
   ).toHaveCount(2);
 });
+
+test('library: DELETE FROM STATION is a different verb from the row REMOVE, and it takes the bindings with it', async ({
+  app,
+}) => {
+  const page = app.page;
+  const dialog = page.getByRole('dialog', { name: 'Live sources' });
+
+  await registerTwoBox(app);
+  await page.getByRole('button', { name: 'Open live sources' }).click();
+  await dialog.getByLabel('New source name').fill('Studio A');
+  await dialog.getByRole('button', { name: 'Add' }).click();
+  await dialog.getByRole('button', { name: 'Done' }).click();
+
+  // Bind a plate, which is what makes this template the one the reported bug hit:
+  // binding requires SELECTING the template, which requires LOADING it onto a row.
+  const layer = await app.loadTemplate(TWO_BOX);
+  await app.selectLayerRow(layer);
+  await app.inspector
+    .locator('[aria-label="Live plates"]')
+    .getByLabel('Source for guest-1')
+    .selectOption({ label: 'Studio A' });
+  await app.applyEdits();
+
+  // ── THE REPORTED BUG: while a row still holds it, the deletion is REFUSED …
+  await app.openTemplatePicker();
+  const picker = app.templatePicker;
+  await picker.getByRole('button', { name: /Delete two box from this station/ }).click();
+  await page.getByRole('button', { name: 'Delete from station', exact: true }).click();
+  // … and the reason is IN THE DIALOG. It used to go to the command toast, which
+  // is rendered under the modal's backdrop — pressing the button did nothing and
+  // said nothing.
+  await expect(picker.locator('[data-modal-message]')).toContainText(/still use this template/);
+  await expect(app.templateRow(TWO_BOX)).toBeVisible();
+  await app.closeTemplatePicker();
+
+  // Clearing the ROW leaves the LIBRARY untouched — R-021 imports once and reuses.
+  await app.layerRow(layer).getByRole('button', { name: 'REMOVE' }).click();
+  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await app.openTemplatePicker();
+  await expect(app.templateRow(TWO_BOX)).toBeVisible();
+
+  // ── Now the library deletion goes through, and its confirm names the fallout.
+  await picker.getByRole('button', { name: /Delete two box from this station/ }).click();
+  const confirm = page.getByRole('dialog', { name: /Delete .* from this station\?/ });
+  await expect(confirm).toContainText('every browser');
+  await expect(confirm).toContainText('1 plate binding');
+  await confirm.getByRole('button', { name: 'Delete from station', exact: true }).click();
+
+  await expect(app.templateRow(TWO_BOX)).toHaveCount(0);
+  await app.closeTemplatePicker();
+});
