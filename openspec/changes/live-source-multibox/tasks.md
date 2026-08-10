@@ -77,6 +77,35 @@ blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` 
       over the plate's rect with an opaque backdrop present** — the assertion must be about the
       exported artifact, since that is what CEF loads, and a builder-level assertion would pass on a
       page whose root alpha is still opaque.
+- [ ] 1.5e ⭐ **THE PLATE GAINS A STROKE (owner, 2026-08-10; `design.md` §9a.1).** Colour + width,
+      same class as the box-shadow already allowed: paint on the TEMPLATE layer, OUTSIDE the hole,
+      live picture untouched. A coloured frame around each guest box is what a multi-box design
+      actually wants.
+      **REUSE `StrokeSchema` (`packages/shared-schema/src/primitives.ts:117-121`) unchanged — do NOT
+      invent a second stroke concept.** Checked, not assumed: that schema is `{ width, color, dash? }`
+      and has **NO alignment notion**; box kinds render it as a CSS `border`
+      (`scene-builder.ts:1133-1135`) and `@cg/template-runtime` sets **no `box-sizing` reset**, so the
+      CSS default `content-box` already paints it OUTSIDE the declared `width`/`height`. The declared
+      rect stays the content box, which is what `collectLiveSources` reads. If shapes ever gain an
+      alignment notion, a Live Source offers only `outside`.
+      Scope: the schema field, the **Inspector control**, the round-trip through **BOTH exporters**,
+      and a test that **the stroke SURVIVES the punch** (1.5c).
+- [ ] 1.5f 🔴 **THE PUNCH MUST NOT ERASE THE PLATE'S OWN PAINT — a requirement ON THE MECHANISM.**
+      An erase driven by the element's own painted alpha (which `destination-out` is) would eat the
+      stroke and leave nothing visible. **The punch is scoped to the HOLE'S FILL AREA; stroke and
+      shadow survive it.**
+      The two candidates are **not symmetric** about this and 1.5b's choice must weigh it: masking the
+      BACKDROP cannot erase the plate's own paint (the plate is not the eraser), while
+      `destination-out` must be scoped deliberately — e.g. the erase on an inner fill node with the
+      stroke painted by an outer one.
+      **1.5b's CEF measurement is EXTENDED accordingly: it must show BOTH real transparency over the
+      hole AND an intact stroke and shadow around it.** A mechanism that punches correctly and eats
+      its own stroke passes the old criterion and fails the feature — criterion 2 is an independent
+      way to fail, not a refinement of criterion 1.
+- [ ] 1.5g **Neither stroke nor shadow enters the hole rect**, so neither touches
+      `collectLiveSources`' geometry nor 1.8's OVERLAP check — pin that: **two plates whose strokes or
+      shadows overlap is NOT a fault; two plates whose HOLES overlap is.** The overlap check reads the
+      declared rect and must keep reading only that.
 - [ ] 1.5d **`border-radius` on a Live Source — revisit AFTER 1.5c, not before.** The Inspector
       withholds it today (a `video-placeholder` is a "bare" kind in `field-registry.ts` and never
       carried `BOX_DESCS`), and `design.md` §9a records why that is pending rather than settled:
@@ -85,6 +114,8 @@ blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` 
       earlier "rounding is impossible" framing was about the LONE-PLATE case (a plate over the
       programme with nothing behind it), where the corners have nothing to hide them and
       `MIXER FILL`/`CLIP` are rectangular — **that case stays unachievable in v1 either way.**
+      ⚠ When it lands, **the HOLE and the STROKE (1.5e) must round TOGETHER**: a rounded hole inside a
+      square frame is worse than either alone, because the frame stops following the picture.
 - [x] 1.7 Exempt a Live Source from `dropFullyOffFrameForExport`
       (`apps/designer/src/renderer/state/off-frame.ts:186-197`) and make out-of-frame a preflight
       **error** instead (C8). An element that is a contract must not be silently deleted.

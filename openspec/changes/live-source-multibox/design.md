@@ -1194,6 +1194,94 @@ single-file page**, under that CEF, with the live layer visible behind it. **Rec
 not the expectation.** Until it is run, no mechanism is chosen — that is the whole point of listing
 two.
 
+### 9a.1 ⭐ AMENDED 2026-08-10 — the plate gains a STROKE, and it CONSTRAINS the punch
+
+**DECIDED 2026-08-10 (owner).** A Live Source may carry a **stroke (colour + width)**. It is the same
+class as the box-shadow already allowed — paint on the TEMPLATE layer, OUTSIDE the hole, live picture
+untouched — and a coloured frame around each guest box is what a multi-box design actually wants.
+
+This is recorded INSIDE §9a rather than beside it because it **narrows which punch mechanism can be
+chosen**, and §9a was written before the stroke was asked for.
+
+⚠ **Note what §9a's own measurement established:** the plate is an EMPTY, GEOMETRY-ONLY `<div>` that
+paints nothing at all. **A stroke would be the first thing it ever paints**, which is exactly why the
+interaction below is not hypothetical.
+
+#### The element, as amended
+
+```
+video-placeholder = {
+  routeKey: LiveSourceId,          // ONE symbolic id (§1a)
+  keySourceId?: LiveSourceId,      // DEPRECATED (§1a) — parsed, never written
+  expectedAspect?: number,         // the author's ASSERTION (§3)
+  posterAssetId?: Id,
+  stroke?: { width, color, dash? },  // NEW — paints OUTSIDE the hole
+  // shadow: already allowed by the box-shadow amendment, same rule
+}
+```
+
+#### Constraint 1 — the stroke sits OUTSIDE the hole; the declared rect IS the transparent area
+
+A stroke drawn ON or INSIDE the edge covers part of the live picture, so the visible area becomes
+**smaller than the rect `collectLiveSources` declared** — and §3's crop-to-fill would then be computed
+for an area that is partly hidden. The author would be cropping a face to fit a box, part of which is
+under their own frame.
+
+**What already exists, checked rather than assumed.** There IS a stroke model:
+`StrokeSchema = { width, color, dash? }` (`packages/shared-schema/src/primitives.ts:117-121`), shared
+through `BoxStyleSchema` by shape / text / ticker / clock / sequence, and separately by `path`.
+🔴 **It has NO alignment notion — no inside / centre / outside anywhere.**
+
+**And it does not need one here.** Box kinds render a stroke as a CSS **`border`**
+(`scene-builder.ts:1133-1135`: `el.style.border = '<w>px <solid|dashed> <color>'`), and there is **no
+`box-sizing` reset anywhere in `@cg/template-runtime`** — so the CSS default `content-box` applies and
+the border is painted **OUTSIDE** the declared `width`/`height`. The declared rect stays the content
+box, which is exactly what `collectLiveSources` reads (`transform.size`).
+
+**So: this element REUSES `StrokeSchema` unchanged and takes the OUTSIDE behaviour the existing
+renderer already produces. No alignment field is invented, and no second stroke concept appears.** If
+a later change adds an alignment notion for shapes, a Live Source offers only `outside` — for the
+reason above, not as a limitation of the control.
+
+#### Constraint 2 — 🔴 THE PUNCH MUST NOT ERASE WHAT THE ELEMENT PAINTS OUTSIDE ITS HOLE
+
+**A REQUIREMENT ON THE MECHANISM, not a footnote.** An erase driven by the element's OWN PAINTED
+ALPHA — which is precisely what `mix-blend-mode: destination-out` is — would erase the element's own
+stroke along with everything else, and **nothing would be visible**: no frame, and a hole that ate the
+thing meant to outline it.
+
+> **The punch SHALL be scoped to the HOLE'S FILL AREA. The stroke and the shadow SHALL survive it.**
+
+**The two candidates are NOT symmetric about this, and that asymmetry is now part of the choice:**
+
+| Mechanism                                          | Behaviour under constraint 2                                                                                                                                                                                                                              |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Masking the BACKDROP with the plate rects**      | **Cannot** erase the plate's own paint — the plate is not the eraser. The stroke survives by construction.                                                                                                                                                |
+| **`mix-blend-mode: destination-out` on the plate** | **Must be scoped deliberately** to avoid eating its own stroke — e.g. the erase carried by an inner fill node while the stroke is painted by an outer one. Buildable, but it is now a thing the mechanism has to get right rather than a property it has. |
+
+#### The measurement plan, EXTENDED
+
+§9a's CEF measurement must now demonstrate **BOTH**:
+
+1. real transparency over the hole, with the live layer visible behind it; **and**
+2. **an INTACT stroke and shadow around it.**
+
+**A mechanism that punches correctly and eats its own stroke passes the old criterion and fails the
+feature.** Criterion 2 is not a refinement of criterion 1 — it is a second, independent way to fail.
+
+**The measurement has NOT been run and NO mechanism has been chosen** (§9a records both candidates
+precisely because the choice waits on it), so there is no settled decision to re-open here. This
+constraint arrives BEFORE the choice, which is the order that costs nothing.
+
+#### Two consequences, recorded where they will be looked for
+
+- **A rounded hole and a stroke must round TOGETHER**, or the frame will not follow the picture — see
+  the border-radius note below, which this qualifies.
+- **Neither stroke nor shadow enters the hole rect**, so neither affects `collectLiveSources`'
+  geometry nor task 1.8's OVERLAP check. **Two plates whose strokes or shadows overlap is not a
+  fault; two plates whose HOLES overlap is.** The overlap check reads the declared rect and must keep
+  reading only that.
+
 ### The consequence for BORDER RADIUS, recorded so the Inspector work can be revisited
 
 The Inspector currently offers **no `border-radius`** on a Live Source (a `video-placeholder` is a
@@ -1210,6 +1298,10 @@ matters and would otherwise be lost:
 
 Both cases are real; they are simply different, and the multi-box one is what the client authors.
 So the control is withheld pending the mechanism, not because the idea is wrong.
+
+⚠ **And when it lands, the HOLE and the STROKE must round TOGETHER** (§9a.1): a rounded hole inside a
+square frame — or the reverse — is worse than either alone, because the frame stops following the
+picture it is drawn around.
 
 ---
 
