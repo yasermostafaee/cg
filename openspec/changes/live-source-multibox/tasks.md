@@ -8,7 +8,7 @@ answered. **Both happened on 2026-08-08** — see `design.md` §12.1 and §12.2 
 decision at §12.4 folding the audio cluster into this wave, and §7 below (all four ticked).
 
 **Phase 1 is therefore ready to start.** Phases 2–7 stay gated on their own predecessors — the mock
-blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` §12.1) — never on
+blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` §12.1) — never on
 §0 again.
 
 - [x] 0.1 Author `proposal.md`, `design.md` and the spec deltas from the 2026-08-03 recon and the
@@ -168,7 +168,8 @@ blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` 
       ambiguity is what prompted the item. Built on the shared `Select` (no raw `<select>`).
       ⚠ **One schema change, a WIDENING:** `expectedAspect` becomes OPTIONAL. `— not specified —`
       writes it ABSENT, and absent is a real third state — under `design.md` §3 the field is the
-      author's ASSERTION and the bridge REFUSES the take when it disagrees with the mapping, so a
+      author's ASSERTION and the bridge REFUSES the take when it disagrees with the assigned source,
+      so a
       required field forced an author who cannot see the feed into a guess that can refuse a take on
       air. Every stored scene still parses; only the TS type gains `| undefined`.
 - [x] 1.11 **D-147 (b) — the "Fit plate to aspect" action.** Resizes so the EFFECTIVE aspect
@@ -182,9 +183,11 @@ blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` 
       or the plate already matches within tolerance.
 - [x] 1.12 **D-147 (c) — the `key id` hint.** States that the key id is SYMBOLIC and pairs with the
       fill id (`guest-1` / `guest-1-key`), that it is empty for any opaque source, and that BOTH ids
-      need their own entry in CG Control's mapping — the last of which is the part that surprises
-      people. A device-shaped id is a preflight error (1.8); the hint is what makes that obvious
-      before the author hits it.
+      need their own entry in CG Control — the last of which is the part that surprises people. A
+      device-shaped id is a preflight error (1.8); the hint is what makes that obvious before the
+      author hits it. ⚠ **SUPERSEDED and REMOVED by 4.8** (`design.md` §1a): the key device is a
+      property of the INSTALLATION's source, so the control and this hint are both gone. Kept here
+      because 4.8 is an explicit un-do and a reader has to be able to find what it undid.
 
 **PHASE 1 LANDED 2026-08-08.** What each task actually produced, so the next reader does not have to
 re-derive it:
@@ -199,8 +202,9 @@ re-derive it:
   `bindingTargetsElement` asks.
 - **1.3** the creation path that did not exist: a `live-source` `DesignerTool`, `defaultLiveSource`,
   the two toolbars, and the canvas placement — with ids handed out `live-1`, `live-2`, … swept
-  SCENE-WIDE (one installation-wide mapping resolves them, so a per-composition sweep would hand out a
-  duplicate that looks unique).
+  SCENE-WIDE (a plate id must be unique across the whole template, so a per-composition sweep would
+  hand out a duplicate that looks unique — and after the §2z reshape it is the handle the operator
+  binds against, which makes uniqueness operator-visible rather than merely internal).
 - **1.4** `RenderMode` on `RuntimeBootOptions`, threaded to `buildScene`, `compileZoneCss` and the two
   stamped-scope builders. **FIVE** boot sites name it, not four — `tools/template-fixtures/build.mjs`
   emits a real on-air artifact and was missing from the design's count.
@@ -223,8 +227,9 @@ re-derive it:
 - **1.10–1.12** are D-147, an amendment on top of the above rather than a new change: authoring UX on
   an unreleased element, changing no `design.md` decision and touching neither the wire nor the
   bridge. **One consequence is recorded rather than solved:** §3's fit-input fallback is
-  _mapping's `aspect` → `expectedAspect`_, and an absent `expectedAspect` on a mapping that states no
-  aspect leaves that chain with no terminal value. **Phase 6 owes that case a defined behaviour**
+  _the assigned source's `aspect` → `expectedAspect`_, and an absent `expectedAspect` on a source that
+  states no aspect leaves that chain with no terminal value. **Phase 6 owes that case a defined
+  behaviour**
   (6.3) — nothing in phase 1 depends on it, and it is written down here rather than silently
   widening §3.
 - **1.9** 28 designer unit tests + 12 template-runtime render tests + 15 schema tests, and
@@ -348,17 +353,25 @@ clip)` returns `null` — not an empty rect — when the two do not intersect, a
   refusals, the geometry and `renderedRect`. The 51-file / 286-test `@cg/caspar-bridge` suite runs
   green against the changed mock, which is what says the refusal did not narrow an existing form.
 
-## 4. Phase 4 — The mapping store and its settings surface
+## 4. Phase 4 — the live source stores and their CG Control surfaces
 
-- [x] 4.1 `SourceMappingsSchema` in `@cg/shared-ipc` — a discriminated union on producer `kind`
-      (`design.md` §2), never a free string. Each entry carries an OPTIONAL `aspect`: the
-      installation's statement of what the plant actually delivers, which is the **fit input** for
-      §3's crop-to-fill. `expectedAspect` on the element is a declaration to validate against, not
-      the fit input — they are different fields (`design.md` §3).
-- [x] 4.2 `SourceMappingStore` in the bridge: atomic mkdir → tmp → rename mirroring
-      `fixed-layers-store.ts:305-310`; **absent file ⇒ NO MAPPINGS, no built-in default**;
+⚠ **RESHAPED 2026-08-10 (owner), AFTER the first version shipped — `design.md` §2z and §2d.** Phase
+4 first landed ONE store keyed by the id a TEMPLATE declares. It now has TWO independent stores — a
+NAMED catalog the installation builds with no reference to any template, and per-template, per-plate
+ASSIGNMENTS joining them — and the binding surface lives in the **Inspector**, not in the sources
+modal. The tasks below are written as BUILT, not as originally planned. **The rework was taken
+immediately and cost nothing to migrate: no config file existed on any machine, and phase 6 resolves
+a plate through this shape, so the cost only grows.**
+
+- [x] 4.1 `SourceCatalogSchema` + `SourceAssignmentsSchema` in `@cg/shared-ipc` — the producer is a
+      discriminated union on `kind` (`design.md` §2), never a free string. Each catalog entry carries
+      an OPTIONAL `format`: the installation's statement of what the plant actually delivers, which
+      is the **fit input** for §3's crop-to-fill. `expectedAspect` on the element is a declaration to
+      validate against, not the fit input — they are different fields (`design.md` §3).
+- [x] 4.2 `source-catalog-store.ts` in the bridge: atomic mkdir → tmp → rename mirroring
+      `fixed-layers-store.ts:305-310`; **absent file ⇒ NO SOURCES, no built-in default**;
       present-but-invalid ⇒ **hard boot failure**.
-- [x] 4.3 A new `--source-mappings-path` flag, default `~/.cg-runtime/bridge-source-mappings.json`.
+- [x] 4.3 A `--source-catalog-path` flag, default `~/.cg-runtime/bridge-source-catalog.json`.
       ⚠ **NOT inside `templatesDir`** — `TemplateRegistry.loadPersisted` reads every `*.json` there
       as a template (`tools/caspar-bridge/src/template-registry.ts:75,87`).
 - [x] 4.4 Load + validate **before** the WebSocket binds, with a `{ value, source }` provenance
@@ -367,22 +380,146 @@ clip)` returns `null` — not an empty rect — when the two do not intersect, a
 - [x] 4.5 Validate the Live Source layer range disjoint from the fixed bank AND the reserved range,
       at load and at change, extending `validateFixedBank` (`fixed-layers-store.ts:145-166`).
 - [x] 4.6 A `sources.*` IPC channel with refusal reason codes derived from a wire const, so store
-      and channel cannot drift.
+      and channel cannot drift. **FOUR channels plus two publish channels after the reshape** —
+      `config` / `set-config` / `assignments` / `set-assignments`, `config-changed` /
+      `assignments-changed`.
+- [x] 4.7 The CG Control surface, modelled on `DelimitersModal`: **no optimistic local update**
+      (`delimiterStore.ts:134-140`) and an older-bridge translation for the refusal every station
+      whose bridge predates this feature will hit (`:162-171`). The entry editor carries the
+      source's `format` (the `ChannelInput` → `Format` vocabulary,
+      `docs/recon/ciab-client-tools.json`) and, on the DECKLINK arm, the optional `keyDevice` —
+      §1a/§3a made operable: this is where an installation says "Studio A is a fill/key pair at
+      1080i5000".
+- [x] 4.8 ⚠ **UN-DO, filed explicitly rather than deleted silently (owner, 2026-08-10, `design.md`
+      §1a).** Remove the Inspector's **`key id` control and its hint** — D-147 task (c), landed as
+      1.12 — because a template declares ONE id and the fill/key pair is a property of the
+      INSTALLATION's source (4.1/4.7). This is the phase that owns that surface, so the removal
+      belongs here and not wherever it is next noticed.
+      **What must NOT happen with it:** `keySourceId` is NOT removed from
+      `VideoPlaceholderElementSchema`. It shipped, it is optional, and deleting it is a MIGRATION.
+      It becomes DEPRECATED — never written by a new document, still parsed so every stored scene
+      keeps loading — and `collectLiveSources` stops emitting `keySourceId` / `keyDynamic` on the
+      declaration. A control that stops being written but stays on screen is worse than either
+      state, which is why this is a task and not a footnote.
+      **Landed in two halves, and the split is worth naming.** The Inspector's control and its
+      hint went in `fd89922` (the Live Source Inspector commit, which implemented the §1a docs
+      decision as it removed everything else a plate cannot honour). This phase closed the other
+      half: `collectLiveSources` stops emitting `keySourceId` AND `keyDynamic`,
+      `VideoPlaceholderElementSchema.keySourceId` is marked DEPRECATED in place, and
+      `LiveSourceDeclarationSchema.keyDynamic` is WIDENED to optional — it had to stop being
+      required rather than sit pinned at `false`, because a required field that is always the same
+      value is a field that still looks like it means something. A KEY-role binding still parses
+      and now reaches nothing, which the vcg-format test asserts by name.
+
+### 4a. ⭐ THE RESHAPE — what it changed, as built (owner, 2026-08-10)
+
+- [x] 4a.1 **The catalog is a LIST OF NAMED DEFINITIONS**, no longer keyed by a template's id. Each
+      entry: an installation-generated `id`, a REQUIRED human `name`, `format?`, `aspect?`,
+      `producer`. `nextSourceId` is random and collision-checked so **an id is never reused** — a
+      re-issued id is a stale reference re-binding silently to a source nobody chose. A duplicate
+      NAME is refused (`duplicate-name` beside `duplicate-id`): the name is the only handle the
+      picker shows.
+- [x] 4a.2 **A SECOND STORE holds the assignments** — template → plate → source id — BRIDGE-side
+      beside the template registry, because the bridge resolves a plate at take. Same atomic
+      mkdir → tmp → rename discipline, the same absent/invalid rules, its own
+      `--source-assignments-path` flag (default `~/.cg-runtime/bridge-source-assignments.json`), and
+      the same warning that it must NOT sit inside `templatesDir`
+      (`template-registry.ts:75,87` reads every `*.json` there as a template).
+- [x] 4a.3 **A template's declared `sourceId` is a PLATE IDENTIFIER**, restated in the designer spec
+      §1/§2 and in `design.md` §3. The schema field is NOT renamed — that is a scene migration — and
+      the rect, `expectedAspect` and every preflight rule attached to it are unchanged.
+- [x] 4a.4 **THE THREE CASES, all behaviours rather than open questions** (`design.md` §2c):
+      **(a) a plate with no assignment** — the ordinary state of a freshly imported template; the
+      template picker row NAMES which plates are unassigned (not a count), and 6.7's refusal is
+      extended from a missing MAPPING to a missing ASSIGNMENT.
+      **(b) deleting a source that is assigned** — allowed, cascaded bridge-side in the same
+      operation, REPORTED at the moment of deletion naming the templates that referenced it, and
+      those plates read as needing a source. REMOVED rather than tombstoned, and `design.md` §2c
+      records why. The same prune is the boot-time reading of two files that disagree — pruned
+      loudly on the boot line, never a boot failure.
+      **(c) one source on two plates** — PERMITTED, and recorded as a RECON question for phase 6's
+      measurement session (a DECKLINK input may refuse a second open); **until it is answered the UI
+      presents it as guaranteed nowhere.**
+- [x] 4a.5 **`C-022`'s acceptance updated**: the read-only HTTP endpoint now serves the NAMED list,
+      which is strictly better for playout — a rundown wants names, not ids invented by whichever
+      template happened to be authored first.
+- [x] 4a.6 **`R-048`'s layering stated in both directions**: the assignment is the TEMPLATE-LEVEL
+      default; R-048's fast on-air swap is a PER-RUN OVERRIDE on top of it, and the override does
+      **NOT write back** — an emergency substitution must never silently become the permanent
+      configuration.
+
+### 4b. ⭐ WHERE THE BINDING LIVES — corrected after use (owner, 2026-08-10)
+
+The first implementation put BOTH jobs in the Live sources modal. With two templates imported it
+already listed **six plates and scrolled** before a single source existed, and nothing on the surface
+was the thing the operator opened it to do.
+
+- [x] 4b.1 **The modal keeps ONE job** — define sources (name, producer kind, format, DECKLINK key
+      device) and the LAYER BAND. The TEMPLATE PLATES section is gone entirely.
+- [x] 4b.2 **The Inspector gains `LIVE PLATES`** for the selected template: one row per declared
+      plate, its source picker, and its unassigned marker. Built on the panel's existing field
+      patterns (`cg-inspector-section` + the `cg-field` select), no new control invented. A template
+      that declares no plate renders NO section at all.
+- [x] 4b.3 **The TEMPLATE-LEVEL scope is stated in the section**, in one line and not a tooltip:
+      _"Set for the template, not this row — every row using it takes the same sources."_ Editing it
+      from one row changes what other rows carrying the same template will do, and an operator must
+      not discover that by surprise on air.
+- [x] 4b.4 **A template not on a row cannot be assigned, and that is the DECISION** — recorded, not
+      omitted. Under R-028 every template that will be used is on a declared row, so loading it is
+      the natural first step, and the take would refuse an unassigned plate anyway.
+
+### 4c. 🔴 THE REFUSAL THE OPERATOR ACTUALLY MET — `invalid request for sources.set-config`
+
+- [x] 4c.1 **The cause, reproduced rather than guessed.** The string is the BRIDGE's own frame
+      validator (`bridge.ts` — `invalid request for ${frame.channel}`), which rejects a payload that
+      does not parse against the channel's request schema. It is **not a typo, it is a STATE**: the
+      browser was talking to a bridge PROCESS built before this channel's shape changed, so the
+      payload was legal in the page and rejected on the wire. `unknown channel` was already
+      translated — the case where the bridge has never heard of the feature — and this is its
+      sibling, where the bridge knows the channel and disagrees about its shape.
+- [x] 4c.2 **Two payload bugs in the same class, found and fixed with it**, because each produced
+      that same bare message from a bridge that was perfectly up to date: a fresh `ndi` / `media`
+      producer was created with an EMPTY name (its own `z.string().min(1)` rejects it), and the
+      numeric controls accepted `0` for `channel` / `device` / `keyDevice` (all
+      `z.number().int().positive()`). **A control must not be able to produce a value the contract
+      forbids** — the floor is now the schema's own, and the text fields hold a draft and commit
+      only a non-empty value.
+- [x] 4c.3 **NO REFUSAL ON THIS SURFACE SHOWS A WIRE IDENTIFIER.** `sourcesReasonMessage` maps
+      EVERY member of both reason unions to an operator sentence, `satisfies
+Record<Reason, string>` so a new code cannot ship without one; `sourcesTransportMessage`
+      catches all three frame-level answers (`unknown channel`, `invalid request for`, `invalid
+response for`) and says the one thing that is true of all of them. Checked as a SET, not one
+      by one.
+
+### 4d. ⭐ TWO TEMPLATES NAMED THE SAME — `R-040`'s class on a second surface
+
+- [x] 4d.1 Both of the owner's templates rendered as `seghab` in the Inspector heading and could not
+      be told apart. `templateDisplayName` prefers the imported FILE name, and two packages can
+      arrive from files called the same thing; the `templateId` that separates them was on the
+      heading's `title` attribute, which is to say nowhere an operator looks. The heading now carries
+      a short id STUB — **only when another template in this browser's registry shares the display
+      name**, because a suffix on every heading is noise on the overwhelmingly common single-template
+      case.
+- [x] 4d.2 **SAME CLASS, DIFFERENT ROOT CAUSE, and `R-040` is cross-referenced saying exactly that.**
+      R-040 is `sequenceItemNamespace` colliding two same-named sequence ELEMENTS inside ONE
+      template's field tree; this is two same-named TEMPLATES. Neither fix reaches the other, so this
+      one is recorded ON R-040 rather than folded into it.
 
 **Five things settled while implementing 4.1–4.6, recorded because a later reader will otherwise
-re-derive them (or wonder why the code and §2's sketch differ):**
+re-derive them (or wonder why the code and §2's sketch differ). ALL FIVE SURVIVE THE RESHAPE
+UNCHANGED:**
 
 1. **ONE format, at the ENTRY — the DECKLINK arm's own `format` is NOT carried.** §2's shape block
    is pre-amendment on that line: it showed `format?` on the decklink arm AND, after the 2026-08-10
    amendment, `format?` on the entry. Carrying both would be two spellings of one fact with nothing
    to say which one the crop was computed from — precisely the drift §3a's decision exists to
-   prevent. `tasks.md` 4.7's own wording already names only `keyDevice` on that arm.
+   prevent. A test asserts the arm strips it.
 2. **`ChannelInput` → `Format` has 37 values, not 39.** `design.md` §3a said 39; the list it quotes
    was always right and is 37 long, and the artifact was re-counted (`docs/recon/ciab-client-tools.json`).
    §3a is corrected in place. `sources.test.ts` pins the count and pins that **AUTO is the only
    format yielding no aspect** — a format added without a raster beside it would otherwise be
    indistinguishable downstream from an operator who chose AUTO.
-3. **`SourceMappingStore` is module functions, not a class** — because 4.2 names
+3. **The bridge stores are module functions, not classes** — because 4.2 names
    `fixed-layers-store.ts` as the model and that store IS module functions: pure exported
    validators, the value in force held by `CasparRuntime`, persistence in `bridge.ts` after the ok.
 4. **The layer band is DECLARED, never defaulted.** §4 says "declared config", so an absent band
@@ -400,41 +537,22 @@ re-derive them (or wonder why the code and §2's sketch differ):**
    validator the boot path calls, against the SAME bank and reserved list resolved once in
    `createBridge`.
 
-- [x] 4.7 A CG Control settings modal modelled on `DelimitersModal`: **no optimistic local update**
-      (`delimiterStore.ts:134-140`) and an older-bridge translation for the unknown-channel refusal
-      (`:162-171`), which every station whose bridge predates this feature will hit.
-      **AMENDED 2026-08-10 — the modal's entry editor carries the mapping's `format` (the
-      `ChannelInput` → `Format` vocabulary, `docs/recon/ciab-client-tools.json`) and, on the DECKLINK
-      arm, the optional `keyDevice`. Both are the amendment in §1a/§3a made operable: this modal is
-      where an installation now says "guest-1 is a fill/key pair at 1080i5000".**
-- [x] 4.8 ⚠ **UN-DO, filed explicitly rather than deleted silently (owner, 2026-08-10, `design.md`
-      §1a).** Remove the Inspector's **`key id` control and its hint** — D-147 task (c), landed as
-      1.12 — because a template now declares ONE id and the fill/key pair is a property of the
-      MAPPING (4.1/4.7). This is the phase that owns that surface, so the removal belongs here and
-      not wherever it is next noticed.
-      **What must NOT happen with it:** `keySourceId` is NOT removed from
-      `VideoPlaceholderElementSchema`. It shipped, it is optional, and deleting it is a MIGRATION.
-      It becomes DEPRECATED — never written by a new document, still parsed so every stored scene
-      keeps loading — and `collectLiveSources` stops emitting `keySourceId` / `keyDynamic` on the
-      declaration. A control that stops being written but stays on screen is worse than either
-      state, which is why this is a task and not a footnote.
-      **Landed in two halves, and the split is worth naming.** The Inspector's control and its
-      hint went in `fd89922` (the Live Source Inspector commit, which implemented the §1a docs
-      decision as it removed everything else a plate cannot honour). This phase closed the other
-      half: `collectLiveSources` stops emitting `keySourceId` AND `keyDynamic`,
-      `VideoPlaceholderElementSchema.keySourceId` is marked DEPRECATED in place, and
-      `LiveSourceDeclarationSchema.keyDynamic` is WIDENED to optional — it had to stop being
-      required rather than sit pinned at `false`, because a required field that is always the same
-      value is a field that still looks like it means something. A KEY-role binding still parses
-      and now reaches nothing, which the vcg-format test asserts by name.
+**And a sixth, which the reshape ADDED and which is the reason it landed in one place:** the PURE
+VALIDATORS live in `@cg/shared-ipc` — `validateSourceCatalog`, `validateSourceAssignments` and
+`pruneAssignmentsForCatalog` — so the bridge and the offline mock share ONE definition of a legal
+catalog, a legal assignment, and what a deletion orphans. Only load / save / provenance stayed
+bridge-side, because only that half needs a filesystem. **A seventh, learned from a failing E2E:**
+the mock's `setSourceCatalog` must read the assignments BEFORE writing the new catalog — its
+`sourceAssignments()` prunes against the catalog in force, so reading after the write reports
+NOTHING dropped and the deletion cascades silently, which is the one thing the report exists to
+prevent.
 
-**Phase 4 LINUX E2E — DISCHARGED.**
+**Phase 4 LINUX E2E — the pre-reshape run, kept for the record.**
 [github.com/yasermostafaee/cg/actions/runs/31384965705](https://github.com/yasermostafaee/cg/actions/runs/31384965705)
 — `dev` @ `37de4a6`, `conclusion: success`, `E2E (Playwright)` job **success** (not skipped, not
-cancelled). That commit is the tip of the phase-4 push and carries all three of its commits
-(`4b8e8ca` the store and wire contract, `aad1314` the CG Control surface, `37de4a6` the 4.8 un-do),
-so the run covers the whole phase. The suite it ran includes the new
-`apps/runtime/tests/e2e/live-source-mapping.spec.ts`.
+cancelled). ⚠ **It does NOT discharge the reshape**: that run covers the three pre-reshape commits
+(`4b8e8ca`, `aad1314`, `37de4a6`) and says nothing about a later diff. The reshape owes its own
+completed green Linux run, cited beside 9.3a.
 
 ## 5. Phase 5 — Ownership (requires phase 3)
 
@@ -479,13 +597,13 @@ so the run covers the whole phase. The suite it ran includes the new
 - [ ] 6.3 ⚠ **Define the case where NEITHER side states an aspect (D-147, 2026-08-08).** §3's fit
       input is the MAPPING's `aspect`, falling back to `expectedAspect`. D-147 made
       `expectedAspect` OPTIONAL — an author who cannot see the feed may now decline to assert — so a
-      mapping with no `aspect` and an element with no `expectedAspect` leaves the chain with no
+      source with no `aspect` and an element with no `expectedAspect` leaves the chain with no
       terminal value. Pick and record the behaviour (assume the hole's own aspect ⇒ no crop; or
       refuse the take with a distinct errorCode). Not solved in phase 1 and not silently folded into
       §3.
 - [ ] 6.3 The aspect fit: **crop-to-fill** — scale to cover the hole preserving proportions, clip
-      the overflow — driven by the MAPPING's `aspect`, falling back to `expectedAspect` only where
-      the mapping states none. Refuse the take with a distinct errorCode when the two disagree
+      the overflow — driven by the ASSIGNED SOURCE's `aspect`, falling back to `expectedAspect` only
+      where that source states none. Refuse the take with a distinct errorCode when the two disagree
       (`design.md` §3). Pillarbox was weighed and **rejected**: bars inside a designed frame read as
       a fault on air.
 - [ ] 6.3a **NARROWED 2026-08-03 — coordinate space and composition order are SETTLED by
@@ -548,14 +666,24 @@ so the run covers the whole phase. The suite it ran includes the new
 - [ ] 6.6 `mixerClear` on teardown — mixer state survives `CLEAR`
       (`command-builder.ts:128-130`, measured on hardware), so omitting it leaves a `FILL` a later
       graphic inherits.
-- [ ] 6.7 The take refuses legibly with a distinct `errorCode` when a declared id has no mapping —
-      never a silent empty hole on air (`docs/prd/caspar.md:396-397`).
+- [ ] 6.7 The take refuses legibly with a distinct `errorCode` when a declared plate has **no
+      ASSIGNMENT** — never a silent empty hole on air (`docs/prd/caspar.md:396-397`).
+      ⚠ **EXTENDED 2026-08-10 by the §2z reshape.** The wording assumed a missing MAPPING, which was
+      the only way to fail before. There are now TWO ways and the refusal must NAME THE PLATE in
+      both: a plate that was never assigned (the ordinary state of a freshly imported template), and
+      a plate whose assignment the delete CASCADE removed when its source was retired (§2c). They
+      resolve to ONE state — unassigned — deliberately: a second "assigned, but not really" state is
+      one every consumer would have to learn and could get wrong.
 - [ ] 6.8 The two-box `route://` demo on real hardware, which needs no capture card.
 - [ ] 6.9 ⭐ **R-048 — swap a plate's input WHILE THE TEMPLATE IS ON AIR. A CLIENT REQUIREMENT**,
       filed in `docs/prd/runtime.md` and implemented here, the same pattern D-147 used for phase 1.
-      A PER-ITEM OVERRIDE — the installation mapping is untouched, exactly like the position
-      override — replacing `producer` on ONE `#liveLayers` record and re-issuing on that same slot.
-      The template's HTML is never touched.
+      A PER-ITEM OVERRIDE — the template's ASSIGNMENT and the installation's CATALOG are both
+      untouched, exactly like the position override — replacing `producer` on ONE `#liveLayers`
+      record and re-issuing on that same slot. The template's HTML is never touched.
+      ⚠ **STATE THE LAYERING IN THE ITEM AND IN THE UI (§2z / §2d):** the ASSIGNMENT is the
+      TEMPLATE-LEVEL default, shared by every row carrying that template; this swap is the PER-RUN
+      override on top of it; and the override **does NOT write back**, because an emergency
+      substitution must never silently become the permanent configuration.
 - [ ] 6.9a **A REPLACE, never a clear-then-add.** `PLAY` on the occupied layer substitutes the
       producer in place. A `CLEAR` then a `PLAY` that fails is the `B-126` window arriving during an
       emergency: a destructive step committed before the constructive one was known to succeed. On
@@ -618,12 +746,12 @@ The owner's 2026-08-10 session recorded the plant's PREVIOUS automation (lives c
 Control, saved as DB presets, read by the playout application into its rundown — `design.md` §2a).
 Four things came out of it, and only ONE is implemented here:
 
-| Item                                                                | Where it lives                                          |
-| ------------------------------------------------------------------- | ------------------------------------------------------- |
-| **R-048** — swap a plate's input while ON AIR                       | **HERE**, phase 6 (tasks 6.9–6.9f). Client requirement. |
-| **C-022** — the source list served READ-ONLY over HTTP              | `docs/prd/caspar.md`, depends on this change's phase 4  |
-| **C-023** — a confidence thumbnail per live source                  | `docs/prd/caspar.md`, rides `C-016`                     |
-| **C-021** — SUBJECT AMENDED to a mapping-level fill/key device pair | `docs/prd/caspar.md`                                    |
+| Item                                                               | Where it lives                                          |
+| ------------------------------------------------------------------ | ------------------------------------------------------- |
+| **R-048** — swap a plate's input while ON AIR                      | **HERE**, phase 6 (tasks 6.9–6.9f). Client requirement. |
+| **C-022** — the NAMED source list served READ-ONLY over HTTP       | `docs/prd/caspar.md`, depends on this change's phase 4  |
+| **C-023** — a confidence thumbnail per live source                 | `docs/prd/caspar.md`, rides `C-016`                     |
+| **C-021** — SUBJECT AMENDED to a source-level fill/key device pair | `docs/prd/caspar.md`                                    |
 
 Also recorded, so neither is re-proposed: a rundown INSIDE this Runtime was **rejected** (noted on
 `C-002` — CIAB owns the programme bed, and two applications each believing they own the channel is

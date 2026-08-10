@@ -16,7 +16,7 @@ async function invokeRoute(
   req: unknown,
   fixedLayersPath?: string,
 ): Promise<unknown> {
-  const routes = buildRoutes(b.runtime, undefined, fixedLayersPath);
+  const routes = buildRoutes(b.runtime, { fixedLayersPath });
   const route = routes.get(channelName);
   if (route === undefined) throw new Error(`no route for ${channelName}`);
   return route.handle(req);

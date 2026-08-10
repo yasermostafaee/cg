@@ -382,39 +382,61 @@ layer is NOT knowably free, and real CasparCG goes silent for empty layers (B-05
 restart-misadoption limit (recorded in `openspec/changes/runtime-protect-video-layers/design.md`):
 both need the bridge to reason about producer KINDS it did not place.
 
-## [~] C-015 — Live Source routing: map Live Source ids to DECKLINK / ROUTE / media / NDI (fill+key capable) and composite them behind the template ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (design + phases 1–4 landed — authoring, the declaration carrier, the mock, and the MAPPING STORE with its CG Control surface, which is what makes a symbolic id resolve to a real producer; DECKLINK / NDI / fill+key split out to [[C-021]])
+## [~] C-015 — Live Source routing: define the installation's live sources, assign one to each template plate, and composite them behind the template ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (design + phases 1–4 landed — authoring, the declaration carrier, the mock, and the TWO SOURCE STORES with their CG Control surfaces, which is what makes a plate resolve to a real producer; DECKLINK / NDI / fill+key split out to [[C-021]])
 
 **What:** The Designer track is adding a "Live Source" element — a template region exported as a
-FULLY TRANSPARENT hole plus metadata (geometry in scene px, a source id, an optional key source
-id, expectedAspect, and whether the id is DYNAMIC/field-bound). When an item whose template
-declares Live Sources is taken, the BRIDGE places each Live Source's mapped source on its own
-CasparCG layer BELOW the template's layer, geometrically behind the hole. The Runtime settings
-expose the installation's source-id → concrete source mapping: a DECKLINK input, another
-channel/layer via the ROUTE producer, a media file, or an NDI source.
-**Why:** An HTML template cannot render live video; CasparCG composites layers. The template
-stays portable — it names sources by id only (Cinegy's Live ID model); mapping id → concrete
-source is an INSTALLATION concern configured in the Runtime.
+FULLY TRANSPARENT hole plus metadata (geometry in scene px, a PLATE id, expectedAspect, and whether
+the id is DYNAMIC/field-bound). When an item whose template declares Live Sources is taken, the
+BRIDGE places each plate's ASSIGNED source on its own CasparCG layer BELOW the template's layer,
+geometrically behind the hole.
+
+⭐ **RESHAPED 2026-08-10 (owner, `live-source-multibox` design.md §2z / §2d).** The installation
+builds its list of lives **INDEPENDENTLY**, with no reference to any template: each entry carries a
+human NAME ("Studio A", "Baku", "Skype 1") beside its producer — a DECKLINK input, another
+channel/layer via the ROUTE producer, a media file, or an NDI source. Separately, each imported
+TEMPLATE gets, **per live plate, a property naming one of those defined sources**, set once per
+template in the **Inspector** when that template is selected.
+
+**Why the join is EXPLICIT rather than a name match.** Binding by name silently requires the AUTHOR
+to guess the installation's naming convention, which contradicts this design's own principle that
+the Designer knows nothing about the installation. The author names plates for the LAYOUT, the
+installation names sources for what they ARE, and one deliberate operator action joins them.
+**Why at all:** An HTML template cannot render live video; CasparCG composites layers. The template
+stays exactly as portable as before — it names its own plates and never a device — and resolving a
+plate to a concrete source is an INSTALLATION concern configured in the Runtime.
 **Acceptance:**
 
-- WHEN the Runtime settings expose a source-id → source mapping THEN a source can be any of: a
-  DECKLINK input device, another channel/layer via the ROUTE producer, a media file from the
-  CasparCG media folder, or an NDI source (subject to the NDI note below)
+- WHEN the Runtime settings expose the installation's live source list THEN each entry carries a
+  human NAME and a producer that can be any of: a DECKLINK input device, another channel/layer via
+  the ROUTE producer, a media file from the CasparCG media folder, or an NDI source (subject to the
+  NDI note below). The list is built with NO reference to any template
+- WHEN a template with live plates is selected THEN the Inspector offers, per plate, a picker over
+  those named sources; the assignment is TEMPLATE-LEVEL (shared by every row carrying that template)
+  and the surface SAYS SO where it is made
+- WHEN a source that plates are assigned to is REMOVED THEN the removal is allowed, the assignments
+  it orphans are dropped in the same operation, and the surface names at that moment which templates
+  referenced it — an assignment that dangles until air is the failure this feature exists to prevent
+- WHEN one source is assigned to two plates at once THEN it is permitted, and nothing in the UI
+  presents it as guaranteed until phase 6's measurement session establishes whether a DECKLINK input
+  accepts a second open
 - WHEN an item whose template declares Live Sources is taken THEN for each Live Source the bridge
   allocates a dedicated layer below the template's layer, plays the mapped producer there, and
   applies MIXER FILL derived from the Live Source's scene-px geometry (normalized), so the source
   sits exactly behind the hole — sources are up BEFORE the template's intro reveals them (exact
   ordering is a design.md decision: pre-roll Live Source producers, then CG PLAY)
-- WHEN a Live Source declares a KEY source id THEN the fill and key sources are composited as a
-  fill+key pair — likely the key on the layer beneath the fill with `MIXER KEYER` — the exact
-  CasparCG mechanism is VERIFIED at recon on real 2.3.2 via `tools/caspar-amcp-probe`, never
-  assumed
-- WHEN a Live Source's source id is DYNAMIC and the operator updates its field value THEN the
-  bridge retargets that Live Source's layer to the newly mapped source (swap the producer on the
-  SAME layer) without disturbing the template's layer or other Live Sources
+- WHEN an installation's source is a fill+key DEVICE PAIR THEN it is stated on that SOURCE and no
+  template ever names it, and the two are composited as a pair — likely the key on the layer beneath
+  the fill with `MIXER KEYER` — the exact CasparCG mechanism is VERIFIED at recon on real 2.3.2 via
+  `tools/caspar-amcp-probe`, never assumed
+- WHEN a Live Source's plate id is DYNAMIC and the operator updates its field value THEN the
+  bridge retargets that layer to the newly resolved source (swap the producer on the SAME layer)
+  without disturbing the template's layer or other Live Sources
 - WHEN the item is stopped or cleared THEN the Live Source layers are cleared alongside it, and
   the template's own STOP/CLEAR verb semantics ([[C-012]]) are unchanged
-- WHEN a declared source id has no mapping THEN the take refuses legibly with a distinct
-  errorCode (never a silent empty hole on air)
+- WHEN a declared plate has no ASSIGNMENT THEN the take refuses legibly with a distinct errorCode
+  NAMING THE PLATE (never a silent empty hole on air). That covers both ways to reach the state: a
+  freshly imported template, whose plates are all unassigned and which is the ordinary case; and a
+  plate whose assignment was dropped because its source was retired
 - WHEN the bridge restarts while Live Sources are on air THEN Live Source layers are re-adopted
   or re-established consistently with the [[B-092]] occupancy-aware adopt (design.md decision —
   never a blind CLEAR of a live source)
@@ -430,8 +452,9 @@ source is an INSTALLATION concern configured in the Runtime.
   OPERATOR-clearable — inverting the protection. The correct behaviour is a REFUSAL with a
   distinct `live-source` reason, following the owner-approved config-declared carve-out precedent
   at `docs/prd/runtime.md:882-885` (`clearBankLayer`, which consults no producer kind at all).
-- WHEN a template declaring N Live Sources is configured THEN CG Control can assign **each of them
-  individually** to a concrete producer, persisted bridge-side
+- WHEN a template declaring N Live Sources is configured THEN CG Control can assign **each plate
+  individually** to one of the installation's named sources, persisted bridge-side (a SECOND store
+  beside the template registry, because the bridge is what resolves a plate at take)
 - WHEN the two-box `route://` demo is run THEN it works on the plant's real CasparCG **2.3.2** —
   which needs no capture card
 
@@ -894,7 +917,7 @@ EVALUATE against arm (c), not as a substitute for it.
 `MIXER` surface; the same file's `Route`, `ATEM/*` and `ChannelInput` entries are the CLIENT's own
 tools and say nothing about the server. Do not read one as the other.
 
-## [ ] C-022 — the installation's live source list, served READ-ONLY over the bridge's HTTP server ⟨priority: medium⟩ — depends on [[C-015]] phase 4
+## [ ] C-022 — the installation's NAMED live source list, served READ-ONLY over the bridge's HTTP server ⟨priority: medium⟩ — depends on [[C-015]] phase 4
 
 **What:** the bridge exposes the installation's live source list as a **read-only HTTP endpoint** on
 the server it already runs (`tools/caspar-bridge/src/template-http-server.ts`), so the **CIAB
@@ -904,9 +927,16 @@ and add them to its own rundown.
 **Why:** this is not a new idea, it is a role the previous automation already had. Recorded by the
 owner 2026-08-10: in the system this project replaces, each live was **created in CG Control** (type,
 master, slave, format), saved as a **preset in a DATABASE**, and the **playout application read that
-list** into its rundown. [[C-015]] phase 4's `SourceMappingStore`
-(`~/.cg-runtime/bridge-source-mappings.json`) IS the successor to that database table — so it gains
-a **SECOND CONSUMER**, and that consumer needs a way in.
+list** into its rundown. [[C-015]] phase 4's source CATALOG
+(`~/.cg-runtime/bridge-source-catalog.json`) IS the successor to that database table — so it gains a
+**SECOND CONSUMER**, and that consumer needs a way in.
+
+⭐ **UPDATED 2026-08-10 by C-015's reshape, and it is strictly better for playout.** The catalog is
+now a list of NAMED lives the installation defines for itself, rather than a set of ids invented by
+whichever template happened to be authored first. A rundown wants names; that is exactly what this
+now serves. The per-template, per-plate ASSIGNMENTS are a SEPARATE store and are **NOT** part of this
+endpoint: playout does not run this product's templates, and serving them would hand a consumer a
+shape it has no use for.
 
 Playout is a **separate application and may be on a separate machine**. Having it open the JSON by
 path couples it to this machine's filesystem layout and gives it no stable shape to read: the file's
@@ -915,13 +945,13 @@ source of truth; the endpoint is a VIEW.**
 
 **Acceptance:**
 
-- WHEN the endpoint is defined THEN its response shape is **DERIVED from `SourceMappingsSchema`**,
+- WHEN the endpoint is defined THEN its response shape is **DERIVED from `SourceCatalogSchema`**,
   never hand-written — two spellings of one contract is how they drift, and this drift would be
   invisible until a playout client showed the wrong source list
 - WHEN any client calls it THEN it is **READ-ONLY**: there is no write path, and the operator's CG
   Control settings surface remains the only writer
-- WHEN the store is ABSENT THEN the endpoint answers **"no mappings"**, not an error — matching
-  phase 4's absent-file rule exactly (absent ⇒ NO MAPPINGS, fail-closed at take time, not a boot or
+- WHEN the catalog is ABSENT THEN the endpoint answers **"no sources"**, not an error — matching
+  phase 4's absent-file rule exactly (absent ⇒ NO SOURCES, fail-closed at take time, not a boot or
   request failure)
 - WHEN a playout client calls an OLDER bridge THEN it can tell: the endpoint is **versioned or
   shape-marked**, so a client can distinguish "this bridge does not have the feature" from "this
@@ -929,7 +959,9 @@ source of truth; the endpoint is a VIEW.**
   bridge configs) on a **second surface** — cross-referenced deliberately, because the same silent
   ambiguity is what it exists to prevent
 - WHEN the endpoint serves an entry THEN it carries the fields a rundown needs — the id, the
-  operator-facing label, and the format — and never invents any the store does not hold
+  operator-facing NAME, and the format — and never invents any the catalog does not hold
+- WHEN the endpoint is defined THEN it serves the CATALOG ALONE: the per-template plate assignments
+  are a separate store and no part of this view
 
 **Provenance, so this is not over-read.** The master/slave/format shape comes from
 `docs/recon/ciab-client-tools.json`, the CIAB client's tool definitions (`ChannelInput`: `Type`,

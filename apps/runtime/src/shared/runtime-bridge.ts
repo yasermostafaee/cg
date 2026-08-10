@@ -66,8 +66,11 @@ import type {
   Settings,
   SettingsGetChannel,
   SettingsSetChannel,
-  SourceMappings,
+  SourceAssignments,
+  SourceCatalog,
+  SourcesAssignmentsChannel,
   SourcesConfigChannel,
+  SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
@@ -407,27 +410,45 @@ export interface RuntimeBridge {
   };
 
   /**
-   * D-137 / C-015 — the installation's Live Source mapping: which concrete
-   * producer each symbolic source id resolves to, and the layer band those
-   * producers are placed on.
+   * D-137 / C-015 — LIVE SOURCES, in two halves.
    *
-   * On the BRIDGE for the reasons `templates`, `delimiters` and
-   * `channelSettings` are, plus one that is sharper here: an EMPTY mapping is
+   * `config` is the installation's CATALOG: the list of lives this plant has,
+   * each with a generated id, a human NAME and its producer. It is built with no
+   * reference to any template. `assignments` is which catalog entry each
+   * template's each PLATE uses — the join, made by one deliberate operator
+   * action rather than by a name match against an id the author guessed.
+   *
+   * Both on the BRIDGE for the reasons `templates`, `delimiters` and
+   * `channelSettings` are, plus one that is sharper here: an unassigned plate is
    * why nothing reaches air, so two consoles disagreeing about it would be two
    * operators with different beliefs about what a take will do.
    */
   sources: {
     config(): Promise<ChannelResponse<typeof SourcesConfigChannel>>;
     /**
-     * Replace the whole mapping. The BRIDGE is authoritative for the refusal —
-     * it rejects a duplicate id and a band overlapping the candidate bank or
-     * the reserved playout range, and supplies the wording — so a second
-     * browser cannot create a state this one is careful to prevent.
+     * Replace the whole catalog. The BRIDGE is authoritative for the refusal —
+     * it rejects a duplicate id, a duplicate NAME, and a band overlapping the
+     * candidate bank or the reserved playout range, and supplies the wording —
+     * so a second browser cannot create a state this one is careful to prevent.
+     *
+     * A DELETION answers with `droppedAssignments`: the plates this change
+     * orphaned. The bridge cascades them rather than letting them dangle, and
+     * the caller is expected to SAY so at the moment of deletion — an operator
+     * who learns at the take is learning too late.
      */
     setConfig(
       req: ChannelRequest<typeof SourcesSetConfigChannel>,
     ): Promise<ChannelResponse<typeof SourcesSetConfigChannel>>;
-    onConfigChanged(handler: (mappings: SourceMappings) => void): Unsubscribe;
+    onConfigChanged(handler: (catalog: SourceCatalog) => void): Unsubscribe;
+    assignments(): Promise<ChannelResponse<typeof SourcesAssignmentsChannel>>;
+    /**
+     * Replace the whole assignment set. Refused when a plate is assigned twice,
+     * or when it names a source this installation does not define.
+     */
+    setAssignments(
+      req: ChannelRequest<typeof SourcesSetAssignmentsChannel>,
+    ): Promise<ChannelResponse<typeof SourcesSetAssignmentsChannel>>;
+    onAssignmentsChanged(handler: (assignments: SourceAssignments) => void): Unsubscribe;
   };
 
   delimiters: {

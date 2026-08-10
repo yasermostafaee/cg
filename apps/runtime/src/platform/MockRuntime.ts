@@ -20,8 +20,11 @@ import type {
   ChannelSettings,
   ChannelSettingsState,
   CHANNEL_SETTINGS_SET_REASONS,
-  SourceMappings,
+  SourceAssignments,
+  SourceCatalog,
+  SourcesSetAssignmentsReason,
   SourcesSetConfigReason,
+  TemplateSourceAssignment,
 } from '@cg/shared-ipc';
 // R-030 — `videoModeRaster` is the ONE video-mode → raster map, shared with the
 // bridge. The mock must never carry a second copy: a mock that disagreed with the
@@ -29,11 +32,15 @@ import type {
 // on air.
 import {
   ChannelRasterSchema,
-  checkSourceMappings,
+  checkSourceAssignments,
+  checkSourceCatalog,
   DelimiterOptionSchema,
-  EMPTY_SOURCE_MAPPINGS,
+  EMPTY_SOURCE_ASSIGNMENTS,
+  EMPTY_SOURCE_CATALOG,
+  pruneAssignmentsForCatalog,
   REFERENCE_RASTER,
-  SourceMappingsSchema,
+  SourceAssignmentsSchema,
+  SourceCatalogSchema,
   videoModeRaster,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
@@ -47,8 +54,43 @@ type FieldValues = StackItemState['fields'];
 
 const SETTINGS_KEY = 'cg-runtime:settings';
 const DELIMITERS_KEY = 'cg-runtime:delimiters';
-const SOURCE_MAPPINGS_KEY = 'cg-runtime:source-mappings';
+const SOURCE_CATALOG_KEY = 'cg-runtime:source-catalog';
+const SOURCE_ASSIGNMENTS_KEY = 'cg-runtime:source-assignments';
 const CHANNEL_SETTINGS_KEY = 'cg-runtime:channel-settings';
+
+/**
+ * D-137 / C-015 — read a `localStorage`-backed config value, falling back to
+ * `fallback` when the key is absent, unreadable or does not parse.
+ *
+ * ONE helper for both live-source keys, so the two cannot come to disagree about
+ * what an unusable store means. It means the EMPTY value, never a guess: a mock
+ * that invented a source would show test mode a plant that does not exist.
+ */
+function readStored<T>(
+  key: string,
+  schema: { safeParse: (v: unknown) => { success: boolean; data?: T } },
+  fallback: T,
+): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw !== null) {
+      const parsed = schema.safeParse(JSON.parse(raw));
+      if (parsed.success && parsed.data !== undefined) return parsed.data;
+    }
+  } catch {
+    // Unusable storage falls through to the empty value — never a guess.
+  }
+  return fallback;
+}
+
+/** The write half. Persistence lost is not the session's value lost. */
+function writeStored(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Persistence lost, the session's value is not.
+  }
+}
 
 /**
  * R-030 parity — the channel the mock declares, matching `MOCK_BANK`'s.
@@ -102,7 +144,8 @@ export class MockRuntime {
   // R-034 parity — the shared delimiter list.
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
   // D-137 / C-015 parity — the installation's Live Source mapping.
-  readonly sourceMappingsChanged = new Emitter<SourceMappings>();
+  readonly sourceCatalogChanged = new Emitter<SourceCatalog>();
+  readonly sourceAssignmentsChanged = new Emitter<SourceAssignments>();
   // R-030 parity — the per-channel output raster + the video-mode reading.
   readonly channelSettingsChanged = new Emitter<ChannelSettingsState>();
   // R-022 parity — the rehearsing set.
@@ -894,55 +937,84 @@ export class MockRuntime {
 
   // ── settings ────────────────────────────────────────────────────────
   /**
-   * D-137 / C-015 parity — the installation's Live Source mapping.
+   * D-137 / C-015 parity — the installation's SOURCE CATALOG.
    *
    * The bridge persists it to a file of its own; the offline mock has no disk,
    * so it uses `localStorage` — the closest thing test mode has to "survives a
    * restart", and the same store the delimiters already use.
    *
-   * ⚠ AN ABSENT/UNUSABLE STORE FALLS BACK TO THE EMPTY MAPPING, never to a
+   * ⚠ AN ABSENT/UNUSABLE STORE FALLS BACK TO THE EMPTY CATALOG, never to a
    * seeded one. The delimiters fall back to the shipped defaults because an
-   * empty picker is a dead end; a seeded MAPPING would be the opposite mistake —
-   * test mode would show sources resolving that no real station has, which is
-   * exactly the kind of thing R-006 forbids the mock from wearing.
+   * empty picker is a dead end; a seeded CATALOG would be the opposite mistake —
+   * test mode would show sources this plant does not have, which is exactly the
+   * kind of thing R-006 forbids the mock from wearing.
    */
-  sourceMappings(): SourceMappings {
-    try {
-      const raw = localStorage.getItem(SOURCE_MAPPINGS_KEY);
-      if (raw !== null) {
-        const parsed = SourceMappingsSchema.safeParse(JSON.parse(raw));
-        if (parsed.success) return parsed.data;
-      }
-    } catch {
-      // Unusable storage falls through to the empty mapping — never a guess.
-    }
-    return EMPTY_SOURCE_MAPPINGS;
+  sourceCatalog(): SourceCatalog {
+    return readStored(SOURCE_CATALOG_KEY, SourceCatalogSchema, EMPTY_SOURCE_CATALOG);
+  }
+
+  /** D-137 / C-015 parity — which catalog entry each template's each plate uses. */
+  sourceAssignments(): SourceAssignments {
+    // PRUNED on every read, against the catalog in force. `localStorage` is two
+    // independently-writable keys, so the same disagreement the bridge meets
+    // between two files can happen here — and it must resolve the same way, or
+    // test mode would show a plate as bound that the real station shows as not.
+    const stored = readStored(
+      SOURCE_ASSIGNMENTS_KEY,
+      SourceAssignmentsSchema,
+      EMPTY_SOURCE_ASSIGNMENTS,
+    );
+    return pruneAssignmentsForCatalog(stored, this.sourceCatalog()).value;
   }
 
   /**
-   * Mirrors the bridge's refusals exactly, because it IS the bridge's
-   * validator: `checkSourceMappings` lives in `@cg/shared-ipc` so the mock
-   * cannot come to refuse something the real station allows, or allow something
-   * it refuses.
+   * Mirrors the bridge's refusals exactly, because it IS the bridge's validator:
+   * `checkSourceCatalog` lives in `@cg/shared-ipc` so the mock cannot come to
+   * refuse something the real station allows, or allow something it refuses.
+   *
+   * The DELETE cascade is the bridge's too (`pruneAssignmentsForCatalog`), and
+   * it is here rather than in the UI for the same reason: a plate left dangling
+   * in test mode is a rehearsal of the on-air failure this prevents.
    */
-  setSourceMappings(next: SourceMappings): {
+  setSourceCatalog(next: SourceCatalog): {
     ok: boolean;
     reason?: SourcesSetConfigReason;
     message?: string;
+    droppedAssignments?: TemplateSourceAssignment[];
   } {
-    const verdict = checkSourceMappings(next, {
+    const verdict = checkSourceCatalog(next, {
       fixedBank: this.#fixedBank,
       // The mock declares no playout reservation — there is no playout system
       // behind it to fence off.
       reservedLayers: [],
     });
     if (!verdict.ok) return verdict;
-    try {
-      localStorage.setItem(SOURCE_MAPPINGS_KEY, JSON.stringify(next));
-    } catch {
-      // Persistence lost, the session's mapping is not.
+    // ⚠ READ THE ASSIGNMENTS FIRST. `sourceAssignments()` prunes against the
+    // catalog IN FORCE, so reading it after the write would return the already-
+    // pruned set and report NOTHING dropped — the deletion would cascade
+    // silently, which is the one thing this report exists to prevent.
+    const before = this.sourceAssignments();
+    writeStored(SOURCE_CATALOG_KEY, next);
+    this.sourceCatalogChanged.emit(next);
+    const pruned = pruneAssignmentsForCatalog(before, next);
+    if (pruned.dropped.length > 0) {
+      writeStored(SOURCE_ASSIGNMENTS_KEY, pruned.value);
+      this.sourceAssignmentsChanged.emit(pruned.value);
+      return { ok: true, droppedAssignments: [...pruned.dropped] };
     }
-    this.sourceMappingsChanged.emit(next);
+    return { ok: true };
+  }
+
+  /** Mirrors the bridge's assignment refusals, from the same shared validator. */
+  setSourceAssignments(next: SourceAssignments): {
+    ok: boolean;
+    reason?: SourcesSetAssignmentsReason;
+    message?: string;
+  } {
+    const verdict = checkSourceAssignments(next, { catalog: this.sourceCatalog() });
+    if (!verdict.ok) return verdict;
+    writeStored(SOURCE_ASSIGNMENTS_KEY, next);
+    this.sourceAssignmentsChanged.emit(next);
     return { ok: true };
   }
 

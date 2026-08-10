@@ -1,60 +1,157 @@
 # runtime-live-source-routing — delta (C-015 design phase, 2026-08-03)
 
-Encodes the Runtime/bridge half: the installation mapping, the declared ownership class, the AMCP
-verbs, the geometry and the audio rule. Implementation is a later PR — see this change's `tasks.md`
-§0. Two decisions are the owner's and are recorded as open questions in `design.md` §12.
+Encodes the Runtime/bridge half: the installation's live sources and the per-plate assignments, the
+declared ownership class, the AMCP verbs, the geometry and the audio rule. Two decisions are the
+owner's and are recorded as open questions in `design.md` §12.
+
+⚠ **RESHAPED 2026-08-10 (owner, `design.md` §2z / §2d).** The single store keyed by a template's
+declared id is replaced by TWO independent stores — a NAMED catalog the installation builds with no
+reference to any template, and per-template, per-plate ASSIGNMENTS joining them — and the binding
+surface moved from the sources modal to the Inspector. The requirements below are written in those
+terms.
 
 ## ADDED Requirements
 
-### Requirement: The installation maps a source id to a concrete producer, and an absent mapping fails CLOSED
+### Requirement: The installation DEFINES its live sources, and an absent catalog fails CLOSED
 
-The bridge SHALL persist an installation-level mapping from a symbolic source id to a concrete
-producer, expressed as a discriminated union over `route` / `decklink` / `ndi` / `media` so an
-unreachable producer form is refused at the boundary rather than at take time.
+The bridge SHALL persist an installation-level **CATALOG** of live sources, built with **no
+reference to any template**: each entry carries an **installation-generated id**, a **human NAME**
+the operator chose, and a concrete producer expressed as a discriminated union over `route` /
+`decklink` / `ndi` / `media`, so an unreachable producer form is refused at the boundary rather than
+at take time.
 
-Each mapping entry SHALL carry the source's **signal FORMAT**, and MAY carry a fill/key **DEVICE
-PAIR** on the arm where such a pair can physically exist. The scene declares one symbolic id and
-never states either: how a source arrives at a plant is an installation fact.
+Each entry SHALL carry the source's **signal FORMAT**, and MAY carry a fill/key **DEVICE PAIR** on
+the arm where such a pair can physically exist. The scene declares neither: how a source arrives at
+a plant is an installation fact.
 
-The mapping SHALL be **product-writable** through an IPC channel and editable by the operator in a
+The NAME SHALL be required and unique within the catalog. It is the only handle the operator ever
+sees when binding a plate, so an entry without one cannot be chosen and two entries sharing one
+leave the operator choosing blind.
+
+A generated id SHALL NEVER be reused. A retired source's id re-issued to a new entry would let a
+stale reference re-bind silently to a source nobody chose.
+
+The catalog SHALL be **product-writable** through an IPC channel and editable by the operator in a
 Runtime settings surface. It SHALL NOT be stored in the bridge's templates directory, because the
 template registry reads every JSON file there as a template.
 
-An **ABSENT** mapping file SHALL mean **NO MAPPINGS**. There SHALL be no built-in default: a default
-layer bank is a guess about our own numbering, whereas a default input mapping is a guess about
+An **ABSENT** catalog file SHALL mean **NO SOURCES**. There SHALL be no built-in default: a default
+layer bank is a guess about our own numbering, whereas a default input definition is a guess about
 hardware this project cannot see, and a wrong guess puts the wrong source on air. A file that is
 PRESENT but unusable SHALL be a HARD startup failure, before the socket accepts clients.
 
-#### Scenario: An absent mapping file reaches nothing to air
+#### Scenario: An absent catalog reaches nothing to air
 
-- **WHEN** the bridge starts with no mapping file **THEN** it starts normally with zero mappings
-- **WHEN** an item declaring a Live Source is then taken **THEN** the take is refused with a
-  distinct errorCode naming the unmapped id — never a silent empty hole on air
+- **WHEN** the bridge starts with no catalog file **THEN** it starts normally with zero sources
+- **WHEN** an item whose template declares a live plate is then taken **THEN** the take is refused
+  with a distinct errorCode naming the plate — never a silent empty hole on air
 
-#### Scenario: A present but unusable mapping file refuses to boot
+#### Scenario: A present but unusable catalog refuses to boot
 
-- **WHEN** the mapping file exists but is unreadable, malformed or schema-invalid **THEN** startup
+- **WHEN** the catalog file exists but is unreadable, malformed or schema-invalid **THEN** startup
   fails with an error naming the file and the reason, and no client is ever served
 
-#### Scenario: The operator edits the mapping and the change is durable
+#### Scenario: The operator defines a source and the change is durable
 
-- **WHEN** the operator sets an id's producer in the settings surface **THEN** the bridge validates
-  and persists it, and refuses illegibly-shaped input with a reason naming what was wrong
-- **WHEN** the bridge restarts **THEN** the mapping is still in force
-- **WHEN** the connected bridge predates this feature **THEN** the surface says so specifically
-  rather than reporting a generic failure
+- **WHEN** the operator names a source and gives it a producer **THEN** the bridge validates and
+  persists it, and refuses illegibly-shaped input with a reason naming what was wrong
+- **WHEN** a second source is given a name the catalog already holds **THEN** it is refused, because
+  the name is the only handle the assignment picker shows
+- **WHEN** the bridge restarts **THEN** the catalog is still in force
+- **WHEN** the connected bridge is an older build than the page **THEN** the surface says so
+  specifically rather than reporting a generic failure
 
-#### Scenario: One id can resolve to a fill/key device pair
+#### Scenario: A refusal never shows a wire identifier
 
-- **WHEN** an installation configures a source id as a fill/key pair **THEN** it is expressed on the
-  MAPPING and the template that names the id is unchanged
+- **WHEN** any live-source call is refused — by the validator, or by the bridge's own frame
+  validation against a build whose channel shape differs — **THEN** the operator is shown a sentence
+  about what to do, never an IPC channel name and never a bare reason code
+- **WHEN** a new validator reason code is added **THEN** the operator sentence for it is derived from
+  the same wire constant the code comes from, so the two cannot drift
+
+#### Scenario: One source can resolve to a fill/key device pair
+
+- **WHEN** an installation defines a source as a fill/key pair **THEN** it is expressed on the
+  CATALOG ENTRY and every template that uses it is unchanged
 - **WHEN** the same template is used at a plant where that source is a single device **THEN** it
   needs no edit
 
-#### Scenario: The mapping's provenance is visible at boot
+#### Scenario: The catalog's provenance is visible at boot
 
-- **WHEN** the bridge starts **THEN** it prints which mapping is in force and where it came from, so
-  two machines running different mappings cannot disagree silently
+- **WHEN** the bridge starts **THEN** it prints which catalog is in force and where it came from, so
+  two machines running different source lists cannot disagree silently
+
+### Requirement: A template's plate is ASSIGNED a source, once per template
+
+A template's declared source id SHALL be read as a **PLATE IDENTIFIER** — it names a hole in that
+template and nothing outside it — and SHALL NOT be matched against the installation's source list by
+name. A name match silently requires the AUTHOR to guess the installation's naming convention, which
+the Designer cannot know.
+
+The bridge SHALL therefore persist a second store of **ASSIGNMENTS** — template, plate, source —
+beside its template registry, because the bridge is what resolves a plate to a producer at take. An
+assignment held per browser would mean the console that made it is the only console that can take
+the item.
+
+The assignment SHALL be **TEMPLATE-LEVEL**: it is the default for every use of that template, and
+the surface SHALL SAY SO where the operator makes it rather than in a tooltip. A per-run override of
+one plate on one on-air item is a separate capability layered on top, and that override SHALL NOT
+write back to this assignment — an emergency substitution must never silently become the permanent
+configuration.
+
+The binding surface SHALL be shown with the SELECTED TEMPLATE, not as a global list of every plate
+in the station. A template that is not on a row cannot be bound, which is accepted: every template
+that will be used is on a declared row, and a take of an unassigned plate refuses anyway.
+
+An **ABSENT** assignments file SHALL mean **NOTHING ASSIGNED**; a PRESENT but unusable one SHALL be
+a HARD startup failure, as for the catalog. An assignment naming a source the catalog does not
+define SHALL be REFUSED at change and PRUNED, loudly, at load — a file that will not parse has no
+reading at all, while a dangling reference has a clear one: that plate is unassigned.
+
+One source MAY be assigned to two plates at once. That means two producers reading one input, which
+is unremarkable for a routed source and MAY be refused by a capture device; until it is measured, no
+surface SHALL present it as guaranteed.
+
+#### Scenario: A freshly imported template has every plate unassigned
+
+- **WHEN** a template declaring live plates is imported **THEN** every one of its plates is
+  unassigned, which is the ordinary state and not an error
+- **WHEN** the operator looks at that template's row **THEN** it NAMES which plates still need a
+  source, rather than reporting only a count
+- **WHEN** the item is taken **THEN** the take is refused with a distinct errorCode naming the plate
+
+#### Scenario: The assignment is made once and holds for every row using that template
+
+- **WHEN** the operator binds a plate from one row **THEN** a different row carrying the same
+  template resolves that plate to the same source
+- **WHEN** the binding surface is shown **THEN** it states that the setting is the template's, not
+  the row's
+
+#### Scenario: A template with no live plates offers no binding surface
+
+- **WHEN** a template that declares no live plate is selected **THEN** no plate-binding section is
+  shown at all
+
+#### Scenario: Deleting a source in use cascades, and says so at the moment of deletion
+
+- **WHEN** the operator removes a source that plates are assigned to **THEN** the removal is
+  ALLOWED, and the surface names the templates and plates that referenced it
+- **WHEN** those plates are next inspected **THEN** they read as needing a source, and no assignment
+  anywhere points at a source that no longer exists
+- **WHEN** one of those items is taken **THEN** the take is refused for that reason
+
+#### Scenario: A dangling assignment at boot is pruned, not fatal
+
+- **WHEN** the assignments file names a source the catalog does not define **THEN** the bridge starts,
+  drops that assignment, and names it on its boot line
+- **WHEN** a client sends such an assignment **THEN** it is REFUSED, because the product's own
+  surface cannot produce one
+
+#### Scenario: Two templates with the same display name are told apart
+
+- **WHEN** two imported templates resolve to the same display name **THEN** the operator surface
+  distinguishes them, so a binding is never made against the wrong one
+- **WHEN** a template's name is unambiguous **THEN** no disambiguator is shown
 
 ### Requirement: A template CARRIES its Live Source declaration, and an absent carrier is UNKNOWN
 
@@ -160,8 +257,8 @@ unrelated graphic inherits the geometry.
 
 #### Scenario: A dynamic id is retargeted without disturbing its neighbours
 
-- **WHEN** a Live Source's id is dynamic and the operator changes its value **THEN** that layer's
-  producer is swapped in place, and neither the template's layer nor any other Live Source is
+- **WHEN** a Live Source's plate id is dynamic and the operator changes its value **THEN** that
+  layer's producer is swapped in place, and neither the template's layer nor any other Live Source is
   disturbed
 
 ### Requirement: Fill geometry reproduces the page's own placement chain, from ONE shared implementation
@@ -214,13 +311,14 @@ COVER the window with its proportions intact and the overflow clipped away — c
 SHALL NOT go on air distorted, and SHALL NOT go on air with bars inside a frame the designer drew:
 in a designed multi-box window, bars read as a fault rather than as an honest aspect.
 
-The fit SHALL be driven by the INSTALLATION's statement of what the mapped source delivers, because
-a crop discards picture and must be computed from what the source actually is. The element's
-declared aspect is an AUTHOR'S ASSERTION to validate against, not the fit input; where the mapping
-states no aspect the declared aspect MAY be used as the assumed source aspect.
+The fit SHALL be driven by the INSTALLATION's statement of what the ASSIGNED source delivers,
+because a crop discards picture and must be computed from what the source actually is. The element's
+declared aspect is an AUTHOR'S ASSERTION to validate against, not the fit input; where the assigned
+source states no aspect the declared aspect MAY be used as the assumed source aspect.
 
-WHEN the element's declared aspect and the mapping's aspect disagree, the take SHALL be refused with
-a distinct errorCode rather than silently cropping something the author did not anticipate.
+WHEN the element's declared aspect and the assigned source's aspect disagree, the take SHALL be
+refused with a distinct errorCode rather than silently cropping something the author did not
+anticipate.
 
 The scaled rect and the mask rect SHALL be emitted as a PAIR, computed together. They are expressed
 in the SAME channel-normalized space and the mask does NOT travel with the scaled rect, so they are
@@ -228,20 +326,20 @@ not independently settable: a scaled rect that moves out from under its mask ren
 on air is a black region where a source should be. No caller SHALL be able to set one without the
 other.
 
-The aspect driving the fit SHALL be **DERIVED** from the mapping's declared format rather than
-typed as a number, falling back — in order — to the mapping's explicit aspect where the format
+The aspect driving the fit SHALL be **DERIVED** from the assigned source's declared format rather
+than typed as a number, falling back — in order — to that source's explicit aspect where the format
 yields none, then to the element's `expectedAspect`. A hand-entered aspect is a value that can be
 wrong on air while looking reasonable.
 
-`expectedAspect` SHALL remain the AUTHOR'S ASSERTION that the bridge validates the mapping against;
-its appearance at the end of the fit chain is a fallback for an undescribed mapping, never a
+`expectedAspect` SHALL remain the AUTHOR'S ASSERTION that the bridge validates the assigned source
+against; its appearance at the end of the fit chain is a fallback for an undescribed source, never a
 promotion to fit input.
 
-#### Scenario: The fit aspect comes from the mapping's format
+#### Scenario: The fit aspect comes from the assigned source's format
 
-- **WHEN** a mapping declares a format that determines a raster **THEN** the crop-to-fill uses the
-  aspect derived from it, and no aspect is typed by hand
-- **WHEN** the format determines no raster **THEN** the mapping's explicit aspect is used, and only
+- **WHEN** the assigned source declares a format that determines a raster **THEN** the crop-to-fill
+  uses the aspect derived from it, and no aspect is typed by hand
+- **WHEN** the format determines no raster **THEN** that source's explicit aspect is used, and only
   then the element's `expectedAspect`
 
 #### Scenario: A 4:3 source fills a 16:9 window without distortion
@@ -252,13 +350,13 @@ promotion to fit input.
 
 #### Scenario: A declared aspect that contradicts the installation refuses the take
 
-- **WHEN** an element declares one aspect and its mapping states another **THEN** the take is refused
-  with an errorCode naming the element and both aspects
+- **WHEN** an element declares one aspect and its assigned source states another **THEN** the take is
+  refused with an errorCode naming the element and both aspects
 
-#### Scenario: An undescribed mapping still plays
+#### Scenario: An undescribed source still plays
 
-- **WHEN** a mapping states no aspect **THEN** the fit uses the element's declared aspect, and the
-  source still reaches air
+- **WHEN** the assigned source states no aspect **THEN** the fit uses the element's declared aspect,
+  and the source still reaches air
 
 #### Scenario: The scaled rect and the mask cannot be set apart
 
@@ -275,10 +373,13 @@ taking the graphic off air and without disturbing the other plates.
 **R-048 — a CLIENT REQUIREMENT, not a preference.** The case is a three-plate template on air, one
 input drops, and that plate goes black while the other two are fine.
 
-The swap SHALL be a **PER-ITEM OVERRIDE**, never an edit to the installation mapping. A mapping is
-installation-wide configuration: editing it changes every template using that id and it persists,
-both wrong for a temporary emergency substitution. The configured value SHALL be untouched and only
-this run SHALL change — the same shape as the existing position override.
+The swap SHALL be a **PER-ITEM OVERRIDE**, never an edit to the template's ASSIGNMENT and never an
+edit to the installation's catalog. The assignment is the TEMPLATE-LEVEL DEFAULT — it is shared by
+every row carrying that template — and the catalog is installation-wide; editing either changes
+other work and persists, both wrong for a temporary emergency substitution. The configured values
+SHALL be untouched and only this run SHALL change — the same shape as the existing position
+override. The override SHALL NOT write back: an emergency substitution must never silently become
+the permanent configuration.
 
 The swap SHALL be a **REPLACE, never a clear-then-add**: the producer is substituted in place on the
 occupied layer. A clear followed by a play that fails is a destructive step committed before the
@@ -305,8 +406,8 @@ reachable in one or two actions from the row.
 
 #### Scenario: The override is per-item and survives a restart
 
-- **WHEN** a plate is swapped **THEN** the installation mapping is unchanged and every other template
-  using that id is unaffected
+- **WHEN** a plate is swapped **THEN** the template's assignment and the installation's catalog are
+  both unchanged, and every other row carrying that template is unaffected
 - **WHEN** the bridge restarts **THEN** the swapped plate is still pointed at the substituted source
 
 ### Requirement: Every producer the bridge creates is created MUTED

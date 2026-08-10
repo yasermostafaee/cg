@@ -6,10 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FixedLayerBank, FixedSlotState } from '@cg/shared-ipc';
 import { Modal, ModalAction } from '../src/renderer/ui/Modal.js';
 import { FixedBankConfigModal } from '../src/renderer/features/fixedLayers/FixedBankConfigModal.js';
-import { SourceMappingsModal } from '../src/renderer/features/sources/SourceMappingsModal.js';
+import { SourcesModal } from '../src/renderer/features/sources/SourcesModal.js';
 import { DelimitersModal } from '../src/renderer/features/inspector/DelimitersModal.js';
 import { ServerSettingsPanel } from '../src/renderer/features/connections/ServerSettingsPanel.js';
-import { __resetSourceMappingsForTest } from '../src/renderer/features/sources/sourceMappingStore.js';
+import { __resetSourcesForTest } from '../src/renderer/features/sources/sourceStore.js';
 import { __resetDelimitersForTest } from '../src/renderer/features/inspector/delimiterStore.js';
 import { clearPortals, openDialog } from './support/dialog.js';
 
@@ -55,7 +55,7 @@ afterEach(async () => {
   container?.remove();
   container = null;
   clearPortals();
-  __resetSourceMappingsForTest();
+  __resetSourcesForTest();
   __resetDelimitersForTest();
   vi.restoreAllMocks();
 });
@@ -165,20 +165,24 @@ describe('the census — every Runtime dialog that can speak, speaks through the
   it('Live sources routes its refusal through the region', async () => {
     const stub = {
       sources: {
-        config: () => Promise.resolve({ mappings: [] }),
+        config: () => Promise.resolve({ sources: [] }),
         onConfigChanged: () => () => undefined,
         setConfig: () => Promise.resolve({ ok: true }),
+        assignments: () => Promise.resolve({ assignments: [] }),
+        onAssignmentsChanged: () => () => undefined,
+        setAssignments: () => Promise.resolve({ ok: true }),
       },
+      templates: { list: () => Promise.resolve([]) },
     };
     (window as unknown as { cg: typeof stub }).cg = stub;
 
-    const dialog = await render(createElement(SourceMappingsModal, { onClose: () => undefined }));
-    // Add with an empty id: the form's own refusal, no bridge round-trip needed.
+    const dialog = await render(createElement(SourcesModal, { onClose: () => undefined }));
+    // Add with an empty name: the form's own refusal, no bridge round-trip needed.
     await clickButton(dialog, 'Add');
 
     expectMessageThroughTheRegion(dialog, 'refusal');
     expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').toContain(
-      'Give the source an id',
+      'Give the source a name',
     );
   });
 

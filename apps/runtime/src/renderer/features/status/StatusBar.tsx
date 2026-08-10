@@ -397,7 +397,7 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
         </Button>
       )}
       {onOpenSources !== undefined && (
-        <Button onClick={onOpenSources} aria-label="Open live source mapping">
+        <Button onClick={onOpenSources} aria-label="Open live sources">
           SOURCES
         </Button>
       )}

@@ -1,46 +1,66 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Trash2 } from 'lucide-react';
 import {
   aspectForFormat,
   LIVE_SOURCE_FORMATS,
-  mappingAspect,
+  nextSourceId,
+  sourceAspect,
   SUGGESTED_LIVE_SOURCE_LAYER_RANGE,
   type LiveSourceFormat,
-  type SourceMapping,
-  type SourceMappings,
+  type SourceCatalog,
+  type SourceDefinition,
   type SourceProducer,
+  type TemplateInfo,
+  type TemplateSourceAssignment,
 } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { Modal, ModalAction } from '../../ui/Modal.js';
+import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
+import { templateDisplayName } from '../library/templateName.js';
 import {
-  commitSourceMappings,
-  currentSourceMappings,
-  sourceMappingsVersion,
-  subscribeSourceMappings,
-} from './sourceMappingStore.js';
+  commitSourceCatalog,
+  currentSourceCatalog,
+  sourcesVersion,
+  subscribeSources,
+} from './sourceStore.js';
 
 /**
- * D-137 / C-015 — bind each symbolic Live Source id to a concrete producer.
+ * D-137 / C-015 — the CG Control surface where an installation DEFINES its live
+ * sources.
  *
- * THE SURFACE THE OWNER NAMED AS THE BLOCKER for the whole feature: a template
- * declares `guest-1` and the scene deliberately never says what that is, so
- * until an operator says it here, nothing reaches air.
+ * ── ⭐ ONE JOB, AFTER THE 2026-08-10 CORRECTION ─────────────────────────
  *
- * Modelled on `DelimitersModal` rather than `FixedBankConfigModal`, because this
- * is a LIST EDITOR and not a read-only ceiling, and two of its behaviours are
- * copied deliberately:
+ * This is the installation's own list: what lives this plant has, each with a
+ * NAME the operator chose ("Studio A", "Baku", "Skype 1") and its producer. It
+ * is built with NO reference to any template.
  *
- * - **No optimistic local update.** Every edit goes through
- *   `commitSourceMappings`, which adopts the value only once the bridge accepts
- *   it. The bridge can refuse (a duplicate id, a band overlapping the candidate
- *   bank or the reserved playout range), and showing a mapping the station does
- *   not have would send an operator away believing a guest box is bound.
- * - **The older-bridge translation.** Every station whose bridge predates this
- *   feature hits `unknown channel: sources.set-config`, and the store turns that
- *   into a sentence naming the real cause.
+ * BINDING a plate to one of them is NOT here — it is in the INSPECTOR, beside
+ * the template being bound. This surface briefly carried both, and two unrelated
+ * jobs in one dialog is what that cost: six plates across two templates, none of
+ * them the thing the operator opened this to do, and a scrollbar before the first
+ * source existed. Selecting a template shows that template's plates; a global
+ * list shows every plate in the station.
+ *
+ * ── TWO BEHAVIOURS COPIED FROM `DelimitersModal`, DELIBERATELY ──────────────
+ *
+ * - **No optimistic local update.** Every edit goes through the store, which
+ *   adopts the value only once the bridge accepts it. The bridge can refuse (a
+ *   duplicate name, a band overlapping the candidate bank), and showing a source
+ *   the station does not have would send an operator away believing a guest box
+ *   can be bound to it.
+ * - **The older-bridge translation.** A station whose bridge predates this
+ *   feature answers with a wire identifier; `sourcesTransportMessage` turns every
+ *   such answer into a sentence naming the real cause.
+ *
+ * ── DELETING A SOURCE THAT IS IN USE ───────────────────────────────
+ *
+ * It is ALLOWED, it CASCADES bridge-side, and this surface SAYS SO at the moment
+ * of deletion — naming the templates that referenced it. Those plates then read
+ * as needing a source, and their take refuses. Refusing the delete would trap an
+ * installation with a live it no longer has; leaving the binding to dangle until
+ * air is the failure this project exists to prevent.
  *
  * The FORMAT is a picker, not a number: §3a's decision is that the crop-to-fill
  * aspect DERIVES from the signal format, because a hand-entered aspect is a
@@ -74,12 +94,11 @@ const styles = {
   row: { display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' as const },
   field: { display: 'flex', flexDirection: 'column' as const, gap: '0.15rem' },
   fieldLabel: { fontSize: '0.72rem', color: colors.textMuted },
-  id: { fontFamily: 'monospace', fontSize: '0.9rem', flex: 1, minWidth: 0 },
   derived: { fontSize: '0.72rem', color: colors.textMuted, alignSelf: 'center' },
   section: {
     borderTop: `1px solid ${colors.border}`,
     paddingTop: '0.6rem',
-    marginTop: '0.2rem',
+    marginTop: '0.6rem',
   },
   sectionTitle: {
     fontSize: '0.74rem',
@@ -106,7 +125,7 @@ const KIND_LABEL: Record<SourceProducer['kind'], string> = {
  *
  * Switching kinds DISCARDS the previous arm's fields rather than trying to carry
  * them across. A device number and a channel number are not the same number, and
- * quietly reusing one as the other is how a mapping comes to point at hardware
+ * quietly reusing one as the other is how a source comes to point at hardware
  * nobody chose.
  */
 function emptyProducer(kind: SourceProducer['kind']): SourceProducer {
@@ -116,13 +135,13 @@ function emptyProducer(kind: SourceProducer['kind']): SourceProducer {
     case 'decklink':
       return { kind: 'decklink', device: 1 };
     case 'ndi':
-      return { kind: 'ndi', source: '' };
+      return { kind: 'ndi', source: 'NDI SOURCE' };
     case 'media':
-      return { kind: 'media', file: '' };
+      return { kind: 'media', file: 'AMB' };
   }
 }
 
-/** What this entry resolves to, in the words the bridge will send. */
+/** What this source resolves to, in the words the bridge will send. */
 function describeProducer(p: SourceProducer): string {
   switch (p.kind) {
     case 'route':
@@ -134,15 +153,15 @@ function describeProducer(p: SourceProducer): string {
         ? `DECKLINK DEVICE ${String(p.device)}`
         : `DECKLINK DEVICE ${String(p.device)} + KEY ${String(p.keyDevice)}`;
     case 'ndi':
-      return p.source === '' ? 'NDI (no source named)' : `NDI ${p.source}`;
+      return `NDI ${p.source}`;
     case 'media':
-      return p.file === '' ? 'media (no file named)' : `media ${p.file}`;
+      return `media ${p.file}`;
   }
 }
 
 /** `1.7778` is not an answer an operator can check; `16:9` is. */
-function describeAspect(mapping: SourceMapping): string {
-  const aspect = mappingAspect(mapping);
+function describeAspect(source: SourceDefinition): string {
+  const aspect = sourceAspect(source);
   if (aspect === null) return 'aspect: not stated';
   const nearest = [
     ['16:9', 16 / 9],
@@ -152,7 +171,7 @@ function describeAspect(mapping: SourceMapping): string {
   ] as const;
   const match = nearest.find(([, v]) => Math.abs(v - aspect) < 0.001);
   const shown = match === undefined ? aspect.toFixed(3) : match[0];
-  const derived = mapping.format !== undefined && aspectForFormat(mapping.format) !== null;
+  const derived = source.format !== undefined && aspectForFormat(source.format) !== null;
   return `aspect: ${shown}${derived ? ' (from the format)' : ''}`;
 }
 
@@ -162,46 +181,138 @@ function parseLayerNumber(raw: string): number | null {
   return Number.isInteger(n) && n >= 0 && n <= 9999 ? n : null;
 }
 
-export function SourceMappingsModal({ onClose }: { onClose: () => void }): JSX.Element {
-  useSyncExternalStore(subscribeSourceMappings, sourceMappingsVersion);
-  const mappings = currentSourceMappings();
-  const [error, setError] = useState<string | null>(null);
-  const [newId, setNewId] = useState('');
+/**
+ * A text field whose stored value cannot legally be empty (a source NAME, an NDI
+ * source name, a media file).
+ *
+ * It holds a DRAFT while the operator types and commits only a non-empty value,
+ * so clearing the field to retype it never sends the wire an entry that its own
+ * schema rejects. On blur an empty draft snaps back to the stored value: the
+ * committed state is the truth, and a field left blank must not read as a value
+ * that was saved.
+ */
+function RequiredText({
+  value,
+  label,
+  ariaLabel,
+  placeholder,
+  onCommit,
+}: {
+  value: string;
+  label: string;
+  ariaLabel: string;
+  placeholder?: string;
+  onCommit: (next: string) => void;
+}): JSX.Element {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  return (
+    <label style={styles.field}>
+      <span style={styles.fieldLabel}>{label}</span>
+      <input
+        className="cg-field"
+        type="text"
+        value={draft}
+        aria-label={ariaLabel}
+        {...(placeholder !== undefined ? { placeholder } : {})}
+        onChange={(e) => {
+          const next = e.target.value;
+          setDraft(next);
+          if (next.trim() !== '') onCommit(next);
+        }}
+        onBlur={() => {
+          if (draft.trim() === '') setDraft(value);
+        }}
+      />
+    </label>
+  );
+}
+
+export function SourcesModal({ onClose }: { onClose: () => void }): JSX.Element {
+  useSyncExternalStore(subscribeSources, sourcesVersion);
+  const catalog = currentSourceCatalog();
+  const [message, setMessage] = useState<ModalMessage | null>(null);
+  const [newName, setNewName] = useState('');
   const [bandStart, setBandStart] = useState('');
   const [bandEnd, setBandEnd] = useState('');
+  const [templates, setTemplates] = useState<readonly TemplateInfo[]>([]);
 
-  const commit = (next: SourceMappings): void => {
-    void commitSourceMappings(next).then(setError);
+  // Pulled at OPEN, not subscribed: the catalogue is browser-local (B-085) and
+  // this dialog is short-lived. It is read for ONE purpose — turning the
+  // cascade report's template IDS into the names the operator knows them by.
+  useEffect(() => {
+    let live = true;
+    void window.cg.templates.list().then(
+      (list) => {
+        if (live) setTemplates(list);
+      },
+      () => {
+        // A list this surface could not read only costs the deletion report its
+        // template NAMES; it falls back to ids and everything else still works.
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const refuse = (text: string): void => {
+    setMessage({ role: 'refusal', text });
   };
 
-  const replaceEntry = (index: number, entry: SourceMapping): void => {
-    commit({ ...mappings, mappings: mappings.mappings.map((m, i) => (i === index ? entry : m)) });
+  const commitCatalog = (next: SourceCatalog): void => {
+    void commitSourceCatalog(next).then(({ refusal, droppedAssignments }) => {
+      if (refusal !== null) {
+        setMessage({ role: 'refusal', ...refusal });
+        return;
+      }
+      setMessage(droppedAssignments.length === 0 ? null : describeDropped(droppedAssignments));
+    });
   };
 
-  const addEntry = (): void => {
-    const id = newId.trim();
+  /** The deletion report, in the operator's vocabulary: template names, not ids. */
+  const describeDropped = (dropped: readonly TemplateSourceAssignment[]): ModalMessage => {
+    const named = dropped.map((a) => {
+      const template = templates.find((t) => t.templateId === a.templateId);
+      const label = template === undefined ? a.templateId : templateDisplayName(template);
+      return `${label} / ${a.plateId}`;
+    });
+    return {
+      role: 'notice',
+      text: `${String(dropped.length)} plate${dropped.length === 1 ? '' : 's'} used that source and now need${dropped.length === 1 ? 's' : ''} a new one.`,
+      detail: named.join(' · '),
+    };
+  };
+
+  const replaceSource = (index: number, entry: SourceDefinition): void => {
+    commitCatalog({
+      ...catalog,
+      sources: catalog.sources.map((s, i) => (i === index ? entry : s)),
+    });
+  };
+
+  const addSource = (): void => {
+    const name = newName.trim();
     // The LOCAL checks are about what was typed into this form; the BRIDGE
-    // re-checks the whole mapping and is authoritative. These exist so the form
+    // re-checks the whole catalog and is authoritative. These exist so the form
     // can answer instantly, not to be the only guard.
-    if (id === '') {
-      setError('Give the source an id — it is the name a template declares, e.g. guest-1.');
+    if (name === '') {
+      refuse('Give the source a name — it is what the operator picks, e.g. Studio A.');
       return;
     }
-    if (!/^[a-z0-9][a-z0-9_-]*$/i.test(id)) {
-      setError(
-        'A source id is symbolic: letters, digits, "_" and "-", starting alphanumeric. The ' +
-          'device goes below, not in the id.',
-      );
-      return;
-    }
-    if (mappings.mappings.some((m) => m.id === id)) {
-      setError(`“${id}” is already mapped.`);
-      return;
-    }
-    setNewId('');
-    commit({
-      ...mappings,
-      mappings: [...mappings.mappings, { id, producer: emptyProducer('route') }],
+    setNewName('');
+    commitCatalog({
+      ...catalog,
+      sources: [
+        ...catalog.sources,
+        {
+          id: nextSourceId(catalog.sources.map((s) => s.id)),
+          name,
+          producer: emptyProducer('route'),
+        },
+      ],
     });
   };
 
@@ -209,24 +320,24 @@ export function SourceMappingsModal({ onClose }: { onClose: () => void }): JSX.E
     const start = parseLayerNumber(bandStart);
     const end = parseLayerNumber(bandEnd);
     if (start === null || end === null) {
-      setError('The band is two layer numbers, e.g. 10 and 59.');
+      refuse('The band is two layer numbers, e.g. 10 and 59.');
       return;
     }
     if (end < start) {
-      setError('The band ends before it starts — swap the two numbers.');
+      refuse('The band ends before it starts — swap the two numbers.');
       return;
     }
-    commit({ ...mappings, layerRange: { start, end } });
+    commitCatalog({ ...catalog, layerRange: { start, end } });
   };
 
-  const band = mappings.layerRange;
+  const band = catalog.layerRange;
 
   return (
     <Modal
       title="Live sources"
       size="wide"
       onClose={onClose}
-      {...(error !== null ? { message: { role: 'refusal' as const, text: error } } : {})}
+      {...(message !== null ? { message } : {})}
       footer={
         <ModalAction actionRole="primary" onClick={onClose}>
           Done
@@ -234,40 +345,37 @@ export function SourceMappingsModal({ onClose }: { onClose: () => void }): JSX.E
       }
     >
       {/*
-        §5 — ONE line, not three paragraphs.
-
-        The three that were here explained the FEATURE (what a declared source is,
-        that the scene deliberately withholds it, what happens on air without a
-        mapping). All of it was true and none of it was needed at the moment of
-        acting: an operator opens this to bind an id, and three paragraphs sharing
-        one muted grey is why nothing on the surface stood out even before the
-        colour question. What survives is the single fact that changes what they
-        do — an unmapped id does not go to air.
-
-        The rest moved to where it is asked for: the band's rule is a hint on the
-        band control, and the derived aspect is beside the format picker. A hint
-        attached to the control it concerns is read; a paragraph above the form is
-        scrolled past.
+        ONE line per section, attached to the thing it concerns — never a block of
+        prose above the form. The previous version's three paragraphs explained the
+        FEATURE, all of it true and none of it needed at the moment of acting;
+        sharing one muted grey, nothing on the surface stood out. What survives is
+        the fact that changes what the operator does.
       */}
-      {mappings.mappings.length === 0 ? (
+      <div style={styles.sectionTitle}>SOURCES</div>
+      {catalog.sources.length === 0 ? (
         <div style={styles.empty} role="status">
-          Nothing is mapped yet — a template that declares a live source cannot be taken until its
-          id is bound here.
+          Nothing is defined yet — a template&rsquo;s live plate cannot be taken until it is
+          assigned a source.
         </div>
       ) : (
         <div style={styles.list}>
-          {mappings.mappings.map((m, index) => (
-            <div key={m.id} style={styles.entry}>
+          {catalog.sources.map((source, index) => (
+            <div key={source.id} style={styles.entry} data-source-id={source.id}>
               <div style={styles.row}>
-                <span style={styles.id}>{m.id}</span>
-                <span style={styles.derived}>{describeProducer(m.producer)}</span>
+                <RequiredText
+                  value={source.name}
+                  label="Name"
+                  ariaLabel={`Name of ${source.name}`}
+                  onCommit={(name) => replaceSource(index, { ...source, name })}
+                />
+                <span style={styles.derived}>{describeProducer(source.producer)}</span>
                 <Button
                   variant="danger"
-                  aria-label={`Remove the mapping for ${m.id}`}
+                  aria-label={`Remove ${source.name}`}
                   onClick={() =>
-                    commit({
-                      ...mappings,
-                      mappings: mappings.mappings.filter((_, i) => i !== index),
+                    commitCatalog({
+                      ...catalog,
+                      sources: catalog.sources.filter((_, i) => i !== index),
                     })
                   }
                 >
@@ -277,33 +385,15 @@ export function SourceMappingsModal({ onClose }: { onClose: () => void }): JSX.E
 
               <div style={styles.row}>
                 <label style={styles.field}>
-                  <span style={styles.fieldLabel}>Shown as</span>
-                  <input
-                    className="cg-field"
-                    type="text"
-                    value={m.label ?? ''}
-                    placeholder={m.id}
-                    aria-label={`Label for ${m.id}`}
-                    onChange={(e) => {
-                      const label = e.target.value;
-                      replaceEntry(index, {
-                        ...m,
-                        ...(label === '' ? {} : { label }),
-                      });
-                    }}
-                  />
-                </label>
-
-                <label style={styles.field}>
                   <span style={styles.fieldLabel}>Kind</span>
                   <select
                     className="cg-field"
                     style={{ width: 'auto' }}
-                    aria-label={`Producer kind for ${m.id}`}
-                    value={m.producer.kind}
+                    aria-label={`Producer kind for ${source.name}`}
+                    value={source.producer.kind}
                     onChange={(e) =>
-                      replaceEntry(index, {
-                        ...m,
+                      replaceSource(index, {
+                        ...source,
                         producer: emptyProducer(e.target.value as SourceProducer['kind']),
                       })
                     }
@@ -321,14 +411,15 @@ export function SourceMappingsModal({ onClose }: { onClose: () => void }): JSX.E
                   <select
                     className="cg-field"
                     style={{ width: 'auto' }}
-                    aria-label={`Signal format for ${m.id}`}
-                    value={m.format ?? ''}
+                    aria-label={`Signal format for ${source.name}`}
+                    value={source.format ?? ''}
                     onChange={(e) => {
                       const format = e.target.value;
-                      replaceEntry(index, {
-                        ...m,
-                        ...(format === '' ? {} : { format: format as LiveSourceFormat }),
-                      });
+                      const { format: _drop, ...rest } = source;
+                      replaceSource(
+                        index,
+                        format === '' ? rest : { ...rest, format: format as LiveSourceFormat },
+                      );
                     }}
                   >
                     <option value="">— not stated —</option>
@@ -339,12 +430,12 @@ export function SourceMappingsModal({ onClose }: { onClose: () => void }): JSX.E
                     ))}
                   </select>
                 </label>
-                <span style={styles.derived}>{describeAspect(m)}</span>
+                <span style={styles.derived}>{describeAspect(source)}</span>
               </div>
 
               <ProducerFields
-                mapping={m}
-                onChange={(producer) => replaceEntry(index, { ...m, producer })}
+                source={source}
+                onChange={(producer) => replaceSource(index, { ...source, producer })}
               />
             </div>
           ))}
@@ -353,17 +444,17 @@ export function SourceMappingsModal({ onClose }: { onClose: () => void }): JSX.E
 
       <div style={styles.row}>
         <label style={styles.field}>
-          <span style={styles.fieldLabel}>New source id</span>
+          <span style={styles.fieldLabel}>New source name</span>
           <input
             className="cg-field"
             type="text"
-            value={newId}
-            aria-label="New source id"
-            placeholder="guest-1"
-            onChange={(e) => setNewId(e.target.value)}
+            value={newName}
+            aria-label="New source name"
+            placeholder="Studio A"
+            onChange={(e) => setNewName(e.target.value)}
           />
         </label>
-        <Button variant="secondary" onClick={addEntry}>
+        <Button variant="secondary" onClick={addSource}>
           Add
         </Button>
       </div>
@@ -423,17 +514,25 @@ export function SourceMappingsModal({ onClose }: { onClose: () => void }): JSX.E
  * configure a pair that cannot exist.
  */
 function ProducerFields({
-  mapping,
+  source,
   onChange,
 }: {
-  mapping: SourceMapping;
+  source: SourceDefinition;
   onChange: (producer: SourceProducer) => void;
 }): JSX.Element {
-  const p = mapping.producer;
+  const p = source.producer;
+  /**
+   * ⚠ `min` IS THE SCHEMA'S OWN FLOOR, not decoration. A channel, a fill device
+   * and a key device are all `z.number().int().positive()`, so committing a
+   * typed `0` sends the bridge a catalog its own schema rejects — and the answer
+   * the operator gets is the frame validator's, naming an IPC channel. The
+   * control must not be able to produce a value the contract forbids.
+   */
   const numeric = (
     label: string,
     aria: string,
     value: number | undefined,
+    min: number,
     apply: (n: number | undefined) => void,
     optional = false,
   ): JSX.Element => (
@@ -445,7 +544,7 @@ function ProducerFields({
       <NumericInput
         className="cg-field"
         style={{ width: '5rem' }}
-        aria-label={`${aria} for ${mapping.id}`}
+        aria-label={`${aria} for ${source.name}`}
         value={value === undefined ? '' : String(value)}
         placeholder={optional ? '—' : '1'}
         onValueChange={(next) => {
@@ -455,7 +554,7 @@ function ProducerFields({
             return;
           }
           const n = Number(trimmed);
-          if (Number.isInteger(n) && n >= 0) apply(n);
+          if (Number.isInteger(n) && n >= min) apply(n);
         }}
       />
     </div>
@@ -465,13 +564,14 @@ function ProducerFields({
     case 'route':
       return (
         <div style={styles.row}>
-          {numeric('Channel', 'Route channel', p.channel, (n) =>
+          {numeric('Channel', 'Route channel', p.channel, 1, (n) =>
             onChange({ ...p, channel: n ?? 1 }),
           )}
           {numeric(
             'Layer (optional)',
             'Route layer',
             p.layer,
+            0,
             (n) =>
               onChange(
                 n === undefined ? { kind: 'route', channel: p.channel } : { ...p, layer: n },
@@ -483,13 +583,14 @@ function ProducerFields({
     case 'decklink':
       return (
         <div style={styles.row}>
-          {numeric('Fill device', 'Decklink fill device', p.device, (n) =>
+          {numeric('Fill device', 'Decklink fill device', p.device, 1, (n) =>
             onChange({ ...p, device: n ?? 1 }),
           )}
           {numeric(
             'Key device (optional)',
             'Decklink key device',
             p.keyDevice,
+            1,
             (n) =>
               onChange(
                 n === undefined ? { kind: 'decklink', device: p.device } : { ...p, keyDevice: n },
@@ -501,33 +602,25 @@ function ProducerFields({
     case 'ndi':
       return (
         <div style={styles.row}>
-          <label style={styles.field}>
-            <span style={styles.fieldLabel}>NDI source name</span>
-            <input
-              className="cg-field"
-              type="text"
-              value={p.source}
-              aria-label={`NDI source name for ${mapping.id}`}
-              placeholder="STUDIO (CAM 2)"
-              onChange={(e) => onChange({ ...p, source: e.target.value })}
-            />
-          </label>
+          <RequiredText
+            value={p.source}
+            label="NDI source name"
+            ariaLabel={`NDI source name for ${source.name}`}
+            placeholder="STUDIO (CAM 2)"
+            onCommit={(next) => onChange({ ...p, source: next })}
+          />
         </div>
       );
     case 'media':
       return (
         <div style={styles.row}>
-          <label style={styles.field}>
-            <span style={styles.fieldLabel}>Media file</span>
-            <input
-              className="cg-field"
-              type="text"
-              value={p.file}
-              aria-label={`Media file for ${mapping.id}`}
-              placeholder="AMB"
-              onChange={(e) => onChange({ ...p, file: e.target.value })}
-            />
-          </label>
+          <RequiredText
+            value={p.file}
+            label="Media file"
+            ariaLabel={`Media file for ${source.name}`}
+            placeholder="AMB"
+            onCommit={(next) => onChange({ ...p, file: next })}
+          />
         </div>
       );
   }

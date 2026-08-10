@@ -133,78 +133,192 @@ operator, one fewer arm in the schema.**
 
 ---
 
-## 2. ⭐ How `guest-1` becomes a real producer
+## 2. ⭐ How a live plate becomes a real producer
 
 Today this is **two English sentences** (`docs/prd/caspar.md:371-373` and its acceptance
 restatement at `:379-381`) and nothing else.
 
 `SEARCH:` `git --no-pager grep -rn -i -e "source-mapping" -e "sourceMapping" -e "sourceId" -e "source-id" -e "sourceMap" -e "producerMap" -e "inputMap" -e "keySourceId" -- packages tools apps` → **0 hits** for every mapping-shaped name. `git --no-pager grep -rn -e "routeKey" -- packages tools apps` → **3 hits**: the declaration (`packages/shared-schema/src/elements.ts:1019`) and two test fixtures (`packages/shared-schema/tests/elements.test.ts:299,311`). `Glob **/*store*.ts` under `tools/caspar-bridge/src` → exactly five stores, none of them a sources store. And `packages/shared-ipc/src/channels/` contains 19 channel files, none defining such a channel.
 
-### DECISION — a bridge-owned `SourceMappingStore`, with a **deliberately split doctrine**
+### 2z. ⭐ RESHAPED 2026-08-10 (owner) — TWO INDEPENDENT STORES, JOINED BY ONE OPERATOR ACTION
 
-| Axis                    | Doctrine followed   | Mechanism                                                                                                                                                                 |
-| ----------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Writability**         | **fixed-layers**    | A `sources.*` IPC channel (`config` / `setConfig` / `onConfigChanged`), edited in a CG Control settings modal. The operator must be able to say what each id resolves to. |
-| **Absent file**         | **reserved-layers** | Absent ⇒ **NO MAPPINGS**. **No built-in default.**                                                                                                                        |
-| **Present but invalid** | both agree          | **HARD boot failure**, before the WebSocket binds.                                                                                                                        |
+**This supersedes the single keyed store phase 4 first shipped, and it removes a weakness
+rather than adding a feature.** It is recorded first because everything below is written in
+its terms.
 
-**Path:** `~/.cg-runtime/bridge-source-mappings.json`, resolved by a **new `--source-mappings-path`
-flag** in `tools/caspar-bridge/bin/caspar-bridge.mjs` beside the existing four.
+**What it was.** ONE store keyed by the id a TEMPLATE declares: the operator added `guest-1`
+because some scene said `guest-1`.
 
-⚠ **It must NOT live in `templatesDir`.** `TemplateRegistry.loadPersisted` reads **every** `*.json`
-there as a template — `tools/caspar-bridge/src/template-registry.ts:75` `fs.readdirSync(this.#persistDir)`
+**What it is.** Two halves that know nothing about each other until an operator joins them:
+
+1. **The CATALOG** — the installation builds its list of lives INDEPENDENTLY, with no
+   reference to any template and no dependence on any declared id. Each entry carries an
+   **installation-generated id**, a human **NAME** ("Studio A", "Baku", "Skype 1") and its
+   producer definition.
+2. **The ASSIGNMENTS** — each imported TEMPLATE gets, **per live plate**, a property whose
+   value is one of those defined sources. **The operator assigns once, per template.**
+
+🔴 **The reasoning, recorded so it is not re-litigated.** Binding by NAME MATCH silently
+requires the **AUTHOR** to guess the installation's naming convention — which contradicts
+§12.1's own principle that the Designer knows nothing about the installation. Explicit
+assignment removes the guess: **the author names plates for the LAYOUT, the installation
+names sources for what they ARE, and one deliberate operator action joins them.** The
+template stays exactly as portable as before; only the join improves.
+
+⚠ **A template's declared `sourceId` is therefore a PLATE IDENTIFIER, not an installation
+key.** The schema field is NOT renamed — that is a scene migration — and every rule attached
+to it (the rect, `expectedAspect`, every preflight code in §3 and `tasks.md` 1.8/1.8a) is
+unchanged. What changed is what it MEANS.
+
+**The rework was cheap and was taken immediately.** No mapping file exists on any machine, so
+there is no migration; phase 6 resolves a plate to a producer through this shape, so the cost
+only grows.
+
+### DECISION — TWO bridge-owned stores, with a **deliberately split doctrine**
+
+| Axis                    | Doctrine followed   | Mechanism                                                                                                                                                                     |
+| ----------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Writability**         | **fixed-layers**    | A `sources.*` IPC channel (`config` / `setConfig` / `assignments` / `setAssignments` + two publish channels), edited by the operator. Until they say it, NOTHING reaches air. |
+| **Absent file**         | **reserved-layers** | Absent ⇒ **NOTHING DEFINED / NOTHING ASSIGNED**. **No built-in default.**                                                                                                     |
+| **Present but invalid** | both agree          | **HARD boot failure**, before the WebSocket binds.                                                                                                                            |
+
+**Paths:** `~/.cg-runtime/bridge-source-catalog.json` (flag `--source-catalog-path`) and
+`~/.cg-runtime/bridge-source-assignments.json` (flag `--source-assignments-path`), beside the
+existing four.
+
+**Why the ASSIGNMENTS are bridge-side too, beside the template registry.** The bridge is what
+resolves a plate to a producer at take. A browser-local assignment would mean the console
+that bound the plate is the only console that can take the item — while every other console
+in the gallery is looking at the same rundown.
+
+⚠ **NEITHER may live in `templatesDir`,** and the trap is closest for the assignments file
+because it is ABOUT templates. `TemplateRegistry.loadPersisted` reads **every** `*.json` there
+as a template — `tools/caspar-bridge/src/template-registry.ts:75` `fs.readdirSync(this.#persistDir)`
 and `:87` `if (!name.endsWith('.json')) continue;` is the _only_ filter.
-`SEARCH:` `git --no-pager grep -rn -i -e "skipFiles" -e "IGNORED_FILES" -e "isTemplateFile" -- tools/caspar-bridge/src` → **1 hit**, which is that `.endsWith` include-filter itself. There is no exclusion list. Two files already trip it (`delimiters.json`, `channel-settings.json`), producing the false _"skipping unusable persisted template … re-import it to restore durability"_ on every boot (filed as B-116, which names only `delimiters.json` — the `channel-settings.json` instance is **wider than the filed bug** and is listed in the PR under _Findings to file_).
+`SEARCH:` `git --no-pager grep -rn -i -e "skipFiles" -e "IGNORED_FILES" -e "isTemplateFile" -- tools/caspar-bridge/src` → **1 hit**, which is that `.endsWith` include-filter itself. There is no exclusion list. Two files already trip it (`delimiters.json`, `channel-settings.json`), producing the false _"skipping unusable persisted template … re-import it to restore durability"_ on every boot (filed as B-116).
 
 ### 🔴 The inversion, stated because it will be mis-copied
 
-**Both stores say "absent = nothing". The safety direction is opposite.**
+**Both this and reserved-layers say "absent = nothing". The safety direction is opposite.**
 
-- **Reserved layers — "absent = nothing reserved" is FAIL-OPEN.** With no file, the bridge happily
-  allocates onto the playout system's layers. The doctrine is chosen anyway because the alternative
-  (guessing a reservation) is worse, and `tools/caspar-bridge/src/reserved-layers-store.ts:15-18`
-  records the reasoning.
-- **Source mappings — "absent = no mappings" is FAIL-CLOSED.** With no file, nothing resolves and
-  **nothing reaches air.**
+- **Reserved layers — "absent = nothing reserved" is FAIL-OPEN.** With no file, the bridge
+  happily allocates onto the playout system's layers. The doctrine is chosen anyway because
+  the alternative (guessing a reservation) is worse, and
+  `tools/caspar-bridge/src/reserved-layers-store.ts:15-18` records the reasoning.
+- **Live sources — "absent = nothing defined and nothing assigned" is FAIL-CLOSED.** With no
+  files, no plate resolves and **nothing reaches air.**
 
-**Why no built-in default, explicitly.** A default fixed-layer bank is safe because 70–99 is empty
-— a default is a guess about _our own_ layer numbering. A default **input** mapping is a guess about
-**hardware nobody in this project can see**, and a wrong guess puts the wrong source on air. C-015's
-own acceptance already prescribes the right behaviour for the empty case
-(`docs/prd/caspar.md:396-397`): _"WHEN a declared source id has no mapping THEN the take refuses
-legibly with a distinct errorCode (never a silent empty hole on air)."_ The absent file is simply
-the case where **every** id is unmapped, and it resolves through that same rule.
+**Why no built-in default, explicitly.** A default fixed-layer bank is safe because 70–99 is
+empty — a default is a guess about _our own_ layer numbering. A default **input definition**
+is a guess about **hardware nobody in this project can see**, and a wrong guess puts the wrong
+source on air. C-015's own acceptance already prescribes the right behaviour for the empty
+case (`docs/prd/caspar.md:396-397`): the take refuses legibly with a distinct errorCode, never
+a silent empty hole on air. The absent files are simply the case where **every** plate is
+unassigned, and it resolves through that same rule.
 
 ### Shape
 
-**AMENDED 2026-08-10 (owner) — two additions, both taken from how the plant's PREVIOUS automation
-actually defined a live.** See §2a below for the architecture that motivates them.
-
 ```
-SourceMappingsSchema = {
-  mappings: Array<{
-    id: string,                     // symbolic, e.g. "guest-1" — see §3
-    label?: string,                 // operator-facing, e.g. "Studio camera 2"
-    format?: string,                // AMENDED — the SIGNAL format, e.g. '1080i5000'.
-                                    //   The fit aspect DERIVES from this (§3).
+SourceCatalogSchema = {
+  sources: Array<{
+    id: string,                     // INSTALLATION-generated (`nextSourceId`), never a scene's id
+    name: string,                   // REQUIRED — "Studio A", "Baku". The only handle the operator sees.
+    format?: string,                // the SIGNAL format, e.g. '1080i5000'. The fit aspect DERIVES from it (§3a).
     aspect?: number,                // fallback when `format` yields none (AUTO / unlisted)
     producer:
       | { kind: 'route',    channel: number, layer?: number }
-      | { kind: 'decklink', device: number, keyDevice?: number, format?: string }
+      | { kind: 'decklink', device: number, keyDevice?: number }
       | { kind: 'ndi',      source: string, lowBandwidth?: boolean }
       | { kind: 'media',    file: string },
   }>,
+  layerRange?: { start: number, end: number },   // DECLARED, never defaulted (§4)
+}
+
+SourceAssignmentsSchema = {
+  assignments: Array<{ templateId: string, plateId: string, sourceId: string }>,
 }
 ```
 
-A **discriminated union on `kind`**, not a free string, so an unreachable producer form is a parse
-error at the boundary rather than an AMCP `400` at take time. `route` carries an optional `layer`
-because the measured grammar `route://(?<CHANNEL>\d+)(-(?<LAYER>\d+))?` makes it optional.
+A **discriminated union on `kind`**, not a free string, so an unreachable producer form is a
+parse error at the boundary rather than an AMCP `400` at take time. `route` carries an
+optional `layer` because the measured grammar `route://(?<CHANNEL>\d+)(-(?<LAYER>\d+))?`
+makes it optional.
 
-**`keyDevice` on the DECKLINK arm is where fill+key now lives** — it moved off the element, see §1a.
-It is on that arm ALONE and deliberately: a fill/key pair is two physical SDI inputs. A `route` or
-an `ndi` source carries its own alpha or none, and offering the field there would invite an operator
-to configure a pair that cannot exist.
+**`keyDevice` on the DECKLINK arm is where fill+key lives** — it moved off the element, see
+§1a. It is on that arm ALONE and deliberately: a fill/key pair is two physical SDI inputs. A
+`route` or an `ndi` source carries its own alpha or none, and offering the field there would
+invite an operator to configure a pair that cannot exist. **The DECKLINK arm carries no
+`format`** — §3a made the ENTRY's format the one that determines the fit, and two spellings of
+one fact with nothing to say which the crop was computed from is precisely the drift that
+decision exists to prevent.
+
+**The id is INSTALLATION-generated and NEVER REUSED**, and that is a safety property rather
+than tidiness: a counter handing out the lowest free number would re-issue a retired source's
+id, and a stale assignment — hand-written, or restored with an older file — would then RE-BIND
+silently to a source nobody chose. `nextSourceId` is random and collision-checked, so a
+retired id never comes back. It is belt to the delete cascade's braces (§2c).
+
+**The NAME is required and must be unique.** It is the only handle the assignment picker
+shows, so an entry without one is an entry nobody can assign, and two entries called "Studio
+A" leave the operator choosing blind. Both are refusals (`duplicate-name` beside
+`duplicate-id`).
+
+### 2c. ⭐ THE THREE CASES THE MODEL MUST ANSWER — behaviours, not open questions
+
+**1. A plate with no assignment.** A freshly imported template has none, and that is the
+ORDINARY state rather than a fault. The template picker row NAMES which plates are unassigned
+(not a count — a count sends the operator hunting), the Inspector's LIVE PLATES section marks
+each one, and **the take refuses legibly naming the plate**. `tasks.md` 6.7's refusal wording
+is extended accordingly: it assumed a missing MAPPING and must also cover a missing
+ASSIGNMENT.
+
+**2. Deleting a source that is assigned somewhere.** The delete is **NOT refused** — an
+installation must be able to retire a live — and it is **NOT left to dangle**: an assignment
+that dangles until air is the failure this project exists to prevent. It **CASCADES**
+bridge-side in the same operation, the surface **names at the moment of deletion** which
+templates referenced it, and those plates then read as needing a source, with the take
+refusing for that reason.
+
+⚠ **REMOVED rather than TOMBSTONED, and the reason is recorded.** A tombstone would be a
+second "assigned, but not really" state that every consumer — the row, the take, the picker,
+C-022's HTTP view — would have to learn and could get wrong, and it would give a re-created id
+something to silently re-bind to. "Unassigned" is the truth about such a plate and is a state
+the whole feature already handles. What a tombstone would have carried — WHICH source went —
+the deletion report carries instead, to where the operator actually is.
+
+The same prune is the LOAD-time reading of an assignments file that disagrees with the catalog
+beside it (two files, hand-editable, restorable apart): it is pruned **loudly** on the boot
+line rather than made a boot failure. The unusable-FILE rule is unchanged — a file that will
+not parse has no reading at all, while a dangling reference has a perfectly clear one.
+
+**3. One source assigned to two plates at once.** **PERMITTED**, and it means two producers
+reading one input. Unremarkable for `route://`; **a DECKLINK input may refuse a second open.**
+🔴 **Recorded as a RECON QUESTION for phase 6's measurement session** (`amcp-poke`, the same
+session as §3b's `DEFER`/`COMMIT` and R-048's occupied-layer `PLAY`), and **until it is
+answered the UI does not present it as guaranteed** — nothing anywhere says it will work.
+
+### 2d. ⭐ WHERE THE BINDING LIVES — the Inspector, not the sources modal (owner, 2026-08-10)
+
+**DECIDED after the first implementation put both jobs in one dialog.** Defining sources stays
+in the **Live sources modal**; BINDING a plate is in the **INSPECTOR**, shown when the
+template is selected.
+
+**The cost that decided it, measured rather than argued:** the modal then did two unrelated
+jobs, and with two templates imported it already listed **six plates and scrolled** before a
+single source existed. The binding belongs beside the thing being bound; selecting a template
+shows **that template's** plates instead of every plate in the station.
+
+🔴 **The assignment is TEMPLATE-LEVEL and the UI SAYS SO.** It is the default for every use of
+that template, so editing it from one row changes what other rows carrying the same template
+will do. That is **one honest line in the section, not a tooltip** — an operator must not
+discover it by surprise on air. `R-048`'s fast on-air swap is the **per-run OVERRIDE** on top
+of it, and the override **does NOT write back**: an emergency substitution must never silently
+become the permanent configuration.
+
+⚠ **A template not on a row cannot be assigned, and that is ACCEPTED.** Under R-028 every
+template that will be used is on a declared row, so loading it is the natural first step, and
+the take would refuse an unassigned plate anyway. Recorded as the decision rather than left as
+an omission.
 
 ### 2a. Where this shape comes from — the plant's PREVIOUS automation
 
@@ -217,10 +331,13 @@ than preferences.** The system this project replaces defined lives like this:
 - The **playout application read that list** and added entries to its own **RUNDOWN**. Playout here
   is the **CIAB client** (a modified CasparCG Client), and it keeps that role.
 
-So `SourceMappingStore` (phase 4) is the successor to that database table, and it gains a **SECOND
+So the phase-4 **source CATALOG** is the successor to that database table, and it gains a **SECOND
 CONSUMER**: playout. That is filed as **C-022** (a read-only HTTP view of the list on the server the
 bridge already runs) rather than letting playout open the JSON by path, which would couple it to
-this machine's filesystem layout and give it no stable shape to read.
+this machine's filesystem layout and give it no stable shape to read. ⚠ The 2026-08-10 reshape made
+that consumer's job STRICTLY BETTER: what it now reads is a list of NAMED lives, which is what a
+rundown wants, rather than a set of ids invented by whichever template happened to be authored
+first.
 
 **The corroborating artifact** is `docs/recon/ciab-client-tools.json`, the CIAB client's tool
 definitions — `ChannelInput` carries exactly `Type`, `StreamPath`, `MasterNumber`, `SlaveNumber`,
@@ -242,24 +359,51 @@ server capability.
   `new WebSocketServer(...)`, so a conflict resolves loudly at startup rather than at a take. The
   pinning-test shape already exists: `tools/caspar-bridge/tests/fixed-layers-boot.integration.test.ts:134-165`
   asserts a conflicting bank throws before binding _and_ that no port is left listening.
-- **Provenance on stderr** — the store returns `{ value, source }` and the boot line prints where
-  the mapping came from, following `describeFixedBank` (`bin/caspar-bridge.mjs:162-182`), whose own
+- **Provenance on stderr** — each store returns `{ value, source }` and the boot line prints where
+  its value came from, following `describeFixedBank` (`bin/caspar-bridge.mjs:162-182`), whose own
   header records why: on 2026-08-01 two machines ran different banks and nothing anywhere said so.
-  A source mapping is _exactly_ the class of install config that differs silently between machines.
+  A live source list is _exactly_ the class of install config that differs silently between machines.
+  The assignments line ALSO prints what the boot **PRUNED** (§2c), because a plate that was bound
+  and now is not must not become one silently.
 - **Refusal wording** — reason codes derived from a wire const so store and channel cannot drift,
-  as `FIXED_LAYERS_SET_CONFIG_REASONS` already does.
+  as `FIXED_LAYERS_SET_CONFIG_REASONS` already does. **Two unions here**, one per store
+  (`SOURCES_SET_CONFIG_REASONS` / `SOURCES_SET_ASSIGNMENTS_REASONS`), and the operator-facing
+  sentences are keyed off them so a validator code cannot ship without one.
+- **THE PURE VALIDATORS LIVE IN `@cg/shared-ipc`, NOT IN THE BRIDGE.** `validateSourceCatalog`,
+  `validateSourceAssignments` and `pruneAssignmentsForCatalog` are all there, so the bridge and the
+  offline mock share ONE definition of a legal catalog, a legal assignment, and what a deletion
+  orphans. Only load / save / provenance stayed bridge-side, because only that half needs a
+  filesystem. **This split is what let the 2026-08-10 reshape land in one place.**
 
-### The settings surface
+### The settings surface — TWO of them, per §2d
 
-Modelled on **`DelimitersModal`** (`apps/runtime/src/renderer/features/inspector/DelimitersModal.tsx`)
-rather than `FixedBankConfigModal`, because a mapping table is a list editor, not a read-only
-ceiling. Two behaviours copied deliberately:
+**Defining** sources is the **Live sources modal**, modelled on **`DelimitersModal`**
+(`apps/runtime/src/renderer/features/inspector/DelimitersModal.tsx`) rather than
+`FixedBankConfigModal`, because a source list is a list editor and not a read-only ceiling.
+**Binding** a plate is the **INSPECTOR's `LIVE PLATES` section**, shown for a selected template
+(§2d records why it is not in the modal). Both go through the same store and inherit the same two
+behaviours, copied deliberately:
 
 - **No optimistic local update** — _"The local cache is NOT updated optimistically. The bridge is
   the owner and can refuse"_ (`delimiterStore.ts:134-140`).
 - **`describeCommitFailure`'s older-bridge translation** (`:162-171`) — a station whose bridge
-  predates this feature will hit `unknown channel: sources.set`, and the operator must be told that
-  rather than shown a generic failure.
+  predates this feature must be told that rather than shown a generic failure.
+
+🔴 **AND A THIRD, MEASURED IN USE: A REFUSAL MUST NEVER SHOW A WIRE IDENTIFIER.** An operator met
+`invalid request for sources.set-config` — the bridge's own frame validator (`bridge.ts`,
+`invalid request for ${frame.channel}`) reaching the screen verbatim. It names an IPC channel and
+there is nothing to do with it. **It was not a typo, it was a STATE:** the browser was talking to a
+bridge PROCESS whose build predated this channel's shape, so the payload was legal in the page and
+rejected on the wire. `unknown channel` was already translated — the case where the bridge has never
+heard of the feature — and this is its sibling, where the bridge knows the channel and disagrees
+about its shape. Both now say the same operator-facing sentence, and the per-reason sentences are
+keyed off the wire's own unions so the two cannot drift.
+
+⚠ **Two payload bugs in the same class were found and fixed with it**, because each produced that
+same bare message: a fresh `ndi` / `media` producer was created with an EMPTY name (which its own
+`z.string().min(1)` rejects), and the numeric controls accepted `0` for `channel` / `device` /
+`keyDevice` (all `z.number().int().positive()`). **A control must not be able to produce a value
+the contract forbids** — the floor is now the schema's own.
 
 `SEARCH:` `git --no-pager grep -rn -e "channelSettings.set" -- apps/runtime/src` → **0 renderer call sites** (the three repo-wide hits are the channel-name literal, the bridge calling its own store, and a `.settings.find` false positive). So `channelSettings` is **not** a usable settings-surface precedent; `FixedBankConfigModal` and `DelimitersModal` are the only two.
 
@@ -271,6 +415,19 @@ ceiling. Two behaviours copied deliberately:
 `'DECKLINK DEVICE 3'` and `'C:\media\guest.mp4'` all parse identically, and **nothing anywhere
 validates it** — no schema refinement, no preflight, no lint, no UI (there is no UI: see §9).
 
+### ⭐ WHAT THE DECLARED ID IS, AFTER §2z — a PLATE IDENTIFIER
+
+**Restated here rather than renamed.** The element's `sourceId` names a HOLE IN THIS TEMPLATE and
+nothing outside it: the author picks it for the LAYOUT (`guest-1`, `guest-2`), and it is joined to
+an installation source by a deliberate operator action, never by matching its text against anything.
+
+⚠ **The schema field keeps its name** — renaming it is a scene migration and is out of scope
+(`proposal.md`) — and **every rule below is unchanged**: the symbolic form, the preflight codes, the
+flattened rect, `expectedAspect`, `tasks.md` 1.8 and 1.8a. Only the MEANING is restated. The
+symbolic-form refinement in particular still earns its keep for a reason that survives the reshape:
+a device-shaped plate id is an author writing an installation fact into a scene, which is exactly
+what this design forbids whether or not anything would have matched it.
+
 ### DECISION — a scene may NOT name a device. Enforced in two places.
 
 1. **Schema** — the id gets a format refinement: a symbolic identifier
@@ -280,8 +437,10 @@ validates it** — no schema refinement, no preflight, no lint, no UI (there is 
    `ExportIssue.code` is `z.string().min(1)`, an open string
    (`packages/shared-ipc/src/channels/export.ts:16-24`).
 
-The template therefore stays portable: it names sources by id only, and the id → producer binding is
-an **installation** concern, which is what both items promise (`docs/prd/caspar.md:374-376`).
+The template therefore stays portable: it names its own plates, and the plate → source binding is an
+**installation** concern, which is what both items promise (`docs/prd/caspar.md:374-376`). §2z makes
+that stronger rather than weaker — under a name match the template was portable only to a plant that
+had adopted the author's vocabulary.
 
 ### 🔴 The aspect decision, forced by hardware fact 2
 
@@ -293,8 +452,8 @@ and nothing prevents it.**
 
 **A correction to how this was first weighed.** The first three options below all answer _"how do
 we PREVENT a mismatch?"_. Only the last two answer _"a mismatch has happened — how do we RESOLVE
-it?"_, which is the question that actually matters, because the mapping is an installation fact the
-author never sees and therefore a mismatch is always possible.
+it?"_, which is the question that actually matters, because the source a plate is assigned to is an
+installation fact the author never sees and therefore a mismatch is always possible.
 
 | Option                                                                                               | Verdict                                                                                                                                                                                                                                                                          |
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -411,16 +570,17 @@ The two readings are different fields that happen to share a name, and this desi
 > **`expectedAspect` is a DECLARATION to validate the mapped source against. It is NOT the input to
 > the fit computation.**
 
-- **The fit input is the MAPPING's aspect** — an installation fact, recorded beside the producer in
-  §2's `SourceMappingsSchema`. The operator configuring `guest-1` knows what the plant delivers; the
-  author does not.
+- **The fit input is the ASSIGNED SOURCE's aspect** — an installation fact, recorded beside the
+  producer in §2's `SourceCatalogSchema`. The operator who defined "Studio A" knows what the plant
+  delivers; the author does not.
   **AMENDED 2026-08-10 (owner): that aspect is DERIVED FROM THE MAPPING'S `format`, not typed.**
   See §3a below for the chain and the reason.
 - **`expectedAspect` is the author's assertion** — "this window is designed for a 16:9 feed". The
-  bridge compares it against the mapping's aspect and **refuses the take with a distinct errorCode
-  when they disagree**, rather than silently cropping something the author never anticipated.
-- **Fallback, recorded as a fallback:** where a mapping states no aspect, the fit uses
-  `expectedAspect` as the assumed source aspect. This keeps the feature usable before every mapping
+  bridge compares it against the ASSIGNED SOURCE's aspect and **refuses the take with a distinct
+  errorCode when they disagree**, rather than silently cropping something the author never
+  anticipated.
+- **Fallback, recorded as a fallback:** where the assigned source states no aspect, the fit uses
+  `expectedAspect` as the assumed source aspect. This keeps the feature usable before every source
   is fully described, and it degrades to the author's best guess rather than to a stretch.
 
 This is what makes the decision coherent: crop-to-fill _discards picture_, so it must be driven by
@@ -431,11 +591,15 @@ would silently cut the wrong part of a face.
 §3's schema work and §6's geometry work sit in the same phase.
 
 **Open residual, unchanged:** whether the producer's real raster can be read back at run time (so
-the fit could use measured truth rather than the mapping's declared aspect) is unknown — §12.3. If
-it can, it supersedes the mapping's `aspect` as the fit input and `expectedAspect` stays exactly
+the fit could use measured truth rather than the source's declared aspect) is unknown — §12.3. If
+it can, it supersedes the source's `aspect` as the fit input and `expectedAspect` stays exactly
 what it is here: a declaration to validate against.
 
-### 3a. AMENDED 2026-08-10 — the mapping carries the FORMAT, and the fit aspect DERIVES from it
+### 3a. AMENDED 2026-08-10 — the SOURCE carries the FORMAT, and the fit aspect DERIVES from it
+
+⚠ **Written before §2z and re-pointed by it, not superseded.** Every word below held of the mapping
+ENTRY and now holds of the CATALOG ENTRY; the fit chain is unchanged, and the only difference is
+which of the two stores the plate reaches it through.
 
 **The previous automation's live definition carried a format**, and the artifact shows the exact
 vocabulary. `ciab-client-tools.json`, `ChannelInput` → `Format` is a **37**-value combo, default
@@ -467,20 +631,23 @@ is a number that can be wrong on air, and it can be wrong while looking entirely
 `1080i5000` is 16:9 whatever anyone types beside it. The operator already has to state the format —
 the previous system asked for it, and it is the field that actually determines the raster.
 
-**The chain, in order, recorded so no reader re-derives it:**
+**The chain, in order, recorded so no reader re-derives it.** Step 0, after §2z, is the ASSIGNMENT:
+the plate's assigned catalog entry is what steps 1 and 2 read, and a plate with NO assignment
+refuses the take before any of this (§2c, `tasks.md` 6.7).
 
-1. **the mapping's `format`** → its aspect (`1080i5000` → 16:9, `PAL` → 4:3, …);
-2. **the mapping's explicit `aspect`** — the fallback where the format yields none, i.e. `AUTO` or a
-   format outside the list above;
+1. **the assigned source's `format`** → its aspect (`1080i5000` → 16:9, `PAL` → 4:3, …);
+2. **the assigned source's explicit `aspect`** — the fallback where the format yields none, i.e.
+   `AUTO` or a format outside the list above;
 3. **the element's `expectedAspect`** — the author's best guess, last;
 4. **neither side states anything** → still open, and still `tasks.md` 6.3's to settle.
 
 🔴 **`expectedAspect` IS UNCHANGED BY THIS, and this sentence exists so a later reader does not
-collapse the two.** It remains the AUTHOR'S ASSERTION that the bridge VALIDATES the mapping against,
+collapse the two.** It remains the AUTHOR'S ASSERTION that the bridge VALIDATES the assigned source
+against,
 refusing the take with a distinct errorCode when the two disagree (above). It appearing at step 3 of
-the fit chain is a FALLBACK for an undescribed mapping, not a promotion to fit input. The two roles
-are different questions about the same number: "what shape is this feed?" (the mapping) and "what
-shape did the author design for?" (the element).
+the fit chain is a FALLBACK for an undescribed source, not a promotion to fit input. The two roles
+are different questions about the same number: "what shape is this feed?" (the installation's
+source) and "what shape did the author design for?" (the element).
 
 ### 3b. OPEN RECON QUESTION — `DEFER` / `COMMIT`, and whether `FILL` and `CLIP` land on ONE frame
 
@@ -565,7 +732,7 @@ validation in phase 4. It is **not** about phases 1–3:
 | **1 — schema + authoring**          | no — Designer-only            | **none.** No bridge, no wire, no layer. Landed 2026-08-08.      |
 | **2 — declaration + carrier**       | no — a `TemplateInfo` field   | none (2.6 is a comment correction R-028's 6.5 explicitly cites) |
 | **3 — mock**                        | no — test infrastructure      | none; it BLOCKS 4 and 5                                         |
-| **4 — mapping store + settings**    | 4.5 only (range disjointness) | 4.5 wants R-028's 6.4 (the freed 10–59) to be real              |
+| **4 — source stores + settings**    | 4.5 only (range disjointness) | 4.5 wants R-028's 6.4 (the freed 10–59) to be real              |
 | **5 — ownership**                   | **yes, all three doors**      | **after R-028 section 6**                                       |
 | **6 — producer + geometry + audio** | yes (creates on those layers) | **after phase 5**                                               |
 
@@ -592,7 +759,7 @@ This supersedes the recon's "1–9 is the only free band", which was measured ag
 policy. Under R-028's own §k that policy is descriptive, and 1–9 (nine layers, enough for four
 fill+key boxes on the whole channel) is not a viable address space.
 
-**The Live Source range is declared config**, in the same file as the mapping (§2), validated
+**The Live Source range is declared config**, in the same file as the source catalog (§2), validated
 disjoint from the fixed bank and the reserved range at load **and** at change — extending the
 existing `validateFixedBank` checks (`tools/caspar-bridge/src/fixed-layers-store.ts:145-166`),
 which already do exactly this for two of the three classes.
@@ -1506,12 +1673,12 @@ to, and the mechanism choice is owed either way.
 
 ### 9b.6 What this model does NOT change — so nobody reads it as a redesign
 
-| Unaffected                                                              | Why                                                                                                                                                                  |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **The mapping store and its CG Control surface** (§2, phase 4 — landed) | it maps a symbolic id to a producer. Which channel that producer is PLAYED on is not in the mapping.                                                                 |
-| **The scene-px → `FILL` / `CLIP` arithmetic** (§6, phase 6)             | `FILL` normalizes per axis against **the channel raster it runs on** (§0b, fact 1). Run it on the dedicated channel and it uses that raster; the chain is identical. |
-| **The born-muted audio rule** (§7, task 6.5)                            | it is a property of how a producer is CREATED, on whatever channel it is created.                                                                                    |
-| **The on-air plate swap** (`R-048`, tasks 6.9–6.9f)                     | it replaces a producer on a layer.                                                                                                                                   |
+| Unaffected                                                                 | Why                                                                                                                                                                  |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The source stores and their CG Control surfaces** (§2, phase 4 — landed) | they define what lives exist and which of them each plate uses. Which channel a producer is PLAYED on is in neither of them.                                         |
+| **The scene-px → `FILL` / `CLIP` arithmetic** (§6, phase 6)                | `FILL` normalizes per axis against **the channel raster it runs on** (§0b, fact 1). Run it on the dedicated channel and it uses that raster; the chain is identical. |
+| **The born-muted audio rule** (§7, task 6.5)                               | it is a property of how a producer is CREATED, on whatever channel it is created.                                                                                    |
+| **The on-air plate swap** (`R-048`, tasks 6.9–6.9f)                        | it replaces a producer on a layer.                                                                                                                                   |
 
 **The channel number becomes configuration; none of the logic moves.** The precedent exists already:
 `FixedLayerBankSchema` carries `channel` (`packages/shared-ipc/src/channels/fixedLayers.ts:45-47`)
@@ -1639,10 +1806,10 @@ Two consequences, both carried out in this change:
 
 ### 12.3 Can the true producer aspect be read at run time? — STILL OPEN
 
-§3's **crop-to-fill** uses the mapping's `aspect`, falling back to `expectedAspect` — an **authored
+§3's **crop-to-fill** uses the assigned source's `aspect`, falling back to `expectedAspect` — an **authored
 guess** about a source the author cannot see. Whether CasparCG reports a producer's real raster (via
 `INFO <ch>-<layer>` or OSC) is **unknown**, and nothing in this repo records it. If it can, the fit
-should use truth, the mapping's `aspect` becomes the fallback, and `expectedAspect` stays exactly
+should use truth, the source's `aspect` becomes the fallback, and `expectedAspect` stays exactly
 what §3 makes it: a declaration to validate against. This is a hardware recon question, answerable
 with `amcp-poke` in the same session as phase 6. **It blocks nothing** — the fallback chain is
 defined without it.

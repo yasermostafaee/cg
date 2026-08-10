@@ -1,10 +1,15 @@
-import { useCallback, useRef, useState } from 'react';
-import { liveSourceCarrierState, type TemplateInfo } from '@cg/shared-ipc';
+import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
+import { liveSourceCarrierState, unassignedPlateIds, type TemplateInfo } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
+import {
+  currentSourceAssignments,
+  sourcesVersion,
+  subscribeSources,
+} from '../sources/sourceStore.js';
 import { templateDisplayName } from '../library/templateName.js';
 
 /**
@@ -67,6 +72,13 @@ const styles = {
    * intent only: nothing is broken, the answer is simply not recorded yet.
    */
   stale: { fontSize: '0.75rem', color: colors.pending },
+  /**
+   * D-137 / C-015 — the same ATTENTION amber, for the same kind of statement:
+   * the template is fine, the work on it is not finished. A plate with no source
+   * refuses its take, so the row names WHICH plates rather than only that some
+   * exist — "2 plates need a source" sends the operator hunting.
+   */
+  unassigned: { fontSize: '0.75rem', color: colors.pending },
   empty: { fontSize: '0.85rem', color: colors.textMuted, margin: 0 },
 } as const;
 
@@ -92,6 +104,23 @@ const STALE_CARRIER_TITLE =
   'whether it has any. Re-import the .vcg to record them — until then a Live Source in it ' +
   'would be left with nothing behind it on air.';
 
+/**
+ * D-137 / C-015 — what the operator is told when a template has live plates that
+ * no source is assigned to.
+ *
+ * A FRESHLY IMPORTED TEMPLATE HAS ALL OF THEM, and that is the ordinary state
+ * rather than a fault: the author names plates for the layout, the installation
+ * names its sources, and the two are joined by a deliberate action in Live
+ * sources. This row is where the operator finds out that action is still owed —
+ * before the take refuses, which is the other place they would find out.
+ *
+ * It also covers the DELETION case with no extra state: retiring a source drops
+ * the assignments it orphaned, so those plates simply read as needing one again.
+ */
+const UNASSIGNED_TITLE =
+  'These live plates have no source yet. Open Live sources to assign one to each — until then ' +
+  'this template refuses its take, naming the plate.';
+
 interface PickRequest {
   title: string;
   templates: readonly TemplateInfo[];
@@ -114,6 +143,20 @@ export function useTemplatePicker(): {
   const [request, setRequest] = useState<PickRequest | null>(null);
   const resolver = useRef<((choice: TemplateChoice) => void) | null>(null);
   const { confirm, confirmDialog } = useConfirm();
+  // D-137 / C-015 — SUBSCRIBED, unlike the template list beside it, because the
+  // assignments are bridge-owned and a second console can bind a plate while
+  // this dialog is open. The list is browser-local, so a snapshot is right for
+  // it and wrong for this.
+  useSyncExternalStore(subscribeSources, sourcesVersion);
+  const unassigned = useCallback(
+    (template: TemplateInfo): string[] =>
+      unassignedPlateIds(
+        currentSourceAssignments(),
+        template.templateId,
+        (template.liveSources?.sources ?? []).map((s) => s.sourceId),
+      ),
+    [],
+  );
 
   const pickTemplate = useCallback(async (title: string): Promise<TemplateChoice> => {
     const templates = await window.cg.templates.list();
@@ -209,6 +252,7 @@ export function useTemplatePicker(): {
             {[...request.templates].reverse().map((t) => {
               const label = templateDisplayName(t);
               const carrier = liveSourceCarrierState(t);
+              const needsSource = unassigned(t);
               return (
                 <div key={t.templateId} style={styles.row} data-template-id={t.templateId}>
                   <div style={styles.rowActions}>
@@ -244,6 +288,20 @@ export function useTemplatePicker(): {
                     </span>
                   ) : (
                     <span hidden data-live-sources={carrier} />
+                  )}
+                  {/*
+                    D-137 / C-015 — the plates still owed a source, NAMED. The
+                    count alone would be a number the operator then has to go and
+                    resolve; the ids are what the assignment surface lists.
+                  */}
+                  {needsSource.length > 0 && (
+                    <span
+                      style={styles.unassigned}
+                      data-plates-unassigned={needsSource.join(',')}
+                      title={UNASSIGNED_TITLE}
+                    >
+                      Needs a source: {needsSource.join(', ')}
+                    </span>
                   )}
                 </div>
               );

@@ -21,8 +21,8 @@ import { StatusBar } from './features/status/StatusBar.js';
 import { Tooltip } from './ui/Tooltip.js';
 import { useConnections } from './hooks/useConnections.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
-import { initSourceMappings } from './features/sources/sourceMappingStore.js';
-import { SourceMappingsModal } from './features/sources/SourceMappingsModal.js';
+import { initSources } from './features/sources/sourceStore.js';
+import { SourcesModal } from './features/sources/SourcesModal.js';
 import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
 import { useLink } from './hooks/useLink.js';
 import { useLock } from './hooks/useLock.js';
@@ -122,10 +122,12 @@ export function App(): JSX.Element {
   // time the operator changed selection.
   useEffect(() => initDelimiters(window.cg), []);
 
-  // D-137 / C-015 — the installation's Live Source mapping, pulled once and kept
-  // subscribed for the same reason: it is per-STATION, and a second console must
-  // gain a binding this one just made without either operator reloading.
-  useEffect(() => initSourceMappings(window.cg), []);
+  // D-137 / C-015 — the installation's source CATALOG and the per-plate
+  // ASSIGNMENTS, pulled once and kept subscribed for the same reason: both are
+  // per-STATION, a second console must gain a binding this one just made without
+  // either operator reloading, and a catalog DELETION cascades into the
+  // assignments without any browser asking.
+  useEffect(() => initSources(window.cg), []);
 
   // Stack housekeeping — the prune of per-item state for items that have left the
   // stack, plus the file-attachment restore. HERE because `App` is the one
@@ -391,7 +393,7 @@ export function App(): JSX.Element {
         <Tooltip />
         <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
         <ServerSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-        {sourcesOpen && <SourceMappingsModal onClose={() => setSourcesOpen(false)} />}
+        {sourcesOpen && <SourcesModal onClose={() => setSourcesOpen(false)} />}
         <LockOverlay
           engaged={lock.engaged}
           {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}

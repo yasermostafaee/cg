@@ -9,7 +9,7 @@ import { colors } from '../theme.js';
  *
  * | where                                    | foreground | ratio     |
  * | ---------------------------------------- | ---------- | --------- |
- * | `SourceMappingsModal` `styles.error`     | `#991B1B`  |  2.13:1 ✗ |
+ * | `SourcesModal` `styles.error`            | `#991B1B`  |  2.13:1 ✗ |
  * | `DelimitersModal` `styles.error`         | `#991B1B`  |  2.13:1 ✗ |
  * | `ServerSettingsPanel` `styles.error`     | `#991B1B`  |  2.13:1 ✗ |
  * | `ServerSettingsPanel` `styles.blocked`   | `#FCA5A5`  |  8.66:1   |
