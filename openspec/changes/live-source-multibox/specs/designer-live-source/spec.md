@@ -102,6 +102,33 @@ that it is left empty for an opaque source, and that both ids need their own map
 - **WHEN** the element already matches within tolerance **THEN** the action is disabled with a
   stated reason
 
+### Requirement: The Inspector offers no affordance a Live Source cannot honour
+
+The Inspector SHALL NOT offer, for a Live Source, any of: a keyframe affordance on a transform
+field, a rotation control, an opacity control, or a filter section.
+
+A Live Source's geometry is composed ONCE at import and sent as a static, axis-aligned box, and the
+element paints no pixels on air, so none of those can change what airs. Offering them invites the
+preflight error rather than preventing it, and the author would learn at EXPORT what the Inspector
+could have said while they were authoring.
+
+The plate's position, size and STATIC scale SHALL remain editable — the flattening composes scale
+into the declared rect, so those describe the hole and the hole is the contract.
+
+Every other element kind SHALL keep all of these.
+
+#### Scenario: The affordances that cannot reach air are absent
+
+- **WHEN** a Live Source is selected **THEN** its Inspector offers no keyframe affordance on any
+  transform field, no rotation, no opacity and no filter section
+- **WHEN** any other element kind is selected **THEN** all of those are still offered
+- **WHEN** a Live Source is selected **THEN** position, size and scale remain editable
+
+#### Scenario: The author is told why, once
+
+- **WHEN** a Live Source is selected **THEN** the section states that the plate is static and
+  axis-aligned and that it paints nothing on air, rather than leaving the removals unexplained
+
 ### Requirement: The source id is bindable through the existing fields/bindings model
 
 A Live Source's source id SHALL be exposable as a dynamic field through the EXISTING fields and
@@ -154,10 +181,21 @@ each raise a preflight **error** — not a warning, because only an error blocks
 - **WHEN** a Live Source is dragged fully off-frame and the scene is exported **THEN** the export is
   blocked with an error naming the element, and the element is NOT removed from the artifact
 
+#### Scenario: A rotated plate — or a rotated parent — is refused
+
+- **WHEN** a Live Source carries a non-zero rotation **THEN** preflight reports an error naming the
+  element and the export is blocked
+- **WHEN** the plate's own rotation is zero but an ANCESTOR container is rotated **THEN** the same
+  error is reported, naming both — the declared rect is axis-aligned either way, so the composited
+  picture would show outside the frame the author drew
+
 #### Scenario: An animated hole is refused in v1
 
 - **WHEN** a Live Source carries a keyframe on position, size or scale **THEN** preflight raises an
   error, because a static composited rect would desync from a moving hole
+- **WHEN** the plate carries none but an ANCESTOR container is animated **THEN** the same error is
+  raised, naming both — an animated parent moves the hole identically, and the rect is read
+  statically, so it stops being true on the next frame
 
 #### Scenario: Overlapping Live Sources are reported
 

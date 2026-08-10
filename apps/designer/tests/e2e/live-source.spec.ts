@@ -8,11 +8,13 @@ import type { DesignerApp } from './fixtures/designer.js';
  * Maps `openspec/changes/live-source-multibox/specs/designer-live-source/spec.md`,
  * one `test` per `#### Scenario` that has a UI to drive:
  *
- *   - "The element carries its ids and is placeable"
+ *   - "The element carries its id and is placeable" + "The scene never declares a
+ *     key source"
  *   - "A device reference is refused as a source id" (the authoring half)
  *   - "Bars on the authoring surfaces, nothing in the exports"
  *   - "An off-frame Live Source blocks rather than vanishes"
- *   - "An animated hole is refused in v1"
+ *   - "The affordances that cannot reach air are absent" + "The author is told why,
+ *     once"
  *   - "Overlapping Live Sources are reported"
  *   - "Multiple independent Live Sources"
  *   - D-147's "the aspect is chosen by NAME" and "fit the plate to the aspect"
@@ -33,6 +35,13 @@ import type { DesignerApp } from './fixtures/designer.js';
  *     `packages/template-runtime/tests/live-source-render.test.ts`
  *   - "A nested Live Source declares its true rect" → the DECLARATION is phase 2;
  *     phase 1 pins only that a nested hole inherits the render mode (same file).
+ *   - "An animated hole is refused in v1" and "A rotated plate — or a rotated parent
+ *     — is refused" → `tests/live-source-preflight.test.ts`. These USED to be driven
+ *     here, by clicking a keyframe diamond and reading the resulting error row.
+ *     There is no diamond to click any more, which is the improvement: the refusals
+ *     are now PREVENTED while authoring rather than reported at export. The ANCESTOR
+ *     halves (an animated or rotated CONTAINER above a static plate) could not be
+ *     driven here in any case — the Designer has no UI that creates a container.
  */
 
 /** Every rendered Live Source box in the editor canvas iframe. */
@@ -64,26 +73,25 @@ const sizeField = (app: DesignerApp, which: 'Width' | 'Height') =>
   app.inspector.getByRole('spinbutton', { name: which });
 
 test.describe('Live Source (D-137 phase 1)', () => {
-  test('placeable, carries its ids, and both round-trip through the Inspector', async ({ app }) => {
+  test('placeable, carries its id, and it round-trips through the Inspector', async ({ app }) => {
     await app.newProject('LiveSource');
     await app.addLiveSource({ x: 200, y: 160 });
 
     // It exists on the canvas, and its default id is the symbolic `live-1`.
     await expect(holes(app)).toHaveCount(1);
     await expect(app.liveSourceIdInput).toHaveValue('live-1');
-    await expect(app.liveSourceKeyIdInput).toHaveValue('');
 
-    // Rename the fill id — the bars' label follows, which is what makes several
-    // holes on one frame distinguishable at a glance.
+    // Rename it — the bars' label follows, which is what makes several holes on one
+    // frame distinguishable at a glance.
     await app.setLiveSourceId('guest-1');
     await expect(label(app)).toHaveText('guest-1');
 
-    // The optional KEY id is settable, and clearing it is legitimate (fill-only is
-    // every route:// and media source).
-    await app.setLiveSourceId('guest-1-key', 'key');
-    await expect(app.liveSourceKeyIdInput).toHaveValue('guest-1-key');
-    await app.setLiveSourceId('', 'key');
-    await expect(app.liveSourceKeyIdInput).toHaveValue('');
+    // ONE id. The key-source-id control is gone: whether an id resolves to a single
+    // device or to a fill/key PAIR is a property of the installation's mapping in CG
+    // Control, and the author cannot know it (design.md §1a).
+    await expect(
+      app.inspector.getByRole('textbox', { name: 'Live Source key source id' }),
+    ).toHaveCount(0);
 
     // No preflight error at any point: a freshly drawn hole is exportable.
     await expect(errorPill(app)).toHaveCount(0);
@@ -179,19 +187,47 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(issueRows(app, /entirely outside/)).toHaveCount(1);
   });
 
-  test('an ANIMATED hole is refused in v1', async ({ app }) => {
-    await app.newProject('LiveSourceAnimated');
+  /**
+   * The v1 refusals are now PREVENTED at authoring time rather than reported at
+   * export, so this test asserts the affordances are absent instead of driving them
+   * and reading the error.
+   *
+   * That is a deliberate inversion of what it used to do: it clicked the
+   * `position.x` diamond and expected a preflight row. There is no diamond to click
+   * any more — which is the point. The author cannot reach the error, so the error's
+   * own coverage moved to `tests/live-source-preflight.test.ts`, where the ANCESTOR
+   * cases (an animated or rotated CONTAINER above a static plate) live too. Those
+   * cannot be driven here at all: the Designer has no UI that creates a container.
+   */
+  test('the Inspector offers nothing a plate cannot honour', async ({ app }) => {
+    await app.newProject('LiveSourceAffordances');
     await app.addLiveSource({ x: 200, y: 160 });
 
-    // A position.x keyframe makes the hole movable. `MIXER FILL` is emitted once from
-    // the static rect, so a moving hole slides off the source behind it.
-    await app.page
-      .getByRole('button', { name: /Toggle keyframe for position\.x/ })
-      .first()
-      .click();
+    // No keyframe diamond on ANY transform field — the rect is composed once at
+    // import and sent as a static MIXER FILL, so an animated hole would slide off
+    // the picture behind it.
+    await expect(app.page.getByRole('button', { name: /^Toggle keyframe for / })).toHaveCount(0);
 
-    await openIssues(app);
-    await expect(issueRows(app, /keyframe/)).toHaveCount(1);
+    // No rotation (MIXER FILL is axis-aligned) and no opacity (the plate paints zero
+    // pixels on air and cannot reach the layer composited behind it).
+    await expect(app.inspector.getByRole('spinbutton', { name: 'Rotation' })).toHaveCount(0);
+    await expect(app.inspector.getByRole('spinbutton', { name: 'Opacity' })).toHaveCount(0);
+
+    // No Filter section: filters paint pixels, and in 'author' mode one would tint
+    // only the SMPTE bars — an effect that reaches nothing on air.
+    await expect(app.inspector.getByRole('button', { name: 'Filter' })).toHaveCount(0);
+
+    // What DOES stay: the box itself. A static scale is composed into the declared
+    // rect, so these six describe the hole, and the hole is the contract.
+    for (const field of ['X position', 'Y position', 'Width', 'Height', 'Scale X', 'Scale Y']) {
+      await expect(app.inspector.getByRole('spinbutton', { name: field })).toHaveCount(1);
+    }
+
+    // And the author is told WHY, here, rather than at export.
+    await expect(app.inspector.getByText(/static and axis-aligned/i)).toBeVisible();
+
+    // A freshly drawn plate is still exportable.
+    await expect(errorPill(app)).toHaveCount(0);
   });
 
   test('OVERLAPPING Live Sources are reported against both', async ({ app }) => {

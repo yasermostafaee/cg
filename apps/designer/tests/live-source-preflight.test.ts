@@ -48,6 +48,24 @@ function live(id: string, x: number, y: number, over: Record<string, unknown> = 
   } as unknown as Element;
 }
 
+/** A container, optionally ROTATED (via `t`) and optionally ANIMATED (via `tracks`). */
+function box(
+  id: string,
+  t: ReturnType<typeof tf>,
+  children: Element[],
+  tracks?: Record<string, unknown>,
+): Element {
+  return {
+    ...baseElProps,
+    id,
+    name: id,
+    type: 'container',
+    transform: t,
+    children,
+    ...(tracks !== undefined ? { animation: { tracks } } : {}),
+  } as unknown as Element;
+}
+
 function scene(children: Element[]): Scene {
   return {
     schemaVersion: 1,
@@ -159,6 +177,93 @@ describe('D-137 — an animated hole is refused in v1', () => {
   it('a NON-geometry keyframe (opacity) is fine — the hole does not move', () => {
     const s = scene([live('guest-1', 10, 10, { animation: { tracks: { opacity: [] } } })]);
     expect(codes(s)).toEqual([]);
+  });
+
+  /**
+   * THE ANCESTOR CASE, and it is the one an element-local implementation passes by
+   * accident: the plate carries no keyframes at all, and its rect is still a lie on
+   * every frame but the first. `collectLiveSources` reads transforms STATICALLY, so
+   * an animated PARENT moves the hole while the composited `MIXER FILL` stays where
+   * it was — the same live-face-sliding-out failure, arriving by a different door.
+   */
+  it('an ANIMATED CONTAINER refuses the plate inside it, though the plate is static', () => {
+    const s = scene([box('rig', tf(0, 0), [live('guest-1', 10, 10)], { 'position.x': [] })]);
+    const issues = liveSourceIssues(s);
+    expect(issues.map((i) => i.code)).toContain('live-source-animated');
+    // The message must name the OFFENDER, not merely the plate — the author has to
+    // know which thing to change, and it is not the one they selected.
+    const msg = issues.find((i) => i.code === 'live-source-animated')?.message ?? '';
+    expect(msg).toContain('guest-1');
+    expect(msg).toContain('rig');
+    // Reported against the PLATE, so selecting the issue goes to the element the
+    // author recognises as the Live Source.
+    expect(issues.find((i) => i.code === 'live-source-animated')?.elementId).toBe('guest-1');
+  });
+
+  it('an animated GRANDPARENT is caught too — the whole chain, not just the parent', () => {
+    const inner = box('inner', tf(0, 0), [live('guest-1', 10, 10)]);
+    const s = scene([box('outer', tf(0, 0), [inner], { 'scale.y': [] })]);
+    expect(codes(s)).toContain('live-source-animated');
+  });
+
+  it('a STATIC container is fine — the check is about animation, not nesting', () => {
+    const s = scene([box('rig', tf(0, 0), [live('guest-1', 10, 10)])]);
+    expect(codes(s)).toEqual([]);
+  });
+
+  it('reports ONE error when the plate AND its parent are animated', () => {
+    // Two errors for one thing to fix reads as two faults.
+    const s = scene([
+      box('rig', tf(0, 0), [live('guest-1', 10, 10, { animation: { tracks: { 'size.w': [] } } })], {
+        'position.x': [],
+      }),
+    ]);
+    expect(codes(s).filter((c) => c === 'live-source-animated')).toHaveLength(1);
+  });
+});
+
+/**
+ * D-137 — ROTATION, on the plate or ANYWHERE above it.
+ *
+ * The declared rect is AXIS-ALIGNED, so a rotated plate declares its BOUNDING BOX:
+ * strictly larger than the frame the author drew, with the live picture composited
+ * showing outside it. A rotated CONTAINER produces exactly that with the plate's own
+ * rotation still at 0, which is why the check reads the composed chain.
+ */
+describe('D-137 — a rotated hole is refused', () => {
+  it('the plate’s OWN rotation raises live-source-rotated', () => {
+    const s = scene([live('guest-1', 10, 10, { transform: { ...tf(10, 10), rotation: 12 } })]);
+    expect(codes(s)).toContain('live-source-rotated');
+  });
+
+  it('a ROTATED CONTAINER refuses the plate inside it, though the plate is unrotated', () => {
+    const s = scene([box('rig', { ...tf(0, 0), rotation: 30 }, [live('guest-1', 10, 10)])]);
+    const issues = liveSourceIssues(s);
+    expect(issues.map((i) => i.code)).toContain('live-source-rotated');
+    const msg = issues.find((i) => i.code === 'live-source-rotated')?.message ?? '';
+    expect(msg).toContain('guest-1');
+    expect(msg).toContain('rig');
+    expect(issues.find((i) => i.code === 'live-source-rotated')?.elementId).toBe('guest-1');
+  });
+
+  it('a rotated GRANDPARENT is caught too', () => {
+    const inner = box('inner', tf(0, 0), [live('guest-1', 10, 10)]);
+    const s = scene([box('outer', { ...tf(0, 0), rotation: 45 }, [inner])]);
+    expect(codes(s)).toContain('live-source-rotated');
+  });
+
+  it('an unrotated chain raises nothing', () => {
+    const s = scene([box('rig', tf(0, 0), [live('guest-1', 10, 10)])]);
+    expect(codes(s)).not.toContain('live-source-rotated');
+  });
+
+  it('reports ONE error when the plate AND its parent are rotated', () => {
+    const s = scene([
+      box('rig', { ...tf(0, 0), rotation: 30 }, [
+        live('guest-1', 10, 10, { transform: { ...tf(10, 10), rotation: 12 } }),
+      ]),
+    ]);
+    expect(codes(s).filter((c) => c === 'live-source-rotated')).toHaveLength(1);
   });
 });
 

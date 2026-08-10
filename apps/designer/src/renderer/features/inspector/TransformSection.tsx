@@ -10,6 +10,7 @@ import {
   hasKeyframeAt,
   keyframeVariantFor,
 } from '../timeline/keyframe-helpers.js';
+import { descriptorFor, isKeyframeable } from './field-registry.js';
 import { Seg, SingleField, transformFieldProps } from './transform-fields.js';
 import * as s from './TransformSection.css.js';
 
@@ -38,7 +39,18 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
   const opacity = effectiveOpacityAt(element, currentFrame);
   const id = element.id;
 
-  function indicatorFor(property: AnimatableProperty): JSX.Element {
+  /**
+   * The diamond for `property`, or `undefined` when this element's kind cannot
+   * keyframe it.
+   *
+   * `isKeyframeable` is THE rule the timeline-left obeys too, so a kind that
+   * declares a property static (D-137's Live Source: the rect is composed once at
+   * import and sent as a static `MIXER FILL`) loses the diamond on BOTH surfaces
+   * from one edit. `point` is already optional — the multi-select editor omits it —
+   * so an absent diamond leaves no gap in the row.
+   */
+  function indicatorFor(property: AnimatableProperty): JSX.Element | undefined {
+    if (!isKeyframeable(element, property)) return undefined;
     const variant = keyframeVariantFor(element, property, currentFrame, selectedKeyframe);
     return (
       <KeyframeIndicator
@@ -48,6 +60,15 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
       />
     );
   }
+
+  // D-137 — a kind may declare a transform property UNMANAGED, and then it has no
+  // field at all. A Live Source drops `rotation` (`MIXER FILL` is axis-aligned, so a
+  // rotated plate declares its bounding box and the picture shows outside the frame
+  // the author drew) and `opacity` (the element paints zero pixels on air, and the
+  // hole's opacity cannot reach the live layer behind it). A control that cannot
+  // change what airs is a control that lies.
+  const showRotation = descriptorFor(element, 'rotation') !== undefined;
+  const showOpacity = descriptorFor(element, 'opacity') !== undefined;
 
   // Commit a property's STORED value (the shared field props convert the
   // displayed value — e.g. opacity %, scale % — back to stored units).
@@ -101,15 +122,19 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
         />
       </div>
       {/* Rotation (degrees) — single field, diamond outside the border. */}
-      <SingleField
-        {...transformFieldProps('rotation', t.rotation, commit('rotation'))}
-        point={indicatorFor('rotation')}
-      />
+      {showRotation && (
+        <SingleField
+          {...transformFieldProps('rotation', t.rotation, commit('rotation'))}
+          point={indicatorFor('rotation')}
+        />
+      )}
       {/* Opacity (percent) — single field, diamond outside the border. */}
-      <SingleField
-        {...transformFieldProps('opacity', opacity, commit('opacity'))}
-        point={indicatorFor('opacity')}
-      />
+      {showOpacity && (
+        <SingleField
+          {...transformFieldProps('opacity', opacity, commit('opacity'))}
+          point={indicatorFor('opacity')}
+        />
+      )}
     </div>
   );
 }

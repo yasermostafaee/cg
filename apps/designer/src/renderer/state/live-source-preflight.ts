@@ -1,4 +1,4 @@
-import type { Element, Layer, Scene, Transform } from '@cg/shared-schema';
+import type { Element, Layer, Scene } from '@cg/shared-schema';
 import { LiveSourceIdSchema } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { frameAabb, GEOMETRY_TRACK_KEYS, type Aabb } from './off-frame.js';
@@ -43,6 +43,15 @@ import { frameAabb, GEOMETRY_TRACK_KEYS, type Aabb } from './off-frame.js';
 interface FlatLiveSource {
   element: Element & { type: 'video-placeholder' };
   box: Aabb;
+  /**
+   * The element's ancestor CONTAINERS, outermost → innermost.
+   *
+   * Carried because two of the six checks are about the CHAIN and not about the
+   * element: a rotated or animated PARENT moves the hole exactly as the element's
+   * own rotation or keyframe would, and an element-local check passes it. See
+   * `rotatedAncestor` / `animatedAncestor`.
+   */
+  ancestors: readonly Element[];
 }
 
 /**
@@ -62,19 +71,54 @@ interface FlatLiveSource {
  */
 function collectFlat(layers: readonly Layer[], seen: Set<string>): FlatLiveSource[] {
   const out: FlatLiveSource[] = [];
-  const walk = (children: readonly Element[], ancestors: readonly Transform[]): void => {
+  const walk = (children: readonly Element[], chain: readonly Element[]): void => {
     for (const el of children) {
       if (el.type === 'video-placeholder') {
         if (seen.has(el.id)) continue;
         seen.add(el.id);
-        out.push({ element: el, box: frameAabb(el, ancestors) });
+        out.push({
+          element: el,
+          box: frameAabb(
+            el,
+            chain.map((a) => a.transform),
+          ),
+          ancestors: chain,
+        });
       } else if (el.type === 'container') {
-        walk(el.children, [...ancestors, el.transform]);
+        walk(el.children, [...chain, el]);
       }
     }
   };
   for (const layer of layers) walk(layer.children, []);
   return out;
+}
+
+/**
+ * The nearest ancestor carrying a non-zero rotation, or `undefined`.
+ *
+ * ROTATION IS CHECKED ON THE COMPOSED CHAIN, not on the element, and that is the
+ * whole point of this function. `collectLiveSources` emits a flattened AXIS-ALIGNED
+ * rect, so a rotated hole declares its BOUNDING BOX — strictly larger than the frame
+ * the author drew — and the live picture is composited showing OUTSIDE that frame.
+ * A rotated parent container produces exactly that with the element's own rotation
+ * still at zero, which is why an element-local check is not enough.
+ */
+function rotatedAncestor(f: FlatLiveSource): Element | undefined {
+  return f.ancestors.find((a) => a.transform.rotation !== 0);
+}
+
+/**
+ * The nearest ancestor carrying a geometry keyframe, or `undefined`.
+ *
+ * Same shape of gap as {@link rotatedAncestor}. An animated PARENT moves the hole
+ * identically to an animated element, and `collectLiveSources` reads transforms
+ * STATICALLY — `live-source-multibox` design.md §6 lists "Animated values" among
+ * what the flattener does not compose. So the `MIXER FILL` is emitted once from a
+ * rect that stops being true on the next frame: the same desync, the same live face
+ * sliding out from behind its own frame.
+ */
+function animatedAncestor(f: FlatLiveSource): Element | undefined {
+  return f.ancestors.find(hasGeometryKeyframe);
 }
 
 /** Strictly outside `[0,0,w,h]` — the frame-touching case is ON-frame, and fine. */
@@ -133,7 +177,8 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
   const seen = new Set<string>();
   for (const doc of docs) {
     const flat = collectFlat(doc.layers, seen);
-    for (const { element, box } of flat) {
+    for (const entry of flat) {
+      const { element, box } = entry;
       if (!LiveSourceIdSchema.safeParse(element.routeKey).success) {
         issues.push({
           severity: 'error',
@@ -186,9 +231,63 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           message:
             `Live Source "${label(element)}" carries a position/size/scale/rotation keyframe. ` +
             `The composited source is placed ONCE from the static rect, so a moving hole would ` +
-            `slide off the source behind it. Animating a Live Source is out of scope in v1.`,
+            `slide off the source behind it. Remove the keyframes from this plate — animating a ` +
+            `Live Source is out of scope in v1.`,
           elementId: element.id,
         });
+      } else {
+        // `else` deliberately: a plate that is animated AND sits under an animated
+        // parent has ONE problem to fix first, and two errors saying the same thing
+        // read as two faults.
+        const animated = animatedAncestor(entry);
+        if (animated !== undefined) {
+          issues.push({
+            severity: 'error',
+            code: 'live-source-animated',
+            message:
+              `Live Source "${label(element)}" sits inside "${label(animated)}", which is ` +
+              `ANIMATED. The plate itself has no keyframes, but an animated parent moves it just ` +
+              `the same — and the composited source is placed ONCE, from a rect read statically, ` +
+              `so it would stop matching on the next frame. Remove the geometry keyframes from ` +
+              `"${label(animated)}", or move the plate out of it.`,
+            elementId: element.id,
+          });
+        }
+      }
+      /*
+        ROTATION — the element's own, or ANY ancestor's.
+
+        The declared rect is axis-aligned, so a rotated plate declares its BOUNDING
+        BOX: strictly larger than the frame the author drew, and the live picture
+        shows outside it. A rotated CONTAINER does this with the plate's own rotation
+        at zero, which is why this reads the composed chain and not the element.
+      */
+      if (element.transform.rotation !== 0) {
+        issues.push({
+          severity: 'error',
+          code: 'live-source-rotated',
+          message:
+            `Live Source "${label(element)}" is rotated (${String(element.transform.rotation)}°). ` +
+            `A live source is composited into an AXIS-ALIGNED box, so a rotated plate declares ` +
+            `its bounding box instead — larger than the frame you drew, with the picture showing ` +
+            `outside it. Set the plate's rotation back to 0.`,
+          elementId: element.id,
+        });
+      } else {
+        const rotated = rotatedAncestor(entry);
+        if (rotated !== undefined) {
+          issues.push({
+            severity: 'error',
+            code: 'live-source-rotated',
+            message:
+              `Live Source "${label(element)}" sits inside "${label(rotated)}", which is rotated ` +
+              `(${String(rotated.transform.rotation)}°). The plate's own rotation is 0, but it is ` +
+              `composited into an AXIS-ALIGNED box either way, so it declares its bounding box ` +
+              `and the picture shows outside the frame. Set "${label(rotated)}" back to 0°, or ` +
+              `move the plate out of it.`,
+            elementId: element.id,
+          });
+        }
       }
     }
     // Overlap is reported against BOTH elements (D-137: "reports it against both"),

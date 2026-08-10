@@ -175,14 +175,10 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
         selectedKeyframe={selectedKeyframe}
       />
     );
-  if (element.type === 'video-placeholder')
-    return (
-      <LiveSourceSections
-        element={element}
-        currentFrame={currentFrame}
-        selectedKeyframe={selectedKeyframe}
-      />
-    );
+  // D-137 — NO `FilterSection` for a Live Source, so it takes no frame/keyframe
+  // props: filters paint pixels and a Live Source paints none on air (in `'author'`
+  // mode one would tint only the SMPTE bars, showing an effect that reaches nothing).
+  if (element.type === 'video-placeholder') return <LiveSourceSections element={element} />;
   // composition / container have no kind-specific style section, but the universal
   // CSS Filter is animatable on every kind — render it so the right inspector's
   // keyframe-able set matches the timeline-left (D-051 parity). Transform comes from
@@ -588,11 +584,7 @@ function ImageSections({
  * consumer only in phase 6, where the bridge refuses a take whose mapped source
  * disagrees with it.
  */
-function LiveSourceSections({
-  element,
-  currentFrame,
-  selectedKeyframe,
-}: SectionProps<VideoPlaceholderElement>): JSX.Element {
+function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const id = element.id;
   // Bumped on a REFUSED id, and folded into each input's key: an uncontrolled input
   // that committed a bad value keeps the bad text on screen otherwise (the committed
@@ -600,14 +592,8 @@ function LiveSourceSections({
   // value the scene does not hold. Reverting is the honest feedback; the notice says
   // why.
   const [rejectSeq, setRejectSeq] = useState(0);
-  const commitId = (role: 'fill' | 'key', raw: string): void => {
+  const commitId = (raw: string): void => {
     const value = raw.trim();
-    if (role === 'key' && value === '') {
-      // Clearing the KEY id is legitimate — absent means fill-only, which is every
-      // `route://` and media source. Clearing the FILL id is not: it is required.
-      designerStore.updateElement(id, { keySourceId: undefined } as Partial<Element>);
-      return;
-    }
     if (!LiveSourceIdSchema.safeParse(value).success) {
       designerStore.showNotice(
         `“${value}” is not a Live Source id. Use letters, digits, “_” and “-”, starting ` +
@@ -617,10 +603,7 @@ function LiveSourceSections({
       setRejectSeq((n) => n + 1);
       return;
     }
-    designerStore.updateElement(
-      id,
-      (role === 'fill' ? { routeKey: value } : { keySourceId: value }) as Partial<Element>,
-    );
+    designerStore.updateElement(id, { routeKey: value } as Partial<Element>);
   };
   return (
     <>
@@ -630,34 +613,25 @@ function LiveSourceSections({
           ariaLabel="Live Source source id"
           value={element.routeKey}
           resetKey={`${id}-${String(rejectSeq)}`}
-          onCommit={(v) => commitId('fill', v)}
+          onCommit={commitId}
         />
-        <TextField
-          label="key id"
-          ariaLabel="Live Source key source id"
-          value={element.keySourceId ?? ''}
-          resetKey={`${id}-${String(rejectSeq)}`}
-          onCommit={(v) => commitId('key', v)}
-        />
+        <AspectRow element={element} />
         {/*
-          D-147 — the key id's shape is not guessable from an empty box. It is
-          SYMBOLIC like the fill id (a device name is a preflight error), it PAIRS
-          with the fill id by convention, it is EMPTY for any opaque source — which
-          is every route:// and media source — and, the part that surprises people,
-          BOTH ids need their own entry in CG Control's mapping.
+          D-137 — ONE line, said once, instead of a row of disabled controls saying
+          it repeatedly and forever.
+
+          It is here because the author would otherwise learn it at EXPORT, from a
+          preflight error — the wrong end of the process. Every removal above it
+          (keyframes, rotation, opacity, filters) has the same single cause, so it
+          gets a single sentence rather than four tooltips.
         */}
         <p className={dds.hint}>
-          Leave empty unless the source is a fill+key PAIR. Symbolic like the source id —{' '}
-          <code>guest-1</code> / <code>guest-1-key</code>, never a device name — and each id needs
-          its own entry in CG Control&rsquo;s source mapping.
+          A plate is <strong>static and axis-aligned</strong>: its rect is sent to CasparCG once, as
+          a fixed box, so rotating or animating it — or a parent — would slide the live picture out
+          from behind the frame on air. Filters and opacity paint nothing on air either: the plate
+          is a hole, and the picture is composited behind it.
         </p>
-        <AspectRow element={element} />
       </CollapseSection>
-      <FilterSection
-        element={element}
-        currentFrame={currentFrame}
-        selectedKeyframe={selectedKeyframe}
-      />
     </>
   );
 }

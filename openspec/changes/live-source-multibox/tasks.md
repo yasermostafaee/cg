@@ -52,6 +52,39 @@ blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` 
 - [x] 1.8 Preflight codes: out-of-frame, overlap, a device-shaped id, and a geometry-keyframed hole
       (all `severity: 'error'` — a warning does not block, `CompositionActionBar.tsx:41`). Costs no
       wire change: `ExportIssue.code` is an open string (`packages/shared-ipc/src/channels/export.ts:16-24`).
+- [x] 1.8a **EXTENDED 2026-08-10 — two cases that reach air the same way and were missing.** Both
+      `severity: 'error'`, both checked on the COMPOSED ANCESTOR CHAIN rather than on the element,
+      because an element-local implementation passes each of them by accident:
+      **(a) `live-source-rotated`** — rotation ANYWHERE in the chain. `collectLiveSources` emits a
+      flattened AXIS-ALIGNED rect, so a rotated hole declares its BOUNDING BOX — larger than the
+      frame the author drew — and the live picture is composited showing OUTSIDE the frame. A
+      rotated PARENT does this with the element's own rotation still at 0.
+      **(b) `live-source-animated` on an ANCESTOR** — the existing code read as covering the element
+      alone. An animated parent moves the hole identically, and `collectLiveSources` reads
+      transforms STATICALLY (`design.md` §6 lists "Animated values" among what the flattener does
+      not compose). Same desync, same live-face-sliding-out failure.
+      Each message NAMES the element, names the offending ancestor where there is one, and says what
+      to change — not merely that the export is blocked. The element's own case and its ancestor case
+      are mutually exclusive (`else`), because one problem reported twice reads as two faults.
+- [x] 1.8b **The Inspector no longer offers what a Live Source cannot honour** (owner, 2026-08-10 —
+      the affordances were still on screen after phase 1 shipped, so the author could author a
+      refusal and only learn at EXPORT, which is the wrong end of the process). Removed for a Live
+      Source ONLY, every other kind unchanged: the keyframe diamond on every transform field,
+      `rotation` ENTIRELY (not merely its keyframes — `MIXER FILL` is axis-aligned), `opacity` (the
+      element paints zero pixels on air and cannot reach the layer behind it), the whole **Filter**
+      section, and the `key id` control + its D-147 hint (superseded by §1a — fill+key is the
+      MAPPING's).
+      **X, Y, W, H and the STATIC scale stay** — `collectLiveSources` composes scale into the
+      flattened rect, so a static scale is meaningful.
+      **Done as a SUBTRACTION in `field-registry.ts` (`LIVE_SOURCE_STATIC`), not as a special case
+      in the Inspector**, because `isKeyframeable` is already the ONE rule the right inspector and
+      the timeline-left both obey — so the diamonds leave both surfaces from one edit and cannot
+      drift apart. `TransformSection` reads `descriptorFor` to decide whether a field exists at all.
+      **REMOVAL over disabling, for all five**, with ONE hint line in the section explaining the
+      cause they share: five disabled controls would teach the same sentence five times and then
+      nag forever, and `point` was already optional (the multi-select editor omits it) so an absent
+      diamond leaves no gap that could read as a rendering fault. ⚠ `keySourceId` is NOT removed
+      from the schema — deprecated and never written; removing it is a migration (4.8).
 - [x] 1.9 Unit tests + a Designer E2E mapping each `#### Scenario` in
       `specs/designer-live-source/spec.md`.
 - [x] 1.10 **D-147 (a) — the aspect PRESET picker.** `expectedAspect` becomes a named picker over the

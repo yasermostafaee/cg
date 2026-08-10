@@ -867,9 +867,41 @@ not. A static `FILL` behind an animated hole **desyncs**, and the hole is transp
 failure mode is a live face sliding out from behind its frame on air.
 
 **v1 refuses it**: a Live Source carrying any geometry keyframe is a preflight **error**
-(`severity: 'error'`, which blocks export — unlike a warning, see §3). Animating the hole is
-recorded as a later phase requiring per-frame `MIXER FILL` emission at the channel frame rate, which
-is a different and much larger problem.
+(`severity: 'error'`, which blocks export — unlike a warning, see §3). **The refusal covers the
+ANCESTOR CHAIN, not only the element** — an animated parent moves the hole identically, and this
+flattener reads transforms statically (see "Animated values" above), so an element-local check
+passes exactly the case that breaks. Rotation is refused on the same chain and for a related reason:
+the emitted rect is axis-aligned, so a rotated hole declares its BOUNDING BOX and the live picture
+shows outside the frame the author drew.
+
+### The v2 path, recorded as a SHAPE rather than as a plan
+
+**Animating a Live Source is possible in principle, and the blocker is not the command.**
+`MIXER FILL` accepts a **tween and a duration** — the plant's client exposes the full easing
+vocabulary against exactly the tools that matter (`docs/recon/ciab-client-tools.json`: the
+`Transform` entry — the client's name for `MIXER FILL` — and the `Clipping` entry — its name for
+`MIXER CLIP` — each carry a `Tween` combo of 44 easings, `Linear` through `EaseOutInBounce`, beside
+a `Duration`). So the server can move a live box smoothly, and a naive reading says "emit a tween
+per keyframe segment and it is done".
+
+🔴 **The hard part is the SYNC, and nothing today reconciles it.** The template's HTML animates on
+**its own clock** — `requestAnimationFrame` inside CEF, driven by the scene's frame rate and started
+when the page plays — while the `MIXER` tween runs on the **server's** clock, started when the
+command lands. Two independent timelines, no shared origin, no shared tick, and no feedback from
+either to the other. A 500 ms move that begins 40 ms late, or that eases on a different curve than
+the CSS did, produces exactly the failure v1 refuses outright: the hole and the picture separate,
+and a guest slides out from behind their own frame — worse for being intermittent.
+
+**What a later phase would have to solve, then, is not "can we tween" but:** what establishes a
+common time origin between a CEF page and the AMCP connection; what bounds the drift between them
+over the length of a move; and what happens on the frame where they disagree. Per-frame `MIXER FILL`
+emission at the channel frame rate is the brute-force alternative and has its own cost (a command
+per frame per plate on a shared socket). Recorded here so the next reader starts from the real
+problem instead of rediscovering that the tween exists.
+
+⚠ The easing lists cited above are from the CLIENT's tool definitions, whose `Mixers` folder tracks
+AMCP's `MIXER` surface — but the file describes a MODIFIED client of unknown vintage, so the
+vocabulary is a lead to verify on the server, not a settled server capability.
 
 ---
 

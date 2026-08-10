@@ -663,6 +663,44 @@ function paddingDesc(
 
 const UNIVERSAL_ONLY: readonly PropertyDescriptor[] = [...TRANSFORM, ...FILTER];
 
+/**
+ * D-137 — a LIVE SOURCE's managed set, and it is a deliberate SUBTRACTION from
+ * {@link UNIVERSAL_ONLY}. Everything absent here is absent because it cannot reach
+ * air, and this list is the ONE place that decides it: `isKeyframeable` and
+ * `descriptorFor` are what the right inspector and the timeline-left both obey, so
+ * a control removed here disappears from both surfaces at once and cannot drift.
+ *
+ * **What stays — X, Y, W, H and a STATIC scale.** `collectLiveSources`
+ * (`@cg/vcg-format`) composes scale into the flattened scene-px rect at import, so a
+ * static scale genuinely changes where the live box lands. Those six describe the
+ * hole, and the hole is the whole contract.
+ *
+ * **What goes, and why each one is a control that would LIE:**
+ *
+ * - **Every keyframe** (`keyframeable: () => false` on all six). The rect is composed
+ *   ONCE at import and sent as a static `MIXER FILL` / `CLIP`, so an animated hole
+ *   desyncs from a stationary composited box — a live face sliding out from behind
+ *   its own frame on air (`live-source-multibox` design.md §6). Preflight already
+ *   refuses it as an ERROR; offering the diamond invites that error instead of
+ *   preventing it, which is finding out at the wrong end of the process.
+ * - **`rotation`** — not merely its keyframes. `MIXER FILL` is AXIS-ALIGNED, and
+ *   `collectLiveSources` emits an axis-aligned rect, so a rotated plate declares its
+ *   BOUNDING BOX: the live picture shows outside the frame the author drew. Out of
+ *   scope in v1 by `proposal.md`, so the field is gone rather than ignored.
+ * - **`opacity`** — in `'output'` mode the element paints ZERO pixels, and the hole's
+ *   opacity cannot reach the live layer composited BEHIND it; that would need a
+ *   `MIXER OPACITY` on that layer, which v1 does not emit.
+ * - **The whole FILTER section.** Filters paint pixels and a Live Source paints none
+ *   on air. In `'author'` mode a filter would tint only the SMPTE bars, which is
+ *   worse than useless: it shows the author an effect that reaches nothing.
+ *
+ * The Live Source Inspector says all of this once, in one line of prose, rather than
+ * through a row of disabled controls that explain it repeatedly and forever.
+ */
+const LIVE_SOURCE_STATIC: readonly PropertyDescriptor[] = TRANSFORM.filter(
+  (d) => d.property !== 'rotation' && d.property !== 'opacity',
+).map((d) => ({ ...d, keyframeable: () => false }));
+
 // D-042 — the background-capable kinds (shape, text, ticker, clock, sequence) all
 // include the shared BOX_DESCS (stroke + border radius). Order keeps each section's
 // descriptors consecutive (shape: fill then stroke under Path Style). Repeater (no
@@ -689,7 +727,9 @@ export const FIELD_REGISTRY: Record<Element['type'], readonly PropertyDescriptor
   repeater: UNIVERSAL_ONLY,
   composition: UNIVERSAL_ONLY,
   lottie: UNIVERSAL_ONLY,
-  'video-placeholder': UNIVERSAL_ONLY,
+  // D-137 — a SUBTRACTION from UNIVERSAL_ONLY, not a copy of it. See
+  // `LIVE_SOURCE_STATIC` above for what each removal prevents on air.
+  'video-placeholder': LIVE_SOURCE_STATIC,
   // D-128 — opaque clip: transform/opacity/filter only (mirrors lottie); the
   // lifecycle surface (phases/hold) is Inspector-section work, not keyframe rows.
   video: UNIVERSAL_ONLY,

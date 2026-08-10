@@ -214,16 +214,16 @@ export class DesignerApp {
     return this.inspector.getByRole('textbox', { name: 'Live Source source id' });
   }
 
-  /** D-137 — the Live Source Inspector's KEY source-id input. */
-  get liveSourceKeyIdInput(): Locator {
-    return this.inspector.getByRole('textbox', { name: 'Live Source key source id' });
-  }
-
-  /** D-137 — commit a value into one of the two id inputs (blur commits). */
-  async setLiveSourceId(value: string, which: 'fill' | 'key' = 'fill'): Promise<void> {
-    const input = which === 'fill' ? this.liveSourceIdInput : this.liveSourceKeyIdInput;
-    await input.fill(value);
-    await input.press('Enter');
+  /**
+   * D-137 — commit the source id (blur commits).
+   *
+   * There is ONE id. The key-source-id input it used to share this helper with is
+   * gone: fill+key is a property of the installation's MAPPING, not of the scene
+   * (`live-source-multibox` design.md §1a).
+   */
+  async setLiveSourceId(value: string): Promise<void> {
+    await this.liveSourceIdInput.fill(value);
+    await this.liveSourceIdInput.press('Enter');
   }
 
   /** D-147 — the Live Source Inspector's aspect PRESET picker. */
