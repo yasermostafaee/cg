@@ -107,7 +107,11 @@ function sceneWith(children: Element[], compositions?: Composition[]): Scene {
 }
 
 describe('collectLiveSources', () => {
-  it('flattens a top-level Live Source to its own rect, and carries its ids', () => {
+  it('flattens a top-level Live Source to its own rect, and carries ONE id', () => {
+    // The element still PARSES a `keySourceId` — deleting the field would be a
+    // migration — and this scene carries one, so the assertion below is the
+    // whole point of the amendment (design.md §1a): a template declares one
+    // symbolic id and the fill/key pair belongs to the installation's MAPPING.
     const scene = sceneWith([
       liveSource('guest-1', transform({ position: { x: 300, y: 200 }, size: { w: 640, h: 360 } }), {
         keySourceId: 'guest-1-key',
@@ -119,11 +123,9 @@ describe('collectLiveSources', () => {
       {
         elementId: 'guest-1',
         sourceId: 'guest-1',
-        keySourceId: 'guest-1-key',
         rect: { x: 300, y: 200, width: 640, height: 360 },
         expectedAspect: 16 / 9,
         dynamic: false,
-        keyDynamic: false,
       },
     ]);
   });
@@ -131,7 +133,6 @@ describe('collectLiveSources', () => {
   it('omits absent optionals rather than spelling them undefined', () => {
     const [decl] = collectLiveSources(sceneWith([liveSource('guest-1', transform())]));
     expect(decl).toBeDefined();
-    expect(Object.keys(decl ?? {})).not.toContain('keySourceId');
     expect(Object.keys(decl ?? {})).not.toContain('expectedAspect');
   });
 
@@ -280,11 +281,12 @@ describe('collectLiveSources', () => {
     };
 
     const decls = collectLiveSources(scene);
-    expect(decls[0]).toMatchObject({ sourceId: 'guest-1', dynamic: true, keyDynamic: false });
-    expect(decls[1]).toMatchObject({ sourceId: 'guest-2', dynamic: false, keyDynamic: false });
+    expect(decls[0]).toMatchObject({ sourceId: 'guest-1', dynamic: true });
+    expect(decls[1]).toMatchObject({ sourceId: 'guest-2', dynamic: false });
+    for (const decl of decls) expect(decl).not.toHaveProperty('keyDynamic');
   });
 
-  it('reads a KEY-role binding declared on the COMPOSITION, not only on the root', () => {
+  it('IGNORES a KEY-role binding — a key device is the installation mapping’s business', () => {
     const comp: Composition = {
       ...composition('comp-inner', 960, 540, [
         liveSource('guest-1', transform(), { keySourceId: 'guest-1-key' }),
@@ -299,7 +301,12 @@ describe('collectLiveSources', () => {
       [comp],
     );
 
-    expect(collectLiveSources(scene)[0]).toMatchObject({ dynamic: false, keyDynamic: true });
+    // The binding still exists in the scene and still parses; it simply reaches
+    // nothing, because a key device is no longer something a scene can name.
+    const [decl] = collectLiveSources(scene);
+    expect(decl).toMatchObject({ dynamic: false });
+    expect(decl).not.toHaveProperty('keyDynamic');
+    expect(decl).not.toHaveProperty('keySourceId');
   });
 
   it('declares nothing for a scene with no Live Source', () => {

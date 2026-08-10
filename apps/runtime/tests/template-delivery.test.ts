@@ -567,7 +567,6 @@ describe('produceTemplateDelivery — D-137 the Live Source carrier', () => {
         rect: { x: 1100, y: 650, width: 200, height: 100 },
         expectedAspect: 16 / 9,
         dynamic: false,
-        keyDynamic: false,
       },
     ]);
   });

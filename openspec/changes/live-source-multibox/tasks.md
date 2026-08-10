@@ -407,7 +407,7 @@ re-derive them (or wonder why the code and §2's sketch differ):**
       `ChannelInput` → `Format` vocabulary, `docs/recon/ciab-client-tools.json`) and, on the DECKLINK
       arm, the optional `keyDevice`. Both are the amendment in §1a/§3a made operable: this modal is
       where an installation now says "guest-1 is a fill/key pair at 1080i5000".**
-- [ ] 4.8 ⚠ **UN-DO, filed explicitly rather than deleted silently (owner, 2026-08-10, `design.md`
+- [x] 4.8 ⚠ **UN-DO, filed explicitly rather than deleted silently (owner, 2026-08-10, `design.md`
       §1a).** Remove the Inspector's **`key id` control and its hint** — D-147 task (c), landed as
       1.12 — because a template now declares ONE id and the fill/key pair is a property of the
       MAPPING (4.1/4.7). This is the phase that owns that surface, so the removal belongs here and
@@ -418,6 +418,15 @@ re-derive them (or wonder why the code and §2's sketch differ):**
       keeps loading — and `collectLiveSources` stops emitting `keySourceId` / `keyDynamic` on the
       declaration. A control that stops being written but stays on screen is worse than either
       state, which is why this is a task and not a footnote.
+      **Landed in two halves, and the split is worth naming.** The Inspector's control and its
+      hint went in `fd89922` (the Live Source Inspector commit, which implemented the §1a docs
+      decision as it removed everything else a plate cannot honour). This phase closed the other
+      half: `collectLiveSources` stops emitting `keySourceId` AND `keyDynamic`,
+      `VideoPlaceholderElementSchema.keySourceId` is marked DEPRECATED in place, and
+      `LiveSourceDeclarationSchema.keyDynamic` is WIDENED to optional — it had to stop being
+      required rather than sit pinned at `false`, because a required field that is always the same
+      value is a field that still looks like it means something. A KEY-role binding still parses
+      and now reaches nothing, which the vcg-format test asserts by name.
 
 ## 5. Phase 5 — Ownership (requires phase 3)
 
