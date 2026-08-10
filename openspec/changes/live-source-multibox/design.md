@@ -1307,6 +1307,234 @@ picture it is drawn around.
 
 ---
 
+## 9b. ⭐ PROPOSED 2026-08-10 (owner) — THE MULTI-BOX ON A CHANNEL OF ITS OWN
+
+**STATUS — EVALUATED AND RECOMMENDED IN PRINCIPLE; NOT ADOPTED.** It is an **operating model this
+design does not have**, and it is gated on four measurements plus one owner question, all recorded in
+**§12.5**. **No task's status or scope changes on the strength of this section**, and in particular
+**§9a's punch work is NOT weakened by the fallback in 9b.5** — a fallback is insurance, not a
+decision.
+
+### The model
+
+The whole composition — backdrop, frames, every live plate — is built on a **CasparCG channel of its
+own**, separate from the channel carrying the playlist, and is **visible there before anything
+reaches air**. When the multi-box is wanted on air the operator switches to it and pauses the
+playlist; when the connection ends, air returns to the playlist.
+
+**It moves WHERE the layers live. It does not change WHAT the bridge sends** — see 9b.6.
+
+### 9b.1 Isolation, which is the real prize — a structural answer to C-023
+
+C-023 (`docs/prd/caspar.md:934-983`) wants a periodically-refreshed still per live source so the
+operator can confirm a feed before it is needed. Its second shaping constraint (`:958-963`) is the
+hard one: producing a picture means **PLAYING the source somewhere**, doing that on the air channel
+risks putting it on air, so it needs **a channel with no air-carrying consumer** — and whether this
+installation has or can gain one is recorded there as an OPEN recon question, deliberately not
+assumed.
+
+**This model supplies exactly that channel.** It also supplies something C-023 did not ask for and
+would rather have: the operator sees **the ASSEMBLED result** — every plate in its real geometry,
+inside its real frame, over the real backdrop — instead of four separate stills that are each
+correct and say nothing about the composition.
+
+🔴 **One sharpening, because the guarantee is TEMPORAL and reads as structural.** Under the air path
+recommended in 9b.4 the dedicated channel never gains a consumer of its own — air is always taken
+from the playlist channel — so "no air-carrying consumer" holds **permanently, in the config**. But
+while the air route is UP, that channel's picture **is on air by reference**, and playing a source
+there to grab a thumbnail puts it on air exactly as a consumer would.
+
+> The isolation C-023 needs is **the route being DOWN**, not the channel being consumer-less.
+
+So a probing grab is free while the multi-box is off air and is a **live picture change** while it is
+on. That is a constraint on C-023's mechanism, not an objection to this model — but C-023 must not be
+closed by pointing at this channel and stopping there.
+
+### 9b.2 The feedback trap — moot in one direction, MANDATORY in the other
+
+**What is in this repo, checked rather than assumed. `A3`'s analysis is NOT in this repo at this
+commit.**
+`SEARCH:` `git --no-pager grep -rn -i -e "feedback loop" -e "route.*same channel" -e "loop back" -- openspec docs`
+→ 5 hits, all unrelated (a drag-origin note at `docs/prd/bugs-designer.md:525`, a timeline loop in
+two specs, a pixel-grid note in an archived change). This section therefore states the structural
+fact itself and names A3 for when it lands; it does **not** summarise a document it cannot read.
+
+**The fact.** Routing a channel into a layer of THAT SAME channel is a loop — the channel's program
+mix would contain a producer reading the channel's program mix. The address form that avoids it is
+the **channel-and-layer** one, and this design already carries it: §2's producer union gives `route`
+an optional `layer` because the measured grammar `route://(?<CHANNEL>\d+)(-(?<LAYER>\d+))?` makes it
+optional (`design.md:200-202`), and §0b measured `PLAY 1-2 "route://1-1"` rendering layer 1's picture
+on layer 2 with no runaway (`design.md:344`).
+
+**Between two DIFFERENT channels there is no loop — in ONE direction.** A studio plate on the
+dedicated channel showing the playlist becomes a plain `route://<playlist channel>`, and A3's
+workaround is unnecessary **for that leg**.
+
+🔴 **But 9b.4's recommended air path supplies the OTHER leg, and the two legs form a CYCLE.** The
+playlist channel carries `route://<dedicated>` full-frame — that is how the multi-box reaches air —
+while the dedicated channel carries `route://<playlist>` inside the studio plate. Substitute one into
+the other and the studio plate shows a picture that contains the studio plate: a **mirror tunnel**,
+one frame deeper per hop. It is the exact trap A3 named, displaced one channel outward, and it is
+reachable only by combining two decisions that are individually sound.
+
+**The mitigation is A3's own workaround, resurrected.** Address the studio plate at the playlist's
+own video **LAYER** — `route://<playlist channel>-<playlist layer>` — so it reads that layer and not
+the mix that carries the air route back. §0b's `route://1-1` result is evidence that the layer-scoped
+form reads a layer rather than a mix; **the cycle itself has not been run**, so it is filed as
+measurement **M4** in §12.5.
+
+Two consequences, stated plainly:
+
+- **Do not delete A3's analysis.** It governs the single-channel installation unchanged — and under
+  the recommended air path it governs the studio plate here too.
+- **The air path and the studio plate are COUPLED.** Under the TriCaster-switching path (9b.4,
+  rejected) the playlist channel carries no route back and no cycle exists. Choosing the air path
+  that touches nothing in the plant is what re-imports the workaround. That is a real cost of the
+  recommendation, and it is still by far the cheaper side.
+
+### 9b.3 Layer pressure ends — for the plates. The code is not there yet, and one layer never moves.
+
+**The claim.** On a dedicated channel there is no playout-owned reserved range to fence against, so
+§4's three-class ownership model degenerates to "everything here is ours". **True of the PLANT. Not
+true of the CODE, and not true of the whole model.** Three measured qualifications:
+
+1. **The reserved fence has NO channel dimension.** `ReservedLayersSchema` is `{ ranges: [{from,to}] }`
+   — layer numbers only (`packages/shared-ipc/src/channels/fixedLayers.ts:177-188`), flattened to a
+   bare list by `reservedLayerNumbers` (`:190-197`) — and `LayerManager` documents the fence as
+   applying on **EVERY channel** (`packages/caspar-client/src/layers/layer-manager.ts:82-90`, and
+   `:165`: _"channel-agnostic fence"_). Declaring the multi-box on another channel therefore does
+   **not** free 60–69 there; the fence follows the NUMBER. Either it gains a channel dimension, or
+   the dedicated channel simply avoids those numbers — which costs nothing, since 10–59 and 70–99
+   are both free there. The point is that "everything here is ours" is a statement about the plant
+   that the code does not make.
+2. **"Ours" is an installation claim, and this plant runs SEVERAL Runtime stations against one
+   CasparCG** (§3b, R-021's own rationale). A second station taking the same channel breaks the claim
+   exactly as a playout graphic would. The dedicated channel must therefore be **declared config,
+   validated for disjointness** by the same machinery as the bank and the reserved range (§4's _"The
+   Live Source range is declared config"_) — never assumed by being "the other channel".
+3. **The bridge knows exactly ONE channel today.** `#declaredChannels()` returns
+   `[this.#fixedBank?.channel ?? DEFAULT_CHANNEL]` — a one-element array
+   (`tools/caspar-bridge/src/caspar-runtime.ts:3288-3290`). The plural is in the signature, not in the
+   content, and both R-030's per-channel mode read (`:2374-2379`) and the channel-settings hydrate
+   (`:606`) iterate it. A second channel is a small, bounded change at a place already shaped for it
+   — but **it is not free configuration**, which is how "the channel number becomes configuration"
+   will otherwise be read.
+
+🔴 **And ONE layer does not move.** Under 9b.4's air path a bridge-owned, non-html, full-frame
+`route://<dedicated>` layer lives on the **playlist** channel — a Live Source layer in everything but
+name, on the shared channel, subject to every door §4 is about: the R-009 sweep, the C-014
+quarantine, the R-015 refusal. **§4's three-class model is needed regardless**, and it is needed for
+the single most consequential layer in the model — the one covering the entire frame.
+
+⚠ **Its layer NUMBER is a consequence to resolve, not a detail.** It must sit **above** the playlist
+picture in order to cover it, and playout owns 60–69, so it cannot live in the 10–59 band §4 chose —
+that band is deliberately BELOW the template. It lands in or above 70–99, which is the fixed operator
+bank's territory. Recorded here; not decided.
+
+**The code must still support the single-channel case.** This is configuration, not a replacement: an
+installation with one channel gets today's model unchanged, and §4 is what makes that possible.
+
+### 9b.4 🔴 THE ONE REAL DECISION — how the dedicated channel reaches air
+
+| Route                                                                                                                                                                | What it requires                                                                                                          |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **The TriCaster switches between two iVGA inputs**, one per channel                                                                                                  | a **second air-carrying consumer** on the playout box, a second TriCaster input, and **a change to the plant's air path** |
+| **The playlist channel routes the dedicated channel over itself** — `route://<dedicated>` full-frame on a layer above the playlist, cleared when the connection ends | one bridge-owned layer on a channel this system already addresses. **No change to the plant's air path.**                 |
+
+> **RECOMMENDED: the second — the playlist channel routes the dedicated channel over itself.**
+
+**The reason is C-020, and it is not a preference.** `docs/prd/caspar.md:775-826` establishes that
+this plant's **entire picture** reaches air over `<newtek-ivga />` into a TriCaster — the production
+config declares `<system-audio />` + `<newtek-ivga />` + `<screen />` and there is no Decklink card
+(`:803-806`) — that **2.4.0 removed the iVGA consumer** and 2.5.0 inherits the removal, that
+`Processing.AirSend.x64.dll` is **absent** from the 2.5.0 install, and that starting 2.5.0 against
+today's config stops output **entirely: the whole picture, not just audio**. C-020 is `high`,
+**deferred** pending the playout integration, and it **BLOCKS C-018**. The air path is the most
+fragile thing in this installation and it already carries an open, deferred, blocking debt.
+
+A model that needs a **second** air-carrying consumer adds to exactly that debt, on exactly that
+path, and buys a failure mode it does not need. The route-over-itself model touches none of it:
+
+- **air stays on the playlist channel permanently** — one consumer, unchanged, the one running today;
+- **the switch is a LAYER that arrives and leaves** — which is a thing this system already does
+  safely and per-layer by construction (§5, `caspar-runtime.ts:2718-2724`);
+- **it degrades to the playlist.** If the route layer never arrives, or is cleared early, air is the
+  playlist — which is what air is anyway. The TriCaster path's equivalent failure is a switcher input
+  showing an unbuilt or black channel.
+
+**The consequence for the playlist — an OPERATING INSTRUCTION, not a feature.** With the route
+covering it, **pausing the playlist is the OPERATOR'S action in CIAB**, not something this system
+does. CIAB owns the programme bed and keeps that role: C-002 (`docs/prd/caspar.md:52-58`) records
+that a rundown inside this Runtime was considered and **rejected**, precisely because _"two
+applications each believing they own the channel is worse for the operator than two with clear
+roles"_. This system must not reach for the playlist transport to tidy up a covered playlist.
+
+**But it matters, and it belongs where an operator will read it: a playlist left running returns
+MID-ITEM.** The route HIDES the playlist, it does not pause it. When the connection ends and the
+layer is cleared, air cuts to wherever the playlist has got to by then.
+
+### 9b.5 A fallback for §9a's punch — recorded because §9a has none
+
+On a dedicated channel the backdrop can be moved **OUT of the template**, onto a CasparCG layer
+**BELOW** the live sources. Then **no punch is needed at all** — the backdrop is under the plates,
+not over them, and the template layer above carries only what paints outside the holes.
+
+**Two things it dissolves, and they are the two §9a is stuck on:**
+
+- **The requirement itself.** §9a's punch exists because the page is ONE layer and painting nothing
+  is not erasing (`design.md:1138-1142`). With nothing opaque above the live layer, there is nothing
+  to erase.
+- **§9a.1's constraint 2 becomes free.** The stroke and shadow live on the template layer above and
+  can never be eaten, because no erase runs — the asymmetry between the two candidate mechanisms
+  (`design.md:1257-1262`) stops mattering.
+
+**Why it is WORSE as a primary design** — the owner's own objection, and it is the right one: **two
+artifacts to coordinate instead of one.** The backdrop's geometry and the holes' geometry would live
+in two places that can drift, and the export would have to emit a backdrop artifact CasparCG can play
+— which `proposal.md` currently rules out (_"No `.vcg` format change is required"_).
+
+⚠ **It is not exclusive to a dedicated channel.** A backdrop layer below the plates is placeable on
+one channel too. What the dedicated channel adds is that covering everything beneath is **harmless
+there**; on the playlist channel a full-frame opaque backdrop also covers the playlist picture, which
+is a different decision rather than a free one.
+
+🔴 **This changes NOTHING about §9a's tasks today.** The fallback is what happens **IF the CEF
+measurement in §9a shows that `destination-out` does not work under CEF 71** — §9a has no fallback,
+that is a real gap, and this closes it. It is **not** a reason to defer, narrow or soften either the
+measurement or the punch work: the single-channel installation has no dedicated channel to fall back
+to, and the mechanism choice is owed either way.
+
+### 9b.6 What this model does NOT change — so nobody reads it as a redesign
+
+| Unaffected                                                              | Why                                                                                                                                                                  |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The mapping store and its CG Control surface** (§2, phase 4 — landed) | it maps a symbolic id to a producer. Which channel that producer is PLAYED on is not in the mapping.                                                                 |
+| **The scene-px → `FILL` / `CLIP` arithmetic** (§6, phase 6)             | `FILL` normalizes per axis against **the channel raster it runs on** (§0b, fact 1). Run it on the dedicated channel and it uses that raster; the chain is identical. |
+| **The born-muted audio rule** (§7, task 6.5)                            | it is a property of how a producer is CREATED, on whatever channel it is created.                                                                                    |
+| **The on-air plate swap** (`R-048`, tasks 6.9–6.9f)                     | it replaces a producer on a layer.                                                                                                                                   |
+
+**The channel number becomes configuration; none of the logic moves.** The precedent exists already:
+`FixedLayerBankSchema` carries `channel` (`packages/shared-ipc/src/channels/fixedLayers.ts:45-47`)
+with `DEFAULT_FIXED_BANK_CHANNEL = 1` (`:31`), and every verb in §5 is layer-scoped through
+`target(slot)` where a slot is `{ channel, layer }` — so a different channel is a different slot
+VALUE, not a different code path.
+
+⚠ **One earlier note reads like a contradiction and is not.** `tasks.md` §7a records, from the same
+2026-08-10 session, that _"a second output channel this Runtime alone would drive … does not exist
+today and justifies nothing now"_ — C-002 carries it in full (`docs/prd/caspar.md:60-62`). That note
+is about a second channel **driven to its own consumer** (a studio monitor, a video wall, a stream)
+being used as motivation for a feature. **This is not that:** under 9b.4 the dedicated channel has no
+consumer of its own, and its picture returns to the playlist channel. C-002's note ends _"if such a
+channel ever appears, this note is where to start"_ — both places now point here.
+
+### 9b.7 What must be measured before any of this is adopted
+
+Three measurements the owner named, a fourth this evaluation adds (the cycle, 9b.2), and one owner
+question — **all in §12.5**. None is guessable, all run on the plant's CasparCG **2.3.2**, and **no
+task moves until they land.**
+
+---
+
 ## 10. Phasing — each phase landable and verifiable without capture hardware
 
 Only `route://` is provable on a dev machine (`route` needs no card; DECLINK has no card in this
@@ -1340,9 +1568,10 @@ by `3e9bbc9` — but **`DEBT.md` is a frozen evidence archive and must not be ed
 ## 12. Owner decisions
 
 **§12.1 and §12.2 were authored as open questions and are ANSWERED — DECIDED 2026-08-08.** A third
-decision (§12.4) was made at the same time. §12.3 remains open on its own terms. They are recorded
-here rather than left in the prompt that carried them, because a prompt is ephemeral and the spec is
-the memory. **Do not re-open 12.1, 12.2 or 12.4.**
+decision (§12.4) was made at the same time. §12.3 remains open on its own terms, and **§12.5 (added
+2026-08-10) is open in full** — four measurements and one owner question carried by §9b. They are
+recorded here rather than left in the prompt that carried them, because a prompt is ephemeral and the
+spec is the memory. **Do not re-open 12.1, 12.2 or 12.4.**
 
 ### 12.1 C-015's acceptance on a plant with no Decklink card — DECIDED 2026-08-08
 
@@ -1435,3 +1664,82 @@ closes:
 
 All three flip to `[~]` naming this change dir. §7 carries the rule, the four call sites, and the
 one residual the rule does **not** close — see §7's _"What this rule does NOT close"_.
+
+### 12.5 The dedicated-channel multi-box (§9b) — FOUR MEASUREMENTS AND ONE OWNER QUESTION, ALL OPEN
+
+**Recorded 2026-08-10.** §9b evaluates the owner's proposal and recommends it in principle. It is
+**not adopted, and nothing moves until these land.** All four measurements run on the plant's
+CasparCG **2.3.2** with `node tools/spikes/amcp-poke/amcp-poke.mjs`, none needs a capture card, and
+together they are one session's work — pair them, exactly as §3b pairs its own question with R-048's
+replace measurement.
+
+#### M1 — does the machine have HEADROOM for a second channel?
+
+A second full HTML-rendering channel is not free: it is a second CEF instance plus that channel's
+compositing, at the plant's raster. **Record the CPU/GPU cost MEASURED, not estimated** — baseline
+the single-channel plant first, then the two-channel case under the real multi-box template, and
+record **dropped/late frames alongside the load**, because a channel that keeps up on average and
+drops on peaks is a fail that an average hides.
+
+**What is already known about the box:** CPU **Intel Core i5-10400**, AVX2 present
+(`docs/recon/2026-07-28-casparcg-250-validation.md:39-41`); the production channel is **1080i5000**
+(`:34-36`). **Its GPU is not recorded anywhere in this repo.**
+`SEARCH:` `git --no-pager grep -rn -i -e "gpu" -e "nvidia" -e "graphics card" -- docs/recon docs/prd/caspar.md`
+→ **0 hits.** So the GPU half of this question begins by identifying the adapter.
+
+#### M2 — does `route://<channel>` carry AUDIO, or only video?
+
+The guests' audio must reach air, and under 9b.4 this is the path it would travel. **Nothing in this
+repo answers it.**
+`SEARCH:` `git --no-pager grep -rn -i "route" -- docs/recon` → 5 hits, none about audio (one
+`system-audio` note, the `Matrix / Route` VideoHub caveat, two `ciab-client-tools.json` keys, one
+export-scoping line).
+
+Measure with a media file that HAS audio, played on the dedicated channel and routed to the playlist
+channel, and confirm it **at the air path** — not only as a mixer number. The adjacent fact that
+makes this worth care: on **2.3.x**, HTML template audio bypasses the channel mix entirely
+(system device only, CasparCG/server#669 — `docs/recon/2026-07-28-casparcg-250-validation.md:265-271`),
+which is why C-019 is blocked on C-018. Live source producers are **not** HTML producers, so their
+audio should be in the mix on 2.3.2 — the open question is only what the ROUTE producer does with it.
+
+⚠ **It compounds with §7.** The plates are born MUTED and unmuted only by explicit intent, and that
+unmute happens on the **dedicated** channel — so a video-only route means an operator unmuting
+something that can never be heard.
+
+🔴 **If it carries video only, the model needs an audio answer BEFORE it can be adopted.** Say that,
+rather than assuming the audio follows the picture.
+
+#### M3 — must the two channels share a VIDEO FORMAT and FRAME RATE?
+
+If they differ, the route resamples — which costs quality and possibly frames. **Record what the
+server actually DOES** when they differ: resample silently, drop/duplicate frames, or refuse the
+producer. Not what the format specification implies. R-030 already reads each declared channel's mode
+over `INFO` and holds configured-vs-reported (`caspar-runtime.ts:2374-2379`, `#channelSettings`), so
+a mismatch has somewhere to surface once the answer is known.
+
+#### M4 — ADDED BY THIS EVALUATION (§9b.2): does the two-channel CYCLE bite, and does the layer-scoped address break it?
+
+With `route://<dedicated>` on the playlist channel (the air path) **and** `route://<playlist>` in the
+studio plate, the composition contains itself. Measure both halves:
+
+- **(a) the whole-channel form** — confirm it produces the mirror tunnel rather than something benign;
+- **(b) `route://<playlist>-<layer>`** — confirm the layer-scoped form reads that LAYER and not the
+  mix that carries the route back. §0b's `PLAY 1-2 "route://1-1"` result suggests it does, but does
+  not prove it **for a channel that is itself carrying a route back**.
+
+This is the one measurement that can change the **studio plate's address**, so it belongs before
+adoption rather than after.
+
+#### The OWNER QUESTION — is a second channel acceptable in the production config at all, and WHO changes that config?
+
+The production install's config is `D:\programs\CasparCG\casparcg.config`: channel **1080i5000**
+(line 13), consumers `<system-audio />` + `<newtek-ivga />` + `<screen />` (lines 15–19), AMCP 5250,
+OSC `predefined-client` 127.0.0.1:6250 (`docs/recon/2026-07-28-casparcg-250-validation.md:34-37`).
+**Nothing in this repo records a second channel there.**
+`SEARCH:` `git --no-pager grep -rn -i -e "second channel" -e "<channel" -- docs/prd/caspar.md docs/recon`
+→ 1 hit, unrelated (`INFO` reply richness at `:133`).
+
+Adding a channel means editing that file and restarting CasparCG — **which is this plant's air path**
+— so it is planned maintenance, never a live change. And that config sits on the same side of the
+integration boundary C-020 is deferred on, which makes "who changes it" a real question rather than a
+formality.

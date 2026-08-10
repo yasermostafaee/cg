@@ -630,6 +630,13 @@ Also recorded, so neither is re-proposed: a rundown INSIDE this Runtime was **re
 worse than two with clear roles), and a second output channel this Runtime alone would drive does
 not exist today and justifies nothing now.
 
+⚠ **The second sentence is about a DIFFERENT proposition than `design.md` §9b, and the two do not
+contradict.** It rejects a second channel **driven to its own consumer** (a studio monitor, a video
+wall, a stream) as motivation for a feature. §9b (added 2026-08-10) proposes a second channel with
+**no consumer of its own**, whose picture returns to the playlist channel over a route — evaluated,
+recommended in principle, **NOT adopted**, and gated on §12.5's four measurements plus one owner
+question. **No task in this file changes on the strength of it**, §9a's punch work included.
+
 ## 8. Docs and PRD
 
 - [x] 8.1 Correct C1, C2, C5, C6 and C8 in D-137 / C-015 (`design.md` §11). **VERIFIED in place

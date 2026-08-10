@@ -61,6 +61,13 @@ automation.
 stream — **does not exist today, so it justifies nothing now.** Recorded so it is not used as
 motivation for a feature; if such a channel ever appears, this note is where to start.
 
+⚠ **Starting here, as invited — and it is NOT the channel this note rejects.**
+`openspec/changes/live-source-multibox/design.md` **§9b** (2026-08-10) evaluates a second channel
+carrying the multi-box composition with **no consumer of its own**, whose picture returns to the
+playlist channel over a `route://`, so the plant's air path is untouched ([[C-020]]). It is
+**recommended in principle and NOT adopted** — gated on §12.5's four measurements and one owner
+question (is a second channel acceptable in the production config at all, and who changes it).
+
 ## [ ] C-003 — On-air per-child timing override ⟨priority: medium⟩
 
 **What:** Expose the runtime's per-scope playout overrides (mode / holdMs / repeat,
@@ -958,7 +965,13 @@ justified a LIVE row is explicitly not needed; do not re-file it.
 2. **Producing a picture means PLAYING the source somewhere**, and doing that on the air channel
    risks putting it on air. It needs a channel with **no air-carrying consumer**. ⚠ Whether this
    installation's CasparCG config has, or can gain, such a channel is a **RECON QUESTION — recorded
-   OPEN, not assumed**. (`D:\programs\CasparCG\casparcg.config` declares `<system-audio />` +
+   OPEN, not assumed**. ⚠ **A CANDIDATE answer, not the answer:**
+   `openspec/changes/live-source-multibox/design.md` **§9b** proposes a dedicated multi-box channel
+   with no consumer of its own, and **§9b.1 sharpens what it would and would not give this item** —
+   the isolation is the air route being DOWN, not the channel being consumer-less, so a probing grab
+   is free off air and is a live picture change on air. That proposal is **not adopted** and this
+   question stays OPEN; record the real answer here, including a negative.
+   (`D:\programs\CasparCG\casparcg.config` declares `<system-audio />` +
    `<newtek-ivga />` + `<screen />`; whether an additional consumer-less channel is available or
    addable has not been established.)
 
