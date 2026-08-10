@@ -116,6 +116,25 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       `MIXER FILL`/`CLIP` are rectangular — **that case stays unachievable in v1 either way.**
       ⚠ When it lands, **the HOLE and the STROKE (1.5e) must round TOGETHER**: a rounded hole inside a
       square frame is worse than either alone, because the frame stops following the picture.
+- [ ] 1.5h ⭐ **PASSTHROUGH — a SECOND source kind that needs NO catalog entry at all (owner,
+      2026-08-10, A3; `design.md` §9a.2).** GATED ON 1.5c: passthrough cannot be demonstrated, or
+      even defined, until the punch is real, because passthrough IS the punch with nothing put
+      beneath it.
+      **What it is.** A plate whose hole has **no producer under it** shows the programme directly —
+      the CG layer composites over the programme, so the punched rect reveals it. No producer, no
+      layer allocated, **no catalog entry, no assignment**, no route latency. It is by-product, not
+      new machinery.
+      🔴 **What it is NOT, and this is the whole reason it is filed separately from mechanism B.**
+      The hole shows the **CORRESPONDING REGION** of the programme — a WINDOW onto it at 1:1 — **not
+      the whole picture scaled into the box.** The rule: **a window onto the programme is
+      passthrough; a scaled copy of the programme is a route.**
+      ⚠ **NOT NEEDED FOR THE OWNER'S THREE-BOX LAYOUT**, which mechanism B (an ordinary `route`
+      catalog entry, §9a.2) answers in full. This task exists for **window-style full-frame designs
+      with a cut-out**, and it is worth having; it is not on the critical path and must not be
+      allowed to become a prerequisite for the multi-box work.
+      Scope when it is taken: how an author DECLARES a plate as passthrough (it has no `sourceId` to
+      assign, so the preflight and the Inspector's unassigned-plate warnings must not read it as a
+      fault), and a test that a passthrough plate allocates **no layer and no producer**.
 - [x] 1.7 Exempt a Live Source from `dropFullyOffFrameForExport`
       (`apps/designer/src/renderer/state/off-frame.ts:186-197`) and make out-of-frame a preflight
       **error** instead (C8). An element that is a contract must not be silently deleted.
@@ -810,6 +829,36 @@ completed green Linux run, cited beside 9.3a.
       resolve to ONE state — unassigned — deliberately: a second "assigned, but not really" state is
       one every consumer would have to learn and could get wrong.
 - [ ] 6.8 The two-box `route://` demo on real hardware, which needs no capture card.
+- [ ] 6.8a 🔴 **A3-R1 — RECON: does `route://<channel>-<layer>` exist on 2.3.2, and WHAT does it
+      deliver?** (`design.md` §12.6; run alongside §12.5's M1–M4 on the plant's CasparCG **2.3.2**.)
+      **The whole no-feedback argument for the studio plate rests on the answer.** §0b measured
+      `PLAY 1-2 "route://1-1"` rendering layer 1's picture on layer 2 with no runaway — that shows
+      the form is ACCEPTED and does not loop; it does NOT establish what the routed picture IS.
+      **(a) the PRODUCER's own output** ⇒ §9a.2's mechanism B stands. **(b) something ALREADY
+      COMPOSITED** ⇒ the layer-scoped form is not a feedback mitigation on a single-channel
+      installation, mechanism B is unavailable there, and the studio plate falls back to passthrough
+      (1.5h, with its window-not-scaled-copy limit) or to §9b's dedicated channel.
+      **The discriminating test:** picture on layer N, a DIFFERENT visibly-overlapping picture on a
+      layer BELOW it, route layer N into a plate on a third layer. Plate shows only layer N ⇒ (a);
+      shows both composited ⇒ (b). **Record the answer either way** — a negative result invalidates
+      the mechanism choice rather than merely delaying it.
+- [ ] 6.8b **A3-R2 — RECON: the route's LATENCY, in frames. Record the NUMBER, not an impression**
+      (`design.md` §12.6). Usually invisible, because the backdrop covers everything except the
+      plates and there is nothing on screen to compare a plate against.
+      ⚠ **It stops being invisible in one arrangement, and that arrangement is reachable by design:**
+      wherever a DIRECTLY composited programme picture is visible BESIDE a routed plate — a
+      passthrough hole (1.5h) and a routed studio plate in the same template, or a routed plate over
+      a programme background — the two are out of step by the measured figure, and fast motion shows
+      it as a visible lag between two views of the same studio. Record that consequence **with the
+      figure beside it**: "N frames" is a number an author can design around; "there may be some
+      latency" is not.
+- [ ] 6.8c ⚠ **OWNER QUESTION, not a recon item — which layer does CIAB put the studio picture on?**
+      (`design.md` §12.6.) No measurement in this repo can answer it and no code can discover it: it
+      is an installation fact owned by the playout system. Without it the studio plate's catalog
+      entry **cannot be configured on this installation** — the schema accepts the address and the
+      SourcesModal already renders it, so nothing is blocked in CODE, but the value the operator must
+      type is unknown and **a guess puts an arbitrary layer's picture inside a guest frame on air.**
+      Put it to the owner, to be put to CIAB.
 - [ ] 6.9 ⭐ **R-048 — swap a plate's input WHILE THE TEMPLATE IS ON AIR. A CLIENT REQUIREMENT**,
       filed in `docs/prd/runtime.md` and implemented here, the same pattern D-147 used for phase 1.
       A PER-ITEM OVERRIDE — the template's ASSIGNMENT and the installation's CATALOG are both

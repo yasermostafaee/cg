@@ -244,6 +244,16 @@ parse error at the boundary rather than an AMCP `400` at take time. `route` carr
 optional `layer` because the measured grammar `route://(?<CHANNEL>\d+)(-(?<LAYER>\d+))?`
 makes it optional.
 
+🔴 **The `layer` on the ROUTE arm is a SAFETY term, not only a grammar term — see §9a.2.** The
+sentence above is why the field is OPTIONAL; it is not why the field must EXIST. On a single-channel
+installation the **studio plate** — the plate showing the picture the channel is already carrying —
+can only be addressed as `route://<channel>-<layer>`, because `route://<channel>` on its own channel
+is a **feedback loop**. §9a.2 records that trap, the two mechanisms that can put the studio picture
+in a box, and the rule for choosing between them. **Nothing in this shape changed when §9a.2 was
+written:** phase 4 already shipped `{ kind: 'route', channel, layer? }` and
+`packages/shared-ipc/tests/sources.test.ts:49-51` already pins both forms. What §9a.2 adds is the
+reason the channel-and-layer form must never be simplified away.
+
 **`keyDevice` on the DECKLINK arm is where fill+key lives** — it moved off the element, see
 §1a. It is on that arm ALONE and deliberately: a fill/key pair is two physical SDI inputs. A
 `route` or an `ndi` source carries its own alpha or none, and offering the field there would
@@ -1579,6 +1589,130 @@ So the control is withheld pending the mechanism, not because the idea is wrong.
 square frame — or the reverse — is worse than either alone, because the frame stops following the
 picture it is drawn around.
 
+### 9a.2 ⭐ ADDED 2026-08-10 (owner, A3) — THE STUDIO PLATE: two mechanisms, one feedback trap
+
+**The use case, from the owner.** A three-plate template is typically **TWO remote live connections
+plus ONE plate showing the MAIN STUDIO picture**. The studio plate is not a remote source, and it is
+not a camera the catalog can simply name — it is **the picture the channel is already carrying**.
+Every section above this one describes how a plate becomes a producer the installation defines; none
+of them had an account of the plate whose source is the programme itself.
+
+Two mechanisms can put that picture in a box. They are **not interchangeable**, and this section
+exists mostly to say which is which.
+
+#### Mechanism A — PASSTHROUGH: a hole with NOTHING behind it
+
+§9a's punch makes the page **transparent over the plate's rect**. The CG layer composites over the
+programme, so a punched hole with **no producer beneath it** shows the programme directly. No
+producer, no layer allocated, **no catalog entry, no assignment**, and no route latency. It costs
+nothing, because §9a's punch is being built anyway — passthrough is that work's by-product, not a
+feature bought separately.
+
+🔴 **Its limit is exactly what makes it the WRONG answer for the owner's layout.** The hole shows the
+**CORRESPONDING REGION** of the programme — a **WINDOW** onto it, 1:1 — not the whole picture scaled
+into the box. A plate at (100, 200) sized 640×360 shows the programme's own pixels at (100, 200)
+sized 640×360. That suits a **full-frame design with a cut-out**; it does not suit a **small box that
+must show the ENTIRE studio shot**.
+
+#### Mechanism B — A ROUTE: a real producer on its own layer
+
+The studio picture is **routed into the plate's own Live Source layer** and scaled by the same
+`FILL` / `CLIP` chain as any other source (§6), so the box shows the **WHOLE picture, reduced**. It
+is an ordinary catalog entry with an ordinary assignment: nothing in §2, §5 or §6 is special-cased
+for it, and the operator binds it in the Inspector exactly as they bind a remote guest.
+
+**This is what the owner's three-box layout needs.**
+
+#### 🔴 THE RULE FOR CHOOSING — stated plainly, because this is what a future reader will get wrong
+
+> **A WINDOW onto the programme is PASSTHROUGH. A SCALED COPY of the programme is a ROUTE.**
+
+Same visual intent — _"show me what is on air, inside this box"_ — different mechanism, and **the
+distinction is not a preference and not an optimisation.** Choosing passthrough for a small box gives
+a **crop** of the programme rather than the programme; choosing a route for a full-frame cut-out
+spends a layer, a producer and the latency measured below on a picture that was already exactly where
+it needed to be.
+
+#### 🔴 THE FEEDBACK TRAP — named so that nobody proposes `route://1` on channel 1
+
+**Routing a CHANNEL into a layer of THAT SAME channel is a feedback loop:** the channel's program mix
+would carry a producer that reads the channel's program mix. This plant is a **single-channel**
+installation (§12.5's owner question — nothing in this repo records a second channel in
+`casparcg.config`), so the studio plate lives on channel 1 and the programme **is** channel 1, which
+makes the naive address the trap itself. **`route://1` on channel 1 is never the answer.**
+
+**The safe form routes the LAYER, not the channel.** `route://<channel>-<layer>` takes **that
+producer's output**, not the channel's composite, so there is nothing to feed back. §0b measured
+`PLAY 1-2 "route://1-1"` rendering layer 1's picture on layer 2 with no runaway, which is evidence
+for the mechanism — recon **A3-R1** (§12.6) asks the question directly rather than resting on it.
+
+It requires knowing **WHICH layer the playout system puts the studio picture on** — an
+**installation fact**, discoverable by no code in this repo — which is why the ROUTE arm must express
+a **channel-AND-layer** address rather than a channel alone, and why the owner question in §12.6 is
+filed as a blocker on configuring this address at all.
+
+⚠ **§9b.2 is the same trap displaced one channel outward, and is NOT a duplicate of this section:**
+there, two individually-sound decisions (a dedicated channel routed to air, a studio plate routed
+from the playlist) close a **cycle** between two different channels, and its mitigation is this
+section's address form resurrected. **This section governs the single-channel installation** — the
+one that exists today — **and §9b.2 governs the two-channel model if it is ever adopted.** Neither
+replaces the other: measurement **M4** covers §9b.2's half, **A3-R1** covers this one.
+
+#### ✅ THE SCHEMA ALREADY CARRIES THE ADDRESS — checked in the code, so no amendment was made
+
+**This is the reasoning recorded in place of a schema change.** Phase 4 shipped the exact address
+form this section requires, so the amendment A3 was scoped to make turned out to be already present:
+
+- `packages/shared-ipc/src/channels/sources.ts:166-176` — the `route` arm of `SourceProducerSchema`
+  is `{ kind: 'route', channel: positive int, layer?: nonnegative int }`.
+- `packages/shared-ipc/tests/sources.test.ts:49-51` — **both forms are already pinned**, channel-only
+  and channel-and-layer. No new test was needed for the form itself.
+- `apps/runtime/src/renderer/features/sources/SourcesModal.tsx:148-150` renders the two forms as
+  `route://<channel>` and `route://<channel>-<layer>`, so the operator can already configure one.
+- `tools/amcp-mock/src/handlers.ts:153` parses both, and
+  `tools/amcp-mock/tests/live-producers.test.ts:43-53` pins that `PLAY 1-11 "route://1-10"` **and**
+  `PLAY 1-11 "route://1"` are each recorded as a ROUTE rather than as `ffmpeg`.
+
+⚠ **What phase 4 recorded was the GRAMMAR reason, not the SAFETY reason**, and the difference is the
+thing worth writing down. The field's own comment justifies `layer` as _"optional because the
+measured grammar makes it optional … a channel-only route means that channel's whole output."_ That
+is true and it is not the whole truth: **on a single-channel installation the layer-scoped form is
+the ONLY form a studio plate may use.** A future editor reading "optional grammar tail" could
+reasonably decide the tail is a nicety and drop it, or default it away. It is not a nicety — **it is
+the feedback mitigation**, and this section is where that is now written down. (A3 was scoped
+docs-and-recon only, so the comment itself is deliberately untouched.)
+
+#### The reserved-range boundary — READING a layer is not WRITING to it
+
+The studio picture's layer sits in the **playout-owned reserved range** (§4's 60–69 class), and this
+design's rule is that **the bridge never writes there**. Stated explicitly because §4's refusals are
+written as **blanket prohibitions**, and a later reader will otherwise conclude that this section
+violates them:
+
+> **Reading a layer via a route is not writing to it.** `PLAY <our layer> "route://<channel>-<reserved layer>"`
+> allocates and writes **OUR** layer; the reserved layer is a **read-only SOURCE**. Nothing is
+> created, cleared, mixed, paused or stopped there, the ledger records no ownership of it, and no
+> `CLEAR` can reach it. §4's prohibition on WRITING the reserved range stands **untouched** — the
+> route address is not an exemption to it, because it was never within its scope.
+
+The same sentence answers the question in the other direction: because the bridge never writes that
+layer, it also cannot **guarantee** what is on it. The address is an installation fact the operator
+states and the operator maintains; if the playout system moves its studio picture to another layer,
+the plate shows whatever now lives at the configured one. That is the price of reading someone else's
+layer, and it is accepted rather than defended against.
+
+#### Passthrough is a SECOND source kind, and it is filed rather than built
+
+Mechanism A needs **no catalog entry and no assignment at all** — it is the absence of a producer
+beneath a punched hole, so there is nothing for the operator to define. That makes it a genuinely
+different **source kind** from everything in §2's producer union, and it is worth having for
+window-style designs. **It is NOT needed for the owner's three-box layout**, which mechanism B
+answers in full.
+
+It is therefore filed as its own task under the phase that owns the render seam (**phase 1**, task
+**1.5h**), **gated on §9a's punch** — passthrough cannot be demonstrated, or even defined, until the
+hole is real.
+
 ---
 
 ## 9b. ⭐ PROPOSED 2026-08-10 (owner) — THE MULTI-BOX ON A CHANNEL OF ITS OWN
@@ -1842,10 +1976,11 @@ by `3e9bbc9` — but **`DEBT.md` is a frozen evidence archive and must not be ed
 ## 12. Owner decisions
 
 **§12.1 and §12.2 were authored as open questions and are ANSWERED — DECIDED 2026-08-08.** A third
-decision (§12.4) was made at the same time. §12.3 remains open on its own terms, and **§12.5 (added
-2026-08-10) is open in full** — four measurements and one owner question carried by §9b. They are
-recorded here rather than left in the prompt that carried them, because a prompt is ephemeral and the
-spec is the memory. **Do not re-open 12.1, 12.2 or 12.4.**
+decision (§12.4) was made at the same time. §12.3 remains open on its own terms; **§12.5 (added
+2026-08-10) is open in full** — four measurements and one owner question carried by §9b — and
+**§12.6 (added 2026-08-10) is open in full** — two measurements and one owner question carried by
+§9a.2's studio plate. They are recorded here rather than left in the prompt that carried them,
+because a prompt is ephemeral and the spec is the memory. **Do not re-open 12.1, 12.2 or 12.4.**
 
 ### 12.1 C-015's acceptance on a plant with no Decklink card — DECIDED 2026-08-08
 
@@ -2017,3 +2152,71 @@ Adding a channel means editing that file and restarting CasparCG — **which is 
 — so it is planned maintenance, never a live change. And that config sits on the same side of the
 integration boundary C-020 is deferred on, which makes "who changes it" a real question rather than a
 formality.
+
+### 12.6 ⭐ THE STUDIO PLATE (§9a.2) — TWO RECON QUESTIONS AND ONE OWNER QUESTION, ALL OPEN
+
+**Added 2026-08-10 (A3).** §9a.2 chose the ROUTE mechanism for the owner's three-box layout and named
+`route://<channel>-<layer>` as the form that avoids the feedback trap. **Neither of the two facts that
+argument rests on has been measured on the target build**, and the third question cannot be measured
+at all — only the owner can answer it. All three are recorded here so that none is later answered by
+assumption.
+
+**Run the two measurements alongside §12.5's M1–M4**, on the plant's CasparCG **2.3.2**, and
+**record the answer either way** — a negative result is the valuable one here, because it invalidates
+§9a.2's mechanism choice rather than merely delaying it.
+
+#### A3-R1 — does `route://<channel>-<layer>` exist on 2.3.2, and WHAT does it deliver?
+
+**The whole no-feedback argument rests on the answer.** §0b measured `PLAY 1-2 "route://1-1"`
+rendering layer 1's picture on layer 2 with no runaway, which shows the form is **accepted** and does
+not loop — it does not establish **what** the routed picture is.
+
+Measure the distinction directly, because the two possibilities are visually identical in the simple
+case and opposite in the case that matters:
+
+- **(a) the PRODUCER's own output** — layer N's picture alone. This is what §9a.2 assumes, and it is
+  what makes the address safe: the layer's own picture cannot contain the mix that carries the plate.
+- **(b) something ALREADY COMPOSITED** — the mix up to and including that layer, or the channel's
+  composite by another name. If this is the answer, **the layer-scoped form is not a feedback
+  mitigation at all** on a single-channel installation, §9a.2's mechanism B is unavailable there, and
+  the studio plate falls back to passthrough (§9a.2's mechanism A) with its window-not-scaled-copy
+  limit — or to §9b's dedicated channel, which is exactly the model §12.5 gates.
+
+**The discriminating test:** put a picture on layer N and a DIFFERENT, visibly overlapping picture on
+a layer BELOW it, then route layer N into a plate on a third layer. If the plate shows only layer N's
+picture, the answer is (a); if it shows both composited, the answer is (b).
+
+#### A3-R2 — what is the route's LATENCY, in frames?
+
+**Record the number, not an impression.** The figure is usually invisible, because in a multi-box
+layout the backdrop covers everything except the plates and there is nothing on screen to compare a
+plate against.
+
+⚠ **It stops being invisible in exactly one arrangement, and that arrangement is reachable by
+design:** wherever a **DIRECTLY composited programme picture is visible BESIDE a routed plate** —
+a passthrough hole (§9a.2 mechanism A) and a routed studio plate (mechanism B) in the same template,
+or a routed plate over a programme background — **the two are out of step by the measured figure**,
+and fast motion shows it as a visible lag between two views of the same studio.
+
+Record the consequence **with the measured figure beside it**, not as a general caution: "N frames"
+is a number an author can design around; "there may be some latency" is not.
+
+#### The OWNER QUESTION — which layer does CIAB put the studio picture on?
+
+**This is not a recon item; no measurement in this repo can answer it and no code can discover it.**
+The route address in §9a.2 is `route://<channel>-<layer>`, and **`<layer>` is an installation fact
+owned by the playout system**: it is the layer CIAB — the plant's playout application — puts the main
+studio picture on.
+
+Without it:
+
+- the catalog entry for the studio plate **cannot be configured on this installation**. The schema
+  accepts the address (`SourceProducerSchema`'s `route` arm already carries `layer`), and the
+  SourcesModal already renders it, so nothing is BLOCKED in code — but the value the operator must
+  type is unknown, and a guess puts an arbitrary layer's picture inside a guest frame on air.
+- §9a.2's reserved-range paragraph cannot be checked against reality. It argues that reading a
+  reserved layer is not writing to it, which stands on its own; but whether the studio picture is
+  even IN the reserved 60–69 range, or somewhere else entirely, is part of the same unknown.
+
+**It is a question for the owner, to be put to CIAB.** Recorded here rather than resolved, because
+resolving it by assumption is precisely the failure mode this section exists to prevent.
