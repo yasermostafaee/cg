@@ -666,7 +666,23 @@ the mock's `setSourceCatalog` must read the assignments BEFORE writing the new c
 NOTHING dropped and the deletion cascades silently, which is the one thing the report exists to
 prevent.
 
-**Phase 4 LINUX E2E — the pre-reshape run, kept for the record.**
+**PHASE 4's LINUX E2E — DISCHARGED, INCLUDING THE RESHAPE.**
+[github.com/yasermostafaee/cg/actions/runs/31408479929](https://github.com/yasermostafaee/cg/actions/runs/31408479929)
+— `ubuntu-latest`, `dev` @ `c16d25f`, **`conclusion: success`, the `E2E (Playwright)` job
+COMPLETED and green** (not skipped, not cancelled). That commit is the tip of the whole wave and
+carries every part of it: `1608a80` (the two-store reshape and the Inspector binding), `dd0091b`
+(the plate picker's draft), `ab7d12e` (the library entry owning its bindings) and `c16d25f` (the
+two E2E repairs). The suite it ran includes `apps/runtime/tests/e2e/live-source-sources.spec.ts`,
+the re-pointed `modal-message-in-viewport.spec.ts`, and the designer's `live-source.spec.ts`.
+
+⚠ **The three pushes before it were RED, and that is recorded rather than hidden**
+(<https://github.com/yasermostafaee/cg/actions/runs/31402468129>,
+<https://github.com/yasermostafaee/cg/actions/runs/31404275672>,
+<https://github.com/yasermostafaee/cg/actions/runs/31406199136>): all three failed on the SAME two
+specs, for the two causes 4g records — a knife-edge designer fixture and a runtime spec whose
+world the reshape moved. Neither was a product fault, and both are repaired in `c16d25f`.
+
+**The earlier pre-reshape run, kept for the record.**
 [github.com/yasermostafaee/cg/actions/runs/31384965705](https://github.com/yasermostafaee/cg/actions/runs/31384965705)
 — `dev` @ `37de4a6`, `conclusion: success`, `E2E (Playwright)` job **success** (not skipped, not
 cancelled). ⚠ **It does NOT discharge the reshape**: that run covers the three pre-reshape commits
@@ -929,6 +945,10 @@ question. **No task in this file changes on the strength of it**, §9a's punch w
   `4f4853a`, `conclusion: success`, `E2E (Playwright)` COMPLETED and green.
   **The 1.8a / 1.8b Inspector + preflight work is discharged** by
   <https://github.com/yasermostafaee/cg/actions/runs/31376780917> (`fd89922`), cited beside 1.8b.
-  Phases 4–8 still owe their own.
+  **PHASE 4's DEBT IS DISCHARGED, RESHAPE INCLUDED** —
+  <https://github.com/yasermostafaee/cg/actions/runs/31408479929>, `ubuntu-latest`, `dev` @
+  `c16d25f`, `conclusion: success`, `E2E (Playwright)` COMPLETED and green. See §4's own note for
+  which commits that tip carries and for the three RED runs before it. Phases 5–8 still owe their
+  own.
 - [ ] 9.4 **Hardware:** the phase-6 `route://` demo is dischargeable here; **phase 7 is not** —
       see `design.md` §12.1, which is an owner decision, not work.
