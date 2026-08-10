@@ -525,6 +525,18 @@ export class DesignerApp {
 
   // ── layer rows / context menu (D-076 / D-077) ───────────────────────────────
 
+  /**
+   * Select ONE element by its id, through its timeline row.
+   *
+   * By ID rather than by clicking the canvas, deliberately: a canvas click
+   * resolves to whatever is topmost at that point, so a test that has just
+   * placed two elements cannot use it to address the one underneath. The row is
+   * addressed by the element's own id, which is unambiguous at any zoom.
+   */
+  async selectElementById(elementId: string): Promise<void> {
+    await this.page.locator(`.cg-tl-row[data-element-id="${elementId}"]`).click();
+  }
+
   /** Count of timeline element ("layer") rows currently shown. */
   async rowCount(): Promise<number> {
     return this.page.locator('.cg-tl-row[data-element-id]').count();

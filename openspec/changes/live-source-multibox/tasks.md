@@ -583,6 +583,47 @@ response for`) and says the one thing that is true of all of them. Checked as a 
       said too, a refused deletion keeps the bindings, and the confirm names the fallout.
       `templateImportAssignments.test.ts` covers the three import rules.
 
+### 4g. THE TWO RED E2E ON THE 4a PUSH — what each actually was
+
+- [x] 4g.1 **Designer `live-source.spec.ts` "MULTIPLE independent Live Sources" — a TEST that
+      encoded a knife-edge assumption, NOT a product regression. Proven by measurement, not
+      asserted.** The test placed two plates with canvas CLICKS 180×140 px apart and asserted no
+      preflight error, commenting "far apart, so this is about independence and not about the
+      overlap rule". A plate is born 640×360 SCENE px at the point clicked, so the scene distance
+      between two clicks is `delta / zoom`, and the zoom is `canvasWidth / 1920` — a function of
+      how wide the surrounding panels happen to render.
+      **MEASURED both ways.** At a 464 px canvas (zoom 0.2417) the plates clear each other by
+      ≈105 scene px and no issue is raised. At a 784 px canvas (zoom 0.408) the SAME two clicks put
+      them 7 canvas px into each other on `y` and preflight raises the pill — the reported failure,
+      reproduced on demand.
+      **The first hypothesis was DISCONFIRMED:** the two plates do not land on the same default rect.
+      They land exactly where they were clicked, which is the product behaving correctly — a plate
+      is never offset onto its neighbour, and two plates the author places on top of each other are
+      a fault the overlap rule exists to report. **And 4a could not have caused it:** `git show
+--stat` over that commit touches no Designer source and no package the Designer renders from
+      (only `packages/shared-ipc/src/channels/sources.ts`, which the Designer's preflight does not
+      consume).
+      **Repaired without touching the assertion**: the separation is now stated in SCENE units
+      through the Inspector's `X position` / `Y position`, which is the space the rule is evaluated
+      in. The sibling test at `:233` remains the positive control for the overlap rule itself.
+- [x] 4g.2 **Runtime `modal-message-in-viewport.spec.ts` — a test whose world the change moved.**
+      4a renamed the entry point, replaced the symbolic id with a NAME, and moved the plate binding
+      out of that modal. **BOTH original conditions were RE-CHECKED rather than assumed to have
+      survived** — the spec exists for a LAYOUT claim jsdom cannot make, so a re-pointed locator
+      over a modal that no longer overflows would be a green test asserting nothing:
+      (a) the body still genuinely overflows with six sources defined, which the spec's own
+      `overflow > 80` precondition proves at run time; (b) the refusal still comes from the REAL
+      validator the bridge runs (`checkSourceCatalog`, through the same band rule), never an
+      invented mock refusal. Everything else is unchanged — the negative control (the last element
+      inside the scrolled body, asserted OUT of viewport at the same scroll position), the Persian
+      neighbour, and the scroll-position claim.
+      One locator detail worth recording: the name field's accessible name derives from the
+      source's own name, so it changes under the locator the moment it is filled — the Persian case
+      addresses it through the ENTRY (`[data-source-id]`) instead.
+- [x] 4g.3 **Both FULL suites run locally before the push**, not the two specs alone: `pnpm
+gate:e2e`, 246 designer + the runtime suite, all green. A targeted run is what let the first
+      of these through — `31264006795` is the recorded precedent.
+
 **Five things settled while implementing 4.1–4.6, recorded because a later reader will otherwise
 re-derive them (or wonder why the code and §2's sketch differ). ALL FIVE SURVIVE THE RESHAPE
 UNCHANGED:**

@@ -310,10 +310,38 @@ test.describe('Live Source (D-137 phase 1)', () => {
 
   test('MULTIPLE independent Live Sources each get their own id', async ({ app }) => {
     await app.newProject('LiveSourceMulti');
-    // Far apart, so this is about independence and not about the overlap rule.
     await app.addLiveSource({ x: 120, y: 100 });
     await app.addLiveSource({ x: 300, y: 240 });
     await expect(holes(app)).toHaveCount(2);
+
+    /*
+      ⚠ SEPARATION IS SET IN SCENE UNITS, NOT ASSUMED FROM THE CLICKS.
+
+      This test is about INDEPENDENCE, not about the overlap rule, and it says so
+      — but two canvas CLICKS cannot express that intent. A plate is born 640×360
+      SCENE px wide at the point clicked, while the clicks are CANVAS px: the
+      scene distance between them is `delta / zoom`, and the zoom is
+      `canvasWidth / 1920`, which depends on how wide the surrounding panels
+      happen to render. MEASURED here: a 464px-wide canvas gives zoom 0.2417, so
+      the two clicks are 745 scene px apart and the 640-wide plates clear each
+      other by ~105px. A canvas wider than ~540px flips that — the same two
+      clicks land the plates ON TOP of each other and preflight correctly reports
+      an overlap. That is the product behaving as designed (a plate is born where
+      you click, never offset onto its neighbour) and the FIXTURE being
+      knife-edge, which is how it passed here and failed on CI's browser.
+
+      So the separation is now stated in the units the rule is evaluated in.
+    */
+    const ids = await holes(app).evaluateAll((nodes) =>
+      nodes.map((n) => n.closest('[data-cg-element-id]')?.getAttribute('data-cg-element-id') ?? ''),
+    );
+    expect(ids.filter((id) => id !== '')).toHaveLength(2);
+    await app.selectElementById(ids[0]!);
+    await app.setInspectorNumber('X position', 0);
+    await app.setInspectorNumber('Y position', 0);
+    await app.selectElementById(ids[1]!);
+    await app.setInspectorNumber('X position', 1000);
+    await app.setInspectorNumber('Y position', 0);
 
     // The tool hands out `live-1`, `live-2`: two holes sharing an id would map to ONE
     // producer with nothing saying so.

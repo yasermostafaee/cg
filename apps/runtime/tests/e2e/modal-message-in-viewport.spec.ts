@@ -21,16 +21,28 @@ import { test, expect } from './fixtures/runtime.js';
  * The debt names a scrolled `Candidate layers` list, and that is where the defect
  * was found. It is not where the assertion can be made: the offline MockRuntime's
  * `setFixedLayers` ACCEPTS everything — there is no shared fixed-layers validator
- * the way `checkSourceMappings` is shared — so producing a candidate-layers refusal
+ * the way `checkSourceCatalog` is shared — so producing a candidate-layers refusal
  * in test mode would mean inventing a mock refusal that no bridge rule backs, and
  * teaching the suite a semantics the bridge does not have is the one thing the mock
  * is written never to do.
  *
  * `Live sources` satisfies every property the debt actually requires, and one more:
- * its body genuinely scrolls once a few sources are mapped (asserted below rather
+ * its body genuinely scrolls once a few sources are defined (asserted below rather
  * than assumed), its refusal comes from the REAL validator the bridge itself runs,
  * and it is the modal whose message the owner reported as illegible. The mechanism
  * under test is the primitive's, so it is the same mechanism either way.
+ *
+ * ── ⚠ RE-POINTED 2026-08-10, AFTER THE PLATE BINDING LEFT THIS MODAL ────────
+ *
+ * The 4a reshape renamed the entry point, replaced the symbolic id with a NAME,
+ * and moved the per-plate binding out to the Inspector. **BOTH ORIGINAL
+ * CONDITIONS WERE RE-CHECKED, not assumed to have survived**: the refusal is
+ * still the bridge's own (`checkSourceCatalog`, reached through the same band
+ * rule), and the body still genuinely overflows with six sources defined — the
+ * `overflow` assertion below is what proves it, and it is deliberately the first
+ * thing that would fail if the modal ever became short enough to make this spec
+ * vacuous. Nothing else about the spec changed: the negative control, the Persian
+ * neighbour and the scroll-position claim are all as they were.
  *
  * ── THE NEGATIVE CONTROL IS THE POINT ───────────────────────────────────────
  *
@@ -41,8 +53,8 @@ import { test, expect } from './fixtures/runtime.js';
  * being in view while its old neighbours are not is the whole claim.
  */
 
-/** Enough mapped sources that the dialog's body cannot fit on one screen. */
-const IDS = ['guest-1', 'guest-2', 'guest-3', 'guest-4', 'guest-5', 'guest-6'];
+/** Enough defined sources that the dialog's body cannot fit on one screen. */
+const NAMES = ['Studio A', 'Studio B', 'Baku', 'Skype 1', 'Skype 2', 'Roving'];
 
 test('a refusal stays in the viewport when the modal body is scrolled away from it', async ({
   app,
@@ -50,24 +62,29 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
   const page = app.page;
   const dialog = page.getByRole('dialog', { name: 'Live sources' });
 
-  await page.getByRole('button', { name: 'Open live source mapping' }).click();
+  await page.getByRole('button', { name: 'Open live sources' }).click();
   await expect(dialog).toBeVisible();
 
-  for (const id of IDS) {
-    await dialog.getByLabel('New source id').fill(id);
+  for (const name of NAMES) {
+    await dialog.getByLabel('New source name').fill(name);
     await dialog.getByRole('button', { name: 'Add' }).click();
   }
-  await expect(dialog.getByLabel('Label for guest-6')).toBeVisible();
+  await expect(dialog.locator('[data-source-id]')).toHaveCount(NAMES.length);
 
   /*
     PERSIAN SITS BESIDE IT. These strings are shown on a station whose operator
-    surface is Persian, and a mapping's display label is free text — so one of the
-    six carries a real RTL name while the refusal below is Latin. If the message
+    surface is Persian, and a source's NAME is free text — so one of the six
+    carries a real RTL name while the refusal below is Latin. If the message
     region's direction handling were wrong the two would fight for the same line
     box, and this is the spec that has a real layout engine to notice.
+
+    Addressed through the ENTRY, not through the field's accessible name: that
+    name is derived from the source's own name, so it changes under the locator
+    the moment the field is filled.
   */
-  await dialog.getByLabel('Label for guest-2').fill('مهمان دو');
-  await expect(dialog.getByLabel('Label for guest-2')).toHaveValue('مهمان دو');
+  const secondName = dialog.locator('[data-source-id]').nth(1).getByRole('textbox').first();
+  await secondName.fill('مهمان دو');
+  await expect(secondName).toHaveValue('مهمان دو');
 
   const body = dialog.locator('[data-modal-body]');
   const message = dialog.locator('[data-modal-message]');
@@ -83,7 +100,7 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
 
   // Refuse something. The band must be disjoint from the candidate bank, which the
   // mock seeds at 70 upward, so 50–75 reaches into it. This is the bridge's own
-  // validator (`checkSourceMappings`), not a stub.
+  // validator (`checkSourceCatalog`), not a stub.
   await dialog.getByLabel('Live source band start layer').fill('50');
   await dialog.getByLabel('Live source band end layer').fill('75');
   await dialog.getByRole('button', { name: 'Apply band' }).click();
