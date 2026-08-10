@@ -49,8 +49,14 @@ export interface MixerRect {
 /**
  * The identity rect: the whole channel. What both `FILL` and `CLIP` are before
  * anything sets them, and what `MIXER … CLEAR` restores.
+ *
+ * FROZEN, because every untouched layer's `fill` and `clip` are this SAME object:
+ * the registry seeds them by reference and the handlers only ever assign fresh
+ * rects. A test that reached in and mutated it would silently change the default
+ * for every other layer in the process — a state that looks correct at the point
+ * of the write and is wrong somewhere else entirely.
  */
-export const FULL_FRAME: MixerRect = { x: 0, y: 0, width: 1, height: 1 };
+export const FULL_FRAME: MixerRect = Object.freeze({ x: 0, y: 0, width: 1, height: 1 });
 
 /**
  * The producer KIND a layer is carrying — what real CasparCG reports per layer

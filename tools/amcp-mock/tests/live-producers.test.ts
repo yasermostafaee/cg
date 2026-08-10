@@ -261,6 +261,21 @@ describe('renderedRect', () => {
     const clip = { x: 0.25, y: 0.25, width: 0.25, height: 0.25 };
     expect(renderedRect(FULL_FRAME, clip)).toEqual(clip);
   });
+
+  it('FULL_FRAME is frozen — every untouched layer shares this one object', () => {
+    // Not pedantry: the registry seeds `fill` and `clip` BY REFERENCE, so a
+    // mutation here would change the default for every other layer in the
+    // process, and the damage would surface nowhere near the write.
+    expect(Object.isFrozen(FULL_FRAME)).toBe(true);
+  });
+
+  it('setting one layer’s geometry does not disturb another’s', async () => {
+    const m = await boot();
+    await send(m.amcpPort, 'PLAY 1-40 "route://1-10"');
+    await send(m.amcpPort, 'PLAY 1-41 "route://1-10"');
+    await send(m.amcpPort, 'MIXER 1-40 FILL 0.5 0.5 0.25 0.25');
+    expect(m.layerState(L(41))?.fill).toEqual(FULL_FRAME);
+  });
 });
 
 /** Send one AMCP line and return the raw reply. */
