@@ -45,6 +45,10 @@ import {
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
   type ChannelSettingsState,
+  SourcesConfigChangedChannel,
+  SourcesConfigChannel,
+  SourcesSetConfigChannel,
+  type SourceMappings,
   RehearseEnterChannel,
   RehearseExitChannel,
   RehearseStateChangedChannel,
@@ -248,6 +252,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #delimiterSubs = new Subs<DelimiterOption[]>();
   /** R-030 — the bridge-owned channel raster + video-mode reading. */
   readonly #channelSettingsSubs = new Subs<ChannelSettingsState>();
+  /** D-137 / C-015 — the bridge-owned Live Source mapping, pushed on change. */
+  readonly #sourceMappingSubs = new Subs<SourceMappings>();
   /** R-022 — the bridge-owned rehearsing set, pushed to every client. */
   readonly #rehearseSubs = new Subs<Rehearsal[]>();
   readonly #statusSubs = new Subs<BridgeLinkStatus>();
@@ -554,6 +560,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#channelSettingsSubs.emit(p.data);
         break;
       }
+      case SourcesConfigChangedChannel.name: {
+        const p = SourcesConfigChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#sourceMappingSubs.emit(p.data);
+        break;
+      }
       case RehearseStateChangedChannel.name: {
         const p = RehearseStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#rehearseSubs.emit(p.data);
@@ -855,6 +866,15 @@ export class WebSocketRuntime implements RuntimeBridge {
     exit: (req: ChannelRequest<typeof RehearseExitChannel>) =>
       this.#invoke(RehearseExitChannel, req),
     onStateChanged: (handler: (rehearsals: Rehearsal[]) => void) => this.#rehearseSubs.add(handler),
+  };
+
+  /** D-137 / C-015 — the installation's Live Source mapping, owned by the bridge. */
+  readonly sources = {
+    config: () => this.#invoke(SourcesConfigChannel, undefined),
+    setConfig: (req: ChannelRequest<typeof SourcesSetConfigChannel>) =>
+      this.#invoke(SourcesSetConfigChannel, req),
+    onConfigChanged: (handler: (mappings: SourceMappings) => void) =>
+      this.#sourceMappingSubs.add(handler),
   };
 
   /** R-034 — the station's delimiter list, owned and disk-persisted by the bridge. */

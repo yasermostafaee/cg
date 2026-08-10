@@ -400,7 +400,7 @@ re-derive them (or wonder why the code and §2's sketch differ):**
    validator the boot path calls, against the SAME bank and reserved list resolved once in
    `createBridge`.
 
-- [ ] 4.7 A CG Control settings modal modelled on `DelimitersModal`: **no optimistic local update**
+- [x] 4.7 A CG Control settings modal modelled on `DelimitersModal`: **no optimistic local update**
       (`delimiterStore.ts:134-140`) and an older-bridge translation for the unknown-channel refusal
       (`:162-171`), which every station whose bridge predates this feature will hit.
       **AMENDED 2026-08-10 — the modal's entry editor carries the mapping's `format` (the

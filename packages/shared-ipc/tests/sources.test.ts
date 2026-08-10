@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   aspectForFormat,
+  checkSourceMappings,
   EMPTY_SOURCE_MAPPINGS,
   LIVE_SOURCE_FORMATS,
   LiveSourceLayerRangeSchema,
   mappingAspect,
   SOURCES_SET_CONFIG_REASONS,
+  SourceMappingsConfigError,
   SourceMappingsSchema,
   SourceProducerSchema,
   SUGGESTED_LIVE_SOURCE_LAYER_RANGE,
+  validateSourceMappings,
   type LiveSourceFormat,
 } from '../src/channels/sources.js';
+import type { FixedLayerBank } from '../src/channels/fixedLayers.js';
 
 /**
  * D-137 / C-015 phase 4 — the installation mapping's WIRE SHAPE.
@@ -122,6 +126,108 @@ describe('the mapping file', () => {
       mappings: [{ id: 'guest-1', format: '1080i50', producer: { kind: 'route', channel: 1 } }],
     });
     expect(bad.success).toBe(false);
+  });
+});
+
+describe('validateSourceMappings — at load AND at change', () => {
+  function bank(overrides: Partial<FixedLayerBank> = {}): FixedLayerBank {
+    return { channel: 1, start: 70, count: 30, ...overrides };
+  }
+
+  const guest1 = { id: 'guest-1', producer: { kind: 'route', channel: 2 } } as const;
+
+  function codeOf(fn: () => unknown): { code: string; message: string } {
+    try {
+      fn();
+    } catch (err) {
+      if (err instanceof SourceMappingsConfigError) return { code: err.code, message: err.message };
+      throw err;
+    }
+    throw new Error('expected SourceMappingsConfigError');
+  }
+
+  it('accepts a band clear of both the bank and the reservation', () => {
+    expect(() =>
+      validateSourceMappings(
+        { mappings: [guest1], layerRange: { start: 10, end: 59 } },
+        { fixedBank: bank(), reservedLayers: [60, 61, 62] },
+      ),
+    ).not.toThrow();
+  });
+
+  it('refuses two mappings claiming one id', () => {
+    const { code, message } = codeOf(() =>
+      validateSourceMappings(
+        { mappings: [guest1, { id: 'guest-1', producer: { kind: 'media', file: 'AMB' } }] },
+        { fixedBank: null, reservedLayers: [] },
+      ),
+    );
+    expect(code).toBe('duplicate-id');
+    // Which producer a template got would depend on array order — the message
+    // has to say that, not merely "duplicate".
+    expect(message).toContain('guest-1');
+    expect(message).toMatch(/order/i);
+  });
+
+  it('refuses a band overlapping the candidate bank, naming BOTH ranges', () => {
+    const { code, message } = codeOf(() =>
+      validateSourceMappings(
+        { mappings: [], layerRange: { start: 50, end: 75 } },
+        { fixedBank: bank(), reservedLayers: [] },
+      ),
+    );
+    expect(code).toBe('overlaps-fixed-bank');
+    expect(message).toContain('50-75');
+    expect(message).toContain('70-99');
+  });
+
+  it('refuses a band overlapping the reserved playout range, naming the layers', () => {
+    const { code, message } = codeOf(() =>
+      validateSourceMappings(
+        { mappings: [], layerRange: { start: 55, end: 65 } },
+        { fixedBank: null, reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69] },
+      ),
+    );
+    expect(code).toBe('overlaps-reserved');
+    expect(message).toContain('55-65');
+    expect(message).toContain('60-69');
+    expect(message).toContain('60, 61');
+  });
+
+  it('compares LAYER NUMBERS regardless of channel — the conservative direction', () => {
+    // The band carries no channel because a Live Source lands on whatever
+    // channel its template is on. Refusing an overlap the bank declares on
+    // channel 2 refuses more than is strictly necessary, and that is right for
+    // a check whose failure mode is a graphic landing on somebody else's layer.
+    expect(() =>
+      validateSourceMappings(
+        { mappings: [], layerRange: { start: 70, end: 80 } },
+        { fixedBank: bank({ channel: 2 }), reservedLayers: [] },
+      ),
+    ).toThrow(SourceMappingsConfigError);
+  });
+
+  it('checks nothing about layers when no band is declared', () => {
+    // A mapping with no band is legal — nothing can be placed, which is phase
+    // 5's problem, not a config error.
+    expect(() =>
+      validateSourceMappings({ mappings: [guest1] }, { fixedBank: bank(), reservedLayers: [60] }),
+    ).not.toThrow();
+  });
+
+  it('checkSourceMappings answers the same verdict as a RESULT', () => {
+    // The bridge's `sources.set-config` and the offline mock both answer with
+    // this shape, from this one function — a mock that refused differently from
+    // the bridge would teach an operator a rule the real station does not have.
+    expect(
+      checkSourceMappings({ mappings: [guest1] }, { fixedBank: null, reservedLayers: [] }),
+    ).toEqual({ ok: true });
+    expect(
+      checkSourceMappings(
+        { mappings: [], layerRange: { start: 50, end: 75 } },
+        { fixedBank: bank(), reservedLayers: [] },
+      ),
+    ).toMatchObject({ ok: false, reason: 'overlaps-fixed-bank' });
   });
 });
 

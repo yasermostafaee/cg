@@ -45,6 +45,7 @@ import {
   type ChannelSettings,
   type ChannelSettingsState,
   EMPTY_SOURCE_MAPPINGS,
+  checkSourceMappings,
   type SourceMappings,
   type SourcesSetConfigReason,
   type CHANNEL_SETTINGS_SET_REASONS,
@@ -53,7 +54,6 @@ import {
   type REHEARSE_EXIT_REASONS,
 } from '@cg/shared-ipc';
 import { ChannelSettingsStore } from './channel-settings-store.js';
-import { SourceMappingsConfigError, validateSourceMappings } from './source-mapping-store.js';
 import {
   validateFixedBank,
   validateFixedBankChange,
@@ -3266,17 +3266,11 @@ export class CasparRuntime {
     reason?: SourcesSetConfigReason;
     message?: string;
   } {
-    try {
-      validateSourceMappings(next, {
-        fixedBank: this.#fixedBank,
-        reservedLayers: this.#reservedLayers,
-      });
-    } catch (err) {
-      if (err instanceof SourceMappingsConfigError) {
-        return { ok: false, reason: err.code, message: err.message };
-      }
-      throw err;
-    }
+    const verdict = checkSourceMappings(next, {
+      fixedBank: this.#fixedBank,
+      reservedLayers: this.#reservedLayers,
+    });
+    if (!verdict.ok) return verdict;
     this.#sourceMappings = next;
     this.sourceMappingsChanged.emit(next);
     return { ok: true };

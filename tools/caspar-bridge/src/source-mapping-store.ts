@@ -1,13 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-  EMPTY_SOURCE_MAPPINGS,
-  SourceMappingsSchema,
-  type FixedLayerBank,
-  type LiveSourceLayerRange,
-  type SOURCES_SET_CONFIG_REASONS,
-  type SourceMappings,
-} from '@cg/shared-ipc';
+import { EMPTY_SOURCE_MAPPINGS, SourceMappingsSchema, type SourceMappings } from '@cg/shared-ipc';
 
 /**
  * D-137 / C-015 phase 4 — the `SourceMappingStore`: bridge-side loading,
@@ -15,11 +8,15 @@ import {
  * mapping, and of the layer band those producers are placed on.
  *
  * Written as MODULE FUNCTIONS rather than a class, deliberately, because it
- * follows `fixed-layers-store.ts` in every respect that matters here: the
- * validators are pure and exported so unit tests exercise every refusal, the
- * value in force is held by `CasparRuntime` beside the other config it owns,
- * and `bridge.ts` persists after a successful apply (the R-010 order —
- * validate → apply → persist → publish).
+ * follows `fixed-layers-store.ts` in every respect that matters here: the value
+ * in force is held by `CasparRuntime` beside the other config it owns, and
+ * `bridge.ts` persists after a successful apply (the R-010 order — validate →
+ * apply → persist → publish).
+ *
+ * This module is the FILE half alone. What a LEGAL mapping is lives in
+ * `@cg/shared-ipc` (`validateSourceMappings`), so the bridge and the offline
+ * mock cannot come to refuse different things — only the filesystem half needs
+ * a filesystem.
  *
  * ── 🔴 THE ABSENT FILE IS A SAFETY PROPERTY, NOT A CONVENIENCE ──────────────
  *
@@ -47,19 +44,16 @@ import {
  * `~/.cg-runtime/bridge-source-mappings.json`.
  */
 
-/** DERIVED from the wire const, so the channel's `reason` union and this cannot drift. */
-export type SourceMappingsErrorCode = (typeof SOURCES_SET_CONFIG_REASONS)[number];
-
-/** A refused mapping (or mapping change). `code` is stable; the message names specifics. */
-export class SourceMappingsConfigError extends Error {
-  override readonly name = 'SourceMappingsConfigError';
-  constructor(
-    readonly code: SourceMappingsErrorCode,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+/**
+ * The VALIDATION lives in `@cg/shared-ipc` (`validateSourceMappings`), not here,
+ * so the bridge and the offline mock share ONE implementation of what a legal
+ * mapping is. Re-exported for the callers that already reach for this module.
+ */
+export {
+  SourceMappingsConfigError,
+  validateSourceMappings,
+  type SourcesSetConfigReason as SourceMappingsErrorCode,
+} from '@cg/shared-ipc';
 
 /** A mapping file that is present but unusable (hard startup failure — see the header). */
 export class SourceMappingsFileError extends Error {
@@ -69,104 +63,6 @@ export class SourceMappingsFileError extends Error {
     reason: string,
   ) {
     super(`source-mappings file ${file} is present but unusable: ${reason}`);
-  }
-}
-
-export interface ValidateSourceMappingsOptions {
-  /**
-   * The operator's candidate bank in force, or `null` when none is declared.
-   * The SAME object the LayerManager was given — never a second reading.
-   */
-  fixedBank: FixedLayerBank | null;
-  /**
-   * The layers the PLAYOUT system owns, expanded (`reservedLayerNumbers`). The
-   * SAME list the boot validator and the allocation fence were given.
-   */
-  reservedLayers: readonly number[];
-}
-
-function rangeText(range: LiveSourceLayerRange): string {
-  return `${String(range.start)}-${String(range.end)}`;
-}
-
-/** Compress a layer list into human-readable inclusive ranges (`60-69, 105`). */
-function formatRanges(layers: readonly number[]): string {
-  const sorted = [...new Set(layers)].sort((a, b) => a - b);
-  const parts: string[] = [];
-  let runStart: number | null = null;
-  let prev = Number.NaN;
-  for (const layer of sorted) {
-    if (runStart === null) {
-      runStart = layer;
-    } else if (layer !== prev + 1) {
-      parts.push(runStart === prev ? String(runStart) : `${String(runStart)}-${String(prev)}`);
-      runStart = layer;
-    }
-    prev = layer;
-  }
-  if (runStart !== null) {
-    parts.push(runStart === prev ? String(runStart) : `${String(runStart)}-${String(prev)}`);
-  }
-  return parts.join(', ');
-}
-
-/**
- * Validate a mapping against itself and against this station's other declared
- * layer classes. Throws {@link SourceMappingsConfigError} naming the conflict.
- *
- * CALLED AT LOAD **AND** AT EVERY CHANGE, from the same function. "At change" is
- * the half that gets forgotten, and it is the half an operator can trigger with
- * a graphic on air — a band edited into the candidate bank at 21:59 would put a
- * live producer on top of an operator row.
- *
- * The band carries NO CHANNEL (a Live Source lands on whatever channel its
- * template is on), so the overlap tests compare layer NUMBERS and ignore which
- * channel the bank declares. That refuses more than is strictly necessary, and
- * that is the correct direction for a check whose failure mode is a graphic
- * landing on somebody else's layer.
- */
-export function validateSourceMappings(
-  value: SourceMappings,
-  options: ValidateSourceMappingsOptions,
-): void {
-  const seen = new Set<string>();
-  for (const mapping of value.mappings) {
-    if (seen.has(mapping.id)) {
-      throw new SourceMappingsConfigError(
-        'duplicate-id',
-        `two mappings claim the id "${mapping.id}" — which producer a template got would ` +
-          `depend on the order of the list; give each id exactly one producer`,
-      );
-    }
-    seen.add(mapping.id);
-  }
-
-  const range = value.layerRange;
-  if (range === undefined) return;
-
-  const bank = options.fixedBank;
-  if (bank !== null) {
-    const bankEnd = bank.start + bank.count - 1;
-    if (range.start <= bankEnd && range.end >= bank.start) {
-      // Name BOTH ranges, the `overlaps-reserved` stance: the operator has to
-      // be able to see which side to move.
-      throw new SourceMappingsConfigError(
-        'overlaps-fixed-bank',
-        `the Live Source layer band ${rangeText(range)} overlaps the operator's candidate ` +
-          `layer bank ${String(bank.start)}-${String(bankEnd)} (channel ${String(bank.channel)}) ` +
-          `— the two must be disjoint; move the band or the bank`,
-      );
-    }
-  }
-
-  const reservedHits = options.reservedLayers.filter((l) => l >= range.start && l <= range.end);
-  if (reservedHits.length > 0) {
-    throw new SourceMappingsConfigError(
-      'overlaps-reserved',
-      `the Live Source layer band ${rangeText(range)} overlaps the reserved playout range ` +
-        `${formatRanges(options.reservedLayers)} on layer(s) ${reservedHits.map(String).join(', ')} ` +
-        `— the two must be disjoint; move the band or the reservation`,
-    );
   }
 }
 

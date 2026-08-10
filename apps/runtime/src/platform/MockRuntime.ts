@@ -20,6 +20,8 @@ import type {
   ChannelSettings,
   ChannelSettingsState,
   CHANNEL_SETTINGS_SET_REASONS,
+  SourceMappings,
+  SourcesSetConfigReason,
 } from '@cg/shared-ipc';
 // R-030 — `videoModeRaster` is the ONE video-mode → raster map, shared with the
 // bridge. The mock must never carry a second copy: a mock that disagreed with the
@@ -27,8 +29,11 @@ import type {
 // on air.
 import {
   ChannelRasterSchema,
+  checkSourceMappings,
   DelimiterOptionSchema,
+  EMPTY_SOURCE_MAPPINGS,
   REFERENCE_RASTER,
+  SourceMappingsSchema,
   videoModeRaster,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
@@ -42,6 +47,7 @@ type FieldValues = StackItemState['fields'];
 
 const SETTINGS_KEY = 'cg-runtime:settings';
 const DELIMITERS_KEY = 'cg-runtime:delimiters';
+const SOURCE_MAPPINGS_KEY = 'cg-runtime:source-mappings';
 const CHANNEL_SETTINGS_KEY = 'cg-runtime:channel-settings';
 
 /**
@@ -95,6 +101,8 @@ export class MockRuntime {
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
   // R-034 parity — the shared delimiter list.
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
+  // D-137 / C-015 parity — the installation's Live Source mapping.
+  readonly sourceMappingsChanged = new Emitter<SourceMappings>();
   // R-030 parity — the per-channel output raster + the video-mode reading.
   readonly channelSettingsChanged = new Emitter<ChannelSettingsState>();
   // R-022 parity — the rehearsing set.
@@ -885,6 +893,59 @@ export class MockRuntime {
   }
 
   // ── settings ────────────────────────────────────────────────────────
+  /**
+   * D-137 / C-015 parity — the installation's Live Source mapping.
+   *
+   * The bridge persists it to a file of its own; the offline mock has no disk,
+   * so it uses `localStorage` — the closest thing test mode has to "survives a
+   * restart", and the same store the delimiters already use.
+   *
+   * ⚠ AN ABSENT/UNUSABLE STORE FALLS BACK TO THE EMPTY MAPPING, never to a
+   * seeded one. The delimiters fall back to the shipped defaults because an
+   * empty picker is a dead end; a seeded MAPPING would be the opposite mistake —
+   * test mode would show sources resolving that no real station has, which is
+   * exactly the kind of thing R-006 forbids the mock from wearing.
+   */
+  sourceMappings(): SourceMappings {
+    try {
+      const raw = localStorage.getItem(SOURCE_MAPPINGS_KEY);
+      if (raw !== null) {
+        const parsed = SourceMappingsSchema.safeParse(JSON.parse(raw));
+        if (parsed.success) return parsed.data;
+      }
+    } catch {
+      // Unusable storage falls through to the empty mapping — never a guess.
+    }
+    return EMPTY_SOURCE_MAPPINGS;
+  }
+
+  /**
+   * Mirrors the bridge's refusals exactly, because it IS the bridge's
+   * validator: `checkSourceMappings` lives in `@cg/shared-ipc` so the mock
+   * cannot come to refuse something the real station allows, or allow something
+   * it refuses.
+   */
+  setSourceMappings(next: SourceMappings): {
+    ok: boolean;
+    reason?: SourcesSetConfigReason;
+    message?: string;
+  } {
+    const verdict = checkSourceMappings(next, {
+      fixedBank: this.#fixedBank,
+      // The mock declares no playout reservation — there is no playout system
+      // behind it to fence off.
+      reservedLayers: [],
+    });
+    if (!verdict.ok) return verdict;
+    try {
+      localStorage.setItem(SOURCE_MAPPINGS_KEY, JSON.stringify(next));
+    } catch {
+      // Persistence lost, the session's mapping is not.
+    }
+    this.sourceMappingsChanged.emit(next);
+    return { ok: true };
+  }
+
   /**
    * R-034 parity — the delimiter list. The bridge persists it to DISK; the
    * offline mock has no disk, so it uses `localStorage` — which is the closest

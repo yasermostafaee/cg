@@ -66,6 +66,9 @@ import type {
   Settings,
   SettingsGetChannel,
   SettingsSetChannel,
+  SourceMappings,
+  SourcesConfigChannel,
+  SourcesSetConfigChannel,
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 
@@ -401,6 +404,30 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof RehearseExitChannel>,
     ): Promise<ChannelResponse<typeof RehearseExitChannel>>;
     onStateChanged(handler: (rehearsals: Rehearsal[]) => void): Unsubscribe;
+  };
+
+  /**
+   * D-137 / C-015 — the installation's Live Source mapping: which concrete
+   * producer each symbolic source id resolves to, and the layer band those
+   * producers are placed on.
+   *
+   * On the BRIDGE for the reasons `templates`, `delimiters` and
+   * `channelSettings` are, plus one that is sharper here: an EMPTY mapping is
+   * why nothing reaches air, so two consoles disagreeing about it would be two
+   * operators with different beliefs about what a take will do.
+   */
+  sources: {
+    config(): Promise<ChannelResponse<typeof SourcesConfigChannel>>;
+    /**
+     * Replace the whole mapping. The BRIDGE is authoritative for the refusal —
+     * it rejects a duplicate id and a band overlapping the candidate bank or
+     * the reserved playout range, and supplies the wording — so a second
+     * browser cannot create a state this one is careful to prevent.
+     */
+    setConfig(
+      req: ChannelRequest<typeof SourcesSetConfigChannel>,
+    ): Promise<ChannelResponse<typeof SourcesSetConfigChannel>>;
+    onConfigChanged(handler: (mappings: SourceMappings) => void): Unsubscribe;
   };
 
   delimiters: {

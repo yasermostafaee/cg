@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LiveSourceIdSchema } from '@cg/shared-schema';
+import type { FixedLayerBank } from './fixedLayers.js';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -291,6 +292,140 @@ export const SOURCES_SET_CONFIG_REASONS = [
   'overlaps-reserved',
 ] as const;
 export type SourcesSetConfigReason = (typeof SOURCES_SET_CONFIG_REASONS)[number];
+
+/** A refused mapping (or mapping change). `code` is stable; the message names specifics. */
+export class SourceMappingsConfigError extends Error {
+  override readonly name = 'SourceMappingsConfigError';
+  constructor(
+    readonly code: SourcesSetConfigReason,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export interface ValidateSourceMappingsOptions {
+  /**
+   * The operator's candidate bank in force, or `null` when none is declared.
+   * The SAME object the LayerManager was given — never a second reading.
+   */
+  fixedBank: FixedLayerBank | null;
+  /**
+   * The layers the PLAYOUT system owns, expanded (`reservedLayerNumbers`). The
+   * SAME list the boot validator and the allocation fence were given.
+   */
+  reservedLayers: readonly number[];
+}
+
+/** Compress a layer list into human-readable inclusive ranges (`60-69, 105`). */
+function formatLayerRanges(layers: readonly number[]): string {
+  const sorted = [...new Set(layers)].sort((a, b) => a - b);
+  const parts: string[] = [];
+  let runStart: number | null = null;
+  let prev = Number.NaN;
+  for (const layer of sorted) {
+    if (runStart === null) {
+      runStart = layer;
+    } else if (layer !== prev + 1) {
+      parts.push(runStart === prev ? String(runStart) : `${String(runStart)}-${String(prev)}`);
+      runStart = layer;
+    }
+    prev = layer;
+  }
+  if (runStart !== null) {
+    parts.push(runStart === prev ? String(runStart) : `${String(runStart)}-${String(prev)}`);
+  }
+  return parts.join(', ');
+}
+
+/**
+ * Validate a mapping against itself and against this station's other declared
+ * layer classes. Throws {@link SourceMappingsConfigError} naming the conflict.
+ *
+ * IT LIVES HERE, in the wire package, so the BRIDGE and the offline MOCK share
+ * ONE implementation rather than two that agree today. The refusal codes are
+ * already defined beside it, and a mock that refused differently from the bridge
+ * would teach an operator a rule the real station does not have — the
+ * `videoModeRaster` precedent, and this repo's one-canonical-predicate rule.
+ * The FILE half (load / save / provenance) stays bridge-side: only that half
+ * needs a filesystem.
+ *
+ * CALLED AT LOAD **AND** AT EVERY CHANGE, from this one function. "At change" is
+ * the half that gets forgotten, and it is the half an operator can trigger with
+ * a graphic on air — a band edited into the candidate bank at 21:59 would put a
+ * live producer on top of an operator row.
+ *
+ * The band carries NO CHANNEL (a Live Source lands on whatever channel its
+ * template is on), so the overlap tests compare layer NUMBERS and ignore which
+ * channel the bank declares. That refuses more than is strictly necessary, and
+ * that is the correct direction for a check whose failure mode is a graphic
+ * landing on somebody else's layer.
+ */
+export function validateSourceMappings(
+  value: SourceMappings,
+  options: ValidateSourceMappingsOptions,
+): void {
+  const seen = new Set<string>();
+  for (const mapping of value.mappings) {
+    if (seen.has(mapping.id)) {
+      throw new SourceMappingsConfigError(
+        'duplicate-id',
+        `two mappings claim the id "${mapping.id}" — which producer a template got would ` +
+          `depend on the order of the list; give each id exactly one producer`,
+      );
+    }
+    seen.add(mapping.id);
+  }
+
+  const range = value.layerRange;
+  if (range === undefined) return;
+  const rangeText = `${String(range.start)}-${String(range.end)}`;
+
+  const bank = options.fixedBank;
+  if (bank !== null) {
+    const bankEnd = bank.start + bank.count - 1;
+    if (range.start <= bankEnd && range.end >= bank.start) {
+      // Name BOTH ranges, the `overlaps-reserved` stance: the operator has to
+      // be able to see which side to move.
+      throw new SourceMappingsConfigError(
+        'overlaps-fixed-bank',
+        `the Live Source layer band ${rangeText} overlaps the operator's candidate layer ` +
+          `bank ${String(bank.start)}-${String(bankEnd)} (channel ${String(bank.channel)}) — ` +
+          `the two must be disjoint; move the band or the bank`,
+      );
+    }
+  }
+
+  const reservedHits = options.reservedLayers.filter((l) => l >= range.start && l <= range.end);
+  if (reservedHits.length > 0) {
+    throw new SourceMappingsConfigError(
+      'overlaps-reserved',
+      `the Live Source layer band ${rangeText} overlaps the reserved playout range ` +
+        `${formatLayerRanges(options.reservedLayers)} on layer(s) ` +
+        `${reservedHits.map(String).join(', ')} — the two must be disjoint; move the band or ` +
+        `the reservation`,
+    );
+  }
+}
+
+/**
+ * The same validation, as a RESULT rather than a throw — the shape both the
+ * bridge's `sources.set-config` handler and the mock's answer with.
+ */
+export function checkSourceMappings(
+  value: SourceMappings,
+  options: ValidateSourceMappingsOptions,
+): { ok: true } | { ok: false; reason: SourcesSetConfigReason; message: string } {
+  try {
+    validateSourceMappings(value, options);
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof SourceMappingsConfigError) {
+      return { ok: false, reason: err.code, message: err.message };
+    }
+    throw err;
+  }
+}
 
 /** Read the mapping in force. Empty `mappings` = nothing resolves (see the header). */
 export const SourcesConfigChannel = defineChannel('sources.config', z.void(), SourceMappingsSchema);
