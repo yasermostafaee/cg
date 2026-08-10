@@ -46,6 +46,45 @@ blocks 4 and 5, the mapping store blocks 6, and phase 7 is C-021's (`design.md` 
       `'output'` mode. Bars are CSS/inline-SVG, never a bundled bitmap.
 - [x] 1.6 Exclude a Live Source from zone compilation in `'output'` mode, closing the
       `zone-css.ts:159-169` background-colour hazard (`design.md` §9).
+- [ ] 1.5a 🔴 **THE BACKDROP PUNCH — 1.5 RESTATED (owner, 2026-08-10; `design.md` §9a).** "Zero
+      painted pixels" is NECESSARY AND NOT SUFFICIENT. The whole page is ONE CasparCG layer above
+      the Live Source layers, so a designed OPAQUE BACKDROP beneath the plates — which is what a
+      multi-box layout normally carries, and what the client authors — SURVIVES at the plate's rect
+      and the live picture is never seen. In `'output'` mode a Live Source must make the page
+      **TRANSPARENT over its own rect**, ERASING what the template painted beneath it.
+      **MEASURED, not inferred:** `buildScene` in `'output'` mode over an opaque full-frame rect with
+      a plate above it emits the plate as an EMPTY geometry-only `<div>` (no background, no
+      `mix-blend-mode`, no mask, no clip-path, no children) and nothing in the page carries a
+      `destination-out`, a mask or a clip-path. The probe was a throwaway test and was DELETED in the
+      same commit that recorded the finding — leaving it would have meant a test the fix must delete.
+      Consistent with the box-shadow amendment: the HOLE is transparent; the element may still paint
+      OUTSIDE its rect. Same family as 1.6's `zone-css` hazard (a background reaching the hole),
+      different cause — that one is an authored zone colour, this one is a sibling element beneath.
+- [ ] 1.5b ⚠ **RECON FIRST, ON THE RIGHT BROWSER — do not choose a mechanism on reasoning.** Two
+      candidates, both recorded in `design.md` §9a with their trade-offs:
+      **(a) `mix-blend-mode: destination-out` on the plate** — element-local, no coupling to the
+      backdrop, and the erase follows the element's own box so a `border-radius` gives a ROUNDED hole
+      for free; the risk is SCOPE, since it erases within its stacking/isolation group and what
+      reaches the page's ROOT alpha depends on the isolation above it.
+      **(b) masking the BACKDROP with the plate rects** — predictable, but couples the backdrop to
+      the plates and must be recomputed whenever a plate moves.
+      **Measure on the CEF inside the plant's CasparCG 2.3.2, NEVER on desktop Chrome** (`B-066` is
+      exactly this class — a root `tsconfig` `es2022` setting that `SyntaxError`d on CEF 71 while
+      every local check passed). What must be SHOWN: real transparency in the EXPORTED single-file
+      page, under that CEF, with the live layer visible behind it. **Record the measurement, not the
+      expectation.** This task is the owner's to run; 1.5c is blocked on its result.
+- [ ] 1.5c Implement the mechanism 1.5b selects, and **test that the EXPORTED page's alpha is CLEAR
+      over the plate's rect with an opaque backdrop present** — the assertion must be about the
+      exported artifact, since that is what CEF loads, and a builder-level assertion would pass on a
+      page whose root alpha is still opaque.
+- [ ] 1.5d **`border-radius` on a Live Source — revisit AFTER 1.5c, not before.** The Inspector
+      withholds it today (a `video-placeholder` is a "bare" kind in `field-registry.ts` and never
+      carried `BOX_DESCS`), and `design.md` §9a records why that is pending rather than settled:
+      once a punch exists, rounding is MEANINGFUL AND HONEST in the multi-box case — the CSS hole
+      rounds and the live rectangle's square corners are covered by the backdrop being punched. The
+      earlier "rounding is impossible" framing was about the LONE-PLATE case (a plate over the
+      programme with nothing behind it), where the corners have nothing to hide them and
+      `MIXER FILL`/`CLIP` are rectangular — **that case stays unachievable in v1 either way.**
 - [x] 1.7 Exempt a Live Source from `dropFullyOffFrameForExport`
       (`apps/designer/src/renderer/state/off-frame.ts:186-197`) and make out-of-frame a preflight
       **error** instead (C8). An element that is a contract must not be silently deleted.

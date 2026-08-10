@@ -1125,6 +1125,94 @@ artifact that carries the contract.
 
 ---
 
+## 9a. 🔴 THE BACKDROP PUNCH — "paints nothing" is necessary and NOT sufficient
+
+**FOUND 2026-08-10 (owner), and MEASURED before being written down.** The client's main scenario is a
+multi-box layout, and those layouts normally carry a **designed OPAQUE BACKDROP** behind the boxes.
+This design had no answer for that, and as it stands the backdrop covers every live source.
+
+### Why the gap exists
+
+The whole HTML page is **ONE CasparCG layer**, sitting above the Live Source layers. Inside that
+page the backdrop is an ordinary element beneath the plates. §9's `mode` seam makes a Live Source
+paint **zero pixels** in `'output'` — but **painting nothing is not the same as ERASING what is
+beneath it in the same page.** The backdrop therefore survives at the plate's rect, opaque, and the
+live picture composited on the layer BELOW is never seen.
+
+### The measurement, not the inference
+
+`buildScene` was run in `'output'` mode over a scene holding an opaque full-frame rectangle
+(`#123456`) with a Live Source above it, and the built DOM inspected:
+
+```
+backdropPresent      true          backdropBackground   #123456
+platePresent         true          plateBackground      (none)
+plateBackgroundImage (none)        plateMixBlendMode    (none)
+plateMask            (none)        plateClipPath        (none)
+plateIsolation       (none)        plateChildCount      0
+anyDestinationOut    false         anyMaskAnywhere      false
+
+<div data-cg-element-id="live-a" data-cg-placeholder-for="video-placeholder"
+     data-cg-live-source="guest-1" class="cg-element"
+     style="left: 100px; top: 200px; width: 640px; height: 360px;
+            opacity: 1; transform-origin: 0% 0%;"></div>
+```
+
+**The plate is an EMPTY, GEOMETRY-ONLY `<div>`.** It paints nothing and it erases nothing, and
+nothing anywhere in the built page carries a `destination-out`, a mask or a clip-path. The gap is
+real. (The probe was a throwaway test; it was **deleted** in the commit that recorded this, rather
+than left behind as a test that the fix would have to delete — see the tasks below.)
+
+### The requirement, stated plainly
+
+> In `'output'` mode a Live Source SHALL make the page **TRANSPARENT over its own rect**, erasing
+> whatever the template painted beneath it, so the live layer below the CasparCG layer is visible.
+
+`tasks.md` **1.5 is restated accordingly**: "zero painted pixels" was necessary and is not
+sufficient. This stays consistent with the box-shadow amendment already recorded — the **HOLE** is
+transparent; the element may still paint **OUTSIDE** its own rect.
+
+### Two candidate mechanisms — recorded with trade-offs, NEITHER chosen
+
+**Neither is picked on reasoning.** The choice waits on the measurement below.
+
+| Mechanism                                          | For                                                                                                                                                             | Against                                                                                                                                                                                                        |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`mix-blend-mode: destination-out` on the plate** | Element-local; no coupling to the backdrop at all. The erase follows the element's OWN box, so a `border-radius` on the plate produces a ROUNDED hole for free. | **Scope.** It erases within its stacking / isolation group, and what reaches the PAGE's root alpha depends on the isolation above it. That interaction is precisely the thing to measure, not to reason about. |
+| **Masking the BACKDROP with the plate rects**      | Predictable, and easy to reason about locally.                                                                                                                  | **Couples the backdrop to the plates** — the backdrop must know where every plate is — and that coupling has to be recomputed whenever a plate moves.                                                          |
+
+### 🔴 The recon, and it must run on the RIGHT browser
+
+**Measure on the CEF inside the plant's CasparCG 2.3.2 — NOT on desktop Chrome.** `B-066` is exactly
+this class of mistake: a root `tsconfig` `es2022` setting that `SyntaxError`d on CEF 71 while every
+local check passed. Blend modes, isolation and root-alpha behaviour are the same kind of thing —
+they work everywhere we develop and are a question mark on a Chromium-71 baseline compositing to an
+SDI consumer.
+
+**What must be shown:** the chosen mechanism produces REAL TRANSPARENCY in the **exported
+single-file page**, under that CEF, with the live layer visible behind it. **Record the measurement,
+not the expectation.** Until it is run, no mechanism is chosen — that is the whole point of listing
+two.
+
+### The consequence for BORDER RADIUS, recorded so the Inspector work can be revisited
+
+The Inspector currently offers **no `border-radius`** on a Live Source (a `video-placeholder` is a
+"bare" kind in `field-registry.ts` and never carried `BOX_DESCS`). Recorded here because the reason
+matters and would otherwise be lost:
+
+- **Once a punch mechanism exists, `border-radius` becomes MEANINGFUL AND HONEST in the multi-box
+  case** — the CSS hole rounds, and the live rectangle's square corners are covered by the backdrop
+  that is being punched. The author gets exactly what they drew.
+- **The earlier framing — "rounding is impossible" — was reasoning about the LONE-PLATE case:** a
+  plate over the programme feed with NOTHING opaque behind it. There, the corners have nothing to
+  hide them, and `MIXER FILL`/`CLIP` are rectangular, so a rounded plate floating over the programme
+  **stays unachievable in v1 either way.**
+
+Both cases are real; they are simply different, and the multi-box one is what the client authors.
+So the control is withheld pending the mechanism, not because the idea is wrong.
+
+---
+
 ## 10. Phasing — each phase landable and verifiable without capture hardware
 
 Only `route://` is provable on a dev machine (`route` needs no card; DECLINK has no card in this
