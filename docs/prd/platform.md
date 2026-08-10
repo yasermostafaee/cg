@@ -1455,3 +1455,9 @@ the untested path can cost minutes, never coverage.
 **To discharge:** on the next `dev` → `main` merge, read the `main` run's summary. It states either
 _"heavy jobs skipped … verified by \<url\>"_ or _"running the full gate — \<reason\>"_. Record which,
 with the run URL, here.
+
+⚠ **AND THIS ITEM'S OWN COMMIT HAS NO CI RUN — see [[B-132]].** The push of `d32fa13`, which carries
+this guard, produced **no GitHub Actions run at all** (no run object, no check suite; the workflow
+validates clean and Actions reports operational). So the change landed on a full green LOCAL gate
+with **no CI verification of its own**, and that must be obtained before this item is archived —
+separately from, and in addition to, the live `main`-run discharge above.

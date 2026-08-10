@@ -1144,3 +1144,66 @@ that made the field real — not a defect in D-060, which repaired what its own 
 **Notes:** apps/designer/src/renderer/features/status/StatusBar.tsx
 
 -->
+
+## [ ] B-132 — a push to `dev` created NO GitHub Actions run at all, and nothing reported it ⟨priority: high — the landing gate is silently absent⟩
+
+**Observed 2026-08-10.** The push of **`d32fa13`** to `dev` (at ~`18:05Z`) produced **no workflow run
+whatsoever**. Not a failed run, not a cancelled one, not a `startup_failure` — **no run object
+exists**, so there is nothing to read, nothing to re-run from, and nothing that goes red.
+
+### The evidence, gathered rather than assumed
+
+| Check                                             | Result                                                                 |
+| ------------------------------------------------- | ---------------------------------------------------------------------- |
+| `actions/workflows/pr.yml/runs?head_sha=d32fa13…` | `total_count: 0`                                                       |
+| `commits/d32fa13…/check-runs`                     | `total_count: 0`                                                       |
+| `commits/d32fa13…/check-suites`                   | 2 suites — **Vercel** and **Claude** only; **no GitHub Actions suite** |
+| `actions/runs?per_page=3` (whole repo)            | newest is `bd88ede` at `17:35:49Z` — nothing after it, 45 min later    |
+| `actions/permissions`                             | `{"enabled": true, "allowed_actions": "all"}`                          |
+| `actions/workflows`                               | `PR` → `state=active`                                                  |
+| githubstatus.com summary                          | Actions / API / Git / Webhooks all `operational`                       |
+
+**The workflow file is NOT the cause, and this was checked rather than reasoned.** `d32fa13` DOES
+modify `.github/workflows/pr.yml` (it adds [[P-030]]'s reuse guard), which is the obvious suspect —
+but the file validates clean against the Actions schema (`@action-validator/cli`, exit 0), **and so
+does the previous version**, so the validator is discriminating rather than merely permissive. An
+invalid workflow also produces a run with `conclusion: startup_failure` rather than no run at all.
+
+### Why it matters more than one missing run
+
+🔴 **The landing gate can be ABSENT, and absence is invisible.** CLAUDE.md's model is: CC pushes to
+`dev` → CI runs the authoritative Linux gate → the owner merges. A run that goes **red** stops that
+flow correctly. A run that **never exists** looks, to anyone glancing at a branch, exactly like a
+branch nobody has pushed to yet — and the [[P-029]] / [[P-027]] work has trained readers that a
+missing `e2e` can be legitimate. **Nothing in the repo distinguishes "not owed" from "never ran".**
+
+It also means a Linux `gate:e2e` debt can be **undischargeable without any signal**: the discharge
+rule requires a completed green run for the specific commit, and here there is no run to cite.
+
+### The leading hypothesis, and what would confirm it
+
+**Account-level GitHub Actions minutes / spending limit for this private repo.** It fits every
+observation: runs succeed up to a point in the day and then stop being created, the workflow stays
+`active`, `actions/permissions` still reads `enabled`, and GitHub reports no incident. This repo has
+**history here** — CLAUDE.md's own commit policy records that _"GitHub Actions billing is restored"_,
+so this failure mode has bitten before.
+
+⚠ **NOT CONFIRMED.** Confirming it needs `users/{user}/settings/billing/actions`, which requires the
+`user` OAuth scope this session's `gh` does not hold; granting it is the owner's call, not a
+diagnostic step to take unilaterally.
+
+**To confirm:** open **Settings → Billing → Plans and usage** and read the Actions minutes and the
+spending limit. If exhausted, that is the answer and the fix is the owner's.
+
+### Acceptance
+
+- The cause is established and recorded here, including a negative (if it is NOT billing, say what it
+  was).
+- WHEN a push to `dev` or `main` produces no run THEN that fact is **detectable** rather than silent.
+  ⚠ **The obvious fix cannot live in the workflow** — a workflow that never starts cannot report that
+  it never started. It needs something outside Actions, or a check at the next push / at merge time
+  that the PREVIOUS head has a run.
+- The commits pushed while runs were not being created are re-verified once they are:
+  **`f384d16`** and **`d32fa13`** (the latter carries [[P-030]] and is `[~]`, its own CI verification
+  outstanding). Both were pushed on a **full green local gate** (85/85, 0 cached), which is fast
+  pre-push feedback and explicitly **not** the landing gate.
