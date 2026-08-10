@@ -150,11 +150,26 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   await expect(plates).toContainText('Set for the template, not this row');
   await expect(plates.locator('[data-plate-unassigned]')).toHaveCount(2);
 
+  // ── A8: EDIT-THEN-ABANDON ────────────────────────────────────────────────
+  // The picker STAGES. Nothing has been written yet, which is the whole point:
+  // one stray click must not silently change what every other row does.
+  await plates.getByLabel('Source for guest-2').selectOption({ label: 'Baku' });
+  await expect(plates.locator('[data-plate-timing]')).toContainText('next take');
+  await expect(app.inspector.getByRole('button', { name: 'Discard staged edits' })).toBeEnabled();
+  await app.discardEdits();
+  await expect(plates.getByLabel('Source for guest-2')).toHaveValue('');
+  await expect(plates.locator('[data-plate-timing]')).toHaveCount(0);
+
+  // ── A8: EDIT-THEN-APPLY ──────────────────────────────────────────────────
   await plates.getByLabel('Source for guest-1').selectOption({ label: 'Studio A' });
+  // Still only a draft — the unassigned marker is gone because the CONTROL shows
+  // the draft, but the assignment is not in force until Update.
   await expect(plates.locator('[data-plate-unassigned]')).toHaveCount(1);
+  await app.applyEdits();
+  await expect(app.inspector.getByRole('button', { name: 'Discard staged edits' })).toBeDisabled();
 
   // 🔴 TEMPLATE-LEVEL, pinned rather than trusted: a SECOND row carrying the
-  // same template reads back the binding the first one made.
+  // same template reads back the binding the first one APPLIED.
   const second = await app.loadTemplate(TWO_BOX);
   await app.selectLayerRow(second);
   await expect(app.inspector.getByLabel('Source for guest-1')).toHaveValue(/.+/);

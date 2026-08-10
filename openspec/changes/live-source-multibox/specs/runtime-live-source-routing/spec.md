@@ -99,6 +99,17 @@ one plate on one on-air item is a separate capability layered on top, and that o
 write back to this assignment — an emergency substitution must never silently become the permanent
 configuration.
 
+The binding control SHALL STAGE an unapplied draft rather than write on change, through the SAME
+draft mechanism every other control on that surface uses — the same state, the same dirty marking,
+the same discard, and the same apply. Because the assignment is shared by every row carrying the
+template, a control that wrote on change would let one stray action change what those rows do with
+no moment to notice and nothing to undo: the draft IS the confirmation step. Every protection that
+already guards an unapplied edit — surviving a selection change, surviving a panel round-trip, and a
+prune that refuses to act on a stack state it cannot confirm — SHALL guard this draft identically.
+
+The surface SHALL state WHEN an applied change takes effect: an assignment is read at the TAKE and
+never re-composites the graphic already on the channel.
+
 The binding surface SHALL be shown with the SELECTED TEMPLATE, not as a global list of every plate
 in the station. A template that is not on a row cannot be bound, which is accepted: every template
 that will be used is on a declared row, and a take of an unassigned plate refuses anyway.
@@ -120,10 +131,22 @@ surface SHALL present it as guaranteed.
   source, rather than reporting only a count
 - **WHEN** the item is taken **THEN** the take is refused with a distinct errorCode naming the plate
 
+#### Scenario: A plate edit is staged, and Update is what writes it
+
+- **WHEN** the operator changes a plate's source **THEN** nothing is written: the edit is a staged
+  draft, the control and the panel both mark it unapplied, and the surface states that it takes
+  effect at the next take
+- **WHEN** the operator discards **THEN** the plate returns to the assignment in force, from the same
+  action that discards the staged fields
+- **WHEN** the operator applies **THEN** the assignment is written alongside the item's field update,
+  as one operator action
+- **WHEN** the selection changes, or the panel is closed and reopened, with a plate edit unapplied
+  **THEN** the draft survives, exactly as a staged field does
+
 #### Scenario: The assignment is made once and holds for every row using that template
 
-- **WHEN** the operator binds a plate from one row **THEN** a different row carrying the same
-  template resolves that plate to the same source
+- **WHEN** the operator APPLIES a plate binding from one row **THEN** a different row carrying the
+  same template resolves that plate to the same source
 - **WHEN** the binding surface is shown **THEN** it states that the setting is the template's, not
   the row's
 

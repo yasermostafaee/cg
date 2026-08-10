@@ -25,6 +25,7 @@ import { layerDetail } from '../stack/layerLabel.js';
 import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
+import { appliedPlateSources } from './livePlates.js';
 import { PositionPicker } from './PositionPicker.js';
 import {
   draftsVersion,
@@ -393,7 +394,15 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
     ? (schema ?? []).map((f) => ({ field: f, key: f.id }))
     : inferredRows;
 
-  const dirty = isItemDirty(itemId, item.fields);
+  // D-137 / C-015 — the plate drafts are the SAME draft state, so the commit bar
+  // has to see them: an Update the operator cannot press, or a Discard that
+  // reads as nothing-to-discard, would be the panel disagreeing with its own
+  // controls about whether there is an unapplied edit.
+  const dirty = isItemDirty(
+    itemId,
+    item.fields,
+    appliedPlateSources(item.templateId, info?.liveSources?.sources ?? []),
+  );
   const isEmpty = rootFields.length === 0 && groups.length === 0;
 
   // R-004 — the header names the template. The `TemplateInfo` was already in hand here and
@@ -447,7 +456,7 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
         <PositionPicker key={`pos-${itemId}`} item={item} />
         {/* D-137 / C-015 — bind this template's live plates. Renders nothing at
             all for a template that declares none, which is most of them. */}
-        <LivePlatesSection templateId={item.templateId} info={info} />
+        <LivePlatesSection item={item} info={info} />
         {/* `cg-inspector-section` carries the shared rhythm — the heading's rule,
             its tracking, and the largest gap in the gradient beneath it. Same
             class as POSITION, so the two sections cannot drift apart. */}

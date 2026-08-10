@@ -320,6 +320,47 @@ template that will be used is on a declared row, so loading it is the natural fi
 the take would refuse an unassigned plate anyway. Recorded as the decision rather than left as
 an omission.
 
+### 2e. ⭐ THE PICKER STAGES A DRAFT — it does not commit (owner, 2026-08-10)
+
+**DECIDED after the binding moved to the Inspector.** The source picker committed on
+change while every other input on that panel stages an unapplied draft and reaches the
+store only through `Update`.
+
+🔴 **It matters more here than consistency alone.** The assignment is TEMPLATE-level:
+it is shared by every row carrying that template. A picker that commits on change means
+**one stray click silently changes what those other rows will do**, with no moment to
+notice and nothing to undo. **The draft is not decoration here, it is the confirmation
+step.**
+
+**THE MECHANISM IS THE ONE THAT ALREADY EXISTS**, and joining it rather than copying it
+is the requirement (golden rule 6). `draftStore.ts` — the module every Inspector field
+uses — gains a per-item plate overlay: one version counter, one `subscribeDrafts`, one
+`clearDraft`, one `pruneDrafts`, one answer to _"is this item dirty?"_. `Update` writes
+it through `applyDraft`, the same call that sends the field payload.
+
+⚠ **A SEPARATE MAP INSIDE THAT MODULE, not a key in the `FieldValues` overlay.** That
+overlay IS the `stack.update` payload, so an assignment living in it would be sent to
+the template as a field it never declared. The assignment goes to
+`sources.set-assignments` — a different channel with a different owner — and `applyDraft`
+writes both from ONE operator action, reporting the apply as accepted only if both
+halves were.
+
+⚠ **KEYED BY ITEM, though what it stages is TEMPLATE-level.** The DRAFT belongs to the
+editing session the operator is in; it becomes template-level the moment it is APPLIED,
+which is exactly when other rows should see it. Keying it by item is also what makes it
+inherit every existing protection UNCHANGED rather than by re-implementation: it survives
+a selection switch and a panel/fullscreen round-trip, and it is dropped only by `Discard`
+or by a prune that can PROVE the item has left the stack. **That prune already destroyed
+every staged edit once**, on a remount against the bootstrap snapshot
+(`useStackHousekeeping`'s header); it fails closed now, and the plate draft rides the same
+guard rather than a second one that would have to be got right again.
+
+**WHEN IT TAKES EFFECT IS SAID WHERE IT IS APPLIED.** A plate assignment is read at the
+TAKE and never re-composites the graphic already on the channel. Editing a live item is
+the normal case on this panel, so leaving that unsaid would let an operator press
+`Update`, see nothing change on air, and reasonably conclude it had not worked. The
+section says so while a plate draft is staged, and names the on-air case explicitly.
+
 ### 2a. Where this shape comes from — the plant's PREVIOUS automation
 
 **RECORDED 2026-08-10 (owner), and it is the reason §1a and §3's amendment are corrections rather

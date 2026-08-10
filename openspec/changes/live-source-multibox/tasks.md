@@ -505,6 +505,42 @@ response for`) and says the one thing that is true of all of them. Checked as a 
       template's field tree; this is two same-named TEMPLATES. Neither fix reaches the other, so this
       one is recorded ON R-040 rather than folded into it.
 
+### 4e. ⭐ THE PICKER STAGES LIKE ITS NEIGHBOURS (owner, 2026-08-10; `design.md` §2e)
+
+- [x] 4e.1 **The plate picker drafts instead of committing.** The assignment is
+      TEMPLATE-level, so a picker that wrote on change let one stray click silently change
+      what every other row carrying that template would do — with no moment to notice and
+      nothing to undo. The draft IS the confirmation step.
+- [x] 4e.2 **JOINED the mechanism, did not write a second one** (golden rule 6). It is
+      `draftStore.ts`, the module every Inspector field already uses: one version counter,
+      one `subscribeDrafts`, one `clearDraft`, one `pruneDrafts`, one `isItemDirty`.
+      ⚠ A SEPARATE MAP INSIDE that module rather than a key in the `FieldValues` overlay —
+      that overlay IS the `stack.update` payload, and an assignment inside it would be sent
+      to the template as a field it never declared. `applyDraft` writes both halves from
+      ONE operator action (`sources.set-assignments` first, because it reaches nothing on
+      air; then `stack.update`), and reports the apply accepted only if both were.
+- [x] 4e.3 **INHERITED the protections, verified rather than assumed.** Keyed by item, so
+      the draft survives a selection switch and a panel/fullscreen round-trip, and is
+      dropped only by `Discard` or by a prune that can PROVE the item left the stack.
+      🔴 That prune is the one that once destroyed every staged edit on a remount against
+      the bootstrap snapshot (`useStackHousekeeping`'s header). It fails closed, the plate
+      draft rides the SAME guard, and a test pins it — a field that only LOOKS like it
+      drafts is how that defect comes back.
+- [x] 4e.4 **A selection change with an unapplied plate draft does exactly what it does for
+      every other field: the draft SURVIVES.** Not a separate answer invented for this one
+      control — drafts are keyed by item and the store hears no selection event at all.
+- [x] 4e.5 **WHEN it takes effect is said where it is applied.** A plate assignment is read
+      at the TAKE and never re-composites the graphic already on the channel; the section
+      says so while a draft is staged, and names the ON-AIR case explicitly. Without it an
+      operator presses `Update`, sees nothing change on air, and reasonably concludes it did
+      not work.
+- [x] 4e.6 Tests assert the MECHANISM, not the styling: `livePlateDraft.test.ts` (13) covers
+      staged-reaches-nothing, draft-over-applied, item-dirty, un-assign-is-an-edit, apply
+      writes both halves and preserves other templates' assignments, a refusal keeps the
+      draft, `Discard` drops it, it survives a selection switch, and the prune fails closed.
+      `livePlates.dom.test.ts` covers the control's wiring; the Runtime E2E covers
+      edit-then-apply and edit-then-abandon.
+
 **Five things settled while implementing 4.1–4.6, recorded because a later reader will otherwise
 re-derive them (or wonder why the code and §2's sketch differ). ALL FIVE SURVIVE THE RESHAPE
 UNCHANGED:**

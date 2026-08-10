@@ -7,7 +7,12 @@ import type { StackItemState } from '@cg/shared-schema';
 import type { SourceAssignments, SourceCatalog, TemplateInfo } from '@cg/shared-ipc';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
 import { SourcesModal } from '../src/renderer/features/sources/SourcesModal.js';
-import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
+import {
+  __resetDraftsForTest,
+  clearDraft,
+  isItemDirty,
+  snapshotPlateDraft,
+} from '../src/renderer/features/inspector/draftStore.js';
 import {
   __resetSourcesForTest,
   initSources,
@@ -24,9 +29,15 @@ import { connectionsStub, linkFor } from './support/reachability.js';
  *  1. the modal no longer carries any plate binding at all;
  *  2. the Inspector shows THIS template's plates, and shows nothing for a
  *     template that declares none;
- *  3. 🔴 the assignment is TEMPLATE-LEVEL — an assignment made from one row is
- *     what a DIFFERENT row carrying the same template reads back. That is the
- *     test that pins the semantics rather than trusting the section's label.
+ *  3. 🔴 the assignment is TEMPLATE-LEVEL — an APPLIED assignment made from one
+ *     row is what a DIFFERENT row carrying the same template reads back. That is
+ *     the test that pins the semantics rather than trusting the section's label.
+ *
+ * ⚠ **A8 — the picker STAGES, it does not commit.** Changing it reaches the draft
+ * store and nothing else; `Update` is what writes it. The mechanism itself is
+ * pinned in `livePlateDraft.test.ts`; what this file asserts is that the CONTROL
+ * is wired to it — the dirty marker, the panel's commit bar, and the line that
+ * says when the change takes effect.
  */
 
 const CATALOG: SourceCatalog = {
@@ -108,6 +119,17 @@ function bridgeStub(templates: readonly TemplateInfo[], info: TemplateInfo | nul
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
   return stub;
+}
+
+/** Drive one plate's picker the way an operator does. */
+async function pick(el: HTMLElement, plateId: string, sourceId: string): Promise<void> {
+  const select = el.querySelector<HTMLSelectElement>(`select[aria-label="Source for ${plateId}"]`);
+  if (select === null) throw new Error(`no picker for ${plateId}`);
+  await act(async () => {
+    select.value = sourceId;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await Promise.resolve();
+  });
 }
 
 function item(itemId: string, templateId: string): StackItemState {
@@ -208,32 +230,65 @@ describe('the Inspector binds THIS template plates', () => {
     expect([...(select?.options ?? [])].map((o) => o.value)).toEqual(['', 'src-aaa', 'src-bbb']);
   });
 
-  it('🔴 the assignment is TEMPLATE-LEVEL: a SECOND row carrying it reads the same binding', async () => {
-    const first = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
-    const select = first.querySelector<HTMLSelectElement>(
-      'select[aria-label="Source for guest-1"]',
-    );
-    if (select === null) throw new Error('no picker');
+  it('A8 — changing the picker STAGES a draft and reaches the bridge with nothing', async () => {
+    const el = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
+    await pick(el, 'guest-1', 'src-aaa');
 
+    // Nothing on the wire. The assignment is TEMPLATE-level, so a picker that
+    // committed on change would change what other rows do with no moment to
+    // notice — the draft IS the confirmation step.
+    expect(setCalls).toEqual([]);
+    expect(snapshotPlateDraft('item-1').get('guest-1')).toBe('src-aaa');
+
+    // The control marks itself, and the panel's commit bar sees the same edit.
+    const select = el.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]');
+    expect(select?.className).toContain('is-dirty');
+    expect(el.textContent).toContain('● draft');
+    expect(
+      el.querySelector<HTMLButtonElement>('button[aria-label="Discard staged edits"]')?.disabled,
+    ).toBe(false);
+    // WHEN it takes effect, said where the change is made.
+    expect(el.querySelector('[data-plate-timing]')?.textContent).toContain('next take');
+  });
+
+  it('A8 — an ON-AIR item says the change lands at its NEXT take', async () => {
+    const onAir: StackItemState = { ...item('item-1', 'tpl-two-box'), status: 'on-air' };
+    const el = await renderInspector(onAir, TWO_BOX);
+    await pick(el, 'guest-1', 'src-aaa');
+    expect(el.querySelector('[data-plate-timing]')?.textContent).toContain('ON AIR');
+  });
+
+  it('A8 — Discard drops the plate draft, from the SAME call that drops the fields', async () => {
+    const el = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
+    await pick(el, 'guest-1', 'src-aaa');
     await act(async () => {
-      select.value = 'src-aaa';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      clearDraft('item-1');
       await Promise.resolve();
     });
-    // It went to the bridge keyed by TEMPLATE, not by item.
-    expect(setCalls.at(-1)).toEqual({
-      assignments: [{ templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' }],
-    });
+    const select = el.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]');
+    expect(select?.value).toBe('');
+    expect(isItemDirty('item-1', {}, new Map([['guest-1', null]]))).toBe(false);
+  });
 
+  it('🔴 an APPLIED assignment is TEMPLATE-LEVEL: a SECOND row reads the same binding', async () => {
+    // Applied bridge-side (what `Update` produces), not staged: a draft is the
+    // operator's own and must NOT be visible from another row.
+    stored = {
+      assignments: [{ templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' }],
+    };
+    const first = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
+    expect(
+      first.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]')?.value,
+    ).toBe('src-aaa');
     first.remove();
-    // A DIFFERENT stack row, same template. It must read back the binding the
-    // other row made — that is what "template-level" means, and the label saying
-    // so is not evidence that it is true.
+
+    // A DIFFERENT stack row, same template. It must read back the same binding —
+    // that is what "template-level" means, and the label saying so is not
+    // evidence that it is true.
     const second = await renderInspector(item('item-2', 'tpl-two-box'), TWO_BOX);
-    const secondSelect = second.querySelector<HTMLSelectElement>(
-      'select[aria-label="Source for guest-1"]',
-    );
-    expect(secondSelect?.value).toBe('src-aaa');
+    expect(
+      second.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]')?.value,
+    ).toBe('src-aaa');
     // …and its OTHER plate is still owed one.
     expect(second.querySelectorAll('[data-plate-unassigned]').length).toBe(1);
   });
