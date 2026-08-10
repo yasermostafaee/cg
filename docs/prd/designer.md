@@ -3554,7 +3554,7 @@ this).
 **Notes:** implementation (canvas readback vs filter) is design-time; depends on D-128's video
 element existing. A Lottie variant may follow as its own item — out of scope here.
 
-## [~] D-137 — Live Source element (multi-box live windows; implements the reserved video-placeholder) ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (authored with [[C-015]] as ONE change; phases 1–3 landed — schema + authoring, the declaration carrier on `TemplateInfo`, and the offline AMCP mock that makes the geometry checkable)
+## [~] D-137 — Live Source element (multi-box live windows; implements the reserved video-placeholder) ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (authored with [[C-015]] as ONE change; phases 1–4 landed — schema + authoring, the declaration carrier on `TemplateInfo`, the offline AMCP mock that makes the geometry checkable, and the installation mapping store + its CG Control surface. Phase 4 also carried the UN-DO of the key-id control: a template declares ONE symbolic id and the fill/key pair is the MAPPING's)
 
 **What:** A **Live Source** element: an axis-aligned frame with a FULLY TRANSPARENT HOLE in export,
 carrying a source id (and optionally a key source id) the runtime uses to composite a live input
@@ -3710,7 +3710,7 @@ and unifies only the insertion + Inspector affordance.
 - WHEN the operator switches an existing element's Source in the Inspector THEN the element
   CONVERTS in place, preserving transform, timeline span, and name where fields correspond;
   incompatible fields are dropped behind a visible confirm, as ONE undo entry
-- WHEN Source = Live Source THEN behavior is exactly D-137's (source id / key id, dynamic binding,
+- WHEN Source = Live Source THEN behavior is exactly D-137's (source id — the key id was withdrawn on 2026-08-10, fill+key is the installation MAPPING's; dynamic binding,
   SMPTE-bars placeholder)
 
 **Notes:** schemas do NOT merge — UI unification only; record the rejected alternative (a single

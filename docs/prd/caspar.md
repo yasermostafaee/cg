@@ -375,7 +375,7 @@ layer is NOT knowably free, and real CasparCG goes silent for empty layers (B-05
 restart-misadoption limit (recorded in `openspec/changes/runtime-protect-video-layers/design.md`):
 both need the bridge to reason about producer KINDS it did not place.
 
-## [~] C-015 — Live Source routing: map Live Source ids to DECKLINK / ROUTE / media / NDI (fill+key capable) and composite them behind the template ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (design + phases 1–3 landed — authoring, the declaration carrier, and the mock; DECKLINK / NDI / fill+key split out to [[C-021]])
+## [~] C-015 — Live Source routing: map Live Source ids to DECKLINK / ROUTE / media / NDI (fill+key capable) and composite them behind the template ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (design + phases 1–4 landed — authoring, the declaration carrier, the mock, and the MAPPING STORE with its CG Control surface, which is what makes a symbolic id resolve to a real producer; DECKLINK / NDI / fill+key split out to [[C-021]])
 
 **What:** The Designer track is adding a "Live Source" element — a template region exported as a
 FULLY TRANSPARENT hole plus metadata (geometry in scene px, a source id, an optional key source

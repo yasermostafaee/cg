@@ -428,6 +428,14 @@ re-derive them (or wonder why the code and §2's sketch differ):**
       value is a field that still looks like it means something. A KEY-role binding still parses
       and now reaches nothing, which the vcg-format test asserts by name.
 
+**Phase 4 LINUX E2E — DISCHARGED.**
+[github.com/yasermostafaee/cg/actions/runs/31384965705](https://github.com/yasermostafaee/cg/actions/runs/31384965705)
+— `dev` @ `37de4a6`, `conclusion: success`, `E2E (Playwright)` job **success** (not skipped, not
+cancelled). That commit is the tip of the phase-4 push and carries all three of its commits
+(`4b8e8ca` the store and wire contract, `aad1314` the CG Control surface, `37de4a6` the 4.8 un-do),
+so the run covers the whole phase. The suite it ran includes the new
+`apps/runtime/tests/e2e/live-source-mapping.spec.ts`.
+
 ## 5. Phase 5 — Ownership (requires phase 3)
 
 - [ ] 5.1 Wire `#liveLayers` beside `#slots` (`caspar-runtime.ts:310`) — **not folded into it**;
