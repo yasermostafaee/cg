@@ -1458,6 +1458,9 @@ with the run URL, here.
 
 ⚠ **AND THIS ITEM'S OWN COMMIT HAS NO CI RUN — see [[B-132]].** The push of `d32fa13`, which carries
 this guard, produced **no GitHub Actions run at all** (no run object, no check suite; the workflow
-validates clean and Actions reports operational). So the change landed on a full green LOCAL gate
-with **no CI verification of its own**, and that must be obtained before this item is archived —
-separately from, and in addition to, the live `main`-run discharge above.
+validates clean and Actions reports operational), and the NEXT push's run **skipped both heavy jobs**
+because [[P-027]] classifies each push against the previous tip and that one was docs-only. So this
+guard landed on a full green LOCAL gate with **no CI verification of its own, and no later `dev` push
+will supply one.** The `dev` → `main` merge sweeps the whole span and is what will finally gate it —
+read that run before archiving this item, separately from and in addition to the live `main`-run
+discharge above.

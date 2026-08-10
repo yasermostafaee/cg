@@ -1145,7 +1145,7 @@ that made the field real — not a defect in D-060, which repaired what its own 
 
 -->
 
-## [ ] B-132 — a push to `dev` created NO GitHub Actions run at all, and nothing reported it ⟨priority: high — the landing gate is silently absent⟩
+## [ ] B-132 — a push to `dev` created NO GitHub Actions run at all, and nothing reported it ⟨priority: high — the landing gate can go silently absent for ONE commit⟩
 
 **Observed 2026-08-10.** The push of **`d32fa13`** to `dev` (at ~`18:05Z`) produced **no workflow run
 whatsoever**. Not a failed run, not a cancelled one, not a `startup_failure` — **no run object
@@ -1180,30 +1180,54 @@ missing `e2e` can be legitimate. **Nothing in the repo distinguishes "not owed" 
 It also means a Linux `gate:e2e` debt can be **undischargeable without any signal**: the discharge
 rule requires a completed green run for the specific commit, and here there is no run to cite.
 
-### The leading hypothesis, and what would confirm it
+### 🔴 The cause — a DROPPED EVENT, not an account limit. Do NOT go looking at billing.
 
-**Account-level GitHub Actions minutes / spending limit for this private repo.** It fits every
-observation: runs succeed up to a point in the day and then stop being created, the workflow stays
-`active`, `actions/permissions` still reads `enabled`, and GitHub reports no incident. This repo has
-**history here** — CLAUDE.md's own commit policy records that _"GitHub Actions billing is restored"_,
-so this failure mode has bitten before.
+**The first hypothesis was an Actions minutes / spending limit**, because runs stopped being created
+partway through the day and this repo has history there (CLAUDE.md records that _"GitHub Actions
+billing is restored"_). **The very next push disproved it**, and the disproof is recorded because it
+is what stops the next reader spending an hour in the billing settings:
 
-⚠ **NOT CONFIRMED.** Confirming it needs `users/{user}/settings/billing/actions`, which requires the
-`user` OAuth scope this session's `gh` does not hold; granting it is the owner's call, not a
-diagnostic step to take unilaterally.
+| Push                            | Run                                     |
+| ------------------------------- | --------------------------------------- |
+| `d32fa13` — `2026-08-10 18:05Z` | **none, ever**                          |
+| `4c93d05` — `2026-08-10 18:25Z` | created at `18:25:52Z` and ran normally |
 
-**To confirm:** open **Settings → Billing → Plans and usage** and read the Actions minutes and the
-spending limit. If exhausted, that is the answer and the fix is the owner's.
+**Twenty minutes apart, same branch, same workflow, same account.** An exhausted minutes balance does
+not refill itself in twenty minutes, so the balance was never the constraint. What was skipped is the
+**event → run creation** step for one push: a dropped webhook / delivery on GitHub's side.
+
+**That makes it TRANSIENT and UNANNOUNCED, which is worse than a hard failure, not better.** A
+billing wall at least stops everything visibly. This drops **one commit's** verification and leaves
+every commit around it looking normal.
+
+⚠ **It is NOT self-healing for the commit it hit, and the obvious repair does NOT work — measured.**
+The natural assumption is _"the next push's run covers it, since a later `dev` HEAD contains the
+change"_. **It does not**, and this is the second thing this item exists to record:
+
+`4c93d05`'s run (**https://github.com/yasermostafaee/cg/actions/runs/31419024054**, `success`)
+**SKIPPED both heavy jobs** — `Lint • Typecheck • Test • Build=skipped`, `E2E (Playwright)=skipped`.
+That is CORRECT behaviour, not a second fault: [[P-027]] classifies a push against the **PREVIOUS TIP
+of the ref**, and `4c93d05` is docs-only relative to `d32fa13`. So the run is green, it contains the
+code, and it **proves nothing about it**.
+
+🔴 **The two mechanisms compose into a hole neither has on its own:** a dropped event means one
+commit's code is never gated, and per-push classification means **no subsequent `dev` push will ever
+gate it either**, because each push only ever sees its own diff.
+
+**What actually closes it** is the completeness backstop CLAUDE.md already names: the owner's
+`dev` → `main` merge is classified against the previous `main` tip, so it sweeps the WHOLE span and
+will pick up `d32fa13`'s files. Until that merge, **`d32fa13`'s code is unverified by CI**.
 
 ### Acceptance
 
-- The cause is established and recorded here, including a negative (if it is NOT billing, say what it
-  was).
+- ~~The cause is established and recorded here~~ — **DONE, and it is NOT billing:** a dropped
+  event-delivery, disproved as a limit by the next push 20 minutes later (see the table above).
 - WHEN a push to `dev` or `main` produces no run THEN that fact is **detectable** rather than silent.
   ⚠ **The obvious fix cannot live in the workflow** — a workflow that never starts cannot report that
   it never started. It needs something outside Actions, or a check at the next push / at merge time
   that the PREVIOUS head has a run.
-- The commits pushed while runs were not being created are re-verified once they are:
-  **`f384d16`** and **`d32fa13`** (the latter carries [[P-030]] and is `[~]`, its own CI verification
-  outstanding). Both were pushed on a **full green local gate** (85/85, 0 cached), which is fast
-  pre-push feedback and explicitly **not** the landing gate.
+- **`d32fa13`'s code is verified.** It carries [[P-030]] and got no run of its own, and the next
+  push's run skipped the heavy jobs (above), so the debt is open until the `dev` → `main` merge
+  sweeps the span — **read that run rather than assuming it**. (`f384d16`, pushed in the same push
+  event, is docs-only and owes nothing.) Both were pushed on a **full green local gate**
+  (85/85, 0 cached), which is fast pre-push feedback and explicitly **not** the landing gate.
