@@ -4002,3 +4002,79 @@ _mapping's `aspect` → `expectedAspect`_, and an absent `expectedAspect` on a m
 aspect leaves that chain with no terminal value. Phase 6 owes that case a defined behaviour (task
 6.3 there); nothing in phase 1 depends on it. Implemented as an amendment to `live-source-multibox`
 phase 1 rather than as its own change: it edits one Inspector section of an unreleased element.
+
+## [ ] D-148 — the Designer's Modal has NO message region, so its one dialog message sits inside the scrolling body ⟨priority: low⟩
+
+**Recorded as the modal-message audit left it: AUDITED, DELIBERATELY OUT OF THAT TASK'S SCOPE,
+UNFIXED.** The Runtime half shipped in `e1e2d03` (_"one message region for every modal, enforced
+rather than remembered"_); the Designer half was reported rather than changed, and this item is that
+report.
+
+**What:** give the Designer's `Modal` the **same message contract the Runtime's now has** —
+`message` taking **DATA**, `{ role, text, detail? }` with **string** fields, so **no caller can style
+a message** — plus the **same lint guard** on `role="alert"` inside a `Modal` subtree.
+
+**Why — the value is the UNIFICATION, not the one dialog.** The Designer does **not** share the
+Runtime's primitive: it has its own `apps/designer/src/renderer/features/shell/Modal.tsx`, whose
+props are `title` / `children` / `footer` / `width` / `ariaLabel` / `closeOnBackdrop` /
+`minBodyHeight` — **there is no message region at all**. Its one dialog message therefore has nowhere
+to go but the body:
+
+```
+apps/designer/src/renderer/features/shell/SaveBeforeSwitchModal.tsx:102
+  {error !== null && <p className={s.error}>{error}</p>}
+```
+
+rendered as the **last child of `Modal`'s scrolling body**. That is **exactly the placement defect
+the Runtime just fixed** — `DelimitersModal` rendered `<p role="alert">` as the last child of its own
+scrolling body, and the fix was the region, which sits **outside** the scrolling body and immediately
+above the action row, _because a refusal appended to scrollable content is a refusal the operator
+never sees_.
+
+⚠ **The COLOUR is fine here, and that is why this is low priority.** `#fda4af` on the Designer's
+modal surface `#272b40` measures **7.38:1** (verified, `SaveBeforeSwitchModal.css.ts:11-15` against
+`theme.ts` `colors.panel`) — comfortably above the 4.5:1 floor, and nothing like the Runtime's 2.13:1
+`colors.error`-as-foreground finding that forced that work. **This is a LATENT defect, not a live
+one:** one dialog, legible, whose message is only unreachable when the body actually scrolls.
+
+⭐ **Derive the roles; do NOT copy the Runtime's two blind.** Recorded because it is the part most
+likely to be got wrong by a session that reads only the diff: the Runtime's `refusal` and `notice`
+were an **EXTRACTION of treatments that already existed in that app**, not an invention —
+`refusal` **IS** `FixedBankConfigModal`'s amber box (`#FCD34D`, 11.21:1), **moved rather than
+redesigned**, and the three red spellings were **deleted** rather than replaced because in `theme.ts`
+red means error or destructive intent and a refusal is neither. **The Designer's roles must be
+derived the same way: audit its dialogs first, then extract.** Adopting `refusal`/`notice` because
+the Runtime has them would import a vocabulary the Designer's own dialogs may not speak.
+
+### Acceptance
+
+- `Modal` (`features/shell/Modal.tsx`) gains a **message region** rendered **outside the scrolling
+  body**, immediately above the footer/action row, present only when a message is passed.
+- The prop takes **DATA, not a `ReactNode`** — `{ role, text, detail? }` with **string** fields, or an
+  array of them. **There must be no seam through which a caller can pass a style**; that seam is what
+  let four Runtime callers answer the question "what does a message look like?" four different ways.
+- **The ROLE decides the treatment**, exactly as it already does for the action buttons, and the roles
+  are written down in **one** place with their **measured contrast ratios beside the values** (the
+  Runtime's `ui/Notice.tsx` is the shape to follow).
+- **Audit the Designer's dialogs FIRST and extract from what is there.** Enumerate the current message
+  treatments across every `Modal` caller — `NewProjectModal`, `SaveBeforeSwitchModal`,
+  `ShortcutsModal`, `VideoImportModal`, `PreviewModal`, `SizingAutoConfirmModal`,
+  `ProjectAssetsPanel`, `SharedLibraryPanel`, `StatusBar` — and derive the role set from them. Record
+  which existing treatment each role IS.
+- `SaveBeforeSwitchModal`'s `error` moves onto the region; its `s.error` style is **deleted, not
+  re-pointed**, so a second spelling cannot survive the move.
+- **The same lint guard as the Runtime's**: `role="alert"` inside a `Modal` subtree is an error
+  (`apps/runtime/eslint.config.mjs:62` is the selector to mirror), with the same carve-out for
+  legitimate non-dialog alerts. The guard is what makes this **enforced rather than remembered** —
+  the Runtime audit found the pattern **half-adopted**, which is the worst state a shared rule can be
+  in.
+- Persian/RTL: `dir="auto"` on the message lines, asserted in a unit test — the Runtime's spec and E2E
+  both do this and the Designer is the app where RTL content is authored.
+
+**Cross-reference — start from the shipped implementation, not from this description.** The Runtime's
+work is commit **`e1e2d03`**: `apps/runtime/src/renderer/ui/Modal.tsx` (the region),
+`apps/runtime/src/renderer/ui/Notice.tsx` (the roles, with ratios),
+`apps/runtime/eslint.config.mjs` (the guard),
+`apps/runtime/tests/modalMessageRegion.dom.test.ts` and
+`apps/runtime/tests/e2e/modal-message-in-viewport.spec.ts` (the tests), and
+`openspec/changes/runtime-modal-message-region/` for the spec delta.

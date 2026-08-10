@@ -1021,3 +1021,11 @@ is a **finding for C-016**, not a reason to fork a second grab path.
 
 **Explicitly OUT of scope:** any path that puts the checked source on the **programme channel**, and
 any **continuous video stream** to the browser. A periodic still is the deliverable.
+
+⚠ **NOT a duplicate of [[R-049]], and neither makes the other unnecessary.** R-049 draws a labelled
+placeholder over each rehearse plate, naming the plate and its assigned source. **This item answers
+"IS THE PICTURE GOOD"; R-049 answers "WHICH SOURCE IS WHERE."** They are related and they cost
+completely different things: R-049 needs no frame grabs, no consumer-less channel and no [[C-016]] —
+it reads the assignment the Runtime already holds — while this item needs all three. A thumbnail that
+does not say which plate it belongs to, and a plate label that does not say whether the feed arrived,
+are each half an answer.

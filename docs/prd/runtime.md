@@ -1997,3 +1997,89 @@ and which source is healthy. C-023 is the diagnosis half; this item is the repai
 **Where it is implemented:** inside `openspec/changes/live-source-multibox/` **phase 6** (tasks
 6.9–6.9f), cross-referenced both ways — the same pattern D-147 used to ride phase 1 rather than
 opening a change of its own.
+
+## [ ] R-049 — a rehearse plate is COMPLETELY BLANK, so a live plate is indistinguishable from a broken render ⟨priority: medium⟩ — depends on [[C-015]]'s assignment store
+
+**What:** in PVW, draw a **labelled placeholder** over each live plate's rect — procedural colour
+bars carrying the **plate's name** and, when one is assigned, **the assigned SOURCE's name**. Drawn
+by the **RUNTIME, OVER the rehearse frame**; the page beneath is untouched.
+
+**Why:** an empty region is **indistinguishable from a broken render**. The operator looking at PVW
+today cannot tell whether the template is fine and the live box is simply not a browser thing, or
+whether the page failed to load — and cannot tell **which source sits behind which plate**. Both
+questions are answerable, and the second one is answerable **only** here.
+
+⭐ **It does what the PAGE never could: show the ASSIGNED SOURCE'S NAME.** The exported page knows
+nothing about assignments — it carries a plate identifier and nothing else, by design
+(`live-source-multibox` design.md §2z: the author names plates for the LAYOUT, the installation names
+sources for what they ARE). **The Runtime knows the join.** That is half the confidence problem
+answered with **no frame grabs and no extra channel**.
+
+### ⚠ This does NOT reopen §12.2, and the compatibility sentence is the point
+
+`live-source-multibox` design.md **§12.2 stands untouched**: rehearse renders the retained exported
+page **VERBATIM**, and the page paints **nothing** where a Live Source is. **This item adds no second
+render path and changes nothing about what is rendered** — the placeholders are an **overlay the
+Runtime draws on top of the rehearse frame**, so the page's contract and §12.2's decision are both
+exactly as they were. A later reader must not read these placeholders as a reversal of §12.2; they
+are a thing drawn beside it.
+
+Three consequences of that, each a reason this is cheap:
+
+- **Nothing is needed from the export path.** No `.vcg` change, no exporter change, no new metadata.
+- **No third render mode is built**, and §9's `mode: 'author' | 'output'` seam **stays unused and
+  available** for a real `'rehearse'` mode if one is ever wanted.
+- **The data is already there.** [[C-015]] phase 2 put each plate's rect, **in scene pixels**, on
+  `TemplateInfo`'s `liveSources` block (`packages/shared-ipc/src/channels/templates.ts:153`), and the
+  stage already knows its own scale.
+
+### Acceptance
+
+- **Procedural colour bars, NOT black.** Black is indistinguishable from a real dead feed; bars say
+  "placeholder". ⚠ **Reuse the Designer's author-mode bars rather than authoring a second set** —
+  **found and named:** `smpteBarsGradient()` / `SMPTE_BARS` at
+  `packages/template-runtime/src/scene-builder.ts:1282-1302`, the 75 %-amplitude bars phase 1 already
+  built for `'author'` mode. It is a **module-local function in `@cg/template-runtime`, not
+  exported**, so reuse means **exporting it** (or lifting it beside the other shared helpers) —
+  a one-line widening, and the alternative is a second copy of a seven-colour table that must then be
+  kept in step. It also already carries the B-066 lesson in its own comment (explicit paired gradient
+  stops, because double-position stops shipped in Chromium 72 and CasparCG's CEF is baseline 71);
+  a hand-written second set would very likely lose that.
+- **TWO VISUALLY DISTINCT STATES, not confusable at a glance** — because they demand **different
+  operator actions**:
+  - **ASSIGNED** — bars, plus **the plate's name** and **the assigned source's name**.
+  - **UNASSIGNED** — a **desaturated** variant, plus an explicit **"no source assigned"**.
+
+  WHEN an operator glances at PVW THEN the two states are distinguishable **without reading the
+  label**, so "this plate is fine" and "this plate will refuse the take" are never mistaken for each
+  other. (An unassigned plate refuses the take — [[C-015]]'s empty-mapping acceptance — so this is the
+  operator's last chance to see it before air.)
+
+- 🔴 **UNMISTAKABLY NOT A PREVIEW — a requirement, not a styling preference.** WHEN the placeholder is
+  drawn THEN an operator must **never** be able to believe PVW is showing the real picture. A browser
+  cannot display SDI or NDI (the wall §12.2 settled and [[C-023]] restates), so a placeholder that
+  reads as a picture is worse than the blank region it replaces: it converts "I can't see it" into "I
+  saw it and it was fine".
+- **Geometry comes from the SAME transform the stage already uses** — the FIT scale on the iframe
+  elements (`RehearsalStage.tsx:289`), not a second one derived beside it. **Deriving a second scale
+  factor is how an overlay drifts off the page beneath it**, and the drift is invisible until the
+  raster changes.
+  ⚠ **Pin alignment with a test over at least one NON-16:9 raster.** On 16:9 the terms collapse and a
+  wrong implementation gives the right answer — the same trap [[C-015]]'s task 6.2b names for the
+  bridge's FILL contract test. Use a raster that pads on the other axis (e.g. `1440×1080` or
+  `720×576`).
+
+### Cross-references, so neither is read as a duplicate of the other
+
+- **[[C-023]]** (a confidence thumbnail per live source) answers **"is the picture good"** — it needs
+  frame grabs, a consumer-less channel and [[C-016]], and it is filed with those costs. **This item
+  answers "WHICH SOURCE IS WHERE"** — it needs none of them. **Related, not duplicates**, and neither
+  makes the other unnecessary: a thumbnail that does not say which plate it belongs to and a plate
+  label that does not say whether the feed arrived are each half an answer.
+- **`live-source-multibox` design.md §12.2** — see the compatibility paragraph above. The
+  placeholders are drawn by the Runtime OVER the frame; the page still paints nothing, and §12.2 is
+  not reopened.
+
+**Depends on the assignment store** ([[C-015]] phase 4, shipped), because the source NAME is what
+makes the placeholder worth drawing. Without it the item degrades to bars plus a plate name — still
+better than blank, but it is the name that answers the operator's actual question.
