@@ -708,7 +708,20 @@ cancelled). ⚠ **It does NOT discharge the reshape**: that run covers the three
 (`4b8e8ca`, `aad1314`, `37de4a6`) and says nothing about a later diff. The reshape owes its own
 completed green Linux run, cited beside 9.3a.
 
-## 5. Phase 5 — Ownership (requires phase 3)
+## 5. Phase 5 — Ownership (requires phase 3 · AND was ordered after R-028 §6 — see below)
+
+⚠ **THIS HEADER USED TO READ "(requires phase 3)", AND THAT WAS THE WHOLE CONSTRAINT IT NAMED.**
+It was not: `design.md` §4's landing-order table also binds this phase **after R-028's section 6**,
+which is a different change's file and was entirely unchecked. A reader working from this header
+alone would never have known to look — the tasks list is what gets read when work starts, and the
+design is what gets read when a decision is questioned. **A prerequisite recorded only in the
+argument for it is a prerequisite nobody will check.** Corrected here, and the same under-statement
+is corrected on §6.
+
+**Resolution, 2026-08-12:** phase 5 landed ahead of R-028 §6 with the owner's confirmation
+(`95ef840c`). The reasoning is in `design.md` §4 under the 2026-08-12 amendment, and the condition
+attached to it is written at R-028's own tasks 6.2 and 6.5 — where the person rewriting the sweep
+will actually be reading.
 
 ⚠ **EVERY ANCHOR IN THIS SECTION HAD DRIFTED** — sessions F and I moved code in
 `caspar-runtime.ts`'s neighbourhood, as the session prompt warned. Each was re-verified against the
@@ -769,7 +782,31 @@ real site before editing, and the true line is recorded beside the stale one bel
       `the bridge must never call its OWN producer foreign`. - disabling 5.4 fails exactly the DOOR 3 test, which reports `reason: 'foreign'` where
       `reason: 'live-source'` was expected — C5's hazard reproduced verbatim.
 
-## 6. Phase 6 — Producer, geometry, audio
+## 6. Phase 6 — Producer, geometry, audio (requires phase 5 — landed — and R-028 §6)
+
+⚠ **This header named NO prerequisite at all**, though `design.md` §4's table binds phase 6 both
+after phase 5 and after R-028's section 6. Same under-statement as §5's old header, corrected for
+the same reason: the constraint has to be where the work starts, not only where it was argued.
+Phase 5 is now landed (`95ef840c`); R-028 §6 is still open.
+
+✅ **THE LEDGER'S WRITE PATH ALREADY EXISTS — CALL IT, DO NOT RE-CREATE IT.** Phase 5 wired
+`#liveLayers` together with its bookkeeping API on `CasparRuntime`:
+
+| Method                                | What it does                                                           |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| `registerLiveLayers(itemId, records)` | Record the layers an item owns. Replaces wholesale, never accumulates. |
+| `releaseLiveLayers(itemId)`           | Forget them (teardown).                                                |
+| `liveLayers()`                        | Read the ledger — for phase 6's re-emission of `FILL`/`CLIP`.          |
+
+**They are BOOKKEEPING ONLY: no AMCP, no producer.** `playSource` (6.1) seats the producer and then
+calls `registerLiveLayers` with **what it actually sent** — the ledger records the resolved producer
+argument as SENT, not as configured, so it says what is on the layer and not what a since-edited
+mapping now claims (`live-layers.ts`).
+
+**Why they are phase 5's and not yours:** the three ownership doors read that ledger, and without a
+way to populate it those doors could not be regression-tested before a verb existed to fill them.
+That testability is what let ownership land first and be self-proving. A second write path here
+would give the ledger two owners and the doors two truths.
 
 - [ ] 6.1 `playSource` / `mixerFit` / `mixerClear` on `command-builder.ts`, all layer-scoped
       through `target()`. Channel-scoped forms stay forbidden (`caspar-runtime.ts:2718-2724`).

@@ -150,6 +150,31 @@ for what part A deliberately skipped or found un-runnable.**
       **against all THREE declared classes** (6.5), not two. Requires 1.2 first — otherwise it flags
       healthy playout graphics as orphans (§i) — and requires 6.5, or it flags live guest boxes as
       orphans, which is an operator being invited to clear a face off air.
+
+      🔴 **STOP — THE THIRD CLASS IS ALREADY IMPLEMENTED, AND A TEST IS WATCHING THIS TASK.**
+      `live-source-multibox` **phase 5 LANDED on 2026-08-12** (`95ef840c`), ahead of this section
+      and with the owner's confirmation. So this is no longer a narrowing you get to design from a
+      clean sheet: the sweep you are about to rewrite **already excludes** bridge-owned Live Source
+      layers, at `caspar-runtime.ts`'s `owned` set —
+      `for (const key of this.#liveLayerKeys()) owned.add(key);` — and that line is load-bearing.
+
+      **THE CONDITION ON THIS TASK: your rewrite must keep these tests PASSING. Do not rewrite them
+      to fit a new sweep.** They live in
+      `tools/caspar-bridge/tests/live-source-ownership.integration.test.ts`:
+      - **DOOR 1** — "a ledgered Live Source layer is never an orphan — its unledgered NEIGHBOUR
+        still is", and its boundary case "releasing the ledger hands the layer BACK to the sweep".
+        **These two are specifically YOURS**: they are the sweep's tests, and they fail the moment
+        a rewrite drops the third class.
+      - **DOOR 2** (the C-014 quarantine) and **DOOR 3** (`clearLayer`'s `live-source` refusal) —
+        the other two doors phase 5 wired, listed so a change here that touches them is recognised
+        as touching them.
+
+      **Why the test and not just this note.** Each door test was verified to fail without its own
+      line, so a two-class rewrite does not produce a quietly-passing suite — it produces a red one
+      naming the door it broke. That is the whole reason phase 5 was allowed to land first: an
+      ordering only protects you if you remember it, and a failing test protects you whether you
+      remember or not. **If one of these goes red, the sweep is wrong — not the test.**
+
 - [ ] 6.3 R-015's foreign refusal unchanged outside declared ranges; regression-test the boundary.
       **The Live Source range is INSIDE a declared range under 6.5**, so the refusal does not reach
       it — and it is refused there for a different, distinct reason (`live-source`), never as
@@ -188,6 +213,22 @@ for what part A deliberately skipped or found un-runnable.**
       `reservedLayers` "the C-015 Live Source seam" are misleading and are corrected by
       `live-source-multibox` phase 2.6; 1.2 satisfied C-015's **disjointness** half and none of its
       **ownership** half.
+
+      ⭐ **SUPERSEDED IN PART, 2026-08-12 — the third class is no longer a thing to REMEMBER, it is
+      a thing that EXISTS.** This task's premise was that section 6 must be amended *before* Live
+      Sources are built, so the narrowing would be written against a complete class list.
+      `live-source-multibox` **phase 5 landed first instead** (`95ef840c`), with the owner's
+      confirmation — the argument is in that change's design.md §4 under the 2026-08-12 amendment.
+
+      What that changes for this task: the ledger (`#liveLayers`), the R-009 sweep exclusion, the
+      C-014 quarantine skip and `clearLayer`'s distinct `live-source` refusal are **already in the
+      code**. So 6.5 is no longer "amend the plan so nobody forgets the third class" — the third
+      class is present and pinned, and this task's remaining job is to make sure section 6's
+      implementation **preserves** it.
+
+      **The teeth are in 6.2** — its three door tests must stay passing rather than be rewritten.
+      That is the whole condition the owner attached to letting phase 5 land early, and it is
+      recorded at 6.2 because that is the task whose rewrite can break it.
 
 ## 7. Migration
 

@@ -865,6 +865,31 @@ third class. The reverse order (build Live Sources first, then narrow) would mea
 live guest boxes as orphans in the window between them, which is an operator being invited to clear
 a face off air.
 
+### ⭐ AMENDED 2026-08-12 (owner) — PHASE 5 LANDED FIRST, DELIBERATELY, AND THE ORDERING IS DISCHARGED BY SOMETHING STRONGER
+
+**Phase 5 shipped while R-028's section 6 was still entirely open (6.1–6.5 unchecked), with the
+owner's confirmation.** Recording why, because the table above says the opposite and a later reader
+finding that contradiction should find the answer with it rather than re-deriving it.
+
+The ordering guarded **two different hazards**, and they did not survive equally:
+
+1. **The silently correct-looking narrowing** — the real one. It is a hazard about a test that
+   passes while forbidding the third class, and the ordering addressed it by making the class exist
+   before anyone wrote the narrowing. **Phase 5 addresses it better: the class now exists AND is
+   pinned.** `tools/caspar-bridge/tests/live-source-ownership.integration.test.ts` holds the three
+   door tests, each verified to FAIL without its own line. A section-6 rewrite that narrows against
+   two classes no longer produces a green suite — it produces a red one, naming the door it broke.
+   **A loud failure is a stronger guarantee than an ordering**, because an ordering only works if
+   whoever writes the narrowing remembers it, and the test works whether they remember or not.
+2. **A live guest box on a reclaimable layer** — the on-air hazard. It **cannot occur before phase
+   6**: no verb seats a live producer (`playSource` is 6.1), so the ledger is empty in production
+   and every door is a no-op on a real bridge. There is no window to be inside.
+
+**The condition attached to this confirmation is NOT recorded here**, because nobody rewriting the
+sweep will be reading this file. It is written where R-028 will be read — at its own tasks 6.2 and
+6.5 — and it is that 6.2's rewrite must keep those three door tests **passing**, never rewrite them
+away. A guard nobody is told about is not a guard.
+
 ### The layer range — 10–59, freed by R-028's own 6.4
 
 Under R-028 the map is: playout **60–69** declared, operator rows **70–99** declared, and
