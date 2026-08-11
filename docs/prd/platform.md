@@ -1592,3 +1592,64 @@ later `dev` push will supply one"_ — was **too strong**, and it is the same er
 been re-scored for: no later push gives that commit **its own** run, but any later run that EXECUTES
 the heavy jobs verifies the **tree** containing it. What a dropped event costs is the per-commit
 signal, not the eventual verification.
+
+---
+
+## [ ] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩
+
+**What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
+`migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
+it — but it must stop presenting itself as the place a schema conversion goes, because a migration
+registered there is a conversion that never runs.
+
+**Why:** The trap is not the dead code; it is the **docstring**, which tells the next author exactly
+the wrong thing:
+
+> _"The loader in `@cg/vcg-format` walks the registry from the loaded version to current."_
+
+It does not. **Measured 2026-08-11** (`git grep`, whole repo):
+
+| Claim                                                      | Reality                                                                                                                                                                                |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@cg/vcg-format` walks the registry                        | `packages/vcg-format/` contains **no reference to `migrations` at all** — not an import, not a call                                                                                    |
+| something outside `@cg/shared-schema` imports `migrations` | **nothing does.** The only importers are `packages/shared-schema/tests/migrations.test.ts` and `tests/zones.test.ts` — its own tests                                                   |
+| `schemaVersion` is read to select a migration              | it is **WRITTEN** by `apps/designer/src/platform/ProjectStore.ts:72` and `packages/vcg-format/src/pack.ts:94`, and read back only as `z.literal(1)` (`scene.ts:339`, `manifest.ts:54`) |
+
+So `schemaVersion` is **ASSERTED, never converted**: a document carrying `schemaVersion: 2` does not
+enter a migration, it **fails to parse** — `packages/vcg-format/tests/pack.test.ts:84` pins exactly
+that behaviour with a `schemaVersion: 99` fixture that is expected to `reject`. The walker's own
+`while (version < CURRENT_SCHEMA_VERSION)` loop can therefore never execute a step: the only version
+the schema admits IS the current one.
+
+**The two live consequences** — this is why the item exists rather than being a tidy-up:
+
+1. 🔴 **Any migration registered there is a conversion that never runs — and it LOOKS like the fix.**
+   The author writes an `up()`, ticks the task, and ships a silent no-op. Old documents then break
+   quietly at parse time, at the exact moment the registry was supposed to save them. Two changes have
+   now had to stop and re-derive this fact under time pressure ([[B-129]], and the project-package
+   work that closes [[B-104]]).
+2. **The codebase's WORKING precedent is parse-time normalization, and it is unwritten anywhere the
+   registry's reader would see it.** `PlayoutSchema`'s legacy `mode` key and [[B-129]]'s
+   `background` → `editorBackdrop` both normalize in a `z.preprocess` on the schema itself. That runs
+   on **every** load path for free, because every load path parses — which is precisely the property
+   the registry claims and does not have.
+
+**Acceptance:**
+
+- WHEN a developer opens `packages/shared-schema/src/migrations/index.ts` THEN its docstring states
+  what is TRUE of the registry today — no claim that any loader walks it — and points at parse-time
+  normalization (`z.preprocess`, per `PlayoutSchema`) as the mechanism that actually runs.
+- WHEN the decision is DELETE THEN `migrations/index.ts`, its export from `src/index.ts`, and
+  `tests/migrations.test.ts` are removed together, and `zones.test.ts`'s "registry is still empty"
+  assertion is removed or re-pointed, so no dangling reference survives.
+- WHEN the decision is WIRE IT UP THEN a real load path (`unpack`, `ProjectStore.load`) calls
+  `migrate()` BEFORE parsing, `SceneSchema.schemaVersion` stops being a `z.literal` that rejects every
+  older version, and a test proves a `schemaVersion: N-1` document loads through a registered step.
+- WHEN either decision lands THEN a test fails if a future `SchemaMigration` is registered without the
+  chosen mechanism being in force — the registry may never again be a plausible-looking dead end.
+
+**Notes:** The lying docstring was corrected in the same commit that filed this item (2026-08-11) —
+that part is a one-line removal of a trap, not the fix. The fix is the decision above, and it is
+deliberately NOT made here: it is a real fork (delete vs. wire) that wants the owner's call on whether
+this product ever ships a schema-version bump. Related: [[B-129]] recorded the measurement first, on
+its `editorBackdrop` preprocess (`packages/shared-schema/src/scene.ts:163`).

@@ -70,9 +70,11 @@
 - [x] 6.3 `pnpm test:e2e` green locally — designer **253 passed**, runtime **67 passed**. One
       designer spec failed on the first turbo-run and passed on an isolated re-run of the whole
       suite: the B-098/B-073 contention class, not this change.
-- [ ] 6.4 🔴 **A Linux `gate:e2e` IS OWED** — this alters what renders. Discharged ONLY by a
-      COMPLETED, GREEN `e2e` job on GitHub Actions for a commit carrying this change. **Write
-      the run URL in beside this box** — a ticked box with no URL is not a discharge.
+- [x] 6.4 ✅ **Linux `gate:e2e` DISCHARGED.**
+      https://github.com/yasermostafaee/cg/actions/runs/31482692184 — `head_sha`
+      `94be0efb66187d702c9aba1e26ce3358c4526910` (the commit carrying this change), job
+      **`E2E (Playwright)` → `completed` / `success`** (2026-08-11T10:43:20Z). The run's `ci`
+      job (`Lint • Typecheck • Test • Build`) is green on the same SHA.
 
 ## 7. Engine doc-sync
 

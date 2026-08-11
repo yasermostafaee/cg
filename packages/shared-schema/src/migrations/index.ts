@@ -1,13 +1,25 @@
 /**
  * Scene-schema migration registry.
  *
- * v1 is the initial schema; there are no migrations yet. As schema-breaking
- * changes accrue, register a new `SchemaMigration` here with `from = N` and
- * `to = N + 1`, and bump `CURRENT_SCHEMA_VERSION`. The loader in
- * `@cg/vcg-format` walks the registry from the loaded version to current.
+ * 🔴 **NOTHING IN PRODUCTION CALLS `migrate()`. Do NOT register a migration here
+ * expecting it to run — it will not.** This docstring used to claim that "the
+ * loader in `@cg/vcg-format` walks the registry"; that was false and it cost two
+ * changes real time. Measured 2026-08-11: `packages/vcg-format/` contains no
+ * reference to `migrations` at all, the only importers of this module are this
+ * package's own tests, and `schemaVersion` is WRITTEN by `ProjectStore.ts` and
+ * `pack.ts` but read back only as `z.literal(1)` — so a document with any other
+ * version FAILS TO PARSE rather than entering a conversion, and the walker's
+ * `while (version < CURRENT_SCHEMA_VERSION)` loop can never execute a step.
+ *
+ * **The mechanism that DOES run is parse-time normalization** — a `z.preprocess`
+ * on the schema itself, as `PlayoutSchema` does for its legacy `mode` key and
+ * `SceneSchema` does for the legacy `background` key (B-129). It runs on every
+ * load path for free, because every load path parses.
+ *
+ * The delete-vs-wire-it-up decision is filed as `P-031` in `docs/prd/platform.md`.
  *
  * Migrations operate on raw JSON (unknown), not parsed types — that's the
- * whole point: parsing the current schema is what they enable.
+ * whole point: parsing the current schema is what they would enable, if one ran.
  */
 
 export interface SchemaMigration<From = unknown, To = unknown> {
