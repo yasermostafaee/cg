@@ -76,7 +76,7 @@ describe('B-104 — assets survive a restart because the package carries them', 
 
     // ── session 2: open the package ─────────────────────────────────────────────
     const doc = await readProjectDocument(bytes);
-    expect(doc.form).toBe('package');
+    expect(doc.manifest.format).toBe('cgproj');
 
     const assets = new AssetStore(wsAfter);
     assets.setActiveProject(doc.scene.id);
@@ -110,74 +110,31 @@ describe('B-104 — assets survive a restart because the package carries them', 
     expect(await assets.list()).toHaveLength(3);
   });
 
-  it('the pre-package form loses them — the control that proves the test can fail', async () => {
-    // Save the project the OLD way (scene JSON only) and reopen against a fresh
-    // workspace. Without this leg, the test above could pass for the wrong reason.
+  it('the pre-package form is REFUSED — the control that proves the test can fail', async () => {
+    // The old control opened a bare scene JSON and showed it carried no assets. P-031
+    // retired that read path, so the control is now the refusal itself: the pre-package
+    // form cannot be opened at all, which is a stronger statement than "it opens badly".
     const scene = baseScene('proj-legacy-control');
-    const wsBefore = new MemoryWorkspace();
-    await authorAndPack(wsBefore, scene);
     const legacyJson = new TextEncoder().encode(JSON.stringify(scene));
-
-    const wsAfter = new MemoryWorkspace();
-    const doc = await readProjectDocument(legacyJson);
-    const assets = new AssetStore(wsAfter);
-    assets.setActiveProject(doc.scene.id);
-
-    expect(doc.form).toBe('legacy-json');
-    expect(doc.index).toHaveLength(0);
-    expect(await assets.list()).toHaveLength(0);
+    await expect(readProjectDocument(legacyJson)).rejects.toThrow(/re-create the project/i);
   });
 });
 
-describe('B-104 — conversion adopts surviving legacy assets, and destroys nothing', () => {
-  it('adopts the workspace-resident bytes and leaves every original in place', async () => {
-    const scene = baseScene('proj-convert');
-
-    // A pre-package project: scene JSON at a workspace path, assets in the subtree.
-    const ws = new MemoryWorkspace();
-    const authoring = new AssetStore(ws);
-    authoring.setActiveProject(scene.id);
-    const logo = await authoring.importFile(file(PNG, 'logo.png', 'image/png'), 'image');
-    await ws.writeJson('projects/legacy.cg.json', scene);
-
-    const legacyBytes = (await ws.readFile('projects/legacy.cg.json'))!;
-    const legacyIndexBefore = await ws.readJson<unknown>(`projects/${scene.id}/assets/index.json`);
-
-    // Open it: parse-time normalization, then adopt whatever survived.
-    const doc = await readProjectDocument(legacyBytes);
-    expect(doc.form).toBe('legacy-json');
-
-    const reopened = new AssetStore(ws);
-    reopened.setActiveProject(scene.id);
-    const legacy = await reopened.collectLegacyAssets(scene.id);
-    expect(legacy.index.map((a) => a.filename)).toEqual(['logo.png']);
-    expect(legacy.files.get(legacy.index[0]!.path)).toEqual(PNG);
-
-    // 🔴 NON-DESTRUCTIVE, asserted rather than asserted-about. The original file is
-    // byte-identical, the legacy asset subtree is untouched, and the bytes are still
-    // where they were: an author cannot end up with less than they started with.
-    expect(await ws.readFile('projects/legacy.cg.json')).toEqual(legacyBytes);
-    expect(await ws.readJson<unknown>(`projects/${scene.id}/assets/index.json`)).toEqual(
-      legacyIndexBefore,
-    );
-    expect(await ws.readFile(logo.workingPath)).toEqual(PNG);
-  });
-
-  it('opens with the scene intact when the legacy bytes are already gone', async () => {
-    // B-104 at its worst: the storage root changed and orphaned the bytes long ago.
-    // The project must still open — the shortfall becomes visible in the assets panel
-    // rather than taking the whole project down with it.
-    const scene = baseScene('proj-orphaned');
-    const ws = new MemoryWorkspace();
-    const assets = new AssetStore(ws);
-    assets.setActiveProject(scene.id);
-
-    const doc = await readProjectDocument(new TextEncoder().encode(JSON.stringify(scene)));
-    const legacy = await assets.collectLegacyAssets(scene.id);
-
-    expect(doc.scene.id).toBe(scene.id);
-    expect(legacy.index).toHaveLength(0);
-  });
+describe('B-104 — the package is the only door, and it carries everything', () => {
+  /*
+   * P-031 — TWO TESTS WERE REMOVED FROM THIS BLOCK, and they went with the code they
+   * covered rather than being weakened:
+   *
+   *   - "adopts the workspace-resident bytes and leaves every original in place"
+   *   - "opens with the scene intact when the legacy bytes are already gone"
+   *
+   * Both exercised D-150's CONVERSION path — `readProjectDocument` accepting a bare
+   * `.cg.json` and `AssetStore.collectLegacyAssets` scraping whatever bytes survived in
+   * the workspace under the project id. Neither the path nor the method exists now (see
+   * the compatibility-floor decision in `P-031`), so keeping the tests would have meant
+   * keeping the code purely to be tested. The refusal that replaced the path is asserted
+   * above and in `@cg/vcg-format`'s `project-package.test.ts`.
+   */
 
   it('exportForPackage REPORTS an asset whose bytes vanished instead of dropping it', async () => {
     const scene = baseScene('proj-missing');

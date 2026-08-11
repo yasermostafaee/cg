@@ -37,4 +37,4 @@ export {
   readProjectDocument,
   looksLikeZip,
 } from './project-package.js';
-export type { PackProjectInput, ProjectDocument, ProjectDocumentForm } from './project-package.js';
+export type { PackProjectInput, ProjectDocument } from './project-package.js';

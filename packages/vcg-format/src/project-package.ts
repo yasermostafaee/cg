@@ -59,17 +59,12 @@ export interface PackProjectInput {
   savedAt: string;
 }
 
-/** Which form a read document turned out to be. */
-export type ProjectDocumentForm = 'package' | 'legacy-json';
-
 export interface ProjectDocument {
   scene: Scene;
-  /** In-package path → bytes. Empty for a legacy document, which carried no assets. */
+  /** In-package path → bytes. */
   files: Map<string, Uint8Array>;
   index: ProjectAssetEntry[];
-  form: ProjectDocumentForm;
-  /** Present only for `form: 'package'`. */
-  manifest: ProjectPackageManifest | null;
+  manifest: ProjectPackageManifest;
 }
 
 /**
@@ -154,7 +149,6 @@ export async function unpackProject(buf: Uint8Array): Promise<ProjectDocument> {
     // reference: the index IS the claim "these bytes are here", and a claim that is
     // false is worse than an omission the operator can see in the assets panel.
     index: manifest.assets.filter((a) => assetFiles.has(a.path)),
-    form: 'package',
     manifest,
   };
 }
@@ -165,30 +159,30 @@ export function looksLikeZip(buf: Uint8Array): boolean {
 }
 
 /**
- * 🔴 **THE ONE ENTRY POINT for reading a project document — new or old.**
+ * 🔴 **THE ONE ENTRY POINT for reading a project document.**
  *
- * A pre-package project is a bare `.cg.json`; a project is now a zip. The two forms
- * are not both JSON, so the discrimination is on BYTES (zip magic), not on a field
- * inside a parsed object.
+ * A project is a `.cgproj` zip. There is exactly ONE form, and this is where that is
+ * enforced — on BYTES (zip magic), before anything is parsed.
  *
- * **This is parse-time normalization, and it is deliberately NOT a registered schema
- * migration.** `migrations.migrate()` has ZERO production call sites (see `P-031`
- * in `docs/prd/platform.md`): nothing outside `@cg/shared-schema` imports it, and
- * `schemaVersion` is read back only as a `z.literal(1)`, so a document with any other
- * version fails to PARSE rather than entering a conversion. A migration registered
- * there would be a no-op that *looks* like the fix — old projects would break quietly
- * at exactly the moment the registry appeared to rescue them. Normalizing here runs on
- * every load path, because every load path goes through this function. It is the same
- * call `SceneSchema` makes for its own legacy `background` key (B-129) and
- * `PlayoutSchema` for its legacy `mode`.
+ * **P-031 — the pre-package `.cg.json` read path is GONE, deliberately.** It existed
+ * to open documents written before D-150 made a project a package. Nothing has shipped
+ * to a client, so no such document needs to keep opening, and the owner's
+ * compatibility-floor decision retires the shim rather than carrying it forever (see
+ * `P-031` in `docs/prd/platform.md`). A conversion nobody needs is debt that reads as
+ * safety — and it was a second, weaker document shape that every downstream consumer
+ * had to branch on.
  *
- * A legacy document carries no assets — it never could. Adopting whatever bytes still
- * survive in the workspace is the CALLER's job (`AssetStore.collectLegacyAssets`),
- * because only the caller has a workspace.
+ * What replaced it is ONE loud, readable failure, which is the whole point: an author
+ * handed a bare `.cg.json` is told what the file is and what to do about it, instead of
+ * getting a half-populated project with no assets. **The reversal is written down too:**
+ * the first shipped release becomes the compatibility floor, and after it a removal like
+ * this one stops being free — see `P-031`.
  */
 export async function readProjectDocument(buf: Uint8Array): Promise<ProjectDocument> {
   if (looksLikeZip(buf)) return unpackProject(buf);
 
-  const scene = SceneSchema.parse(JSON.parse(decoder.decode(buf)) as unknown);
-  return { scene, files: new Map(), index: [], form: 'legacy-json', manifest: null };
+  throw new Error(
+    'That file is not a cg project package. Pre-package projects (a bare .cg.json) are no ' +
+      'longer supported — re-create the project and save it as .cgproj.',
+  );
 }

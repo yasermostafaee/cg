@@ -123,43 +123,37 @@ describe('Scene', () => {
     expect(SceneSchema.parse(s).editorBackdrop).toBe('#000000');
   });
 
-  // B-129 — the legacy spelling is normalized at parse time, so every stored scene
-  // loads unchanged and the parsed object carries NO `background` field at all. That
-  // absence is the point: it is what makes an editor preference unable to reach the
-  // render path by a name the renderer might still read.
-  it('normalizes a legacy `background` key onto `editorBackdrop`', () => {
-    // A genuinely pre-B-129 scene carries `background` and NO `editorBackdrop` — so
-    // the new key must be REMOVED from the fixture here, not merely shadowed. Leaving
-    // it in tests the "explicit wins" rule below instead, which is a different claim.
+  /*
+   * P-031 — THREE TESTS WERE REPLACED BY THE TWO BELOW, and the replacement IS the
+   * decision.
+   *
+   * B-129 renamed `background` → `editorBackdrop` and left a parse-time `z.preprocess`
+   * that accepted the old key on the scene and on every composition. Three tests pinned
+   * that shim ("normalizes a legacy `background` key", "lets an explicit
+   * `editorBackdrop` WIN over a stale `background`", "normalizes the legacy key on
+   * COMPOSITIONS too"). The shim is gone — nothing has shipped to a client, so no
+   * document in the world needs it, and the owner's compatibility-floor decision retires
+   * every such path while it is still free to do so (`P-031`).
+   *
+   * What must NOT be lost is the property those tests really protected: `background`
+   * must never reach a parsed Scene under a name the render path might read. That is now
+   * true by construction — there is no key to normalize — and the tests below assert the
+   * two halves that remain observable: the key is unknown (stripped), and its absence is
+   * a LOUD parse failure rather than a silent default.
+   */
+  it('a legacy `background` key does NOT stand in for `editorBackdrop` — it FAILS', () => {
     const { editorBackdrop: _absent, ...legacyScene } = minimalScene;
-    const parsed = SceneSchema.parse({ ...legacyScene, background: '#123456' });
-    expect(parsed.editorBackdrop).toBe('#123456');
-    expect(Object.hasOwn(parsed, 'background')).toBe(false);
+    // Loud, and specific: zod names the required key that is missing, which is exactly
+    // what an author needs in order to know the file predates the current format.
+    expect(() => SceneSchema.parse({ ...legacyScene, background: '#123456' })).toThrow(
+      /editorBackdrop/,
+    );
   });
 
-  it('lets an explicit `editorBackdrop` WIN over a stale `background`', () => {
-    // A re-save must never be undone by a key an older writer left behind.
-    const parsed = SceneSchema.parse({
-      ...minimalScene,
-      editorBackdrop: '#123456',
-      editorBackdrop: 'transparent',
-    });
+  it('a stale `background` beside a real `editorBackdrop` is STRIPPED, never read', () => {
+    const parsed = SceneSchema.parse({ ...minimalScene, background: '#123456' });
     expect(parsed.editorBackdrop).toBe('transparent');
     expect(Object.hasOwn(parsed, 'background')).toBe(false);
-  });
-
-  it('normalizes the legacy key on COMPOSITIONS too, not just the scene root', () => {
-    const comp = {
-      id: 'c1',
-      name: 'c',
-      resolution: { width: 100, height: 100 },
-      frameRange: { in: 0, out: 10 },
-      editorBackdrop: '#ABCDEF',
-      layers: [],
-    };
-    const parsed = SceneSchema.parse({ ...minimalScene, compositions: [comp] });
-    expect(parsed.compositions?.[0]?.editorBackdrop).toBe('#ABCDEF');
-    expect(Object.hasOwn(parsed.compositions?.[0] ?? {}, 'background')).toBe(false);
   });
 });
 

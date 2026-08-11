@@ -1595,7 +1595,7 @@ signal, not the eventual verification.
 
 ---
 
-## [ ] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/`
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1653,3 +1653,69 @@ that part is a one-line removal of a trap, not the fix. The fix is the decision 
 deliberately NOT made here: it is a real fork (delete vs. wire) that wants the owner's call on whether
 this product ever ships a schema-version bump. Related: [[B-129]] recorded the measurement first, on
 its `editorBackdrop` preprocess (`packages/shared-schema/src/scene.ts:163`).
+
+---
+
+### ⭐ THE OWNER'S DECISION (2026-08-11) — DELETE, and the COMPATIBILITY FLOOR that governs it
+
+**The fork above is answered: DELETE.** The registry is gone
+(`packages/shared-schema/src/migrations/` and its `export * as migrations`), and
+`SceneSchema.schemaVersion` stays `z.literal(1)` — which is now the WHOLE mechanism, not a
+leftover beside one. A document from any other schema version fails to parse, loudly, at the
+door. That is the intended behaviour and it must not be softened.
+
+**The decision is bigger than the registry, because the context is:** _the product has not
+been delivered to a client yet, and no project file in the world has to keep opening._ Every
+backward-compatibility path is therefore DEBT that READS AS SAFETY — code the next author
+must reason about, and a second document shape every downstream consumer branches on, bought
+for nobody. This is the cheapest moment it will ever be to shed it, so it was shed.
+
+**Removed in the same change (each one a legacy shim, and nothing else):**
+
+| Removed                                                                                    | It existed to…                                                                | Replaced by                                                                            |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `packages/shared-schema/src/migrations/` + its export                                      | walk a registry to convert older documents (it never ran — that is this item) | nothing. `z.literal(1)` is the mechanism                                               |
+| `readProjectDocument`'s bare-`.cg.json` arm (`@cg/vcg-format`)                             | open pre-D-150 projects, which were a scene JSON with no assets               | ONE readable throw: _"Pre-package projects (a bare .cg.json) … re-create the project"_ |
+| `AssetStore.collectLegacyAssets` + the legacy `adoptDocument` arm                          | scrape whatever asset bytes a converted project still had in the workspace    | nothing — there is no conversion to feed it                                            |
+| `ProjectDocumentForm` / `ProjectDocument.form` / nullable `manifest`                       | let callers branch on package-vs-legacy                                       | one form, so no branch and no nullable                                                 |
+| `SceneSchema`/`CompositionSchema`'s `background` → `editorBackdrop` `z.preprocess` (B-129) | accept the pre-B-129 spelling of the editor backdrop                          | a required-key parse failure naming `editorBackdrop`                                   |
+| the forced-Save-As rule for converted projects (`convertedProjects`)                       | stop a converted package overwriting the `.cg.json` it came from              | nothing — see the judgment below                                                       |
+
+**LEFT IN PLACE, deliberately, and why:**
+
+- **The parse-time normalization MECHANISM itself.** `z.preprocess` is how this codebase
+  reshapes input at the door, and it is the mechanism this item's own acceptance points at.
+  Only the LEGACY USES of it were removed.
+- **`PlayoutSchema`'s legacy `mode` key.** It is the same class as the `background` shim and
+  the policy below covers it, but it was NOT in the owner's enumerated list and removing it
+  is a separate ripple (`docs/prd/designer.md`'s D-020 surface). Flagged here rather than
+  taken: **it is the one remaining legacy shim, and it is now the owner's call.**
+- **`z.literal(1)` on `schemaVersion`.** Load-bearing, and more so than before: it is the
+  only thing left that turns a stale document into a loud failure instead of a silent
+  mis-parse.
+
+**The forced-Save-As rule — judged on its own merits, not dropped by association.** D-150
+forced a converted project's first Save through the file picker so a `.cgproj` was never
+written over the `.cg.json` it came from. Re-judged: the ONLY thing that rule protected
+against was opening a document in a format DIFFERENT from the one Save writes. With the
+`.cg.json` read path gone, that mismatch is unreachable — every document the app can open is
+already the format it saves. Keeping the `Set` would have left a mechanism nothing can ever
+add to, which is precisely the dead-code-that-advertises-a-safeguard defect this item exists
+to end. So it went, and a real Save As (`askPath`) still forces the picker.
+
+### 🔴 THE POLICY, AND ITS REVERSAL — write this into any argument about compatibility
+
+**Until the first client delivery, NO backward compatibility is owed.** A shim that lets an
+older file open is optional, and where it costs a branch, a second document shape or a second
+derivation, the default is to DELETE it and fail loudly instead.
+
+**⭐ THE FIRST SHIPPED RELEASE BECOMES THE COMPATIBILITY FLOOR, AND THIS POLICY REVERSES AT
+THAT MOMENT.** From the first release a client actually holds, a file that release could open
+must keep opening — shims stop being optional, they become a requirement with a test, and
+removing one becomes a breaking change that needs its own decision and a migration story.
+
+**Both halves are written down on purpose.** The reversal is the half that will be forgotten:
+without it, someone reads "no backward compatibility is owed" a year from now, cites this
+item, and deletes a path a real station's files depend on. **Today's decision is scoped to
+today's fact — nothing has shipped — and it expires the moment that fact does.** If you are
+reading this after a release has gone out, this section is HISTORY, not licence.

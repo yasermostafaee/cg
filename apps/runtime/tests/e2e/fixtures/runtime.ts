@@ -738,7 +738,10 @@ export async function buildNestedCompVcg(
       ...(entry.activeRange !== undefined ? { activeRange: entry.activeRange } : {}),
       ...(entry.lifecycle !== undefined ? { lifecycle: entry.lifecycle } : {}),
       ...(entry.playout !== undefined ? { playout: entry.playout } : {}),
-      background: entry.background,
+      // P-031 — the composition's own backdrop is an EDITOR preference and never
+      // travels in an exported package; the scoped scene keeps the root's
+      // `editorBackdrop` from the `...migrated` spread above. (This line used to copy a
+      // legacy `background` key that the schema's now-retired parse shim understood.)
       layers: entry.layers,
       fields: entry.fields ?? [],
       bindings: entry.bindings ?? [],

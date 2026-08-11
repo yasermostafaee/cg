@@ -36,14 +36,25 @@
       ALREADY-STORED `sha256` (no re-hash — the measured cost the proposal declines to pay).
 - [x] 3.2 `AssetStore.adoptFromPackage(index, files)` — write the bytes into the active project's
       workspace subtree and rebuild the in-memory index. Idempotent (dedupe by sha).
-- [x] 3.3 `AssetStore.collectLegacyAssets(projectId)` — read `projects/<id>/assets/index.json` + bytes for the CONVERSION path. Read-only: never move, never delete.
+- [x] 3.3 ~~`AssetStore.collectLegacyAssets(projectId)` — the CONVERSION path's asset scrape.~~
+      **SUPERSEDED and REMOVED 2026-08-11** by the owner's compatibility-floor decision (`P-031`,
+      `openspec/changes/schema-compatibility-floor/`): pre-package projects are no longer opened at
+      all, so there is no conversion to feed. The method is deleted, and so are the two tests that
+      covered it (see 6.5).
 - [x] 3.4 `ProjectStore.savePackage` / `openPackage` — package bytes in, package bytes out;
       workspace path-model tier writes `.cgproj`.
 - [x] 3.5 `createDesignerBridge`: `saveDisk` / `openDisk` / `openRecent` / `open` all route
-      through the package. Suggested name `<slug>.cgproj`; the file picker accepts BOTH
-      `.cgproj` and legacy `.cg.json`.
-- [x] 3.6 A project opened from legacy JSON is marked `converted` so the next Save routes to
-      Save As — the original file is never written through.
+      through the package. Suggested name `<slug>.cgproj`.
+      **AMENDED 2026-08-11 (`P-031`):** the file picker no longer needs to accept legacy
+      `.cg.json` — reading one is refused by name.
+- [x] 3.6 ~~A project opened from legacy JSON is marked `converted` so the next Save routes to
+      Save As — the original file is never written through.~~
+      **SUPERSEDED and REMOVED 2026-08-11 (`P-031`), and RE-JUDGED rather than dropped by
+      association.** The rule protected against exactly one thing: opening a document in a format
+      DIFFERENT from the one Save writes. With the `.cg.json` read path gone that mismatch is
+      unreachable, so the `convertedProjects` set could never be added to again — a mechanism
+      advertising a safeguard it can no longer perform, which is the very defect `P-031` exists to
+      end. A real Save As (`askPath`) still forces the picker.
 
 ## 4. `initWorkspace()` — no silent substitution
 
@@ -79,9 +90,14 @@
       workspace A; construct a SEPARATE, EMPTY workspace B (the restart: different root, zero
       asset bytes); open the package bytes against B; assert every asset lists and its bytes
       match. Not an in-memory round-trip — the point is that the workspace changed.
-- [x] 6.5 Conversion test: open a pre-package `.cg.json` whose assets live under
-      `projects/<id>/assets/`; assert the scene loads, the assets are adopted, and BOTH the
-      original JSON and the legacy asset bytes are still present and unmodified afterwards.
+- [x] 6.5 ~~Conversion test: open a pre-package `.cg.json` whose assets live under
+      `projects/<id>/assets/`…~~
+      **SUPERSEDED 2026-08-11 (`P-031`).** The two conversion tests were REMOVED with the code
+      they covered (keeping them would have meant keeping the code purely to be tested); the
+      block they lived in now carries a note naming them, so the removal is legible. What
+      replaced them is a REFUSAL test in the same files: a bare `.cg.json` is rejected by name,
+      in `@cg/vcg-format`'s `project-package.test.ts` and the Designer's
+      `project-package-restart.test.ts`.
 - [x] 6.6 `initWorkspace` tests: each reason is reported; nothing is swallowed; the healthy path
       reports no degradation.
 - [x] 6.7 E2E `apps/designer/tests/e2e/project-package.spec.ts` — import an image, save,

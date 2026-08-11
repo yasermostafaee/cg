@@ -110,16 +110,17 @@ The Designer SHALL save projects as a `.cgproj` package: a deterministic zip con
 authoring scene as `project.json`, a `manifest.json` declaring the project-package format and
 its asset index, and the asset bytes under `assets/<kind>/<sha>.<ext>`.
 
-The Designer SHALL still OPEN a pre-package `.cg.json` project, and SHALL convert it to the
-package form. Conversion SHALL happen by normalization at the point the document is read — the
-one entry point that reads a project document SHALL determine which form it is looking at and
-produce the same result type for both. Conversion SHALL NOT be expressed as an entry in the
-schema-version migration registry, which no production code executes.
+The package SHALL be the ONLY form the Designer opens. A file that predates it SHALL be
+REFUSED with a message that names what the file is and what the author must do about it,
+rather than opened into a partially-populated project. There SHALL NOT be a second document
+form, and consumers of a read document SHALL NOT have to branch on which form they were given.
 
-Conversion SHALL be non-destructive. Opening a pre-package project SHALL NOT write to, move, or
-delete the original file, and SHALL NOT delete any asset bytes it adopts. The converted project
-SHALL be saved as a NEW package file, chosen by the author, leaving the original recoverable and
-openable by a build that predates this change.
+(Superseded 2026-08-11 by the owner's compatibility-floor decision — `P-031`. This requirement
+previously mandated a CONVERSION path for pre-package `.cg.json` projects, with a
+non-destructive forced-Save-As rule to protect the original bytes. Nothing has shipped to a
+client, so no such document has to keep opening, and the conversion cost a second document
+shape that every consumer branched on. The removal, and the reversal that will end this
+licence at the first release, are recorded in `P-031`.)
 
 #### Scenario: Saved file format
 
@@ -127,27 +128,18 @@ openable by a build that predates this change.
 - **THEN** the file is a `.cgproj` package whose manifest declares the project-package format
 - **AND** it contains the authoring scene and the bytes of every asset the project holds
 
-#### Scenario: A pre-package project opens
+#### Scenario: A pre-package project is refused, by name
 
 - **WHEN** the author opens a `.cg.json` file authored before this change
-- **THEN** it opens as a normal project, with its scene intact
-- **AND** any asset bytes still present in the current workspace under that project's id are
-  adopted into the project, so they travel with it from then on
+- **THEN** the open fails with a message naming the file as a pre-package project and telling
+  the author to re-create it as a package
+- **AND** nothing is partially opened — there is no project with a scene and no assets
 
-#### Scenario: Conversion does not destroy the original
+#### Scenario: A read document has exactly one form
 
-- **WHEN** a pre-package project is opened and then saved
-- **THEN** the original `.cg.json` file is unchanged on disk, byte for byte
-- **AND** the package is written to a separate file the author chose
-- **AND** no adopted asset bytes were deleted from the workspace
-
-#### Scenario: Conversion does not run through the migration registry
-
-- **WHEN** a pre-package project is opened
-- **THEN** the normalization that converts it runs on the read path itself, so it executes for
-  every way a project can be opened
-- **AND** it does not depend on the schema-version migration registry, which has no production
-  caller and would therefore be a conversion that never runs
+- **WHEN** any entry point reads a project document
+- **THEN** it yields the package form or it throws
+- **AND** no consumer branches on a document form, and no manifest is nullable
 
 ### Requirement: Tiered persistence fallback
 

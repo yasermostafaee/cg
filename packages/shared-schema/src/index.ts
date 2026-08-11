@@ -15,4 +15,3 @@ export * from './path-migration.js';
 export * from './manifest.js';
 export * from './project-package.js';
 export * from './runtime/index.js';
-export * as migrations from './migrations/index.js';

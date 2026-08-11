@@ -226,37 +226,6 @@ export class AssetStore {
     this.cleared.emit();
   }
 
-  /**
-   * D-150 — the CONVERSION path: collect whatever asset bytes a pre-package project
-   * still has under `projects/<projectId>/assets/` so they travel with it from now on.
-   *
-   * 🔴 **Strictly read-only.** Nothing is moved, nothing is deleted. Opening an old
-   * project must never be able to leave the author with less than they started with,
-   * so the old bytes stay exactly where they are and the package gets a COPY.
-   *
-   * Best-effort by design: when the bytes are already gone (B-104 in its worst form —
-   * the storage root changed and orphaned them) the project still opens with its scene
-   * intact, and the shortfall is visible in the assets panel instead of silent.
-   */
-  async collectLegacyAssets(
-    projectId: string,
-  ): Promise<{ index: ProjectAssetEntry[]; files: Map<string, Uint8Array> }> {
-    const index: ProjectAssetEntry[] = [];
-    const files = new Map<string, Uint8Array>();
-    const saved = await this.#ws.readJson<AssetMeta[]>(`projects/${projectId}/assets/index.json`);
-    if (saved === null) return { index, files };
-    for (const meta of saved) {
-      const bytes = await this.#ws.readFile(meta.workingPath);
-      if (bytes === null) continue;
-      const path = AssetStore.packagePath(meta);
-      if (files.has(path)) continue;
-      const { workingPath: _workingPath, ...rest } = meta;
-      index.push({ ...rest, path });
-      files.set(path, bytes);
-    }
-    return { index, files };
-  }
-
   async list(): Promise<AssetMeta[]> {
     await this.#ensureLoaded();
     return [...this.#index.values()];

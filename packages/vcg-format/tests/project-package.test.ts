@@ -14,7 +14,7 @@ import {
   fixtureCgCss,
   fixtureManifestExtras,
 } from './fixtures.js';
-import { readZip } from '../src/zip.js';
+import { readZip, writeZip } from '../src/zip.js';
 
 /**
  * D-150 / B-104 — the project package.
@@ -66,7 +66,7 @@ describe('project package — pack/unpack round trip', () => {
   it('carries the scene AND every asset byte, so the file is sufficient on its own', async () => {
     const doc = await unpackProject(await packFixture());
 
-    expect(doc.form).toBe('package');
+    expect(doc.manifest.format).toBe('cgproj');
     expect(doc.scene).toEqual(fixtureScene);
     expect(doc.index).toHaveLength(2);
     // The bytes themselves — not a path, not a hash, the actual content.
@@ -159,41 +159,52 @@ describe('project package — the authoring scene survives WHOLE', () => {
 describe('readProjectDocument — one entry point, both forms', () => {
   it('reads a package', async () => {
     const doc = await readProjectDocument(await packFixture());
-    expect(doc.form).toBe('package');
     expect(doc.scene.id).toBe(fixtureScene.id);
+    expect(doc.manifest.format).toBe('cgproj');
   });
 
   /**
-   * The CONVERSION path. A pre-package project is a bare `.cg.json`, so the two forms
-   * are not both JSON and the discrimination is on BYTES (zip magic).
+   * P-031 — THE PRE-PACKAGE `.cg.json` PATH IS GONE, and this test is what used to
+   * prove it worked. It is re-pointed rather than deleted, because the removal is the
+   * behaviour now: nothing has shipped to a client, so no `.cg.json` in the world has
+   * to keep opening, and a conversion nobody needs is debt that reads as safety.
    *
-   * 🔴 This is parse-time normalization, NOT a registered schema migration
-   * (`migrations.migrate()` has zero production call sites — P-031). It runs on every
-   * load path because every load path goes through this function.
+   * What must survive the removal is that the failure is READABLE — an author handed a
+   * bare scene JSON is told what it is and what to do, not given a half-populated
+   * project with no assets.
    */
-  it('reads a pre-package .cg.json and reports it as legacy', async () => {
+  it('REFUSES a pre-package .cg.json by name, instead of half-opening it', async () => {
     const json = new TextEncoder().encode(JSON.stringify(fixtureScene));
-    const doc = await readProjectDocument(json);
-
-    expect(doc.form).toBe('legacy-json');
-    expect(doc.scene).toEqual(fixtureScene);
-    // A legacy document carried no assets — it never could. That is the bug.
-    expect(doc.files.size).toBe(0);
-    expect(doc.index).toHaveLength(0);
-    expect(doc.manifest).toBeNull();
+    await expect(readProjectDocument(json)).rejects.toThrow(/re-create the project/i);
+    await expect(readProjectDocument(json)).rejects.toThrow(/\.cgproj/);
   });
 
-  it('normalizes a legacy scene through the schema, so old spellings still load', async () => {
-    // B-129's legacy `background` key: the scene-level preprocess moves it onto
-    // `editorBackdrop`. Proves the conversion path gets the schema's normalization for
-    // free, which is the entire argument for doing it at parse time.
-    const legacy = { ...fixtureScene, editorBackdrop: undefined, background: '#123456' };
-    delete (legacy as Record<string, unknown>)['editorBackdrop'];
-    const doc = await readProjectDocument(new TextEncoder().encode(JSON.stringify(legacy)));
-
-    expect(doc.form).toBe('legacy-json');
-    expect(doc.scene.editorBackdrop).toBe('#123456');
-    expect('background' in doc.scene).toBe(false);
+  it('REFUSES a legacy `background` spelling — the B-129 parse shim is gone too', async () => {
+    // The other half of the same decision. B-129 renamed `background` → `editorBackdrop`
+    // and left a `z.preprocess` accepting the old key; that shim is retired, so a scene
+    // carrying only `background` now fails to parse with zod naming the missing required
+    // key. Packaged so this asserts the CURRENT door (a .cgproj), not the deleted one.
+    const legacy: Record<string, unknown> = { ...fixtureScene, background: '#123456' };
+    delete legacy['editorBackdrop'];
+    const bytes = await writeZip(
+      new Map([
+        [
+          'manifest.json',
+          new TextEncoder().encode(
+            JSON.stringify({
+              format: 'cgproj',
+              formatVersion: '1.0',
+              projectId: fixtureScene.id,
+              name: fixtureScene.name,
+              savedAt: '2026-08-11T00:00:00.000Z',
+              assets: [],
+            }),
+          ),
+        ],
+        ['project.json', new TextEncoder().encode(JSON.stringify(legacy))],
+      ]),
+    );
+    await expect(readProjectDocument(bytes)).rejects.toThrow(/editorBackdrop/);
   });
 
   it('refuses an exported .vcg BY NAME rather than failing obscurely', async () => {

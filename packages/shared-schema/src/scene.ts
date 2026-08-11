@@ -157,32 +157,6 @@ export const PlayoutTargetSchema = z.enum(['casparcg']);
 export type PlayoutTarget = z.infer<typeof PlayoutTargetSchema>;
 
 /**
- * B-129 — move a legacy `background` key onto `editorBackdrop`.
- *
- * 🔴 **Parse-time normalization, NOT a registry migration, and the reason is a
- * measured one:** `migrations.migrate()` has ZERO production call sites. Its own
- * docstring claims "the loader in `@cg/vcg-format` walks the registry" — nothing
- * outside `@cg/shared-schema` and its tests imports `migrations` at all, and
- * `schemaVersion: 1` is WRITTEN by `ProjectStore.ts` and `pack.ts` and never read
- * back for migration. Registering a migration would create the APPEARANCE of a
- * conversion that never runs. Normalizing here runs on every load path, because
- * every load path parses.
- *
- * The value is preserved, not reinterpreted, so no schema-version bump is owed —
- * the same call {@link PlayoutSchema} makes for its own legacy `mode`.
- *
- * An explicit `editorBackdrop` WINS when both keys are present: a re-save must
- * never be undone by a stale key left behind by an older writer.
- */
-const normalizeEditorBackdrop = (raw: unknown): unknown => {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
-  const o = raw as Record<string, unknown>;
-  if (!('background' in o)) return raw;
-  const { background, ...rest } = o;
-  return 'editorBackdrop' in o ? rest : { ...rest, editorBackdrop: background };
-};
-
-/**
  * B-129 — the EDITOR's backdrop, and nothing else: a viewing aid that makes
  * authored content legible while working.
  *
@@ -234,7 +208,18 @@ const CompositionObjectSchema = z
     bindings: z.array(FieldBindingSchema).optional(),
   })
   .superRefine(refineLifecycle);
-export const CompositionSchema = z.preprocess(normalizeEditorBackdrop, CompositionObjectSchema);
+/**
+ * P-031 — NO legacy `background` → `editorBackdrop` shim any more.
+ *
+ * B-129 renamed the key and left a `z.preprocess` that accepted the old one. The
+ * owner's compatibility-floor decision (see `P-031` in `docs/prd/platform.md`)
+ * retires it: nothing has shipped, so no document in the world needs it, and a
+ * conversion nobody needs is debt that reads as safety. A document carrying
+ * `background` and no `editorBackdrop` now fails to parse — loudly, with zod
+ * naming the missing required key — which is the honest answer for a file that
+ * predates the current format.
+ */
+export const CompositionSchema = CompositionObjectSchema;
 export type Composition = z.infer<typeof CompositionObjectSchema>;
 
 const FontReferenceSchema = z.object({
@@ -400,7 +385,7 @@ const SceneObjectSchema = z
     metadata: SceneMetadataSchema,
   })
   .superRefine(refineLifecycle);
-export const SceneSchema = z.preprocess(normalizeEditorBackdrop, SceneObjectSchema);
+export const SceneSchema = SceneObjectSchema;
 export type Scene = z.infer<typeof SceneObjectSchema>;
 
 /**

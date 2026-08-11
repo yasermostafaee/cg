@@ -88,17 +88,6 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   });
 
   /**
-   * D-150 — project ids that were opened from a pre-package `.cg.json` and have not
-   * yet been re-saved as a package.
-   *
-   * A converted project's next Save is forced through the PICKER, so the package is
-   * written to a NEW file the author chooses and the original `.cg.json` is never
-   * written through. That is what makes conversion recoverable: the old file is still
-   * on disk, byte for byte, and still opens in a build that predates this change.
-   */
-  const convertedProjects = new Set<string>();
-
-  /**
    * D-150 — build the `.cgproj` bytes for a scene: the authoring scene plus every
    * asset the project holds.
    *
@@ -127,22 +116,7 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
    */
   async function adoptDocument(doc: ProjectDocument, path: string | null): Promise<void> {
     projects.activate(doc.scene, path);
-
-    if (doc.form === 'package') {
-      await assets.adoptFromPackage(doc.index, doc.files);
-      convertedProjects.delete(doc.scene.id);
-      return;
-    }
-
-    // Legacy `.cg.json`: it carried no assets — it never could. Adopt whatever bytes
-    // still survive in this workspace under the project's id, so they travel with the
-    // project from now on. READ-ONLY: nothing is moved and nothing is deleted, so the
-    // author cannot end up with less than they started with. Best-effort: when the
-    // bytes are already gone (B-104 at its worst) the project still opens with its
-    // scene intact, and the shortfall is visible rather than silent.
-    const legacy = await assets.collectLegacyAssets(doc.scene.id);
-    if (legacy.index.length > 0) await assets.adoptFromPackage(legacy.index, legacy.files);
-    convertedProjects.add(doc.scene.id);
+    await assets.adoptFromPackage(doc.index, doc.files);
   }
 
   /** D-150 — write package bytes to the workspace path-model tier. */
@@ -258,10 +232,22 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         const { scene, askPath } = req;
         const sfp = window.showSaveFilePicker;
         const bytes = await buildPackage(scene);
-        // D-150 — a project converted from a pre-package `.cg.json` must never be written
-        // back through a handle pointing at the ORIGINAL file: the old file stays exactly
-        // as it was, and the package goes to a new one the author picks.
-        const forcePicker = askPath || convertedProjects.has(scene.id);
+        /*
+         * P-031 — THE FORCED-SAVE-AS RULE IS GONE WITH THE PATH THAT NEEDED IT, and
+         * this is the judgment rather than a mechanical deletion.
+         *
+         * D-150 forced a converted project's first Save through the picker so a package
+         * was never written over the `.cg.json` it came from. That rule earned its place
+         * because opening produced a document in a DIFFERENT format from the one Save
+         * writes — and that mismatch is the only thing it ever protected against.
+         * Reading a `.cg.json` is no longer possible, so the mismatch is unreachable:
+         * every document this app opens is already the format it saves. Keeping the
+         * `Set` would leave a mechanism nothing can ever add to — precisely the dead
+         * code that advertises itself as a safeguard that `P-031` exists to end.
+         *
+         * A real Save As is unaffected: `askPath` still forces the picker.
+         */
+        const forcePicker = askPath;
 
         if (sfp !== undefined) {
           // Save (not Save As): reuse the project's persisted handle when usable.
@@ -305,19 +291,16 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
           sceneSaveHandles.set(scene.id, handle);
           await saveFileHandle(scene.id, handle);
           projects.recordRecentHandle(scene);
-          convertedProjects.delete(scene.id);
           return { ok: true, filename: handle.name, handleKey: scene.id };
         }
 
         // No File System Access -> workspace path-model (reopenable via Recent) -> download.
         if (isOpfsSupported()) {
           const { path } = await savePackageToWorkspace(scene, scene.name, bytes);
-          convertedProjects.delete(scene.id);
           return { ok: true, filename: path };
         }
         const filename = `${slugifyName(scene.name) || 'untitled'}${PROJECT_PACKAGE_EXT}`;
         triggerPackageDownload(bytes, filename);
-        convertedProjects.delete(scene.id);
         return { ok: true, filename };
       },
       // D-088 — open via showOpenFilePicker so the file carries a writable handle.
