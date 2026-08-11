@@ -2886,6 +2886,11 @@ the `CG ADD`, never after. Source: `DEBT.md:1104`.
 
 ## [ ] B-122 — `CLEAR ALL` is always ENABLED but is not always EFFECTIVE: it filters on the very statuses that may be wrong, and reports success having sent nothing ⟨priority: high — reaches air⟩
 
+> ⚠ **`layers.clear` gained a FOURTH refusal reason on 2026-08-12 — `live-source`** (C-015 phase 5,
+> a bridge-owned Live Source layer; it is neither `foreign` nor `owned`). Whatever fixes this item
+> must honour it: the canonical list is `LAYER_CLEAR_REASONS` in
+> `packages/shared-ipc/src/channels/layers.ts` — match on that, never on inline string literals.
+
 **What:** the owner's decision was that CLEAR and CLEAR ALL are always enabled, because refusing
 the remedy when the state model is confused strands a graphic on air. The UI does that. The two
 halves do not deliver it equally:
@@ -2942,6 +2947,11 @@ something narrower than its name is how that decision gets made on a wrong numbe
 **Env:** Runtime shell, pre-existing. Source: `DEBT.md:1722`.
 
 ## [ ] B-125 — a bound-row race lets the unbound branch CLEAR a just-loaded producer, and the item's state machine still reads `loaded` while the layer is empty ⟨priority: high — reaches air⟩
+
+> ⚠ **`layers.clear` gained a FOURTH refusal reason on 2026-08-12 — `live-source`** (C-015 phase 5,
+> a bridge-owned Live Source layer; it is neither `foreign` nor `owned`). Whatever fixes this item
+> must honour it: the canonical list is `LAYER_CLEAR_REASONS` in
+> `packages/shared-ipc/src/channels/layers.ts` — match on that, never on inline string literals.
 
 **What:** the row routes on `item === null` **at click time**. If an item is loaded onto the row in
 the instant between render and click, the unbound branch sends a layer `CLEAR` that destroys the

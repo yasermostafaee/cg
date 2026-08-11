@@ -36,6 +36,44 @@ export const LayersOrphansChangedChannel = definePublishChannel(
 );
 
 /**
+ * Every reason `layers.clear` can refuse for — ONE canonical list, so a caller
+ * that maps reasons cannot silently miss one that was added later.
+ *
+ * They are NOT interchangeable, and the distinctions are the point:
+ *
+ * - `owned` — the bridge holds this layer for a stack item (`#slots`). Clearing
+ *   owned layers is Out/Remove's job.
+ * - `foreign` — R-015: no FRESH observation of an `html` producer here, so the
+ *   layer is provably not ours (or silence is evidence of nothing).
+ * - `reserved` — R-028: a DECLARED playout layer. Config is the identity,
+ *   because OSC cannot tell a playout html graphic from ours.
+ * - `live-source` — C-015 phase 5: a layer in the bridge's own Live Source
+ *   ledger. **Deliberately distinct from both `owned` and `foreign`**, so the
+ *   operator is told WHAT the layer is and why it is not theirs to clear. It is
+ *   not `foreign` (the bridge owns it) and not `owned` (it carries no stack
+ *   item's template, and `#slots` is not where it lives). Granting C-015's
+ *   exemption as originally worded would have made these layers operator
+ *   CLEARABLE — inverting the protection — which is why the answer is a new
+ *   refusal and not an exemption (`live-source-multibox` design.md §4, C5).
+ * - `amcp-error` — the CLEAR was permitted and the server rejected it.
+ *
+ * ⚠ **A caller that switches on this must handle `live-source`.** [[B-122]] and
+ * [[B-125]] are open items in the same clear path and will have to honour it;
+ * this list is exported as a named constant precisely so their fix cannot miss
+ * it by matching on an inline string literal.
+ */
+export const LAYER_CLEAR_REASONS = [
+  'owned',
+  'foreign',
+  'reserved',
+  'amcp-error',
+  'live-source',
+] as const;
+
+/** A refusal reason from {@link LAYER_CLEAR_REASONS}. */
+export type LayerClearReason = (typeof LAYER_CLEAR_REASONS)[number];
+
+/**
  * Explicit operator Clear of a surfaced layer: sends `CLEAR <ch>-<layer>`.
  * Refused with `reason: 'owned'` when the bridge owns the layer (clearing
  * owned layers is Out/Remove's job). R-015 — refused with `reason: 'foreign'`
@@ -54,6 +92,9 @@ export const LayersOrphansChangedChannel = definePublishChannel(
  * config — so config is the identity, and clearing a reserved layer must be
  * impossible from ANY caller: it would take the company's playout output off
  * air.
+ *
+ * C-015 phase 5 (R-015) — refused with `reason: 'live-source'` for a layer in
+ * the bridge's own Live Source ledger. See {@link LAYER_CLEAR_REASONS}.
  */
 export const LayersClearChannel = defineChannel(
   'layers.clear',
@@ -63,7 +104,7 @@ export const LayersClearChannel = defineChannel(
   }),
   z.object({
     ok: z.boolean(),
-    reason: z.enum(['owned', 'foreign', 'reserved', 'amcp-error']).optional(),
+    reason: z.enum(LAYER_CLEAR_REASONS).optional(),
   }),
 );
 

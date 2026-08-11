@@ -710,17 +710,64 @@ completed green Linux run, cited beside 9.3a.
 
 ## 5. Phase 5 — Ownership (requires phase 3)
 
-- [ ] 5.1 Wire `#liveLayers` beside `#slots` (`caspar-runtime.ts:310`) — **not folded into it**;
-      `#slots` answers a different question that nine read sites depend on.
-- [ ] 5.2 R-009: add the `#liveLayers` coordinates to the sweep's `owned` set
-      (`caspar-runtime.ts:2390-2393`).
-- [ ] 5.3 C-014: skip Live Source coordinates in `#reconcileForeignQuarantine` **before** the
-      `occ.producer === 'html'` test at `:3520`, since that test is what a bridge-owned non-html
-      layer defeats.
-- [ ] 5.4 R-015: `clearLayer` refuses a Live Source layer with a **new distinct reason**
-      (`live-source`), not `foreign` and not `owned`. **Do NOT apply C-015's exemption as worded** —
-      it would make Live Source layers operator-clearable (`design.md` §4, C5).
-- [ ] 5.5 Regression tests for all three doors plus the boundary, against the phase-3 mock.
+⚠ **EVERY ANCHOR IN THIS SECTION HAD DRIFTED** — sessions F and I moved code in
+`caspar-runtime.ts`'s neighbourhood, as the session prompt warned. Each was re-verified against the
+real site before editing, and the true line is recorded beside the stale one below. The file is
+3926 lines; the drift runs from +40 to +193 lines and grows with depth, so nothing here was found by
+"close enough".
+
+- [x] 5.1 Wire `#liveLayers` beside `#slots` (~~`caspar-runtime.ts:310`~~ → **`:350`**, drift +40) —
+      **not folded into it**; `#slots` answers a different question that its read sites depend on.
+      The ledger TYPES already existed from phase 2.5 (`live-layers.ts`, "defined, not yet wired"),
+      so this task is the WIRING: the field, one coordinate-flattening helper (`#liveLayerKeys`)
+      that all three doors share so "is this a Live Source layer" has ONE implementation, and the
+      ledger's own bookkeeping API (`registerLiveLayers` / `releaseLiveLayers` / `liveLayers`).
+      ⚠ **That write path is deliberately phase 5's, not phase 6's, and it sends no AMCP.**
+      Ownership is this phase; phase 6.1's `playSource` will call it with what it actually sent.
+      Without it the three doors could not be populated, so they could not be regression-tested
+      before a verb exists to fill them — which is the entire reason ownership lands first.
+      ✅ **"Nine read sites untouched" is ASSERTED, not assumed**: every `#slots` **code** line is
+      byte-identical to HEAD (`git diff` filtered to non-comment lines returns empty; a direct diff
+      of all `#slots` code sites HEAD-vs-working reports IDENTICAL). Only comments mention it.
+- [x] 5.2 R-009: add the `#liveLayers` coordinates to the sweep's `owned` set
+      (~~`caspar-runtime.ts:2390-2393`~~ → **`:2504-2506`**, drift +114). Ownership, not exclusion —
+      commented at the site as explicitly different from the reserved-range filter three lines
+      above, because both end in "not an orphan" by different arguments and that is how one of them
+      later gets deleted as a duplicate.
+- [x] 5.3 C-014: skip Live Source coordinates in `#reconcileForeignQuarantine` **before** the
+      `occ.producer === 'html'` test (~~`:3520`~~ → **`:3713`**, drift +193; the method itself is at
+      `:3707`), since that test is what a bridge-owned non-html layer defeats.
+      🔴 **Pinned by a test with a NON-html live occupant** — the case the old order gets wrong: a
+      live producer reports `route`, falls straight through the kind test, and is quarantined as
+      "a foreign producer" on a layer the bridge itself owns. Placed after the kind test it would
+      still skip today, but only because live producers happen never to be `html` — which would make
+      this door's correctness depend on a fact about a different one.
+- [x] 5.4 R-015: `clearLayer` refuses a Live Source layer with a **new distinct reason**
+      (`live-source`), not `foreign` and not `owned` (~~`:2649-2651` / `:2682-2686` / `:2690`~~ →
+      at the pre-change HEAD the method is **`:2784`**, the `owned` loop **`:2796`** and the `html`
+      test **`:2804`** — drift +114 to +135).
+      C-015's exemption was **NOT** applied as worded (`design.md` §4, C5): an exemption would have
+      made these layers operator-CLEARABLE, inverting the protection.
+      The check sits AFTER the `owned` loop (which is therefore untouched) and BEFORE the `html`
+      test — the ordering that matters, since a live producer is never `html` and would otherwise be
+      refused as `foreign`: the right outcome carried by exactly the wrong statement.
+      **The reason is a named constant, not an inline string**: `LAYER_CLEAR_REASONS` in
+      `packages/shared-ipc/src/channels/layers.ts` is now the ONE canonical list, and
+      `clearLayer`'s return type is derived from it, so a reason cannot exist on the wire and be
+      unrepresentable in the implementation. [[B-122]] and [[B-125]] each carry a one-line note
+      pointing at it; neither item was otherwise touched.
+- [x] 5.5 Regression tests for all three doors plus the boundary, against the phase-3 mock —
+      `tools/caspar-bridge/tests/live-source-ownership.integration.test.ts`, 7 tests.
+      **The boundary is half the suite**: every door test runs TWO ADJACENT layers (30 and 31)
+      through the SAME sweep carrying the SAME `route` producer, differing ONLY in whether the
+      ledger holds them, so a check that leaked either way fails. The existing classes are asserted
+      unchanged at the same time — `owned` (via `#slots`), `foreign` (the neighbour), `reserved`
+      (a declared playout layer) and a genuine html orphan still CLEARABLE.
+      ✅ **Each door was verified to FAIL without its own line**, one at a time, against the
+      restored source — tests that only ever ran green would pin nothing: - disabling 5.2 fails exactly the two DOOR 1 tests: the ledgered layer 30 appears in the
+      orphan set beside its neighbour 31. - disabling 5.3 fails exactly the two DOOR 2 tests, on the assertion
+      `the bridge must never call its OWN producer foreign`. - disabling 5.4 fails exactly the DOOR 3 test, which reports `reason: 'foreign'` where
+      `reason: 'live-source'` was expected — C5's hazard reproduced verbatim.
 
 ## 6. Phase 6 — Producer, geometry, audio
 

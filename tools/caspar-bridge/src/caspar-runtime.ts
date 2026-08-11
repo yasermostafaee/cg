@@ -27,6 +27,7 @@ import {
   // into the SPA bundle (see channelSettings.ts for the full reasoning).
   parseVideoModeFromInfo,
   videoModeRaster,
+  type LayerClearReason,
   type PLAYOUT_CLEAR_REASONS,
   type RestoreSkip,
   type PlayoutLayerState,
@@ -70,6 +71,7 @@ import {
 } from './fixed-layers-store.js';
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
+import type { LiveLayerLedger, LiveLayerRecord } from './live-layers.js';
 import { TemplateRegistry } from './template-registry.js';
 import { DelimiterStore } from './delimiter-store.js';
 import {
@@ -348,6 +350,30 @@ export class CasparRuntime {
    * retained through out (the item is still on the stack, idle), deleted at remove.
    */
   readonly #slots = new Map<string, CommandSlot>();
+  /**
+   * C-015 phase 5 — THE LIVE SOURCE LEDGER, deliberately BESIDE {@link #slots}
+   * and never folded into it.
+   *
+   * `#slots` answers ONE question — "where does this item's TEMPLATE live" — as
+   * one coordinate per item, and every read site below depends on that answer
+   * being exactly that. An item owning N live layers is unrepresentable in it,
+   * so widening its value type would touch every one of those sites for a
+   * reason none of them share. The types live in `live-layers.ts`, which argues
+   * this at length; the field is here because phase 5 is where it is WIRED.
+   *
+   * This is the third ownership class: not `#slots` (an operator graphic's
+   * layer), not `#reservedSet` (a fence AWAY from the company's playout system),
+   * but a layer the BRIDGE itself owns. Three doors read it — the R-009 sweep,
+   * the C-014 quarantine, and `clearLayer`'s R-015 refusal — and each is
+   * commented at its own site.
+   *
+   * ⚠ **Empty in this phase, and that is expected, not a gap.** No verb can seat
+   * a live producer yet (`playSource` is phase 6.1), so nothing populates this
+   * in production. The doors are still wired now, because the alternative — a
+   * live guest box existing on a layer the un-narrowed sweep can reclaim — is
+   * an operator being invited to clear a face off air (`design.md` §4).
+   */
+  readonly #liveLayers: LiveLayerLedger = new Map();
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -2391,6 +2417,61 @@ export class CasparRuntime {
     );
   }
 
+  // ── C-015 phase 5: the Live Source ledger (the THIRD ownership class) ──────
+
+  /**
+   * Every Live Source coordinate the bridge currently owns, as `ch:layer` keys.
+   *
+   * The ONE place that flattens the ledger to coordinates — all three ownership
+   * doors call this rather than walking `#liveLayers` themselves, so "is this a
+   * Live Source layer" has exactly one implementation and cannot drift between
+   * the sweep, the quarantine and the refusal (golden rule 6). Keyed through
+   * `adoptionKey` so the format matches the sweep's `owned` set exactly.
+   */
+  #liveLayerKeys(): Set<string> {
+    const keys = new Set<string>();
+    for (const records of this.#liveLayers.values()) {
+      for (const record of records) keys.add(adoptionKey(record.slot));
+    }
+    return keys;
+  }
+
+  /** Is this exact coordinate a bridge-owned Live Source layer? */
+  #isLiveLayer(channel: number, layer: number): boolean {
+    return this.#liveLayerKeys().has(adoptionKey({ channel, layer }));
+  }
+
+  /**
+   * Record the Live Source layers an item owns. **Bookkeeping ONLY — this sends
+   * no AMCP and creates no producer.**
+   *
+   * Phase 6.1's `playSource` is what will seat an actual producer and call this
+   * with what it sent; the ledger is phase 5's because OWNERSHIP is phase 5's.
+   * Keeping the write path here (rather than inventing it inside a phase-6 verb)
+   * is what lets the three doors be wired and REGRESSION-TESTED before any verb
+   * exists to fill them — which is the whole point of landing ownership first.
+   *
+   * Replaces the item's previous records wholesale: a re-seat re-states what the
+   * item owns rather than accumulating stale coordinates.
+   */
+  registerLiveLayers(itemId: string, records: readonly LiveLayerRecord[]): void {
+    if (records.length === 0) {
+      this.#liveLayers.delete(itemId);
+      return;
+    }
+    this.#liveLayers.set(itemId, [...records]);
+  }
+
+  /** Forget an item's Live Source layers (teardown). Bookkeeping only. */
+  releaseLiveLayers(itemId: string): void {
+    this.#liveLayers.delete(itemId);
+  }
+
+  /** The ledger, for tests and for phase 6's re-emission of `FILL`/`CLIP`. */
+  liveLayers(): ReadonlyMap<string, readonly LiveLayerRecord[]> {
+    return new Map([...this.#liveLayers].map(([id, rs]) => [id, [...rs]]));
+  }
+
   /**
    * One sweep tick: sample the CURRENT primary's passive OSC occupancy tap
    * and diff it against the layers this bridge owns (#slots). Reads the
@@ -2505,6 +2586,30 @@ export class CasparRuntime {
     for (const slot of this.#slots.values()) {
       owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
     }
+    /*
+     * C-015 phase 5 (R-009) — DOOR 1 of 3: Live Source layers are OWNED, so they
+     * are never orphan candidates.
+     *
+     * This is ownership, not exclusion — the opposite of the reserved-range
+     * filter above. The bridge PUT this producer here and knows the coordinate
+     * from its own ledger; the reserved range is a fence away from a layer the
+     * bridge neither owns nor watches. Both end in "not an orphan", by different
+     * arguments, and conflating them is how one of them later gets deleted as a
+     * duplicate.
+     *
+     * Why it cannot be left to the kind test: a live producer is `route` /
+     * `decklink` / `ndi`, never `html`, so nothing about producer KIND rescues
+     * it — R-009's doctrine is "declared, never detected" (`design.md` §4), and
+     * this is the declaration. Without it the sweep surfaces a live guest box as
+     * reclaimable and invites the operator to clear a face off air.
+     *
+     * ⚠ R-028's own section 6 will REWRITE this sweep to narrow its candidates.
+     * When it does, it must narrow against all THREE declared classes (its task
+     * 6.5), not two. `live-source-orphan-sweep` in
+     * `tests/live-source-ownership.integration.test.ts` fails if this line is
+     * dropped in that rewrite — which is the point of pinning it now.
+     */
+    for (const key of this.#liveLayerKeys()) owned.add(key);
     /*
      * BANK LAYERS ARE NO LONGER EXCLUDED — the exclusion's own premise expired.
      *
@@ -2784,7 +2889,10 @@ export class CasparRuntime {
   async clearLayer(
     channel: number,
     layer: number,
-  ): Promise<{ ok: boolean; reason?: 'owned' | 'foreign' | 'reserved' | 'amcp-error' }> {
+    // The reason type comes from `LAYER_CLEAR_REASONS` rather than being spelled
+    // out again here: ONE canonical list, so a reason cannot exist on the wire
+    // and be unrepresentable in the implementation (or the reverse).
+  ): Promise<{ ok: boolean; reason?: LayerClearReason }> {
     // R-028 / C-015 — a DECLARED playout layer is never clearable, from any
     // caller. The R-015 `html` discriminator below cannot protect it: a
     // playout template graphic IS an html producer, and that
@@ -2797,6 +2905,27 @@ export class CasparRuntime {
       if (slot.channel === channel && slot.layer === layer) {
         return { ok: false, reason: 'owned' };
       }
+    }
+    /*
+     * C-015 phase 5 (R-015) — DOOR 3 of 3: a Live Source layer is refused with
+     * its OWN reason, so the operator is told what the layer is.
+     *
+     * ⚠ MUST PRECEDE the `html` test below. A live producer is never `html`, so
+     * without this it would be refused as `foreign` — the right outcome carried
+     * by the wrong statement. `foreign` means "provably not ours"; this layer is
+     * emphatically ours. It is not `owned` either: that reason means a stack
+     * item's TEMPLATE is here, and this coordinate is not in `#slots` at all.
+     *
+     * ⚠ C-015 asked for an EXEMPTION here — "the bridge may CLEAR what it owns"
+     * — and applying that as worded is backwards: `clearLayer` is the
+     * operator-facing `layers.clear` door ONLY, so an exemption would make Live
+     * Source layers operator-CLEARABLE, inverting the protection. The bridge
+     * needs no exemption to clear what it owns: its own teardown calls
+     * `#builder.out(slot)` directly and never routes through here. Refusal with
+     * a distinct reason is the decision (`design.md` §4, C5).
+     */
+    if (this.#isLiveLayer(channel, layer)) {
+      return { ok: false, reason: 'live-source' };
     }
     const observed = this.#adapter.primarySession.osc.occupancy
       .occupied(this.#occupancyStaleMs)
@@ -3709,7 +3838,28 @@ export class CasparRuntime {
     if (session.state !== 'healthy') return;
 
     const foreign = new Map<string, { slot: CommandSlot; producer: string }>();
+    const live = this.#liveLayerKeys();
     for (const occ of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
+      /*
+       * C-015 phase 5 (C-014) — DOOR 2 of 3: a bridge-owned Live Source layer is
+       * not foreign, so it is never quarantined from allocation.
+       *
+       * ⚠ THIS TEST IS FIRST, BEFORE THE `html` TEST BELOW, AND THE ORDER IS THE
+       * TASK. The `html` test is a KIND heuristic stating "only html can be
+       * ours", which is precisely what a bridge-owned NON-html layer defeats: a
+       * live producer reports `route` / `decklink` / `ndi`, so it falls straight
+       * through that test into `foreign` and gets quarantined — the layer the
+       * bridge is about to composite a guest onto, fenced off from allocation by
+       * the bridge itself.
+       *
+       * Consulting the DECLARATION before the detection is R-009's own doctrine
+       * ("declared, never detected", `design.md` §4). Placed after the kind test
+       * it would still skip today — but only because live producers happen never
+       * to be `html`, which makes the correctness of this door depend on a fact
+       * about a different one. Ownership is not a kind question, and this line
+       * does not ask a kind question.
+       */
+      if (live.has(adoptionKey(occ))) continue;
       if (occ.producer === 'html') continue;
       foreign.set(adoptionKey(occ), {
         slot: { channel: occ.channel, layer: occ.layer },
