@@ -972,7 +972,7 @@ guards. Capability: `designer-playout-lifecycle`.
 **Notes:** Introduced by #320 (D-102 Phase 2 — per-element preview timing). UI display/input-conversion ONLY: the session override, the drivers and the schema keep milliseconds; only the two controls convert (ms ÷ 1000 to display, × 1000 on commit). Each preview row mirrors its inspector counterpart's rounding exactly — the countdown duration is INTEGER seconds (`step 1`), the sequence dwell allows FRACTIONAL seconds (`step 0.5`, `min 0.1`), as `StyleSection` does. The preview's per-scope HOLD control is deliberately NOT changed: the inspector's Playout section shows hold in milliseconds too, so it is already consistent — converting it would create the very mismatch this bug is about. No schema / session-shape / runtime / export / on-air change ⇒ no CasparCG hardware validation needed.
 **Regression test:** unit `preview-timing-rows.test.ts` (a 60000 ms countdown DISPLAYS `60`; a 5000 ms dwell DISPLAYS `5`; typing `6` writes `durationMs: 6000`; typing `0.8` writes `dwellMs: 800`); E2E `preview-timing-phase2.spec.ts` (drive the seconds inputs, assert the runtime's EFFECTIVE ms stamps `data-cg-countdown-ms` / `data-cg-sequence-dwell` are unchanged in ms).
 
-## [~] B-088 — a start-trimmed element ignores its in-point during play: the whole intro is ONE painted frame ⟨priority: high⟩ — code merged (#342, `62bbb44`) but DELIBERATELY still `[~]`: this fix changes playout TIMING and reaches the exported outputs, and NEITHER of its two verification gates has been discharged. See **Gates still OWED** below. Focused fix, no change dir
+## [~] B-088 — a start-trimmed element ignores its in-point during play: the whole intro is ONE painted frame ⟨priority: high⟩ — code merged (#342, `62bbb44`) but DELIBERATELY still `[~]`: this fix changes playout TIMING and reaches the exported outputs, and ONE of its two verification gates is still outstanding. **Gate 2 (Linux `pnpm gate:e2e`) is DISCHARGED 2026-08-11** — <https://github.com/yasermostafaee/cg/actions/runs/31414808016>, commit `bd88ede`, a later `dev` HEAD that CONTAINS `62bbb44`; run `conclusion: success` and the `E2E (Playwright)` job's own conclusion is `success` (it RAN). **Gate 1 (real-CasparCG hardware check, PREVIEW + EXPORTED OUTPUT) is still OWED and has never been performed** — that is the sole reason this item is not `[x]`, and no e2e run can substitute for it: the gate exists precisely because a green suite cannot settle elapsed-time behaviour on air. See **Gates still OWED** below. Focused fix, no change dir
 
 **Repro:**
 
@@ -997,10 +997,10 @@ guards. Capability: `designer-playout-lifecycle`.
 
 **On-air impact:** this changes playout TIMING — a composition that previously snapped through its intro instantly now sweeps it in real time whenever a trim boundary is crossed (which is the point: the trim needs elapsed time to be honoured). Warrants a real-CasparCG check before it is considered done.
 
-**Gates still OWED — this is why the item is `[~]` and not `[x]` (as of 2026-07-20).** The code is
-merged (#342, `62bbb44`); the VERIFICATION is not done. BOTH gates below are outstanding. Neither
-has been attempted, and neither may be inferred from the merge — a merged branch is not a discharged
-gate:
+**Gates still OWED — this is why the item is `[~]` and not `[x]` (updated 2026-08-11).** The code is
+merged (#342, `62bbb44`). **Gate 2 is now DISCHARGED; gate 1 is not, and it is the only thing holding
+this item open.** Gate 1 has never been attempted, and it may not be inferred from the merge nor from
+gate 2 — a merged branch is not a discharged gate, and a green suite is not an on-air observation:
 
 1. **Real-CasparCG hardware check (PREVIEW + EXPORTED OUTPUT) — OWED, never performed.** Required by
    this entry's own **On-air impact** line above: the fix changes playout TIMING, so an intro leg
@@ -1010,19 +1010,23 @@ gate:
    this reproduces "in the exported outputs" as well as in preview, and the export path renders
    through the same `PlayoutController` without the preview's driver, so one can hold while the
    other fails.
-2. **Linux `pnpm gate:e2e` — OWED, and demonstrably NOT RUN.** The fix is in
-   `packages/template-runtime` (a render-path change), which is exactly the class P-009's spec
-   (`docs/prd/platform.md`) says owes an E2E run, and a `win32` pass is explicitly
-   NON-AUTHORITATIVE there. CI did not supply it either: #342's own **E2E (Playwright)** check is
-   recorded `SKIPPED`, because GitHub Actions is billing-exhausted until ~2026-08-01. WSL is not
-   installed on this host, so no Linux run has been produced locally. This is a positive finding
-   from the check record, not an assumption.
+2. **Linux `pnpm gate:e2e` — ✅ DISCHARGED 2026-08-11.** The fix is in `packages/template-runtime`
+   (a render-path change), which is exactly the class P-009's spec (`docs/prd/platform.md`) says
+   owes an E2E run, and a `win32` pass is explicitly NON-AUTHORITATIVE there. That debt is now
+   settled by a COMPLETED, GREEN `e2e` job on `ubuntu-latest`:
+   <https://github.com/yasermostafaee/cg/actions/runs/31414808016> — commit `bd88ede`, a later
+   `dev` HEAD that CONTAINS `62bbb44` (verified with `git merge-base --is-ancestor`, not assumed
+   from dates). Checked by reading the job conclusions, not merely that a run exists: run
+   `status: completed` / `conclusion: success`, `E2E (Playwright)` job conclusion `success` with
+   its `E2E` step actually executing (~10 min), alongside
+   `Lint • Typecheck • Test • Build=success`. The job is not diff-scoped — it runs `pnpm test:e2e`,
+   the entire Playwright suite — so it verifies the TREE at that SHA, this fix included.
 
-   **UNBLOCKED 2026-08-08 (not yet discharged).** CI is running again and `pr.yml` triggers on
-   every push to `dev`, so the owed Linux run no longer needs WSL and no longer needs arranging —
-   it arrives with the next `dev` push that carries this code. The debt is still OPEN: discharge
-   it by citing a COMPLETED, GREEN `e2e` run URL for a commit containing the fix (CLAUDE.md, "E2E
-   coverage"). A cancelled run does not count.
+   **SUPERSEDED text, recorded so the change is legible:** this entry previously read "OWED, and
+   demonstrably NOT RUN", because #342's own `E2E (Playwright)` check was `SKIPPED` under the
+   Actions billing outage and WSL is not installed on this host. Both conditions are gone — CI is
+   restored and `pr.yml` runs on every push to `dev`. Do not go install WSL on the strength of the
+   old sentence; it no longer applies.
 
 **Same debt as [[B-089]], and for the same reason** — both change playout timing in the
 template-runtime render path. B-089's hardware gate has since been discharged by owner report
@@ -1030,7 +1034,7 @@ template-runtime render path. B-089's hardware gate has since been discharged by
 the two fixes touch different legs (B-088 is about how OFTEN the gate runs, B-089 about WHICH
 elements it covers) and were merged from different branches. B-088 needs its own observation.
 
-## [~] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩ — code merged (#369, `7f9868f`) but DELIBERATELY still `[~]`: this fix changes playout TIMING, and ONE of its two verification gates is still outstanding. The real-CasparCG hardware check is DISCHARGED (owner report, 2026-07-20); the Linux `pnpm gate:e2e` is NOT RUN. See **Gates still OWED** below. Do not flip to `[x]` until that remaining gate is discharged
+## [x] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩ — code merged (#369, `7f9868f`); BOTH verification gates are now discharged, so the item closes. (1) Real-CasparCG hardware check — DISCHARGED by owner report, 2026-07-20 (preview + single-file export). (2) Linux `pnpm gate:e2e` — DISCHARGED 2026-08-11 by a COMPLETED, GREEN `e2e` job on `ubuntu-latest`: <https://github.com/yasermostafaee/cg/actions/runs/31414808016>, commit `bd88ede`, a later `dev` HEAD that CONTAINS `7f9868f` (verified with `git merge-base --is-ancestor`). Run `conclusion: success`; the `E2E (Playwright)` job's own conclusion is `success` and its `E2E` step RAN for ~10 min — not `skipped`. The job is not diff-scoped: it runs `pnpm test:e2e`, the whole Playwright suite, so it verifies the TREE at that SHA including this fix. Focused fix, no change dir
 
 **Repro:**
 
@@ -1043,20 +1047,21 @@ elements it covers) and were merged from different branches. B-088 needs its own
 **Env:** Browser / Designer preview; also the exported outputs.
 **Notes:** `collectLifespanGates` (`packages/template-runtime/src/runtime.ts:1579`) walks only `scene.layers` and resolves ids against the ROOT `built.elementMap`; every composition instance owns its own `elementMap`, so nested elements are unreachable and never enter the gate list. The per-frame application is likewise root-only (`if (isGlobalRoot) applyLifespanGatesAtFrame(frame)`, `runtime.ts:969`). Its `el.type === 'container'` recursion branch is **effectively dead** as well: `container` is built by `buildPlaceholder`, which builds no children, so container children never enter any `elementMap` either. Distinct from B-088 (which is about how OFTEN the gate runs); this is about WHICH elements it covers. Do not fold the two — B-088's fix deliberately leaves nested scopes' collapse behaviour untouched.
 
-**Gates still OWED — this is why the item is `[~]` and not `[x]` (updated 2026-07-20).** The code is
-merged. ONE of the two gates below is now discharged and ONE is still outstanding; the item stays
-`[~]` until both are. Each must be independently confirmed, or carry an explicit owner attestation —
-never taken from a prompt or a hand-off note as if it were a measurement this session made:
+**Gates — BOTH DISCHARGED (closed 2026-08-11).** The code is merged and both verification gates
+below now carry independent evidence, so the item is `[x]`. Each was independently confirmed or
+carries an explicit owner attestation — neither was taken from a prompt or a hand-off note as if it
+were a measurement this session made:
 
-1. **Linux `pnpm gate:e2e` — NOT RUN.** WSL is not installed on the development host, so the Linux
-   E2E signal has never been produced for this change. A Windows Playwright run does not substitute:
-   per P-009's spec (`docs/prd/platform.md`), a `win32` `gate:e2e` pass is explicitly
-   NON-AUTHORITATIVE and leaves a Linux/WSL run owed. GitHub Actions is billing-exhausted until
-   ~2026-08-01, so CI cannot supply it either — the Linux run must be done locally.
-   **CORRECTION 2026-08-08: CI CAN supply it now.** Actions is restored and `pr.yml` runs on every
-   push to `dev`, so "the Linux run must be done locally" no longer holds — do not go install WSL
-   on the strength of that sentence. The debt is still OPEN and is discharged by a COMPLETED,
-   GREEN `e2e` run URL for a commit carrying this fix (CLAUDE.md, "E2E coverage").
+1. **Linux `pnpm gate:e2e` — ✅ DISCHARGED 2026-08-11.**
+   <https://github.com/yasermostafaee/cg/actions/runs/31414808016> — commit `bd88ede`, a later
+   `dev` HEAD that CONTAINS this fix's `7f9868f` (verified with `git merge-base --is-ancestor`).
+   Run `status: completed` / `conclusion: success`; the `E2E (Playwright)` job's OWN conclusion is
+   `success` and its `E2E` step actually executed (~10 min) — a `skipped` job would have proved
+   nothing (P-029). `pnpm test:e2e` runs the whole suite, so the run verifies the TREE at that SHA.
+   **SUPERSEDED text:** this entry previously read "NOT RUN … the Linux run must be done locally",
+   which was true only under the Actions billing outage and the absence of WSL on this host. CI is
+   restored and `pr.yml` runs on every push to `dev`; do not install WSL on the strength of the old
+   sentence.
 2. **Real-CasparCG hardware check (PREVIEW + SINGLE-FILE EXPORT) — DISCHARGED by OWNER REPORT,
    2026-07-20.** The owner ran the check on their own CasparCG hardware and reported it covering
    BOTH output paths — PREVIEW and SINGLE-FILE EXPORT. This project's definition of done is
