@@ -127,6 +127,12 @@ direct ripple of B-129's rename that this session was already standing on.
       class — two Playwright suites co-scheduled on this host — not a defect in this change, and
       per CLAUDE.md the answer is the bound, never a longer timeout. The authoritative signal is
       the Linux `e2e` job in 8.4.
-- [ ] 8.4 🔴 **A Linux `gate:e2e` IS OWED** — this alters user-facing behaviour and adds UI.
-      Discharged ONLY by a COMPLETED, GREEN `e2e` job on GitHub Actions for a commit carrying
-      this change. **Write the run URL beside this box.**
+- [x] 8.4 ✅ **Linux `gate:e2e` DISCHARGED.**
+      <https://github.com/yasermostafaee/cg/actions/runs/31490830071> — `head_sha`
+      `8cad8989135cc2a747d444a7622543272ae3187a`, the commit that carries this change. Job
+      **`E2E (Playwright)` → `completed` / `success`** — it RAN, it was not skipped. The `ci`
+      job (`Lint • Typecheck • Test • Build`) is `success` on the same SHA, and the run's own
+      conclusion is `success`.
+      ⭐ This also settles the local combined-run noise recorded in 8.3: the authoritative
+      Linux suite is green on this exact tree, so those failures were the host contention
+      class and not this change.
