@@ -2142,3 +2142,67 @@ affordance.
 `openspec/changes/archive/2026-08-11-runtime-splash-screen/DEBT.md` §3). The Designer has the
 same gap; if that surface is built too, both read their own app's `__CG_BUILD__` — one
 mechanism, two call sites, never a shared re-derivation.
+
+## [~] R-052 — one message region for every modal, enforced rather than remembered ⟨priority: medium⟩ — implemented (`e1e2d03`): `openspec/changes/runtime-modal-message-region/`; all 19 tasks ticked including the owed Linux `gate:e2e`; ARCHIVE-READY
+
+<!-- Filed 2026-08-11 by the [~] audit. The work SHIPPED in `e1e2d03` and was fully
+     specified in its change dir, but no PRD item was ever written for it — the only
+     reference anywhere in docs/prd was a cross-link from the Designer counterpart
+     D-148. Filed retrospectively so every open change dir resolves to exactly one
+     PRD item, and so the capability is discoverable from the PRD rather than only
+     from a change dir that is about to be archived. R-052 verified free against
+     `dev`, `origin/main` and every file in the repo before claiming it. -->
+
+**What:** give the Runtime's `Modal` primitive ONE message region that every dialog uses, and
+make it impossible to go around:
+
+- The region takes **DATA, not a node** — `message?: ModalMessage | ModalMessage[]` where
+  `ModalMessage` is `{ role, text, detail? }` with **string** fields. There is no seam to pass
+  a `style` through, so a call site cannot spell its own treatment even by accident.
+- **Two roles, and the ROLE decides the treatment** — `refusal` (why it did not happen) and
+  `notice` (what happened when it worked) — the same rule the action-button roles already
+  follow. The treatment lives in exactly one place, `renderer/ui/Notice.tsx`.
+- **A lint rule closes the placement hole** the type system cannot see: `role="alert"` inside a
+  `<Modal>` subtree is banned outside `ui/`.
+
+**Why:** the `Live sources` modal put `colors.error` (`#991B1B`) as a FOREGROUND on the modal
+surface (`#111827`) — **2.13:1**, below even the 3:1 large-text floor. But the contrast number
+is the symptom, not the defect. **The pattern was already solved and the new modal went around
+it**: the dialog wave that introduced `Modal` gave it a message region pinned OUTSIDE the
+scrolling body and immediately above the action row, precisely because _a refusal appended to
+scrollable content is a refusal the operator never sees_ — he presses Apply with the list
+scrolled to the top, nothing happens, and the reason is below the fold. The audit found the
+pattern **half-adopted**, which is the worst state a shared rule can be in: four dialogs, four
+spellings, and `Text file delimiters` rendering `<p role="alert">` as the last child of its own
+scrolling body — the exact defect the region exists to prevent, in a dialog otherwise ON the
+primitive.
+
+**Acceptance:**
+
+- WHEN any dialog that can speak renders THEN its message goes through the shared region, and a
+  DOM-level census test asserts the MECHANISM rather than a colour
+- WHEN a message is supplied THEN its treatment is decided by its `role`, and no call site can
+  supply a style — the props carry strings only
+- WHEN a developer places `role="alert"` inside a `<Modal>` subtree outside `ui/` THEN `eslint`
+  FAILS, so the placement rule is enforced rather than remembered
+- WHEN a validator refuses inside a genuinely scrolling dialog body THEN the message is fully
+  in the viewport (`toBeInViewport({ ratio: 1 })`), asserted by an E2E that was verified RED
+  against the reintroduced in-body placement
+- WHEN a message carries Persian text THEN it renders `dir="auto"`
+
+**Notes — no new colour was introduced, and that is deliberate.** `refusal` **IS**
+`Candidate layers`' existing amber box, MOVED rather than redesigned; the three red spellings
+were **deleted** rather than replaced, because in `theme.ts` red means error or destructive
+intent and a refusal is neither — it is the ATTENTION case, which is amber.
+
+**Partial discharge only** of the `Modal` contract debt (`DEBT.md:2079`): this covers the
+MESSAGE region and its roles. The three action-button roles and the chrome migration of five
+dialogs remain unspecified and still owe their own artifacts.
+
+**Cross-reference — [[D-148]] is the Designer counterpart, and it is NOT a copy job.** The
+Designer has its own `features/shell/Modal.tsx` with no message region at all, and its one
+dialog message sits in the scrolling body — the same placement defect, but latent (its colour
+measures 7.38:1, not 2.13:1), which is why D-148 is `low` and this was not. D-148 records
+explicitly that its roles must be DERIVED from the Designer's own existing treatments, not
+copied from this item's two: the Runtime's `refusal`/`notice` were an EXTRACTION of treatments
+that already existed in that app.

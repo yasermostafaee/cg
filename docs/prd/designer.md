@@ -3721,7 +3721,7 @@ is the NEED, not the UI. **Naming:** the live element is user-facing "Live Sourc
 schema type stays `video-placeholder`. **RECON-FIRST for the type-conversion semantics; needs its
 own design.md.**
 
-## [ ] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩
+## [ ] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩ — change dir authored, NOT yet implemented: `openspec/changes/add-azan-countdown/` (42/63 tasks). Stays `[ ]` — per `docs/prd/README.md`, `[~]` means "change implemented, not yet archived", which this is not; the pointer is recorded so the change dir is reachable from the item
 
 **What:** Extend the clock element so a countdown can target a wall-clock time of day
 and drive named color zones that restyle the composition — including elements inside
