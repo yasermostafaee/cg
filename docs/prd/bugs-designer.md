@@ -1794,3 +1794,342 @@ composition three levels down cannot paint a backdrop the surface above it suppr
 **Regression test:** `packages/template-runtime/tests/editor-backdrop-surface.test.ts` — canvas
 paints, preview does not, output never does, and the axis defaults to ON so no existing caller
 changes meaning.
+
+## [ ] B-136 — video is NEVER visible in PVW, though CasparCG, the HTML export and the Designer preview all render it ⟨priority: high — PVW is the operator's pre-air check⟩
+
+**Repro:**
+
+1. Import a video into a project and place it on a scene.
+2. Export / import the template into CG Control (the Runtime app) and put the row into REHEARSE.
+3. Look at the PVW (PREVIEW) panel. Press PLAY.
+
+**Expected:** PVW shows the video, because PVW's whole purpose is to show what air will show.
+**Actual:** the video is not visible in PVW. Everything else on the scene renders. CG Control's PVW
+does not show videos at all.
+**Env:** CG Control (Runtime SPA) PVW. Found in live testing by the owner on the `.cgproj` build.
+
+**🔴 THREE SURFACES RENDER IT AND ONE DOES NOT — that asymmetry IS the bug.** The same video plays
+correctly in the **CasparCG output**, in the **HTML export**, and in the **Designer's** own preview.
+Reported as UNCONDITIONAL: it holds for a small in-scene clip and for a full-frame background video,
+and in the scene configurations where [[B-137]] does not occur.
+
+**Why this is not cosmetic.** It does not reach air — but PVW is what an operator trusts BEFORE
+taking something to air, and [runtime.md](runtime.md):2059 already states the requirement it
+violates: "an operator must **never** be able to believe PVW is showing the real picture". A PVW
+that silently omits an element teaches the operator to trust a picture that is not the picture.
+
+**The Designer's PVW and CG Control's PVW are TWO separate implementations, not one shared surface**
+— established from code, and the reason this is filed as ONE bug against the Runtime:
+
+|           | Designer                                                                                                       | CG Control (Runtime)                                                                     |
+| --------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Surface   | canvas iframe + Preview modal (`CanvasArea.tsx:940`, `PreviewModal.tsx:402`)                                   | PVW panel (`PreviewPanel.tsx:144` → `RehearsalStage.tsx:446` → `RehearsalFrame.tsx:232`) |
+| Document  | generated at runtime by `apps/designer/src/platform/preview.ts`, importing the live ESM `@cg/template-runtime` | the **already-exported single-file page**, replayed verbatim from `LibraryStore.html()`  |
+| Video src | `blob:` object URLs (`assetUrlCache.ts:41`)                                                                    | a base64 `data:video/webm` URI inlined by `@cg/single-file-export`                       |
+
+The only shared layer is `@cg/template-runtime`'s scene builder. `frameEnvironment.ts:30-47` states
+outright that the Runtime SPA deliberately does not depend on it. **The Designer's preview is a
+different asset path under a different CSP, and it works — so the fix belongs to the Runtime.**
+
+**Mechanism — strongly supported by code, needs one runtime confirmation.** `apps/runtime/index.html:8`
+declares a CSP with `img-src 'self' data: blob:` and `font-src 'self' data:` but **no `media-src`**,
+so media falls back to `default-src 'self'` and a `data:` video is refused. `apps/designer/index.html:8`
+**does** carry `media-src 'self' blob: data:`. PVW's frame is an `<iframe srcDoc>`
+(`RehearsalFrame.tsx:232`), and a `srcdoc` document **inherits its embedder's CSP** — the exported
+page declares its own permissive `media-src data:` (`exporter-single-file.ts:409`), but an inherited
+policy is enforced IN ADDITION and the intersection wins. This predicts the reported asymmetry
+exactly, including why only video fails: images, fonts and inline scripts all survive the
+intersection because the Runtime CSP admits them, and **media is the only class it omits**.
+
+The repo already knows this failure mode. `openspec/changes/archive/2026-07-27-video-import-element/design.md:265-269`
+records it verbatim for the Designer: "the app CSP had no `media-src`, so `default-src 'self'`
+blocked every `blob:` `<video>` — stored WebMs were byte-perfect but undecodable… srcdoc documents
+INHERIT the embedding page's CSP".
+
+**⚠️ NOT A REGRESSION — established from git, not from a build.** `git log -S"media-src" -- apps/runtime/index.html`
+returns **zero commits**: that directive has never existed in the Runtime page, across all 8 commits
+that file has ever had. The same pickaxe on the Designer returns `aa0138a` (D-128 Phase 2), i.e. the
+Designer gained the directive at the exact moment it first needed to play video. **The Runtime was
+never given the equivalent when D-128 Phase 5 taught the exporter to inline video**, so this is an
+ORIGINAL GAP, not something recent work broke — there was never a working state to regress from.
+
+**The two named suspects were diffed and both CLEAR — established from git, no build and no
+worktree.** ⚠ **First, a correction to the premise:** `94be0efb` is NOT "the head prior to SESSION
+D" — it **is** one of that run's own commits, the B-129 fix (`fix(schema,runtime,export): B-129 —
+the canvas backdrop is an EDITOR fact…`, 2026-08-11 13:59). The true prior head is **`bd9dc57`**
+(2026-08-11 14:24, docs + one comment). The window below is therefore `94be0efb..HEAD`, which is the
+WIDEST honest window since it contains B-129 itself.
+
+- **D-150 / B-104 (`8cad898`) moved asset resolution into the `.cgproj` package — the PVW asset path
+  did NOT change.** That commit touches none of `preview.ts`, `assetUrlCache.ts`, `useAssets.ts`,
+  `CanvasArea.tsx`, `PreviewModal.tsx`, `scene-builder.ts`, `runtime.ts`, `video-driver.ts`,
+  `video-poster.ts`, or any `apps/runtime/.../monitors/` file. `AssetStore.ts`'s diff is two hunks,
+  both pure additions; every pre-existing method including `bytes()` is byte-identical, and
+  `assets.url` does not appear in the diff at all.
+- **B-129 / B-133 / B-134 — the render MODE PVW renders through did NOT change.** In `267cf3b`'s
+  `preview.ts` diff `mode: 'author'` is a **context line**, unchanged on both surfaces. B-134 added a
+  SECOND boolean axis (`paintEditorBackdrop`) read at exactly four sites that do nothing but set a
+  background colour. B-133 (`a3ed312`) is confined to a string table in `document.ts`.
+- **Last commit to touch the PVW render path:** `267cf3b` (2026-08-11 15:46, B-134) for the preview
+  host / scene builder / runtime boot; the Runtime's own PVW monitor files were last changed
+  behaviourally at `f075570` (2026-07-31). The video element renderer itself last changed at
+  `7379dad` (2026-07-25) and `VideoDriver` at `404558b` (2026-07-25) — all before this build.
+
+**⚠️ ONE RIDER — the single way D-150 could still be causal WITHOUT showing in a diff.** It did not
+change asset RESOLUTION, but it did change asset **AVAILABILITY** (`adoptFromPackage` replaces the
+asset index wholesale), and diffs cannot say whether the video asset survives a `.cgproj`
+save → reopen. That matters because of a **latent trap in unchanged code**: `preview.ts:414-448`'s
+unresolved branch has an `IMG` leg **only**, so an unresolved VIDEO assetId yields a `<video>` with
+no `src`, **no placeholder, no `data-cg-missing` marker and no console line** — silently invisible,
+which is exactly the reported symptom. That code dates to `cb5a3ad` (2026-07-26) and is unchanged.
+**One-glance runtime check: does the Project Assets panel still list the video after reopening the
+`.cgproj`?** If NO, D-150 is implicated via availability rather than resolution, and the silence is
+the missing VIDEO leg. Worth fixing regardless of this bug's outcome.
+
+**⚠️ WHICH SURFACE "PVW" NAMES is worth pinning with the owner.** The literal `PREVIEW (PVW)` panel
+is the **Runtime's**; the Designer's modal is titled `Preview · WxH`, not PVW. This item is filed
+against the Runtime PVW on that reading, which also matches "CG Control's PVW does not show videos
+at all". If the owner meant the Designer modal, the CSP mechanism does not apply (the Designer's CSP
+already admits media) and the availability rider above becomes the leading candidate instead.
+
+**A perception confound to rule out first, since it landed in the same build.** After `267cf3b`
+(B-134) the Preview modal no longer paints the scene's backdrop colour — a checkerboard now sits
+where a colour used to. That CANNOT make a video invisible, but "the video is not visible" and "the
+area behind the video looks different now" are easy to conflate in a live test.
+
+**Four candidates checked and dispositioned before filing** (none covers this):
+
+- **[[B-127]] — RULED OUT.** A test-flake item about one E2E spec on the **Designer editor canvas**,
+  a third surface again. That spec asserts `paused === true` — it pins an at-rest poster, never
+  playback. The "canvas-blank class" its fixture probes is a CLOSED root cause (the VP8 alpha-plane
+  keyframe misalignment, fixed by the poster ladder + GOP pinning — `video-poster.ts:9-13`).
+- **[[B-102]] — OVERLAPS AS A CLASS, DOES NOT SHARE THE SURFACE.** It is the standing example of a
+  preview/air parity break, so cite it — but its direction is INVERTED and its element kind differs:
+  B-102 is _Designer preview good / CasparCG hardware bad_ on **images**; this is _CasparCG + HTML
+  export good / Runtime PVW bad_ on **video**. B-102's failing surface is this bug's working one.
+- **`preview-blank-until-play` (the watch item inside [[B-095]], [bugs.md](bugs.md):722) — RULED
+  OUT.** It is a gate-contention flake watch about `cg-pending` never clearing, which blanks the
+  WHOLE stage, all element kinds, at preview boot. Here the rest of the scene renders.
+- **The PVW-white reproduction at `DEBT.md:1190` — SAME SURFACE, but NOT a re-open.** It did measure
+  this surface: `.cg-stage` reading `rgba(0,0,0,0)` inside the PVW rehearsal frame
+  (`RehearsalFrame.tsx:53-56`). But the defect it closed was an **opaque canvas that occluded
+  EVERYTHING** — `DEBT.md:1171`: "the composite was correct and invisible". Here the rest of the
+  scene is visible and only the video is missing, so the white-canvas mode has not returned. Its fix
+  (`color-scheme: light`) governs canvas opacity and says nothing about `<video>`. Recorded
+  explicitly so nobody closes this as "that white thing again".
+
+**⚠️ FILING HAZARD — do not close this as by-design.** There IS a recorded decision that something
+shows nothing in PVW: `openspec/changes/live-source-multibox/design.md:2029` — "v1 shows an EMPTY,
+TRANSPARENT region in PVW". That covers **Live Source** (SDI/NDI) ONLY. This bug is D-128 **file
+video**, which [designer.md](designer.md):3619 draws the line on explicitly. Discriminator: the HTML
+export also renders through `mode: 'output'` and paints zero pixels for a Live Source, so the fact
+that the HTML export SHOWS this element proves it is a real `video` element.
+
+**Ruled out as mechanisms, so nobody re-checks them:** PVW renders **LIVE DOM, not a snapshot** —
+zero hits for `toDataURL` / `html-to-image` / `drawImage` / `captureStream` in `apps/runtime/src`;
+a real `<video>` is genuinely in that DOM. Render mode is not it either: `buildVideo`
+(`scene-builder.ts:1209-1224`) has **no mode check at all** — no skip, no poster-only, no hide — and
+`withoutEditorBackdrop` strips only the backdrop field. Nor is it CSS: the frame is
+`background: transparent` with per-frame z-index from real layer order, none of it video-specific.
+
+**Fix size: ~1 line + tests.** Add `media-src 'self' data: blob:;` to `apps/runtime/index.html:8`,
+mirroring the Designer. **Why it was never caught:** `apps/runtime` has no test touching a real
+`video` element — its only "video" is `type: 'video-placeholder'` (`template-delivery.test.ts:471`)
+— and every CSP assertion tests the ARTIFACT's own CSP, never the embedding page's. The regression
+test must assert the embedder's CSP contains `media-src` with `data:`, plus a PVW E2E.
+
+**⚠️ NEEDS OWNER CONFIRMATION AT THE MACHINE — one minute, and it settles the mechanism.** Put a
+video template into REHEARSE, open DevTools, and look for:
+`Refused to load media from 'data:video/webm;base64,…' because it violates the following Content
+Security Policy directive: "default-src 'self'"`. **Present ⇒ proved. Absent ⇒ the CSP mechanism is
+wrong** and the next candidate is whether the `.vcg` packaged the video bytes at all (grep the
+retained page for `data:video/` — though its absence would also break CasparCG, which the report
+argues against). CSP inheritance into `srcdoc` is browser behaviour that cannot be executed from a
+code read; the repo RELIES on it and documents it, but this session could not run it.
+
+**Regression test:** an assertion that `apps/runtime/index.html`'s CSP admits `data:` media, plus a
+PVW E2E mirroring `apps/designer/tests/e2e/video-import.spec.ts`.
+
+## [ ] B-137 — video stays PAUSED in the Designer preview after a scene rebuild, and reopening the preview is the only cure ⟨priority: high — the preview is the authoring feedback loop⟩
+
+**Repro** (as reported by the owner):
+
+1. Put a video and a ticker on the scene. Open the preview.
+2. Toggle the ticker's `infinite` or `cycle seam` checkbox. **→ the video pauses.**
+3. It plays again only after CLOSING the preview and opening it anew.
+
+And the sticky variant:
+
+1. Put a video on the scene. Add a Lottie element beside it. Open the preview. **→ the video shows
+   paused.**
+2. REMOVE the Lottie. **→ the video is STILL paused.** The state does not come back on its own.
+
+**Expected:** the video keeps playing across an edit, as it does before the edit.
+**Actual:** it pauses, and in the Lottie case the pause is sticky — undoing the change that caused
+it does not undo it.
+**Env:** Designer preview. **Preview-only — the CasparCG output is CORRECT in both cases.** Found in
+live testing by the owner on the `.cgproj` build.
+
+**SCOPE — a full-frame background video has NO immunity.** Video is also used as the background of
+an ENTIRE template, full frame, and the same pausing occurs there. This is NOT a lower-third /
+ticker-backdrop defect and must not be worded as one. Confirmed from code: there is no
+background/full-frame video concept in the schema — a background is a real full-frame element — so
+every video goes through the same `buildVideo`, the same pooling and the same driver binding. A
+full-frame clip fails identically, and more visibly, because it is the whole frame.
+
+**KNOWN GOOD, and the exact limit of what it proves.** Video alone, or beside only shapes and
+live-source elements, plays correctly in the preview, the CasparCG output and the HTML export (video
+there is `loop` on, `driven hold = no`). ⚠ **But a "live source" in the Designer today is only a
+STATIC IMAGE PLACEHOLDER** — `buildLiveSource` (`scene-builder.ts:1426-1442`) paints SMPTE bars in
+author mode and nothing in output mode; real live playback has never been tested. So it is a static
+element and proves nothing about motion.
+
+**🔴 OPEN QUESTION — the evidence does not separate two readings, and this is filed UNRESOLVED.**
+Every known-good companion is STATIC and every known-bad companion is TIME-DRIVEN, so the
+observations are equally consistent with:
+
+- **(A) any ANIMATING element breaks it**, or
+- **(B) only a timeline/lifecycle DRIVER breaks it.**
+
+Do not resolve this by picking a reading. **Code review proposes a third answer that would dissolve
+both** — see the mechanism below: what matters may be neither animation nor driving, but simply
+**what forces a scene rebuild**. Experiment 3 in the list at the end is the one that decides it.
+
+**Mechanism — strongly supported by code, and it is NOT either hypothesis the session started with.**
+The preview iframe transplants the OLD `<video>` DOM node back over the freshly built one after
+every in-iframe rebuild, but nothing re-points the newly built `VideoDriver` at it. The driver ends
+up commanding a detached, src-less orphan; the node the operator can SEE is the one the previous
+driver explicitly paused during teardown, and no code path ever plays it again.
+
+1. An edit posts a rebuild into the already-open preview → `applyScene` (`preview.ts:531-599`).
+2. `preview.ts:552` `harvestVideos()` stores the live `<video>` into `videoPool`; `:553`
+   `runtime.remove()` tears the runtime down, which reaches `video-driver.ts:292-308` →
+   **`this.handle.pause()`**. The pooled node is now explicitly paused.
+3. `createRuntime` builds a FRESH `<video>` and `runtime.ts:999` — `let media = v.container` — closes
+   over it. Only `recover()` (`:1042`) ever re-points that variable, and only on a terminal
+   `media.error`.
+4. `preview.ts:401` `fresh.replaceWith(pooled)` — the DOM now shows the pooled, PAUSED node while the
+   driver holds the fresh one, now detached. Worse, the src walk at `:414` uses
+   `document.querySelectorAll`, so the detached node **never receives a `src` at all**.
+5. Play calls `handle.play()` on that orphan; the rejection is swallowed at `runtime.ts:1002-1007`.
+   No console trace, no evidence.
+
+**Why the stickiness.** `lottieAssetCache.getAll()` (`lottieAssetCache.ts:29-33`) returns the whole
+MODULE-LEVEL cache, never scene-scoped. Deleting the Lottie ELEMENT does not evict the parsed
+ASSET — only `clearAll()` on project change does (`:89-92`) — so the "are there Lottie assets?"
+test at `preview.ts:884` stays true and keeps forcing rebuilds for the rest of the session. **The
+stickiness lives in module state, not in the engine**, which is why removing the element cannot undo
+it and why reopening the preview can: a fresh document starts with an empty `videoPool`, so the
+transplant branch is not taken.
+
+**Both hypotheses this session was asked to test are REFUTED — recorded so they are not re-run:**
+
+- **Autoplay policy: refuted as the CAUSE.** The element is created `muted = true`
+  (`scene-builder.ts:1216`) with `playsinline`, no `autoplay` attribute and no `loop` attribute, and
+  the rebuild path re-asserts `fresh.muted = true` (`runtime.ts:1037-1040`) precisely because an
+  unmuted rebuilt element would be blocked. A muted, `playsinline` video in a same-origin `srcdoc`
+  iframe is allowed to autoplay without user activation. **But it is exactly why the real failure is
+  SILENT:** `play()` rejections are swallowed everywhere (`runtime.ts:1002-1007`,
+  `video-driver.ts:75` — documented as intentional).
+- **A stepped / deterministic frame driver: refuted — it does not exist.** There is no stepped or
+  hold-driver mode in `@cg/template-runtime`, and no code advances a `<video>` by writing
+  `currentTime` per frame. `video-driver.ts:10-28` states the inverse architecture outright: a
+  `<video>` **advances itself** and the driver only re-anchors it. The one state where a video
+  legitimately sits paused and positioned by `currentTime` is `holdBehavior: 'freeze'`, an authored
+  per-element property nothing about a ticker or a Lottie can flip. And the driver set is rebuilt
+  from scratch on every `createRuntime` — **not latched** — which is a second reason it cannot
+  explain the stickiness.
+- **The multiple-computation-sites concern was checked and is CLEAN today.** The driving-element set
+  is computed in six places (`scene.ts:470-511`, `runtime.ts:269-302`, the build-time collection at
+  `runtime.ts:952`/`:1070`, `playout-metadata.ts:44`, `PlayoutSection.tsx:630`,
+  `PreviewScopeTiming.tsx:112`). The prior `visible === false` finding appears fixed in both
+  predicates — they agree, with the opt-in/opt-out asymmetry spelled identically. **None of it is on
+  this bug's path.**
+
+**⚠️ NOT A REGRESSION — established from git, no build and no worktree.** Every file that could
+produce this is untouched across `94be0efb..HEAD` (the widest honest window — see [[B-136]] for why
+`94be0efb` is not the commit the report assumed): `video-driver.ts`, `ticker-driver.ts` (last
+changed **2026-06-26**, roughly seven weeks before this build), `playout-controller.ts`,
+`lottie-driver.ts`, `CanvasArea.tsx`, `PreviewModal.tsx`, `PreviewHost.tsx`, and the
+`videoPool` / `harvestVideos` / `reconcileVideos` block in `preview.ts` (unchanged since `cb5a3ad`,
+2026-07-26). D-150 / B-104 touches no preview file at all; B-133's only edit is a routing string
+table; B-134's only edit is a background-colour gate. **The structure that produces this dates to
+`c41bba8` (2026-07-23) and `cb5a3ad` (2026-07-26)** — it predates the `.cgproj` build the owner
+found it on. The build is where it was NOTICED, not where it was introduced.
+
+**Corroboration worth recording: two independent code investigations converged on the same
+mechanism**, from different starting points (one hypothesis-testing the preview, one reading diffs
+for a regression verdict), and neither was looking for the other's answer. That is why the mechanism
+below is stated with confidence despite no live observation — but it is still CODE-DERIVED, and the
+experiments at the end are what would make it OBSERVED.
+
+**Related, not duplicates.** [[B-091]] (`[x]`, merged) is the nearest mechanism precedent: the
+preview's `lottie-assets` handler did a full `applyScene` rebuild mid-playback with no `!playing`
+guard. Its fix covered the `lottie-assets` TRIGGER only; the edit-driven triggers here are a
+different entry point, and the "removing the Lottie does not restore it" stickiness is new
+information present in no existing item. [[B-027]] establishes that "any edit ⇒ full runtime
+rebuild" is a known standing cost; this is the first item to report that rebuild destroying media
+playback state.
+
+**Do these two bugs share a root? NO.** [[B-136]] is a Content-Security-Policy gap in a different
+application (`apps/runtime`), on a different asset scheme (`data:` vs `blob:`), on a surface that
+does not run this code at all — `videoPool` / `harvestVideos` / `reconcileVideos` exist ONLY in
+`apps/designer/src/platform/preview.ts`. They share a subsystem (video) and a symptom class ("video
+missing where it should be"), and nothing else. Fixing either does not touch the other.
+
+**Fix size: ~20 lines in one engine file + tests.** At `runtime.ts:999`, replace the captured
+`let media = v.container` with a resolver that re-queries the live node by
+`data-cg-element-id` when `media.isConnected === false` — the variable is already mutable, and
+`recover()` already does exactly this re-pointing on a different trigger. Host-agnostic, so it also
+covers any future harness that reparents nodes. Two cheap adjacent improvements worth doing in the
+same change: scope the posted Lottie map to the scene's own Lottie ids (killing the stickiness at
+source), and stop swallowing the `play()` rejection blind — logging it once per element would have
+surfaced this in minutes.
+
+**⚠️ Would `live-source-multibox` phases 5–6 make this WORSE? NO — answered explicitly.** A real live
+element would NOT join the timeline driver set and would NOT be ticked by the `<video>` path. A Live
+Source is a `<div>` hole by construction (`scene-builder.ts:1426-1442`), never a media element;
+CasparCG composites the real picture on a LOWER channel layer, so nothing enters the DOM to be
+pooled. Phases 5–6 are entirely bridge-side (`caspar-runtime.ts`, `command-builder.ts`) and mention
+neither `drivesHold` nor `VideoDriver`. The Designer preview will still show SMPTE bars after phase
+6 — `preview.ts:559-568` says so. **A fix here does not collide with phases 5–6**: no shared file,
+no shared predicate.
+
+### ⚠️ READY-TO-RUN EXPERIMENTS — for the owner, at the machine, in minutes
+
+These are what the code cannot settle. Run them in order; each says what its outcome means.
+
+1. **Does a plain SHAPE rebuild the preview, and does the video survive it?** With a video playing in
+   the preview, add and then remove a plain rectangle. **Video keeps playing ⇒ a shape edit does not
+   reach the rebuild path**, and rebuild-on-any-edit is not the trigger — narrowing which edits
+   matter. **Video pauses ⇒ the trigger is far broader than the report suggests**, and the item's
+   priority should rise.
+2. **The decisive one — change a preview TIMING knob with NO ticker and NO Lottie on the scene.**
+   Video alone; open the preview; change any knob in the preview's own timing panel (hold ms, mode,
+   scope dwell). **Video freezes ⇒ the mechanism above is confirmed**, and everything
+   ticker-specific and Lottie-specific in the report is a red herring — the trigger is simply "what
+   forces a rebuild". **Video keeps playing ⇒ the mechanism is incomplete** and something
+   ticker/Lottie-specific is really in play.
+3. **Separate "any animating element" from "timeline driver" — the open question above.** Add an
+   element that ANIMATES but does NOT drive the timeline. **All three are authorable today**, so
+   there is no excuse to skip this: a keyframe-animated shape, an **animated GIF** (`gif` is an
+   accepted image import — `asset-types.ts:26-27`), or a **second video**. Code review PREDICTS the
+   GIF and the animated shape will NOT reproduce the freeze (they force no rebuild), while a second
+   video WILL (it is pooled identically). **That predicted split kills reading (A) and reading (B)
+   together** and confirms the third answer. **If instead the GIF DOES freeze it, both the mechanism
+   above and reading (B) are wrong**, and reading (A) survives.
+4. **See the orphan directly.** With the freeze showing, in the preview iframe's console:
+   `document.querySelectorAll('video[data-cg-element-id]')`. **Two nodes, one detached with no
+   `src` ⇒ the transplant mechanism is visible in the DOM**, which is proof rather than inference.
+5. **Settle WHICH checkbox the report means** — this one changes the diagnosis if it goes the other
+   way. Code review assumes the `infinite` / `cycle seam` controls are the **preview modal's own**
+   per-ticker session controls (`PreviewTimingControls.tsx:296-317`), not the Inspector's. That
+   matters because the modal renders a SNAPSHOT of the scene, so an INSPECTOR edit cannot reach an
+   already-open modal at all. **If the owner is certain the toggle was in the Inspector, a second,
+   undiagnosed mechanism is in play** and this item needs re-opening at the diagnosis level.
+
+**Regression test (once the mechanism is confirmed):** a Preview-**modal** E2E — play, post a scene
+rebuild, play again, assert the VISIBLE `video[data-cg-element-id]` has `paused === false` and an
+advancing `currentTime`. The existing coverage misses exactly this: `video-import.spec.ts:229-259`
+pins the transplant, but against the **canvas** iframe, which never plays, and it asserts node
+identity and `currentTime` — never `!paused` after a rebuild.

@@ -784,3 +784,30 @@ The `D-` space keeps its six pre-existing gaps (`069` `070` `080` `090` `091` `0
 claimed in the same session's later bug-filing commit, and the sweep is recorded now because it was
 run now. A reader deriving next-free between the two commits must re-derive from the headings, not
 from this paragraph: it is a measurement, not a reservation, exactly as the retired pointer was.
+
+**Mint 2026-08-11 (evening, session H — second commit) — `B-136` and `B-137`, a CONTIGUOUS RANGE in
+ONE commit**, both [bugs-designer.md](bugs-designer.md), both filed and code-diagnosed but NOT
+fixed: **B-136** (video is never visible in PVW although CasparCG, the HTML export and the Designer
+preview all render it) and **B-137** (video stays paused in the Designer preview after a scene
+rebuild, stickily). Filed as two numbers rather than one **because they do not share a root** — the
+split test this file has applied since `B-100`/`B-101`. B-136 is a CSP gap in `apps/runtime`'s page,
+on a `data:` asset scheme, on a surface that does not run the other's code at all; B-137 is a
+DOM-node/driver rebinding defect in `apps/designer/src/platform/preview.ts`. They share a subsystem
+(video) and a symptom class, and nothing else; fixing either does not touch the other.
+
+**Verified free immediately before the commit that writes the headings**, and the reach is stated
+rather than implied. `git fetch origin` first; the duplicate audit over `docs/prd/` printed exactly
+`B-056` and `B-080`. No `## [.] B-136` / `B-137` heading existed anywhere — in the working tree, or
+on any of the 9 refs (`refs/heads` + `refs/remotes`) swept programmatically. The highest `B-` heading
+anywhere was `B-135`. The space stays contiguous: `B-001` … `B-137`, no gaps.
+
+⚠ **Their only prior occurrences were TWO FORWARD REFERENCES, and that is worth a line because it
+inverts the usual hazard.** The same session's earlier commit (`d14d3fe`) wrote `[[B-136]]` and
+`[[B-137]]` into [designer.md](designer.md)'s D-135 as a "Related, NOT a dependency" note, **before
+either heading existed** — a live cross-reference to unwritten items, which the duplicate check
+correctly flagged as dangling. It resolved cleanly because the same session then filed them in that
+exact order (B-136 = the PVW bug, B-137 = the preview-pause bug), which is the mapping the note
+asserts. **Recorded as a hazard, not a practice:** a forward reference is a reservation this file
+does not recognise, and had the session died between its two pushes, `dev` would have carried a
+permanent dangling link plus two numbers that look claimed but are not. Prefer filing the item
+first, or the reference last.
