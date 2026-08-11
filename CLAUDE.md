@@ -380,6 +380,29 @@ origin dev` matches local — and only claim CI green after seeing the check's
   prior run's URL, so a green merge run that did nothing can never be mistaken for one
   that passed.
 
+  ⭐ **WHY reusing a green SHA is safe at all — classification gates WHETHER; the jobs
+  themselves are WHOLE-TREE.** The natural alarm on reading that guard is: the prior run
+  classified only **its own push's diff**, but the merge run's job is the whole
+  `main..head` **span** — so an earlier commit in the span could be uncovered, and the
+  guard would skip the very run that covers it. **That alarm is wrong, and the reason is
+  written here because it will occur to the next reader too — who might otherwise "fix" a
+  guard that is already correct.** Neither heavy job is diff-scoped: `ci` runs
+  `pnpm format:check` / `typecheck` / `lint` / `test` / `build`, each a bare
+  workspace-wide `turbo run <task>` with no `--filter` and no changed-file input, and
+  `e2e` runs `pnpm test:e2e` — the entire Playwright suite. **The changed-path
+  classification decides only WHETHER those jobs run, never WHAT they cover.** A green run
+  that EXECUTED both therefore verifies the whole **tree** at that SHA, including the code
+  of every earlier commit in the span. Reusing it does not narrow coverage; it declines to
+  compute the same whole-tree answer twice.
+
+  🔴 **The corollary — "both jobs actually RAN" is LOAD-BEARING, not belt-and-braces.**
+  Whole-tree coverage is a property of jobs that **RAN**. A prior run that was green having
+  **SKIPPED** `e2e` proves nothing whatsoever about the tree's render behaviour, which is
+  exactly why that case must not be reused. **Do not let a later reader relax the condition
+  to "a green run exists for this SHA"** — it reads as a harmless simplification and
+  silently deletes the backstop. The same fact is what re-scored `B-132`: a dropped event
+  costs a commit its own run, not the tree's eventual verification.
+
 ## Engine doc-sync
 
 When a change alters an engine's **structure, contracts, or extension points**,

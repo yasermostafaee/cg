@@ -1408,6 +1408,56 @@ the absence of a negative.
 it would never match anyway, but restricting it **states the intent** and keeps re-run requests
 predictable.
 
+### 🔴 WHY reusing a green SHA is safe at all — classification gates WHETHER; the jobs are WHOLE-TREE
+
+**This is recorded because the alarm it dissolves is a GOOD one, it was raised in review, and the
+reasoning that answers it lived nowhere.** The next reader will raise it again — and might "fix" a
+guard that is already correct.
+
+**The alarm.** The guard skips the `main` run when the same SHA already has a green run that executed
+`ci` and `e2e`. But that run classified only **its own push's diff**, while the merge run's job is the
+whole **`main..head` span** — so (the argument goes) an earlier commit in the span could be uncovered,
+and the guard would skip the very run that covers it.
+
+**Why it is wrong: neither heavy job is diff-scoped.** Checked in `.github/workflows/pr.yml` rather
+than assumed. The steps are bare workspace-wide scripts — no `--filter`, no changed-file input, no
+path argument:
+
+| Job                               | Its steps, verbatim                                                               | What they cover                                                     |
+| --------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `Lint • Typecheck • Test • Build` | `pnpm format:check` · `pnpm typecheck` · `pnpm lint` · `pnpm test` · `pnpm build` | the whole workspace — each is `turbo run <task>` over every package |
+| `E2E (Playwright)`                | `pnpm build` · `pnpm test:e2e`                                                    | the **entire** Playwright suite (`turbo run test:e2e`)              |
+
+The changed-path classification ([[P-027]] / [[P-029]]) feeds only the jobs' `if:` conditions —
+`needs.changes.outputs.code` and `needs.changes.outputs.needs_e2e`. It never reaches a step.
+
+> **Classification gates WHETHER the jobs run; the jobs themselves are whole-tree.**
+
+So a green run in which both **EXECUTED** verifies the whole **TREE** at that SHA — and that tree
+contains the code of every earlier commit in the span. Reusing it does not narrow coverage; it
+declines to compute the same whole-tree answer twice.
+
+#### The corollary — the match condition is exactly right, not accidentally right
+
+🔴 Whole-tree coverage is a property of jobs that **RAN**. That is the entire reason constraint 3
+above is not belt-and-braces: **skipping is safe ONLY because the guard requires the prior run to have
+EXECUTED both jobs.** A run that was green having **SKIPPED** `e2e` proves nothing whatsoever about
+the tree's render behaviour — which is precisely why that case must not be reused.
+
+⚠ **The condition is LOAD-BEARING. Do not let a later reader relax it to "a green run exists for this
+SHA".** That reads as a harmless simplification of a fiddly rule, and it silently deletes the
+completeness backstop.
+
+⚠ **One qualification on "same SHA ⇒ same tree", noted because the first live reuse depended on it.**
+The guard does not filter candidates by `event`, and the run it reused was a **`pull_request`** run. A
+`pull_request` run checks out the **merge ref** (`refs/pull/N/merge`), so `head_sha` names the commit
+but the tree tested is `merge(head, base)`. Those are the SAME tree whenever the base is already an
+ancestor of the head — which the `dev` → `main` `--ff-only` model guarantees, and which was verified
+for the live case (`caf94f0`, the previous `main` tip, is an ancestor of `a9ecfaa`). **If that
+invariant ever stops holding — a base branch that advances independently of `dev` — this is the
+assumption to re-check**, because the argument above is about the TREE, and a `pull_request` run's
+tree is base-dependent in a way a `push` run's is not.
+
 ### Acceptance
 
 - WHEN a `--ff-only` merge pushes to `main` a SHA whose `dev`-tip run **executed both** `ci` and
@@ -1440,27 +1490,53 @@ Plus a test that reads `pr.yml` itself and asserts the job names the guard match
 there, so a rename fails loudly instead of silently turning the guard into a permanent
 "run everything".
 
-### ⚠ UNDISCHARGED — the live end-to-end run on `main`
+### ✅ DISCHARGED — the live end-to-end run on `main`, observed 2026-08-11
 
-**Both directions are verified against real API data; NEITHER has been observed on a real `push` to
-`main` run, and CC cannot produce one.** CLAUDE.md is explicit that **CC never commits to, or merges
-into, `main`** — the owner performs that merge by hand — and the guard fires on **no other event by
-design** (constraint 1). So the one thing that cannot be self-tested here is the live firing.
+**Both directions were verified against real API data, but NEITHER had been observed on a real `push`
+to `main`, and CC could not produce one** — CLAUDE.md is explicit that **CC never commits to, or
+merges into, `main`**, and the guard fires on no other event by design (constraint 1). The owner's
+merge on **2026-08-11** supplied the live firing, and it behaved exactly as specified.
 
-What that leaves unproven is narrow and one-directional: the `gh api` invocation and the
-`actions: read` grant have not been exercised on a runner. **Both fail SAFE** — an API error or a
-missing permission yields `reuse=false` and the full gate runs, i.e. exactly today's behaviour — so
-the untested path can cost minutes, never coverage.
+**The merge run — https://github.com/yasermostafaee/cg/actions/runs/31470347819** (`push` to `main`,
+`a9ecfaa`, `conclusion: success`). From its log:
 
-**To discharge:** on the next `dev` → `main` merge, read the `main` run's summary. It states either
-_"heavy jobs skipped … verified by \<url\>"_ or _"running the full gate — \<reason\>"_. Record which,
-with the run URL, here.
+```
+classification: kind=code needsE2e=true files=31 => code=true
+P-030: reuse=true — prior run 31469356886 is completed+successful and RAN both Lint • Typecheck • Test • Build and E2E (Playwright)
+code=true | needs_e2e=true | reuse=true | ci=skipped | e2e=skipped | docs-check=success
+Already verified by a completed, successful run of this workflow for this SHA
+```
+
+**Every clause of the acceptance is visible in that one run**, and the first line is the important
+one: the merge run classified the **WHOLE span** — 31 files ⇒ `kind=code needsE2e=true` — so this was
+**not** a docs-only or not-owed skip. It was a span that genuinely owed both jobs, and the guard
+skipped them **only** because a prior run had actually RUN both. `required` then passed **citing the
+prior run's URL**, so "green because it did nothing" stays distinguishable from "green because it
+passed". The `gh api` invocation and the `actions: read` grant are now exercised on a runner.
+
+**The prior run reused — https://github.com/yasermostafaee/cg/actions/runs/31469356886** (`a9ecfaa`,
+`success`; `Lint • Typecheck • Test • Build = success`, `E2E (Playwright) = success`).
+
+🔴 **This run is also the concrete instance of the section above.** The reused run's own push
+classified a different, smaller diff than the merge run's 31-file span — the exact shape the alarm
+warns about — and the outcome is correct anyway, because both jobs are whole-tree. The theory and its
+first live case are the same story.
+
+⚠ **Also discharged by it: [[B-132]]'s open code debt.** `d32fa13`'s files
+(`.github/workflows/pr.yml`, `tools/gate-hook/src/reuse-decision.mjs`, its fixtures/tests/types,
+`openspec/specs/platform-ci/spec.md`) are all inside that 31-file span, and run `31469356886` ran both
+heavy jobs green on a tree containing them. **This item's own commit is now CI-verified.**
 
 ⚠ **AND THIS ITEM'S OWN COMMIT HAS NO CI RUN — see [[B-132]].** The push of `d32fa13`, which carries
 this guard, produced **no GitHub Actions run at all** (no run object, no check suite; the workflow
 validates clean and Actions reports operational), and the NEXT push's run **skipped both heavy jobs**
 because [[P-027]] classifies each push against the previous tip and that one was docs-only. So this
-guard landed on a full green LOCAL gate with **no CI verification of its own, and no later `dev` push
-will supply one.** The `dev` → `main` merge sweeps the whole span and is what will finally gate it —
-read that run before archiving this item, separately from and in addition to the live `main`-run
-discharge above.
+guard landed on a full green LOCAL gate with **no CI verification of its own.**
+
+✅ **RESOLVED 2026-08-11 — and how it resolved is the point.** Run `31469356886` ran both heavy jobs
+green on `a9ecfaa`, a tree that contains `d32fa13`'s files, so the code is verified; the `main` merge
+run then classified the whole 31-file span and reused it. Note that the earlier claim here — that _"no
+later `dev` push will supply one"_ — was **too strong**, and it is the same error [[B-132]] has now
+been re-scored for: no later push gives that commit **its own** run, but any later run that EXECUTES
+the heavy jobs verifies the **tree** containing it. What a dropped event costs is the per-commit
+signal, not the eventual verification.

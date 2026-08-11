@@ -1145,7 +1145,7 @@ that made the field real — not a defect in D-060, which repaired what its own 
 
 -->
 
-## [ ] B-132 — a push to `dev` created NO GitHub Actions run at all, and nothing reported it ⟨priority: high — the landing gate can go silently absent for ONE commit⟩
+## [ ] B-132 — a push to `dev` created NO GitHub Actions run at all, and nothing reported it ⟨priority: medium — RE-SCORED 2026-08-11: it costs the PER-COMMIT SIGNAL and bisectability, NOT merge-time coverage⟩
 
 **Observed 2026-08-10.** The push of **`d32fa13`** to `dev` (at ~`18:05Z`) produced **no workflow run
 whatsoever**. Not a failed run, not a cancelled one, not a `startup_failure` — **no run object
@@ -1210,13 +1210,50 @@ That is CORRECT behaviour, not a second fault: [[P-027]] classifies a push again
 of the ref**, and `4c93d05` is docs-only relative to `d32fa13`. So the run is green, it contains the
 code, and it **proves nothing about it**.
 
-🔴 **The two mechanisms compose into a hole neither has on its own:** a dropped event means one
-commit's code is never gated, and per-push classification means **no subsequent `dev` push will ever
-gate it either**, because each push only ever sees its own diff.
+**The two mechanisms compose into a real gap neither has on its own:** a dropped event means one
+commit gets no run, and per-push classification means **no subsequent `dev` push will give it a run of
+its own either**, because each push only ever sees its own diff. The commit that lost its run is never
+again the thing being classified.
 
-**What actually closes it** is the completeness backstop CLAUDE.md already names: the owner's
-`dev` → `main` merge is classified against the previous `main` tip, so it sweeps the WHOLE span and
-will pick up `d32fa13`'s files. Until that merge, **`d32fa13`'s code is unverified by CI**.
+### 🔴 RE-SCORED 2026-08-11 — high → medium. What this actually endangers, and what it does not
+
+**The original severity was written on the assumption that a dropped run leaves code unverified until
+a merge sweeps it, and that the two mechanisms above compose into an unverified merge. That assumption
+is WRONG**, and it is corrected here so nobody plans work against the larger version of the problem.
+
+**The fact that dissolves it: `ci` and `e2e` are NOT diff-scoped.** `ci` runs `pnpm format:check` /
+`typecheck` / `lint` / `test` / `build` — each a bare workspace-wide `turbo run <task>` — and `e2e`
+runs the entire Playwright suite. Changed-path classification decides only **WHETHER** those jobs run,
+never **WHAT** they cover (recorded in full under [[P-030]] and in CLAUDE.md beside the daily-merge
+backstop). So **any** later run that EXECUTES them verifies the whole **TREE** at its SHA — including
+the code of the commit whose event was dropped.
+
+**Both paths therefore fail safe, and there is no third path:**
+
+| At the `dev` → `main` merge                               | Outcome                                                                         |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| A run for that SHA **executed** `ci` + `e2e` green        | The guard skips — but that run already verified the whole tree, change included |
+| No such run exists (or one exists that **skipped** a job) | The guard **refuses to skip**; the merge run does the full gate over the span   |
+
+**A dropped event cannot produce an unverified merge.** Reuse is only ever granted on evidence of
+whole-tree execution; absent that evidence the work is done.
+
+**What it DOES cost — and this is still a real defect:**
+
+- 🔴 **The per-commit signal.** You learn **later** — at the next code push or at the merge — instead
+  of at the push. The window between is a window where nothing is known.
+- 🔴 **Bisectability and attribution.** You **cannot point at one run for one commit**. If the later
+  whole-tree run is RED, it tells you the tree is broken, not **which** commit broke it — and the
+  discharge rule needs a completed green run **for the specific commit that carries the change**, which
+  no longer exists for that commit.
+- **Verification of a state that was never gated.** Whole-tree coverage verifies the tree **as it is
+  now**. If a later commit touched the same lines, the intermediate state the dropped run would have
+  gated is never checked by anything.
+- **Silence is indistinguishable from "nothing was pushed"** — the point made above, unchanged.
+
+**Why it stays OPEN at medium rather than closing:** a dropped event delivery is a genuine defect in
+the landing gate, its composition with [[P-027]]'s per-push classification is worth recording, and
+nothing in the repo yet **detects** the absence. What changed is the blast radius, not the existence.
 
 ### Acceptance
 
@@ -1226,8 +1263,13 @@ will pick up `d32fa13`'s files. Until that merge, **`d32fa13`'s code is unverifi
   ⚠ **The obvious fix cannot live in the workflow** — a workflow that never starts cannot report that
   it never started. It needs something outside Actions, or a check at the next push / at merge time
   that the PREVIOUS head has a run.
-- **`d32fa13`'s code is verified.** It carries [[P-030]] and got no run of its own, and the next
-  push's run skipped the heavy jobs (above), so the debt is open until the `dev` → `main` merge
-  sweeps the span — **read that run rather than assuming it**. (`f384d16`, pushed in the same push
-  event, is docs-only and owes nothing.) Both were pushed on a **full green local gate**
+- ~~**`d32fa13`'s code is verified.**~~ — **DONE, 2026-08-11, read rather than assumed.** Run
+  **https://github.com/yasermostafaee/cg/actions/runs/31469356886** (`a9ecfaa`, `success`) executed
+  **both** `Lint • Typecheck • Test • Build` and `E2E (Playwright)` green, and `d32fa13` is an
+  ancestor of `a9ecfaa` — so its files were covered whole-tree. The `main` merge run
+  (**https://github.com/yasermostafaee/cg/actions/runs/31470347819**) then classified the whole
+  31-file span as `kind=code needsE2e=true` and reused that run. (`f384d16`, pushed in the same push
+  event, is docs-only and owes nothing.) Both were originally pushed on a **full green local gate**
   (85/85, 0 cached), which is fast pre-push feedback and explicitly **not** the landing gate.
+  ⚠ Note what this cost even though it ended green: the verification arrived a day late and is
+  **not attributable** to `d32fa13` — exactly the re-scored damage above.
