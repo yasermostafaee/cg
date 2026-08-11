@@ -67,6 +67,22 @@
       `owesE2e: false` individually (`.github/workflows/pr.yml`,
       `tools/gate-hook/src/reuse-decision.mjs`, its `types/` and `tests/` files,
       `docs/prd/platform.md`, `openspec/**`). None matches `UI_RENDER_PATTERNS`.
-      **What CI ACTUALLY did with the `e2e` job on the push is reported in the session's
-      final report and written in beside this box on the next commit that touches this
-      change — a prediction is not a result.**
+      **OBSERVED, not predicted.** Run
+      <https://github.com/yasermostafaee/cg/actions/runs/31475639919> — commit `d693fa35`,
+      `event: push`, `conclusion: success`. Docs check ✓ · Detect changed paths ✓ ·
+      Lint • Typecheck • Test • Build ✓ · E2E (Playwright) **skipped** · required ✓.
+      Classifier: `{kind: 'code', needsE2e: false}` — the prediction and the observation
+      agree.
+
+      🔴 **Two consequences, so a later reader cannot misread that green:**
+
+      **(a) The skipped `e2e` job discharges NO e2e debt.** A `skipped` job is a statement
+      about the DIFF, not evidence about the suite (P-029). This run says nothing whatsoever
+      about what the tree renders, and must never be cited as though it did.
+
+      **(b) This run is NOT reusable by the merge run** — and that is the correct outcome,
+      not a shortcoming. `e2e` did not RUN, so `decideReuse` returns the backstop reason
+      (`prior run … was green but did not RUN: E2E (Playwright) … this run is the
+      completeness backstop for it`). The `dev` -> `main` merge will therefore classify the
+      whole span and do the work. Note the rejection here comes from the THIRD condition, not
+      the new fourth one: the run is a `push` run and passes the `event` check.

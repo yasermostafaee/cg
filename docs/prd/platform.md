@@ -1397,7 +1397,7 @@ uses), and the completeness backstop now recorded in CLAUDE.md and
 `openspec/specs/platform-ci/spec.md` — the daily `dev` → `main` merge classifies the whole span, so
 anything an individual push skipped is still caught there.
 
-## [~] P-030 — the `dev` → `main` merge re-runs a full gate against a SHA that already has a green one ⟨priority: medium⟩ — in progress: `.github/workflows/pr.yml` (the `reuse` step) + `tools/gate-hook/src/reuse-decision.mjs` (the pure rule); the `event === 'push'` match condition is `openspec/changes/platform-reuse-guard-push-only/`
+## [x] P-030 — the `dev` → `main` merge re-runs a full gate against a SHA that already has a green one ⟨priority: medium⟩ — SHIPPED: `.github/workflows/pr.yml` (the `reuse` step) + `tools/gate-hook/src/reuse-decision.mjs` (the pure rule). The `event === 'push'` match condition is archived at `openspec/changes/archive/2026-08-11-platform-reuse-guard-push-only/` (living spec `platform-ci`), verified by CI run <https://github.com/yasermostafaee/cg/actions/runs/31475639919> on commit `d693fa35` — `conclusion: success`, `Lint • Typecheck • Test • Build` ✓. ⚠ That run's `e2e` job was **skipped** (classifier: `{kind: 'code', needsE2e: false}`), which is correct for this diff and discharges NO e2e debt — this change alters no UI, layout, or rendering path
 
 **The symptom.** `dev` → `main` is a **`--ff-only`** merge, so `main`'s new HEAD is the **SAME
 COMMIT** as `dev`'s tip — **same SHA, same tree**. The push to `main` fires a full run against a tree
