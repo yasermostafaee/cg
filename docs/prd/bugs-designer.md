@@ -1353,7 +1353,7 @@ this IS the out-of-box behavior — every freshly created sequence shows the def
 **Regression test:** template-runtime sequence test on the injected clock covering first-item
 entry under BOTH repeat modes.
 
-## [~] B-104 — project assets (images, fonts) are GONE after save → Designer restart → load ⟨priority: high⟩ — being fixed by [[D-150]] (the project becomes a self-contained package): `openspec/changes/designer-project-package/`
+## [x] B-104 — project assets (images, fonts) are GONE after save → Designer restart → load ⟨priority: high⟩ — FIXED by [[D-150]] (the project becomes a self-contained package): `openspec/changes/archive/2026-08-11-designer-project-package/`
 
 **Repro:**
 
@@ -1386,7 +1386,7 @@ panel listing), including the restart boundary.
 not come back. Folded in here rather than filed as a new number because it is this defect — the
 same save → reload → assets-missing boundary — reported from the other side of the same seam.
 
-**⭐ DIAGNOSED 2026-08-11, and BOTH candidates turned out to be real** (`openspec/changes/designer-project-package/`, [[D-150]]). Candidate **(a)** is the primary one and needs no permission
+**⭐ DIAGNOSED 2026-08-11, and BOTH candidates turned out to be real** (`openspec/changes/archive/2026-08-11-designer-project-package/`, [[D-150]]). Candidate **(a)** is the primary one and needs no permission
 subtlety at all: `openDisk` / `openRecent` returned a scene WITHOUT calling
 `ProjectStore.#setActive`, and `activeChanged` is what relays into `assets.setActiveProject` —
 so opening a project from a real file left the asset store scoped to whatever came before, which
@@ -1737,7 +1737,7 @@ that produces the next entry in this file.
 **Env:** Designer, build. Source: the repo-wide BOM sweep recorded by the `DEBT.md` sweep's closing
 session and left unfiled.
 
-## [~] B-133 — the editor backdrop control writes to a field nobody renders, so changing it does nothing ⟨priority: high⟩ — fixed in `openspec/changes/designer-project-package/` (same session; a B-129 rename ripple)
+## [x] B-133 — the editor backdrop control writes to a field nobody renders, so changing it does nothing ⟨priority: high⟩ — fixed in `openspec/changes/archive/2026-08-11-designer-project-package/` (same session; a B-129 rename ripple)
 
 **Repro:**
 
@@ -1769,7 +1769,7 @@ on the active composition and that `editSceneOf` (what the canvas is handed) see
 adds a `satisfies` constraint so the next rename of a doc field is a BUILD ERROR at this table
 rather than a control that quietly stops working.
 
-## [~] B-134 — the editor backdrop paints in the Preview modal, which is a preview of AIR ⟨priority: medium⟩ — fixed in `openspec/changes/designer-project-package/` (same session)
+## [x] B-134 — the editor backdrop paints in the Preview modal, which is a preview of AIR ⟨priority: medium⟩ — fixed in `openspec/changes/archive/2026-08-11-designer-project-package/` (same session)
 
 **Repro:**
 
@@ -1795,10 +1795,10 @@ composition three levels down cannot paint a backdrop the surface above it suppr
 paints, preview does not, output never does, and the axis defaults to ON so no existing caller
 changes meaning.
 
-## [~] B-136 — video is NEVER visible in PVW, though CasparCG, the HTML export and the Designer preview all render it ⟨priority: high — PVW is the operator's pre-air check⟩
+## [x] B-136 — video is NEVER visible in PVW, though CasparCG, the HTML export and the Designer preview all render it ⟨priority: high — PVW is the operator's pre-air check⟩
 
 > **✅ FIXED — and the mechanism is now OBSERVED, not inferred.**
-> `openspec/changes/video-plays-in-preview-and-pvw`. `apps/runtime/index.html` gained
+> `openspec/changes/archive/2026-08-11-video-plays-in-preview-and-pvw`. `apps/runtime/index.html` gained
 > `media-src 'self' data:`; no other directive was touched.
 >
 > **The runtime confirmation this item asked for was obtained — programmatically, not by hand.**
@@ -1990,10 +1990,10 @@ code read; the repo RELIES on it and documents it, but this session could not ru
 **Regression test:** an assertion that `apps/runtime/index.html`'s CSP admits `data:` media, plus a
 PVW E2E mirroring `apps/designer/tests/e2e/video-import.spec.ts`.
 
-## [~] B-137 — video stays PAUSED in the Designer preview after a scene rebuild, and reopening the preview is the only cure ⟨priority: high — the preview is the authoring feedback loop⟩
+## [x] B-137 — video stays PAUSED in the Designer preview after a scene rebuild, and reopening the preview is the only cure ⟨priority: high — the preview is the authoring feedback loop⟩
 
 > **✅ FIXED — and the code-derived mechanism is now OBSERVED.**
-> `openspec/changes/video-plays-in-preview-and-pvw`. Three changes, all in the fix shape this item
+> `openspec/changes/archive/2026-08-11-video-plays-in-preview-and-pvw`. Three changes, all in the fix shape this item
 > specified: the video handle re-resolves its node by `data-cg-element-id` when the captured one
 > reports `isConnected === false` (`runtime.ts`, host-agnostic, reusing `recover()`'s existing
 > re-pointing precedent); the Lottie map a preview is handed is SCENE-SCOPED (`getForScene`),

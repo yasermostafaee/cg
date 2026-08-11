@@ -4202,7 +4202,7 @@ byte-identity test is what makes the change safe to merge.
 
 ---
 
-## [~] D-150 — a project is a self-contained PACKAGE that carries its assets ⟨priority: high⟩ — in progress: `openspec/changes/designer-project-package/` (closes [[B-104]])
+## [x] D-150 — a project is a self-contained PACKAGE that carries its assets ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-08-11-designer-project-package/` (closes [[B-104]])
 
 **What:** A project's durable form stops being a bare `.cg.json` holding a scene and a list of
 `assetId` strings, and becomes a self-contained package (`.cgproj`) that carries the asset bytes

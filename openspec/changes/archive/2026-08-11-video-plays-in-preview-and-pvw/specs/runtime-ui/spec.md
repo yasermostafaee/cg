@@ -18,7 +18,10 @@ directive media falls back to `default-src` and every video in PVW is refused wh
 and scripts still load.
 
 That policy SHALL be no wider than the need: schemes the application never produces SHALL NOT be
-admitted merely to match another application's policy.
+admitted merely to match another application's policy. Parity with a sibling application is NOT a
+reason to widen a policy — the Designer admits `blob:` media because it plays video off object URLs,
+and this application creates none. A scheme SHALL be added only by a change that needs it, and that
+change SHALL carry a test demonstrating the need.
 
 #### Scenario: A video-bearing template rehearses and its video plays in PVW
 
