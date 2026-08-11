@@ -4079,7 +4079,7 @@ work is commit **`e1e2d03`**: `apps/runtime/src/renderer/ui/Modal.tsx` (the regi
 `apps/runtime/tests/e2e/modal-message-in-viewport.spec.ts` (the tests), and
 `openspec/changes/runtime-modal-message-region/` for the spec delta.
 
-## [~] D-149 — image `fit` gains **fit width** / **fit height**, and `none` is relabelled **original** ⟨priority: medium — reaches air⟩ — in progress: `openspec/changes/designer-image-fit-axis/`
+## [x] D-149 — image `fit` gains **fit width** / **fit height**, and `none` is relabelled **original** ⟨priority: medium — reaches air⟩ — shipped and archived: `openspec/changes/archive/2026-08-11-designer-image-fit-axis/` (living spec `designer-image-element`). All 13 tasks ticked; the Linux `gate:e2e` debt this render-path change owed is DISCHARGED by a COMPLETED, GREEN `e2e` job on `ubuntu-latest` for commit `bd88ede`, which carries the change: <https://github.com/yasermostafaee/cg/actions/runs/31414808016> (run `conclusion: success`; `E2E (Playwright)` job conclusion `success` — it RAN, it was not skipped)
 
 **What:** two changes to the image element's `fit` control, both agreed with the owner.
 
