@@ -23,6 +23,32 @@ the `medium` recorded here: this item was written as a portability and CSP impro
 report shows the target deployment is the one that breaks. The `What`, `Why` and `Acceptance`
 above already describe the fix correctly and are unchanged; only the severity moved.
 
+### ⭐ FOLDED IN 2026-08-11 — `runtime-splash-screen` task 8.4, and it makes the Runtime half CHEAPER than this item assumes
+
+R-035's deferral list carried "the Runtime's UI font still comes off a CDN" as an item of its own.
+It is **not** a separate item — it is exactly this one, so it is folded in here rather than filed
+as a duplicate (source:
+`openspec/changes/archive/2026-08-11-runtime-splash-screen/DEBT.md` §4). Two facts come with it,
+and the first changes the shape of the work:
+
+1. 🔴 **The Runtime ALREADY SHIPS the Vazirmatn faces** — `apps/runtime/src/renderer/fonts.css`
+   carries them — **but that file is imported only as `?inline`, for template delivery.** So the
+   app UI reads Persian off the network while the same faces sit unused in the bundle. For the
+   Runtime the fix may therefore be pointing the app UI at faces that are already there and
+   dropping the `<link>`, rather than adding `@fontsource/vazirmatn` as the Notes above assume.
+   **Check which is true per app before adding a dependency** — the Designer already self-hosts.
+2. **A partial mitigation is already in place on the Runtime, and it is NOT the fix.** R-035 made
+   the jsdelivr `<link>` non-render-blocking (`media="print"` until `onload`), because in its
+   previous form it blocked the FIRST PAINT until the CDN answered or the socket timed out — on a
+   LAN-only machine, never. That removed the hang from the boot path and **nothing more**: the UI
+   still falls back to a system face offline, which is a Persian/RTL shaping regression, not a
+   cosmetic one. Do not read the splash's green acceptance as evidence this item is smaller than
+   it was.
+
+The verification this needs is a font-loading change with Persian/RTL consequences — mixed
+RTL/LTR shaping checked with the network cut, per CLAUDE.md golden rule 4 — which is why R-035
+declined to smuggle it into a boot screen.
+
 ## [ ] P-002 — Lightweight routing / app shell ⟨priority: low⟩
 
 **What:** Introduce simple routing so each app can have more than one screen

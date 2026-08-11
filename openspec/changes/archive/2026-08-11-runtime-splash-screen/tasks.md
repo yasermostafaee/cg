@@ -107,12 +107,27 @@
       specs passed on Linux: `apps/runtime/tests/e2e/splash.spec.ts` all 6 (the 8s cold-start
       hold, the phase-label handoff, the refused-bridge dismissal, the build stamp, and both
       reduced-motion specs), plus the designer's 6 splash specs.
-- [ ] 8.2 The APASAI mark and brand colours are PLACEHOLDERS. The swap point is the single BRAND
+- [x] 8.2 The APASAI mark and brand colours are PLACEHOLDERS. The swap point is the single BRAND
       SLOT `<svg>` in `index.html`; replacing it is a later task once the real mark exists.
-- [ ] 8.3 No in-application about/version surface is built here. When one lands it reads
+      **RESCOPED OUT 2026-08-11 → [[R-050]]** (`docs/prd/runtime.md`), which carries the swap
+      point, the preserved class/viewBox/`aria-hidden`, and the `--r-*`-tokens-only rule. Not
+      work of this change; blocked on the owner supplying the final mark.
+- [x] 8.3 No in-application about/version surface is built here. When one lands it reads
       `__CG_BUILD__` — it does not re-derive a second stamp.
-- [ ] 8.4 The Runtime's UI font still comes off a CDN. This change made that link
+      **RESCOPED OUT 2026-08-11 → [[R-051]]** (`docs/prd/runtime.md`), which carries the
+      read-`__CG_BUILD__`-never-re-derive rule and the deferred `version` decision.
+- [x] 8.4 The Runtime's UI font still comes off a CDN. This change made that link
       non-render-blocking (it blocked the first paint, which its own acceptance forbids) and
       nothing more; moving the app UI onto the self-hosted `fonts.css` faces is its own item.
+      **FOLDED INTO [[P-001]] 2026-08-11** (`docs/prd/platform.md`, "Bundle Vazirmatn offline")
+      rather than filed as a duplicate — P-001 IS this fix. The fold carries `DEBT.md` §4's two
+      findings into P-001: the Runtime already ships the faces in `src/renderer/fonts.css` but
+      imports them `?inline` only, and the `media="print"` mitigation this change made is NOT
+      the fix (the UI still falls back to a system face offline).
+
+🔴 **8.2–8.4 are ticked as RESCOPED, not as DONE.** None of the three work is performed; each
+now lives in a PRD item that can be prioritised on its own. This change is archivable because
+they were never its scope — they were things it NOTICED. 8.1 is the only one of the four that
+was ever a debt of this change, and it is discharged with a run URL.
 
 All four are written up with their reasoning in `DEBT.md` beside this file.

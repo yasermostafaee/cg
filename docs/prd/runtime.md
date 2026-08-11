@@ -1449,9 +1449,9 @@ one-time setup step.
 - The list can never be emptied to nothing — a list field with split on must always have at
   least one delimiter to choose.
 
-## [~] R-035 — a startup splash screen: the product's first frame ⟨priority: medium⟩
+## [x] R-035 — a startup splash screen: the product's first frame ⟨priority: medium⟩ — shipped and archived: `openspec/changes/archive/2026-08-11-runtime-splash-screen/` (living spec `runtime-ui`). The Linux `gate:e2e` this UI change owed is DISCHARGED — <https://github.com/yasermostafaee/cg/actions/runs/31252541925>, commit `a344cd2`, run `conclusion: success`, `E2E (Playwright)` job conclusion `success` (it RAN); `splash.spec.ts` all 6 passed on Linux. The change's three remaining deferrals were RESCOPED OUT rather than done — they were never its scope: the placeholder brand → [[R-050]], the in-app about/version surface → [[R-051]], and the CDN font → folded into [[P-001]], which IS that fix, not filed as a duplicate
 
-<!-- change: openspec/changes/runtime-splash-screen/ -->
+<!-- change: openspec/changes/archive/2026-08-11-runtime-splash-screen/ -->
 
 <!-- Filed as R-031 by a session reading this file ON `main`, where R-030 was the highest in
      use; `dev` already held R-031 (the operator surface) in an unmerged fast-mode edit that
@@ -2083,3 +2083,62 @@ Three consequences of that, each a reason this is cheap:
 **Depends on the assignment store** ([[C-015]] phase 4, shipped), because the source NAME is what
 makes the placeholder worth drawing. Without it the item degrades to bars plus a plate name — still
 better than blank, but it is the name that answers the operator's actual question.
+
+## [ ] R-050 — swap the placeholder APASAI mark and brand colours for the real ones ⟨priority: low⟩
+
+<!-- rescoped out of R-035 (runtime-splash-screen task 8.2), 2026-08-11 -->
+
+**What:** Replace the placeholder brand on the Runtime's startup splash with the real APASAI
+mark and the real brand colours.
+
+**Why:** the splash is the product's first frame — the thing an operator sees before anything
+else — and it currently carries a stand-in. `R-035` shipped the splash deliberately with a
+placeholder because the real mark did not exist yet; this item is the swap, filed so the
+placeholder cannot quietly become permanent by nobody remembering it was one.
+
+**Acceptance:**
+
+- WHEN the real mark is dropped in THEN the ONLY file that changes is
+  `apps/runtime/index.html`, at the single `<svg class="cg-splash__mark">` BRAND SLOT — the
+  swap point R-035 built for exactly this
+- WHEN the mark is replaced THEN the `cg-splash__mark` class, the 56×56 `viewBox` and
+  `aria-hidden` are preserved, so layout and accessibility are unchanged by the swap
+- WHEN brand colours are applied THEN every colour is a `--r-*` token value, never a literal —
+  `apps/runtime/tests/splashCss.test.ts` already enforces this and must stay green
+
+**Notes:** the swap point being ONE documented element is R-035's deliberate design (see
+`openspec/changes/archive/2026-08-11-runtime-splash-screen/DEBT.md` §2). Do not spread brand
+values across the stylesheet on the way in — that is what makes the NEXT rebrand expensive.
+Blocked on the owner supplying the final mark and palette; no code question is open.
+
+## [ ] R-051 — an in-application about / version surface that reads the ONE build stamp ⟨priority: low⟩
+
+<!-- rescoped out of R-035 (runtime-splash-screen task 8.3), 2026-08-11 -->
+
+**What:** Give the Runtime a place inside the app — an About dialog or a status-bar readout —
+where the operator can read which build they are running, without restarting to catch the
+splash.
+
+**Why:** the build stamp exists and nothing in the app reads it. `vite.config.ts` computes it
+ONCE and exposes it both as the HTML the splash paints and as the `__CG_BUILD__` compile-time
+global; today only the splash uses it, so the only way to answer "which build is this?" is to
+reload and read a screen that dismisses itself. On a support call that is the wrong
+affordance.
+
+**Acceptance:**
+
+- WHEN the about/version surface renders THEN it reads `__CG_BUILD__` and does NOT re-derive a
+  version, a SHA or a date — 🔴 two derivations are two answers, and the whole point of the
+  stamp is that what the operator reads on the first frame and what they read in the app are
+  the SAME STRING
+- WHEN the project starts tagging releases THEN `v${version}` is prefixed at the ONE render
+  site named in the comment beside `#cg-splash-version` in `apps/runtime/index.html`, not at a
+  second one
+- WHEN no release tag exists THEN the surface shows `sha · builtAt` only, exactly as the splash
+  does — `0.0.0` is a placeholder, not a release identity, and showing it would be a lie about
+  what is deployed
+
+**Notes:** carries the `version` decision R-035 deferred (see
+`openspec/changes/archive/2026-08-11-runtime-splash-screen/DEBT.md` §3). The Designer has the
+same gap; if that surface is built too, both read their own app's `__CG_BUILD__` — one
+mechanism, two call sites, never a shared re-derivation.
