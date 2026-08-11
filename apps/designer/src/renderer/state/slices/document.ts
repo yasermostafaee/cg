@@ -18,6 +18,7 @@ import {
   ensureCompositions,
   normalizeKeyframeIds,
   withActiveDoc,
+  type EditDocFields,
 } from '../scene-doc.js';
 
 /**
@@ -124,16 +125,34 @@ export const documentSlice = {
     }
     // D-026 — `frameRate` is project-level: it is intentionally NOT a doc key, so
     // an fps patch routes to the scene root (shared by every composition).
-    const docKeys = new Set([
+    //
+    // 🔴 **B-133 — this table is a set of STRINGS, so a field rename cannot break it
+    // loudly.** B-129 renamed `background` -> `editorBackdrop` across the schema, the
+    // renderer, the runtime and both exporters, and this literal stayed behind. The
+    // result was silent and total: with a composition active (which is EVERY new
+    // project — `newScene` seeds `comp1` and the operator lands inside it),
+    // `editorBackdrop` fell through to `rootPatch` and was written to `scene.editorBackdrop`,
+    // while the canvas renders `editSceneOf`, which reads `c.editorBackdrop`. Written to
+    // one place, read from another: the backdrop control did nothing at all.
+    //
+    // The keys MUST stay in step with `EditDocFields` (`state/scene-doc.ts`) — the
+    // `satisfies` below is what makes a future rename a TYPE ERROR here rather than a
+    // control that quietly stops working.
+    // `satisfies` is the guard: every literal must still NAME a real doc field, so
+    // renaming one in `EditDocFields` fails the build HERE. (It does not assert
+    // exhaustiveness — a brand-new doc field is a different, weaker risk. What bit us
+    // was a rename leaving a dead string behind, and that is what this catches.)
+    const DOC_KEYS = [
       'resolution',
       'frameRange',
       'activeRange',
       'lifecycle',
       'playout',
-      'background',
+      'editorBackdrop',
       'name',
       'layers',
-    ]);
+    ] as const satisfies readonly (keyof EditDocFields | 'name' | 'layers')[];
+    const docKeys = new Set<string>(DOC_KEYS);
     const docPatch: Record<string, unknown> = {};
     const rootPatch: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(patch)) {

@@ -53,6 +53,14 @@
       (`preview.ts`), and `!important` beats the runtime's inline style — so the author NEVER saw
       their backdrop on canvas while air did. That is the sharpest possible form of the item's
       own _"the editor looks the same either way"_, and it makes this fix a pure removal of harm.
+      ⛔ **(a) IS WRONG, corrected 2026-08-11 — see `B-133`.** The CSS was never the obstacle: in
+      the PASTEBOARD branch neither `background-color` nor `background-image` carries `!important`
+      (only the position/size rules do), and the runtime sets the `background` SHORTHAND inline,
+      which beats both. The real cause was one stale STRING left behind by this very rename:
+      `updateScene`'s `docKeys` still said `'background'`, so an `editorBackdrop` patch was routed
+      to the scene ROOT while the canvas renders the active COMPOSITION's field. The value never
+      arrived. Left in place rather than deleted because the wrong conclusion is instructive: a
+      plausible CSS explanation was accepted without testing it, and it stood for a week.
       **(b)** The `<input type="color">` could not be driven from Playwright — `fill()` is
       swallowed by React's value tracker, and the native-setter + `input`/`change` route still
       left the input reading `#000000`. Rather than escalate the simulation until something
