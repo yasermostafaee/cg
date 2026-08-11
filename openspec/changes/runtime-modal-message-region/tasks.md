@@ -34,8 +34,15 @@
       body, a real validator refusal, `toBeInViewport({ ratio: 1 })`, and a negative control.
       Verified RED against the reintroduced in-body placement.
 - [x] 4.2 Debt marked discharged in `DEBT.md` and `DEBT-SWEEP.md`.
-- [ ] 4.3 **Linux `gate:e2e` — CI run URL to be written in beside this box.** A green Windows
-      run is not a discharge.
+- [x] 4.3 **Linux `gate:e2e` — DISCHARGED 2026-08-11.** A green Windows run is not a discharge;
+      this one is a COMPLETED, GREEN `e2e` job on `ubuntu-latest`:
+      <https://github.com/yasermostafaee/cg/actions/runs/31414808016> — commit `bd88ede`, a later
+      `dev` HEAD that CONTAINS this change's `e1e2d03` (verified with
+      `git merge-base --is-ancestor`, not inferred from dates). Run `status: completed` /
+      `conclusion: success`; the `E2E (Playwright)` job's OWN conclusion is `success` and its
+      `E2E` step actually executed (~10 min) — a `skipped` job would have discharged nothing
+      (P-029). `pnpm test:e2e` is not diff-scoped, so the run exercised the whole Playwright
+      suite at that SHA, `modal-message-in-viewport.spec.ts` included.
 
 ## 5. Prose
 
