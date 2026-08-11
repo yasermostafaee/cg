@@ -17,6 +17,10 @@
       `data:` is what the exporter inlines; `'self'` covers same-origin media. NO
       `blob:` — unlike the Designer (which plays video off object URLs) nothing in
       this app creates one, so admitting it would widen the policy past the need.
+      ⚠ PARITY WITH THE DESIGNER IS NOT A REASON TO ADD IT (owner's call, 2026-08-12):
+      two apps are allowed to have different policies because they have different
+      needs. If a future change genuinely needs `blob:` here, that change adds it —
+      with a test that proves the need.
       Pinned by `tests/e2e/pvw-video.spec.ts` in a REAL browser: jsdom does not
       enforce CSP, so no unit test can observe this.
     -->
