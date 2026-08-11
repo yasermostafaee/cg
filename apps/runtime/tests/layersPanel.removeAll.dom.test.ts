@@ -76,6 +76,9 @@ function stubBridge(
       update: () => Promise.resolve({ accepted: true }),
       out: () => Promise.resolve({ accepted: true }),
       remove: () => Promise.resolve({ accepted: true }),
+      // B-108 — the restore-skip report. A healthy session reports NOTHING,
+      // which is what this panel renders for every spec not about that surface.
+      onRestoreSkips: () => () => undefined,
     },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
@@ -221,6 +224,9 @@ describe('StackPanel Remove-All â R-010', () => {
         update: () => Promise.resolve({ accepted: true }),
         out: () => Promise.resolve({ accepted: true }),
         remove: () => Promise.resolve({ accepted: true }),
+        // B-108 — the restore-skip report. A healthy session reports NOTHING,
+        // which is what this panel renders for every spec not about that surface.
+        onRestoreSkips: () => () => undefined,
       },
     };
     (window as unknown as { cg: typeof stub }).cg = stub;

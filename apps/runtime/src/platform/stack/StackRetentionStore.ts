@@ -1,3 +1,4 @@
+import { RetainedAirStateSchema, retainedStateFor } from '@cg/shared-schema';
 import type { RetainedStackItem, StackItemState } from '@cg/shared-schema';
 import type { Workspace } from '@cg/storage';
 
@@ -46,7 +47,14 @@ export class StackRetentionStore {
           (i) =>
             typeof i.itemId === 'string' &&
             typeof i.templateId === 'string' &&
-            typeof i.played === 'boolean',
+            // B-107/B-109 — a record with no usable STATE is dropped rather than
+            // given a default. The whole point of this change is that a row's state
+            // is never guessed: picking a comfortable value for a record that does
+            // not carry one is the exact defect, one layer down. A record written by
+            // a build that predates the state field is such a record, and under the
+            // compatibility-floor policy (P-031) it is not owed a conversion — the
+            // cost is one stack rebuild, once, on a product that has not shipped.
+            RetainedAirStateSchema.safeParse(i.state).success,
         );
       }
     } catch {
@@ -75,38 +83,32 @@ export class StackRetentionStore {
 
 /**
  * Reduce reconciled state back to INTENT: what the operator asked for, plus the
- * one bit the restore cannot re-derive — whether the item had been taken to air.
+ * STATE that justified it.
+ *
+ * ⭐ **B-107 / B-109 — this used to reduce the row to `played: boolean`, and that
+ * is the bug.** One bit cannot tell a FAILED row from a deliberately CLEARed row
+ * from a genuinely pre-rolled one, so a bridge death replayed all three as the
+ * same thing: an errored row came back READY, and a cleared graphic was re-ADDed
+ * onto its layer unasked.
+ *
+ * 🔴 **The status → state map is NOT written here.** It is
+ * `@cg/shared-schema`'s `retainedStateFor`, and the reason is golden rule 6: this
+ * used to hold a LOCAL `isPlayed` list of statuses, and `B-107`'s own notes name
+ * "two status-derivation sites that can drift" as a live hazard. There is now one
+ * site. Do not inline it back.
  */
 function toRetained(item: StackItemState): RetainedStackItem {
+  const state = retainedStateFor(item.status);
   return {
     itemId: item.itemId,
     templateId: item.templateId,
     fields: item.fields,
-    played: isPlayed(item.status),
+    state,
+    // Only an `error` state carries a code, and only its own: an `errorCode` set for
+    // a different purpose (B-093's `osc-unverifiable` rides an `unverified` row)
+    // must not travel as if it were a failure this row suffered.
+    ...(state === 'error' && item.errorCode !== undefined && { errorCode: item.errorCode }),
     ...(item.slot !== undefined && { slot: item.slot }),
     ...(item.position !== undefined && { position: item.position }),
   };
-}
-
-/**
- * Play evidence from the last published status.
- *
- * The ambiguous states resolve to TRUE on purpose. `exiting` (an out in flight
- * when the bridge died — the CLEAR may never have landed), `unconfirmed` (B-044:
- * a command whose ack never came) and `unverified` (B-086: the CasparCG link was
- * down, so the claim could not be checked) all describe an item that may well
- * still be rendering. Over-claiming is self-correcting — the bridge's occupancy
- * check demotes it to `loaded` the moment the layer proves silent — whereas
- * under-claiming would let a restore treat a LIVE layer as empty, which is the
- * error direction this codebase never takes.
- */
-function isPlayed(status: StackItemState['status']): boolean {
-  return (
-    status === 'playing' ||
-    status === 'on-air' ||
-    status === 'updating' ||
-    status === 'exiting' ||
-    status === 'unconfirmed' ||
-    status === 'unverified'
-  );
 }

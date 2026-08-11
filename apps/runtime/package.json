@@ -32,6 +32,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@cg/amcp-mock": "workspace:*",
     "@cg/caspar-bridge": "workspace:*",
     "@cg/eslint-config": "workspace:*",
     "@playwright/test": "1.60.0",

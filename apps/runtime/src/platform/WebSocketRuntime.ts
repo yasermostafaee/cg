@@ -1,4 +1,4 @@
-import type { StackItemState } from '@cg/shared-schema';
+import type { RetainedAirState, StackItemState } from '@cg/shared-schema';
 import {
   AuditRecentChannel,
   ConnectionsConfigChangedChannel,
@@ -87,6 +87,7 @@ import {
   type OwnedOccupancyWarning,
   type PendingUpdate,
   type PlayoutLayerState,
+  type RestoreSkip,
   type Settings,
   type TemplateInfo,
 } from '@cg/shared-ipc';
@@ -242,6 +243,17 @@ export class WebSocketRuntime implements RuntimeBridge {
   #resyncing = false;
 
   readonly #stackSubs = new Subs<readonly StackItemState[]>();
+  /**
+   * B-108 — the rows the last restore could NOT bring back, with the reason.
+   *
+   * NOT a bridge PUBLISH channel: this is a fact about a call THIS browser made, so
+   * it belongs to this client and not to every client attached to the bridge.
+   * Broadcasting it would tell a second operator's browser that rows IT never had
+   * failed to restore.
+   */
+  readonly #restoreSkipSubs = new Subs<readonly RestoreSkip[]>();
+  /** The latest report, so a late subscriber (the panel mounts after boot) sees it. */
+  #lastRestoreSkips: readonly RestoreSkip[] = [];
   readonly #healthSubs = new Subs<ConnectionHealth>();
   readonly #configSubs = new Subs<ConnectionConfig>();
   readonly #orphanSubs = new Subs<OrphanLayer[]>();
@@ -369,6 +381,30 @@ export class WebSocketRuntime implements RuntimeBridge {
    * A failed re-delivery is surfaced and never aborts the rest.
    */
   async #resync(rePullSnapshots = true): Promise<void> {
+    /*
+     * 🔴 THE RETENTION GUARD IS RAISED **HERE**, BEFORE THE FIRST `await` — and the
+     * reason is a race this change's E2E caught, not a tidy-up.
+     *
+     * `#resyncing` used to be set further down, just before the restore. Everything
+     * above it — the template re-deliveries — contains awaits, so the guard went up
+     * one macrotask AFTER the socket opened. In that window `#setStatus('live')` has
+     * already fired, the renderer's `useBridgeSnapshot` re-pulls on the link change,
+     * and `stack.snapshot()` now takes the LIVE branch: it asks a freshly-booted
+     * bridge, gets `[]`, and calls `#mirrorStack([])`.
+     *
+     * That mirror ERASES THE RETAINED STACK — the exact failure B-092's own
+     * `mirror()` docstring warns about ("the bug would erase its own fix") — and it
+     * erases it BEFORE the restore reads it, so the restore then re-delivers nothing
+     * and the operator's rows are gone for good. It is a RACE, so it lost silently
+     * some of the time and looked like flake: a bridge restart that dropped the whole
+     * stack on one run and worked on the next.
+     *
+     * `#resync` is invoked synchronously from the socket's `open` handler, so setting
+     * the flag as the FIRST statement closes the window completely: any pull the
+     * renderer issues during the resync resolves with the guard already up and
+     * mirrors nothing. It is cleared on every exit path below, as before.
+     */
+    this.#resyncing = true;
     // B-085 — reconcile the bridge to the browser-local library: deliver every
     // retained template FIRST, sourced from the persistent store.
     //
@@ -418,15 +454,29 @@ export class WebSocketRuntime implements RuntimeBridge {
     // the bug. The bridge decides adopt-vs-re-ADD against real OSC occupancy,
     // so this can never clear a live layer.
     //
-    // `#resyncing` suppresses retention mirroring across the whole window: a
-    // failed restore must leave the retention intact for the next connect
-    // rather than let an empty snapshot overwrite it.
-    this.#resyncing = true;
+    // `#resyncing` suppresses retention mirroring across the whole window — it was
+    // raised at the top of this method (see the note there for the race that
+    // requires it): a failed restore must leave the retention intact for the next
+    // connect rather than let an empty snapshot overwrite it.
     let restoreOk = true;
     try {
       const retained = this.#stackRetention.items();
       if (retained.length > 0) {
-        await this.#invoke(StackRestoreChannel, { items: [...retained] });
+        const result = await this.#invoke(StackRestoreChannel, { items: [...retained] });
+        /*
+         * B-108 — CONSUME the report. This line is the bug: `#resync` used to
+         * `await` this call and DISCARD its return value, so rows the bridge could
+         * not re-seat simply disappeared from the operator's stack with nothing
+         * said. Silently not restoring something is the same class of lie as
+         * falsely restoring it.
+         *
+         * The BENIGN reason is filtered here rather than at the surface, because it
+         * is a fact about the restore and not about presentation: an item the live
+         * bridge already holds is a page reload against a healthy bridge — the row
+         * is still there, backed by the bridge, and nothing was lost. Reporting it
+         * would be an alarm on the most ordinary event there is.
+         */
+        this.#emitRestoreSkips(result.skipped.filter((s) => s.reason !== 'already-held'));
       }
     } catch (err) {
       restoreOk = false;
@@ -463,6 +513,19 @@ export class WebSocketRuntime implements RuntimeBridge {
       /* a fresh drop during resync will re-trigger reconnect */
       this.#resyncing = false;
     }
+  }
+
+  /**
+   * B-108 — publish the rows a restore did NOT bring back, so the operator can see
+   * what is missing and why.
+   *
+   * Emitted even when EMPTY, and that is deliberate rather than an oversight: an
+   * empty report is what CLEARS a stale notice from a previous, worse reconnect. A
+   * surface that can only ever be raised is a surface that eventually lies.
+   */
+  #emitRestoreSkips(skips: readonly RestoreSkip[]): void {
+    this.#lastRestoreSkips = skips;
+    this.#restoreSkipSubs.emit(skips);
   }
 
   /**
@@ -666,6 +729,14 @@ export class WebSocketRuntime implements RuntimeBridge {
     },
     onStateChanged: (handler: (snapshot: readonly StackItemState[]) => void) =>
       this.#stackSubs.add(handler),
+    // B-108 — replays the latest report on subscribe. The panel mounts after boot, so
+    // a subscribe-only stream would miss precisely the report worth seeing: the one
+    // from the reconnect that happened while the UI was coming up.
+    onRestoreSkips: (handler: (skips: readonly RestoreSkip[]) => void) => {
+      const unsubscribe = this.#restoreSkipSubs.add(handler);
+      handler(this.#lastRestoreSkips);
+      return unsubscribe;
+    },
   };
 
   /**
@@ -673,18 +744,32 @@ export class WebSocketRuntime implements RuntimeBridge {
    * while the bridge is unreachable. It is a VIEW of intent, not a claim about
    * the wire, so its statuses are the honest ones for "nothing can be verified":
    *
-   *   played  → `unverified` — B-086/B-087's muted "WAS ON AIR". NEVER the
-   *             broadcast-red `on-air`/`playing`: with no bridge the SPA has no
-   *             conduit to CasparCG at all, so a confident red badge would be
-   *             the exact lie those two changes exist to kill.
-   *   !played → `loaded` — not an air claim, and the same resting status the
-   *             bridge itself leaves an item at when no server is reachable
-   *             (B-082).
+   *   `on-air`  → `unverified` — B-086/B-087's muted "WAS ON AIR". NEVER the
+   *               broadcast-red `on-air`/`playing`: with no bridge the SPA has no
+   *               conduit to CasparCG at all, so a confident red badge would be
+   *               the exact lie those two changes exist to kill.
+   *   `loaded`  → `loaded` — not an air claim, and the same resting status the
+   *               bridge itself leaves an item at when no server is reachable
+   *               (B-082).
+   *   `cleared` → `idle` — the layer is known empty. NOT `loaded`.
+   *   `error`   → `error`, with the code it carried. NOT `loaded`.
+   *
+   * 🔴 **THE LAST TWO ARE B-107, AND THEY ARE THE WHOLE OF IT.** This method used
+   * to read `i.played ? 'unverified' : 'loaded'`, which collapsed a FAILED row and
+   * a CLEARED row onto `loaded` — the `airStateVisual` word READY. `useStack` opts
+   * into `pullWhileDisconnected`, so the moment the bridge process died every ERROR
+   * row on the operator's stack flipped to READY at once, inviting a PLAY on a row
+   * that never got a layer, over a link the SPA could no longer use in either
+   * direction. **A lost link may never IMPROVE a status** — that is B-086/B-087's
+   * demote-on-silence rule, and this was it broken in the opposite direction.
    *
    * `pending` is false throughout: nothing is in flight, so no row spins.
    *
-   * The projection round-trips cleanly (`unverified`/`loaded` map back to the
-   * same `played`), so it can never corrupt the retention if re-mirrored.
+   * The projection still ROUND-TRIPS exactly — `retainedStateFor` maps every status
+   * emitted here back to the state it came from (`unverified`→`on-air`,
+   * `loaded`→`loaded`, `idle`→`cleared`, `error`→`error`) — so re-mirroring it can
+   * never corrupt the retention. That property is asserted, not assumed; do not add
+   * a status here without checking it survives.
    */
   #retainedProjection(): StackItemState[] {
     const projected = this.#stackRetention.items().map(
@@ -692,8 +777,9 @@ export class WebSocketRuntime implements RuntimeBridge {
         itemId: i.itemId,
         templateId: i.templateId,
         fields: i.fields,
-        status: i.played ? 'unverified' : 'loaded',
+        status: projectedStatusFor(i.state),
         pending: false,
+        ...(i.errorCode !== undefined && { errorCode: i.errorCode }),
         ...(i.slot !== undefined && { slot: i.slot }),
         ...(i.position !== undefined && { position: i.position }),
       }),
@@ -900,4 +986,26 @@ export class WebSocketRuntime implements RuntimeBridge {
     onChanged: (handler: (delimiters: DelimiterOption[]) => void) =>
       this.#delimiterSubs.add(handler),
   };
+}
+
+/**
+ * B-107 — the retained STATE a row is displayed as while the bridge is unreachable.
+ *
+ * Exhaustive with no `default`, the same discipline as `retainedStateFor` and
+ * `seedStatusFor` on the other two legs of this journey: a new retained state must
+ * fail to compile here until someone decides what an operator should see for it,
+ * rather than falling through to a comfortable guess. That fall-through IS the bug
+ * this function exists to close.
+ */
+function projectedStatusFor(state: RetainedAirState): StackItemState['status'] {
+  switch (state) {
+    case 'on-air':
+      return 'unverified';
+    case 'loaded':
+      return 'loaded';
+    case 'cleared':
+      return 'idle';
+    case 'error':
+      return 'error';
+  }
 }

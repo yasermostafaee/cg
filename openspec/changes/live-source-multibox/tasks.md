@@ -886,6 +886,17 @@ completed green Linux run, cited beside 9.3a.
 - [ ] 6.9d **The override survives a bridge restart.** Retention must carry it, or a momentary blip
       silently reverts the plate to the DEAD source. This is the `B-107` / `B-109` class — retention
       dropping state it did not model — so it is a requirement with a test, not an assumption.
+      ⭐ **THE MODEL THIS ATTACHES TO NOW EXISTS** (2026-08-11,
+      `openspec/changes/runtime-retention-state/` — landed BEFORE this phase precisely so this task
+      is an addition rather than a repair). `RetainedStackItem` is deliberately split into two axes
+      that do not interact: a CLOSED `state` enum answering "may this row's producer be re-seated?",
+      and an OPEN set of per-item OVERRIDES (`slot`, `position`). **This override goes on the OPEN
+      axis**: add `sourceOverride?: LiveSourceOverride` beside `position`, mirror it in
+      `StackRetentionStore.toRetained` from the published `StackItemState`, and re-apply it in
+      `caspar-runtime.ts`'s `restore()` at the same point `#positions.set(...)` already re-applies
+      R-011's placement — which is BEFORE any adopt-vs-re-ADD decision, so a re-issued producer
+      carries it. Nothing about `state` changes; no consumer branches differently. See the two-axes
+      note on `RetainedStackItemSchema`.
 - [ ] 6.9e **Reachable in one or two actions from the row.** Used under pressure, on air: not in
       settings, not behind a modal chain, not anywhere the operator must first find the item.
 - [ ] 6.9f **Recorded as OUT of scope, so neither is re-proposed as part of this:** a PRE-ARMED

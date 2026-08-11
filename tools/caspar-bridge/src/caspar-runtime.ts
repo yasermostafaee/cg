@@ -12,7 +12,7 @@ import {
   type LayerSlot,
   type ServerLabel,
 } from '@cg/caspar-client';
-import { positionQuery } from '@cg/shared-schema';
+import { isRestorable, positionQuery } from '@cg/shared-schema';
 import type {
   AuditEntry,
   FieldValues,
@@ -28,6 +28,7 @@ import {
   parseVideoModeFromInfo,
   videoModeRaster,
   type PLAYOUT_CLEAR_REASONS,
+  type RestoreSkip,
   type PlayoutLayerState,
   type DelimiterOption,
   type ChannelResponse,
@@ -1219,11 +1220,22 @@ export class CasparRuntime {
    * never clobber a live bridge's own state — a page reload against a healthy
    * bridge changes nothing), an unregistered template (the SPA re-delivers its
    * library first, so this means the template is genuinely gone), or an
-   * exhausted layer range.
+   * exhausted layer range. B-108 — every skip is reported WITH ITS REASON, per
+   * item, because a bare count cannot tell the operator which rows are gone.
+   *
+   * ⭐ **B-109 / B-107 — step 2 runs ONLY for a restorable state.** A row retained
+   * as `cleared` (the operator emptied that layer) or `error` (it never got what it
+   * asked for) is restored as a ROW — slot reserved, OSC interest bound, published —
+   * but is NEVER entered into `#pendingRestore`. That is the whole fix, and it is
+   * deliberately structural: an item that is not pending cannot reach
+   * `#decidePendingRestores`, so its "silent layer → re-ADD" branch is UNREACHABLE
+   * for it rather than guarded against. Occupancy is not consulted for such a row at
+   * all — silence on a layer the operator emptied is the EXPECTED reading, not
+   * evidence that a producer was lost.
    */
   async restore(items: readonly RetainedStackItem[]): Promise<{
     restored: number;
-    skipped: number;
+    skipped: RestoreSkip[];
   }> {
     // B-086 honesty, applied to seeded records: the reconciler learns `linkDown`
     // from session TRANSITIONS, and a bridge whose CasparCG session has never
@@ -1242,20 +1254,22 @@ export class CasparRuntime {
     if (this.#adapter.primarySession.state !== 'healthy') this.#reconciler.setLinkDown(true);
 
     let restored = 0;
-    let skipped = 0;
+    const skipped: RestoreSkip[] = [];
     for (const item of items) {
-      // The live bridge wins over the retained copy — never clobber.
+      // The live bridge wins over the retained copy — never clobber. BENIGN: the row
+      // is still there, backed by the live bridge, so nothing is lost and B-108's
+      // surface deliberately says nothing about it.
       if (this.#reconciler.get(item.itemId) !== null) {
-        skipped++;
+        skipped.push({ itemId: item.itemId, reason: 'already-held' });
         continue;
       }
       if (!this.#templates.has(item.templateId)) {
-        skipped++;
+        skipped.push({ itemId: item.itemId, reason: 'unknown-template' });
         continue;
       }
       const slot = this.#slotForRestore(item);
       if (slot === null) {
-        skipped++;
+        skipped.push({ itemId: item.itemId, reason: 'no-layer' });
         continue;
       }
       if (
@@ -1263,7 +1277,8 @@ export class CasparRuntime {
           itemId: item.itemId,
           templateId: item.templateId,
           fields: item.fields,
-          played: item.played,
+          state: item.state,
+          ...(item.errorCode !== undefined && { errorCode: item.errorCode }),
         }) === null
       ) {
         // B-114 — release by the SAME door the slot was taken through.
@@ -1273,20 +1288,47 @@ export class CasparRuntime {
         // nothing, which no verb can clear.
         if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
         else this.#layers.deallocate(slot);
-        skipped++;
+        skipped.push({ itemId: item.itemId, reason: 'already-held' });
         continue;
       }
       this.#slots.set(item.itemId, slot);
       this.#reconciler.assignSlot(item.itemId, { ...slot, server: 'primary' });
+      // Bound for EVERY restored row including a cleared one: an `out` retains its
+      // slot (B-109's own trace), so the row keeps its layer identity and OSC is
+      // what confirms the layer really is idle.
       this.#addInterest(slot);
       // R-011 — the operator's placement is intent too, and #sendAdd reads it
       // off #positions, so it must be back BEFORE any re-ADD decision runs.
+      //
+      // ⭐ This is also the line task 6.9d's per-plate SOURCE override attaches
+      // beside: an OPEN-axis optional field on `RetainedStackItem`, re-applied here,
+      // before any decision, so a re-issued producer carries it. See
+      // `RetainedStackItemSchema`'s two-axes note.
       if (item.position !== undefined) this.#positions.set(item.itemId, item.position);
-      this.#pendingRestore.set(item.itemId, {
-        slot,
-        templateId: item.templateId,
-        fields: item.fields,
-      });
+      /*
+       * 🔴 B-109 / B-107 — THE PENDING RESTORE IS THE LICENCE TO TOUCH THE LAYER, and
+       * only a restorable state gets one.
+       *
+       * `cleared` — the operator CLEARed this graphic to take it off air and kept the
+       * row. Its layer is empty BECAUSE THEY EMPTIED IT. Parking it here would hand it
+       * to `#decidePendingRestores`, whose "silent layer → the producer is gone, re-ADD
+       * it" branch cannot tell a producer CasparCG destroyed from one the OPERATOR
+       * destroyed — and would put the graphic back with a `CG ADD` nobody asked for.
+       * `error` — the row never had a producer to lose, and a lost link may never
+       * IMPROVE a status.
+       *
+       * NOT a guard inside the decision: the decision is reached only THROUGH this map,
+       * so leaving the row out of it makes the re-ADD unreachable rather than merely
+       * refused. A second copy of the predicate inside `#decidePendingRestores` is the
+       * kind of drift golden rule 6 exists to prevent.
+       */
+      if (isRestorable(item.state)) {
+        this.#pendingRestore.set(item.itemId, {
+          slot,
+          templateId: item.templateId,
+          fields: item.fields,
+        });
+      }
       this.#markDirty(item.itemId);
       restored++;
     }
@@ -1296,7 +1338,11 @@ export class CasparRuntime {
     // case) — but the tap has been filling ever since, so the answer is
     // available right now. Without this branch those items would sit pending
     // forever, visible but never adopted or re-ADDed.
-    if (restored > 0 && this.#adapter.primarySession.state === 'healthy') {
+    //
+    // Gated on the PENDING set, not on `restored`: a restore of nothing but cleared
+    // and errored rows restores rows but licenses no wire action, and sampling
+    // occupancy for it would be work done to reach a no-op.
+    if (this.#pendingRestore.size > 0 && this.#adapter.primarySession.state === 'healthy') {
       const occupiedKeys = new Set(
         this.#adapter.primarySession.osc.occupancy
           .occupied(this.#occupancyStaleMs)

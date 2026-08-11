@@ -2212,7 +2212,7 @@ closed; nothing here needs booking again.**
 layer), [[B-094]] (the honest indicator for the same state), [[C-014]] (designs for the blind
 install this breaks), [[B-093]].
 
-## [ ] B-107 — an errored stack row flips to READY when the BRIDGE PROCESS dies: the browser's retained-intent projection reduces every non-played status (including `error`) to `loaded`, so a load that never got a layer presents as playable ⟨priority: high⟩
+## [~] B-107 — an errored stack row flips to READY when the BRIDGE PROCESS dies: the browser's retained-intent projection reduces every non-played status (including `error`) to `loaded`, so a load that never got a layer presents as playable ⟨priority: high⟩ — FIXED and on `dev`: `openspec/changes/runtime-retention-state/` (the DISPLAY face of the shared root)
 
 **What:** While the SPA↔bridge WebSocket is up, a load that fails allocation shows on the stack
 as a red **ERROR / "no layer"** row — correct, and one such row accumulates per further failed
@@ -2318,8 +2318,26 @@ retained-intent projection, not a pool-exhaustion symptom.
 - **Reproduction is MANUAL** (owner, real Runtime + real bridge, 2026-07-25): load past the dynamic
   pool size so further loads error with "no layer", then kill the bridge process — the ERROR rows
   flip to READY. No automated reproduction exists.
+- ⭐ **FIXED 2026-08-11** in `openspec/changes/runtime-retention-state/`, together with [[B-109]] and
+  [[B-108]] — one root, three faces. `RetainedStackItem.played: boolean` is REPLACED by
+  `state: 'on-air' | 'loaded' | 'cleared' | 'error'` plus an `errorCode`, mapped by ONE canonical
+  `retainedStateFor()` in `@cg/shared-schema` (the item's own note about "two status-derivation
+  sites that can drift" is why it lives there and not in the store). `#retainedProjection` now maps
+  `error` → `error` with its code and `cleared` → `idle`, so nothing collapses onto `loaded`.
+  Reproduction is no longer manual: `apps/runtime/tests/e2e/retention-honesty.spec.ts` kills a real
+  bridge process under a real browser.
+- ⚠ **ONE PART OF THIS ITEM WAS DELIBERATELY NOT DONE, and it is a decision rather than an
+  oversight.** The acceptance says an errored or cleared row must never resolve to "`loaded`/READY".
+  The STATUS half is fixed exactly as written. The WORD is not: `idle` and `loaded` both render as
+  **READY** by a LATER owner decision (`runtime-unified-layer-rows` — "an operator does not perceive
+  the difference and showing two states for one perception is false precision"), with the real
+  difference kept in `readyDetail`'s tooltip. That decision post-dates this item and was made on its
+  own grounds, so re-opening it belongs to whoever revisits the row language, not to a bug fix.
+  **The dangerous case named in this item's title — `error` → READY — IS fixed**: an errored row
+  renders ERROR with its code. What remains is the milder `idle` → READY, on a row whose tooltip
+  says the layer is empty.
 
-## [ ] B-108 — a bridge restart silently DROPS stack rows it cannot re-seat: `restore()` skips them and returns a `skipped` count no UI surface consumes ⟨priority: medium⟩
+## [~] B-108 — a bridge restart silently DROPS stack rows it cannot re-seat: `restore()` skips them and returns a `skipped` count no UI surface consumes ⟨priority: medium⟩ — FIXED and on `dev`: `openspec/changes/runtime-retention-state/` (the HONESTY face; `restore()` now returns per-item reasons and `#resync` consumes them)
 
 **What:** on bridge restart the browser re-delivers its retained stack intent
 (`StackRestoreChannel`) and the bridge's `restore()` re-seats what it can. Any item it CANNOT
@@ -2373,7 +2391,7 @@ this.#invoke(StackRestoreChannel, …)` and drops the `{ restored, skipped }` re
   it — only the layer-holding rows come back; the rest are gone with no message. No automated
   reproduction exists.
 
-## [ ] B-109 — a bridge restart RE-ADDs a deliberately CLEARed graphic onto its layer: retention stores `played:false` for both `idle` and `loaded`, so `restore()` cannot tell "cleared, leave empty" from "loaded, re-seat" and re-loads the producer UNASKED ⟨priority: high⟩
+## [~] B-109 — a bridge restart RE-ADDs a deliberately CLEARed graphic onto its layer: retention stores `played:false` for both `idle` and `loaded`, so `restore()` cannot tell "cleared, leave empty" from "loaded, re-seat" and re-loads the producer UNASKED ⟨priority: high⟩ — FIXED and on `dev`: `openspec/changes/runtime-retention-state/` (the WIRE face of the shared root)
 
 **What:** an operator CLEARs a graphic (the stack's `out` verb) to take it off air but keeps the
 row to re-take later — an `out` is NOT a `remove`, so the row stays on the stack, reconciled

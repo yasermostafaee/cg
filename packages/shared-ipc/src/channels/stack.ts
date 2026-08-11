@@ -193,6 +193,26 @@ export const StackSnapshotChannel = defineChannel(
 );
 
 /**
+ * B-108 — WHY an intent was declined. The three reasons are not interchangeable,
+ * and the split that matters is BENIGN vs LOST:
+ *
+ *   `already-held`     — the live bridge already has this item (a page reload
+ *                        against a healthy bridge). Nothing is lost, the row is
+ *                        still there, and surfacing it would be a false alarm.
+ *   `unknown-template` — the SPA re-delivers its library FIRST, so this means the
+ *                        template is genuinely gone. The row is LOST.
+ *   `no-layer`         — the range is exhausted. The row is LOST.
+ */
+export const RestoreSkipReasonSchema = z.enum(['already-held', 'unknown-template', 'no-layer']);
+export type RestoreSkipReason = z.infer<typeof RestoreSkipReasonSchema>;
+
+export const RestoreSkipSchema = z.object({
+  itemId: IdSchema,
+  reason: RestoreSkipReasonSchema,
+});
+export type RestoreSkip = z.infer<typeof RestoreSkipSchema>;
+
+/**
  * B-092 — re-deliver the browser's RETAINED stack intent to the bridge, so the
  * stack survives a restart of the bridge process (it otherwise lives only in
  * the bridge's in-memory Reconciler). Issued on every (re)connect, right after
@@ -202,16 +222,23 @@ export const StackSnapshotChannel = defineChannel(
  * The bridge REBUILDS state from these intents and publishes immediately, but
  * sends NOTHING to CasparCG at that moment: the adopt-vs-re-ADD decision waits
  * until real OSC occupancy is knowable, so a restore can never CLEAR a live
- * layer. `skipped` counts intents the bridge declined (an item it already
- * holds, an unregistered template, no free layer) — a partial restore is
- * normal, never an error.
+ * layer. A partial restore is normal, never an error.
+ *
+ * ⭐ **B-108 — `skipped` is a LIST, not a count, and it REPLACED the count rather
+ * than joining it.** It was `skipped: number`, and nothing consumed it:
+ * `WebSocketRuntime.#resync` awaited the call and discarded the result, so rows the
+ * bridge could not re-seat vanished from the operator's stack with nothing said.
+ * A count could not have fixed that even if it had been read — the operator needs to
+ * know WHICH rows are gone and WHY, and one of the three reasons is benign and must
+ * raise no alarm at all. Carrying both a count and a list would be two shapes of one
+ * fact, which is how they come to disagree.
  */
 export const StackRestoreChannel = defineChannel(
   'stack.restore',
   z.object({ items: z.array(RetainedStackItemSchema) }),
   z.object({
     restored: z.number().int().nonnegative(),
-    skipped: z.number().int().nonnegative(),
+    skipped: z.array(RestoreSkipSchema),
   }),
 );
 

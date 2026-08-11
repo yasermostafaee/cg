@@ -106,6 +106,10 @@ const BRIDGE_SURFACE: {
       'stopAll',
       'snapshot',
       'onStateChanged',
+      // B-108 — the rows the last restore could not bring back. The mock has no
+      // bridge and so no restore; it answers the contract with the true value for
+      // such a session (an empty report), which is why parity holds here.
+      'onRestoreSkips',
     ],
     connections: [
       'config',

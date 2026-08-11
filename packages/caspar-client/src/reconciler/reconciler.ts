@@ -1,9 +1,11 @@
 import { EventEmitter } from 'node:events';
+import { isRetainedOnAir } from '@cg/shared-schema';
 import type {
   FieldValues,
   Intent,
   LayerSlot,
   OscEvent,
+  RetainedAirState,
   StackItemState,
   StackItemStatus,
 } from '@cg/shared-schema';
@@ -202,38 +204,60 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
    * a live bridge's own state with a retained copy (a page reload against a
    * healthy bridge must change nothing).
    *
-   * `played` is reconstructed play evidence, and it decides how the record is
-   * seeded:
+   * ⭐ **B-107 / B-109 — the retained STATE decides how the record is seeded, and
+   * a restore may NEVER seed a state better than the one that was retained.**
    *
-   *   played  → `playing` AND `ackedStatus: 'playing'`, i.e. exactly what a
-   *             settled, confirmed take left behind before the process died.
-   *             The ack matters: without it `pending` is true and the row spins
-   *             forever on a link that may never come back. The item is NOT
-   *             claimed `on-air` here — only OSC may promote it there, and it
-   *             will, as soon as the wire confirms a live producer.
-   *   !played → the terminal `loaded`, resting and unconfirmed by anything.
+   * This took a `played: boolean`, which is the shared root of both bugs: it
+   * collapsed a FAILED row, a deliberately CLEARed row and a genuinely pre-rolled
+   * one into the single seed `loaded`, so a bridge restart silently promoted the
+   * first two to something playable.
+   *
+   *   `on-air`  → `playing` AND `ackedStatus: 'playing'`, i.e. exactly what a
+   *               settled, confirmed take left behind before the process died.
+   *               The ack matters: without it `pending` is true and the row spins
+   *               forever on a link that may never come back. The item is NOT
+   *               claimed `on-air` here — only OSC may promote it there, and it
+   *               will, as soon as the wire confirms a live producer.
+   *   `loaded`  → the terminal `loaded`, resting and unconfirmed by anything.
+   *   `cleared` → the terminal `idle`. The operator emptied this layer (or a
+   *               reconcile proved it empty); the row comes back saying so.
+   *   `error`   → `error`, carrying its code, AND acked. The ack is load-bearing
+   *               for the same reason as the on-air case — `error` is not in
+   *               `isTerminalStatus`, so without a matching ack the row would
+   *               publish `pending: true` and spin forever on a failure that is
+   *               finished.
    *
    * No OSC observation and no slot are seeded — the caller assigns the slot
    * (`assignSlot`) and real OSC supplies the truth. Until then the merge ladder
    * falls through to these values, and while the CasparCG link is down B-086's
-   * `unverified` demotion applies to the played case exactly as it would to a
+   * `unverified` demotion applies to the on-air case exactly as it would to a
    * record that never died.
    */
   restoreItem(input: {
     itemId: string;
     templateId: string;
     fields: FieldValues;
-    played: boolean;
+    state: RetainedAirState;
+    errorCode?: string;
   }): StackItemState | null {
     if (this.items.has(input.itemId)) return null;
+    // The ONE canonical predicate for play evidence — never a local re-derivation
+    // of which states count as air (golden rule 6).
+    const played = isRetainedOnAir(input.state);
     const rec: ItemRecord = {
       itemId: input.itemId,
       templateId: input.templateId,
       fields: input.fields,
       fieldsHash: hashFields(input.fields),
-      intentStatus: input.played ? 'playing' : 'loaded',
-      ...(input.played && { ackedStatus: 'playing' as StackItemStatus }),
-      played: input.played,
+      intentStatus: seedStatusFor(input.state),
+      ...(played && { ackedStatus: 'playing' as StackItemStatus }),
+      // An errored restore is SETTLED, not in flight: acking it with its own status
+      // is what stops the row spinning (see the docstring).
+      ...(input.state === 'error' && { ackedStatus: 'error' as StackItemStatus }),
+      ...(input.state === 'error' && input.errorCode !== undefined
+        ? { errorCode: input.errorCode }
+        : {}),
+      played,
     };
     this.items.set(rec.itemId, rec);
     return this.emitChange(rec);
@@ -781,6 +805,28 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       return rec.ackedStatus === rec.intentStatus;
     }
     return false;
+  }
+}
+
+/**
+ * B-107 / B-109 — the seed status for a restored record, per retained state.
+ *
+ * Exhaustive with no `default`, like `retainedStateFor` on the other side of the
+ * same journey: a new retained state must not be able to fall through to a
+ * comfortable guess.
+ */
+function seedStatusFor(state: RetainedAirState): StackItemStatus {
+  switch (state) {
+    // NOT `on-air`: only OSC may promote a record there. `playing` + the ack is
+    // exactly what a settled take left behind.
+    case 'on-air':
+      return 'playing';
+    case 'loaded':
+      return 'loaded';
+    case 'cleared':
+      return 'idle';
+    case 'error':
+      return 'error';
   }
 }
 

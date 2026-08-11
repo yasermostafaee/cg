@@ -246,12 +246,12 @@ it('B-114 — a retained item on a declared row is RE-BOUND to that row after a 
       itemId: 'item-clock',
       templateId: 'tpl-clock',
       fields: {},
-      played: false,
+      state: 'loaded',
       slot: { channel: 1, layer: 72 },
     },
   ]);
   expect(result.restored).toBe(1);
-  expect(result.skipped).toBe(0);
+  expect(result.skipped).toEqual([]);
 
   // THE assertion: the row names the item again, with the registry's template
   // type — not `null`, and not a raw templateId.

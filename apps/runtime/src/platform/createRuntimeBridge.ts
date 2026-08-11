@@ -134,6 +134,24 @@ export function createMockBridge(): RuntimeBridge {
       stopAll: () => Promise.resolve(mock.stopAll()),
       snapshot: () => Promise.resolve(mock.stackSnapshot()),
       onStateChanged: (handler) => mock.stackChanged.subscribe(handler),
+      /*
+       * B-108 — PARITY BY HONEST EMPTINESS, not by a missing method.
+       *
+       * Test mode has no bridge at all (`link.status()` is a constant
+       * `offline-mock`), so it has no retention, no `restore()` and therefore no
+       * rows a restore could fail to bring back. The truthful report is an EMPTY
+       * one, delivered once, forever — which is exactly what a healthy live session
+       * reports too, so the surface behaves identically in both backends instead of
+       * being absent in one.
+       *
+       * This is the same shape as `templates.html` returning `null` here: the mock
+       * answers the contract with the true value for a session that has no such
+       * thing, rather than dropping the method and forcing every consumer to branch.
+       */
+      onRestoreSkips: (handler) => {
+        handler([]);
+        return () => undefined;
+      },
     },
 
     connections: {

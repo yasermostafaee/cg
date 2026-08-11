@@ -57,6 +57,7 @@ import type {
   ChannelSettingsSetChannel,
   ChannelSettingsState,
   Rehearsal,
+  RestoreSkip,
   RehearseEnterChannel,
   RehearseExitChannel,
   RehearseStateChannel,
@@ -160,6 +161,25 @@ export interface RuntimeBridge {
     stopAll(): Promise<ChannelResponse<typeof StackStopAllChannel>>;
     snapshot(): Promise<ChannelResponse<typeof StackSnapshotChannel>>;
     onStateChanged(handler: (snapshot: readonly StackItemState[]) => void): Unsubscribe;
+    /**
+     * B-108 — the rows the last restore could NOT bring back, with the reason.
+     *
+     * A bridge restart re-delivers the browser's retained stack intent, and the
+     * bridge declines what it cannot re-seat. Those rows were on the operator's
+     * screen a moment ago and are now GONE — which desynchronises their model of the
+     * stack from reality, silently. The information was always computed and always
+     * discarded; this is the seam that carries it to a surface.
+     *
+     * The BENIGN skip (an item the live bridge already holds — a page reload against
+     * a healthy bridge, which loses no row) is filtered out BEFORE it reaches here,
+     * so a subscriber never has to know the difference and can never raise a false
+     * alarm by forgetting to.
+     *
+     * The handler is called IMMEDIATELY with the latest report on subscribe: the
+     * panel mounts after boot, and a report it missed is exactly the one worth
+     * seeing. An EMPTY report is meaningful — it clears a stale notice.
+     */
+    onRestoreSkips(handler: (skips: readonly RestoreSkip[]) => void): Unsubscribe;
   };
 
   connections: {

@@ -6,6 +6,8 @@ import {
   PanelRight,
   RotateCcw,
   Trash2,
+  TriangleAlert,
+  X,
   XSquare,
 } from 'lucide-react';
 import { colors } from '../../theme.js';
@@ -20,6 +22,7 @@ import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
 import { useStackSnapshot } from '../../hooks/useStack.js';
+import { restoreSkipReason, useRestoreSkips } from '../../hooks/useRestoreSkips.js';
 import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { usePlayoutLayers } from '../../hooks/usePlayoutLayers.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
@@ -88,6 +91,21 @@ const styles = {
    * a narrow width would defeat the fixed height. The full sentence stays reachable
    * through the element's own `title`.
    */
+  restoreSkipStrip: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.4rem',
+    padding: '0.35rem 0.6rem',
+    fontSize: '0.78rem',
+    // The CAUTION role, not the danger red: nothing is on air wrongly and nothing is
+    // broken — the operator's LIST is short, and they have to know before they reach
+    // for a row that is not there.
+    color: colors.pending,
+    background: colors.panelMuted,
+    borderBottom: `1px solid ${colors.border}`,
+    overflow: 'hidden',
+  },
   awaitingStrip: {
     height: '1.65rem',
     flexShrink: 0,
@@ -172,6 +190,28 @@ export function LayersPanel({
    * two of them guarded.
    */
   const { items, ready: stackReady } = useStackSnapshot();
+  /*
+   * B-108 — the rows the last restore could NOT bring back.
+   *
+   * DELIBERATELY MINIMAL, and the reason is scheduling rather than taste: Live Source
+   * phase 6.9e reshapes these same rows, so this adds the LEAST that is honest and
+   * leaves the better surface to the change that is about to rebuild it. When 6.9e
+   * lands it can move this per-row and delete the strip; nothing else depends on it.
+   *
+   * A PANEL notice and not a row one, because these rows DO NOT EXIST any more —
+   * that is precisely what is wrong. There is nothing to hang a per-row mark on.
+   * (The rows a restore deliberately declines to re-seat — cleared and errored — are
+   * honest ON the row already, through the state the row renders. Those two surfaces
+   * are complementary and neither duplicates the other.)
+   */
+  const restoreSkips = useRestoreSkips();
+  const [dismissedSkips, setDismissedSkips] = useState('');
+  // Keyed by CONTENT, not a boolean: dismissing this report must not also dismiss the
+  // NEXT one. A boolean flag would silence every future reconnect after the operator
+  // acknowledged one — a surface that can be permanently turned off by a single click
+  // is a surface that eventually lies.
+  const skipsKey = restoreSkips.map((s) => `${s.itemId}:${s.reason}`).join('|');
+  const showSkips = skipsKey.length > 0 && skipsKey !== dismissedSkips;
   const linkDown = useLink() === 'disconnected';
   // THE SECOND HOP — a live bridge says nothing about the playout machine.
   const casparReach = useCasparReach();
@@ -580,6 +620,35 @@ export function LayersPanel({
                 changes or the change is never announced. `status` and not `alert` —
                 nothing is wrong, this is the ordinary first second of a page.
               */}
+              {showSkips && (
+                /*
+                  `role="alert"`, not `status`: rows the operator was looking at are
+                  GONE. That is not the ordinary first second of a page, which is what
+                  the strip below reports — it is a change to their list that nothing
+                  else announces, and it must interrupt.
+                */
+                <div style={styles.restoreSkipStrip} role="alert" data-restore-skips="">
+                  <Icon icon={TriangleAlert} size={13} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <strong>
+                      {restoreSkips.length} {restoreSkips.length === 1 ? 'row' : 'rows'} did not
+                      come back
+                    </strong>{' '}
+                    after the bridge restarted:{' '}
+                    {restoreSkips
+                      .map((s) => `${s.itemId} — ${restoreSkipReason(s.reason)}`)
+                      .join('; ')}
+                    .
+                  </span>
+                  <Button
+                    variant="ghost"
+                    aria-label="Dismiss the restore notice"
+                    onClick={() => setDismissedSkips(skipsKey)}
+                  >
+                    <Icon icon={X} size={13} />
+                  </Button>
+                </div>
+              )}
               <div style={styles.awaitingStrip} role="status">
                 {awaitingRows > 0 && (
                   <>

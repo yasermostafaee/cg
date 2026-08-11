@@ -232,14 +232,19 @@ it('R-028 / C-015 — a retained item whose slot is now RESERVED is skipped at r
       itemId: 'item-old',
       templateId: 'tpl-clock',
       fields: {},
-      played: true,
+      state: 'on-air',
       slot: { channel: 1, layer: 61, server: 'primary' },
     },
   ]);
   // SKIPPED — not restored elsewhere. Re-homing would read a DIFFERENT
   // layer's occupancy and could re-ADD a duplicate while the survivor stays
   // live on the playout layer.
-  expect(result).toEqual({ restored: 0, skipped: 1 });
+  expect(result).toEqual({
+    restored: 0,
+    // B-108 — named, so the SPA can tell the operator this row is GONE (a reserved
+    // playout coordinate yields no layer of ours) rather than letting it vanish.
+    skipped: [{ itemId: 'item-old', reason: 'no-layer' }],
+  });
   expect(r.stackSnapshot().some((i) => i.itemId === 'item-old')).toBe(false);
   expect(mock.lastCgAdd({ channel: 1, layer: 61 })).toBeUndefined();
 });

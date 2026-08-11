@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { retainedStateFor } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type {
   ConnectionConfig,
@@ -105,16 +106,27 @@ async function recvLines(m: MockHandle, file: string): Promise<string[]> {
 /**
  * The browser's side of the contract, in one line: reduce the published stack
  * to retained INTENT, exactly as `StackRetentionStore` does.
+ *
+ * 🔴 **The status → state map is `retainedStateFor`, the SAME function the browser
+ * store calls — never a list of statuses written out again here.** This helper used
+ * to carry its own `i.status === 'playing' || …` copy, which is precisely the "two
+ * status-derivation sites that can drift" hazard `B-107` named: a test standing in
+ * for the browser must reduce state the way the browser does, or it proves the
+ * bridge handles input the browser never sends.
  */
 function retain(r: CasparRuntime): RetainedStackItem[] {
-  return r.stackSnapshot().map((i) => ({
-    itemId: i.itemId,
-    templateId: i.templateId,
-    fields: i.fields,
-    played: i.status === 'playing' || i.status === 'on-air' || i.status === 'unverified',
-    ...(i.slot !== undefined && { slot: i.slot }),
-    ...(i.position !== undefined && { position: i.position }),
-  }));
+  return r.stackSnapshot().map((i) => {
+    const state = retainedStateFor(i.status);
+    return {
+      itemId: i.itemId,
+      templateId: i.templateId,
+      fields: i.fields,
+      state,
+      ...(state === 'error' && i.errorCode !== undefined && { errorCode: i.errorCode }),
+      ...(i.slot !== undefined && { slot: i.slot }),
+      ...(i.position !== undefined && { position: i.position }),
+    };
+  });
 }
 
 /**
@@ -149,7 +161,7 @@ it('a BRIDGE-ONLY restart: the restored item keeps ON AIR and its live layer is 
 
   const retained = await onAirThenBridgeDies(mock, oscPort);
   expect(retained).toHaveLength(1);
-  expect(retained[0]?.played).toBe(true);
+  expect(retained[0]?.state).toBe('on-air');
   expect(retained[0]?.slot).toMatchObject(SLOT);
 
   // CasparCG never died: the graphic is STILL ON AIR, orphaned by the dead bridge.
@@ -167,7 +179,7 @@ it('a BRIDGE-ONLY restart: the restored item keeps ON AIR and its live layer is 
   // completes). The occupancy tap is empty here, so the decision MUST be
   // deferred to the healthy transition; if it were taken now, "silent" would be
   // read as "empty" and the live layer would be re-ADDed over.
-  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: 0 });
+  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [] });
 
   // The core bug: the row is BACK, immediately, before CasparCG is reachable.
   expect(r2.stackSnapshot().map((i) => i.itemId)).toEqual(['item1']);
@@ -217,7 +229,7 @@ it('a BRIDGE + CASPARCG restart: the restored item returns as LOADED on the empt
   runtime2 = r2;
   await r2.startServing();
   r2.templateImport(TEMPLATE, HTML);
-  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: 0 });
+  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [] });
   r2.start();
   await r2.whenServerHealthy(HEALTH_MS);
 
@@ -268,7 +280,7 @@ it('INVARIANT: a layer the occupancy tap reports OCCUPIED has its adopt-CLEAR su
   await r2.whenServerHealthy(HEALTH_MS);
   const beforeRestore = (await recvLines(mock, tracePath)).length;
 
-  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: 0 });
+  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [] });
 
   // Occupied at restore time → adopted WITHOUT a CLEAR, and the item reads ON AIR.
   await waitFor(() => status(r2, 'item1') === 'on-air', 8000, 'restored item reads ON AIR');
@@ -291,7 +303,7 @@ it('FROZEN: the ORDINARY load path still adopt-CLEARs, and a live bridge is neve
   runtime2 = r2;
   await r2.startServing();
   r2.templateImport(TEMPLATE, HTML);
-  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: 0 });
+  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [] });
   r2.start();
   await r2.whenServerHealthy(HEALTH_MS);
   const afterRestore = (await recvLines(mock, tracePath)).length;
@@ -310,7 +322,13 @@ it('FROZEN: the ORDINARY load path still adopt-CLEARs, and a live bridge is neve
 
   // A second restore of the SAME intent (a page reload against this now-live
   // bridge) is a no-op: local intent never clobbers a bridge's own state.
-  expect(await r2.restore(retained)).toEqual({ restored: 0, skipped: 1 });
+  expect(await r2.restore(retained)).toEqual({
+    restored: 0,
+    // B-108 — the skip now says WHICH row and WHY, and this is the BENIGN reason:
+    // a page reload against a live bridge loses nothing, so the SPA filters it out
+    // before any operator surface sees it.
+    skipped: [{ itemId: 'item1', reason: 'already-held' }],
+  });
   expect(r2.stackSnapshot()).toHaveLength(2);
 }, 40_000);
 
@@ -327,11 +345,11 @@ it('FROZEN: restoring while NO server is reachable sends nothing, and the on-air
       itemId: 'item1',
       templateId: 'lower-third',
       fields: { headline: 'سلام' },
-      played: true,
+      state: 'on-air',
       slot: { ...SLOT, server: 'primary' },
     },
   ];
-  expect(await r.restore(retained)).toEqual({ restored: 1, skipped: 0 });
+  expect(await r.restore(retained)).toEqual({ restored: 1, skipped: [] });
 
   // The row is back — that is the point, and it costs no AMCP traffic (there is
   // nothing to send to, and nothing is queued for later: R-006 forbids that).
@@ -392,13 +410,18 @@ it('FROZEN: a restore never LIFTS B-086 — a mirror pair with the primary down 
     await waitFor(() => status(r, 'item1') === 'unverified', 8000, 'B-086 demotes to WAS ON AIR');
 
     // A page reload now re-delivers retained intent. The demotion must SURVIVE it.
-    expect(await r.restore(retain(r))).toEqual({ restored: 0, skipped: 1 });
+    expect(await r.restore(retain(r))).toEqual({
+      restored: 0,
+      skipped: [{ itemId: 'item1', reason: 'already-held' }],
+    });
     expect(status(r, 'item1')).toBe('unverified');
 
     // …including for an item the restore genuinely seeds.
     expect(
-      await r.restore([{ itemId: 'item2', templateId: 'lower-third', fields: {}, played: true }]),
-    ).toEqual({ restored: 1, skipped: 0 });
+      await r.restore([
+        { itemId: 'item2', templateId: 'lower-third', fields: {}, state: 'on-air' },
+      ]),
+    ).toEqual({ restored: 1, skipped: [] });
     expect(status(r, 'item2')).toBe('unverified');
   } finally {
     await backup.stop();
