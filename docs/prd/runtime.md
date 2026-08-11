@@ -1421,7 +1421,7 @@ describes is the behaviour this item was filed to deliver. Closing `R-030` means
 source 2 reachable (append `cw`/`ch` only when a channel is genuinely configured) or amending the
 acceptance to drop a source the design does not want — a decision, not a bug fix.
 
-## [ ] R-034 — the delimiter list is CONFIGURABLE in settings, not hard-coded in the control ⟨priority: medium⟩
+## [~] R-034 — the delimiter list is CONFIGURABLE in settings, not hard-coded in the control ⟨priority: medium⟩ — FIXED and on `dev`: `openspec/changes/runtime-from-file-persistence/` (20/21 tasks), authored together with [[B-113]] because they are two defects in the same control. Gated on the SAME single remaining task 6.2 — an owner browser check on a Chromium that does not auto-grant — which is a File System Access question, not a delimiter one; one owner pass closes both items
 
 **What:** the five delimiters offered under a list field are a hard-coded array in
 `fromFileContent.ts` (`DELIMITER_SUGGESTIONS`). The owner asked for a section in settings where

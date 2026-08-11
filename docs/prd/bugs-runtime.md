@@ -2448,7 +2448,7 @@ violation. It protects a surviving producer but resurrects a cleared one.
   (leaving the idle row on the stack), then kill and restart the bridge — the producer is re-ADDed
   onto its layer and the row returns READY.
 
-## [ ] B-113 — a field's chosen source FILE is lost on every page refresh, and the delimiter list hides four of its five options behind a text input the operator must first clear ⟨priority: high⟩
+## [~] B-113 — a field's chosen source FILE is lost on every page refresh, and the delimiter list hides four of its five options behind a text input the operator must first clear ⟨priority: high⟩ — FIXED and on `dev`: `openspec/changes/runtime-from-file-persistence/` (20/21 tasks). Both halves are implemented — the attachment now writes through to IndexedDB on every mutation and is restored on load (`fromFileStore.ts`), and the delimiter list no longer hides behind the input. **The ONLY thing between this and `[x]` is task 6.2, an OWNER BROWSER CHECK** on a Chromium that does NOT auto-grant the File System Access permission: the needs-gesture path is covered by unit test against a FAKE handle, but the real prompt's wording and timing on this station's browser has never been seen, and a fake handle cannot prove it
 
 **What:** two defects in R-018's "from file" affordance, both reported by the owner from live
 use, both in the same control:
