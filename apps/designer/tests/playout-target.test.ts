@@ -16,7 +16,7 @@ function comp(id: string, over: Partial<Composition> = {}): Composition {
     name: id,
     resolution: { width: 1920, height: 1080 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [],
     fields: [],
     bindings: [],
@@ -59,7 +59,7 @@ function sceneWithTargetedChild(): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [],
     compositions: [
       comp('R', { layers: [layerOf([compInstance('instC', 'C')])], playoutTarget: 'casparcg' }),

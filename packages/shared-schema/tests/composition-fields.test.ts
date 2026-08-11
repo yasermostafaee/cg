@@ -94,7 +94,7 @@ function comp(over: Partial<Composition> & { id: string }): Composition {
     name: over.id,
     resolution: { width: 200, height: 100 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [],
     fields: [],
     bindings: [],

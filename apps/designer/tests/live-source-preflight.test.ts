@@ -76,7 +76,7 @@ function scene(children: Element[]): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: 'L1', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -290,7 +290,7 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
           resolution: { width: 1920, height: 1080 },
           frameRate: 50,
           frameRange: { in: 0, out: 50 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           layers: [
             {
               id: 'CL1',
@@ -333,7 +333,7 @@ describe('D-137 — overlapping holes are reported against BOTH elements', () =>
           resolution: { width: 1920, height: 1080 },
           frameRate: 50,
           frameRange: { in: 0, out: 50 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           layers, // the SAME array the projection put on `scene.layers`
         },
       ],

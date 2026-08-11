@@ -266,6 +266,21 @@ describe("FieldBinding — the 'clock-target' target (D-141)", () => {
  * it parsed to before — no injected keys, no version bump, nothing to migrate.
  * These are REAL committed fixtures (B-034, 2026-06-28), not scenes minted here.
  */
+/**
+ * B-129 — the one deliberate shape difference between a pre-B-129 fixture and its
+ * parse: `background` (scene AND every composition) is now `editorBackdrop`. Applied
+ * to the fixture so the additivity proof above compares like with like.
+ */
+function renameBackgroundKeys(raw: unknown): unknown {
+  if (Array.isArray(raw)) return raw.map(renameBackgroundKeys);
+  if (raw === null || typeof raw !== 'object') return raw;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    out[k === 'background' ? 'editorBackdrop' : k] = renameBackgroundKeys(v);
+  }
+  return out;
+}
+
 describe('the widening is additive — no schema-version bump, no migration', () => {
   const fixtures = ['hidden-content-inert', 'hidden-ancestor-inert'] as const;
 
@@ -277,7 +292,14 @@ describe('the widening is additive — no schema-version bump, no migration', ()
     const parsed = SceneSchema.parse(raw);
     // Round-tripping through JSON drops `undefined`-valued keys, so this compares the
     // SERIALISED forms: the parse neither added a field nor dropped one.
-    expect(JSON.parse(JSON.stringify(parsed))).toEqual(raw);
+    //
+    // B-129 — ONE documented difference, applied to the EXPECTATION rather than
+    // relaxed away: `background` is normalized onto `editorBackdrop` at parse time.
+    // Encoding it here keeps the proof exactly as strong as it was — any OTHER
+    // injected or dropped key still fails — while naming the single rename that is
+    // deliberate. Do NOT weaken this to `toMatchObject`: that would stop catching
+    // injected keys, which is the whole point of the fixture.
+    expect(JSON.parse(JSON.stringify(parsed))).toEqual(renameBackgroundKeys(raw));
   });
 
   it.each(fixtures)('%s.scene.json gains no zones / zoneOverrides key anywhere', (name) => {

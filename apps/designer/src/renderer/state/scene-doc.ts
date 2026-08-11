@@ -20,7 +20,7 @@ import { dropFullyOffFrameForExport } from './off-frame.js';
  * The "active document" layer shared by every domain slice. The editor edits
  * either the main scene (`activeCompositionId === null`) or one of
  * `scene.compositions`; these accessors read and write that active document's
- * layers and doc-level fields (size / duration / background / fields+bindings)
+ * layers and doc-level fields (size / duration / editorBackdrop / fields+bindings)
  * so every mutation stays agnostic of which one is active. Plus `locate` (find
  * an element) and `editSceneOf` (project the active comp into a flat `Scene` for
  * the inspector/preview/exporter).
@@ -38,7 +38,7 @@ export interface EditDocFields {
   activeRange?: FrameRange | undefined;
   lifecycle?: Lifecycle | undefined;
   playout?: Playout | undefined;
-  background: Scene['background'];
+  editorBackdrop: Scene['editorBackdrop'];
 }
 
 export function activeCompId(): string | null {
@@ -131,7 +131,7 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     activeRange: c.activeRange,
     lifecycle: c.lifecycle,
     playout: c.playout,
-    background: c.background,
+    editorBackdrop: c.editorBackdrop,
     layers: c.layers,
     // D-025 — fields/bindings are per-composition; surface the active comp's own
     // (the inspector/preview/exporter read these). `compositions` stays from the
@@ -246,7 +246,7 @@ export function ensureCompositions(scene: Scene): { scene: Scene; activeId: stri
       // absent one stays absent rather than materializing an `undefined` key.
       ...(scene.lifecycle !== undefined ? { lifecycle: scene.lifecycle } : {}),
       ...(scene.playout !== undefined ? { playout: scene.playout } : {}),
-      background: scene.background,
+      editorBackdrop: scene.editorBackdrop,
       layers: rootLayers,
       fields: [],
       bindings: [],

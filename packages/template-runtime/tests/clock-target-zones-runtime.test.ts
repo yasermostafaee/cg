@@ -123,7 +123,7 @@ function sceneOf(partial: Partial<Scene> & Pick<Scene, 'layers'>): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     fields: [],
     bindings: [],
     fonts: [],
@@ -253,7 +253,7 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
           id: 'child',
           name: 'child',
           resolution: { width: 400, height: 60 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           frameRange: { in: 0, out: 50 },
           layers: [
             layerOf('CL', [clockEl({ id: 'clk', target: { kind: 'timeofday', time: '20:32' } })]),
@@ -303,7 +303,7 @@ describe('zone scope roots — reach, nearest-wins, inertness (D-141)', () => {
           id: 'child',
           name: 'child',
           resolution: { width: 400, height: 60 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           frameRange: { in: 0, out: 50 },
           layers: [
             layerOf('CL', [

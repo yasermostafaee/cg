@@ -1582,7 +1582,7 @@ Any fix must say what happens to those.
 **Related:** [[D-039]] is the feature that introduced image/logo separators. Source:
 `DEBT.md` sweep, external report (no `DEBT.md` line — reported directly by the owner).
 
-## [ ] B-129 — the Designer canvas background colour reaches the OUTPUT: air must stay transparent unless a real element was placed ⟨priority: high — reaches air⟩
+## [~] B-129 — the Designer canvas background colour reaches the OUTPUT: air must stay transparent unless a real element was placed ⟨priority: high — reaches air⟩
 
 **What:** the canvas backdrop the author sees while editing is carried into the rendered output.
 Output must be **transparent** unless the author deliberately placed a large rectangle — which is
@@ -1592,7 +1592,42 @@ a real element, with a real entry in the scene, and behaves like one.
 broadcast overlay that is the difference between a lower-third and a full-frame card, and nothing
 in the Designer tells the author it will happen — the editor looks the same either way.
 
-**MECHANISM NOT DIAGNOSED.** The owner has confirmed the behaviour; no cause is recorded here.
+⭐ **MECHANISM DIAGNOSED 2026-08-11** (was: _"MECHANISM NOT DIAGNOSED"_) — in progress:
+`openspec/changes/designer-export-fidelity/`.
+
+- `BackgroundControl.tsx` is an _"always-on scene background picker"_ writing `scene.background`.
+- `scene-builder.ts:98` applied it to `.cg-stage` in **every** render mode, `output` included —
+  and `:278` / `:900` / `:1041` did the same for a nested composition.
+
+One field carried TWO facts — _"let me see my white text while I work"_ and _"this paints a
+background on air"_ — and the render path could not tell them apart.
+
+🔴 **AND A SECOND FINDING, which sharpens the item: the author never saw the backdrop ANYWAY.**
+The D-071 authoring pasteboard pins `.cg-stage { background-color: #3d4253 !important }` plus the
+broadcast checkerboard (`preview.ts:162-190`), and `!important` beats the runtime's inline style.
+So the control had NO effect on the surface the author was looking at and FULL effect on air —
+the exact reason _"nothing in the Designer tells the author it will happen"_. The fix is therefore
+a pure removal of harm, not a trade.
+
+**THE DECISION:** the backdrop MEANS the editor's affordance and nothing else. `background` is
+renamed `editorBackdrop` on `Scene` and `Composition` (the name is the contract), a legacy
+`background` key is normalized onto it **at parse time**, the renderer paints it **only in
+`author` mode**, and both exporters emit it transparent via ONE shared `withoutEditorBackdrop`
+helper. An authored background stays expressible as a real full-frame element, unchanged.
+
+⚠ **NOT a schema-version bump + registry migration, and the reason is a measured finding worth
+keeping:** `migrations.migrate()` has **ZERO production call sites**. Its docstring claims _"the
+loader in `@cg/vcg-format` walks the registry"_ — nothing outside `@cg/shared-schema` and its own
+tests imports `migrations`, and `schemaVersion: 1` is WRITTEN by `ProjectStore.ts:72` and
+`pack.ts:87` and never read back. A registered migration would have been a conversion that never
+runs. Parse-time normalization is the codebase's own precedent (`PlayoutSchema`) and executes on
+every load path, because every load path parses.
+
+**Fate of existing templates:** their EDITING appearance is unchanged (the legacy value survives
+onto `editorBackdrop`); their ON-AIR appearance changes, which IS the fix. **No shipped template
+is affected** — every `@cg/starter-templates` scene and composition already carried
+`'transparent'` (verified, not assumed). The change is announced rather than silent: the control
+now states it is editor-only and does not reach air.
 
 **On `DEBT.md:1190` — that entry is NOT wrong, but its scope is narrower than it reads, and this
 item must not be closed by citing it.** It states that two candidate causes for a separate defect

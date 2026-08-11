@@ -263,7 +263,7 @@ export const tickerScene: Scene = {
   frameRate: FPS,
   safeAreas: { title: 10, action: 5 },
   frameRange: { in: 0, out: 122 },
-  background: 'transparent',
+  editorBackdrop: 'transparent',
   layers: [],
   compositions: [
     {
@@ -273,7 +273,7 @@ export const tickerScene: Scene = {
       frameRange: { in: 0, out: 122 },
       lifecycle: { outPoint: 60, contentStart: 55 },
       playout: { mode: 'manual' },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         layer('L-full', 'Frame', [
           // The strap, positioned at its on-frame home. The envelope opacity
@@ -303,7 +303,7 @@ export const tickerScene: Scene = {
       frameRange: { in: 0, out: 110 },
       lifecycle: { outPoint: 60, contentStart: 55 },
       playout: { mode: 'manual' },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [layer('L-strap', 'Strap', strapChildren)],
     },
     {
@@ -313,7 +313,7 @@ export const tickerScene: Scene = {
       frameRange: { in: 0, out: 50 },
       lifecycle: { outPoint: 50 },
       playout: { mode: 'loop-cycle', holdSource: 'timed', holdMs: 0, repeat: 'infinite' },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [layer('L-pulse', 'Pulse', pulseChildren)],
     },
   ],

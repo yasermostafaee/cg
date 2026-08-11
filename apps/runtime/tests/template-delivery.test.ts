@@ -51,7 +51,7 @@ function fixtureScene(): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'layer-1',
@@ -332,7 +332,7 @@ async function buildVcgWithFont(templateId = 'tpl-font-1'): Promise<Uint8Array> 
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'layer-1',
@@ -456,7 +456,7 @@ async function buildVcgWithLiveSource(
         resolution: { width: 960, height: 540 },
         frameRate: 50,
         frameRange: { in: 0, out: 50 },
-        background: 'transparent',
+        editorBackdrop: 'transparent',
         layers: [
           {
             id: 'comp-layer',

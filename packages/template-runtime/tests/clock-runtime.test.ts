@@ -138,7 +138,7 @@ function clockScene(opts: {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     ...(opts.playout !== undefined ? { playout: opts.playout } : {}),
     layers: [
       {

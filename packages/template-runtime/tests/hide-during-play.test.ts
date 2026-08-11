@@ -139,7 +139,7 @@ function scene(children: Element[]): Scene {
     frameRange: { in: 0, out: 100 },
     lifecycle: { outPoint: 40 },
     playout: { mode: 'manual' },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],

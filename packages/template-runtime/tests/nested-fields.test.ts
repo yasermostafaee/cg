@@ -28,7 +28,7 @@ const childComp: Composition = {
   name: 'Team',
   resolution: { width: 200, height: 100 },
   frameRange: { in: 0, out: 50 },
-  background: 'transparent',
+  editorBackdrop: 'transparent',
   layers: [
     {
       id: 'cl',
@@ -83,7 +83,7 @@ const parentScene: Scene = {
   frameRate: 50,
   safeAreas: { title: 10, action: 5 },
   frameRange: { in: 0, out: 50 },
-  background: 'transparent',
+  editorBackdrop: 'transparent',
   layers: [
     {
       id: 'pl',

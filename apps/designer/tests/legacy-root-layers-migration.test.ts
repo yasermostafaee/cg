@@ -26,7 +26,7 @@ function legacyScene(over: Partial<Scene> = {}): Scene {
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
     activeRange: { in: 0, out: 80 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'L1',
@@ -83,7 +83,7 @@ describe('B-068 — ensureCompositions migrates a legacy root-layers scene', () 
     expect(playoutOf(comp).mode).toBe('static');
   });
 
-  it('still carries resolution / frameRange / activeRange / background / layers', () => {
+  it('still carries resolution / frameRange / activeRange / editorBackdrop / layers', () => {
     const scene = legacyScene({ lifecycle: { outPoint: 60 } });
 
     const comp = migrate(scene);
@@ -92,7 +92,7 @@ describe('B-068 — ensureCompositions migrates a legacy root-layers scene', () 
     expect(comp.resolution).toEqual({ width: 1920, height: 1080 });
     expect(comp.frameRange).toEqual({ in: 0, out: 100 });
     expect(comp.activeRange).toEqual({ in: 0, out: 80 });
-    expect(comp.background).toBe('transparent');
+    expect(comp.editorBackdrop).toBe('transparent');
     expect(comp.layers).toEqual(scene.layers);
     // The root is drained — the layers now live in the composition.
     expect(ensureCompositions(scene).scene.layers).toEqual([]);

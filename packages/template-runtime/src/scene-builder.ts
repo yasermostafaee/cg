@@ -95,8 +95,13 @@ export function buildScene(
   container.className = 'cg-stage';
   container.style.width = `${scene.resolution.width}px`;
   container.style.height = `${scene.resolution.height}px`;
-  if (scene.background !== 'transparent') {
-    container.style.background = scene.background;
+  // B-129 — the backdrop is an EDITOR affordance and MUST NOT reach output. One
+  // field used to carry two facts ("let me see my white text" and "this paints on
+  // air"), so an editing preference went to air as a full-frame card over live
+  // video. `author` paints it; `output` paints nothing, and an authored background
+  // is a real full-frame element like anything else that paints.
+  if (mode === 'author' && scene.editorBackdrop !== 'transparent') {
+    container.style.background = scene.editorBackdrop;
   }
   // D-141 — this scope owns a zoned countdown, so it is a zone ROOT: the driver
   // publishes `data-cg-zone` here at run time, and the compiled reset rule keys off
@@ -275,7 +280,9 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
   const sx = comp.resolution.width === 0 ? 1 : element.transform.size.w / comp.resolution.width;
   const sy = comp.resolution.height === 0 ? 1 : element.transform.size.h / comp.resolution.height;
   inner.style.transform = `scale(${String(sx)}, ${String(sy)})`;
-  if (comp.background !== 'transparent') inner.style.background = comp.background;
+  // B-129 — author-mode only; a nested instance is where a backdrop would otherwise leak.
+  if (ctx.mode === 'author' && comp.editorBackdrop !== 'transparent')
+    inner.style.background = comp.editorBackdrop;
   // D-141 — a nested instance whose own composition carries a zoned countdown is a
   // zone root in its own right; one without stays transparent to the host's zone,
   // which is how zone state crosses instance boundaries.
@@ -897,7 +904,9 @@ export function buildSequenceCompositionItem(
   const sx = comp.resolution.width === 0 ? 1 : box.width / comp.resolution.width;
   const sy = comp.resolution.height === 0 ? 1 : box.height / comp.resolution.height;
   inner.style.transform = `scale(${String(sx)}, ${String(sy)})`;
-  if (comp.background !== 'transparent') inner.style.background = comp.background;
+  // B-129 — author-mode only (see `buildScene`); `mode` is the param this builder already takes.
+  if (mode === 'author' && comp.editorBackdrop !== 'transparent')
+    inner.style.background = comp.editorBackdrop;
   // D-141 — a stamped scope is a scope: it publishes its own zone when it owns a
   // zoned countdown (same rule as every other scope container).
   if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
@@ -1038,7 +1047,9 @@ export function buildRepeaterRows(
     inner.style.height = `${comp.resolution.height}px`;
     inner.style.transformOrigin = '0 0';
     inner.style.transform = `scale(${String(scale)}, ${String(scale)})`;
-    if (comp.background !== 'transparent') inner.style.background = comp.background;
+    // B-129 — author-mode only (see `buildScene`); `mode` is the param this builder already takes.
+    if (mode === 'author' && comp.editorBackdrop !== 'transparent')
+      inner.style.background = comp.editorBackdrop;
     // D-141 — same rule for a stamped repeater row.
     if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
 

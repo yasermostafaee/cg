@@ -156,7 +156,48 @@ export type Layer = z.infer<typeof LayerSchema>;
 export const PlayoutTargetSchema = z.enum(['casparcg']);
 export type PlayoutTarget = z.infer<typeof PlayoutTargetSchema>;
 
-export const CompositionSchema = z
+/**
+ * B-129 — move a legacy `background` key onto `editorBackdrop`.
+ *
+ * 🔴 **Parse-time normalization, NOT a registry migration, and the reason is a
+ * measured one:** `migrations.migrate()` has ZERO production call sites. Its own
+ * docstring claims "the loader in `@cg/vcg-format` walks the registry" — nothing
+ * outside `@cg/shared-schema` and its tests imports `migrations` at all, and
+ * `schemaVersion: 1` is WRITTEN by `ProjectStore.ts` and `pack.ts` and never read
+ * back for migration. Registering a migration would create the APPEARANCE of a
+ * conversion that never runs. Normalizing here runs on every load path, because
+ * every load path parses.
+ *
+ * The value is preserved, not reinterpreted, so no schema-version bump is owed —
+ * the same call {@link PlayoutSchema} makes for its own legacy `mode`.
+ *
+ * An explicit `editorBackdrop` WINS when both keys are present: a re-save must
+ * never be undone by a stale key left behind by an older writer.
+ */
+const normalizeEditorBackdrop = (raw: unknown): unknown => {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const o = raw as Record<string, unknown>;
+  if (!('background' in o)) return raw;
+  const { background, ...rest } = o;
+  return 'editorBackdrop' in o ? rest : { ...rest, editorBackdrop: background };
+};
+
+/**
+ * B-129 — the EDITOR's backdrop, and nothing else: a viewing aid that makes
+ * authored content legible while working.
+ *
+ * 🔴 **It is NEVER rendered to output and never travels in an exported package.**
+ * The name is the contract (golden rule 6) — it was called `background`, one field
+ * carrying two different facts ("let me see my white text" and "this graphic paints
+ * a background on air"), and the render path could not tell them apart, so an
+ * editor preference reached air as a full-frame card over live video.
+ *
+ * An authored background is a REAL ELEMENT — a full-frame rect, with a real entry
+ * in the scene, which renders unchanged. That is the only way to paint on air.
+ */
+const EditorBackdropSchema = z.union([z.literal('transparent'), HexColorSchema]);
+
+const CompositionObjectSchema = z
   .object({
     id: IdSchema,
     name: z.string(),
@@ -179,7 +220,8 @@ export const CompositionSchema = z
      * selector is deferred to a 2nd target (C-001).
      */
     playoutTarget: PlayoutTargetSchema.optional(),
-    background: z.union([z.literal('transparent'), HexColorSchema]),
+    /** B-129 — EDITOR affordance only; never rendered to output. See {@link EditorBackdropSchema}. */
+    editorBackdrop: EditorBackdropSchema,
     layers: z.array(LayerSchema),
     /**
      * D-025 — this composition's OWN dynamic fields + their bindings. Fields are
@@ -192,7 +234,8 @@ export const CompositionSchema = z
     bindings: z.array(FieldBindingSchema).optional(),
   })
   .superRefine(refineLifecycle);
-export type Composition = z.infer<typeof CompositionSchema>;
+export const CompositionSchema = z.preprocess(normalizeEditorBackdrop, CompositionObjectSchema);
+export type Composition = z.infer<typeof CompositionObjectSchema>;
 
 const FontReferenceSchema = z.object({
   family: z.string().min(1),
@@ -291,7 +334,7 @@ export function resolveDefaultPosition(scene: {
 }
 
 /** Scene — root of the editor's domain model. */
-export const SceneSchema = z
+const SceneObjectSchema = z
   .object({
     schemaVersion: z.literal(1),
     id: IdSchema,
@@ -333,7 +376,8 @@ export const SceneSchema = z
      * instance position is the D-119 Designer track.
      */
     defaultPosition: PositionSchema.optional(),
-    background: z.union([z.literal('transparent'), HexColorSchema]),
+    /** B-129 — EDITOR affordance only; never rendered to output. See {@link EditorBackdropSchema}. */
+    editorBackdrop: EditorBackdropSchema,
     layers: z.array(LayerSchema),
     fields: z.array(DynamicFieldSchema),
     bindings: z.array(FieldBindingSchema),
@@ -356,7 +400,32 @@ export const SceneSchema = z
     metadata: SceneMetadataSchema,
   })
   .superRefine(refineLifecycle);
-export type Scene = z.infer<typeof SceneSchema>;
+export const SceneSchema = z.preprocess(normalizeEditorBackdrop, SceneObjectSchema);
+export type Scene = z.infer<typeof SceneObjectSchema>;
+
+/**
+ * B-129 — the scene as an EXPORTER must emit it: every backdrop forced transparent,
+ * on the scene and on every composition.
+ *
+ * ⚠ **This is DEFENCE IN DEPTH, not the guard.** The guard is the render path, which
+ * paints the backdrop only in `author` mode ({@link EditorBackdropSchema}). This makes
+ * the artifact unable to carry the value even if a future renderer forgot the mode
+ * check — belt to the render path's braces.
+ *
+ * ONE implementation, exported from here because BOTH exporters need it and two
+ * spellings of one rule is how the render path and the artifact come to disagree
+ * (golden rule 6).
+ */
+export function withoutEditorBackdrop(scene: Scene): Scene {
+  const compositions = scene.compositions?.map((c) =>
+    c.editorBackdrop === 'transparent' ? c : { ...c, editorBackdrop: 'transparent' as const },
+  );
+  return {
+    ...scene,
+    editorBackdrop: 'transparent',
+    ...(compositions === undefined ? {} : { compositions }),
+  };
+}
 
 /**
  * The effective active region (play / export / preview window) of a scene:

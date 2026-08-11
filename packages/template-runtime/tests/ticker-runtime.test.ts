@@ -119,7 +119,7 @@ function tickerScene(overrides: {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     ...(overrides.playout !== undefined ? { playout: overrides.playout } : {}),
     layers: [
       {
@@ -349,7 +349,7 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
           name: 'band',
           resolution: { width: 400, height: 60 },
           frameRange: { in: 0, out: 50 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           playout: { mode: 'auto-out', holdSource: 'content-driven' },
           layers: [
             {
@@ -416,7 +416,7 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
           name: 'band',
           resolution: { width: 400, height: 60 },
           frameRange: { in: 0, out: 50 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           // B-031 — the band is itself content-driven (a coordinator) with an infinite
           // crawl; the content-driven root now WAITS on its self-settle, so the infinite
           // crawl holds the root on air until stop().

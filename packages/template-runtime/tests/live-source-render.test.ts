@@ -55,7 +55,7 @@ function sceneWith(children: Element[]): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: 'L1', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -219,7 +219,7 @@ describe('D-137 — the mode reaches a NESTED Live Source', () => {
           resolution: { width: 960, height: 540 },
           frameRate: 50,
           frameRange: { in: 0, out: 50 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           layers: [
             {
               id: 'CL1',

@@ -177,7 +177,7 @@ function sequenceScene(opts: {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     ...(opts.playout !== undefined ? { playout: opts.playout } : {}),
     layers: [
       {
@@ -444,7 +444,7 @@ describe('createRuntime — D-083 composition sequence items (text | composition
       name: 'Clock card',
       resolution: { width: 400, height: 60 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         {
           id: 'cl',
@@ -468,7 +468,7 @@ describe('createRuntime — D-083 composition sequence items (text | composition
       name: 'Label card',
       resolution: { width: 400, height: 60 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         {
           id: 'cl',
@@ -531,7 +531,7 @@ describe('createRuntime — D-083 composition sequence items (text | composition
       frameRate: 50,
       safeAreas: { title: 10, action: 5 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       playout: { mode: 'manual' },
       layers: [
         {

@@ -84,7 +84,7 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
       <DurationRow scene={scene} />
       <FrameRateRow scene={scene} />
       <Row label="elements" value={String(countElements(scene))} />
-      <BackgroundControl background={scene.background} variant="full" />
+      <BackgroundControl editorBackdrop={scene.editorBackdrop} variant="full" />
       <PlayoutSection scene={scene} />
       {(scene.fields.length > 0 || compositionInstancesOf(scene).length > 0) && (
         <>

@@ -136,11 +136,16 @@ describe('buildScene', () => {
     expect(container.style.background).toBe('');
   });
 
-  it('paints a solid background', () => {
+  it('paints the editor backdrop in AUTHOR mode, and nothing in output (B-129)', () => {
+    // Was "paints a solid background", unconditionally. The backdrop is an EDITOR
+    // affordance now: painting it in output is how a lower-third reached air as a
+    // full-frame card. The full split is pinned in `editor-backdrop.test.ts`.
     const sceneCopy = structuredClone(lowerThirdScene);
-    sceneCopy.background = '#000000';
-    const { container } = buildScene(sceneCopy);
-    expect(container.style.background).toMatch(/#000000/i);
+    sceneCopy.editorBackdrop = '#000000';
+    expect(buildScene(sceneCopy, document, 'author').container.style.background).toMatch(
+      /#000000/i,
+    );
+    expect(buildScene(sceneCopy, document, 'output').container.style.background).toBe('');
   });
 
   describe('B-016/B-017 — gradient text on a dedicated inner node (linear + radial)', () => {
@@ -429,7 +434,7 @@ describe('buildClock — static initial render (D-027)', () => {
       frameRate: 50,
       safeAreas: { title: 10, action: 5 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         {
           id: 'L1',
@@ -641,7 +646,7 @@ describe('buildSequence — static item-1 render (D-029)', () => {
       frameRate: 50,
       safeAreas: { title: 10, action: 5 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         {
           id: 'L1',
@@ -800,7 +805,7 @@ describe('buildTicker — vertical align of the static authoring row (D-045)', (
       frameRate: 50,
       safeAreas: { title: 10, action: 5 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         {
           id: 'l1',

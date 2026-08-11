@@ -413,7 +413,7 @@ export const iribNewsScene: Scene = {
   frameRate: FPS,
   safeAreas: { title: 10, action: 5 },
   frameRange: { in: 0, out: 124 },
-  background: 'transparent',
+  editorBackdrop: 'transparent',
   layers: [],
   compositions: [
     {
@@ -423,7 +423,7 @@ export const iribNewsScene: Scene = {
       frameRange: { in: 0, out: 124 },
       lifecycle: { outPoint: 60, contentStart: 55 },
       playout: { mode: 'manual' },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         layer('L-full', 'Frame', [
           {
@@ -450,7 +450,7 @@ export const iribNewsScene: Scene = {
       frameRange: { in: 0, out: 112 },
       lifecycle: { outPoint: 60, contentStart: 55 },
       playout: { mode: 'manual' },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [layer('L-strap', 'Strap', strapChildren)],
     },
     {
@@ -458,7 +458,7 @@ export const iribNewsScene: Scene = {
       name: 'پنل تهران',
       resolution: { width: RIGHT_W, height: BAND_H },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [layer('L-t', 'Tehran', clockStateChildren('irt', 'تهران', 'Asia/Tehran'))],
     },
     {
@@ -466,7 +466,7 @@ export const iribNewsScene: Scene = {
       name: 'پنل گرینویچ',
       resolution: { width: RIGHT_W, height: BAND_H },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [layer('L-g', 'Greenwich', clockStateChildren('irg', 'گرینویچ', 'UTC'))],
     },
     {
@@ -474,7 +474,7 @@ export const iribNewsScene: Scene = {
       name: 'پنل نشان',
       resolution: { width: RIGHT_W, height: BAND_H },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [layer('L-b', 'Brand', brandStateChildren)],
     },
   ],

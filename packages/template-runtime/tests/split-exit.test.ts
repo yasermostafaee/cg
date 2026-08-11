@@ -139,7 +139,7 @@ function scene(): Scene {
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 40 },
     lifecycle: { outPoint: 20 }, // intro [0→20], hold @20, outro [20→40]
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'l',

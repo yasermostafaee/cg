@@ -122,7 +122,7 @@ export const compositionSlice = {
       name: `comp${String(n)}`,
       resolution: { ...current.scene.resolution },
       frameRange: { in: 0, out: Math.max(1, span) },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [],
     };
     set({ scene: { ...current.scene, compositions: [...existing, comp] } });

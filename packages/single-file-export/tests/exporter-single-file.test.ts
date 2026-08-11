@@ -14,7 +14,7 @@ function makeScene(): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [],
     fields: [
       { id: 'f0', label: 'Title', required: true, type: 'text', default: 'Hello', maxLength: 100 },
@@ -142,6 +142,21 @@ describe('ExporterSingleFile', () => {
     // ships in the exported single-file HTML and on-air matches the preview.
     expect(html).toContain('"holdOverrides"');
     expect(html).toContain('"seq-1":false');
+  });
+});
+
+describe('ExporterSingleFile — B-129 the editor backdrop never reaches the artifact', () => {
+  it('embeds a scene whose backdrop is transparent, from a scene that had a colour', () => {
+    // The artifact side of the split, on the OTHER exporter — asserted here as well as
+    // in `@cg/vcg-format` because two exporters that disagree about this is exactly the
+    // failure the ONE shared helper exists to prevent.
+    const scene: Scene = { ...makeScene(), editorBackdrop: '#123456' };
+    return makeExporter()
+      .produce(scene)
+      .then(({ html }) => {
+        expect(html).not.toContain('#123456');
+        expect(html).toContain('"editorBackdrop":"transparent"');
+      });
   });
 });
 

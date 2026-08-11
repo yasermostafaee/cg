@@ -26,6 +26,27 @@ describe('pack → unpack round-trip', () => {
     expect(scene).toEqual(fixtureScene);
   });
 
+  it('B-129 — the packed scene carries NO editor backdrop', async () => {
+    // The artifact side of the split. The guard is the render path's `author`-mode
+    // check; this is defence in depth, so the value cannot travel even if a future
+    // renderer forgot the mode. Asserted on a scene that DOES carry a backdrop, so a
+    // regression cannot hide behind an already-transparent fixture.
+    const buf = await pack({
+      scene: { ...fixtureScene, editorBackdrop: '#123456' },
+      manifestExtras: fixtureManifestExtras,
+      indexHtml: fixtureIndexHtml,
+      cgJs: fixtureCgJs,
+      cgCss: fixtureCgCss,
+    });
+    const { scene } = await unpack(buf);
+    expect(scene.editorBackdrop).toBe('transparent');
+    // Everything else survives — the stripper is not a general-purpose scrubber.
+    expect({ ...scene, editorBackdrop: '#123456' }).toEqual({
+      ...fixtureScene,
+      editorBackdrop: '#123456',
+    });
+  });
+
   it('D-042 — round-trips a per-corner cornerRadius + a stroke on a non-shape element', async () => {
     const baseLayer = fixtureScene.layers[0];
     if (!baseLayer) throw new Error('fixture missing layer 0');

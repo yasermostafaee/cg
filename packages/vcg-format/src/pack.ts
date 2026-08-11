@@ -5,6 +5,7 @@ import {
   type Manifest,
   type Scene,
 } from '@cg/shared-schema';
+import { withoutEditorBackdrop } from '@cg/shared-schema';
 import { utf8ToBytes } from '@noble/hashes/utils';
 import { writeZip } from './zip.js';
 import { computeIntegrity } from './integrity.js';
@@ -70,7 +71,13 @@ export async function pack(input: PackInput): Promise<Uint8Array> {
 
   // Core artifacts. JSON is pretty-printed for diff-ability; the zip
   // already compresses it, so the readability cost is essentially free.
-  files.set('template.json', utf8ToBytes(JSON.stringify(input.scene, null, 2)));
+  // B-129 — the artifact never carries the editor's backdrop. Defence in depth: the
+  // guard is the render path's `author`-mode check; this makes the value unable to
+  // travel at all. ONE helper, shared with the single-file exporter.
+  files.set(
+    'template.json',
+    utf8ToBytes(JSON.stringify(withoutEditorBackdrop(input.scene), null, 2)),
+  );
   files.set('index.html', utf8ToBytes(input.indexHtml));
   files.set('cg.js', utf8ToBytes(input.cgJs));
   files.set('cg.css', utf8ToBytes(input.cgCss));

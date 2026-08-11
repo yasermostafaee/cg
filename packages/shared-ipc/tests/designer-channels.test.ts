@@ -35,7 +35,7 @@ const sampleScene = {
   frameRate: 50 as const,
   safeAreas: { title: 5, action: 10 },
   frameRange: { in: 0, out: 50 },
-  background: 'transparent' as const,
+  editorBackdrop: 'transparent' as const,
   layers: [],
   fields: [],
   bindings: [],

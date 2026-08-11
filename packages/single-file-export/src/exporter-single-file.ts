@@ -1,4 +1,10 @@
-import { playoutOf, type Element, type Scene, type TickerElement } from '@cg/shared-schema';
+import {
+  playoutOf,
+  withoutEditorBackdrop,
+  type Element,
+  type Scene,
+  type TickerElement,
+} from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import {
   buildGddSchema,
@@ -376,7 +382,10 @@ function buildSingleFileHtml(parts: HtmlParts): string {
   const { scene, gdd, playout, cgCss, fontCss, cgJsIife, cgJsLottieIife, assetUrls, lottieAssets } =
     parts;
   // Escape `</` so scene text / GDD strings can't close the <script>/<style>.
-  const sceneLiteral = JSON.stringify(scene).replace(/</g, '\\u003c');
+  // B-129 — same rule as the `.vcg` exporter, same ONE helper: the embedded scene
+  // carries no editor backdrop, so the artifact cannot paint one even if a renderer
+  // forgot the mode check.
+  const sceneLiteral = JSON.stringify(withoutEditorBackdrop(scene)).replace(/</g, '\\u003c');
   const gddJson = JSON.stringify(gdd).replace(/</g, '\\u003c');
   const playoutJson = JSON.stringify(playout).replace(/</g, '\\u003c');
   const assetUrlsJson = JSON.stringify(assetUrls).replace(/</g, '\\u003c');

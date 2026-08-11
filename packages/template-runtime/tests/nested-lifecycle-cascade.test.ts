@@ -110,7 +110,7 @@ function comp(id: string, outPoint: number, children: Element[], playout?: Playo
     frameRange: { in: 0, out: 40 },
     lifecycle: { outPoint },
     ...(playout !== undefined ? { playout } : {}),
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: `${id}-l`, name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -132,7 +132,7 @@ function parentScene(opts: {
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 40 },
     ...(opts.lifecycle !== undefined ? { lifecycle: opts.lifecycle } : {}),
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'pl',

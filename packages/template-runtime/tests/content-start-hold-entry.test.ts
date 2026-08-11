@@ -150,7 +150,7 @@ function comp(id: string, outPoint: number, children: Element[], playout?: Playo
     frameRange: { in: 0, out: 100 },
     lifecycle: { outPoint },
     ...(playout !== undefined ? { playout } : {}),
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: `${id}-l`, name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -178,7 +178,7 @@ function scene(opts: {
         ? { outPoint: opts.outPoint, contentStart: opts.contentStart }
         : { outPoint: opts.outPoint },
     playout: opts.playout,
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'pl',

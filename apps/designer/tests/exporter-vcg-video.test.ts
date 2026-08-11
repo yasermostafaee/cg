@@ -82,7 +82,7 @@ function baseScene(children: unknown[], compChildren: unknown[] = []): Scene {
     frameRate: 25,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: 'L1', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -94,7 +94,7 @@ function baseScene(children: unknown[], compChildren: unknown[] = []): Scene {
               name: 'nested',
               resolution: { width: 1920, height: 1080 },
               frameRange: { in: 0, out: 50 },
-              background: 'transparent',
+              editorBackdrop: 'transparent',
               layers: [
                 {
                   id: 'CL1',

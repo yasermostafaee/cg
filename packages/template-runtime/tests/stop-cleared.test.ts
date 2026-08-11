@@ -190,7 +190,7 @@ function childComp(id: string, children: Element[], lifecycle?: { outPoint: numb
     resolution: { width: 400, height: 200 },
     frameRange: { in: 0, out: 40 },
     ...(lifecycle !== undefined ? { lifecycle } : {}),
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: `${id}-l`, name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -216,7 +216,7 @@ function scene(opts: {
     frameRange: { in: 0, out: 40 },
     ...(opts.playout !== undefined ? { playout: opts.playout } : {}),
     ...(opts.lifecycle !== undefined ? { lifecycle: opts.lifecycle } : {}),
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'L1',

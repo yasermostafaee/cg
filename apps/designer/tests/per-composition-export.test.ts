@@ -116,7 +116,7 @@ function comp(id: string, children: Element[]): Composition {
     name: id,
     resolution: { width: 200, height: 100 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [layerOf(children)],
     fields: [],
     bindings: [],
@@ -137,7 +137,7 @@ function fourCompScene(): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [], // post-D-024 the root is layerless; content lives in compositions
     compositions: [
       comp('R', [
@@ -226,7 +226,7 @@ describe('D-083 — a sequence COMPOSITION item pulls its comp into the export c
       frameRate: 50,
       safeAreas: { title: 10, action: 5 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [],
       compositions: [comp('RS', [seq]), comp('Q', [imageEl('imgQ', A_SEQ)])],
       fields: [],

@@ -92,7 +92,7 @@ function composition(id: string, width: number, height: number, children: Elemen
     resolution: { width, height },
     frameRate: 50,
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [layer(children, `${id}-layer`)],
   };
 }

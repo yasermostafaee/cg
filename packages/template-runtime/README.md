@@ -81,6 +81,23 @@ survive). It returns a **`scopeTree`** (a `FieldScope`): each composition instan
 owns its **own** `elementMap`, `textOriginals`, container, `animated` list,
 `tickers` + `clocks` + `sequences` + `lotties` lists, and lifecycle `source`.
 
+**The editor backdrop never reaches output (B-129).** `Scene.editorBackdrop` and
+`Composition.editorBackdrop` are an **authoring affordance** — a viewing aid that makes
+content legible while editing — and `buildScene` paints them **only when
+`mode === 'author'`**. In `'output'` (the DEFAULT, so a caller that forgets is safe) the
+stage and every composition inner are transparent, and an authored background is a real
+full-frame element like anything else that paints.
+
+The field used to be called `background` and painted in every mode, so an editing
+preference reached air as a full-frame card over live video — a lower-third going out as
+a fullscreen graphic. **Three builders apply the composition backdrop**
+(`buildComposition`, `buildSequenceCompositionItem`, `buildRepeaterRows`); all three are
+mode-gated, because one unguarded site is a leak that only shows on hardware. A legacy
+`background` key is normalized onto `editorBackdrop` at parse time by
+`@cg/shared-schema`, and both exporters emit it as `'transparent'` via the ONE shared
+`withoutEditorBackdrop` helper — defence in depth behind the mode check, never a second
+guard.
+
 **Auto-size text (D-060).** A `text` element with `fitMode: 'autosize'` hugs its
 content in BOTH dimensions via CSS intrinsic sizing — `buildText` skips the
 `transform.size` width/height (`applyBaseStyles(..., skipSize)`) and sets

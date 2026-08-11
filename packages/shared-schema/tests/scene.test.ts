@@ -26,7 +26,7 @@ const minimalScene = {
   frameRate: 50 as const,
   safeAreas: { title: 10, action: 5 },
   frameRange: { in: 0, out: 50 },
-  background: 'transparent' as const,
+  editorBackdrop: 'transparent' as const,
   layers: [],
   fields: [],
   bindings: [],
@@ -118,9 +118,48 @@ describe('Scene', () => {
     expect(() => SceneSchema.parse({ ...minimalScene, schemaVersion: 2 })).toThrow();
   });
 
-  it('accepts solid hex background', () => {
-    const s = { ...minimalScene, background: '#000000' };
-    expect(SceneSchema.parse(s).background).toBe('#000000');
+  it('accepts a solid hex editor backdrop', () => {
+    const s = { ...minimalScene, editorBackdrop: '#000000' };
+    expect(SceneSchema.parse(s).editorBackdrop).toBe('#000000');
+  });
+
+  // B-129 — the legacy spelling is normalized at parse time, so every stored scene
+  // loads unchanged and the parsed object carries NO `background` field at all. That
+  // absence is the point: it is what makes an editor preference unable to reach the
+  // render path by a name the renderer might still read.
+  it('normalizes a legacy `background` key onto `editorBackdrop`', () => {
+    // A genuinely pre-B-129 scene carries `background` and NO `editorBackdrop` — so
+    // the new key must be REMOVED from the fixture here, not merely shadowed. Leaving
+    // it in tests the "explicit wins" rule below instead, which is a different claim.
+    const { editorBackdrop: _absent, ...legacyScene } = minimalScene;
+    const parsed = SceneSchema.parse({ ...legacyScene, background: '#123456' });
+    expect(parsed.editorBackdrop).toBe('#123456');
+    expect(Object.hasOwn(parsed, 'background')).toBe(false);
+  });
+
+  it('lets an explicit `editorBackdrop` WIN over a stale `background`', () => {
+    // A re-save must never be undone by a key an older writer left behind.
+    const parsed = SceneSchema.parse({
+      ...minimalScene,
+      editorBackdrop: '#123456',
+      editorBackdrop: 'transparent',
+    });
+    expect(parsed.editorBackdrop).toBe('transparent');
+    expect(Object.hasOwn(parsed, 'background')).toBe(false);
+  });
+
+  it('normalizes the legacy key on COMPOSITIONS too, not just the scene root', () => {
+    const comp = {
+      id: 'c1',
+      name: 'c',
+      resolution: { width: 100, height: 100 },
+      frameRange: { in: 0, out: 10 },
+      editorBackdrop: '#ABCDEF',
+      layers: [],
+    };
+    const parsed = SceneSchema.parse({ ...minimalScene, compositions: [comp] });
+    expect(parsed.compositions?.[0]?.editorBackdrop).toBe('#ABCDEF');
+    expect(Object.hasOwn(parsed.compositions?.[0] ?? {}, 'background')).toBe(false);
   });
 });
 
@@ -235,7 +274,7 @@ describe('Scene — D-026 single project fps (no per-composition frameRate)', ()
     name: 'Comp',
     resolution: { width: 1920, height: 1080 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent' as const,
+    editorBackdrop: 'transparent' as const,
     layers: [],
     ...over,
   });
@@ -361,7 +400,7 @@ describe('hasEffectiveHoldDrivers — D-128 video is an OPT-IN hold driver', () 
       name: 'Comp',
       resolution: { width: 1920, height: 1080 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent' as const,
+      editorBackdrop: 'transparent' as const,
       layers: [
         {
           id: 'CL1',

@@ -392,7 +392,7 @@ describe('buildScene — composition instance edges', () => {
       name: 'Self',
       resolution: { width: 100, height: 100 },
       frameRange: { in: 0, out: 10 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         {
           id: 'cl',

@@ -77,7 +77,7 @@ export class ProjectStore {
       frameRate,
       safeAreas: { title: 10, action: 5 },
       frameRange,
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [],
       fields: [],
       bindings: [],
@@ -93,7 +93,7 @@ export class ProjectStore {
           // D-026 — fps is project-level (`Scene.frameRate`); compositions no longer
           // carry their own.
           frameRange,
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           layers: [],
         },
       ],

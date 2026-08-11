@@ -220,7 +220,7 @@ function hiddenAncestorChild(): Composition {
     frameRange: { in: 0, out: 50 },
     activeRange: { in: 0, out: 50 },
     lifecycle: { outPoint: 25 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'cl',
@@ -264,7 +264,7 @@ function scene(children: Element[], playout?: Playout, compositions: Composition
     // intro [0→25] (500 ms), hold @25, background outro [25→50] (500 ms)
     lifecycle: { outPoint: 25 },
     ...(playout !== undefined ? { playout } : {}),
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -747,7 +747,7 @@ describe('D-125 §D6.2b — AUTO-exit routes through the element-outro seam', ()
       activeRange: { in: 0, out: 50 },
       lifecycle: { outPoint: 25 },
       playout,
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         { id: `${id}-l`, name: 'l', visible: true, locked: false, blendMode: 'normal', children },
       ],
