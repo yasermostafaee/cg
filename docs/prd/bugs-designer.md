@@ -1353,7 +1353,7 @@ this IS the out-of-box behavior — every freshly created sequence shows the def
 **Regression test:** template-runtime sequence test on the injected clock covering first-item
 entry under BOTH repeat modes.
 
-## [ ] B-104 — project assets (images, fonts) are GONE after save → Designer restart → load ⟨priority: high⟩
+## [~] B-104 — project assets (images, fonts) are GONE after save → Designer restart → load ⟨priority: high⟩ — being fixed by [[D-150]] (the project becomes a self-contained package): `openspec/changes/designer-project-package/`
 
 **Repro:**
 
@@ -1385,6 +1385,20 @@ panel listing), including the restart boundary.
 "Designer JSON save/import loses assets": the project is saved and re-imported, and the assets do
 not come back. Folded in here rather than filed as a new number because it is this defect — the
 same save → reload → assets-missing boundary — reported from the other side of the same seam.
+
+**⭐ DIAGNOSED 2026-08-11, and BOTH candidates turned out to be real** (`openspec/changes/designer-project-package/`, [[D-150]]). Candidate **(a)** is the primary one and needs no permission
+subtlety at all: `openDisk` / `openRecent` returned a scene WITHOUT calling
+`ProjectStore.#setActive`, and `activeChanged` is what relays into `assets.setActiveProject` —
+so opening a project from a real file left the asset store scoped to whatever came before, which
+at boot is `null`. The scene rendered; the panel was empty; every time. Candidate **(b)** is real
+too and explains the restart specificity: `restoreRememberedDirectory` calls `requestPermission()`,
+which **Chromium refuses outside a user gesture**, and `initWorkspace()` runs at boot where there
+is none — so after a restart the remembered folder ALWAYS fails to reopen and a bare `catch {}`
+substituted a different root in silence.
+
+The fix does not repair either link. It removes the reason a link is needed: the project carries
+its own assets. The paragraph below is kept as written, because it is the state of knowledge that
+produced the requirement to pin the mechanism, and that requirement was the right one.
 
 **The mechanism is STILL NOT DIAGNOSED, and this report does not change that.** It supplies the
 reproduction this entry has been asking for, not a cause. **Do not promote either candidate (a) or
@@ -1722,3 +1736,61 @@ that produces the next entry in this file.
 
 **Env:** Designer, build. Source: the repo-wide BOM sweep recorded by the `DEBT.md` sweep's closing
 session and left unfiled.
+
+## [~] B-133 — the editor backdrop control writes to a field nobody renders, so changing it does nothing ⟨priority: high⟩ — fixed in `openspec/changes/designer-project-package/` (same session; a B-129 rename ripple)
+
+**Repro:**
+
+1. Create a project (this lands you inside `comp1` — every new project does).
+2. Change the editor backdrop colour on the canvas header.
+
+**Expected:** the authoring canvas shows the chosen colour.
+**Actual:** nothing changes; the canvas stays as it was.
+**Env:** Designer canvas, any project. Reported by the owner 2026-08-11.
+
+**Mechanism — a stale STRING in a routing table.** `updateScene`
+(`renderer/state/slices/document.ts`) decides whether a patch lands on the ACTIVE COMPOSITION or on
+the scene ROOT by testing the key against a `docKeys` set of string literals. [[B-129]] renamed
+`background` → `editorBackdrop` across the schema, the renderer, the runtime and both exporters —
+and this literal stayed behind as `'background'`. So `editorBackdrop` was not recognised as a doc
+key, fell through to the ROOT patch, and was written to `scene.editorBackdrop`; meanwhile the canvas
+renders `editSceneOf`, which reads the ACTIVE COMPOSITION's `editorBackdrop`. **Written to one
+place, read from another.**
+
+⚠ **This also CORRECTS a conclusion recorded during B-129.** That change's `tasks.md` §5.4(a) said
+the author never sees the backdrop because the D-071 pasteboard pins
+`.cg-stage { background-color: #3d4253 !important }`. That is not the cause: in the pasteboard branch
+neither `background-color` nor `background-image` carries `!important`, and the runtime sets the
+`background` SHORTHAND inline — which beats both. The CSS was never the obstacle; the value simply
+never arrived.
+
+**Regression test:** `apps/designer/tests/editor-backdrop-routing.test.ts` — asserts the patch lands
+on the active composition and that `editSceneOf` (what the canvas is handed) sees it. The fix also
+adds a `satisfies` constraint so the next rename of a doc field is a BUILD ERROR at this table
+rather than a control that quietly stops working.
+
+## [~] B-134 — the editor backdrop paints in the Preview modal, which is a preview of AIR ⟨priority: medium⟩ — fixed in `openspec/changes/designer-project-package/` (same session)
+
+**Repro:**
+
+1. Set an editor backdrop colour.
+2. Open the Preview modal.
+
+**Expected:** the preview shows what air shows — no backdrop ([[B-129]]: the backdrop is an EDITOR
+affordance that never reaches air).
+**Actual:** the backdrop paints in the preview, so the preview disagrees with the export.
+**Env:** Designer Preview modal. Reported by the owner 2026-08-11, immediately after [[B-133]].
+
+**Mechanism.** B-129 gated the backdrop on `mode === 'author'`, and the Preview modal boots in
+`'author'` **deliberately** — it cannot show real live video either, so a Live Source must still
+paint its SMPTE bars there (D-137 §9). One flag was carrying two different questions, and the modal
+is the surface where their answers differ.
+
+**Fix.** A SECOND axis, `paintEditorBackdrop`, rather than a third `RenderMode`: the modal needs
+`'author'` and "no backdrop" **simultaneously**, which no single enum value can express. Threaded on
+`BuildCtx` for the same reason `mode` is — a nested composition inherits it by construction, so a
+composition three levels down cannot paint a backdrop the surface above it suppressed.
+
+**Regression test:** `packages/template-runtime/tests/editor-backdrop-surface.test.ts` — canvas
+paints, preview does not, output never does, and the axis defaults to ON so no existing caller
+changes meaning.

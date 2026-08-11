@@ -8,6 +8,7 @@ import {
 import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
 import { getStarter, STARTER_TEMPLATES } from '@cg/starter-templates';
 import { forgetFileHandle, type KeyValueStore, type Workspace } from '@cg/storage';
+import { PROJECT_PACKAGE_EXT } from '@cg/shared-schema';
 import { Emitter } from './emitter.js';
 import { uuid } from './uuid.js';
 
@@ -141,6 +142,48 @@ export class ProjectStore {
     this.#setActive(updated, target);
     this.#recordRecent(updated, target);
     return { path: target };
+  }
+
+  /**
+   * D-150 / B-104 — ACTIVATE a scene that was loaded from somewhere other than a
+   * workspace path (a File System Access handle, a package the operator picked).
+   *
+   * 🔴 **This is the second half of B-104, and it is the half nothing had named.**
+   * `activeChanged` is what re-points the `AssetStore` at the opened project
+   * (`createDesignerBridge` relays it into `assets.setActiveProject`). Every
+   * workspace-path entry point emitted it — `newScene`, `loadStarter`, `open`,
+   * `save` — and the HANDLE entry points (`openDisk`, `openRecent`, `saveDisk`) did
+   * not. So opening a project from a real file left the asset store scoped to
+   * whatever was active before, which at boot is `null`: the scene rendered and the
+   * assets panel was empty, deterministically, with no permission or storage-root
+   * subtlety involved at all.
+   *
+   * Every path that loads a project now goes through here or through `#setActive`.
+   */
+  activate(scene: Scene, path: string | null): void {
+    this.#setActive(scene, path);
+  }
+
+  /**
+   * D-150 — the workspace path-model tier for a project PACKAGE.
+   *
+   * Same tier as the old `save()` (reopenable via Recent), writing package bytes
+   * instead of a JSON blob. `save()` is kept for the callers that still hand over a
+   * scene without assets (`projects.save` on the bridge, and the tests that use it).
+   */
+  async savePackageBytes(scene: Scene, bytes: Uint8Array, name: string): Promise<{ path: string }> {
+    const base = name.replace(/\.cgproj$/i, '').replace(/\.cg\.json$/i, '');
+    const normalized = base.endsWith(PROJECT_PACKAGE_EXT) ? base : `${base}${PROJECT_PACKAGE_EXT}`;
+    const target = normalized.includes('/') ? normalized : `projects/${normalized}`;
+    await this.#ws.writeFile(target, bytes);
+    this.#setActive(scene, target);
+    this.#recordRecent(scene, target);
+    return { path: target };
+  }
+
+  /** D-150 — raw bytes of a workspace-relative project file (package or legacy JSON). */
+  readBytes(path: string): Promise<Uint8Array | null> {
+    return this.#ws.readFile(path);
   }
 
   recent(): RecentProject[] {

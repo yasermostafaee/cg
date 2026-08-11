@@ -4142,3 +4142,66 @@ through an early guard, so the legacy body is reached **unchanged** for every pr
 
 **⚠ Reaches air** — the image element renders into the export and onto the programme channel. The
 byte-identity test is what makes the change safe to merge.
+
+---
+
+## [~] D-150 — a project is a self-contained PACKAGE that carries its assets ⟨priority: high⟩ — in progress: `openspec/changes/designer-project-package/` (closes [[B-104]])
+
+**What:** A project's durable form stops being a bare `.cg.json` holding a scene and a list of
+`assetId` strings, and becomes a self-contained package (`.cgproj`) that carries the asset bytes
+inside it — the same shape the `.vcg` export already uses. The author points at ONE artifact and
+everything travels with it.
+
+**Why:** [[B-104]] is a DATA-LOSS bug, and it is not a leak in a pipe — it is the SHAPE of the
+document. The file the author saves, backs up, emails, and reopens does not contain the images or
+fonts it needs; it contains references and a hope that somewhere else still resolves. Two
+independent mechanisms make that hope fail, and both were pinned during this change rather than
+assumed:
+
+1. 🔴 **The handle-based entry points never activated the opened project.** `openDisk` /
+   `openRecent` returned a scene without calling `ProjectStore.#setActive`, and `activeChanged` is
+   what re-points the `AssetStore` at the project (`createDesignerBridge` relays it into
+   `assets.setActiveProject`). So opening a project from a real file left the asset store scoped
+   to whatever came before — `null` at boot. **The scene rendered and the assets panel was empty,
+   deterministically, with no permission or storage-root subtlety involved at all.** This is the
+   mechanism B-104's own notes listed as candidate (a), and it is the one the 2026-08-02 field
+   report was seeing.
+2. **The storage root could be silently substituted.** `initWorkspace()` preferred a remembered
+   on-disk folder, and `restoreRememberedDirectory` calls `requestPermission()` — which **Chromium
+   refuses outside a user gesture**, and boot has none. A full browser restart therefore always
+   lands in the bare `catch {}` or the `null` return, and both fell through to a DIFFERENT root
+   without a word. `projects/<scene.id>/assets/...` then resolved somewhere the bytes were not.
+   Candidate (b), confirmed.
+
+Neither is fixable by repairing a link, because the deeper fact is the one the field report
+exposes: **a `.cg.json` handed to another machine can never have assets — it never carried any.**
+
+**Acceptance:**
+
+- WHEN a project with imported assets is saved THEN the written artifact is a single package
+  containing the authoring scene AND the bytes of every asset it holds.
+- WHEN that package is opened against a workspace whose root is a DIFFERENT store, holding none of
+  the project's bytes, THEN every asset lists and its bytes resolve. (The restart case, proven by a
+  test that constructs a second empty workspace — not an in-memory round trip.)
+- WHEN a project is saved and reopened THEN the authoring scene round-trips EXACTLY, editor-only
+  state included — while an export of the same scene still strips it (B-129 stands).
+- WHEN a pre-package `.cg.json` is opened THEN it opens, and converts, by **parse-time
+  normalization** on the single document-reading entry point. ⚠ NOT via `migrations.migrate()` —
+  see [[P-031]]: that registry has zero production call sites, so a migration registered there is a
+  conversion that never runs and old projects would break quietly.
+- WHEN a pre-package project is opened and then saved THEN the ORIGINAL file is unchanged byte for
+  byte, the adopted asset bytes are still in place, and the package is written to a separate file
+  the author chose.
+- WHEN the workspace root is not the one the author configured, or will not survive the tab closing,
+  THEN the Designer says so where the author will see it, names the reason, and offers Reconnect
+  where a click can repair it. WHEN the expected root is available THEN nothing is shown.
+- WHEN the storage MECHANISM degrades (no File System Access, no sandboxed store) THEN the DOCUMENT
+  does not: every save tier writes the same self-contained package.
+
+**Notes:** The design fork — single file rewritten whole vs. an incremental working layer — is
+decided IN the proposal on measured cost: a whole-package rewrite is **45 ms at 8.5 MB**, because
+`writeZip` STOREs (never deflates) the extensions that carry essentially all of a project's bytes.
+An incremental layer would have bought ~45 ms and cost a second source of truth, which is the exact
+class of defect B-104 is. Packaging reuses `@cg/vcg-format`'s `writeZip`/`readZip`/`sha256Hex`;
+`.cgproj` is a different DOCUMENT from `.vcg` (which strips `editorBackdrop`, embeds the runtime,
+and carries a signable broadcast manifest) — reasoning in the proposal.

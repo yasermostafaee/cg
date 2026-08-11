@@ -27,3 +27,14 @@ export { buildPlayoutMetadata } from './playout-metadata.js';
 export type { PlayoutMetadata } from './playout-metadata.js';
 
 export { collectLiveSources } from './live-sources.js';
+
+// D-150 / B-104 — the Designer's own working document. Same zip + hashing
+// primitives as the .vcg exporter above; a DIFFERENT document (it keeps the
+// authoring scene whole, carries no runtime bundle, and is never signed).
+export {
+  packProject,
+  unpackProject,
+  readProjectDocument,
+  looksLikeZip,
+} from './project-package.js';
+export type { PackProjectInput, ProjectDocument, ProjectDocumentForm } from './project-package.js';

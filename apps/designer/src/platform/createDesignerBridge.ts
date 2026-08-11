@@ -1,4 +1,5 @@
-import { SceneSchema, type Element, type Scene } from '@cg/shared-schema';
+import { PROJECT_PACKAGE_EXT, type Element, type Scene } from '@cg/shared-schema';
+import { packProject, readProjectDocument, type ProjectDocument } from '@cg/vcg-format';
 import { getStarter } from '@cg/starter-templates';
 import type { AppInfo, DesignerBridge } from '../shared/designer-bridge.js';
 import {
@@ -19,7 +20,15 @@ import {
   loadFileHandle,
   ensureHandlePermission,
 } from '@cg/storage';
-import { initWorkspace, prefs } from './workspace.js';
+import {
+  connectDirectory,
+  initWorkspaceWithRoot,
+  isDegradedRoot,
+  isSessionOnlyRoot,
+  prefs,
+  isPersistentFolderSupported,
+  workspaceRoot,
+} from './workspace.js';
 import { ProjectStore } from './ProjectStore.js';
 import { AssetStore } from './AssetStore.js';
 import { SharedImageStore } from './SharedImageStore.js';
@@ -36,7 +45,7 @@ const APP_INFO: AppInfo = { name: 'cg Designer', version: '0.0.0', platform: 'br
  * instead of Electron IPC + a custom protocol).
  */
 export async function initDesignerPlatform(): Promise<DesignerBridge> {
-  const ws = await initWorkspace();
+  const { workspace: ws } = await initWorkspaceWithRoot();
   const projects = new ProjectStore(ws, prefs);
   const assets = new AssetStore(ws);
   // D-040 — the shared image library lives ONCE outside any project. Constructed
@@ -77,6 +86,74 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     for (const url of assetUrlCache.values()) URL.revokeObjectURL(url);
     assetUrlCache.clear();
   });
+
+  /**
+   * D-150 — project ids that were opened from a pre-package `.cg.json` and have not
+   * yet been re-saved as a package.
+   *
+   * A converted project's next Save is forced through the PICKER, so the package is
+   * written to a NEW file the author chooses and the original `.cg.json` is never
+   * written through. That is what makes conversion recoverable: the old file is still
+   * on disk, byte for byte, and still opens in a build that predates this change.
+   */
+  const convertedProjects = new Set<string>();
+
+  /**
+   * D-150 — build the `.cgproj` bytes for a scene: the authoring scene plus every
+   * asset the project holds.
+   *
+   * The scene is passed WHOLE — no `withoutEditorBackdrop`. That helper belongs to
+   * the export path (B-129); running it on a save would delete the author's canvas
+   * backdrop every time they pressed Ctrl+S.
+   */
+  async function buildPackage(scene: Scene): Promise<Uint8Array> {
+    const { index, files } = await assets.exportForPackage();
+    return packProject({ scene, index, files, savedAt: new Date().toISOString() });
+  }
+
+  /**
+   * D-150 — make a freshly-read document the active project, assets and all.
+   *
+   * ORDER IS LOAD-BEARING: `projects.activate` is what emits `activeChanged`, which is
+   * what re-points the `AssetStore` at this project. Adopting before activating would
+   * write the bytes into the PREVIOUS project's subtree (or throw, at boot, when there
+   * is no active project at all).
+   *
+   * 🔴 The activate call is also a fix in its own right. Before this, the handle-based
+   * entry points (`openDisk`, `openRecent`) never activated the opened project, so the
+   * asset store stayed scoped to whatever came before — `null` at boot. The scene
+   * rendered and the assets panel was empty every time, which is the other half of
+   * B-104 and the half that needed no permission subtlety to reproduce.
+   */
+  async function adoptDocument(doc: ProjectDocument, path: string | null): Promise<void> {
+    projects.activate(doc.scene, path);
+
+    if (doc.form === 'package') {
+      await assets.adoptFromPackage(doc.index, doc.files);
+      convertedProjects.delete(doc.scene.id);
+      return;
+    }
+
+    // Legacy `.cg.json`: it carried no assets — it never could. Adopt whatever bytes
+    // still survive in this workspace under the project's id, so they travel with the
+    // project from now on. READ-ONLY: nothing is moved and nothing is deleted, so the
+    // author cannot end up with less than they started with. Best-effort: when the
+    // bytes are already gone (B-104 at its worst) the project still opens with its
+    // scene intact, and the shortfall is visible rather than silent.
+    const legacy = await assets.collectLegacyAssets(doc.scene.id);
+    if (legacy.index.length > 0) await assets.adoptFromPackage(legacy.index, legacy.files);
+    convertedProjects.add(doc.scene.id);
+  }
+
+  /** D-150 — write package bytes to the workspace path-model tier. */
+  async function savePackageToWorkspace(
+    scene: Scene,
+    name: string,
+    prebuilt?: Uint8Array,
+  ): Promise<{ path: string }> {
+    const bytes = prebuilt ?? (await buildPackage(scene));
+    return projects.savePackageBytes(scene, bytes, name);
+  }
 
   /**
    * Import a starter's bundled assets into the (now active) project and rewrite
@@ -154,29 +231,45 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
           }),
         ),
       open: async (req) => {
-        if (req.path !== undefined) return projects.open(req.path);
-        const picked = await pickJsonFile();
+        if (req.path !== undefined) {
+          const bytes = await projects.readBytes(req.path);
+          if (bytes === null) return { scene: null, path: null };
+          const doc = await readProjectDocument(bytes);
+          await adoptDocument(doc, req.path);
+          return { scene: doc.scene, path: req.path };
+        }
+        const picked = await pickProjectFile();
         if (picked === null) return { scene: null, path: null };
-        const scene = SceneSchema.parse(JSON.parse(picked.text));
-        const { path } = await projects.save(scene, picked.name);
-        return { scene, path };
+        const doc = await readProjectDocument(picked.bytes);
+        await adoptDocument(doc, null);
+        const { path } = await savePackageToWorkspace(doc.scene, picked.name);
+        return { scene: doc.scene, path };
       },
       save: (req) => projects.save(req.scene, req.path ?? req.scene.name),
       // D-088 — desktop document Save / Save As. The chosen FileSystemFileHandle is the
       // project's file, persisted in IndexedDB keyed by project id so Save keeps writing to
-      // the same on-disk file across reloads. Tiered fallback: handle → OPFS (reopenable via
-      // Recent) → download.
+      // the same on-disk file across reloads. Tiered fallback: handle -> OPFS (reopenable
+      // via Recent) -> download.
+      //
+      // D-150 — every tier now writes the SAME self-contained `.cgproj` package. A weaker
+      // storage mechanism may not produce a weaker document: that asymmetry is what let a
+      // project exist as a scene with no assets in the first place (B-104).
       saveDisk: async (req) => {
         const { scene, askPath } = req;
         const sfp = window.showSaveFilePicker;
+        const bytes = await buildPackage(scene);
+        // D-150 — a project converted from a pre-package `.cg.json` must never be written
+        // back through a handle pointing at the ORIGINAL file: the old file stays exactly
+        // as it was, and the package goes to a new one the author picks.
+        const forcePicker = askPath || convertedProjects.has(scene.id);
 
         if (sfp !== undefined) {
           // Save (not Save As): reuse the project's persisted handle when usable.
-          if (!askPath) {
+          if (!forcePicker) {
             const cached = sceneSaveHandles.get(scene.id) ?? (await loadFileHandle(scene.id));
             if (cached !== null && (await ensureHandlePermission(cached))) {
               try {
-                await writeSceneToHandle(cached, scene);
+                await writeBytesToHandle(cached, bytes);
                 sceneSaveHandles.set(scene.id, cached);
                 projects.recordRecentHandle(scene);
                 return { ok: true, filename: cached.name, handleKey: scene.id };
@@ -188,17 +281,17 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
                 return { ok: false, filename: null, reason: 'write-failed' };
               }
             }
-            // No usable handle (none, or permission denied) → fall through to Save As.
+            // No usable handle (none, or permission denied) -> fall through to Save As.
           }
           // Save As: pick a new file, persist its handle.
           let handle: FileSystemFileHandle;
           try {
             handle = await sfp({
-              suggestedName: `${slugifyName(scene.name) || 'untitled'}.cg.json`,
+              suggestedName: `${slugifyName(scene.name) || 'untitled'}${PROJECT_PACKAGE_EXT}`,
               types: [
                 {
-                  description: 'cg Designer scene',
-                  accept: { 'application/json': ['.json', '.cg.json'] },
+                  description: 'cg Designer project',
+                  accept: { 'application/zip': [PROJECT_PACKAGE_EXT] },
                 },
               ],
             });
@@ -208,20 +301,23 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
             }
             throw err;
           }
-          await writeSceneToHandle(handle, scene);
+          await writeBytesToHandle(handle, bytes);
           sceneSaveHandles.set(scene.id, handle);
           await saveFileHandle(scene.id, handle);
           projects.recordRecentHandle(scene);
+          convertedProjects.delete(scene.id);
           return { ok: true, filename: handle.name, handleKey: scene.id };
         }
 
-        // No File System Access → OPFS path-model (reopenable via Recent) → download.
+        // No File System Access -> workspace path-model (reopenable via Recent) -> download.
         if (isOpfsSupported()) {
-          const { path } = await projects.save(scene, scene.name);
+          const { path } = await savePackageToWorkspace(scene, scene.name, bytes);
+          convertedProjects.delete(scene.id);
           return { ok: true, filename: path };
         }
-        const filename = `${slugifyName(scene.name) || 'untitled'}.cg.json`;
-        triggerJsonDownload(scene, filename);
+        const filename = `${slugifyName(scene.name) || 'untitled'}${PROJECT_PACKAGE_EXT}`;
+        triggerPackageDownload(bytes, filename);
+        convertedProjects.delete(scene.id);
         return { ok: true, filename };
       },
       // D-088 — open via showOpenFilePicker so the file carries a writable handle.
@@ -229,9 +325,11 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         const sop = window.showOpenFilePicker;
         if (sop === undefined) {
           // No File System Access — hidden input yields a File with no handle.
-          const picked = await pickJsonFile();
+          const picked = await pickProjectFile();
           if (picked === null) return { scene: null, handleKey: null };
-          return { scene: SceneSchema.parse(JSON.parse(picked.text)), handleKey: null };
+          const doc = await readProjectDocument(picked.bytes);
+          await adoptDocument(doc, null);
+          return { scene: doc.scene, handleKey: null };
         }
         let handles: FileSystemFileHandle[];
         try {
@@ -239,8 +337,13 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
             multiple: false,
             types: [
               {
-                description: 'cg Designer scene',
-                accept: { 'application/json': ['.json', '.cg.json'] },
+                description: 'cg Designer project',
+                // Legacy `.cg.json` stays openable — it must, or every project authored
+                // before the package format becomes unreachable.
+                accept: {
+                  'application/zip': [PROJECT_PACKAGE_EXT],
+                  'application/json': ['.json', '.cg.json'],
+                },
               },
             ],
           });
@@ -252,11 +355,12 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         }
         const handle = handles[0];
         if (handle === undefined) return { scene: null, handleKey: null };
-        const scene = await readSceneFromHandle(handle);
-        sceneSaveHandles.set(scene.id, handle);
-        await saveFileHandle(scene.id, handle);
-        projects.recordRecentHandle(scene);
-        return { scene, handleKey: scene.id };
+        const doc = await readProjectDocument(await readBytesFromHandle(handle));
+        await adoptDocument(doc, null);
+        sceneSaveHandles.set(doc.scene.id, handle);
+        await saveFileHandle(doc.scene.id, handle);
+        projects.recordRecentHandle(doc.scene);
+        return { scene: doc.scene, handleKey: doc.scene.id };
       },
       // D-088 — reopen a Recent entry: re-acquire permission in the click, else needsPicker.
       openRecent: async (req) => {
@@ -264,10 +368,11 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
           const handle = await loadFileHandle(req.handleKey);
           if (handle !== null && (await ensureHandlePermission(handle))) {
             try {
-              const scene = await readSceneFromHandle(handle);
-              sceneSaveHandles.set(scene.id, handle);
-              projects.recordRecentHandle(scene);
-              return { scene, handleKey: scene.id, needsPicker: false };
+              const doc = await readProjectDocument(await readBytesFromHandle(handle));
+              await adoptDocument(doc, null);
+              sceneSaveHandles.set(doc.scene.id, handle);
+              projects.recordRecentHandle(doc.scene);
+              return { scene: doc.scene, handleKey: doc.scene.id, needsPicker: false };
             } catch {
               /* file moved / deleted / unreadable — fall back to the picker */
             }
@@ -275,9 +380,12 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
           return { scene: null, handleKey: null, needsPicker: true };
         }
         if (req.path !== undefined) {
-          // Legacy path-keyed entry → OPFS path-model (upgrades to a handle on next save).
-          const result = await projects.open(req.path);
-          return { scene: result.scene, handleKey: null, needsPicker: false };
+          // Legacy path-keyed entry -> workspace path-model (upgrades to a handle on save).
+          const bytes = await projects.readBytes(req.path);
+          if (bytes === null) return { scene: null, handleKey: null, needsPicker: true };
+          const doc = await readProjectDocument(bytes);
+          await adoptDocument(doc, req.path);
+          return { scene: doc.scene, handleKey: null, needsPicker: false };
         }
         return { scene: null, handleKey: null, needsPicker: true };
       },
@@ -298,6 +406,39 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         return result;
       },
       onActiveChanged: (handler) => projects.activeChanged.subscribe(handler),
+    },
+
+    /**
+     * D-150 — the storage ROOT, surfaced. `initWorkspace` used to swallow both of its
+     * failure legs in bare `catch {}`s, so the author was moved to a different root
+     * without a word — and `projects/<id>/assets/...` then resolved somewhere else
+     * entirely. That silence is half of B-104; this namespace is what ends it.
+     */
+    storage: {
+      state: () => {
+        const root = workspaceRoot();
+        return Promise.resolve({
+          kind: root.kind,
+          label: root.label,
+          reason: root.reason,
+          degraded: isDegradedRoot(root),
+          sessionOnly: isSessionOnlyRoot(root),
+          canConnectFolder: isPersistentFolderSupported(),
+          ...(root.folderName !== undefined ? { folderName: root.folderName } : {}),
+          ...(root.detail !== undefined ? { detail: root.detail } : {}),
+        });
+      },
+      /**
+       * Re-grant the connected folder. MUST be called from a user GESTURE: Chromium
+       * refuses `requestPermission()` without one, and boot has none. That is exactly
+       * why a lost folder cannot be repaired at startup and has to become an action
+       * the author takes.
+       */
+      reconnectFolder: async () => {
+        await connectDirectory();
+        const root = workspaceRoot();
+        return { ok: true, label: root.label };
+      },
     },
 
     assets: {
@@ -447,17 +588,51 @@ function mimeOf(kind: 'image' | 'font' | 'lottie' | 'video', filename: string): 
   return 'application/octet-stream';
 }
 
-/** D-088 — write a scene JSON payload to an open file handle. */
-async function writeSceneToHandle(handle: FileSystemFileHandle, scene: Scene): Promise<void> {
+/** D-150 — write raw package bytes to an open file handle. */
+async function writeBytesToHandle(handle: FileSystemFileHandle, bytes: Uint8Array): Promise<void> {
   const writable = await handle.createWritable();
-  await writable.write(new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' }));
+  await writable.write(new Blob([bytes as BlobPart], { type: 'application/zip' }));
   await writable.close();
 }
 
-/** D-088 — read + parse a scene from an open file handle. */
-async function readSceneFromHandle(handle: FileSystemFileHandle): Promise<Scene> {
+/** D-150 — read raw bytes from an open file handle. */
+async function readBytesFromHandle(handle: FileSystemFileHandle): Promise<Uint8Array> {
   const file = await handle.getFile();
-  return SceneSchema.parse(JSON.parse(await file.text()));
+  return new Uint8Array(await file.arrayBuffer());
+}
+
+/**
+ * D-150 — trigger a download of the project package (the last-resort save tier).
+ * The bytes are the SAME package every other tier writes: degrading the storage
+ * mechanism must never degrade the document.
+ */
+function triggerPackageDownload(bytes: Uint8Array, filename: string): void {
+  const blob = new Blob([bytes as BlobPart], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 10_000);
+}
+
+async function pickProjectFile(): Promise<{ bytes: Uint8Array; name: string } | null> {
+  const file = await new Promise<File | null>((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    // Both forms: the package, and the pre-package JSON that must still open.
+    input.accept = '.cgproj,.json,application/json,application/zip';
+    input.onchange = () => {
+      resolve(input.files?.[0] ?? null);
+    };
+    input.click();
+  });
+  if (file === null) return null;
+  return { bytes: new Uint8Array(await file.arrayBuffer()), name: file.name };
 }
 
 /** File-system-safe slug — lower-case, ascii, hyphens, no extension. */
@@ -471,37 +646,4 @@ function slugifyName(s: string): string {
     .replace(/\.cg\.json$/i, '')
     .replace(/\.json$/i, '')
     .replace(/^-+|-+$/g, '');
-}
-
-/**
- * Fallback save for browsers without `showSaveFilePicker` (Firefox).
- * Triggers the browser's native download mechanism with a sensible
- * filename so the operator can pick where to put the file.
- */
-function triggerJsonDownload(scene: Scene, filename: string): void {
-  const blob = new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-  }, 10_000);
-}
-
-async function pickJsonFile(): Promise<{ text: string; name: string } | null> {
-  const file = await new Promise<File | null>((resolve) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json';
-    input.onchange = () => {
-      resolve(input.files?.[0] ?? null);
-    };
-    input.click();
-  });
-  if (file === null) return null;
-  return { text: await file.text(), name: file.name };
 }

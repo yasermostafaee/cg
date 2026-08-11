@@ -10,6 +10,7 @@ import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { InputTooltip } from './features/shell/InputTooltip.js';
 import { LandingView } from './features/shell/LandingView.js';
 import { Splitter } from './features/shell/Splitter.js';
+import { StorageNotice } from './features/shell/StorageNotice.js';
 import { TopToolbar } from './features/shell/TopToolbar.js';
 import { TransportBar } from './features/shell/TransportBar.js';
 import { StatusBar } from './features/status/StatusBar.js';
@@ -528,6 +529,10 @@ export function App(): JSX.Element {
   if (view === 'landing' || scene === null) {
     return (
       <main className={s.page}>
+        {/* D-150 — mounted on the LANDING screen too: this is where an author decides
+            what to open, so it is the worst possible place to be quiet about which
+            storage root is live. */}
+        <StorageNotice />
         <LandingView />
         <InputTooltip />
       </main>
@@ -536,6 +541,7 @@ export function App(): JSX.Element {
 
   return (
     <main className={s.page}>
+      <StorageNotice />
       <div className={s.studioTop}>
         <TopToolbar scene={scene} projectPath={projectPath} />
       </div>
