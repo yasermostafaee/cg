@@ -99,9 +99,16 @@
 
 ## 6. Gate + landing
 
-- [ ] 6.1 Full green gate (`pnpm gate`), uncached.
-- [ ] 6.2 **LINUX `gate:e2e` — OWED.** This change alters UI/render behaviour, so a green Windows run
-      does NOT discharge it. Discharged only by a COMPLETED, GREEN GitHub Actions run for the commit
-      that carries this change, whose `e2e` job actually RAN (a P-029 skip does not count), cited by
-      its run URL here.
-      Run URL: _pending_
+- [x] 6.1 Full green gate (`pnpm gate`), uncached — `85 successful, 85 total`, `0 cached, 85 total`,
+      prettier clean, `openspec validate --all --strict` 48/48.
+- [x] 6.2 **LINUX `gate:e2e` — OWED, and DISCHARGED.** This change alters UI/render behaviour, so a
+      green Windows run does not discharge it.
+      **Run URL: https://github.com/yasermostafaee/cg/actions/runs/31537842955**
+      Checked against every condition the rule names, not merely that a run exists: - `status: completed`, `conclusion: success` — not cancelled, not pending. - `headSha f38124089e1c44775fe54834a4ba75d0a61903e0` — the exact commit carrying this change. - **`E2E (Playwright)` job: `completed / success` — it RAN.** A `skipped` `e2e` (the P-029
+      classification case) would NOT have discharged this, which is why the job's own conclusion
+      is recorded here and not just the run's. - `Lint • Typecheck • Test • Build`: `success` on `ubuntu-latest`.
+- [x] 6.3 Local regression check beyond the gate (the gate does not run E2E): the existing video and
+      Lottie suites — `video-import.spec.ts`, `video-export.spec.ts`, `lottie-element.spec.ts` —
+      pass 12/12 with the driver change in place, including
+      `video-import.spec.ts:207` ("a video element is NOT remounted across transform changes"),
+      which is the pin most likely to have been disturbed by re-binding the handle.

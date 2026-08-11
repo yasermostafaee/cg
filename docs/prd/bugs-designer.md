@@ -1832,6 +1832,10 @@ changes meaning.
 > The latent trap the rider pointed at is real and is filed separately as [[B-138]] — `preview.ts`'s
 > unresolved-asset branch has an `IMG` leg only, so a missing VIDEO is silently invisible. It is not
 > fixed here; see that item.
+>
+> **Linux `gate:e2e` DISCHARGED** — completed, green, `e2e` job actually RAN (not P-029-skipped), on
+> the commit that carries the change (`f3812408`):
+> https://github.com/yasermostafaee/cg/actions/runs/31537842955
 
 **Repro:**
 
@@ -2008,6 +2012,10 @@ PVW E2E mirroring `apps/designer/tests/e2e/video-import.spec.ts`.
 > what happens on the NEXT play** — every other element starts and the video does not, which is
 > precisely the owner's "it plays again only after CLOSING the preview". The regression test asserts
 > after a second play for exactly this reason.
+>
+> **Linux `gate:e2e` DISCHARGED** — completed, green, `e2e` job actually RAN (not P-029-skipped), on
+> the commit that carries the change (`f3812408`):
+> https://github.com/yasermostafaee/cg/actions/runs/31537842955
 
 ### 🔴 THE OPEN QUESTION IS CLOSED — reading (A) and reading (B) are BOTH DISSOLVED
 
