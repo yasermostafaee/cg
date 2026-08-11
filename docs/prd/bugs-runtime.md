@@ -3069,3 +3069,76 @@ character" into this item without measuring it.**
 `library-inspector-dispatch` subject (controls dispatch on click) is likely covered incidentally by
 the picker specs, but that was **not** verified and is not claimed here. Source:
 `dev-list-vs-layer` v3 §5, recovered 2026-08-03; the census row is `DEBT.md:936`.
+
+## [ ] B-135 — the Runtime's storage root is SILENTLY substituted: `initRuntimeWorkspace()` swallows an OPFS failure and hands back in-memory storage, so the template library and the retained stack are lost for the session with nothing said ⟨priority: high⟩
+
+**What:** `apps/runtime/src/platform/library/workspace.ts` resolves the Runtime's one
+persistence root like this:
+
+```ts
+try {
+  return isOpfsSupported() ? await openOpfsWorkspace('runtime') : new MemoryWorkspace();
+} catch {
+  // OPFS can throw in insecure contexts / private modes — never let storage init
+  // blank the app; fall back to in-memory (this-session-only) storage.
+  return new MemoryWorkspace();
+}
+```
+
+Both legs — the `isOpfsSupported()` false branch and the bare `catch` — resolve to a
+`MemoryWorkspace`, and **nothing anywhere tells the operator.** That workspace is the root for
+BOTH browser-local stores the Runtime owns: [[B-085]]'s `LibraryStore` (the operator's imported
+templates) and [[B-092]]'s `StackRetentionStore` (the intent that makes the stack survive a
+bridge restart). Both are constructed from it in `createRuntimeBridge.ts` and both hydrate
+from it at boot.
+
+So on any install where OPFS is unavailable or throws — an insecure context (plain `http://`
+to a station box, which is exactly how a playout machine on a house LAN gets served), a private
+window, a locked-down profile — the Runtime runs a full session that LOOKS normal: templates
+import, rows load, the stack builds. Every one of those writes goes to memory. The first
+reload, and the operator's library and stack are gone with no error, no banner, and no reason
+given.
+
+**Why:** this is [[B-104]]'s defect, on the Runtime surface, and [[D-150]] already removed it
+on the Designer's. The Designer's `initWorkspace()` now returns
+`WorkspaceInit { workspace, root: { kind, label, reason, detail? } }` — a degraded root is
+REPORTED rather than swallowed, because "the app silently wrote a session's work somewhere it
+will not be tomorrow" is a data-loss class no amount of resilience justifies. The Runtime kept
+the old shape. The asymmetry is the bug: the two apps disagree about whether losing your
+persistence root is worth mentioning, and the Runtime is the one where the loss lands during a
+broadcast.
+
+It is worse here than in the Designer in one specific way, and that is why this is filed
+`high` rather than `medium`: an author notices a missing image. An operator does not notice a
+retention store that is quietly volatile — they notice it at the moment the bridge restarts
+mid-programme and the stack does not come back, which is the exact failure [[B-092]] exists to
+prevent. A silent memory fallback turns a working safety net into one that is only pretending.
+
+**Acceptance:**
+
+- WHEN `initRuntimeWorkspace()` cannot open the durable root — OPFS unsupported, or
+  `openOpfsWorkspace` throws — THEN the substitution is REPORTED, not swallowed: the caller
+  receives the root's kind and the reason it degraded, in the same shape the Designer's
+  `initWorkspace()` returns
+- WHEN the Runtime is running on a degraded (session-only) root THEN the operator is told, in a
+  surface they cannot miss, that the template library and the stack will NOT survive a reload —
+  the loss is announced BEFORE it happens, never discovered after
+- WHEN the durable root opens normally THEN nothing is surfaced and no degradation is reported
+- WHEN the reason is one the operator can act on (an insecure context) THEN the message names
+  the fix, rather than reporting only that storage is unavailable
+
+**Notes:**
+
+- **Filed, deliberately NOT fixed**, from the retention-state session (2026-08-11). It is the
+  same class as the work that session did — a store that quietly loses the state it exists to
+  hold — but a different surface and a different fix, and folding it in would have crowded out
+  the on-air cluster.
+- **Cross-refs:** [[B-104]] (the Designer-side data loss this mirrors), [[D-150]] (which fixed
+  it there, and whose `WorkspaceInit` shape is the precedent to reuse — do NOT invent a second
+  one), [[B-085]] (the library store on this root), [[B-092]] (the retention store on it).
+- The E2E path is unaffected and must stay so: `isE2E()` returns a `MemoryWorkspace`
+  DELIBERATELY, for run isolation. That leg is not a degradation and must not be reported as
+  one — only the two failure legs are.
+- **Not verified against a real degraded install.** This is filed from a code read of
+  `initRuntimeWorkspace()` and its two call sites in `createRuntimeBridge.ts`; the insecure-context
+  leg in particular has not been reproduced on a station box.

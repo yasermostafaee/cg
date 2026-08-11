@@ -725,3 +725,24 @@ changes, its task must declare the bug files as inputs (see [B-084](bugs.md)); b
 it cache-hit and let the B-080 duplicate merge.
 
 **If it fails on your branch: renumber YOUR bug.** Merged `main` numbers always win.
+
+---
+
+**Mint 2026-08-11 — `B-135`, one Runtime bug, filed but NOT fixed.** The retention-state session
+(`B-107`/`B-109`/`B-108`) was asked to FILE the Runtime-side workspace hole rather than close it:
+**B-135** (`initRuntimeWorkspace()` silently substitutes in-memory storage for OPFS, so the
+template library AND the retained stack are session-only with nothing said — [[B-104]]'s defect on
+the Runtime surface, which [[D-150]] already removed on the Designer's),
+[bugs-runtime.md](bugs-runtime.md).
+
+**Verified free immediately before the commit that writes the heading**, by the discipline this
+file prescribes: `git grep -c "B-135" -- docs/` over the working tree returned **no match at all**
+(exit 1) before the heading was written, and the highest `B-` heading anywhere in `docs/prd/` was
+`B-134`. The space stays contiguous: `B-001` … `B-135`, no gaps. **Next free: `B-136`.**
+
+⚠ **The reach of this claim is narrower than the 2026-08-02 sweep above, and saying so is the
+point.** It checked the WORKING TREE's `docs/`, not all refs and not the sibling worktrees, because
+this repo now uses ONE folder on `dev` (see CLAUDE.md, "Repo layout — one folder, one branch") and
+every branch that exists lives in it. What that does NOT cover is a number claimed on a ref this
+checkout has not fetched. The CI audit (`tools/soak-runner/tests/bug-number-audit.test.ts`) is the
+backstop that makes a collision unmergeable, which is the property that has ever actually mattered.
