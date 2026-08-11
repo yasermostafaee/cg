@@ -1795,7 +1795,43 @@ composition three levels down cannot paint a backdrop the surface above it suppr
 paints, preview does not, output never does, and the axis defaults to ON so no existing caller
 changes meaning.
 
-## [ ] B-136 — video is NEVER visible in PVW, though CasparCG, the HTML export and the Designer preview all render it ⟨priority: high — PVW is the operator's pre-air check⟩
+## [~] B-136 — video is NEVER visible in PVW, though CasparCG, the HTML export and the Designer preview all render it ⟨priority: high — PVW is the operator's pre-air check⟩
+
+> **✅ FIXED — and the mechanism is now OBSERVED, not inferred.**
+> `openspec/changes/video-plays-in-preview-and-pvw`. `apps/runtime/index.html` gained
+> `media-src 'self' data:`; no other directive was touched.
+>
+> **The runtime confirmation this item asked for was obtained — programmatically, not by hand.**
+> A real-Chromium E2E (`apps/runtime/tests/e2e/pvw-video.spec.ts`) put a `data:video/webm` on the
+> PVW surface and recorded Chromium's own refusal, verbatim:
+>
+> > Loading media from `'data:video/webm;base64,…'` violates the following Content Security Policy
+> > directive: `"default-src 'self'"`. **Note that 'media-src' was not explicitly set, so
+> > 'default-src' is used as a fallback.** The action has been blocked.
+>
+> That is the exact line the item predicted DevTools would show. **Present ⇒ proved**, by this
+> item's own stated test. Pre-fix the `<video>` never left `readyState 0`; post-fix it decodes and
+> no violation is raised. The FINAL spec was re-run against a build with the directive removed, to
+> confirm it still fails there.
+>
+> **The `blob:` scheme was deliberately NOT admitted**, though the Designer's policy carries it:
+> nothing in `apps/runtime` creates an object URL (no `createObjectURL`, no `blob:` anywhere in
+> `apps/runtime/src`), and the exporter inlines video as `data:`. Narrowest policy that covers the
+> real need; the reasoning sits in a comment beside the directive.
+>
+> **The availability rider is CLOSED, and it gates [[D-150]]'s archive: a video asset DOES survive
+> a `.cgproj` save → reopen.** Established by test, not by claim —
+> `apps/designer/tests/project-package-restart.test.ts` now reopens a package into a workspace
+> holding NONE of the bytes and asserts the video is still listed, still `kind: 'video'`, under a
+> STABLE `assetId` (so a placed element still resolves), with byte-identical content and its D-128
+> `provenance` intact. The existing restart cases covered images and fonts only, which is why the
+> gap could sit open. **D-150 is therefore cleared as a cause of this bug on both axes** — it
+> changed neither resolution (established from diffs when filed) nor availability (established
+> here).
+>
+> The latent trap the rider pointed at is real and is filed separately as [[B-138]] — `preview.ts`'s
+> unresolved-asset branch has an `IMG` leg only, so a missing VIDEO is silently invisible. It is not
+> fixed here; see that item.
 
 **Repro:**
 
@@ -1950,7 +1986,50 @@ code read; the repo RELIES on it and documents it, but this session could not ru
 **Regression test:** an assertion that `apps/runtime/index.html`'s CSP admits `data:` media, plus a
 PVW E2E mirroring `apps/designer/tests/e2e/video-import.spec.ts`.
 
-## [ ] B-137 — video stays PAUSED in the Designer preview after a scene rebuild, and reopening the preview is the only cure ⟨priority: high — the preview is the authoring feedback loop⟩
+## [~] B-137 — video stays PAUSED in the Designer preview after a scene rebuild, and reopening the preview is the only cure ⟨priority: high — the preview is the authoring feedback loop⟩
+
+> **✅ FIXED — and the code-derived mechanism is now OBSERVED.**
+> `openspec/changes/video-plays-in-preview-and-pvw`. Three changes, all in the fix shape this item
+> specified: the video handle re-resolves its node by `data-cg-element-id` when the captured one
+> reports `isConnected === false` (`runtime.ts`, host-agnostic, reusing `recover()`'s existing
+> re-pointing precedent); the Lottie map a preview is handed is SCENE-SCOPED (`getForScene`),
+> killing the stickiness at source; and a rejected `play()` is now reported once per element.
+>
+> **The mechanism reproduced exactly as diagnosed, on the first attempt.** In
+> `apps/designer/tests/e2e/video-preview-rebuild.spec.ts`, pre-fix: the video plays and advances,
+> then after the owner's own gesture (a ticker's `cycle seam` in the modal's session timing
+> controls) it sits at `paused === true`, frozen at the IDENTICAL `currentTime`, on the ATTACHED
+> node. Two independent code investigations had converged on this mechanism without ever running it;
+> it is now run.
+>
+> ⚠️ **One correction to the reproduction recipe, worth carrying:** a rebuild returns the preview to
+> its pending (blank, armed) state, because the modal is a BROADCAST surface that shows nothing
+> until play. So a video sitting paused AT THAT INSTANT is correct, not the bug. **The defect is
+> what happens on the NEXT play** — every other element starts and the video does not, which is
+> precisely the owner's "it plays again only after CLOSING the preview". The regression test asserts
+> after a second play for exactly this reason.
+
+### 🔴 THE OPEN QUESTION IS CLOSED — reading (A) and reading (B) are BOTH DISSOLVED
+
+**The trigger is what forces a REBUILD.** Neither "any ANIMATING element" (A) nor "only a
+timeline/lifecycle DRIVER" (B) survives, and the third answer code review proposed is confirmed.
+
+**The evidence is experiment 2, and it is now a permanent test** — `EXPERIMENT 2` in
+`video-preview-rebuild.spec.ts`. A video **ALONE** on the scene: no ticker, no Lottie, no animated
+companion of ANY kind. It plays and advances; a preview TIMING knob then rebuilds the scene; on the
+next play it is frozen. Pre-fix that test fails on exactly that assertion, post-fix it passes.
+**With no animating companion anywhere on the scene, the companion cannot have been the variable.**
+
+Every ticker-specific and Lottie-specific detail in the original report is therefore a red herring
+about the TRIGGER — they force rebuilds, which is all they ever contributed. (The Lottie remains
+special in one respect, and only one: it is what made the freeze STICKY, via the module-level cache.
+That is a separate half of the bug and it is fixed separately.)
+
+⚠️ **The two hypotheses the filing session refuted STAY REFUTED — do not re-run them.** Autoplay
+policy is not the cause (it is why the failure was SILENT, which the new logging addresses), and a
+stepped/deterministic frame driver does not exist in this engine. Nothing found here re-opens
+either. Experiments 1, 3 and 4 in the list at the end are now MOOT: 3 was the decider and experiment
+2 settled the same question more directly, without needing a GIF or a second video.
 
 **Repro** (as reported by the owner):
 
@@ -2133,3 +2212,63 @@ rebuild, play again, assert the VISIBLE `video[data-cg-element-id]` has `paused 
 advancing `currentTime`. The existing coverage misses exactly this: `video-import.spec.ts:229-259`
 pins the transplant, but against the **canvas** iframe, which never plays, and it asserts node
 identity and `currentTime` — never `!paused` after a rebuild.
+
+## [ ] B-138 — an unresolved VIDEO asset in the preview is SILENTLY invisible: no placeholder, no marker, no console line ⟨priority: medium — it makes a whole class of asset failure undiagnosable⟩
+
+**Repro (constructed — this is a latent trap, not a reported field failure):**
+
+1. Place a video element on a scene.
+2. Put the preview in a state where that `assetId` does not resolve to a URL — the asset is missing,
+   or simply not yet primed at the moment the preview walks the tree.
+3. Look at the preview, and at the console.
+
+**Expected:** the same treatment an unresolved IMAGE gets — a visible placeholder and a
+`data-cg-missing` marker — or, failing that, SOME evidence that an asset did not resolve.
+**Actual:** a `<video>` with no `src`. Nothing is painted, nothing is marked, nothing is logged. The
+element is indistinguishable from one that was never placed.
+
+**Mechanism — exact, and confined to one branch.** In `apps/designer/src/platform/preview.ts`, the
+asset walk in `applyAssetUrls()` ends:
+
+```js
+} else if (tag === 'IMG' && node.getAttribute('data-cg-missing') !== '1') {
+  node.src = MISSING_IMG;
+  node.setAttribute('data-cg-missing', '1');
+}
+```
+
+The unresolved leg tests `tag === 'IMG'`. The walk itself admits BOTH kinds a few lines above
+(`if (tag !== 'IMG' && tag !== 'VIDEO') return;`), so a VIDEO reaches this branch and falls straight
+out of it. The resolved leg handles VIDEO properly; only the UNRESOLVED leg is image-only. Dates to
+`cb5a3ad` (2026-07-26) and is unchanged since.
+
+**Why it is worth its own item.** It is a DIAGNOSABILITY defect, and its cost is paid by other bugs:
+"the video is not visible" is exactly what [[B-136]] reported, and this branch is the reason such a
+report cannot be told apart from a CSP refusal, a missing asset, or a packaging failure without
+attaching a debugger. [[B-136]] named it as the leading alternative candidate precisely because it
+produces an identical symptom through a completely different cause.
+
+**⚠️ It is NOT what caused [[B-136]], and that is now settled rather than assumed.** B-136's
+mechanism was proved directly (Chromium's own CSP refusal, captured verbatim), and the availability
+question that would have implicated this path — does a video survive a `.cgproj` reopen? — was
+answered YES by test. So this is a trap that has not yet sprung, filed before it does.
+
+**Why it was NOT fixed in the session that found it** (session I, which fixed B-136 and B-137), even
+though a fix was authorised if it stayed confined. It did not meet the bar, on two counts:
+
+- **It needs a product decision that is the owner's, not the implementer's:** what should a missing
+  VIDEO actually SHOW? `MISSING_IMG` is an image data URI and cannot be a `<video>`'s `src`. The
+  options — a poster frame, a CSS background, an overlaid box, or marker-and-log only with no visual
+  at all — are a design call. Shipping marker-and-log alone would half-close the item and make the
+  remaining half harder to see.
+- **Its test cannot be a unit test.** This code lives inside the generated `<script>` string that
+  `#buildHtml` emits, so covering it honestly means another Designer E2E — more than "confined to
+  that one branch, with its own test".
+
+**Fix shape when taken:** decide the visual treatment, then extend the unresolved leg to VIDEO —
+setting `data-cg-missing="1"` and logging once per element (the once-per-element discipline [[B-137]]
+established for `play()` rejections applies here for the same reason: this walk re-runs on DOM
+mutations). An E2E asserting the marker appears on a video whose assetId resolves to nothing.
+
+**Related:** [[B-136]] (the identical symptom from a different cause, and the item that surfaced
+this), [[B-137]] (the once-per-element logging precedent).

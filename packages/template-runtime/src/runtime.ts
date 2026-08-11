@@ -995,30 +995,103 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const loopEndMs = idle ? idle.end : hasPhases ? outroStartMs : durationMs;
         const hasOutro = outroStartMs < durationMs;
         // MUTABLE: `recover()` rebuilds the element in place (a terminal decode
-        // error kills the NODE, not the driver) and re-points every handle member.
+        // error kills the NODE, not the driver) and re-points every handle member,
+        // and B-137's `live()` below re-points it when a HOST reparents the node.
         let media = v.container;
+        /**
+         * B-137 — THE NODE THE DRIVER COMMANDS MUST BE THE NODE THE VIEWER SEES.
+         *
+         * A host may legitimately REPARENT a `<video>` across a rebuild rather than
+         * let it reload: the Designer preview pools the live element and transplants
+         * it back over the freshly built one (`preview.ts` `reconcileVideos`), so
+         * that a transform-only edit never re-fetches the media. Nothing told the
+         * NEW driver about that swap, so it went on commanding the node it captured
+         * at build time — by then detached, and never given a `src` (the host's src
+         * walk uses `document.querySelectorAll`, which cannot see a detached node).
+         * Meanwhile the node actually on screen was the one the OUTGOING driver
+         * paused during teardown, and no code path ever played it again. That is
+         * the whole of B-137: a frozen picture with a healthy driver behind it,
+         * commanding an orphan.
+         *
+         * Re-resolving by `data-cg-element-id` fixes it at the binding rather than
+         * at the host, so it is HOST-AGNOSTIC — any future harness that reparents
+         * nodes is covered without knowing this driver exists.
+         *
+         * `isConnected === false` is the trigger, and it is precise: it is true
+         * ONLY when this node has left the document, which is exactly the swap.
+         * A node that is merely moved WITHIN the document stays connected and is
+         * never re-resolved, so the normal path costs one boolean read. The scan
+         * (rather than a selector) avoids escaping an arbitrary author-supplied id
+         * — and a scene's video count is small, on a path taken only after a swap.
+         *
+         * This is the same re-pointing `recover()` already performs on a different
+         * trigger (a terminal decode error), deliberately reusing that precedent
+         * instead of inventing a second mechanism.
+         */
+        const live = (): HTMLVideoElement => {
+          if (media.isConnected) return media;
+          const nodes = media.ownerDocument.querySelectorAll<HTMLVideoElement>(
+            'video[data-cg-element-id]',
+          );
+          for (const node of nodes) {
+            if (node.dataset['cgElementId'] === el.id) {
+              media = node;
+              return media;
+            }
+          }
+          // No replacement in the document — keep the last known node. The driver
+          // then commands a detached element harmlessly, exactly as before.
+          return media;
+        };
+        /**
+         * B-137 — `play()` REJECTIONS ARE REPORTED, ONCE PER ELEMENT.
+         *
+         * Every rejection here was swallowed blind, which is why a video commanding
+         * an orphan looked like nothing at all for weeks: no console line, no
+         * evidence, a frozen picture and a driver reporting success. The silence was
+         * load-bearing to the bug's invisibility, so the logging is part of the fix.
+         *
+         * ONCE per element, latched — this sits on a path that can be re-entered every
+         * tick, and a per-frame log would be its own defect. Rejections remain
+         * NON-FATAL (a src-less node during export wiring, an autoplay refusal, jsdom
+         * with no media stack): the driver carries on exactly as it did.
+         */
+        let playFailureReported = false;
+        const reportPlayFailure = (reason: unknown): void => {
+          if (playFailureReported) return;
+          playFailureReported = true;
+          console.warn(`[cg] video "${el.id}": play() was rejected`, reason);
+        };
         const handle: VideoHandle = {
           play: () => {
+            const node = live();
             try {
-              const p = media.play();
-              if (p !== undefined && typeof p.catch === 'function') void p.catch(() => undefined);
-            } catch {
-              /* no src (Phase-5 export wiring) / autoplay policy / jsdom — non-fatal */
+              const p = node.play();
+              if (p !== undefined && typeof p.catch === 'function') {
+                void p.catch((reason: unknown) => {
+                  reportPlayFailure(reason);
+                });
+              }
+            } catch (reason) {
+              reportPlayFailure(reason);
             }
           },
-          pause: () => media.pause(),
+          pause: () => live().pause(),
           seek: (sec) => {
-            media.currentTime = sec;
+            live().currentTime = sec;
           },
-          currentTime: () => media.currentTime,
+          currentTime: () => live().currentTime,
           // D-128 sync fix — a corrective seek must never stack on one still settling
           // (`media.seeking`): that seek-storm wedged the decoder and painted half-decoded
           // frames. jsdom has no real seek, so `seeking` is simply false there.
-          seeking: () => media.seeking,
+          seeking: () => live().seeking,
           // D-128 seek-fragility recovery — `media.error` is TERMINAL: no seek or
           // play on the dead node ever paints again (the pause/resume freeze the
           // owner hit on a pre-alignment asset). jsdom has no MediaError: null ⇒ alive.
-          dead: () => media.error !== null && media.error !== undefined,
+          dead: () => {
+            const node = live();
+            return node.error !== null && node.error !== undefined;
+          },
           // Rebuild the element IN PLACE: fresh node, same attributes (src, class,
           // style, playsinline, preload, every data-* — so the Designer preview's
           // video pool re-adopts it by `data-cg-element-id`), positioned where the
@@ -1026,7 +1099,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // no-remount-on-drag guard: a transform change never sets `media.error`,
           // so recovery can only fire on a genuinely dead decoder — never on a drag.
           recover: () => {
-            const old = media;
+            // Rebuild the node that is ON SCREEN — recovering an orphan would
+            // replace a node nobody can see and leave the frozen one in place.
+            const old = live();
             const wasPlaying = !old.paused && !old.ended;
             const at = Number.isFinite(old.currentTime) ? old.currentTime : 0;
             const fresh = old.ownerDocument.createElement('video');

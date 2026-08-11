@@ -811,3 +811,33 @@ asserts. **Recorded as a hazard, not a practice:** a forward reference is a rese
 does not recognise, and had the session died between its two pushes, `dev` would have carried a
 permanent dangling link plus two numbers that look claimed but are not. Prefer filing the item
 first, or the reference last.
+
+---
+
+**Mint 2026-08-12 (session I) — `B-138`, ONE number, filed as a by-product of fixing two others.**
+
+| Prefix | Claimed | Item                                                                                                        | File                                 |
+| ------ | ------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `B-`   | `B-138` | an unresolved VIDEO asset in the preview is silently invisible — no placeholder, no marker, no console line | [bugs-designer.md](bugs-designer.md) |
+
+**Filed, not fixed** — deliberately. `B-138` is the latent trap [[B-136]] named as its leading
+alternative candidate: `preview.ts`'s unresolved-asset branch has an `IMG` leg only, so a missing
+VIDEO produces exactly the symptom B-136 reported, through a completely different cause. The session
+that found it was authorised to fix it if the fix stayed confined to that one branch; it does not,
+on two counts recorded in the item (it needs an owner-level decision about what a missing video
+should SHOW, and its code lives inside a generated `<script>` string so its test is an E2E). Filing
+it rather than half-closing it is the point.
+
+**Verified free immediately before the commit that writes the heading.** `git grep -c "B-138" --
+docs/` returned no match at all (exit 1) over the working tree, and the highest `B-` heading anywhere
+in `docs/prd/` was `B-137`. The space stays contiguous: `B-001` … `B-138`, no gaps.
+**Next free: `B-139`.**
+
+⚠ **The one prior occurrence was a FORWARD REFERENCE again — the same hazard the previous mint
+recorded, and this time it was deliberate and short-lived.** `[[B-138]]` was written into
+`apps/designer/tests/project-package-restart.test.ts`'s new video case minutes before the heading
+existed, because that test is what CLOSED the availability question B-138 hangs off. The reach of
+the check above is stated plainly: it swept the WORKING TREE's `docs/`, not all refs — this repo
+keeps one folder on `dev` (CLAUDE.md, "Repo layout"), and the CI audit
+(`tools/soak-runner/tests/bug-number-audit.test.ts`) remains the backstop that makes a collision
+unmergeable.

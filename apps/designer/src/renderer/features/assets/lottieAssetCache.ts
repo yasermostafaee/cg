@@ -33,6 +33,39 @@ export function getAll(): Readonly<Record<string, unknown>> {
 }
 
 /**
+ * B-137 — THE MAP A PREVIEW IS HANDED, SCOPED TO THE SCENE THAT ASKED FOR IT.
+ *
+ * {@link getAll} returns this MODULE-LEVEL cache in full — every Lottie parsed since
+ * the project opened, including assets whose elements have since been deleted. Only
+ * {@link clearAll} (a project change) ever empties it.
+ *
+ * That is what made B-137's freeze STICKY. The preview iframe rebuilds the scene
+ * whenever it is handed a non-empty Lottie map, and a rebuild is what strands the
+ * video driver on a reparented node. Because the map stayed non-empty after the
+ * Lottie ELEMENT was deleted, the rebuild-forcing condition stayed true for the rest
+ * of the session — so undoing the change that caused the freeze could not undo the
+ * freeze. The stickiness lived in module state, not in the engine, which is also why
+ * reopening the preview cured it.
+ *
+ * The CANVAS deliberately still uses {@link getAll}: it never plays media, so a stale
+ * entry there costs a redundant rebuild and cannot freeze anything. The asymmetry is
+ * intentional rather than drift — scoping it too is a safe, separate improvement.
+ *
+ * Scoping the map to the scene's OWN ids kills that at source: delete the Lottie and
+ * the map goes empty, so the condition goes false and no rebuild is forced. Nothing
+ * about which players MOUNT changes — an id the scene does not reference could never
+ * have mounted a player, so this only ever removes entries that were dead weight.
+ */
+export function getForScene(scene: Scene): Readonly<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  for (const id of collectLottieIds(scene)) {
+    const parsed = data.get(id);
+    if (parsed !== undefined) out[id] = parsed;
+  }
+  return out;
+}
+
+/**
  * D-125 Phase 3a — one asset's parsed animation, or `undefined` while it is still
  * resolving. The Lottie Inspector reads `fr` / `ip` / `op` off this (via `lottieTiming`)
  * to show the clip's timing in the composition's frame space.

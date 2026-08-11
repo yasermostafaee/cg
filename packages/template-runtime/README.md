@@ -535,6 +535,36 @@ instead of a permanent freeze. Recovery fires ONLY on `media.error`; a
 transform change never sets it, so the Designer-preview no-remount-on-drag
 guarantee is untouched.
 
+**THE NODE-BINDING CONTRACT (B-137) — the handle follows the node a viewer can
+SEE, not the node the scene was built with.** A host is ALLOWED to reparent a
+media element across a rebuild: the Designer preview pools the live `<video>`
+and transplants it back over the freshly built one, so a transform-only edit
+never re-fetches the media. The engine therefore does not treat the node it
+captured at build time as final. Every `VideoHandle` member reads through a
+`live()` resolver which, when the captured node reports
+`isConnected === false`, re-queries the owning document for
+`video[data-cg-element-id="<element id>"]` and re-points to what it finds.
+
+Three properties are load-bearing, and all three are pinned by
+`tests/video-node-rebind.test.ts`:
+
+- **HOST-AGNOSTIC.** The rule keys off `isConnected` + `data-cg-element-id` and
+  nothing else, so any harness that reparents nodes is covered without the
+  engine knowing it exists. A host does NOT notify the driver of a swap, and is
+  not expected to.
+- **Only a DISCONNECTED node is re-resolved.** A node merely moved WITHIN the
+  document stays connected and is never re-resolved, so the normal path costs
+  one boolean read and a host that reorders its tree gets no surprise rebinding.
+- **`recover()` rebuilds the VISIBLE node.** It starts from `live()`, so a
+  terminal decode error replaces what is on screen rather than an orphan.
+
+Without this the newly built driver commanded a DETACHED element — which, with a
+valid `src`, plays quite happily and reports success — while the node on screen
+was the one the OUTGOING driver paused during teardown. Nothing ever played it
+again: a frozen picture with a healthy driver behind it. A rejected `play()` is
+now also reported ONCE per element (latched — the path can be re-entered every
+tick), because swallowing it is what made that failure invisible.
+
 ### LottieDriver + the element-outro seam (D-125)
 
 A `lottie` element mounts a `lottie_light` player (`@cg/lottie-bridge`,

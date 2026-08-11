@@ -3,9 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      B-136 — `media-src` IS LOAD-BEARING FOR PVW, and its absence is why PVW never
+      showed a video. This page EMBEDS an exported single-file template in an
+      `<iframe srcDoc>` (`RehearsalFrame.tsx:236`), and a `srcdoc` document INHERITS
+      its embedder's CSP — enforced IN ADDITION to the artifact's own, intersection
+      wins. The artifact has declared `media-src data:` since D-128 Phase 5, but this
+      page declared no `media-src` at all, so media fell through to
+      `default-src 'self'` and every base64 `data:video/webm` was refused. Images and
+      fonts survived the intersection because they ARE listed — media was the only
+      class omitted, which is exactly why only video was invisible.
+
+      `data:` is what the exporter inlines; `'self'` covers same-origin media. NO
+      `blob:` — unlike the Designer (which plays video off object URLs) nothing in
+      this app creates one, so admitting it would widen the policy past the need.
+      Pinned by `tests/e2e/pvw-video.spec.ts` in a REAL browser: jsdom does not
+      enforce CSP, so no unit test can observe this.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob:; font-src 'self' data: https://cdn.jsdelivr.net; media-src 'self' data:; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
     />
     <!--
       R-035 — LOADED NON-BLOCKING (`media="print"` until `onload`), and that is not a

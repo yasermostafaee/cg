@@ -43,6 +43,16 @@ function baseScene(id = 'proj-1'): Scene {
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10, 1, 2, 3]);
 const PNG2 = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10, 9, 9, 9]);
 const TTF = new Uint8Array([0x00, 0x01, 0x00, 0x00, 5, 5, 5]);
+/** A WebM's EBML magic + filler. Bytes are opaque to the store — only identity matters here. */
+const WEBM = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 7, 7, 7, 7, 7]);
+/** D-128 import-time lineage that ONLY the manifest can carry back — it is not derivable from bytes. */
+const PROVENANCE = {
+  sourceFilename: 'clip.mov',
+  sourceFps: 29.97,
+  targetFps: 50,
+  sourceWidth: 1920,
+  sourceHeight: 1080,
+};
 
 function file(bytes: Uint8Array, name: string, type: string): File {
   return new File([bytes as BlobPart], name, { type });
@@ -94,6 +104,59 @@ describe('B-104 — assets survive a restart because the package carries them', 
     }
     const logo = listed.find((a) => a.filename === 'logo.png')!;
     expect(await assets.bytes(logo.assetId)).toEqual(PNG);
+  });
+
+  /**
+   * B-136 PART 2 — **the availability rider, answered.**
+   *
+   * B-136 could not rule D-150 out from diffs alone: D-150 did not change asset
+   * RESOLUTION, but it did change asset AVAILABILITY (`adoptFromPackage` replaces the
+   * index wholesale), and no diff can say whether a VIDEO survives a save → reopen.
+   * That mattered because `preview.ts`'s unresolved-asset branch has an IMG leg only
+   * (see [[B-138]]), so an unresolved video is silently invisible — the exact reported
+   * symptom. If a video vanished from the package, B-136 would have had a second cause.
+   *
+   * The existing restart case above covers images and fonts ONLY, which is why this
+   * gap could sit open. It is asserted here rather than argued from the code being
+   * kind-agnostic: "the code looks generic" is not evidence that a format round-trip
+   * preserves a kind.
+   */
+  it('a VIDEO asset survives the package round trip — bytes, kind and D-128 provenance', async () => {
+    const scene = baseScene('proj-video');
+    const wsBefore = new MemoryWorkspace();
+
+    const authoring = new AssetStore(wsBefore);
+    authoring.setActiveProject(scene.id);
+    const stored = await authoring.importBytes(WEBM, 'clip.webm', 'video', PROVENANCE);
+    expect(stored.kind).toBe('video');
+    const { index, files, missing } = await authoring.exportForPackage();
+    expect(missing).toHaveLength(0);
+    const bytes = packProject({ scene, index, files, savedAt: SAVED_AT });
+
+    // The restart: a workspace holding NONE of the project's bytes.
+    const wsAfter = new MemoryWorkspace();
+    const doc = await readProjectDocument(await bytes);
+    const reopened = new AssetStore(wsAfter);
+    reopened.setActiveProject(doc.scene.id);
+    await reopened.adoptFromPackage(doc.index, doc.files);
+
+    // (1) The Project Assets panel still LISTS it — the owner's one-glance check.
+    const listed = await reopened.list();
+    expect(listed.map((a) => a.filename)).toEqual(['clip.webm']);
+    expect(listed[0]?.kind).toBe('video');
+
+    // (2) The assetId is STABLE, so a scene's video element still resolves. An asset
+    //     listed under a fresh id would leave every placed element unresolved — listed
+    //     but unusable, which reads as "the video is gone" on every surface.
+    expect(listed[0]?.assetId).toBe(stored.assetId);
+
+    // (3) The BYTES resolve. A listing whose bytes are gone is B-104 wearing a new coat.
+    const readBack = await reopened.bytes(stored.assetId);
+    expect(readBack).toEqual(WEBM);
+
+    // (4) Provenance survives — it cannot be recomputed from bytes, so if the manifest
+    //     drops it the clip silently re-converts on the next re-pick.
+    expect(listed[0]?.provenance).toEqual(PROVENANCE);
   });
 
   it('opening the same package twice does not duplicate assets', async () => {
