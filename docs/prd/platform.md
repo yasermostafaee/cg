@@ -1371,7 +1371,7 @@ uses), and the completeness backstop now recorded in CLAUDE.md and
 `openspec/specs/platform-ci/spec.md` — the daily `dev` → `main` merge classifies the whole span, so
 anything an individual push skipped is still caught there.
 
-## [~] P-030 — the `dev` → `main` merge re-runs a full gate against a SHA that already has a green one ⟨priority: medium⟩ — in progress: `.github/workflows/pr.yml` (the `reuse` step)
+## [~] P-030 — the `dev` → `main` merge re-runs a full gate against a SHA that already has a green one ⟨priority: medium⟩ — in progress: `.github/workflows/pr.yml` (the `reuse` step) + `tools/gate-hook/src/reuse-decision.mjs` (the pure rule); the `event === 'push'` match condition is `openspec/changes/platform-reuse-guard-push-only/`
 
 **The symptom.** `dev` → `main` is a **`--ff-only`** merge, so `main`'s new HEAD is the **SAME
 COMMIT** as `dev`'s tip — **same SHA, same tree**. The push to `main` fires a full run against a tree
@@ -1383,10 +1383,12 @@ minutes are metered, so this is a recurring bill for re-proving a tree nothing c
 ⚠ **`[skip ci]` cannot help**, and this is why the fix has to be a workflow-level guard rather than a
 commit-message convention: **a fast-forward creates no commit** whose message could carry it.
 
-### The three-part match condition — and the third is the one a naive version gets wrong
+### The four-part match condition — and the third is the one a naive version gets wrong
 
 The guard asks the Actions API whether **this workflow** already has a run for the same `head_sha`,
-and may skip the heavy jobs **only** on a positive, complete match:
+and may skip the heavy jobs **only** on a positive, complete match. ⭐ **A FOURTH condition was added
+2026-08-11 — the run must be a `push` run** (`openspec/changes/platform-reuse-guard-push-only/`); see
+the qualification section below for why it is not optional:
 
 1. **The run is for the same `head_sha`**, and is not this run (a run can never verify itself — on a
    re-run it would otherwise find its own record and skip the work it was re-run to do).
@@ -1398,6 +1400,9 @@ and may skip the heavy jobs **only** on a positive, complete match:
    produces exactly that. And **the merge run is the completeness backstop** that would otherwise
    catch the day's render changes. So: skip only when the prior run's **`ci` AND `e2e` both RAN and
    succeeded**; if either was **skipped** there, do **not** skip here. **Fail toward running.**
+4. ⭐ **`event === 'push'`.** Only a `push` run tests the tree of that exact commit; a
+   `pull_request` run tests the merge ref. POSITIVE check — a missing, empty, or unrecognised
+   `event` is an uncertainty, never a permission.
 
 **Every uncertainty runs everything.** An API error, a missing permission, unreadable jobs, an
 ambiguous or empty result, a job renamed in the workflow without mirroring it in the guard — all
@@ -1448,15 +1453,27 @@ the tree's render behaviour — which is precisely why that case must not be reu
 SHA".** That reads as a harmless simplification of a fiddly rule, and it silently deletes the
 completeness backstop.
 
-⚠ **One qualification on "same SHA ⇒ same tree", noted because the first live reuse depended on it.**
-The guard does not filter candidates by `event`, and the run it reused was a **`pull_request`** run. A
-`pull_request` run checks out the **merge ref** (`refs/pull/N/merge`), so `head_sha` names the commit
-but the tree tested is `merge(head, base)`. Those are the SAME tree whenever the base is already an
-ancestor of the head — which the `dev` → `main` `--ff-only` model guarantees, and which was verified
-for the live case (`caf94f0`, the previous `main` tip, is an ancestor of `a9ecfaa`). **If that
-invariant ever stops holding — a base branch that advances independently of `dev` — this is the
-assumption to re-check**, because the argument above is about the TREE, and a `pull_request` run's
-tree is base-dependent in a way a `push` run's is not.
+✅ **"Same SHA ⇒ same tree" is no longer an assumption — candidates are `push` runs ONLY**
+(`openspec/changes/platform-reuse-guard-push-only/`, 2026-08-11). A **`push`** run tests the tree of
+that exact commit, so the whole-tree argument above applies to it directly. A **`pull_request`** run
+does not: it checks out the **merge ref** (`refs/pull/N/merge`), so `head_sha` names the commit while
+the tree tested is `merge(head, base)` — the same tree only while base is already an ancestor of head.
+`decideReuse` now requires `event === 'push'` as a fourth match condition, which **ELIMINATES** the
+base-dependency rather than documenting it. The check is POSITIVE (only the exact string `push`
+qualifies; a missing, empty, or unrecognised `event` is an uncertainty and runs everything), it lives
+in the **pure function** so it is unit-tested, and `pr.yml`'s API query additionally passes
+`event=push` as defence in depth — the query is not the guard.
+
+**This mattered in practice, in both directions.** The first live reuse consumed a **`pull_request`**
+run (`31469356886`); it was correct only because the ancestry invariant happened to hold that day
+(`caf94f0`, the previous `main` tip, is an ancestor of `a9ecfaa`). And the divergent state is real:
+PR #439 was squash-merged on GitHub, `main` diverged from `dev`, and PR #440 sat open with a conflict.
+Cost of the restriction is zero in the current model — there are no PRs; `dev` is pushed directly and
+the owner merges by hand — so every candidate the guard should ever see is already a `push` run.
+
+**SUPERSEDED text:** this paragraph previously read _"the guard does not filter candidates by
+`event` … if that invariant ever stops holding … this is the assumption to re-check"_. It is not an
+assumption any more, and there is nothing left to re-check.
 
 ### Acceptance
 
@@ -1485,6 +1502,15 @@ The decision is a **pure module** (`tools/gate-hook/src/reuse-decision.mjs`), un
   classified the diff as unable to affect rendering) ⇒ **do NOT reuse**. This is the backstop case,
   and it needed no construction: an ordinary docs-only push produces it.
 - **e2e failed** — `ab7d12e`, run `31406199136`: `ci` green, `e2e` `failure` ⇒ **do NOT reuse**.
+
+⭐ **The `event` condition is tested off the SAME real fixture, changing only the event**, so nothing
+but the event can explain the different verdict: `both-ran` re-labelled `pull_request` ⇒ **do NOT
+reuse**, with a reason naming the non-push rejection and the counts; `event` absent / empty /
+`merge_group` / `PUSH` ⇒ **do NOT reuse** (each of those would be an automatic pass under a
+`!== 'pull_request'` phrasing, which is why the check is positive); and a mixed list with a
+`pull_request` run FIRST still reuses the `push` run behind it, proving the event check filters the
+candidate set rather than aborting on it. All six were confirmed RED against the pre-fix
+implementation before the fix was restored.
 
 Plus a test that reads `pr.yml` itself and asserts the job names the guard matches on still exist
 there, so a rename fails loudly instead of silently turning the guard into a permanent

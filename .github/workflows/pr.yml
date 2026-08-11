@@ -210,7 +210,13 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
-          runs_json="$(gh api "repos/$REPO/actions/workflows/pr.yml/runs?head_sha=$HEAD_SHA&per_page=20" 2>/dev/null || echo 'null')"
+          # `event=push` is DEFENCE IN DEPTH, not the guard. `reuse-decision.mjs`
+          # enforces `event === 'push'` on every candidate itself, and it must keep
+          # doing so — do NOT delete the check there because this query "already
+          # filters". The query is a server-side convenience that can be dropped,
+          # mistyped, or silently ignored by an API change; the pure function is the
+          # part that is unit-tested and cannot be.
+          runs_json="$(gh api "repos/$REPO/actions/workflows/pr.yml/runs?head_sha=$HEAD_SHA&event=push&per_page=20" 2>/dev/null || echo 'null')"
           printf '%s' "$runs_json" > runs.json
 
           cat > reuse.mjs <<'REUSE'
