@@ -75,11 +75,16 @@
 - [x] 6.4 Anything skipped is visible, with its reason.
 - [x] 6.5 `pnpm test:e2e` run locally — see 8.2 for exactly what it reported and what was done
       about it. Not claimed as a clean green: it is not one, and CI is the authority anyway.
-- [ ] 6.6 🔴 **Linux `e2e` debt — OWED, NOT DISCHARGED.** Discharged ONLY by a COMPLETED, GREEN
-      `e2e` job on GitHub Actions for the commit carrying this change. A green Windows run does not
-      discharge it and a cancelled or SKIPPED run is not a result. **Write the run URL here, beside
-      this box.**
-      Run URL: _(pending — the push that carries this change has not had its CI run read yet)_
+- [x] 6.6 🔴 **Linux `e2e` debt — DISCHARGED.**
+      **Run URL: https://github.com/yasermostafaee/cg/actions/runs/31507143124**
+      `head_sha` **d276e4b38e961eb87ca62bd43c6dddb24f4f6be5** (the commit that carries this change),
+      run `status: completed`, `conclusion: success`. Checked against every clause of the discharge
+      rule rather than "a run exists": the run COMPLETED (not cancelled — a cancelled run is neither
+      a pass nor a fail), it is the LINUX `ubuntu-latest` job and not the non-authoritative Windows
+      one, it is on THIS commit, and the **`E2E (Playwright)` job itself reports
+      `completed` / `success`** — it RAN, it was not SKIPPED by the `P-029` changed-path classifier,
+      which is the clause that would otherwise leave this owed while looking green. Sibling jobs:
+      `Lint • Typecheck • Test • Build` success, `Docs check` success, `required` success.
 
 ## 7. Docs
 
