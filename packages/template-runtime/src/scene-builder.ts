@@ -64,6 +64,13 @@ interface BuildCtx {
    * — a Live Source three instances deep cannot end up in the other mode.
    */
   mode: RenderMode;
+  /**
+   * B-134 — is this the editing CANVAS? Only the canvas paints the editor backdrop.
+   * Carried on the ctx for the same reason `mode` is: a nested instance inherits it by
+   * construction, so a composition three levels down cannot paint a backdrop the
+   * surface above it suppressed.
+   */
+  paintEditorBackdrop: boolean;
 }
 
 function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
@@ -90,6 +97,7 @@ export function buildScene(
   scene: Scene,
   doc: Document = document,
   mode: RenderMode = 'output',
+  paintEditorBackdrop = true,
 ): BuildSceneResult {
   const container = doc.createElement('div');
   container.className = 'cg-stage';
@@ -100,7 +108,10 @@ export function buildScene(
   // air"), so an editing preference went to air as a full-frame card over live
   // video. `author` paints it; `output` paints nothing, and an authored background
   // is a real full-frame element like anything else that paints.
-  if (mode === 'author' && scene.editorBackdrop !== 'transparent') {
+  // B-134 — and ONLY on the editing canvas. The Preview modal is a preview of AIR, so
+  // it must show what air shows: no backdrop. It still boots in `'author'` mode for
+  // Live Sources, which is exactly why the two facts cannot share one flag.
+  if (mode === 'author' && paintEditorBackdrop && scene.editorBackdrop !== 'transparent') {
     container.style.background = scene.editorBackdrop;
   }
   // D-141 — this scope owns a zoned countdown, so it is a zone ROOT: the driver
@@ -117,6 +128,7 @@ export function buildScene(
     visited: new Set<string>(),
     resolutionWidth: scene.resolution.width,
     mode,
+    paintEditorBackdrop,
   };
 
   for (const layer of scene.layers) {
@@ -280,8 +292,9 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
   const sx = comp.resolution.width === 0 ? 1 : element.transform.size.w / comp.resolution.width;
   const sy = comp.resolution.height === 0 ? 1 : element.transform.size.h / comp.resolution.height;
   inner.style.transform = `scale(${String(sx)}, ${String(sy)})`;
-  // B-129 — author-mode only; a nested instance is where a backdrop would otherwise leak.
-  if (ctx.mode === 'author' && comp.editorBackdrop !== 'transparent')
+  // B-129 — author-mode only; a nested instance is where a backdrop would otherwise
+  // leak. B-134 — and canvas-only: the Preview modal suppresses it at every depth.
+  if (ctx.mode === 'author' && ctx.paintEditorBackdrop && comp.editorBackdrop !== 'transparent')
     inner.style.background = comp.editorBackdrop;
   // D-141 — a nested instance whose own composition carries a zoned countdown is a
   // zone root in its own right; one without stays transparent to the host's zone,
@@ -875,6 +888,8 @@ export function buildSequenceCompositionItem(
   // may contain a Live Source. Defaults to `'output'` (paint nothing), the safe
   // direction: a caller that forgets cannot put colour bars on air.
   mode: RenderMode = 'output',
+  // B-134 — the canvas-only axis, threaded for the same reason.
+  paintEditorBackdrop = true,
 ): SequenceCompositionItemBuild | null {
   const comp = scene.compositions?.find((c) => c.id === compositionId);
   if (
@@ -904,8 +919,9 @@ export function buildSequenceCompositionItem(
   const sx = comp.resolution.width === 0 ? 1 : box.width / comp.resolution.width;
   const sy = comp.resolution.height === 0 ? 1 : box.height / comp.resolution.height;
   inner.style.transform = `scale(${String(sx)}, ${String(sy)})`;
-  // B-129 — author-mode only (see `buildScene`); `mode` is the param this builder already takes.
-  if (mode === 'author' && comp.editorBackdrop !== 'transparent')
+  // B-129 — author-mode only (see `buildScene`); `mode` is the param this builder
+  // already takes. B-134 — and canvas-only, same reasoning.
+  if (mode === 'author' && paintEditorBackdrop && comp.editorBackdrop !== 'transparent')
     inner.style.background = comp.editorBackdrop;
   // D-141 — a stamped scope is a scope: it publishes its own zone when it owns a
   // zoned countdown (same rule as every other scope container).
@@ -922,6 +938,7 @@ export function buildSequenceCompositionItem(
     visited: new Set([...guard.visited, compositionId]),
     resolutionWidth: comp.resolution.width,
     mode,
+    paintEditorBackdrop,
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, itemCtx));
@@ -996,6 +1013,8 @@ export function buildRepeaterRows(
   // D-137 §9 — as above: a stamped ROW is a real scope and may contain a Live
   // Source, so the mode has to reach it. `'output'` by default, the safe direction.
   mode: RenderMode = 'output',
+  // B-134 — the canvas-only axis, threaded for the same reason.
+  paintEditorBackdrop = true,
 ): RepeaterRowBuild[] {
   const comp = scene.compositions?.find((c) => c.id === element.compositionId);
   if (
@@ -1047,8 +1066,9 @@ export function buildRepeaterRows(
     inner.style.height = `${comp.resolution.height}px`;
     inner.style.transformOrigin = '0 0';
     inner.style.transform = `scale(${String(scale)}, ${String(scale)})`;
-    // B-129 — author-mode only (see `buildScene`); `mode` is the param this builder already takes.
-    if (mode === 'author' && comp.editorBackdrop !== 'transparent')
+    // B-129 — author-mode only (see `buildScene`); `mode` is the param this builder
+    // already takes. B-134 — and canvas-only, same reasoning.
+    if (mode === 'author' && paintEditorBackdrop && comp.editorBackdrop !== 'transparent')
       inner.style.background = comp.editorBackdrop;
     // D-141 — same rule for a stamped repeater row.
     if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
@@ -1064,6 +1084,7 @@ export function buildRepeaterRows(
       visited: new Set([...guard.visited, element.compositionId]),
       resolutionWidth: comp.resolution.width,
       mode,
+      paintEditorBackdrop,
     };
     for (const layer of comp.layers) {
       inner.appendChild(buildLayer(layer, rowCtx));

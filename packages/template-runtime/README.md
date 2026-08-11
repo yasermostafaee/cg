@@ -98,6 +98,24 @@ mode-gated, because one unguarded site is a leak that only shows on hardware. A 
 `withoutEditorBackdrop` helper — defence in depth behind the mode check, never a second
 guard.
 
+**…and it paints on the editing CANVAS only (B-134).** `mode === 'author'` covers TWO
+surfaces — the canvas and the Designer's Preview modal — and they disagree about the
+backdrop. The modal is `'author'` deliberately, because it cannot show real live video
+either, so a Live Source must still paint its SMPTE bars there (D-137 §9); but it is a
+preview of AIR, so it must not paint a backdrop air will never show. One flag was
+carrying two questions.
+
+So there is a **second boot option, `paintEditorBackdrop`** (`RuntimeBootOptions`),
+threaded onto `BuildCtx` for the same reason `mode` is: a nested composition inherits it
+by construction, so a composition three levels down cannot paint a backdrop the surface
+above it suppressed. It defaults to `true`, which is a no-op in `'output'` (the backdrop
+is never painted there anyway) and preserves every existing `'author'` caller. Only
+`preview.ts` passes `false`, and only for the broadcast (modal) document.
+
+🔴 **Do not "simplify" this into a third `RenderMode` value.** The modal needs `'author'`
+and "no backdrop" **simultaneously**; no single enum value can express that, which is
+exactly why the axis is separate.
+
 **Auto-size text (D-060).** A `text` element with `fitMode: 'autosize'` hugs its
 content in BOTH dimensions via CSS intrinsic sizing — `buildText` skips the
 `transform.size` width/height (`applyBaseStyles(..., skipSize)`) and sets

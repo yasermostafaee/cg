@@ -170,6 +170,23 @@ export interface RuntimeBootOptions {
   mode?: RenderMode;
 
   /**
+   * B-134 — whether this surface paints the EDITOR BACKDROP.
+   *
+   * A SECOND axis, deliberately not folded into {@link RenderMode}, because the two
+   * genuinely disagree on one surface. `mode` answers "does a Live Source paint SMPTE
+   * bars?" — and the Preview modal wants `'author'` there, because it cannot show real
+   * live video either. This answers "is this the editing canvas?" — and the Preview
+   * modal wants `false`, because it is a preview of AIR and the backdrop never reaches
+   * air (B-129). Overloading `mode` for both would force one of the two answers to be
+   * wrong on that surface.
+   *
+   * Absent ⇒ `true`, which changes nothing for `'output'` (where the backdrop is
+   * already never painted) and preserves the canvas behaviour for every existing
+   * `'author'` caller. Only the Preview modal passes `false`.
+   */
+  paintEditorBackdrop?: boolean;
+
+  /**
    * D-062 — image `assetId` → resolved URL. After building the scene the runtime
    * sets the `src` of each `<img data-cg-asset-id>` whose id is in this map, so
    * image elements render in exported output (`.vcg`: packaged relative paths;

@@ -414,6 +414,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // zone compiler and the builder). Absent ⇒ `'output'`: a forgotten boot site
   // paints nothing, which is the safe direction on air. See `RenderMode`.
   const mode = options.mode ?? 'output';
+  // B-134 — the editor backdrop paints on the editing CANVAS only. A second axis
+  // rather than a third `RenderMode`, because the Preview modal wants `'author'` for
+  // Live Sources and `false` here at the same time. Absent ⇒ true, which is a no-op
+  // in `'output'` (the backdrop is never painted there anyway).
+  const paintEditorBackdrop = options.paintEditorBackdrop ?? true;
 
   const zoneCss = ensureZoneCss(scene, doc, mode);
   for (const warning of zoneCss.warnings) {
@@ -422,7 +427,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     console.warn(`[cg] zone stylesheet: ${warning}`);
   }
 
-  const built = buildScene(scene, doc, mode);
+  const built = buildScene(scene, doc, mode, paintEditorBackdrop);
   root.appendChild(built.container);
 
   // D-062 — wire image `src` from a host-supplied assetId→URL map. The scene
@@ -738,6 +743,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             { depth: s.depth, visited: s.visited },
             doc,
             mode,
+            paintEditorBackdrop,
           );
           if (built === null) {
             // Missing / over-deep / cyclic reference ⇒ an empty grid-cell box.
@@ -1410,6 +1416,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             { depth: entry.depth, visited: entry.visited },
             doc,
             mode,
+            paintEditorBackdrop,
           );
           return rows.map((row, i) => {
             // D-102 Phase 2 — a repeater row is a STAMPED subtree: every row is built from the SAME

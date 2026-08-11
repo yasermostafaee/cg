@@ -262,6 +262,12 @@ export class Preview {
         // operator can edit. createRuntime always sets cg-pending; this only
         // decides whether applyScene clears it on load.
         const REVEAL_ON_LOAD = ${String(revealOnLoad)};
+        // B-134 — the EDITOR BACKDROP paints on the editing canvas ONLY. The Preview
+        // modal is a preview of AIR, and the backdrop never reaches air (B-129), so it
+        // must show what air shows. A SEPARATE axis from the render mode, which stays
+        // 'author' on both surfaces because neither can show real live video.
+        // (No backticks in this block: it lives inside a template literal.)
+        const PAINT_EDITOR_BACKDROP = ${String(authoring)};
         // Mutable bookkeeping — the iframe document stays alive across
         // edits; only the runtime (its DOM tree) is rebuilt by
         // applyScene(). This avoids reloading the whole HTML on every
@@ -556,7 +562,13 @@ export class Preview {
               // AUTHOR is building, not what the exporter will emit, so a Live
               // Source shows its bars in both and an invisible box in neither.
               // The exports name 'output' at their own boot sites.
+              //
+              // B-134 — the two surfaces do NOT agree about the editor backdrop, which
+              // is why that is its own option below rather than another render-mode
+              // value: the modal needs 'author' (bars) and no backdrop at once.
               mode: 'author',
+              // B-134 — canvas paints the editor backdrop; the Preview modal does not.
+              paintEditorBackdrop: PAINT_EDITOR_BACKDROP,
               playoutOverride: playoutOverride,
               scopeOverrides: scopeOverrides,
               // D-039ext — give the runtime the current asset URLs so the ticker driver can
