@@ -3481,13 +3481,20 @@ error-prone.
 
 **Notes:** additive schema field, default absent.
 
-## [ ] D-133 — loop range visualization ON the timeline (Cinegy-style) ⟨priority: medium⟩
+## [ ] D-133 — loop range visualization ON the timeline, and an UNCONDITIONALLY authorable loop range (Cinegy-style) ⟨priority: high — client-required⟩
 
 **What:** Show a composition's loop/hold range directly on the timeline — start/end markers
 present by default when the composition repeats/holds — with the playhead wrapping at the loop
-end.
+end. **And make the loop range authorable UNCONDITIONALLY**: the main scene offers a loop option
+ALWAYS, with no content-driven element required to bring the affordance into existence.
 **Why:** today the loop/hold behavior is only observable in the preview; Cinegy shows a loop range
-directly on the timeline, which is friendlier.
+directly on the timeline, which is friendlier. **And the authoring path is gated today**: an out
+point exists only via the "Add out point" button, and the loop range only becomes definable once a
+content-driven element (ticker / sequence / clock in countdown mode) is present — that is when the
+"Pin content start" button appears at all (`PlayoutSection.tsx:779`, gated on
+`lifecycle !== undefined && hasContent`, where `hasContent` is `hasContentElement(scene)`,
+`scene.ts:45`). In the Cinegy model the main page can carry a loop range from the start; an
+operator should not have to add a ticker to discover that loops exist.
 **Acceptance** (from the owner's description — map to our lifecycle model in design):
 
 - WHEN a composition repeats/holds (e.g. content-driven with a repeating driver) THEN the timeline
@@ -3496,10 +3503,31 @@ directly on the timeline, which is friendlier.
 - WHEN the repeat is finite (e.g. 2) THEN it wraps that many times and then proceeds to the true
   end; WHEN infinite THEN it wraps indefinitely
 - WHEN markers render THEN the start/end indicator lines extend the FULL timeline height
+- WHEN the MAIN scene contains NO content-driven element THEN the loop option is STILL offered —
+  the loop range is authorable with nothing but shapes on the scene, and the conditional
+  "Pin content start" affordance is at most a shortcut to it, never the only path to it
+- 🔴 WHEN the hold is content-driven and a driver is ticked (e.g. a ticker set to repeat 3×) and
+  playback reaches the loop end THEN the playhead wraps to the loop start **and the driver's
+  content DOES NOT RESET** — the ticker text keeps flowing ACROSS the seam, unbroken
+- WHEN that driver has completed its N repeats THEN playback passes the loop end WITHOUT wrapping
+  and the out phase of the other elements runs
+- WHEN the hold is NOT content-driven THEN an authored loop range has NO playback effect —
+  authoring it is allowed, it is simply INERT
 
 **Notes:** the mapping of "loop" onto our shipped lifecycle (`outPoint` + optional `contentStart`,
 content-driven repeat) is the core design decision — record it in the change's design.md when
 implemented, do not invent a new lifecycle mode casually. **RECON-FIRST.**
+
+**The seam semantics are the core of this item**, not a detail of it: "wrap the playhead, continue
+the content" is a different machine from "wrap the playhead, restart the content", and every
+existing loop affordance in the codebase should be read against that distinction before any of it
+is reused. A design that restarts the driver at the seam does not satisfy this item even if the
+playhead behaviour matches.
+
+**No backward compatibility is owed to today's conditional-authoring UI.** Nothing has been
+delivered to the client, so the compatibility floor has not been set (see [[P-031]]'s policy in
+[platform.md](platform.md)) — the gated affordance may be replaced outright rather than kept
+beside the unconditional one.
 
 ## [ ] D-134 — clock: custom UTC offset ⟨priority: low⟩
 
@@ -3517,25 +3545,54 @@ the clock renders that offset's time.
 **Notes:** additive field alongside `timezone` (`ClockElementSchema`); countdown/countup ignore it
 like they ignore `timezone`.
 
-## [ ] D-135 — scrubbing the timeline drives Lottie AND video frames on the canvas ⟨priority: medium⟩
+## [ ] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩
 
-**What:** While scrubbing, each Lottie element on the canvas shows the exact frame under the
-playhead (through its phase mapping where set); post-D-128, the same for video elements.
+**What:** The canvas follows the playhead for both frame-mapped element kinds, under BOTH ways the
+playhead moves. **(a) Scrub:** while scrubbing, each Lottie element on the canvas shows the exact
+frame under the playhead (through its phase mapping where set), and the same for video elements.
+**(b) Play:** pressing PLAY on the timeline renders video and Lottie MOTION on the canvas, live —
+through the same frame↔time mapping the scrub half uses.
 **Why:** the canvas currently shows lifecycle-driven playback only in preview; Cinegy shows the
-animation while scrubbing. Both Lottie and (post-D-128) video have a deterministic frame↔time
-mapping, so the canvas can render the exact frame under the playhead.
+animation both while scrubbing and while playing. Both Lottie and video have a deterministic
+frame↔time mapping, so the canvas can render the exact frame under the playhead. **Today's Play
+animates only keyframed properties** — video and Lottie motion is visible only in the preview,
+so the canvas silently misrepresents the composition during the one operation the operator uses
+to judge it. Cinegy parity is the client's stated expectation.
 **Acceptance:**
 
 - WHEN the operator scrubs THEN each Lottie element on canvas shows the frame corresponding to the
   playhead (through its phase mapping where set)
-- WHEN a video element exists (after D-128 lands) THEN the same holds for it
+- WHEN a video element exists THEN the same holds for it
+- WHEN the operator presses PLAY on the timeline THEN each Lottie element on the canvas renders its
+  MOTION live, advancing with the playhead through the same frame↔time mapping as the scrub case
+- WHEN the operator presses PLAY on the timeline THEN each video element on the canvas renders its
+  motion live, by the same mapping
 - WHEN the playhead is outside the element's timeline span THEN the canvas shows the element's
-  resting state consistently with today's rules
+  resting state consistently with today's rules — under scrub and under play alike
+- WHEN a ticker, sequence or clock is on the scene THEN it is UNAFFECTED by either half of this
+  item: it stays time-driven and does not follow the playhead
 
 **Notes:** ticker/sequence/clock remain DELIBERATELY time-driven ("scrubbing never moves it" — the
 schema's own comment, verified on `SequenceElementSchema` and the clock element); this item must
-not change that. Sequencing: the Lottie half is implementable now; the video half depends on D-128
-Phase 3+.
+not change that, and the carve-out now covers PLAY as well as scrub. **Sequencing: the D-128
+dependency is DISCHARGED** — this note previously read "the video half depends on D-128 Phase 3+";
+D-128 is `[x]` (archived 2026-07-27, `openspec/changes/archive/2026-07-27-video-import-element/`),
+with Phase 3 (canvas render + Inspector) and Phase 4 (`@cg/template-runtime`'s `VideoDriver` +
+lifecycle) both landed. Nothing in this item is blocked on it any more; both halves are
+implementable now.
+
+**Retitled rather than split into a sibling.** The PLAY requirement is the same machinery, the same
+frame↔time mapping and the same carve-out as the scrub requirement — filing it separately would
+create two items with one implementation, the near-duplicate the item-number registry exists to
+prevent (see the deliberate `B-111` non-mint in
+[b-number-registry.md](b-number-registry.md)). The number is unchanged; only the title and scope
+grew, so nothing that cites `D-135` breaks.
+
+**Related, NOT a dependency:** [[B-136]] and [[B-137]] ([bugs-designer.md](bugs-designer.md)) are
+the two video preview/PVW defects on this same subsystem — video invisible in PVW, and video stuck
+paused in the preview after a scene rebuild. This item drives video on the CANVAS, which is a third
+surface again; their diagnosis is worth reading before designing this, because it maps who ticks a
+`<video>` and when.
 
 ## [ ] D-136 — alpha-matte view toggle for video elements ⟨priority: low-medium⟩
 
@@ -4205,3 +4262,52 @@ An incremental layer would have bought ~45 ms and cost a second source of truth,
 class of defect B-104 is. Packaging reuses `@cg/vcg-format`'s `writeZip`/`readZip`/`sha256Hex`;
 `.cgproj` is a different DOCUMENT from `.vcg` (which strips `editorBackdrop`, embeds the runtime,
 and carries a signable broadcast manifest) — reasoning in the proposal.
+
+## [ ] D-151 — adding content LONGER than its host warns, and offers to extend the host duration ⟨priority: high — client-required⟩
+
+**What:** At the moment content is **ADDED TO A SCENE OR COMPOSITION**, compare the added content's
+intrinsic duration against the host's duration. If the content is longer, warn that the host is too
+short and offer to EXTEND the host duration to fit. If the operator declines, **the element is NOT
+added.** Applies to video, to Lottie, and to a composition inserted into another composition alike.
+**Why:** the operator's own case: a 3 s scene, a 15 s video. Today the video is added silently and
+is simply truncated by the host — the authoring surface gives no signal at the one moment the
+mismatch is both knowable and trivially fixable, and the operator discovers it later in the preview
+or, worse, on air. Cinegy asks at add time; so should we.
+**Acceptance:**
+
+- WHEN content whose intrinsic duration EXCEEDS the host's duration is added to a scene or
+  composition THEN the Designer warns that the host is too short and offers to extend the host
+  duration to fit the content
+- WHEN the operator ACCEPTS THEN the host's duration is extended to fit and the element is added
+- WHEN the operator DECLINES THEN the element is **NOT added** — the scene is left exactly as it was
+- WHEN the added content is a VIDEO, a LOTTIE, or a COMPOSITION inserted into another composition
+  THEN the same check and the same dialog apply
+- WHEN the added content FITS within the host's duration THEN nothing is shown and the element is
+  added as it is today
+- WHEN an asset is IMPORTED into the library THEN NO check fires — this is an add-to-scene rule, not
+  an import rule
+
+**Notes:** 🔴 **The trigger is ADD-TO-SCENE, explicitly NOT asset-import time.** Import puts an
+asset in the library, where it has no host and no duration to be measured against; the same asset
+may later be added to a 3 s scene and a 30 s one. A check placed at import would fire at the wrong
+moment, against nothing, and would have to fire again anyway. Composition-into-composition insert is
+the same event by a different route and must go through the same path.
+
+**⚠ OPEN QUESTION — do NOT resolve this at filing time; the owner decides at implementation.** A
+LOOPING background video in a short scene (loop on, content-driven hold) is a legitimate pattern the
+owner uses deliberately, and at add time the loop intent is **unknowable** — the operator has not
+configured the element yet. So the two-choice dialog above may be wrong for that case:
+
+- **Candidate A — a THIRD choice.** The dialog offers "Add anyway — it will loop / hold", which adds
+  the element without extending the host. This keeps the deliberate pattern one click away, at the
+  cost of a third button that is also the easiest way to dismiss the warning without thinking.
+- **Candidate B — decline-means-not-added is FIRM.** Two choices only. The looping-background author
+  extends the host, or sets up the loop first and accepts that add-time asks a question they answer
+  by extending and then trimming back.
+
+Both are defensible and the choice changes the acceptance above, so it is recorded here rather than
+guessed. Whoever implements this must have the owner's answer before writing the dialog.
+
+**Related:** [[D-133]]'s loop semantics are the other half of the looping-background case — that
+item is where "a loop range is authorable unconditionally" lives, and it is what makes the open
+question above answerable at all.

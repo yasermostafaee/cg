@@ -1719,3 +1719,48 @@ without it, someone reads "no backward compatibility is owed" a year from now, c
 item, and deletes a path a real station's files depend on. **Today's decision is scoped to
 today's fact — nothing has shipped — and it expires the moment that fact does.** If you are
 reading this after a release has gone out, this section is HISTORY, not licence.
+
+## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
+
+**What:** `PlayoutSchema` still carries a `z.preprocess` that rewrites the pre-D-028 spelling
+`mode: 'content-driven'` into `{ mode: 'loop-cycle', holdSource: 'content-driven' }`
+(`packages/shared-schema/src/scene.ts:77`–`85`). [[P-031]] deleted every other legacy
+compatibility path in the codebase under the compatibility-floor policy recorded above; this one
+was left in place because it was NOT in the owner's enumerated list and because removing it ripples
+into the D-020 playout surface. **It is the same class as everything P-031 removed**, so it is
+filed here rather than left as a bullet inside a decision section, where the next reader will not
+find it.
+
+**Why:** it is a second document shape that every consumer of `Playout` must tolerate, bought for
+no file that exists — the exact debt-that-reads-as-safety P-031 was about. Two facts sharpen it:
+
+1. 🔴 **The shim has TWO independent copies, not one.** Besides the `z.preprocess` at
+   `scene.ts:77`, `playoutOf()` re-derives the same normalization by hand at `scene.ts:436`–`443`
+   ("defensively normalizes the legacy `mode: 'content-driven'` for scene objects handed straight
+   to `createRuntime` without re-parsing"). That is the second-local-copy pattern golden rule 6
+   names: one legacy spelling, two places that must agree about it forever. Deleting the shim means
+   deleting BOTH, and any half-removal leaves a path that silently accepts what the other rejects.
+2. **The schema's own docstring is now stale.** `scene.ts:74`–`75` says "A registry migration is
+   deferred until a schema-version bump is unavoidable" — pointing at the migration registry that
+   P-031 **deleted**. The comment defers to a mechanism that no longer exists, which is precisely
+   the lying-docstring defect P-031 exists to end, surviving one file over.
+
+**Acceptance** (whichever way the owner decides):
+
+- WHEN the owner decides REMOVE THEN both the `z.preprocess` at `scene.ts:77` and the hand-rolled
+  arm in `playoutOf()` at `scene.ts:441` go together, a document carrying `mode: 'content-driven'`
+  fails to parse LOUDLY naming the field, and `packages/shared-schema/tests/scene.test.ts:297`
+  (which pins the normalization today) is replaced by a test pinning the refusal
+- WHEN the owner decides KEEP THEN `scene.ts:74`–`75`'s docstring stops citing the deleted
+  migration registry and states what is actually true — that parse-time normalization IS the
+  mechanism — and a test asserts the two copies agree, so they cannot drift apart
+- WHEN either decision lands THEN `apps/designer/tests/e2e/fixtures/designer.ts:828`, which still
+  types `'content-driven'` as an authorable `mode`, is updated to match
+
+**Notes:** **NOT removed by this filing, deliberately.** P-031 recorded it as "the one remaining
+legacy shim, and it is now the owner's call", and this item does not take that call — it only gives
+it a number so it stops living inside another item's decision section. The compatibility-floor
+policy above governs it: while nothing has shipped, removal is cheap and the default; from the
+first client delivery it becomes a breaking change with its own migration story. **The cost of
+deferring is that the window closes**, which is the whole argument for deciding now rather than
+later. Related: [[P-031]] (the policy and the enumerated removals).

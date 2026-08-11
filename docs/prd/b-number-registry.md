@@ -746,3 +746,41 @@ this repo now uses ONE folder on `dev` (see CLAUDE.md, "Repo layout — one fold
 every branch that exists lives in it. What that does NOT cover is a number claimed on a ref this
 checkout has not fetched. The CI audit (`tools/soak-runner/tests/bug-number-audit.test.ts`) is the
 backstop that makes a collision unmergeable, which is the property that has ever actually mattered.
+
+---
+
+**Mint 2026-08-11 (evening, session H) — `D-151` and `P-032`, two prefixes, ONE commit.** Filed
+from the owner's client-requirement pass, none of them fixed:
+
+| Prefix | Claimed | Item                                                                                                   | File                       |
+| ------ | ------- | ------------------------------------------------------------------------------------------------------ | -------------------------- |
+| `D-`   | `D-151` | adding content longer than its host warns and offers to extend the host duration (client-required)     | [designer.md](designer.md) |
+| `P-`   | `P-032` | `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path | [platform.md](platform.md) |
+
+**Two further client requirements in the same commit claimed NO number**, deliberately, and that is
+the part worth recording: they EXTENDED existing open items rather than minting near-duplicates.
+**D-133** absorbed "the loop range must be authorable unconditionally, and the content continues
+across the seam rather than restarting"; **D-135** absorbed "PLAY drives the canvas, not only
+scrubbing" and was **retitled** to say so. The D-135 judgment is the interesting one: the PLAY
+requirement is the same machinery, the same frame↔time mapping and the same ticker/sequence/clock
+carve-out as the scrub requirement it sits beside, so a sibling item would have been two headings
+with one implementation — the near-duplicate class this file caught once before in the deliberate
+`B-111` non-mint. **Retitling an item is not renumbering it**: `D-135` still names the same work,
+and nothing that cites the number breaks (precedent: B-078's title was corrected in place for the
+same reason).
+
+**Verified free immediately before the commit that writes the headings.** `git fetch origin` first,
+then: the duplicate audit over `docs/prd/` printed exactly `B-056` and `B-080` for `B-` and
+**nothing** for `C-`/`D-`/`P-`/`R-` (the one `D-001` pair is [README.md](README.md)'s documented
+format specimen — the `--exclude=README.md` false positive). `git grep -c` for `D-151` and `P-032`
+over `docs/` returned **no match at all** before the headings were written. The highest heading in
+`docs/prd/` was `D-150` and `P-031`. A programmatic sweep for `^## \[.\] (D-151|P-032|B-136|B-137)`
+across **all 9 refs** (`refs/heads` + `refs/remotes`, post-fetch) returned zero hits, so no unpushed
+or remote ref holds a claim on any of them. The working tree was clean at the start of the session.
+The `D-` space keeps its six pre-existing gaps (`069` `070` `080` `090` `091` `095`) and adds none;
+`P-` stays contiguous `P-001` … `P-032`.
+
+**`B-136` and `B-137` were swept as FREE here but are NOT claimed by this commit** — they are
+claimed in the same session's later bug-filing commit, and the sweep is recorded now because it was
+run now. A reader deriving next-free between the two commits must re-derive from the headings, not
+from this paragraph: it is a measurement, not a reservation, exactly as the retired pointer was.
