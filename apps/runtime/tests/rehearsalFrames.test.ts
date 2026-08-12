@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { FixedLayerBank, Rehearsal } from '@cg/shared-ipc';
 import { bankPosition, defaultLayerAlias } from '@cg/shared-ipc';
 import {
+  caveatsZIndex,
+  frameBox,
   frameZIndex,
+  overlayZIndex,
   rehearsalCaption,
   rowNameFor,
   stackedByLayer,
@@ -28,6 +31,8 @@ function subject(over: Partial<RehearsalSubject> & { layer: number }): Rehearsal
     rowName: `row-${String(over.layer)}`,
     position: undefined,
     fields: {},
+    liveSources: undefined,
+    plateSourceNames: new Map<string, string | null>(),
     ...over,
   };
 }
@@ -152,5 +157,54 @@ describe('rowNameFor — the row’s own name, never the raw layer dressed as an
 
   it('with no bank declared, says the layer number and does not invent a position', () => {
     expect(rowNameFor(null, 99, undefined)).toBe('Layer 99');
+  });
+});
+
+/**
+ * R-049 — THE ONE FIT TRANSFORM, and the band the overlay occupies.
+ *
+ * `frameBox` exists so that the iframes and the live-plate overlay cannot express
+ * the fit differently. The test asserts they are the SAME OBJECT SHAPE from one
+ * call rather than comparing two literals, because two literals that agree today
+ * are exactly the arrangement that drifts.
+ */
+describe('frameBox — the raster-sized box and the single FIT transform', () => {
+  const RASTER = { width: 1440, height: 1080 };
+
+  it('sizes to the RASTER, not to the panel — that is what the pages measure', () => {
+    const box = frameBox(RASTER, 0.25);
+    expect(box.width).toBe('1440px');
+    expect(box.height).toBe('1080px');
+  });
+
+  it('composes the fit with the centring translate, about the centre', () => {
+    expect(frameBox(RASTER, 0.25).transform).toBe('translate(-50%, -50%) scale(0.25)');
+    expect(frameBox(RASTER, 0.25).transformOrigin).toBe('center center');
+  });
+
+  it('a fit of 1 still emits the scale — one code path, no special case', () => {
+    // Deliberately NOT optimised away. The overlay counter-scales by 1/fit, so a
+    // box that sometimes carries a scale and sometimes does not is a second
+    // shape for the label maths to disagree with.
+    expect(frameBox(RASTER, 1).transform).toBe('translate(-50%, -50%) scale(1)');
+  });
+});
+
+describe('overlayZIndex / caveatsZIndex — the marker is above every frame', () => {
+  it('sits above the TOP frame, whatever the frame count', () => {
+    // There is no cap on rehearsing rows, so a constant would be overtaken. A
+    // placeholder that ends up under a graphic is worse than none: it would show
+    // for one row and vanish for another with nothing to say why.
+    for (const count of [1, 2, 3, 12]) {
+      expect(overlayZIndex(count)).toBeGreaterThan(frameZIndex(count - 1));
+    }
+  });
+
+  it('the caveats sit above the overlay — a note about the surface is never covered', () => {
+    for (const count of [1, 3, 12]) {
+      expect(caveatsZIndex(count)).toBeGreaterThan(overlayZIndex(count));
+    }
+    // The bare `3` this replaced already tied with the third frame.
+    expect(caveatsZIndex(3)).toBeGreaterThan(3);
   });
 });

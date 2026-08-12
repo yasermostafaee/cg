@@ -2,16 +2,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Info } from 'lucide-react';
 // The raster type comes from `@cg/shared-ipc` (`ChannelRaster`), not from
-// `@cg/template-runtime`'s structurally-identical `Raster`: the runtime app already
-// depends on shared-ipc, and adding a dependency on the template runtime here would
-// pull the whole renderer into the SPA bundle to obtain one `{width, height}` type.
-// The rendered page carries its own copy of that runtime, inlined.
+// `@cg/template-runtime`'s structurally-identical `Raster` — a `{width, height}`
+// type belongs to the package this app already speaks to the bridge with.
+//
+// R-049 note: `@cg/template-runtime` IS now a dependency of this app, for the two
+// things that cannot be re-spelled without risking divergence — the SMPTE bar
+// table and the page's own placement arithmetic. That does not make it the right
+// source for this type, and it did not cost the bundle what the older form of this
+// comment feared ("would pull the whole renderer into the SPA bundle"): MEASURED,
+// those four pure functions add 3.5 kB to the built SPA (1,271.6 → 1,275.1 kB with
+// them stubbed out and back), because nothing else in the package is reachable
+// from them and both imports go through subpaths rather than the entry index.
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { LivePlateOverlay } from './LivePlateOverlay.js';
+import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
 import { RehearsalFrame, type RehearsalFrameHandle } from './RehearsalFrame.js';
-import { frameZIndex, rehearsalCaption, type RehearsalSubject } from './rehearsalFrames.js';
+import {
+  caveatsZIndex,
+  frameZIndex,
+  overlayZIndex,
+  rehearsalCaption,
+  type RehearsalSubject,
+} from './rehearsalFrames.js';
 
 /**
  * R-022 — the rehearsal render: EVERY rehearsing row's graphic, with the
@@ -92,20 +107,37 @@ import { frameZIndex, rehearsalCaption, type RehearsalSubject } from './rehearsa
  * ── NOT AN AIR CHECK ─────────────────────────────────────────────────────────
  *
  * Browser rendering versus CasparCG's CEF 71 is faithful but NOT pixel-identical
- * (the B-066 class), and a Live Source region renders as NOTHING — an empty,
- * fully transparent hole.
+ * (the B-066 class).
  *
- * That last clause said the opposite until 2026-08-08: "after C-015 a Live
- * Source region renders as a labelled placeholder rather than video". It
- * described a render path that was never built, and could not be, on this
- * surface: rehearse renders the RETAINED EXPORTED PAGE VERBATIM (`srcDoc={html}`
- * in `RehearsalFrame`), and D-137 requires that page to paint zero pixels where a
- * Live Source is. DECIDED 2026-08-08, owner — `openspec/changes/live-source-multibox/`
- * design.md §12.2: v1 shows the empty region, and no second render path is built.
- * The hole is honest rather than incomplete — what fills it on air is a CasparCG
- * layer the bridge composites BEHIND the template, which no browser preview was
- * ever going to show. (`buildScene`'s `mode` seam is an enum, not a boolean, so a
- * third `'rehearse'` mode can be added later without reopening the decision.)
+ * ⚠ A LIVE SOURCE REGION: THE PAGE PAINTS NOTHING, THE RUNTIME DRAWS A MARKER.
+ * Read both halves — this comment has been wrong in each direction once.
+ *
+ *   - THE RENDERED PAGE still paints ZERO PIXELS there, and that is unchanged.
+ *     Rehearse renders the RETAINED EXPORTED PAGE VERBATIM (`srcDoc={html}` in
+ *     `RehearsalFrame`), D-137 requires that page to paint nothing where a Live
+ *     Source is, and no second render path exists. DECIDED 2026-08-08, owner —
+ *     `openspec/changes/live-source-multibox/` design.md §12.2, NOT reopened by
+ *     R-049. (`buildScene`'s `mode` seam is an enum, not a boolean, so a third
+ *     `'rehearse'` mode remains addable without reopening it — and stays unused.)
+ *   - R-049 THEN DRAWS A LABELLED PLACEHOLDER OVER IT — `LivePlateOverlay`, this
+ *     component's own child, composited on top of the frames from the plate rects
+ *     the template declares. It is a MARKER, never the feed: an empty region is
+ *     indistinguishable from a broken render, and nothing but the Runtime can say
+ *     WHICH SOURCE is behind WHICH plate, because the page carries a plate
+ *     identifier and nothing else.
+ *
+ * What fills the region ON AIR is a CasparCG layer the bridge composites BEHIND
+ * the template, which no browser preview was ever going to show — hence a marker
+ * that is deliberately unmistakable for a picture, rather than a picture.
+ *
+ * The history is worth keeping, because the first version of this paragraph was
+ * confidently wrong: until 2026-08-08 it read "after C-015 a Live Source region
+ * renders as a labelled placeholder rather than video", describing a render path
+ * that was never built and could not be on this surface. It was corrected to "an
+ * empty transparent hole", which was true then and is HALF true now. Neither
+ * short form survives contact with the truth: the PAGE paints nothing, the
+ * RUNTIME draws a marker over it, and a reader needs both facts to reason about
+ * either.
  *
  * Rehearse catches wrong values, broken layouts and bad motion; it is not a
  * confidence monitor (that is C-016). Those caveats are stated IN the panel below
@@ -199,7 +231,8 @@ const styles = {
     color: colors.textMuted,
     borderTop: `1px solid ${colors.border}`,
     background: colors.panelMuted,
-    zIndex: 3,
+    // `zIndex` is supplied by the caller from `caveatsZIndex(frameCount)` — the
+    // bare `3` that used to live here already tied with the third frame.
   },
   /** Pushes the info toggle to the trailing end of the lifecycle bar. */
   lifecycleSpacer: { flex: 1 },
@@ -285,6 +318,34 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
     [subjects, htmlByItem],
   );
   const unavailable = subjects.length - renderable.length;
+
+  /**
+   * R-049 — every live plate of every RENDERABLE row, in raster pixels.
+   *
+   * Keyed off `renderable`, not `subjects`: a row whose page this browser does not
+   * hold renders no frame at all, and a placeholder floating over nothing would
+   * assert a live region on a graphic the operator cannot see. The shortfall is
+   * already stated by the caption ("showing N of M") — this must not contradict it.
+   *
+   * The plate ids come from the AUTHOR and the source names from the INSTALLATION,
+   * so two rows carrying the same template legitimately produce the same plate id
+   * twice; `elementId` is prefixed with the item id to keep the React keys unique
+   * across rows rather than across the template.
+   */
+  const placements = useMemo<PlatePlacement[]>(
+    () =>
+      renderable.flatMap(({ subject }) => {
+        const live = subject.liveSources;
+        if (live === undefined || live.sources.length === 0) return [];
+        return platePlacements(
+          live,
+          raster,
+          subject.position,
+          (plateId) => subject.plateSourceNames.get(plateId) ?? null,
+        ).map((p) => ({ ...p, elementId: `${subject.itemId}:${p.elementId}` }));
+      }),
+    [renderable, raster],
+  );
 
   // The FIT scale — preview only. Measured rather than assumed, so the rehearsal
   // stays whole at any panel width, including mid divider-drag.
@@ -462,11 +523,28 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
             }}
           />
         ))}
+        {/*
+          R-049 — the live-plate markers, ABOVE every frame. See `LivePlateOverlay`
+          for why they are drawn over rather than behind, and for the standing note
+          that none of this reopens design.md §12.2: the pages below still paint
+          nothing where a Live Source is.
+        */}
+        <LivePlateOverlay
+          placements={placements}
+          raster={raster}
+          fit={fit}
+          zIndex={overlayZIndex(renderable.length)}
+        />
         {showCaveats && (
-          <p id={CAVEATS_ID} style={styles.caveats}>
+          <p
+            id={CAVEATS_ID}
+            style={{ ...styles.caveats, zIndex: caveatsZIndex(renderable.length) }}
+          >
             Rehearsal — rendered in this browser at {raster.width}×{raster.height}, not on air.
-            Faithful but <strong>not pixel-identical</strong> to the on-air render, and a Live
-            Source region shows as an <strong>empty transparent hole</strong> — what fills it on air
+            Faithful but <strong>not pixel-identical</strong> to the on-air render. A Live Source
+            region paints <strong>nothing</strong> in the rendered page; the marked box you see over
+            it is a <strong>placeholder this app draws</strong>, naming the plate and the source
+            bound to it — it is <strong>not the live picture</strong>. What fills that region on air
             is a CasparCG layer composited behind the template, which no browser preview can show.
             Only <strong>rehearsing</strong> rows are shown, composited in channel layer order —
             nothing that is on air is composited here. CasparCG composites each template over a{' '}

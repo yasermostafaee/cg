@@ -1414,6 +1414,35 @@ function smpteBarsGradient(): string {
 }
 
 /**
+ * R-049 — the bars are the RUNTIME's too, and this is why they leave the module
+ * as a STATEMENT rather than as an `export` keyword on each declaration.
+ *
+ * PVW draws these same bars as a placeholder over each live plate, so there must
+ * be exactly ONE bar table and ONE gradient writer — a hand-written second copy
+ * would very likely lose the paired-stop rule above, and lose it only on the
+ * build nobody develops against.
+ *
+ * Two things here are deliberate, and both were MEASURED against the generated
+ * `cg-runtime-bundles.ts` rather than assumed:
+ *
+ *  1. **A statement, not `export const SMPTE_BARS = [...]`.** The prefix pushes
+ *     that declaration past `printWidth`, prettier then wraps the array over
+ *     seven lines, and esbuild reprints the wrap — **+64 bytes in every exported
+ *     `.vcg`, for a reformat**. Left as one line, the emitted bundle is
+ *     byte-identical.
+ *  2. **NOT re-exported from `src/index.ts`.** That file is esbuild's bundle
+ *     ENTRY, so its export list IS the on-air artifact's export table: adding
+ *     these two names there costs **+121 bytes** in every `.vcg` for names no
+ *     page ever calls. Consumers reach them through the `./scene-builder`
+ *     subpath instead (see `package.json`), which the entry never sees.
+ *
+ * Neither figure paints a pixel. They are recorded because the fact behind them —
+ * the entry index IS the on-air export table — is worth knowing before the next
+ * symbol is added to it.
+ */
+export { SMPTE_BARS, smpteBarsGradient };
+
+/**
  * D-137 — render a **Live Source**: the region CasparCG composites a live input
  * behind (C-015).
  *

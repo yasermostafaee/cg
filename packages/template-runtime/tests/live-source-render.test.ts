@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Window } from 'happy-dom';
 import type { Element, Scene } from '@cg/shared-schema';
-import { buildScene } from '../src/scene-builder.js';
+import { buildScene, smpteBarsGradient, SMPTE_BARS } from '../src/scene-builder.js';
 import { compileZoneCss } from '../src/zone-css.js';
 
 /**
@@ -98,6 +98,26 @@ describe("D-137 — 'author' mode paints the bars", () => {
     expect((g.match(/#[0-9a-f]{6} [0-9.]+%/g) ?? []).length).toBe(14);
     // No `#rrggbb A% B%` anywhere.
     expect(/#[0-9a-f]{6}\s+[0-9.]+%\s+[0-9.]+%/.test(g)).toBe(false);
+  });
+
+  it('R-049 — the painted bars ARE `smpteBarsGradient()`, the exported one', () => {
+    // The reuse guard, as an EQUALITY rather than a shape check. PVW draws these
+    // same bars over each live plate by calling this exact function, so the two
+    // surfaces must be one table: a hand-written second copy is how the paired
+    // stops above get lost on the ONE build nobody develops against.
+    const { root } = build(sceneWith([liveSource()]), 'author');
+    expect(node(root).style.backgroundImage).toBe(smpteBarsGradient());
+    // Seven bars, 75 % amplitude, in authored order. Pinned so a colour that is
+    // silently changed shows up here rather than in a gallery.
+    expect(SMPTE_BARS).toEqual([
+      '#c0c0c0',
+      '#c0c000',
+      '#00c0c0',
+      '#00c000',
+      '#c000c0',
+      '#c00000',
+      '#0000c0',
+    ]);
   });
 
   it('a POSTER replaces the bars — and still carries the label', () => {

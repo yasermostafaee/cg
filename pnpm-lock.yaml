@@ -171,6 +171,9 @@ importers:
       '@cg/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@cg/template-runtime':
+        specifier: workspace:*
+        version: link:../../packages/template-runtime
       '@cg/text-shaping':
         specifier: workspace:*
         version: link:../../packages/text-shaping

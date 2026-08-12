@@ -1,4 +1,11 @@
-import { defaultLayerAlias, type FixedLayerBank, type Rehearsal } from '@cg/shared-ipc';
+import type { CSSProperties } from 'react';
+import {
+  defaultLayerAlias,
+  type ChannelRaster,
+  type FixedLayerBank,
+  type Rehearsal,
+  type TemplateLiveSources,
+} from '@cg/shared-ipc';
 import type { FieldValues, Position } from '@cg/shared-schema';
 
 /**
@@ -16,6 +23,54 @@ export interface RehearsalSubject {
   position: Position | undefined;
   /** Applied fields with any staged edits layered on. */
   fields: FieldValues;
+  /**
+   * R-049 — the template's Live Source carrier, when this browser's registry
+   * holds one. `undefined` covers BOTH "this template declares none" and "the
+   * registry has not answered yet", and the two are treated identically here on
+   * purpose: with no declaration there is no rect to draw over, so there is
+   * nothing an overlay could honestly say. The three-way distinction that DOES
+   * matter — declared / none / unknown — is `liveSourceCarrierState`'s, and it is
+   * consumed where a take can be refused, not on a preview surface.
+   */
+  liveSources: TemplateLiveSources | undefined;
+  /**
+   * R-049 — `plateId → the APPLIED source's operator-facing NAME`, or `null` for
+   * a plate nothing is bound to.
+   *
+   * Resolved by the panel (which can see the sources store) rather than here, so
+   * the stage stays a presentational component. The names are the JOIN the
+   * exported page cannot make: it carries a plate identifier and nothing else, and
+   * only the Runtime holds the installation's binding for it.
+   */
+  plateSourceNames: ReadonlyMap<string, string | null>;
+}
+
+/**
+ * R-049 — THE ONE EXPRESSION OF THE FIT TRANSFORM, used by every layer that must
+ * land on the same pixels: each rehearsal frame's `<iframe>` and the live-plate
+ * overlay drawn over the whole stack.
+ *
+ * It exists because the alternative is a second scale factor derived beside the
+ * first, which is precisely how an overlay drifts off the page beneath it — and
+ * the drift is invisible on a 16:9 raster, where the geometry inside each page
+ * collapses to identity, so it would ship looking correct.
+ *
+ * Two scales stay apart, and this is only the second of them:
+ *   - the AIR scale lives INSIDE each page (reference frame → raster), real placement;
+ *   - the FIT scale is THIS (raster → panel), preview only.
+ * A box sized to the raster and then scaled by a CSS transform cannot perturb what
+ * the document inside measures, which is what keeps them apart.
+ */
+export function frameBox(raster: ChannelRaster, fit: number): CSSProperties {
+  return {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: `${String(raster.width)}px`,
+    height: `${String(raster.height)}px`,
+    transformOrigin: 'center center',
+    transform: `translate(-50%, -50%) scale(${String(fit)})`,
+  };
 }
 
 /**
@@ -56,6 +111,37 @@ export function stackedByLayer(subjects: readonly RehearsalSubject[]): Rehearsal
  */
 export function frameZIndex(index: number): number {
   return index + 1;
+}
+
+/**
+ * R-049 — the band the live-plate overlay occupies: ABOVE every frame in the
+ * composite, whatever its size.
+ *
+ * Derived from the frame count rather than fixed, because the frames' own band is
+ * open-ended — there is deliberately NO CAP on rehearsing rows, so a constant
+ * picked today is a constant the fourth frame overtakes. A placeholder that ends
+ * up UNDER a graphic is worse than none: it would show for one row and vanish for
+ * another with nothing to say why.
+ *
+ * It is drawn OVER the frames rather than behind them even though the real live
+ * layer composites BEHIND the template on air. That is deliberate: the overlay is
+ * a MARKER, not a simulation of the composite, and a placeholder peeking through a
+ * transparent hole is exactly the "looks like the real picture" reading R-049
+ * forbids.
+ */
+export function overlayZIndex(frameCount: number): number {
+  return frameZIndex(frameCount) + 1;
+}
+
+/**
+ * The caveats disclosure, above the overlay and therefore above everything.
+ *
+ * It used to be a bare `3`, which was already a tie with the third frame and
+ * would have lost to the placeholders outright. A note explaining the surface
+ * must never be covered by the surface.
+ */
+export function caveatsZIndex(frameCount: number): number {
+  return overlayZIndex(frameCount) + 1;
 }
 
 /** The row's display name: its configured alias, else the bank's default. */

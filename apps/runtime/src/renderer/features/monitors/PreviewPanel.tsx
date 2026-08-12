@@ -8,7 +8,10 @@ import { useRehearse } from '../../hooks/useRehearse.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 import { useFixedBank, useFixedSlots } from '../../hooks/useFixedLayers.js';
+import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { buildApplyPayload, draftsVersion, subscribeDrafts } from '../inspector/draftStore.js';
+import { appliedPlateSources } from '../inspector/livePlates.js';
+import { currentSourceCatalog, sourcesVersion, subscribeSources } from '../sources/sourceStore.js';
 import { RehearsalStage } from './RehearsalStage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
 
@@ -73,12 +76,28 @@ export function PreviewPanel(): JSX.Element {
   // air.
   const draftVersion = useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
 
+  /**
+   * R-049 — the template registry and the sources store, joined for the live-plate
+   * placeholders.
+   *
+   * `useTemplateIndex` is what carries each template's `liveSources` block (the
+   * plate rects, in scene pixels, plus the resolution and resolved default
+   * position the geometry chain needs); `sourceVersion` is the subscription that
+   * makes ANOTHER console's rebinding repaint this one's PVW, since the bridge
+   * owns the assignments and pushes them.
+   */
+  const templates = useTemplateIndex(items.map((i) => i.templateId));
+  const sourceVersion = useSyncExternalStore(subscribeSources, sourcesVersion, sourcesVersion);
+  const catalog = currentSourceCatalog();
+
   const subjects = useMemo(
     () =>
       subjectsFor(rehearsals, (r): RehearsalSubject | null => {
         const item = items.find((i) => i.itemId === r.itemId);
         if (item === undefined) return null;
         const alias = slots.find((s) => s.layer === r.layer && s.channel === r.channel)?.alias;
+        const info = templates.get(item.templateId) ?? null;
+        const live = info?.liveSources;
         return {
           itemId: r.itemId,
           layer: r.layer,
@@ -90,13 +109,53 @@ export function PreviewPanel(): JSX.Element {
           // Inspector's Apply uses — so what is rehearsed is exactly what Apply
           // would send.
           fields: buildApplyPayload(item.itemId, item.fields),
+          liveSources: live,
+          /**
+           * 🔴 THE APPLIED BINDING, NOT THE DRAFT — and this is the ONE place
+           * this panel deliberately diverges from the "show what the operator
+           * has typed" rule the field values above follow.
+           *
+           * Fields are shown as drafted because rehearse exists to preview an
+           * edit before it reaches air. A plate binding is different in kind:
+           * an unassigned plate REFUSES the take (C-015's empty-mapping
+           * acceptance), and a binding that has been staged but not applied is
+           * still unassigned as far as the take is concerned. Painting a staged
+           * pick as bound would tell the operator the take will work at the
+           * exact moment it will not — which is the failure PVW is their last
+           * chance to catch.
+           *
+           * `appliedPlateSources` is the canonical join (the Inspector's LIVE
+           * PLATES section and `isItemDirty` both read it); the catalog lookup
+           * turns its source ID into the NAME the operator actually recognises,
+           * because an id like `src-8f2a1c` names nothing to anyone.
+           *
+           * A binding whose catalog entry has gone reads as UNASSIGNED, matching
+           * `pruneAssignmentsForCatalog`'s own reading of a dangling reference —
+           * and it is the safe direction anyway, since that plate will refuse.
+           */
+          plateSourceNames: new Map(
+            [...appliedPlateSources(item.templateId, live?.sources ?? []).entries()].map(
+              ([plateId, sourceId]) => [
+                plateId,
+                sourceId === null
+                  ? null
+                  : (catalog.sources.find((s) => s.id === sourceId)?.name ?? null),
+              ],
+            ),
+          ),
         };
       }),
     // `draftVersion` is a real dependency even though nothing in the body names
     // it: `buildApplyPayload` reads the draft store, which is external mutable
     // state React cannot see. Without it a staged edit would not reach the
     // rehearsal until something else happened to invalidate this memo.
-    [rehearsals, items, slots, bank, draftVersion],
+    //
+    // `sourceVersion` is the same shape of dependency for `appliedPlateSources`
+    // and `catalog`, which read the sources store. Without it a plate bound on
+    // another console — or on this one, through the Inspector's Update — would
+    // keep reading "no source assigned" here until something unrelated
+    // invalidated this memo.
+    [rehearsals, items, slots, bank, draftVersion, templates, sourceVersion, catalog],
   );
 
   // Which page each rehearsing row needs. Kept as a SERIALISED key rather than

@@ -4,6 +4,7 @@ import type { FieldValues, Position } from '@cg/shared-schema';
 import { positionQuery } from '@cg/shared-schema';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { applyOperatorPosition, type PageRuntimeWindow } from './frameEnvironment.js';
+import { frameBox } from './rehearsalFrames.js';
 
 /**
  * R-022 — ONE rehearsing row's frame: the retained self-contained page, in a
@@ -17,16 +18,13 @@ import { applyOperatorPosition, type PageRuntimeWindow } from './frameEnvironmen
 
 const styles = {
   frame: {
-    position: 'absolute' as const,
-    left: '50%',
-    top: '50%',
     border: 0,
     display: 'block',
-    // The FIT scale is composed with the centring translate so the frame scales
-    // about its own centre inside the shared box. Every frame is the same size
-    // (the channel raster), which is what makes ONE checker behind the whole
-    // stack correct.
-    transformOrigin: 'center center',
+    // R-049 — the box and the FIT transform are NOT written here any more. They
+    // come from the shared `frameBox`, because the live-plate overlay must land
+    // on exactly these pixels and a second copy of the expression is how an
+    // overlay drifts off the page beneath it. What stays here is what belongs to
+    // an iframe and to nothing else.
     // TRANSPARENT, not black — an opaque frame would hide both the checker and
     // every frame below it in the composite, which is the entire point of
     // compositing. The page inside paints its own background where it has one.
@@ -238,17 +236,15 @@ export function RehearsalFrame({
         setReady(true);
       }}
       style={{
-        ...styles.frame,
-        zIndex,
-        // Sized to the CHANNEL RASTER — this is what makes the page inside place
-        // itself exactly as it will on air (R-030 geometry step 2 reads
-        // `window.innerWidth`/`innerHeight`, which inside a frame is this box).
-        width: `${String(raster.width)}px`,
-        height: `${String(raster.height)}px`,
-        // Preview-only fit, composed with the centring translate. A CSS
+        // Sized to the CHANNEL RASTER and fitted by the shared transform — the
+        // size is what makes the page inside place itself exactly as it will on
+        // air (R-030 geometry step 2 reads `window.innerWidth`/`innerHeight`,
+        // which inside a frame is this box), and the fit is preview-only. A CSS
         // transform on the ELEMENT cannot change what the document inside
         // measures, which is why the two scales stay apart.
-        transform: `translate(-50%, -50%) scale(${String(fit)})`,
+        ...frameBox(raster, fit),
+        ...styles.frame,
+        zIndex,
       }}
     />
   );

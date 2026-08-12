@@ -1998,7 +1998,17 @@ and which source is healthy. C-023 is the diagnosis half; this item is the repai
 6.9–6.9f), cross-referenced both ways — the same pattern D-147 used to ride phase 1 rather than
 opening a change of its own.
 
-## [ ] R-049 — a rehearse plate is COMPLETELY BLANK, so a live plate is indistinguishable from a broken render ⟨priority: medium⟩ — depends on [[C-015]]'s assignment store
+## [~] R-049 — a rehearse plate is COMPLETELY BLANK, so a live plate is indistinguishable from a broken render ⟨priority: high⟩ — depends on [[C-015]]'s assignment store
+
+<!--
+  PRIORITY RAISED medium → high, 2026-08-12. Not a re-estimate: the owner hit this
+  in LIVE TESTING and reported that in CG Control's PVW you cannot tell a live
+  plate exists at all. That is this item's own premise — "indistinguishable from a
+  broken render" — confirmed in use rather than predicted, and a filed premise that
+  has been met in operation is no longer a medium.
+-->
+
+**In progress:** `openspec/changes/rehearse-live-plate-placeholders/`.
 
 **What:** in PVW, draw a **labelled placeholder** over each live plate's rect — procedural colour
 bars carrying the **plate's name** and, when one is assigned, **the assigned SOURCE's name**. Drawn
@@ -2068,6 +2078,34 @@ Three consequences of that, each a reason this is cheap:
   wrong implementation gives the right answer — the same trap [[C-015]]'s task 6.2b names for the
   bridge's FILL contract test. Use a raster that pads on the other axis (e.g. `1440×1080` or
   `720×576`).
+
+### ⭐ DECIDED 2026-08-12, owner — VISIBLE BEFORE PLAY, and it does NOT reopen [[D-087]]
+
+Observed by the owner during implementation: the placeholders paint **as soon as PVW opens**, while
+the template's own elements stay blank until **Play**. That is [[D-087]]'s **blank-until-play**
+contract, which the rehearse frame inherits by rendering the exported page verbatim
+(`body.cg-pending` hides the page's stage; `play()` clears it, settle re-adds it). The overlay sits
+**outside** that page, so it was never subject to it. **Recorded here as a DECISION rather than
+left as the side effect it started as:**
+
+- **Visible before Play is CORRECT and is kept.** This item's own acceptance is the argument: an
+  unassigned plate **REFUSES the take**, and PVW is "the operator's last chance to see it before
+  air". A placeholder that appeared only after Play would be absent at exactly the moment it was
+  filed to serve.
+- **It does NOT reopen [[D-087]]**, for the same reason it does not reopen §12.2: **the page still
+  paints nothing before Play.** `cg-pending` is a class on the PAGE's own `body`; the overlay is a
+  Runtime layer composited over the frame and reaches into no document. The contract is untouched.
+- **DURING play: it persists, entirely unchanged** — same box, same state, same words. **Verified,
+  not assumed** (`apps/runtime/tests/e2e/pvw-live-plate-placeholder.spec.ts` drives a stand-in page
+  carrying the real `cg-pending` contract and asserts the page blank → painting → blank while the
+  marker never moves). Nothing about it changes appearance and nothing disappears, because the
+  component takes **no lifecycle input at all**. That is the wanted behaviour rather than a gap: the
+  hole is still a hole while the graphic runs, and the "never mistakable for a real incoming
+  picture" requirement is **most** load-bearing exactly then — fading the marker at play would
+  restore the original defect at the moment the frame most resembles air.
+
+Pinned at both levels so it cannot drift silently: the E2E above for the real lifecycle, and
+`apps/runtime/tests/livePlateOverlay.dom.test.ts` for the overlay's invariance under the transport.
 
 ### Cross-references, so neither is read as a duplicate of the other
 

@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FixedLayerBank, FixedSlotState, Rehearsal } from '@cg/shared-ipc';
+import type { FixedLayerBank, FixedSlotState, Rehearsal, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { PreviewPanel } from '../src/renderer/features/monitors/PreviewPanel.js';
 import { ShellLayoutProvider } from '../src/renderer/hooks/shellLayoutContext.js';
@@ -75,6 +75,13 @@ interface Fixture {
   slots?: FixedSlotState[];
   /** Item ids whose page this browser does NOT hold. */
   missingPages?: string[];
+  /**
+   * R-049 — the registry entries PVW joins each row against for its live-plate
+   * placeholders. Absent means the ordinary case for this suite: templates with
+   * no Live Source carrier, so no placeholder is drawn and every assertion below
+   * is about the frames alone.
+   */
+  templates?: TemplateInfo[];
 }
 
 function stubBridge(f: Fixture): void {
@@ -100,6 +107,13 @@ function stubBridge(f: Fixture): void {
     },
     templates: {
       html: (templateId: string) => Promise.resolve(missing.has(templateId) ? null : PAGE),
+      // R-049 — PVW now also reads the REGISTRY, for each template's Live Source
+      // carrier (the plate rects its placeholders are drawn over). Both members
+      // are required: `useTemplateIndex` pulls once and re-pulls on every
+      // catalogue push, so a stub with only `html` leaves the panel calling
+      // through an undefined.
+      list: () => Promise.resolve(f.templates ?? []),
+      onChanged: noop,
     },
     link: { status: () => 'live', onStatusChanged: noop },
   };

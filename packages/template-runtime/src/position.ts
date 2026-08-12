@@ -111,9 +111,23 @@ export function resolveOutputPosition(scene: Scene, search: string): Position {
  * `stageX = ax*(ow−fw) + offset.x`, `stageY = ay*(oh−fh) + offset.y`.
  * A full-frame scene computes (0,0) — pixel-identical to the
  * pre-positioning output.
+ *
+ * R-049 — the first parameter is `Pick<Scene, 'resolution'>`, not `Scene`. A
+ * WIDENING, not a redesign: the body only ever read `scene.resolution`, every
+ * existing caller still satisfies it, and no behaviour changes.
+ *
+ * It matters because the second caller does not hold a scene. PVW draws a
+ * placeholder over each Live Source plate and needs the SAME anchor translate the
+ * page computes for itself, from the `resolution` the template carries on
+ * `TemplateInfo.liveSources` — the scene itself is discarded at import. Requiring
+ * a full `Scene` here would have forced that caller to fabricate one or, far
+ * worse, to write its own copy of two lines of arithmetic, which is exactly the
+ * divergence `live-source-multibox` design.md §6's duplication guard exists to
+ * prevent: nothing errors when the copies drift, the overlay simply stops sitting
+ * on its hole.
  */
 export function outputTranslate(
-  scene: Scene,
+  scene: Pick<Scene, 'resolution'>,
   position: Position,
   frame: Raster = REFERENCE_FRAME,
 ): { x: number; y: number } {
