@@ -3481,7 +3481,7 @@ error-prone.
 
 **Notes:** additive schema field, default absent.
 
-## [ ] D-133 — loop range visualization ON the timeline, and an UNCONDITIONALLY authorable loop range (Cinegy-style) ⟨priority: high — client-required⟩
+## [~] D-133 — loop range visualization ON the timeline, and an UNCONDITIONALLY authorable loop range (Cinegy-style) ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-135]] as ONE change; no implementation task is ready — four owner decisions are open in `design.md` §9)
 
 **What:** Show a composition's loop/hold range directly on the timeline — start/end markers
 present by default when the composition repeats/holds — with the playhead wrapping at the loop
@@ -3545,7 +3545,7 @@ the clock renders that offset's time.
 **Notes:** additive field alongside `timezone` (`ClockElementSchema`); countdown/countup ignore it
 like they ignore `timezone`.
 
-## [ ] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩
+## [~] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; the play-and-re-anchor vs position-by-`currentTime` question is ANSWERED in `design.md` §5)
 
 **What:** The canvas follows the playhead for both frame-mapped element kinds, under BOTH ways the
 playhead moves. **(a) Scrub:** while scrubbing, each Lottie element on the canvas shows the exact

@@ -2930,7 +2930,14 @@ cued row is the accepted cost** — it loses its pre-rolled producer and re-ADDs
 which is cheap; the alternative cost is a graphic stranded on air with the console reporting
 success, which is not.
 
-**Landed 2026-08-12** (`fix(caspar-bridge,runtime,shared-ipc): B-122/B-125`). What changed:
+**Landed 2026-08-12** in `4cbe3331` (`fix(caspar-bridge,runtime,shared-ipc): B-122/B-125`).
+
+**Linux `gate:e2e` OWED and DISCHARGED** — `LayersPanel.tsx` changed (the confirm dialog, the
+button’s aria-label and title, the result toasts), so the debt was owed on the UI rule, not on an
+edited spec. Discharged by a COMPLETED, GREEN `e2e` job that actually RAN for that exact commit:
+<https://github.com/yasermostafaee/cg/actions/runs/31573550952>.
+
+What changed:
 
 - `caspar-runtime.clearAll()` — the status filter is gone. The only remaining question is the
   STRUCTURAL one (does the item hold a slot), which is also the broadcast-safety property that
@@ -3013,7 +3020,8 @@ hatch exists to bypass. The proper fix is to reconcile **after** a successful cl
 on-air bookkeeping and wants its own diff. Source: `DEBT.md:2207`, with the full finding at
 `DEBT.md:2535` inside the `dev-clear-bank-scoped` DONE entry (`DEBT.md:2456`).
 
-**Landed 2026-08-12** (same commit as [[B-122]]) — `clearBankLayer` calls a new
+**Landed 2026-08-12** in `4cbe3331` (same commit as [[B-122]], and covered by the same
+discharged Linux e2e run recorded there) — `clearBankLayer` calls a new
 `#reconcileClearedSlot(slot)` **after** the CLEAR is acked, never before it, and never on a
 refusal. The rejected fix was not reproposed: the clear stays unconditional and the bookkeeping
 catches up behind it.
