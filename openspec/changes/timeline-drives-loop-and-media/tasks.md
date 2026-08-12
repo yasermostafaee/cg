@@ -227,11 +227,13 @@ test pairs the two, so it can never pass by nothing happening).
       `apps/designer/src/renderer/features/timeline/README.md` (a new "What the playhead drives on
       the canvas" section, including the poster consequence), `docs/engines/overview.md`
 - [x] Full green gate for every touched workspace (`pnpm gate`, uncached, exit 0; openspec 48/48)
-- [x] **E2E**: DISCHARGED for `f9a35507` — <https://github.com/yasermostafaee/cg/actions/runs/31644333051>
+- [x] **E2E**: DISCHARGED for `d43a9adb` — <https://github.com/yasermostafaee/cg/actions/runs/31647897276>
       `conclusion: success`, and the `e2e` job **RAN** (not skipped). This SUPERSEDES every earlier
       discharge rather than joining them — the debt follows the pushed HEAD, and each earlier run
       verified a tree that has since been replaced:
-      `0d2d0c3b` (<https://github.com/yasermostafaee/cg/actions/runs/31639516131>),
+      `f9a35507` (<https://github.com/yasermostafaee/cg/actions/runs/31644333051>),
+      `0d2d0c3b`
+      (<https://github.com/yasermostafaee/cg/actions/runs/31639516131>),
       `f492939d` (<https://github.com/yasermostafaee/cg/actions/runs/31633111026>) and `6e620f70`
       (<https://github.com/yasermostafaee/cg/actions/runs/31612094833>).
       ⚠ **This change's history carries one RED run**, on `f2ce18ae`
