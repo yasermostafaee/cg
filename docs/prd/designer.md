@@ -3586,7 +3586,13 @@ like they ignore `timezone`.
 >
 > ✅ **The LOTTIE half is BUILT and CI-verified.** `tick(frame)` positions every Lottie at the
 > playhead; scrub and PLAY are the same call by construction; **every frame maps, including the
-> composition's in-point.** That last clause took three attempts and is worth reading in
+> composition's in-point.** Linux `e2e` DISCHARGED for `f492939d` —
+> <https://github.com/yasermostafaee/cg/actions/runs/31633111026> (`success`, and the `e2e` job
+> RAN); this supersedes `6e620f70`'s run, which verified a tree whose in-point behaviour has since
+> been replaced.
+>
+> The in-point clause
+> composition's in-point.\*\* That last clause took three attempts and is worth reading in
 > `design.md` §4.3: an interim revision rested the in-point on D-125's poster frame (to keep a
 > build-on clip from opening blank on the design surface), and the result — observed on the real
 > canvas — was that the in-point became the ONE frame that did not show the clip, while every other

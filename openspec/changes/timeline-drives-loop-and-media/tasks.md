@@ -186,13 +186,17 @@ test pairs the two, so it can never pass by nothing happening).
       `apps/designer/src/renderer/features/timeline/README.md` (a new "What the playhead drives on
       the canvas" section, including the poster consequence), `docs/engines/overview.md`
 - [x] Full green gate for every touched workspace (`pnpm gate`, uncached, exit 0; openspec 48/48)
-- [x] **E2E**: DISCHARGED for `6e620f70` — <https://github.com/yasermostafaee/cg/actions/runs/31612094833>
-      `conclusion: success`, and the `e2e` job **RAN** (not skipped — the P-029 classifier read the
-      diff as render-affecting). ⚠ The PREVIOUS push (`f2ce18ae`) went **RED** on this same job, on
-      a real regression this change introduced and not a flake: it broke D-125's canvas poster. See
-      design §4.3 — the failing run is <https://github.com/yasermostafaee/cg/actions/runs/31589324495>
-      and it discharges nothing; it is recorded because a red run in this branch's history deserves
-      a reader who knows why
+- [x] **E2E**: DISCHARGED for `f492939d` — <https://github.com/yasermostafaee/cg/actions/runs/31633111026>
+      `conclusion: success`, and the `e2e` job **RAN** (not skipped). This SUPERSEDES the earlier
+      discharge rather than joining it: the debt follows the pushed HEAD, and `6e620f70`'s run
+      (<https://github.com/yasermostafaee/cg/actions/runs/31612094833>) verified a tree whose canvas
+      behaviour at the in-point has since been replaced.
+      ⚠ **This change's history carries one RED run**, on `f2ce18ae`
+      (<https://github.com/yasermostafaee/cg/actions/runs/31589324495>) — not a flake and not
+      infrastructure: the D-125 canvas tests, failing on a real regression. It discharges nothing
+      and is recorded because a red run in a branch's history deserves a reader who knows why.
+      Design §4.3 tells the whole sequence, including that the fix which turned it green was itself
+      reverted after the owner watched it on the real canvas
 - [x] `pnpm openspec validate timeline-drives-loop-and-media --strict`
 - [x] D-133 and D-135 are `[~]` with this change dir; **archive only on the owner's confirmation** —
       and this change is NOT ready for it: §1–§3 (D-133) and §5 (the video half) are unbuilt
