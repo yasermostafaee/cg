@@ -3198,7 +3198,29 @@ The 5 templates (owner-refreshed 2026-07-12; supersedes the original list):
 
 **Notes:** Cross-references: B-058 (menu chrome), B-059 (visual bounds), B-060 (right-click draw-cancel), B-061 (rotated overlay), B-062 (size==visualBBox model + resize bake), B-063 (curved add affordance) — all same branch; supersedes the D-109/B-037-era "PathEditor mounts whenever a path is selected" behavior (spec text replaced per the spec-discipline rule). OWNER ADDITION (Issue D, 2026-07-10): right-clicking a SEGMENT (not an anchor) in edit mode opens the shared context menu with **Add point** (corner) and **Add curve point** (smooth, tangent-aligned mirrored handles sized chord/6), inserting at the nearest point on the real curve under the cursor via the same insert route; anchor right-click keeps Delete point; pen-draft right-click keeps the B-060 cancel. Spec: `## MODIFIED` on `designer-path-element`. Tests: unit `edit-mode-state.test.ts` (state transitions) + `anchor-context-menu.test.ts` (segment Add menu, corner + smooth); E2E `pen-edit-mode.spec.ts` (box-only vs dblclick, Esc/empty exits) + `pen-curve-edit.spec.ts` (Ctrl-gated insertion, plain click inert) + the pen specs updated to the `enterPathEdit` fixture flow.
 
-## [x] D-125 — import After Effects → bodymovin (Lottie) animations as a lifecycle-aware element ⟨priority: medium⟩ — DONE: shipped in phases (#335 + canvas fixes #337/#338/#339, #341, #345, #348, #352, #354, #357, #358; reconciled #364) and archived `openspec/changes/archive/2026-07-19-lottie-lifecycle-element/`. The CasparCG 2.3.x CEF hardware smoke — the pre-archive gate — was OWNER-VERIFIED on real hardware (2026-07-19). Remainders carried forward: image field overrides deferred (reason in the archived change), and [B-096](bugs-designer.md) (the Inspector's clip-total frame count ignores a nonzero `ip`)
+> ⚠ **TOUCHED 2026-08-13 by `openspec/changes/timeline-drives-loop-and-media/` (D-135's session),
+> without reopening this item.** Two things changed for a MARKER-LESS clip, both recorded in that
+> change's `design.md` §4.5 / §4.6:
+>
+> 1. **The Inspector now offers "Add phase markers"** on a clip that has none, seeding
+>    `introEnd` at the clip MIDPOINT (through the shared `lottieClipMidpoint`, the same helper the
+>    canvas poster uses) and `outroStart` at `op` — deliberately degenerate, because nothing can
+>    detect where a clip animates off. Until now the panel only EXPLAINED the absence. `VideoSections`
+>    had shipped the same affordance with the same seeds since D-128; the Lottie section was the odd
+>    one out.
+> 2. **The runtime's marker-less `introEnd = op` fallback is UNCHANGED, deliberately**, under a rule
+>    worth carrying: that fallback is a clip's MISSING DATA and nothing may infer intent from it. It
+>    is the third time the project has met it — `lottieTiming` refuses to derive a settle from it,
+>    D-125 Phase 1 refuses it for the poster frame — and the first two went the same way.
+>
+> 🔴 **And the "Which content closes the graphic?" checkbox was INERT for a Lottie/video row.** D-128
+> extended the READ side without the WRITE side, so the box clicked and wrote nothing. Fixed in the
+> same change: `drivesHold` now has one writer covering all five flag-carrying kinds, with the
+> container recursion the shallow `updateElement` lacks.
+
+## [x] D-125 — import After Effects → bodymovin (Lottie) animations as a lifecycle-aware element ⟨priority: medium⟩ — DONE:
+
+shipped in phases (#335 + canvas fixes #337/#338/#339, #341, #345, #348, #352, #354, #357, #358; reconciled #364) and archived `openspec/changes/archive/2026-07-19-lottie-lifecycle-element/`. The CasparCG 2.3.x CEF hardware smoke — the pre-archive gate — was OWNER-VERIFIED on real hardware (2026-07-19). Remainders carried forward: image field overrides deferred (reason in the archived change), and [B-096](bugs-designer.md) (the Inspector's clip-total frame count ignores a nonzero `ip`)
 
 **What:** Import a bodymovin/Lottie export (`.json`, ideally `.lottie`) as an OPAQUE, self-playing `lottie` element rendered by a bundled Lottie player. The Designer positions / scales / rotates / times it and places it on the timeline, but never edits it point-by-point and converts NO keyframes into native ones. The element carries a **phase mapping** — an intro-end and an outro-start frame in the ANIMATION's own frame space, plus an optional idle segment between them — read from the bodymovin `markers` array when the export has them, otherwise marked by hand in the Inspector. Those phases are then mapped onto the composition's shipped lifecycle (`outPoint` + optional `contentStart`, `LifecycleSchema`): on play the intro runs once and the element HOLDS (freeze, or loop the idle segment); it does NOT drive the content-driven hold by default; on `stop()`/`out()` it plays its OUTRO and the composition settles to CLEARED; `pause()`/`resume()` freeze/continue it in lockstep with the rest of the scene. The intended composition is the real use case: an AE-authored animated background / lower-third ("furniture") holds on air while a NATIVE ticker or sequence placed ON TOP carries the dynamic content and drives the content-driven hold — the existing D-107/D-112 model, unchanged.
 **Why:** Broadcast furniture is authored in After Effects, and re-creating it natively is neither realistic nor desirable — we want to play it, not port it. The pieces are already half-present and inert: `LottieElementSchema` (`assetId`/`speed`/`loopMode`/`segment`/`fieldOverrides`), the `lottie` manifest asset kind, the `lottie-override` binding target, and `@cg/lottie-bridge` (a real `lottie-web` wrapper + a real import allowlist) all EXIST but nothing is wired — `scene-builder` renders a placeholder div, `lottie-override` is a no-op pinned by a test, and the Designer can neither import a Lottie asset nor create the element. The gap that actually matters is not "play a Lottie": it is LIFECYCLE. An opaque, self-playing animation only earns its place if it plugs into IN/HOLD/OUT — so a native ticker can hold the graphic on air over it, and the outro still fires on stop.

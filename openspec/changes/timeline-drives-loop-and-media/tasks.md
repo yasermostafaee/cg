@@ -161,6 +161,31 @@ architecture, no decoder.
 - [x] Test: ⚠ the LIMIT — a MARKER-LESS clip settles on `op` because `introEnd` falls back to `op`
       too, so the canvas agrees with air and both are blank. Pinned so it is not "fixed" into
       disagreeing with air; the real finding is design §4.5
+- [x] ✅ **§4.5 ANSWERED (A) and BUILT** — the Inspector offers "Add phase markers" on a
+      marker-less Lottie, seeding `introEnd` at the clip midpoint and `outroStart` at `op`
+      (degenerate). (B) — changing the runtime's marker-less `introEnd` fallback — is REJECTED under
+      the standing rule that fallback is MISSING DATA and nothing may infer intent from it (design
+      §4.5; it is the third encounter and the first two went the same way)
+- [x] The midpoint is ONE definition — `lottieClipMidpoint` in `@cg/lottie-bridge`; the runtime's
+      poster and the Designer's seed both call it, and BOTH call sites are asserted by **the shared
+      call**, not by two equal numbers
+- [x] ⚠ FINDING: `VideoSections` had shipped this same affordance since D-128, with the same two
+      seeding choices. The Lottie section was the odd one out — design §4.6
+- [x] 🔴 **Q — the inert hold-checklist row.** D-128 extended the READ side
+      (`contentHoldElementsOf` lists media) without the WRITE side: `patchDrivesHold` filtered to
+      ticker / sequence / clock, so the Lottie/video checkbox wrote nothing and re-rendered
+      unchanged. The mutator now covers all five flag-carrying kinds, keeps its container
+      recursion, and its doc comment is true again; `StyleSection`'s media control now uses the
+      SAME action, so the flag has one writer with one reach
+- [x] Test (failing first, 4 of 6): a Lottie row and a video row are writable in both directions; a
+      ticker is unchanged and its absent-⇒-participates default preserved; a NESTED element is
+      reachable; a non-flag kind is untouched on an id match; and the flag survives a schema
+      round-trip so a saved scene reloads still ticked
+- [x] 🔴 **AUDIT (design §9A.1) — the `undefined outroStart` in the driver test helper cost
+      NOTHING that was decided on.** `lottie-driver.test.ts` is the only direct constructor of a
+      `LottieDriver`, it never calls `playOutro()`, and D-125's outro decisions are exercised
+      through `createRuntime` with real values. No assertion was vacuous; one test NAME was
+      misleading and is now true, and the latent NaN hazard is closed
 
 ## 5. D-135 — the video half ⟨GATE: §9.5 — the forward-1× hybrid — and §9.4⟩
 
@@ -220,8 +245,12 @@ test pairs the two, so it can never pass by nothing happening).
 
 ## Not in this change
 
-- [ ] **D-151** (`docs/prd/designer.md:4266`) — deliberately excluded. It needs no design, only the
-      owner's answer on whether the add-time dialog gets a third "add anyway" choice. Folding it in
-      would make a design wait on an unrelated product decision. See `proposal.md`.
+- [ ] 🔴 **`updateElement` cannot reach a grouped element** (design §9A.2) — `locate()` searches a
+      layer's DIRECT children only, so EVERY Inspector control routed through `updateElement` is a
+      silent no-op for an element inside a container, not just `drivesHold`. Measured against the
+      real store. Not fixed here: recursing `locate` changes the shape every mutation indexes
+      (`layer.children[elIdx]`), which is a store-wide refactor. **No number minted — the owner's
+      to file, and it should be.**
+- [ ] **D-151** (`docs/prd/designer.md:4266`)
 - [ ] The `hasContentElement` divergence at the **Hold-source select** and the
       **`ContentHoldChecklist`** (§8 risk 5). Recorded as a residual; no item number is minted here.

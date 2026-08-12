@@ -90,14 +90,35 @@ function insertElementAt(layerIdx: number, pos: number, el: Element, select: boo
 }
 
 /**
- * D-107 — set a content element's `drivesHold` flag, reaching elements nested in
- * containers (the shallow `locate` / `updateElement` only reach a layer's direct
- * children). Only ticker / sequence / clock carry the flag; any other type is left
- * untouched even on an id match.
+ * D-107 / D-125 / D-128 — set a content element's `drivesHold` flag, reaching elements
+ * nested in containers (the shallow `locate` / `updateElement` only reach a layer's
+ * direct children).
+ *
+ * ALL FIVE flag-carrying kinds: ticker / sequence / clock, AND the two media kinds,
+ * `video` / `lottie`. Any other type is left untouched even on an id match.
+ *
+ * 🔴 The media kinds were added late, and the gap they left is the reason this comment
+ * now spells the set out. D-128 extended the READ side — `contentHoldElementsOf` LISTS a
+ * media element in "Which content closes the graphic?" — while the WRITE side kept the
+ * three-kind filter, so the checkbox on a Lottie/video row clicked, wrote nothing, and
+ * re-rendered from unchanged state. The row was inert, and it looked like a React bug.
+ *
+ * The flag's DEFAULT is inverted between the two groups and this function must not care:
+ * it always writes an explicit boolean. Absent ⇒ PARTICIPATES for ticker/sequence/clock;
+ * absent ⇒ does NOT participate for media (`=== true` is the opt-in, `scene.ts`). Writing
+ * an explicit `false` is therefore correct for both, and DELETING the key would be wrong
+ * for the first group — it would read back as participating.
  */
 function patchDrivesHold(els: readonly Element[], id: string, drivesHold: boolean): Element[] {
   return els.map((el): Element => {
-    if (el.id === id && (el.type === 'ticker' || el.type === 'sequence' || el.type === 'clock')) {
+    if (
+      el.id === id &&
+      (el.type === 'ticker' ||
+        el.type === 'sequence' ||
+        el.type === 'clock' ||
+        el.type === 'video' ||
+        el.type === 'lottie')
+    ) {
       return { ...el, drivesHold };
     }
     if (el.type === 'container') {

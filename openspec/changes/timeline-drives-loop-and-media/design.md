@@ -485,23 +485,89 @@ The two levers proposed for this were: (1) pin `contentStart` earlier; (2) `driv
   the moment it goes blank. It shortens the composition to the clip; it does not keep the clip
   visible.
 
+#### ✅ The VERIFIED operator motivation (2026-08-13) — observed on a real scene
+
+The first motivation offered for this finding was mechanically wrong (see above: `contentStart`
+does not touch a Lottie). **This one is the real thing, and it was reproduced in the code path.**
+On a scene with a Lottie and a ticker, `mode: auto-out`, `holdSource: content-driven`, the operator
+reports: _"the Lottie plays right through and ends while the ticker keeps running."_
+
+The mechanism, stated so it is not confused with the hold-checklist defect fixed alongside it:
+
+- The **"Which content closes the graphic?"** checkbox answers _"does this element's completion
+  CLOSE the graphic"_ — a closing condition. Ticking it does not keep anything on screen.
+- What the operator wants is the clip to **stay visible during the hold**, which is the FREEZE
+  frame — a different quantity entirely.
+- For a marker-less clip the freeze frame is `introEnd = op`: the blank last frame.
+- 🔴 **And every `holdBehavior` degenerates to that same blank frame.** `idle-loop` does not
+  escape it: `idleIn` falls back to `introEnd` and `idleOut` to `outroStart`, both of which are
+  `op` for a marker-less clip, so `idleOut > idleIn` is false and the driver takes the freeze
+  branch. The operator can flip the "on hold" control between its two values and see no difference
+  whatsoever, which is its own small teaching failure.
+
+So the clip ending early is not a hold-source question, not a `drivesHold` question, and not
+fixable from the Playout panel. It is the missing `introEnd`, which is what (A) supplies.
+
 **What the operator actually lacks is phase markers, and the inspector will not let them add any.**
 `StyleSection` renders editable `introEnd` / `outroStart` inputs only when `phases.source ===
 'manual'`; a clip with no phases at all gets a hint — _"No phase markers — plays once then
 freezes."_ — and no control. So the honest summary is: an imported clip with no markers plays once,
 goes blank, and there is nothing in the UI that changes that.
 
-Two directions, both the owner's to weigh, and **no item number is minted here**:
+Two directions were weighed, and **the owner's answer is (A)** — no item number minted for either:
 
-1. **Offer MANUAL phases for a marker-less clip.** The manual-phase editor already exists and is
-   already the right shape; it is simply not offered when `phases === undefined`. Cheapest, and it
-   changes no runtime behaviour — the operator authors the `introEnd` the clip lacks.
-2. **Change the marker-less `introEnd` fallback** so the freeze lands somewhere visible (the clip
-   midpoint, mirroring what the D-125 poster did). Cheaper still to implement and strictly worse to
-   decide: it changes what goes ON AIR for every existing marker-less clip, silently.
+1. ✅ **ANSWERED — offer MANUAL phases for a marker-less clip.** The manual-phase editor already
+   exists and is already the right shape; it was simply not offered when `phases === undefined`.
+   It changes no runtime behaviour: the operator authors the `introEnd` the clip lacks. **Built
+   2026-08-13** — see §4.6.
+2. ❌ **REJECTED — changing the marker-less `introEnd` fallback** so the freeze lands somewhere
+   visible. Cheaper to implement and strictly worse to decide: it changes what goes ON AIR for
+   every existing marker-less clip, silently.
 
-Direction 1 is this design's recommendation. It is recorded rather than acted on because it is a
-Designer-side authoring change with no place in this change's scope.
+#### 🔴 WHY (B) is rejected — the standing rule, because this is the THIRD encounter
+
+`introEnd = op` is not a value with a meaning. **It is a marker-less clip's MISSING DATA, and
+nothing may read intent into it.** This project has now met that fallback three times and answered
+the same way twice before:
+
+1. **`lottie-bridge/src/timing.ts`** refuses to derive `settleOffset` from it, in its own words:
+   the fallback _"is the ABSENCE of information, not an authored claim that the entrance runs the
+   full clip"_ — so a marker-less clip contributes `null` to the entrance settle.
+2. **D-125 Phase 1** refuses it for the canvas poster frame, using the clip midpoint instead,
+   because parking on `op` leaves the editor canvas empty.
+3. **This question** would have been the first to go the other way — turning an absence of
+   information into an authored claim, silently, for every existing clip, **on air**.
+
+Stated as the rule a future reader should apply without re-deriving it: **a fallback that exists
+because data is missing may be used to DISPLAY something, and may never be used to INFER intent.**
+The midpoint poster is a display choice (§4.6 makes the seed one too, visibly). A changed runtime
+fallback would be an inference, and it would be invisible.
+
+---
+
+### 4.6 §4.5 (A), BUILT — and the video section had already answered it
+
+The Inspector now offers **"Add phase markers"** on a marker-less Lottie, beside the hint that used
+to be the whole answer. Taking it writes `phases.source = 'manual'` with `introEnd` at the clip
+MIDPOINT and `outroStart` at `op` (degenerate — "no outro claimed"), and the existing manual inputs
+then apply unchanged. Both seeded values are immediately visible and editable: **that visibility is
+the entire justification for (A) over (B)** — a seed the operator cannot see would be the same
+silent inference (B) was rejected for.
+
+⚠ **FINDING — this was not a new decision. `VideoSections` has shipped the same affordance since
+D-128**, with the same two seeding choices: a marker-less video gets an "Add phase marks" button
+that writes `introEnd: round(duration / 2)` (the midpoint) and `outroStart: duration` (degenerate).
+So the Lottie section was the ODD ONE OUT, and this change closes a gap between two sibling
+inspectors rather than inventing a policy. Worth recording because the reasoning was re-derived
+from first principles here while a working precedent sat one function away — the cheapest check
+("does the other media kind already do this?") was not made, twice.
+
+**The midpoint is now ONE definition**: `lottieClipMidpoint` in `@cg/lottie-bridge` — the package
+whose header already claims to be _"the ONE place a Lottie's phase frames are converted"_. The
+runtime's poster and the Designer's seed both call it, and both call sites are covered by tests that
+assert **the shared call**, not two equal numbers (equal numbers is precisely how a second
+derivation hides). The video section's `round(duration / 2)` is a different quantity in a different
+space (milliseconds of a video, not frames of a clip) and is deliberately left alone.
 
 ---
 
@@ -909,6 +975,66 @@ the Lottie's.** It is recorded here rather than fixed now because touching video
 exactly what §5 is gated on: whichever way §9.5 goes, the video's canvas frame becomes something
 `tick(frame)` owns, and the poster is the thing it would overwrite. Doing it early would change
 video rendering in a change that has deliberately not decided how video is driven.
+
+## 9A. 🔴 FINDINGS FROM THE 2026-08-13 AUDITS — one closed, one WIDE OPEN
+
+### 9A.1 The `undefined outroStart` in the driver test helper — CLOSED, nothing was decided on it
+
+`lottie-driver.test.ts`'s `makeDriver` never passed `outroStart`, so every outro computation in
+that file ran on `undefined` from the day it was written. What that cost, established by reading
+every consumer:
+
+- **It is the ONLY file that constructs a `LottieDriver` directly** (`grep "new LottieDriver"`), so
+  nothing outside it could be affected.
+- **`playOutro()` is never called in it.** The outro lifecycle — §D6.2's element-outro seam,
+  §D6.4.1's always-resolves invariant, the scope outro ledger — is exercised in
+  `lottie-lifecycle.test.ts` **through `createRuntime`**, which always passes a real
+  `outroStart` (`phases?.outroStart ?? meta.op`). **So no D-125 decision rests on a value that was
+  ever `undefined`.**
+- The two tests that DO use the outro mapping both passed `outroStart` explicitly.
+
+**No assertion was vacuous.** The real cost was one **misleading test name** — a sweep called
+_"across intro, hold and outro"_ that only ever exercised the intro mapping — and a latent hazard:
+any future outro test added to that file would have computed `NaN` and landed on `op` silently. The
+hazard is closed (the helper now supplies a degenerate `outroStart` and derives `hasOutro` exactly
+as the runtime does), and the sweep now covers what its name claims.
+
+**Reported in full because "nothing was decided on them" is a result**, and leaving it unstated
+would leave the question open for the next reader to re-open at the same cost.
+
+### 9A.2 🔴 OPEN AND LARGER THAN ITS SYMPTOM — `updateElement` cannot reach a grouped element
+
+Fixing the inert hold-checklist row exposed something well beyond it. **`locate()` searches a
+layer's DIRECT children only** — `layers[i].children.findIndex(...)`, no recursion — and
+`updateElement` is built on it. Its own doc calls it _"used by every mutation"_.
+
+Measured, not inferred (a probe against the real store):
+
+| call                    | target                 | result                |
+| ----------------------- | ---------------------- | --------------------- |
+| `updateElement` (speed) | top-level element      | ✅ applied            |
+| `updateElement` (speed) | **inside a container** | 🔴 **silent no-op**   |
+| `setElementDrivesHold`  | nested ticker          | ✅ applied (recurses) |
+| `setElementDrivesHold`  | nested Lottie          | 🔴 no-op — Q's defect |
+
+The last row is fixed by this change. **The second row is not, and it is not about `drivesHold` at
+all:** every Inspector control routed through `updateElement` — speed, hold behaviour, phases
+(including the new affordance above), colours, fonts — is a silent no-op for any element the
+operator has grouped. `patchDrivesHold` and `patchHoldOverride` recurse precisely because their
+authors hit this and worked around it locally, one flag at a time.
+
+**Not fixed here, deliberately.** Giving `locate` a recursive reach changes the shape it returns
+(`{layer, layerIdx, elIdx}` is indexed as `layer.children[elIdx]` by every caller), so it is a
+refactor across every mutation in the store — far outside a session scoped to one inert checkbox,
+and exactly the kind of second change a brief-scoped session should not fold in. **No item number
+is minted here; it is the owner's to file, and it should be filed.**
+
+⚠ The new "Add phase markers" affordance (§4.6) inherits this: it writes through `updateElement`,
+so it is a no-op for a GROUPED marker-less Lottie, exactly like the `speed` and `on hold` controls
+beside it. That is deliberate — a private bypass for one control while its neighbours stay broken
+would hide the shared cause and make the eventual fix harder to verify.
+
+---
 
 ## 10. What was expected and NOT found
 
