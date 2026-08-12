@@ -75,7 +75,12 @@ import {
   buildSequenceCompositionItem,
   repeaterItemValues,
 } from './scene-builder.js';
-import { createLottiePlayer, lottieClipMeta, lottieTiming } from '@cg/lottie-bridge';
+import {
+  createLottiePlayer,
+  lottieClipMeta,
+  lottieClipMidpoint,
+  lottieTiming,
+} from '@cg/lottie-bridge';
 import { registerLottiePlayer } from './lottie-registry.js';
 import { ClockDriver, parseTimeOfDay } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
@@ -914,7 +919,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // canvas EMPTY (the bug). The clip MIDPOINT sits in the held/visible region, so it
         // is the representative "settled" look; never `op`. Only the poster frame — the
         // always-revealed canvas — changes; play() still resets()→`ip`.
-        const posterFrame = l.element.phases?.introEnd ?? Math.round((meta.ip + meta.op) / 2);
+        // D-135 — the midpoint comes from `@cg/lottie-bridge`, which is also where the
+        // Designer's manual-phase SEED reads it. One definition: if the two drifted,
+        // converting a marker-less clip to manual phases would move its picture.
+        const posterFrame = l.element.phases?.introEnd ?? lottieClipMidpoint(meta);
         const driver = new LottieDriver({
           handle,
           fr: meta.fr,

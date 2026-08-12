@@ -39,6 +39,30 @@ export function lottieClipMeta(data: unknown): LottieClipMeta {
   return { ip: num(d['ip'], 0), op: num(d['op'], 0), fr: num(d['fr'], 30) };
 }
 
+/**
+ * D-125 / D-135 — the REPRESENTATIVE frame of a clip whose intro-end is unknown: the
+ * midpoint of `[ip, op]`, rounded.
+ *
+ * ONE definition, two callers, and the reason they must not each write `(ip + op) / 2`
+ * for themselves:
+ *
+ *  - `@cg/template-runtime` paints it as the pre-tick POSTER for a MARKER-LESS clip
+ *    (D-125 Phase 1). `ip` is the intro-START and `op` the outro-END — both blank on a
+ *    real furniture clip — so the midpoint is the one frame in the held/visible region
+ *    that can be picked without authored markers.
+ *  - the Designer SEEDS it as `phases.introEnd` when an operator converts a marker-less
+ *    clip to manual phases, so the seeded hold frame is the same frame the poster already
+ *    chose. If these two drifted apart, converting a clip would MOVE its picture for no
+ *    reason the operator asked for.
+ *
+ * 🔴 It is a DISPLAY choice, never an authored claim. Nothing may read intent into it —
+ * see {@link LottieTiming.settleOffset}, which refuses to derive a settle from the
+ * marker-less `introEnd = op` fallback for exactly that reason.
+ */
+export function lottieClipMidpoint(meta: LottieClipMeta): number {
+  return Math.round((meta.ip + meta.op) / 2);
+}
+
 /** One phase measured in all three spaces. */
 export interface LottiePhaseSpan {
   /** Start frame, in the ANIMATION's frame space. */

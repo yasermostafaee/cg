@@ -1,6 +1,6 @@
 import { useCallback, useState, useSyncExternalStore } from 'react';
 import { ChevronDown, ChevronRight, Maximize, Square } from 'lucide-react';
-import { lottieTiming } from '@cg/lottie-bridge';
+import { lottieClipMidpoint, lottieTiming } from '@cg/lottie-bridge';
 import type { LottieTiming } from '@cg/lottie-bridge';
 import type {
   AnimatableProperty,
@@ -969,7 +969,43 @@ function LottieSections({
           }
         />
         {phases === undefined ? (
-          <p className={dds.hint}>No phase markers — plays once then freezes.</p>
+          // §4.5 (A) — a marker-less clip freezes on `op`, which for a furniture clip is the
+          // frame it has animated OFF to: it plays once and goes blank, on the canvas AND on
+          // air, and until now the Inspector only EXPLAINED that. A hint that names a problem
+          // and offers no way out teaches nothing (the same rule the owner settled for §9.1),
+          // so the hint is now an affordance.
+          //
+          // The seed is deliberately the two values that claim the LEAST:
+          //  - `introEnd` = the clip MIDPOINT, the same frame the canvas poster already
+          //    picks for a marker-less clip, through the same `lottieClipMidpoint` — so
+          //    converting a clip never MOVES its picture;
+          //  - `outroStart` = `op`, i.e. DEGENERATE — "no outro claimed". We cannot detect
+          //    where a clip animates off, and a seeded outro would invent an authorial claim,
+          //    which is exactly what §4.5 rejects. A degenerate outro now holds the settled
+          //    frame correctly (§4.4), so this seed is well-defined rather than a placeholder.
+          //
+          // Both land in the editable inputs below, where the operator SEES and corrects
+          // them. That visibility is the whole justification for seeding over guessing in the
+          // runtime: a seed the operator cannot see would forfeit it.
+          <>
+            <p className={dds.hint}>No phase markers — plays once then freezes.</p>
+            <Button
+              variant="secondary"
+              disabled={timing === null}
+              onClick={() => {
+                if (timing === null) return;
+                designerStore.updateElement(id, {
+                  phases: {
+                    introEnd: lottieClipMidpoint(timing.meta),
+                    outroStart: timing.meta.op,
+                    source: 'manual',
+                  },
+                } as Partial<Element>);
+              }}
+            >
+              Add phase markers
+            </Button>
+          </>
         ) : phases.source === 'markers' ? (
           <div className={fieldCss.row}>
             <span className={fieldCss.label}>phases</span>
@@ -1110,9 +1146,13 @@ function VideoSections({
           value={element.drivesHold === true ? 'on' : 'off'}
           options={['off', 'on'] as const}
           labels={['No', 'Yes']}
-          onCommit={(v) =>
-            designerStore.updateElement(id, { drivesHold: v === 'on' } as Partial<Element>)
-          }
+          // Q — the flag has exactly ONE writer, and it is the deep-reaching one.
+          // `updateElement` is shallow (it goes through `locate`, which searches a layer's
+          // DIRECT children only), so this control could not write a grouped element's flag;
+          // `setElementDrivesHold` recurses containers and is the same action the Playout
+          // checklist's row calls. Two writers with different reach is how the two surfaces
+          // come to disagree about one flag.
+          onCommit={(v) => designerStore.setElementDrivesHold(id, v === 'on')}
         />
         {phases === undefined ? (
           <>

@@ -18,40 +18,50 @@ import type { Element, Scene } from '@cg/shared-schema';
  * BOTH halves: the canvas's ticks, and a PLAYING host receiving ticks.
  */
 
-const { handles } = vi.hoisted(() => ({
+const { handles, midpointCalls } = vi.hoisted(() => ({
   handles: [] as { frames: number[]; destroyed: boolean; el: HTMLElement }[],
+  midpointCalls: [] as unknown[],
 }));
-
 // Only the PLAYER is stubbed; the module's pure helpers (`lottieClipMeta` /
 // `lottieTiming`) stay REAL so the wiring reads the same frame metadata as production.
-vi.mock('@cg/lottie-bridge', async (importOriginal) => ({
-  ...(await importOriginal<typeof LottieBridge>()),
-  createLottiePlayer: (container: HTMLElement) => {
-    const h = {
-      element: container,
-      el: container,
-      frames: [] as number[],
-      destroyed: false,
-      play: () => undefined,
-      pause: () => undefined,
-      stop: () => undefined,
-      destroy() {
-        h.destroyed = true;
-      },
-      goToFrame(f: number) {
-        h.frames.push(f);
-      },
-      applyOverride() {
-        return true;
-      },
-      get isAlive() {
-        return !h.destroyed;
-      },
-    };
-    handles.push(h);
-    return h;
-  },
-}));
+vi.mock('@cg/lottie-bridge', async (importOriginal) => {
+  const actual = await importOriginal<typeof LottieBridge>();
+  return {
+    ...actual,
+    // The POSTER frame must come from the SHARED midpoint helper — the same call the
+    // Designer's manual-phase seed makes. Asserting two equal numbers would pass against
+    // a second copy of `(ip + op) / 2`, which is how a duplicated derivation hides.
+    lottieClipMidpoint: (meta: { ip: number; op: number; fr: number }) => {
+      midpointCalls.push(meta);
+      return actual.lottieClipMidpoint(meta);
+    },
+    createLottiePlayer: (container: HTMLElement) => {
+      const h = {
+        element: container,
+        el: container,
+        frames: [] as number[],
+        destroyed: false,
+        play: () => undefined,
+        pause: () => undefined,
+        stop: () => undefined,
+        destroy() {
+          h.destroyed = true;
+        },
+        goToFrame(f: number) {
+          h.frames.push(f);
+        },
+        applyOverride() {
+          return true;
+        },
+        get isAlive() {
+          return !h.destroyed;
+        },
+      };
+      handles.push(h);
+      return h;
+    },
+  };
+});
 
 const { createRuntime } = await import('../src/runtime.js');
 
@@ -465,6 +475,34 @@ describe('D-135 — the playhead positions every Lottie on the canvas', () => {
     runtime.tick(70);
     expect(lastFrame()).toBe(40);
     expect(painted()).not.toContain(100);
+  });
+
+  it('the MARKER-LESS poster comes from the SHARED midpoint helper, not a local copy', () => {
+    // One definition, two callers: this poster and the Designer's manual-phase seed. If
+    // they drifted, converting a marker-less clip to manual phases would MOVE its picture
+    // for no reason the operator asked for. The CALL is the assertion — a second copy of
+    // `Math.round((ip + op) / 2)` produces the same 50 and leaves this at zero.
+    midpointCalls.length = 0;
+    createRuntime(scene([lottieElement({ phases: undefined })]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    expect(midpointCalls).toHaveLength(1);
+    expect(midpointCalls[0]).toMatchObject({ ip: 0, op: 100 });
+    expect(lastFrame()).toBe(50); // the poster it produced
+
+    // A MARKED clip takes its poster from the authored `introEnd` and never asks.
+    midpointCalls.length = 0;
+    handles.length = 0;
+    document.body.innerHTML = '';
+    createRuntime(scene([lottieElement()]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    expect(midpointCalls).toHaveLength(0);
+    expect(lastFrame()).toBe(40);
   });
 
   it('⚠ a MARKER-LESS clip settles on `op` — the canvas agrees with air, and both are blank', () => {

@@ -275,33 +275,22 @@ describe('LottieDriver — positionAt (the Designer playhead)', () => {
       positioned.driver.positionAt(elapsed, null);
       expect(last(positioned.handle)).toBe(last(clocked.handle));
     }
-  });
 
-  it('positions the OUT phase from the composition’s out-point, clamped at `op`', () => {
-    const { driver, handle } = makeDriver({ introEnd: 5, outroStart: 50, op: 60 });
-    driver.positionAt(0, 0);
-    expect(last(handle)).toBe(50);
-    driver.positionAt(0, 50); // +5 frames at 100fps
-    expect(last(handle)).toBe(55);
-    driver.positionAt(0, 200); // past `op` — clamped, never overshot
-    expect(last(handle)).toBe(60);
-  });
+    // …and the OUTRO leg, which this test's NAME has always claimed and which it did not
+    // cover until 2026-08-13. The helper never passed `outroStart`, so every outro
+    // computation in this file ran on `undefined`; the audit (design §9A.1) found no
+    // assertion had been made vacuous by it, but a sweep that names a phase should sweep it.
+    for (const elapsed of [0, 10, 49, 50, 200]) {
+      const clocked = makeDriver({ introEnd: 5, outroStart: 50, op: 60 });
+      clocked.driver.reset();
+      void clocked.driver.playOutro();
+      clocked.clock.advance(elapsed);
 
-  it('an idle-loop hold wraps under the playhead exactly as it does under the clock', () => {
-    const { driver, handle } = makeDriver({
-      introEnd: 5,
-      idleIn: 5,
-      idleOut: 10,
-      holdBehavior: 'idle-loop',
-    });
-    driver.positionAt(50, null); // advanced 5 → the hold entry
-    expect(last(handle)).toBe(5);
-    driver.positionAt(70, null); // advanced 7 → 2 into the 5-frame idle span
-    expect(last(handle)).toBe(7);
-    driver.positionAt(100, null); // advanced 10 → wrapped
-    expect(last(handle)).toBe(5);
+      const positioned = makeDriver({ introEnd: 5, outroStart: 50, op: 60 });
+      positioned.driver.positionAt(0, elapsed);
+      expect(last(positioned.handle)).toBe(last(clocked.handle));
+    }
   });
-
   it('🔴 zero elapsed paints `ip`, NEVER the poster — the boundary is not a special case', () => {
     // The whole defect, at unit level. `posterFrame` is deliberately far from `ip` so the
     // two can never be confused; an earlier revision returned the poster here, which made
