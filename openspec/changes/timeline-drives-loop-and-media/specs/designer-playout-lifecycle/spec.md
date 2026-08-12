@@ -1,8 +1,9 @@
-# designer-playout-lifecycle — delta (D-133 design phase, 2026-08-12)
+# designer-playout-lifecycle — delta (D-133, 2026-08-12)
 
 Encodes the LOOP RANGE: what it is in the shipped lifecycle model, what wrapping at its end does,
-and — the part that is the item — what wrapping must NOT do. Implementation is a later PR, gated on
-`design.md` §9 — see this change's `tasks.md` §0.
+and — the part that is the item — what wrapping must NOT do. The owner's answers to `design.md`
+§9.1 and §9.2 are folded in: an inert range MUST explain itself, and the loop range does NOT create
+an out-point as a side effect.
 
 ## ADDED Requirements
 
@@ -28,32 +29,46 @@ condition, its END condition and the OUT phase that follows are all unchanged.
 - **WHEN** a composition carries a loop range
 - **THEN** its `playout.mode` is one of the shipped values and no new mode value exists
 
-### Requirement: The loop range is authorable UNCONDITIONALLY on the main scene
+### Requirement: The loop range is authorable on ANY composition that has an out-point
 
-The main scene SHALL offer the loop option ALWAYS. Authoring a loop range SHALL NOT require a
-content-driven element to be present: it SHALL be authorable with nothing but shapes on the scene.
-The existing "Pin content start" affordance — gated today on a composition containing a ticker,
-sequence or countdown clock — SHALL be at most a SHORTCUT to the loop range, never the only path to
-it.
+The loop option SHALL be offered on EVERY composition that has an out-point, with NO further
+condition. Authoring a loop range SHALL NOT require a content-driven element to be present: it
+SHALL be authorable with nothing but shapes on the scene. The existing "Pin content start"
+affordance SHALL be at most a SHORTCUT to the loop range, never the only path to it.
 
-The gate being removed is also NARROWER than the hold rule it appears to serve: it counts only
-ticker / sequence / countdown clock, while an opted-in Lottie or video also drives a hold. A
-composition held by an opted-in Lottie therefore has a content-driven hold today and no way to pin
-its content start. Removing the gate resolves that discrepancy; if any gate is retained in its
-place, the discrepancy SHALL be fixed explicitly instead.
+The condition that is removed is the CONTENT condition — a composition containing a ticker, a
+sequence or a countdown clock. The condition that REMAINS is the out-point, and it remains for a
+reason that is not convenience: `contentStart` is schema-constrained to
+`[activeRange.in, outPoint]`, so a loop range cannot exist without one, and creating an out-point is
+not a marker edit — it moves the composition out of `static`, giving it an animated OUT segment
+where it previously hard-cut on stop. **Authoring a loop range SHALL NOT create an out-point as a
+side effect.** The out-point remains an explicit, separately-authored step through the shipped
+"Add out point" affordance, which is on the same panel.
+
+Because the loop range is therefore not offered on a composition with no out-point, the "never the
+only path" guarantee is discharged by the loop range being **present by default** for a composition
+that loops or holds (see the next requirement), not by the removal of the content gate alone.
 
 No backward compatibility is owed to the conditional affordance: nothing has been delivered to the
 client, so the compatibility floor is unset.
 
 #### Scenario: A shapes-only scene can author a loop range
 
-- **WHEN** the main scene contains no ticker, sequence or countdown clock
+- **WHEN** the main scene has an out-point and contains no ticker, sequence or countdown clock
 - **THEN** the loop option is still offered and the loop range is authorable
 
 #### Scenario: A Lottie-held composition can pin its content start
 
 - **WHEN** a composition's only hold driver is a Lottie with `drivesHold: true`
 - **THEN** its content start is authorable, exactly as it is for a ticker-held composition
+- **NOTE** this holds TODAY and is kept as a REGRESSION GUARD, not as a fix: the affordance's gate
+  already counts an opted-in Lottie or video, so removing it does not change this case
+
+#### Scenario: Authoring a loop range does not create an out-point
+
+- **WHEN** a composition has no out-point
+- **THEN** authoring a loop range is not offered as an action that would create one, and the
+  composition's playout mode is unchanged by anything the loop-range surface does
 
 ### Requirement: The loop range renders on the timeline with full-height markers
 
@@ -127,18 +142,31 @@ whole `loop-cycle` open/close cycles and is a different axis.
 - **WHEN** the hold's driver is infinite
 - **THEN** playback keeps wrapping at the loop end until the composition is stopped
 
-### Requirement: With a non-content-driven hold, an authored loop range is INERT
+### Requirement: With a non-content-driven hold, an authored loop range is INERT — and the surface SAYS SO
 
 WHEN the hold is NOT content-driven, an authored loop range SHALL have NO playback effect.
 Authoring it is allowed; it is simply inert, and the timed hold continues to park on `outPoint` for
 `holdMs` exactly as it does today.
 
-> ⚠ **OPEN — `design.md` §9.1.** The alternative is that a `timed` hold LOOPS the range for
-> `holdMs`. That is the more useful product and the more expensive decision: `timed` is the DEFAULT
-> hold, so every existing shape-only composition carrying a `contentStart` would change what it
-> does. This requirement states the item as filed; it is not settled until §9.1 is answered.
+**The surface SHALL state that the range is inert, and SHALL state what would make it active.** An
+inert control with no explanation teaches the operator nothing, and the effective hold-driver
+predicate is already resolved on this panel, so the explanation SHALL be EXACT — it names the
+missing condition (this composition has no effective hold driver, so its hold is timed) rather than
+offering generic text.
+
+This is the item as filed, and it is settled (`design.md` §9.1). The alternative — a `timed` hold
+LOOPING the range for `holdMs` — is rejected: it contradicts the item, it would change the
+behaviour of every composition that has a driver but never touched the hold select (`holdSource`
+defaults to `timed` even when drivers are present), and it has no defined duration at all under
+`manual` or `static`, where `holdSource` is ignored entirely.
 
 #### Scenario: A timed hold ignores the loop range
 
 - **WHEN** a composition's hold resolves to `timed` and a loop range is authored
 - **THEN** playback holds `outPoint` for `holdMs` and never wraps
+
+#### Scenario: The surface explains why an authored range is inert
+
+- **WHEN** a loop range is authored on a composition whose hold resolves to `timed`
+- **THEN** the surface states that the range has no playback effect
+- **AND** it states what would make it active — a content-driven hold with an effective driver

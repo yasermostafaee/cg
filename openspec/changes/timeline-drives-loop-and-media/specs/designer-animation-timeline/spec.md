@@ -1,7 +1,8 @@
-# designer-animation-timeline — delta (D-135 design phase, 2026-08-12)
+# designer-animation-timeline — delta (D-135, 2026-08-12)
 
-Encodes what the PLAYHEAD DRIVES on the canvas, and what deliberately does not follow it.
-Implementation is a later PR, gated on `design.md` §9 — see this change's `tasks.md` §0.
+Encodes what the PLAYHEAD DRIVES on the canvas, and what deliberately does not follow it. The
+Lottie half is implemented in this change; the video half is gated on `design.md` §9.5 (see
+`tasks.md` §5) and its requirements below are the settled design it will be built to.
 
 ## ADDED Requirements
 
@@ -21,6 +22,20 @@ lifespan gates only.
 
 When the playhead is outside an element's timeline span the canvas SHALL show that element's
 resting state consistently with today's rules, under scrub and under play alike.
+
+**EVERY Lottie and EVERY video SHALL follow the playhead, regardless of its `drivesHold` flag.**
+The two are ORTHOGONAL and this is stated explicitly because the inverse default for media
+(`drivesHold === true` is an OPT-IN, against ticker/sequence/clock's `!== false`) is load-bearing
+elsewhere, so a reader who assumed the flag governs this would not be being unreasonable.
+`drivesHold` answers "does this element gate the HOLD"; whether the canvas shows the element's
+frame under the playhead is a different question with a different answer. A Lottie that is
+deliberately not a hold driver — a logo animation, say — SHALL still animate on the canvas, because
+a frozen one is exactly the misrepresentation this capability exists to remove.
+
+#### Scenario: A Lottie that is not a hold driver still follows the playhead
+
+- **WHEN** a composition contains a Lottie whose `drivesHold` is absent or `false`
+- **THEN** it is positioned at the playhead's mapped frame exactly as an opted-in one is
 
 #### Scenario: Scrubbing moves a Lottie to the frame under the playhead
 
@@ -67,6 +82,21 @@ every frame, and this is the specified contract, not a degradation: **canvas vid
 frame-accurate during playback and will visibly drop frames under decoder pressure.** The Preview
 keeps the real driver path and remains the frame-true rendition.
 
+The rate this yields is MEASURED, not estimated: roughly **one new frame every ~94 ms — every
+2nd–3rd frame at 25 fps** — with ~56 % of ticks skipped by the guard. The conditions travel with
+the number and SHALL NOT be dropped when it is quoted: ONE 1920×1080 VP8+alpha element, a 1-second
+GOP (this project's converter output), Chrome 151, driven at 25 fps. Two or more video elements is
+UNMEASURED, and 1080p VP8+alpha is software-decoded twice over in Chromium, so the figure is a
+conservative floor rather than a guarantee.
+
+**Direction SHALL NOT be a special case.** Backward play and bounce SHALL position the element
+exactly as forward play does. Under position-by-`currentTime` every tick is a random seek that
+decodes from the nearest preceding keyframe, so direction does not enter the computation at all —
+measured at 10.6 distinct frames/s backward against 10.2 forward, i.e. equal within noise. "Backward
+is the worst case for inter-frame codecs" is true of PLAYBACK and false of POSITIONING, and no
+freeze-and-badge or defer-until-pause behaviour SHALL be introduced for a direction that is not
+special.
+
 The element node SHALL be resolved through the driver's `live()` re-resolution on every access, and
 never through a reference captured at build time. The canvas is a second host that reparents
 `<video>` nodes across a scene rebuild, which is exactly the shape of B-137 — a healthy driver
@@ -82,6 +112,12 @@ commanding a detached orphan while the viewer watches a frozen picture.
 
 - **WHEN** a playhead tick arrives while the canvas video is still settling a previous seek
 - **THEN** that tick issues no new seek, and the canvas keeps showing the frame it has
+
+#### Scenario: Backward play positions a video exactly as forward play does
+
+- **WHEN** the transport plays backward (the `J` key) or bounces with a video on the canvas
+- **THEN** the video is positioned per tick by the same mechanism as forward play, with no
+  direction-specific behaviour, badge, or deferral
 
 #### Scenario: A reparented node is re-resolved, not commanded detached
 

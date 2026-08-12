@@ -1,7 +1,10 @@
 # Design — the playhead drives the canvas, and the loop range is authorable
 
-> **DESIGN-FIRST.** This document is the deliverable. `tasks.md` carries no task that is ready to
-> start; §9's open questions gate all of them.
+> **DESIGN-FIRST — and §9 is ANSWERED as of 2026-08-12.** This document is the deliverable. All
+> four owner decisions (§9.1–§9.4) are answered, with the reasoning, the measurement and the
+> corrections kept beside them. Answering §9.3 opened exactly ONE new question — **§9.5**, the
+> forward-1× hybrid — which gates `tasks.md` §5 (the video half) and nothing else. §4 (the Lottie
+> half) and every D-133 task are unblocked.
 
 ---
 
@@ -85,18 +88,30 @@ D-133**: three are call sites of one canonical predicate, and only three derive 
 | `template-runtime/src/runtime.ts` `scopeHasEffectiveHoldDrivers` | a deliberate MIRROR over the built `FieldScope` tree, documented as such |
 | `vcg-format/src/playout-metadata.ts:44`                          | **CALLS** `hasEffectiveHoldDrivers` — no local copy                      |
 | `PlayoutSection.tsx:630`                                         | **CALLS** `hasEffectiveHoldDrivers` (`hasDrivers`)                       |
-| `PlayoutSection.tsx:45` `hasContentElement`                      | a genuinely SEPARATE, NARROWER predicate — see below                     |
+| `PlayoutSection.tsx:45` `hasContentElement`                      | a genuinely SEPARATE, DIVERGENT predicate — see below                    |
 | `PreviewScopeTiming.tsx:112` `contentOf`                         | a third, different set again — TUNABLE content, not hold drivers         |
 
 Two of these are not the driving set at all, and D-133 collides with both:
 
-- **`hasContentElement`** (ticker / sequence / countdown clock only — **no Lottie, no video**) is
-  what gates the "Pin content start" affordance. It is NARROWER than
-  `hasEffectiveHoldDrivers`, which also counts an opted-in Lottie or video. So today a composition
-  whose only hold driver is an opted-in Lottie **has a content-driven hold and no way to pin its
-  content start**. D-133's "offer the loop option ALWAYS" deletes that gate, which removes the
-  discrepancy as a side effect rather than by fixing it — worth knowing, because it means the
-  gate's removal is a bug fix as well as a feature.
+- 🔴 **`hasContentElement`** is what gates "Pin content start" (and two other affordances — see
+  below). An earlier revision of this section recorded it as "ticker / sequence / countdown clock
+  only — no Lottie, no video", and **that was wrong**: it was re-read in the tree on 2026-08-12 and
+  it DOES count an opted-in media element (`el.type === 'video' || el.type === 'lottie'` with
+  `drivesHold === true`, `PlayoutSection.tsx:61-70`), exactly as the canonical predicate does. The
+  two agree on media. **The real divergence is elsewhere, and it runs in BOTH directions:**
+  - **`drivesHold` on ticker / sequence / countdown clock.** `hasEffectiveHoldDrivers` honours
+    `drivesHold !== false` for those kinds; `hasContentElement` does not read `drivesHold` for them
+    at all. So a ticker with `drivesHold: false` counts for `hasContentElement` and NOT for the
+    canonical predicate — an **over-count**.
+  - **D-112 `holdOverrides` on a nested composition instance.** The canonical predicate takes the
+    instance's per-element override into account (`overrides?.[el.id] ?? …`); `hasContentElement`
+    takes no overrides parameter and cannot. So a force-EXCLUDED nested element **over-counts**,
+    and a force-INCLUDED `drivesHold: false` element **under-counts**.
+
+  Three affordances are gated on `hasContentElement`, not one: the **Hold-source select**
+  (`PlayoutSection.tsx` ~`:705`), the **`ContentHoldChecklist`** (~`:723`), and **"Pin content
+  start"** (~`:780`). D-133 removes it from the THIRD only — see §8 risk 5 for what that leaves.
+
 - **`contentOf`** collects TUNABLE content for the preview timing panel and deliberately excludes
   Lottie and video. Untouched by this change; listed so a future reader does not mistake it for a
   fourth copy of the driver rule.
@@ -237,15 +252,20 @@ that they be distinguishable is a spec requirement, not a preference.
 
 ### 3.5 Unconditional authoring
 
-`PlayoutSection.tsx:621` gates "Pin content start" on `lifecycle !== undefined && hasContent`.
-D-133 removes the `hasContent` half outright. Note from §1.5 that this also fixes an existing
-discrepancy: a composition held by an opted-in Lottie has a content-driven hold today and no way to
-pin its content start.
+`PlayoutSection.tsx` gates "Pin content start" on `lifecycle !== undefined && hasContent`
+(~`:780`). D-133 removes the `hasContent` half outright.
 
-The `lifecycle !== undefined` half is a **separate question** — see §9.2. `contentStart` is
-schema-constrained to `[activeRange.in, outPoint]`, so it cannot exist without an `outPoint`; an
-unconditional loop range therefore implies an unconditional out-point, which is a bigger change
-than it looks. That is the owner's call, not this design's.
+⚠ **This is NOT also a bug fix, and an earlier revision of this section said it was.** That claim
+rested on §1.5's false "no Lottie, no video" reading of `hasContentElement`: a composition held by
+an opted-in Lottie can pin its content start **today**, because `hasContentElement` counts opted-in
+media. Removing the gate changes nothing for that case. The genuine divergence between the two
+predicates (`drivesHold` on ticker/sequence/clock, and D-112 `holdOverrides`) is described in §1.5
+and its residue after this change in §8 risk 5.
+
+The `lifecycle !== undefined` half is **KEPT** — see §9.2, now answered. `contentStart` is
+schema-constrained to `[activeRange.in, outPoint]`, so it cannot exist without an `outPoint`; the
+explicit, already-shipped "Add out point" button is the path to one, and authoring a loop range
+never creates one as a side effect.
 
 **No backward compatibility is owed** to the conditional UI: the item records that nothing has been
 delivered to the client, so the compatibility floor is unset ([[P-031]]).
@@ -312,11 +332,27 @@ depends on all three:
 2. **The canvas is not the frame-true surface.** The Preview keeps the real `play()` path with the
    real drivers and remains the rendition the operator judges final timing against. The canvas is
    an authoring surface, and "the nearest decoded frame, promptly" is the right contract for it.
-3. **Keyframe interval dominates, and it is known.** `video-driver.ts` records ~5 s keyframes on
-   this project's assets and a "RESUME GRACE" window because "a seek at our ~5 s keyframe interval
-   decodes seconds of video in one burst". Canvas seeking should therefore prefer `fastSeek()`
-   where available. **This is a measurement, not a guess — but the measurement was taken for a
-   different path, and the canvas's per-frame behaviour has NOT been measured. See §9.3.**
+3. **Keyframe interval dominates, and it is known — but the number this note first quoted was
+   STALE by 5×, and one of its recommendations does not exist on this engine.** Both corrections
+   were made on 2026-08-12 and both matter:
+   - 🔴 **The GOP is ONE SECOND, not ~5 s.** `video-driver.ts` records "~5 s keyframes on this
+     project's assets" and a RESUME GRACE window justified by it. That describes the pre-
+     `2026-07-24.3` era. Every video imported since is converted with **`-g 25 -keyint_min 25`** —
+     a FIXED 1-second GOP at 25 fps, colour and alpha keyframing together since `2026-07-25.5`
+     (`apps/designer/src/renderer/features/assets/video-convert-args.ts`, whose own comment reads
+     "every seek decodes ≤1s instead of ≤5s"). A canvas seek therefore decodes **≤25 frames, not
+     ~125**. `video-driver.ts`'s comment is annotated at its own site so this premise is not
+     re-derived from the stale number.
+   - 🔴 **`fastSeek()` is NOT available here — the recommendation is removed, not deferred.** An
+     earlier revision of this note said canvas seeking "should prefer `fastSeek()` where
+     available". `fastSeek` appears **nowhere** in this repo's source (only in `node_modules`
+     typings), and it is **not implemented in Chromium** — measured `typeof video.fastSeek ===
+'undefined'` on Chrome 151. On this engine the recommendation is a no-op, so it comes out of
+     the spec rather than being carried as a "where available" hedge that will never fire. It
+     stays worth re-verifying only if this app is ever hosted on a non-Chromium engine.
+
+   With those two corrected, the per-frame behaviour of the canvas **has now been measured** —
+   see §9.3, which answers what this note used to defer.
 
 ### 5.3 What the canvas gives up, in one sentence
 
@@ -324,6 +360,13 @@ depends on all three:
 decoded frame and will visibly drop frames under decoder pressure, especially with two or more
 video elements.** That is the deal, it is the right deal for an authoring surface, and it must be
 written into the spec so it is not later filed as a bug.
+
+**And it now carries a NUMBER (§9.3, measured 2026-08-12):** roughly **one new frame every ~94 ms —
+every 2nd–3rd frame at 25 fps** — with ~56 % of ticks skipped by the seek-in-flight guard. The
+conditions travel with the number, always: ONE 1920×1080 VP8+alpha element, 1 s GOP, Chrome 151,
+driven at 25 fps. The "two or more video elements" clause above remains **qualitative and
+unmeasured**, and 1080p VP8+alpha is software-decoded twice over in Chromium, so the number is a
+conservative floor rather than a typical case.
 
 ### 5.4 The cost of the rejected option, for the record
 
@@ -333,6 +376,16 @@ answer for backward play or bounce; divergence between the scrub frame and the p
 drift correction; and a re-import of the whole drift/re-base/resume-grace machine onto a surface
 that has no wall clock of its own. **It is rejected on (a) alone**; the rest is why it would not be
 worth reaching back for later.
+
+🔴 **RE-OPENED IN PART, 2026-08-12 — see §9.5.** This section conceded that play-and-re-anchor would
+be "genuinely better, in the one mode where it works" while not knowing how much better. §9.3's
+measurement says: ~10 fps against 25 fps. That does not revive play-and-re-anchor as the whole
+answer — (a) still stands, and backward and bounce still have no expression in it — but it does put
+a **HYBRID** on the table that this section never considered: forward-1× play through the shipped
+`VideoDriver`, everything else positioned. It is filed as **§9.5, OPEN**, and it gates `tasks.md`
+§5. Note that this section's own objection — that a re-anchoring path would "re-import the whole
+drift/re-base/resume-grace machine" — is weaker than written: that machine is shipped, and the
+Preview uses it.
 
 ### 5.5 The hard constraint from §1.8
 
@@ -382,86 +435,208 @@ and `docs/engines/overview.md`.
 
 1. **The seam rule is easy to satisfy accidentally and easy to break accidentally.** §3.3's
    invariant must be a TEST, not a comment: assert that a wrap issues no driver lifecycle call.
-2. **Decoder pressure is unmeasured on this path** (§5.2 note 3) — see §9.3.
+2. **Decoder pressure is MEASURED as of 2026-08-12** (§9.3) — one 1080p VP8+alpha element yields
+   ~10 distinct frames/s in every transport direction. What remains unmeasured is the multi-element
+   case (§5.3), which is still stated qualitatively.
 3. **Two loops, one word** (§3.4).
 4. **The canvas is a second host that reparents `<video>` nodes** (§1.8 / §5.5) — B-137's exact
    shape, one surface over.
-5. **`hasContentElement` vs `hasEffectiveHoldDrivers`** (§1.5): removing the gate silently fixes a
-   discrepancy. If the gate is kept in any form, the discrepancy must be fixed explicitly instead.
+5. 🔴 **`hasContentElement` vs `hasEffectiveHoldDrivers` — the RESIDUAL divergence, stated exactly.**
+   An earlier revision of this risk claimed removing the gate "silently fixes a discrepancy". It is
+   void: it rested on §1.5's false reading, and the two predicates agree on media. The real risk is
+   what this change LEAVES BEHIND. `hasContentElement` genuinely diverges from the canonical
+   predicate on (i) `drivesHold` for ticker / sequence / countdown clock and (ii) D-112
+   `holdOverrides` — in both directions (§1.5). Removing the gate at **"Pin content start"** removes
+   that divergence **at that one affordance**; the **Hold-source select** and the
+   **`ContentHoldChecklist`** keep it, because they keep the gate.
+
+   **This change does NOT fix those two, deliberately** — they are a different item's worth of work
+   (the Hold-source select is where a wrong answer changes on-air timing, so it deserves its own
+   scenarios rather than a drive-by edit). The residual is recorded here so it is not mistaken for
+   something this change closed. It is a candidate for an item; **no number is minted for it here**
+   — that is the owner's to file.
 
 ---
 
-## 9. OPEN QUESTIONS — owner decisions, NOT guessed
+## 9. OWNER DECISIONS — §9.1–§9.4 ANSWERED (2026-08-12), §9.5 newly OPEN
 
 Each names both candidate answers and what each costs. They are recorded here rather than left in
-the prompt that raised them, because a prompt is ephemeral and the spec is the memory. **Every task
-in `tasks.md` is gated on at least one of these.**
+the prompt that raised them, because a prompt is ephemeral and the spec is the memory. **The
+candidates and their costs are KEPT after the answer** — the record of why a decision went the way
+it did is worth more than the decision restated alone.
 
-### 9.1 What does a loop range MEAN under a `timed` hold? — GATES tasks 2.x
+> **Status.** §9.1, §9.2, §9.3 and §9.4 are ANSWERED. Answering §9.3 opened a NEW question — §9.5,
+> the forward-1× hybrid — which gates `tasks.md` §5 (the video half) and NOTHING else. §4 (the
+> Lottie half) and all of D-133's tasks are unblocked.
 
-D-133 says: _"with a non-content-driven hold the loop range is INERT"_. Taken literally the markers
-are authorable and do nothing, which is a control that teaches the operator nothing when they use
-it. But the alternative changes playback.
+### 9.1 What does a loop range MEAN under a `timed` hold? — GATED tasks 2.x — ✅ ANSWERED: (a) INERT
+
+**(a) INERT, exactly as filed — AND the surface MUST say why.** A non-content-driven hold keeps
+parking on `outPoint`; an authored loop range has no playback effect. The mitigation floated below
+as "a UI answer to a model question" is now **a requirement, not a mitigation**: an inert control
+with no explanation is what made this a question in the first place, so the surface states that the
+range is inert and what would make it active. `hasDrivers` (`hasEffectiveHoldDrivers`) is already
+computed in `PlayoutSection` (~`:630`), so that text can be EXACT — it can name the missing
+condition rather than saying something generic.
+
+The two candidates, kept as the record of why:
 
 - **(a) INERT, exactly as filed.** The markers draw; a `timed` hold still parks on `outPoint`.
-  **Cost:** an operator who authors a loop range on a shape-only scene sees nothing happen, with no
-  explanation. Mitigable with an inline note ("this range loops once a content driver is added"),
-  which is a UI answer to a model question.
+  **Cost:** an operator who authors a loop range on a shape-only scene sees nothing happen — which
+  the explanation requirement above is what answers.
 - **(b) A `timed` hold LOOPS the range for `holdMs`.** The furniture repeats for the hold duration,
-  then the OUT phase runs. **Cost:** it is a behaviour change to `timed` holds, which are the
-  DEFAULT, so every existing shape-only composition with a `contentStart` changes what it does.
-  It also makes the loop range meaningful in two different ways depending on `holdSource`.
+  then the OUT phase runs. **Cost:** a behaviour change to `timed` holds, which are the DEFAULT. It
+  also makes the loop range meaningful in two different ways depending on `holdSource`.
 
-**Design's read:** (a) is what the item says, and this design assumes it. (b) is the more useful
-product and the more expensive decision. **Not decided here.**
+**Why (a), in four parts — three of which CORRECT this question's own cost statement:**
 
-### 9.2 Does an UNCONDITIONAL loop range imply an unconditional OUT-POINT? — GATES tasks 1.x
+1. **D-133's acceptance says INERT verbatim.** (b) would contradict the filed item, which is a
+   thing to do deliberately or not at all.
+2. 🔴 **CORRECTION — (b)'s stated cost was measured against an EMPTY SET.** This question claimed
+   the cost falls on "every existing shape-only composition carrying a `contentStart`". **There are
+   none, and there cannot be:** a shapes-only composition cannot have a `contentStart` today,
+   because the `hasContent` gate this very change removes (`PlayoutSection.tsx` ~`:780`) is exactly
+   what withholds the button that would set one.
+3. 🔴 **CORRECTION — the REAL exposure of (b) is larger, and in the other direction.** `holdSource`
+   defaults to `timed` **even when drivers are present** (`PlayoutObjectSchema`: "Absent ⇒
+   'timed'"; `playoutOf` resolves it). So (b) would change the behaviour of every composition that
+   HAS a ticker and simply never touched the hold select — not of a nonexistent shapes-only set.
+   That is a much bigger blast radius than the one this question weighed.
+4. 🔴 **CORRECTION — there are THREE hold states, not two.** This question named `timed` and
+   `content-driven`. Under `manual` and `static` the `holdSource` is ignored ENTIRELY
+   (`HoldSourceSchema`'s own comment: "Ignored by `manual` (the operator ends the hold)"), so (b)
+   has **no defined duration at all** in those states — there is no `holdMs` to loop for. That is
+   the same structural hole that decided §5: an option with no defined behaviour in a shipped state
+   is not the smaller decision.
 
-`contentStart` is schema-constrained to `[activeRange.in, outPoint]` and so cannot exist without an
-`outPoint`. Today an out-point exists only via the "Add out point" button, and a composition with
-none resolves to `mode: 'static'` (D-114).
+### 9.2 Does an UNCONDITIONAL loop range imply an unconditional OUT-POINT? — GATED tasks 1.x — ✅ ANSWERED: (b), minimal form
+
+**ANSWER: remove ONLY the `hasContent` half of the gate; KEEP `lifecycle !== undefined`.** No
+implicit promotion out of `static`, no new compound verb, and **no new UI to offer one** — the
+existing "Add out point" button IS the first step, already on the same panel, already named for
+what it does. This is the minimal change that satisfies the item.
+
+The two candidates, kept as the record of why:
 
 - **(a) Offering the loop range implies creating an out-point.** Authoring a loop range on a
-  composition that has none silently promotes it out of `static`. **Cost:** an authoring action
-  named "loop" changes the composition's PLAYOUT MODE as a side effect — exactly the kind of
-  compound verb this codebase refuses elsewhere (the row's re-bind, the rehearse interlock).
+  composition that has none silently promotes it out of `static`.
 - **(b) The loop range still requires an out-point; the UI offers to add one, explicitly.** Two
   visible steps. **Cost:** "ALWAYS offered" becomes "always offered, sometimes after one more
   click", which is arguably not what D-133 asked for.
 
-**Design's read:** (b) is consistent with how this codebase treats compound verbs, and the item's
-own words are that the conditional affordance is "at most a shortcut" — which implies a path, not
-an absence of steps. **Not decided here.**
+**Why (b):**
 
-### 9.3 Canvas video under BACKWARD play and BOUNCE — GATES tasks 3.x, and it changes SHAPE
+1. **Creating an out-point is not a marker edit — it changes what the composition does ON AIR at
+   stop time.** `playoutOf` resolves a composition with no out-point and `manual`/absent mode to
+   `static` (`scene.ts` `playoutOf`), and `PlayoutSection`'s mode select DISABLES `static` once a
+   lifecycle exists. So seeding an out-point moves the composition from "hard cut on stop" to
+   `manual` with a real animated OUT segment `[outPoint, activeRange.out]`. An authoring action
+   named "loop" must not make that change silently.
+2. 🔴 **CORRECTION — this question's "compound verb" argument was overstated.** It claimed the
+   codebase uniformly refuses compound verbs; the counter-example is in the SAME FILE.
+   `changeMode()` already seeds an out-point implicitly — picking `auto-out` or `loop-cycle` with
+   no lifecycle calls `setLifecycle(defaultMarker())`. So the precedent exists and (a) would not be
+   unprecedented. **The distinction that actually decides it is ANNOUNCEMENT, not principle:**
+   choosing `auto-out` ANNOUNCES that you want an exit segment — the mode's own label reads "outro
+   after hold" — so seeding the out-point it requires completes the stated intent. Authoring a loop
+   range announces nothing of the kind.
 
-§5 establishes that a `<video>` cannot play backward. Under position-by-`currentTime` it _can_ be
-positioned backward — one seek per frame, against the decoder's grain (backward seeking is the
-worst case for inter-frame codecs). Three answers, and this one changes the implementation's shape
-rather than a constant in it:
+⚠ **CONSEQUENCE — `tasks.md` §3 becomes LOAD-BEARING for D-133's acceptance.** With this answer the
+loop range is offered only where an out-point exists, so what discharges the item's "the
+conditional affordance is at most a shortcut, **never the only path**" is §3's "**present by
+default** for a composition that loops or holds". §3 is therefore part of the item's acceptance,
+not decoration: it MUST NOT be dropped, deferred out of this change, or reduced to an opt-in
+affordance.
 
-- **(a) Position backward too, accepting whatever the decoder gives.** Consistent: every transport
-  mode drives every element the same way. **Cost:** backward play with video on the canvas may be a
-  slideshow. Unmeasured (§5.2 note 3).
-- **(b) Video freezes on the last forward frame during backward/bounce play**, and the canvas says
-  so (a small badge on the element). **Cost:** the canvas stops being a true rendition in two
-  transport modes, and it must SAY so or it lies.
-- **(c) Backward play positions video only on PAUSE** — during backward playback the element holds,
-  and it re-positions when the transport stops. **Cost:** the most complex of the three, and it
-  introduces a fourth behaviour to explain.
+### 9.3 Canvas video under BACKWARD play and BOUNCE — GATED tasks 3.x — ✅ ANSWERED: (a), and the question's PREMISE was FALSE
 
-**Not observed — needs the owner at the machine.** How bad backward-seeking actually is on this
-project's assets (~5 s keyframe interval, per `video-driver.ts`) can only be established by
-watching it. That measurement should be taken BEFORE choosing, and it is cheap: scrub a video
-element backward on the canvas today, at speed, and watch.
+**ANSWER: (a) — position backward and bounce exactly as forward. Every transport mode drives every
+element the same way, and there is no special case for direction anywhere in the implementation.**
 
-**Design's read:** (a) if the measurement is tolerable, (b) if it is not. (c) only if the owner
-wants backward play to remain smooth with video present.
+#### The measurement (2026-08-12)
 
-### 9.4 Does a Lottie/video that is NOT a hold driver follow the playhead? — GATES tasks 3.x, 4.x
+Chrome 151, one 1920×1080 VP8+alpha element (1 s fixed GOP, per the converter — see below), 200
+ticks driven at 25 fps over 8.0 s:
 
-`drivesHold` is an OPT-IN for media (`=== true`, the inverse of ticker/sequence/clock). A Lottie
-with `drivesHold` absent is furniture: it does not gate the hold.
+| pass     | distinct frames/s | seeks issued | ticks skipped |
+| -------- | ----------------- | ------------ | ------------- |
+| FORWARD  | 10.2              | 83           | 117           |
+| BACKWARD | **10.6**          | 88           | 112           |
+| BOUNCE   | 8.2               | 79           | 121           |
+
+Seek latency median 50 ms, p95 125 ms. 85 of the 88 backward seeks yielded a distinct frame.
+
+#### 🔴 The premise was false, and the REASON outlives the number
+
+**Backward is not worse than forward. It is 4 % FASTER — i.e. equal within noise.** This question
+was built on "backward seeking is the worst case for inter-frame codecs", which is **true of
+PLAYBACK and false of POSITIONING**:
+
+> Under position-by-`currentTime`, EVERY tick is a random seek that decodes from the nearest
+> preceding keyframe. **Direction does not enter the computation at all.** A backward step and a
+> forward step are the same operation on the same decoder path; only the target timestamp differs.
+
+That is why the reason is worth more than the number: a future reader re-measuring on a different
+asset will get different frames-per-second, and the same conclusion.
+
+**(b) and (c) are therefore rejected ON EVIDENCE, not on preference.** Each invents a special case
+— a freeze-and-badge, or a defer-until-pause — for a direction that is measurably not special.
+Their costs (the canvas ceasing to be a true rendition in two transport modes; a fourth behaviour
+to explain) would be paid for nothing.
+
+#### What this lets the spec SAY, and the conditions it must carry
+
+§5.3's warning can now carry a NUMBER: roughly **one new frame every ~94 ms — every 2nd–3rd frame
+at 25 fps** — with ~56 % of ticks skipped by the seek-in-flight guard (the BACKWARD pass, the one
+this question was about; forward is equivalent within noise). **State the conditions with it every
+time**: ONE 1920×1080 VP8+alpha element, 1 s GOP, Chrome 151, driven at 25 fps. A bare number with
+no conditions invites the next reader to treat it as a guarantee.
+
+Two honest limits, recorded so nobody over-reads the table:
+
+- **It measured ONE element.** §5.3's "especially with two or more video elements" claim remains
+  UNMEASURED, and is retained as a qualitative statement only.
+- **1080p VP8+alpha is software-decoded twice over in Chromium** (the colour stream and the alpha
+  side stream, neither hardware-accelerated). So this is a **conservative floor**, not a typical
+  case.
+
+#### 🔴 CORRECTION — the keyframe-interval premise under this question was STALE by 5×
+
+This question, and §5.2 note 3, both rest on `video-driver.ts`'s "~5 s keyframe interval on this
+project's assets", and this question called that "a measurement, not a guess". **It is a
+measurement of an era that ended in July.**
+
+- `apps/designer/src/renderer/features/assets/video-convert-args.ts` converts every imported video
+  to VP8+alpha (`libvpx`, `yuva420p`, `-crf 4` / `-qmax 16`) with **`-g 25 -keyint_min 25`** — a
+  **FIXED 1-second GOP at 25 fps** — with the colour and alpha streams keyframing TOGETHER since
+  converter revision `2026-07-25.5`. The arg's own comment says it: "every seek decodes ≤1s instead
+  of ≤5s".
+- So the canvas's worst-case seek — in EITHER direction — decodes **≤25 frames, not ~125**. The
+  design's stated cost was overstated by 5× for any asset imported under `2026-07-24.3` or later.
+- `video-driver.ts`'s comment describes the pre-`.3` era and is now misleading **at its own site**;
+  it is annotated there so the next reader does not re-derive this premise from the stale number.
+
+**What the element on the canvas actually IS — the fact that invalidated the first measurement
+attempt:** always the CONVERTED `.webm`, never the imported source. A source AVI / MOV / MXF is not
+decodable by Chromium at all, so it cannot be measured and must never be used as the measurement
+subject.
+
+#### A FOURTH answer this question never considered — recorded as an option, NOT chosen
+
+**The GOP is a knob this project OWNS.** It is versioned by `CONVERTER_REVISION` with an existing
+re-import prompt, and going from ~5 s to 1 s cost only **+3.5 % file size** by
+`video-convert-args.ts`'s own measurement. Shortening it further is therefore plausibly cheap and
+would raise the frames-per-second above, at the cost of a `CONVERTER_REVISION` bump and a re-import
+of the client's library. Had the measurement landed SHORT of (a), this was the option to weigh
+before accepting (b).
+
+It is **not chosen here**, and it is **not a licence to re-litigate** the `-crf 4` / `-qmax 16`
+broadcast-quality decision, which is the owner's and is settled. Recorded as a follow-up option
+with its cost; no item number is minted for it here.
+
+### 9.4 Does a Lottie/video that is NOT a hold driver follow the playhead? — GATED tasks 3.x, 4.x — ✅ ANSWERED: (a)
+
+**ANSWER: (a) — EVERY Lottie and EVERY video follows the playhead, regardless of `drivesHold`.**
 
 - **(a) EVERY Lottie/video follows the playhead**, regardless of `drivesHold`. `drivesHold` answers
   "does this gate the HOLD", which is a different question from "does the canvas show its frame".
@@ -469,12 +644,39 @@ with `drivesHold` absent is furniture: it does not gate the hold.
   not a hold driver would sit frozen on the canvas while the composition plays — which is the exact
   misrepresentation D-135 exists to remove.
 
-**Design's read: (a), strongly.** They are orthogonal questions and conflating them would defeat
-the item. Recorded as an open question anyway because it is a product-visible choice and the
-inverse-default of `drivesHold` is load-bearing elsewhere — a reader who saw `drivesHold` and
-assumed it governs this would not be being unreasonable.
+**The two flags are ORTHOGONAL, and that is now stated IN THE SPEC**, not only here. The inverse
+default for media (`drivesHold === true` opt-in, against ticker/sequence/clock's `!== false`) is
+load-bearing elsewhere, so a later reader who saw `drivesHold` and assumed it governs
+playhead-following would not be being unreasonable — which is precisely why the spec says it out
+loud rather than leaving it to be inferred from an implementation that simply never reads the flag
+on this path.
 
----
+### 9.5 🔴 NEW — OPEN: does forward-1× PLAY drive a canvas video through the shipped `VideoDriver`? — GATES tasks 5.x ONLY
+
+**Opened by §9.3's measurement, 2026-08-12. NOT decided.** It gates `tasks.md` §5 (the video half)
+together with §9.4. It does **NOT** gate §4 (the Lottie half), and it does not gate anything in
+D-133.
+
+§5.4 rejected play-and-re-anchor and conceded it would be "genuinely better, in the one mode where
+it works" — **without knowing the size of the gap.** The measurement supplies it: the gap is
+**~10 fps against 25 fps**, and forward-1× play is precisely the operation D-135's own "Why" names
+as the one the operator uses to judge the composition. That re-opens something §5.4 closed under an
+unknown.
+
+So a HYBRID that §5 never considered is on the table: **forward-1× play drives the element through
+the shipped `VideoDriver` (a real `play()`, real drift correction); scrub, backward play and bounce
+position it by `currentTime`.**
+
+- **FOR:** it recovers frame-true motion in the DOMINANT mode. And §5.4's objection that it would
+  "re-import the whole drift/re-base/resume-grace machine" is **weaker than it was written**: that
+  machine EXISTS, is SHIPPED, and is what the Preview already uses. The hybrid would reuse it, not
+  re-import it.
+- **AGAINST:** it is exactly the fork §5.1(b) warns about — two mechanisms, where the SINGULARITY
+  of one call is what guarantees scrub and play agree — plus a hand-off at every ENTRY to and EXIT
+  from forward-1× play, on a surface that reparents nodes (B-137's shape, §1.8).
+
+**Not decided here.** Answering it means weighing frame-true forward play against the one-call
+guarantee D-135's acceptance rests on.
 
 ## 10. What was expected and NOT found
 

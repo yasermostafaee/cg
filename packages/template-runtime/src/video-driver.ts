@@ -53,6 +53,19 @@ import type { RuntimeClock } from './types.js';
  *     bursts) and, with two videos, is the "very slow for a few seconds then recovers"
  *     the owner saw. The WRAP and the always-recoverable paths are never suppressed.
  *
+ *     ⚠ STALE NUMBER, KEPT FOR ITS HISTORY (annotated 2026-08-12). The "~5 s keyframe
+ *     interval" above describes the assets of its own era and is NOT this project's
+ *     conversion output any more: since converter revision `2026-07-24.3` every imported
+ *     video is encoded with `-g 25 -keyint_min 25` — a FIXED 1-SECOND GOP at 25 fps (and
+ *     since `2026-07-25.5` the colour and alpha streams keyframe TOGETHER). See
+ *     `apps/designer/src/renderer/features/assets/video-convert-args.ts`, whose own
+ *     comment reads "every seek decodes ≤1s instead of ≤5s". A seek therefore decodes
+ *     ≤25 frames, not ~125. The grace window is still correct — a ramping decoder should
+ *     not be hammered — but do NOT re-derive a cost estimate from the 5 s figure: a
+ *     design (`openspec/changes/timeline-drives-loop-and-media/design.md` §9.3) did
+ *     exactly that and was overstated by 5×. Pre-`.3` assets in an existing library are
+ *     the reason the number is annotated rather than simply replaced.
+ *
  * PHASE MAPPING (clip's own ms time space; decisions (a)–(d)):
  *
  * | Composition phase | This driver                                              |
@@ -139,8 +152,11 @@ export interface VideoDriverOptions {
   resyncThresholdMs?: number | undefined;
   /**
    * After a resume (or a large-gap re-base) the `<video>` decoder must RAMP UP — and a
-   * seek at our current ~5 s keyframe interval means decoding seconds of video in one
-   * burst. Firing drift corrections during that ramp is self-amplifying: each corrective
+   * seek at a multi-second keyframe interval means decoding seconds of video in one
+   * burst. (⚠ The "~5 s" this comment used to name is STALE — this project's converter
+   * has emitted a fixed 1-second GOP since `2026-07-24.3`; see the annotation on RESUME
+   * GRACE in this file's header.) Firing drift corrections during that ramp is
+   * self-amplifying: each corrective
    * seek is another keyframe burst that stalls the decoder more, accruing more drift and
    * more seeks (very slow for a few seconds, then it self-heals — the owner's report,
    * doubled with two videos). For this window (ms) drift correction is SUPPRESSED so the

@@ -3481,7 +3481,27 @@ error-prone.
 
 **Notes:** additive schema field, default absent.
 
-## [~] D-133 — loop range visualization ON the timeline, and an UNCONDITIONALLY authorable loop range (Cinegy-style) ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-135]] as ONE change; no implementation task is ready — four owner decisions are open in `design.md` §9)
+## [~] D-133 — loop range visualization ON the timeline, and an UNCONDITIONALLY authorable loop range (Cinegy-style) ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-135]] as ONE change; **all four owner decisions ANSWERED 2026-08-12** — every D-133 task is unblocked, none is gated)
+
+> **Owner decisions (`design.md` §9), answered 2026-08-12 — the two that bind this item:**
+> **§9.1 — the loop range under a `timed` hold is INERT**, exactly as this item's acceptance says,
+> **and the surface must state that it is inert and what would make it active** (an inert control
+> with no explanation is what raised the question). **§9.2 — only the `hasContent` half of the gate
+> is removed; `lifecycle !== undefined` stays.** The shipped "Add out point" button IS the path to
+> an out-point, and authoring a loop range never creates one as a side effect — creating one moves
+> the composition out of `static`, which changes what it does on air at stop time.
+>
+> ⚠ **Consequence:** because the loop range is offered only where an out-point exists, what
+> discharges this item's "the conditional affordance is at most a shortcut, never the only path" is
+> `tasks.md` §3 — the loop range being **present by default** for a composition that loops or holds.
+> §3 is part of this item's acceptance, not decoration.
+>
+> 🔴 **A recorded fact under this item was FALSE and is withdrawn:** the design claimed removing the
+> gate would also fix a discrepancy, because `hasContentElement` supposedly counted "no Lottie, no
+> video". It counts opted-in media exactly as the canonical predicate does. The genuine divergence
+> is `drivesHold` on ticker/sequence/countdown clock and D-112 `holdOverrides`, and this change
+> removes it at "Pin content start" ONLY — the Hold-source select and the `ContentHoldChecklist`
+> keep it, deliberately (`design.md` §8 risk 5). No item number is minted for that residual here.
 
 **What:** Show a composition's loop/hold range directly on the timeline — start/end markers
 present by default when the composition repeats/holds — with the playhead wrapping at the loop
@@ -3545,7 +3565,31 @@ the clock renders that offset's time.
 **Notes:** additive field alongside `timezone` (`ClockElementSchema`); countdown/countup ignore it
 like they ignore `timezone`.
 
-## [~] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; the play-and-re-anchor vs position-by-`currentTime` question is ANSWERED in `design.md` §5)
+## [~] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; §5 answers play-and-re-anchor vs position-by-`currentTime`; **all four §9 decisions ANSWERED 2026-08-12** — the LOTTIE half is unblocked and built, the VIDEO half is gated on ONE new question, §9.5)
+
+> **Owner decisions (`design.md` §9), answered 2026-08-12 — the two that bind this item:**
+> **§9.4 — EVERY Lottie and EVERY video follows the playhead, regardless of `drivesHold`.** The
+> flags are orthogonal: `drivesHold` answers "does this gate the HOLD", not "does the canvas show
+> this element's frame" — and the spec now says so out loud, because media's inverse default
+> (`=== true`, an opt-in) is load-bearing elsewhere. **§9.3 — backward play and bounce position the
+> element exactly as forward play does; no direction special case.**
+>
+> 🔴 **§9.3's PREMISE was false, and the reason outlives the number.** MEASURED 2026-08-12 (Chrome
+> 151, one 1920×1080 VP8+alpha element, 1 s GOP, 200 ticks at 25 fps): backward **10.6** distinct
+> frames/s against forward **10.2** — backward is 4 % FASTER, i.e. equal within noise. Under
+> position-by-`currentTime` every tick is a random seek decoding from the nearest preceding
+> keyframe, so **direction does not enter the computation at all**. "Backward is the worst case for
+> inter-frame codecs" is true of PLAYBACK and false of POSITIONING. Two further corrections came
+> with it: this project's converter emits a **fixed 1-second GOP** (`-g 25 -keyint_min 25`), so the
+> design's "~5 s keyframe interval" premise was stale by 5×; and **`fastSeek()` does not exist on
+> this engine**, so that recommendation is deleted rather than hedged.
+>
+> 🔴 **ONE NEW QUESTION, OPEN — `design.md` §9.5, and it gates the VIDEO half alone.** The
+> measurement shows the gap between positioning (~10 fps) and real forward-1× playback (25 fps) in
+> precisely the operation this item's "Why" names as the one the operator judges the composition
+> by. So a hybrid §5 never considered is on the table: forward-1× play through the shipped
+> `VideoDriver`, with scrub / backward / bounce positioned. **Not decided.** It does NOT gate the
+> Lottie half, and it does not gate anything in [[D-133]].
 
 **What:** The canvas follows the playhead for both frame-mapped element kinds, under BOTH ways the
 playhead moves. **(a) Scrub:** while scrubbing, each Lottie element on the canvas shows the exact
