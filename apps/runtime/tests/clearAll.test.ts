@@ -42,7 +42,7 @@ function byId(stack: readonly StackItemState[], itemId: string): StackItemState 
   return found;
 }
 
-describe('isOnAir — one predicate, shared by the row and the header', () => {
+describe('isOnAir — the GRACEFUL predicate (B-122: no longer Clear-All’s)', () => {
   const item = (status: StackItemState['status']): StackItemState => ({
     itemId: 'i',
     templateId: 't',
@@ -51,18 +51,19 @@ describe('isOnAir — one predicate, shared by the row and the header', () => {
     pending: false,
   });
 
-  it('an idle or merely-loaded item has nothing to clear', () => {
-    // `loaded` has been CG ADD-ed but never PLAYed — there is nothing on air yet.
+  it('an idle or merely-loaded item has no outro to run', () => {
+    // `loaded` has been CG ADD-ed but never PLAYed — there is nothing on air yet, so
+    // STOP has nothing to ask of it. B-122 — this is NOT the reason Clear-All would
+    // skip it, because Clear-All no longer skips anything that holds a layer.
     expect(isOnAir(item('idle'))).toBe(false);
     expect(isOnAir(item('loaded'))).toBe(false);
   });
 
-  it('anything that might be showing something IS clearable', () => {
+  it('anything that might be showing something IS stoppable', () => {
     expect(isOnAir(item('on-air'))).toBe(true);
     expect(isOnAir(item('playing'))).toBe(true);
     expect(isOnAir(item('updating'))).toBe(true);
-    // B-044 — an item whose true state is UNKNOWN is precisely the one an operator most
-    // needs to be able to clear.
+    // B-044 — an item whose true state is UNKNOWN may well be showing something.
     expect(isOnAir(item('unconfirmed'))).toBe(true);
   });
 });
@@ -76,7 +77,7 @@ describe('stack.clearAll', () => {
     expect(before.filter(isOnAir)).toHaveLength(2);
 
     const result = mock.clearAll();
-    expect(result).toEqual({ ok: true, cleared: 2 });
+    expect(result).toEqual({ ok: true, cleared: 2, attempted: 2, refused: [] });
 
     // The rows never leave the stack — not even mid-transition, while they are `exiting`.
     expect(mock.stackSnapshot()).toHaveLength(2);
@@ -91,27 +92,34 @@ describe('stack.clearAll', () => {
     expect(after.filter(isOnAir)).toHaveLength(0);
   });
 
-  it('leaves a merely-loaded item alone — it was never on air', async () => {
+  it('B-122 — a merely-loaded item is cleared TOO: the cued row is the accepted cost', async () => {
     const mock = emptyMock();
     mock.load('item-loaded', 'tpl-1', {});
     await loadAndPlay(mock, 'item-live');
 
-    expect(mock.clearAll()).toEqual({ ok: true, cleared: 1 });
+    // ⭐ THIS TEST ASSERTED THE OPPOSITE, and the assertion was the defect written
+    // down: it required Clear-All to spare a row on the strength of its BELIEVED status.
+    // That is the same reasoning that spares a whole stack of WRONGLY-idle rows in the
+    // emergency the button exists for. The owner's decision (2026-08-12) is that a clear
+    // goes to every row the console holds, whatever it believes.
+    expect(mock.clearAll()).toEqual({ ok: true, cleared: 2, attempted: 2, refused: [] });
     await settle();
 
     const after = mock.stackSnapshot();
     expect(after).toHaveLength(2);
-    // Untouched: still loaded and ready to take, not knocked back to idle.
-    expect(byId(after, 'item-loaded').status).toBe('loaded');
+    // Both rows are now idle. The cued row lost its pre-rolled producer and will re-load
+    // on its next play — deliberately, and it is the cheaper of the two failures.
+    expect(byId(after, 'item-loaded').status).toBe('idle');
     expect(byId(after, 'item-live').status).toBe('idle');
   });
 
-  it('is a no-op when nothing is on air', () => {
+  it('sends nothing ONLY with an empty stack — and never calls that a success', () => {
     const mock = emptyMock();
-    mock.load('item-loaded', 'tpl-1', {});
 
-    expect(mock.clearAll()).toEqual({ ok: true, cleared: 0 });
-    expect(mock.stackSnapshot()).toHaveLength(1);
+    // Nothing to address at all is the one honest no-op, and it does not come back as
+    // `ok: true`. A success report for a no-op is the exact shape of B-122's lie.
+    expect(mock.clearAll()).toEqual({ ok: false, cleared: 0, attempted: 0, refused: [] });
+    expect(mock.stackSnapshot()).toHaveLength(0);
   });
 
   it('is NOT Remove-All: the list survives clear, and does not survive remove', async () => {

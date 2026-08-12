@@ -5,6 +5,7 @@ import type {
   FixedLayerBank,
   FixedSlotObservation,
   FixedSlotState,
+  LayerClearReason,
   LockState,
   OrphanLayer,
   OwnedOccupancyWarning,
@@ -434,25 +435,40 @@ export class MockRuntime {
   }
 
   /**
-   * Take every ON-AIR item off air, and KEEP it on the stack (it settles to idle).
+   * Take every item off air, and KEEP it on the stack (it settles to idle).
    *
-   * Parity with the real bridge: the same status predicate (everything not `idle`/`loaded` —
-   * the row's own Clear gating) and the same per-item `out()`, which in the mock runs the
-   * same B-070/B-056 bookkeeping a single Clear does. No new verb, and the list is untouched
-   * — that is the whole difference from `removeAll`.
+   * ⭐ **B-122 — NO STATUS PREDICATE, matching the bridge.** This used to filter on
+   * everything-not-`idle`/`loaded`, mirroring the bridge's old candidate set. That set was
+   * the defect: it gated the emergency control on precisely the values that may be wrong in
+   * the emergency, and returned a SUCCESS having sent nothing. The owner's decision
+   * (2026-08-12) is that a clear goes to every row the console holds, whatever it believes —
+   * including the merely-`loaded` ones. ⚠ Do not reintroduce a status filter here; the mock
+   * demonstrating a narrower Clear-All than the bridge is how the wrong behaviour gets
+   * "confirmed" in test mode.
    *
-   * It deliberately does NOT also filter on "holds a slot", which the bridge does for
-   * broadcast safety (clear only the layers we allocated; never a channel-wide clear). The
-   * mock allocates NO slots and reaches NO server — there is no wire, no channel and no
-   * program feed to protect here. Adding that filter would simply make Clear-All a no-op in
-   * test mode, which is the one place it needs to be exercisable.
+   * The bridge's remaining filter is "holds a bound slot" — an OWNERSHIP fact, not a belief,
+   * and its broadcast-safety point is that we clear only the layers we allocated and never a
+   * channel. The mock allocates NO slots and reaches NO server: there is no wire, no channel
+   * and no program feed to protect, so every row is addressable and `attempted` is simply the
+   * stack length. Applying the bridge's slot filter here would make Clear-All a permanent
+   * no-op in the one mode where it needs to be exercisable.
+   *
+   * `refused` is always empty: the Live Source ledger is a bridge-side structure and the mock
+   * has none. The field is reported rather than omitted so the shape is identical either way.
    */
-  clearAll(): { ok: boolean; cleared: number } {
-    const onAir = this.#stack.filter((i) => i.status !== 'idle' && i.status !== 'loaded');
-    for (const item of onAir) {
+  clearAll(): {
+    ok: boolean;
+    cleared: number;
+    attempted: number;
+    refused: { itemId: string; reason: LayerClearReason }[];
+  } {
+    const addressable = [...this.#stack];
+    for (const item of addressable) {
       this.out(item.itemId);
     }
-    return { ok: true, cleared: onAir.length };
+    const attempted = addressable.length;
+    // Nothing owed is not a success — the honest shape the operator's toast reads.
+    return { ok: attempted > 0, cleared: attempted, attempted, refused: [] };
   }
 
   // ── R-021 stage 2a: fixed-bank parity ───────────────────────────────

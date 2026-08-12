@@ -2884,7 +2884,7 @@ re-derived by the next sweep.
 upgrade, which would change the ordering constraint here — on 2.5.0 the volume must land BEFORE
 the `CG ADD`, never after. Source: `DEBT.md:1104`.
 
-## [ ] B-122 — `CLEAR ALL` is always ENABLED but is not always EFFECTIVE: it filters on the very statuses that may be wrong, and reports success having sent nothing ⟨priority: high — reaches air⟩
+## [~] B-122 — `CLEAR ALL` is always ENABLED but is not always EFFECTIVE: it filters on the very statuses that may be wrong, and reports success having sent nothing ⟨priority: high — reaches air⟩
 
 > ⚠ **`layers.clear` gained a FOURTH refusal reason on 2026-08-12 — `live-source`** (C-015 phase 5,
 > a bridge-owned Live Source layer; it is neither `foreign` nor `owned`). Whatever fixes this item
@@ -2916,10 +2916,47 @@ worked, and the graphic is still on air. Found by the adversarial self-review th
 - The per-row CLEAR is unchanged.
 
 **Notes:** the predicate change is on-air bridge behaviour, which is why it was left out of the UI
-review that found it. It also needs a decision the fix cannot dodge: **should CLEAR ALL hard-cut
-rows the model believes are merely `loaded`** (not yet on air)? Related: [[R-012]] is the
-Clear-All feature this defect sits inside. Source: `DEBT.md:1539`, restated at `DEBT.md:2558`
-inside the `dev-clear-bank-scoped` DONE entry (`DEBT.md:2456`).
+review that found it. Related: [[R-012]] is the Clear-All feature this defect sits inside. Source:
+`DEBT.md:1539`, restated at `DEBT.md:2558` inside the `dev-clear-bank-scoped` DONE entry
+(`DEBT.md:2456`).
+
+⭐ **THE OPEN DECISION IS ANSWERED (owner, 2026-08-12): YES.** The question was whether CLEAR ALL
+should hard-cut rows the model believes are merely `loaded` and not yet on air. **It does** — a
+clear is sent for every item with a bound slot, whatever the status claims, `loaded` included.
+
+**The rationale, recorded so it is not re-litigated: filtering on status IS the defect.** An
+emergency control must not depend on the bookkeeping whose failure is the emergency. **Losing a
+cued row is the accepted cost** — it loses its pre-rolled producer and re-ADDs on its next play,
+which is cheap; the alternative cost is a graphic stranded on air with the console reporting
+success, which is not.
+
+**Landed 2026-08-12** (`fix(caspar-bridge,runtime,shared-ipc): B-122/B-125`). What changed:
+
+- `caspar-runtime.clearAll()` — the status filter is gone. The only remaining question is the
+  STRUCTURAL one (does the item hold a slot), which is also the broadcast-safety property that
+  keeps this per-LAYER.
+- `stack.clear-all` now answers `{ ok, cleared, attempted, refused }`. `cleared` counts what
+  CasparCG **accepted**, `attempted` what was **sent**, and `ok` is true only when something was
+  owed and all of it landed — so no shape of no-op can return a success. `LayersPanel` reports all
+  three outcomes (complete / partial / nothing sent) instead of discarding the result, which is
+  how a bulk verb that sent nothing used to look like it had worked.
+- ⚠ **A Live Source layer still refuses**, with C-015 phase 5's distinct `live-source` reason, via
+  the same `#isLiveLayer` the other three ownership doors read. Pinned by a boundary test: the
+  ledgered row survives and its identical unledgered neighbour is cleared.
+- `isOnAir` survives as **STOP ALL's** predicate only, with the prohibition written on it. STOP is
+  the one bulk verb where the status is the right question — `CG STOP` asks for an authored outro,
+  which a never-played row does not have — and `clearAll`/`stopAll` now differ deliberately.
+
+**Two findings from the fix, worth keeping:**
+
+1. **On a HEARING plant this defect is nearly invisible**, because the occupancy tap keeps the
+   status honest and the filter rarely excludes anything wrongly. It bites on the **OSC-less
+   install** ([[B-094]] / [[B-101]]), where nothing corrects the belief. That is why the
+   regression test is built on a deliberately deaf tap — a hearing one cannot construct the bug.
+2. The old UI dialog **documented the defect in its own body text** ("this may send no commands at
+   all … use CLEAR on its own row"), i.e. a bulk emergency control whose confirm dialog told the
+   operator to use a different control. Worth reading as a signal: when wording has to apologise
+   for a verb, the verb is what needs changing.
 
 ## [ ] B-123 — the failover banner overlays the monitor strip instead of pushing it down ⟨priority: low⟩
 
@@ -2946,7 +2983,7 @@ something narrower than its name is how that decision gets made on a wrong numbe
 
 **Env:** Runtime shell, pre-existing. Source: `DEBT.md:1722`.
 
-## [ ] B-125 — a bound-row race lets the unbound branch CLEAR a just-loaded producer, and the item's state machine still reads `loaded` while the layer is empty ⟨priority: high — reaches air⟩
+## [~] B-125 — a bound-row race lets the unbound branch CLEAR a just-loaded producer, and the item's state machine still reads `loaded` while the layer is empty ⟨priority: high — reaches air⟩
 
 > ⚠ **`layers.clear` gained a FOURTH refusal reason on 2026-08-12 — `live-source`** (C-015 phase 5,
 > a bridge-owned Live Source layer; it is neither `foreign` nor `owned`). Whatever fixes this item
@@ -2975,6 +3012,42 @@ clear when the layer is owned. That reintroduces dependence on the very bookkeep
 hatch exists to bypass. The proper fix is to reconcile **after** a successful clear, which is
 on-air bookkeeping and wants its own diff. Source: `DEBT.md:2207`, with the full finding at
 `DEBT.md:2535` inside the `dev-clear-bank-scoped` DONE entry (`DEBT.md:2456`).
+
+**Landed 2026-08-12** (same commit as [[B-122]]) — `clearBankLayer` calls a new
+`#reconcileClearedSlot(slot)` **after** the CLEAR is acked, never before it, and never on a
+refusal. The rejected fix was not reproposed: the clear stays unconditional and the bookkeeping
+catches up behind it.
+
+⭐ **THE DAMAGE HAS TWO HALVES, AND ONLY ONE OF THEM IS A STATUS STRING.** This was the finding
+that shaped the test, and it is the part the item as filed understated:
+
+1. **`#loaded` — the bridge's own producer record — is the durable half.** It is what `take()`'s
+   B-039 pre-roll reads to decide whether to re-`CG ADD`. Left stale, the next take sends a bare
+   `CG PLAY` onto an **empty layer**: accepted on the wire, and **nothing on air**. This never
+   self-heals, on any install, and it is what the regression test asserts — on the COMMANDS, not
+   on a rendered string.
+2. **The published status is the fragile half.** On a plant with a working OSC tap it self-heals
+   within one TTL (the tap observes `empty`, `freshTruth` derives `idle`), so a test written
+   against the status alone would have **passed before the fix** and been a test of the tap. On an
+   OSC-less install ([[B-094]] / [[B-101]]) the correction never arrives and the row lies until
+   the operator hits REMOVE — the item's wording exactly.
+
+**Two related gaps, deliberately NOT fixed here — recorded rather than actioned:**
+
+- **`clearBankLayer` is a FOURTH clear door that C-015 phase 5 did not fence.** Phase 5 wired
+  `live-source` into three doors (the R-009 sweep, the C-014 quarantine, `clearLayer`); this one
+  checks only `reserved` + bank membership. Whether it should refuse a Live Source layer is a real
+  question with two defensible answers: **(a) add the refusal** — a guest's face is never the
+  operator's to cut from a bank row, and the ledger is bridge-owned config-like state, not a
+  status; **(b) leave it** — this door's stated doctrine is that it consults nothing that can be
+  wrong, and the ledger can be wrong. Not decided here because nothing seats a live producer until
+  C-015 phase 6.1, so the case is not yet reachable. It must be decided **before** phase 6.1
+  lands.
+- **Live Source layers survive CLEAR ALL entirely.** Under phase 6 an item will own a template
+  layer AND live plate layers; CLEAR ALL clears the first and refuses the second, so a guest feed
+  could be left running with no template over it. That is phase 6's problem to answer (probably by
+  tearing the item's live layers down with it), and it is named here so it is not discovered on
+  air.
 
 ## [ ] B-126 — the adopt-`CLEAR` succeeded and the `CG ADD` after it failed, leaving the layer empty: the CLEAR/ADD pair is not atomic in the other direction ⟨priority: high — reaches air⟩
 

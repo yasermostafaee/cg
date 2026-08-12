@@ -8,6 +8,10 @@ import {
 } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
+// B-122 — Clear-All's refusals speak the ONE canonical reason list, never an
+// inline literal, so a reason added at the `layers.clear` door (as `live-source`
+// was) cannot exist on the wire and be unrepresentable here.
+import { LAYER_CLEAR_REASONS } from './layers.js';
 
 /**
  * Stack channels (Phase 7 §3 / Phase 5 §8). The Reconciler in Main owns
@@ -146,23 +150,56 @@ export const StackRemoveAllChannel = defineChannel(
  * recovering means re-importing/reloading and re-typing every field. Clear-All leaves the
  * rows exactly where they were, idle and re-takeable.
  *
- * NO new AMCP verb. It iterates the items that are actually on air and issues the SAME
+ * NO new AMCP verb. It iterates the items that hold a layer of ours and issues the SAME
  * per-item `out()` the row's Clear button sends — a `CLEAR <ch>-<layer>` on the urgent
  * (air-safety) lane, with the same B-039 CLEAR-destroys bookkeeping, so a later take re-ADDs.
- * The predicate matches the row's Clear gating exactly: everything that is not `idle` or
- * `loaded`. Clear-All IS "press Clear on every row where Clear is enabled".
+ *
+ * ⭐ **B-122 — IT DOES NOT ASK THE STATUS, AND MUST NEVER BE MADE TO AGAIN.**
+ *
+ * It used to filter its candidates on `status` (everything not `idle`/`loaded`), which made
+ * the emergency control depend on **precisely the values that may be wrong in the emergency**.
+ * With every item wrongly reading `idle` it sent nothing and returned a SUCCESS with a cleared
+ * count of zero — an operator told the escape hatch worked while the graphic was still on air,
+ * which is worse than a disabled button, because a disabled button tells the truth.
+ *
+ * The owner's decision (2026-08-12) is therefore: **a clear is sent for EVERY item holding a
+ * bound slot, regardless of believed status — including rows the model believes are merely
+ * `loaded` and not yet on air.** Losing a cued row is the ACCEPTED COST. The only question
+ * this verb may ask about an item is the structural one — does it hold a layer of ours —
+ * never what it believes is on that layer. ⚠ Do not reintroduce a status predicate here under
+ * another name.
+ *
+ * **THE REPORT COUNTS WHAT ACTUALLY WENT.** `attempted` is how many clears were sent,
+ * `cleared` how many CasparCG accepted, and `refused` names the items deliberately not
+ * addressed. `ok` is true only when something was owed AND all of it landed, so a no-op can
+ * never come back dressed as a success.
+ *
+ * **`refused` — C-015 phase 5's third ownership class.** A bound slot that is in the bridge's
+ * Live Source ledger is NOT cleared: broadening this verb must not let it reach a layer that
+ * was just fenced off, and cutting a guest's face off air from a button that never named it
+ * is exactly that hazard. The reason comes from {@link LAYER_CLEAR_REASONS}, the one canonical
+ * list, so a reason added later cannot be silently missed here.
  *
  * **BROADCAST SAFETY — per-LAYER, never per-channel.** It clears only the layers this app
- * itself allocated, one `CLEAR <ch>-<layer>` per on-air item. It MUST NEVER emit a
- * channel-level `CLEAR <channel>`: that wipes the entire channel, including the
- * program/background signal this app does not manage and must never touch. Taking our
- * graphics off air has to leave the program feed ON AIR. An item holding no slot holds no
- * layer of ours, so nothing is sent for it.
+ * itself allocated, one `CLEAR <ch>-<layer>` per item. It MUST NEVER emit a channel-level
+ * `CLEAR <channel>`: that wipes the entire channel, including the program/background signal
+ * this app does not manage and must never touch. Taking our graphics off air has to leave the
+ * program feed ON AIR. An item holding no slot holds no layer of ours, so nothing is sent for
+ * it — that is a statement about OWNERSHIP, not about status, and it is the one filter that
+ * belongs here.
  */
 export const StackClearAllChannel = defineChannel(
   'stack.clear-all',
   z.void(),
-  z.object({ ok: z.boolean(), cleared: z.number().int().nonnegative() }),
+  z.object({
+    ok: z.boolean(),
+    /** Clears CasparCG ACCEPTED — what actually went. Never a candidate count. */
+    cleared: z.number().int().nonnegative(),
+    /** Clears SENT (`cleared` + those the server rejected). */
+    attempted: z.number().int().nonnegative(),
+    /** Bound-slot items deliberately not addressed, and why. */
+    refused: z.array(z.object({ itemId: IdSchema, reason: z.enum(LAYER_CLEAR_REASONS) })),
+  }),
 );
 
 /**

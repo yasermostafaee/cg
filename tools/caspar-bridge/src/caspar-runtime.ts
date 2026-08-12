@@ -2855,11 +2855,71 @@ export class CasparRuntime {
     }
     const slot: CommandSlot = { channel, layer };
     const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    if (!ok) return { ok: false, reason: 'amcp-error' };
     // Adoption marking mirrors `clearLayer`: a CLEAR we executed on the current
     // primary is an adoption, so the bookkeeping stays consistent with the other two
     // clear paths. It is bookkeeping ONLY — it is never a precondition above.
-    if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
-    return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };
+    if (onPrimary) this.#markAdoptedOnPrimary(slot);
+    // B-125 — AFTER the clear landed, never before it. See `#reconcileClearedSlot`.
+    this.#reconcileClearedSlot(slot);
+    return { ok: true };
+  }
+
+  /**
+   * B-125 — the layer was just CLEARed by a LAYER-addressed command; make the
+   * ITEM bookkeeping say so.
+   *
+   * ── THE RACE THIS CLOSES ────────────────────────────────────────────────────
+   *
+   * The operator's row routes CLEAR on `item === null` **at click time**. If a
+   * load + take binds an item to that layer in the instant between the render
+   * that saw an empty row and the click that acted on it, the UNBOUND branch
+   * fires and destroys a producer the stack item still believes is resident —
+   * without going through `out()`, which is where that belief is normally
+   * retired. Two things are then left lying:
+   *
+   *   - `#loaded` still holds the item, and it is what `take()`'s B-039 pre-roll
+   *     reads to decide whether to re-`CG ADD`. Stale, the next take sends a bare
+   *     `CG PLAY` onto an EMPTY layer: accepted on the wire, nothing on air. This
+   *     half never self-heals, on any install.
+   *   - the published STATUS keeps claiming `loaded`/on-air. On a hearing plant
+   *     the occupancy tap observes `empty` and `freshTruth` derives `idle` within
+   *     a TTL; on an OSC-LESS install (B-094 / B-101) that correction never comes
+   *     and the row lies until the operator hits REMOVE.
+   *
+   * ── 🔴 THE FIX THAT WAS CONSIDERED AND REJECTED — DO NOT REPROPOSE IT ───────
+   *
+   * Refusing the clear when the layer is owned. It reads like the safe answer and
+   * it is the wrong one: it reintroduces dependence on **the very bookkeeping this
+   * escape hatch exists to bypass**. The hatch is reached precisely when `#slots`
+   * and the status are what is wrong, so a guard that consults them fails exactly
+   * when it is needed. The clear stays unconditional; the bookkeeping catches up.
+   *
+   * ── WHY NO SECOND `CLEAR` IS SENT ──────────────────────────────────────────
+   *
+   * Reusing `out(itemId)` would be the obvious reuse, and it would put a second,
+   * redundant `CLEAR` for the same coordinate on an air-affecting lane. There is
+   * nothing left to destroy: the caller only reaches here on an ACKED clear of
+   * this exact slot. So the intent is applied as an `immediate` out — the flag
+   * that has existed on the `out` intent since the Reconciler was written and
+   * finally has its caller: `intentStatus` lands directly on the terminal `idle`
+   * with no `settle` and no pending ack, because the command it describes has
+   * ALREADY been sent and acked. Nothing is claimed here that the wire has not
+   * already confirmed.
+   *
+   * ⚠ Call this ONLY after a clear that succeeded. On a refusal the layer was
+   * never touched, and reconciling would knock a perfectly resident producer's
+   * row back to `idle` — the exact inverse of the defect, produced by its fix.
+   */
+  #reconcileClearedSlot(slot: CommandSlot): void {
+    for (const [itemId, owned] of this.#slots) {
+      if (owned.channel !== slot.channel || owned.layer !== slot.layer) continue;
+      // B-039 — the producer is destroyed, so a later take must re-ADD rather
+      // than `CG PLAY` an empty layer. The slot stays RESERVED (the item is
+      // still on the stack, idle) exactly as it does after `out()`.
+      this.#loaded.delete(itemId);
+      this.#reconciler.applyIntent({ kind: 'out', itemId, immediate: true }, this.#nextSeq());
+    }
   }
 
   /**
@@ -2977,21 +3037,58 @@ export class CasparRuntime {
    * burst. A per-item failure does not abort the rest — a stuck item must not strand the
    * graphics behind it on air.
    *
-   * The status predicate mirrors the row's Clear gating exactly (everything that is not
-   * `idle` or `loaded`), so this IS "press Clear on every row where Clear is enabled".
+   * ⭐ **B-122 — THE STATUS PREDICATE IS GONE, AND MUST NOT COME BACK UNDER ANOTHER NAME.**
+   *
+   * It used to mirror the row's Clear gating (everything not `idle`/`loaded`), which sounds
+   * like consistency and is in fact the defect: it gated the emergency control on **exactly
+   * the values that may be wrong in the emergency**. With every item wrongly reading `idle`
+   * this sent nothing and returned `{ ok: true, cleared: 0 }` — the operator told the escape
+   * hatch worked while the graphic was still on air. A success report for a no-op is worse
+   * than a disabled button, because a disabled button tells the truth.
+   *
+   * The owner's decision (2026-08-12): a clear goes to EVERY item holding a bound slot,
+   * regardless of believed status, INCLUDING rows the model believes are merely `loaded`.
+   * Losing a cued row is the ACCEPTED COST — an emergency control must not depend on the
+   * bookkeeping whose failure is the emergency.
+   *
+   * The one filter that remains is about OWNERSHIP, not belief: an item with no slot holds no
+   * layer of ours, so there is nothing for us to clear. That is a structural fact, it cannot
+   * be wrong in the way a status can, and it is what keeps this per-LAYER (see above).
+   *
+   * ⚠ **A Live Source layer is REFUSED, not cleared** (C-015 phase 5 — the third ownership
+   * class). Broadening this verb must not let it reach a class that was just fenced off at
+   * `clearLayer`: a bulk button that cuts a guest's face off air without ever naming it is
+   * the hazard phase 5 exists to prevent. The check reuses `#isLiveLayer` — the ONE
+   * flattening of the ledger every ownership door reads — so it cannot drift from the others.
+   *
+   * The report distinguishes what was SENT from what LANDED from what was never addressed,
+   * so no shape of no-op can come back as a success (B-122's acceptance).
    */
-  async clearAll(): Promise<{ ok: boolean; cleared: number }> {
-    const clearable = this.#reconciler
+  async clearAll(): Promise<{
+    ok: boolean;
+    cleared: number;
+    attempted: number;
+    refused: { itemId: string; reason: LayerClearReason }[];
+  }> {
+    const bound = this.#reconciler
       .snapshot()
-      .filter(
-        (i) =>
-          i.status !== 'idle' && i.status !== 'loaded' && this.#slots.get(i.itemId) !== undefined,
-      );
-    for (const item of clearable) {
+      .map((item) => ({ itemId: item.itemId, slot: this.#slots.get(item.itemId) }))
+      .filter((c): c is { itemId: string; slot: CommandSlot } => c.slot !== undefined);
+    const refused: { itemId: string; reason: LayerClearReason }[] = [];
+    let attempted = 0;
+    let cleared = 0;
+    for (const { itemId, slot } of bound) {
+      if (this.#isLiveLayer(slot.channel, slot.layer)) {
+        refused.push({ itemId, reason: 'live-source' });
+        continue;
+      }
+      attempted += 1;
       // → `CLEAR <ch>-<layer>` for THIS item's own slot. Never a channel-wide clear.
-      await this.out(item.itemId);
+      if ((await this.out(itemId)).accepted) cleared += 1;
     }
-    return { ok: true, cleared: clearable.length };
+    // Nothing owed is not a success. `attempted > 0` is what stops an empty
+    // stack — or a stack of nothing but refusals — reporting a completed clear.
+    return { ok: attempted > 0 && cleared === attempted, cleared, attempted, refused };
   }
 
   /**
@@ -3004,14 +3101,28 @@ export class CasparRuntime {
    * between a clean end-of-segment and every lower-third snapping to black at
    * once.
    *
-   * Deliberately built exactly like `clearAll`: the SAME candidate predicate
-   * (anything not idle/loaded that actually holds a slot — so nothing is sent
-   * for an item that owns no layer), the SAME sequential loop through the
-   * per-item verb rather than a burst, and the SAME "a failure does not abort
-   * the rest" property — one stuck graphic must never strand the ones behind it
-   * on air. Reusing `stopItem` means the C-012 semantics (`#loaded` and
-   * `#adopted` untouched, so a later take RESUMES rather than re-ADDs) can never
-   * drift between the single and bulk paths.
+   * Built like `clearAll` in SHAPE — the same sequential loop through the
+   * per-item verb rather than a burst, and the same "a failure does not abort
+   * the rest" property, because one stuck graphic must never strand the ones
+   * behind it on air. Reusing `stopItem` means the C-012 semantics (`#loaded`
+   * and `#adopted` untouched, so a later take RESUMES rather than re-ADDs) can
+   * never drift between the single and bulk paths.
+   *
+   * ⭐ **THE CANDIDATE PREDICATES NOW DIFFER, DELIBERATELY (B-122).** This one
+   * still asks the status (anything not idle/loaded that holds a slot);
+   * `clearAll` no longer asks it at all. That is not drift — the two verbs
+   * answer different questions:
+   *
+   *   - Clear-All is an EMERGENCY control, so it must not depend on the
+   *     bookkeeping whose failure is the emergency. It clears every bound slot.
+   *   - Stop-All is a PROGRAMME control. `CG STOP` asks a template to run its
+   *     authored outro, which is meaningless for a row that was never PLAYed —
+   *     an `idle` or `loaded` item has no outro to run and nothing to leave. The
+   *     status is the right question here because it is not the axis under
+   *     suspicion; a wrong `idle` costs a graceful exit, never a stranded
+   *     graphic, and CLEAR ALL sits beside it as the remedy that ignores it.
+   *
+   * ⚠ Do not "restore consistency" by copying either predicate onto the other.
    */
   async stopAll(): Promise<{ ok: boolean; stopped: number }> {
     const stoppable = this.#reconciler

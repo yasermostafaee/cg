@@ -30,7 +30,7 @@ import { bankPosition, isLayerVisible, isRehearsing } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import { isOnAir } from '../stack/onAir.js';
 import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
-import { reportCommandError } from '../status/commandFeedback.js';
+import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { LayerRow } from './LayerRow.js';
 import { resolveRowBinding } from './rowState.js';
 import { LayerTableHeader } from './LayerTableHeader.js';
@@ -297,7 +297,13 @@ export function LayersPanel({
   /** How many rows do not yet know what they carry. Zero hides the notice. */
   const awaitingRows = rowBindings.filter((r) => r.binding.kind === 'awaiting').length;
 
+  // STOP ALL's count: the status IS the right question there — a row that never
+  // played has no authored outro to run. See `isOnAir`.
   const onAirCount = items.filter(isOnAir).length;
+  // B-122 — CLEAR ALL's count, and deliberately a different one. It counts rows
+  // that HOLD A LAYER, an ownership fact, because the believed status is exactly
+  // what may be wrong when the operator reaches for this button.
+  const boundCount = items.filter((i) => i.slot !== undefined).length;
 
   // "Get it off the screen" is not "throw it away". This clears air and KEEPS
   // the rows, so recovering is a re-take — not a re-import and re-typing every
@@ -306,40 +312,69 @@ export function LayersPanel({
   // header it replaces — the distinction it draws is the point.)
   const clearAll = useCallback(async (): Promise<void> => {
     /*
-      THE WORDING HAS TO MATCH WHAT THE BRIDGE ACTUALLY DOES, and that is narrower
-      than this button's availability suggests.
+      ⭐ B-122 — THE WORDING NOW MATCHES A BULK VERB THAT REALLY IS AN ESCAPE HATCH.
 
-      The button is always enabled (owner decision — Clear is the escape hatch). But
-      the bridge's `stack.clearAll` clears only items whose status is NOT `idle` or
-      `loaded`, which are exactly the statuses that might be WRONG in the situation
-      the escape hatch exists for. So when nothing currently reads as on air, this
-      bulk action would report success having sent nothing.
+      It used to have to apologise for one. The bridge's `stack.clearAll` cleared only
+      items whose status was NOT `idle` or `loaded` — exactly the statuses that may be
+      WRONG in the situation the hatch exists for — so this dialog had to warn that
+      pressing it "may send no commands at all" and point the operator at the per-row
+      CLEAR instead. A bulk emergency control whose own dialog tells you to use a
+      different control is a defect wearing a caption.
 
-      Rather than promise "everything comes off", the dialog says what will happen and
-      — when the count is zero — names the per-row CLEAR, which really is not
-      status-gated (`out()` needs only a bound slot). Recorded in DEBT.md: making the
-      bulk verb a true escape hatch is a BRIDGE change on an on-air path, not a
-      wording fix, and it is not this session's to make silently.
+      The predicate is gone (owner decision, 2026-08-12): a clear goes to EVERY row
+      holding a layer, whatever the console believes about it, INCLUDING rows that read
+      merely `loaded`. So the dialog now promises exactly that, and says the cost out
+      loud — a cued row loses its pre-rolled producer and will re-ADD on the next take.
+
+      `boundCount`, not `onAirCount`, is what this dialog counts: the believed status is
+      the thing that may be wrong, so it must not be what the operator is asked to
+      confirm against. `onAirCount` survives for STOP ALL, where the status IS the right
+      question (a row that never played has no outro to run).
     */
-    const body =
-      onAirCount > 0
-        ? `All ${String(onAirCount)} on-air item(s) come off air. They stay on the stack, idle, and can be taken again.`
-        : 'Nothing currently reads as on air, so this may send no commands at all. ' +
-          'If you believe a graphic is stuck on air, use CLEAR on its own row — that one ' +
-          'is not gated on the status.';
     const ok = await confirm({
-      title: onAirCount > 0 ? 'Clear all on-air items?' : 'Clear all — nothing reads as on air',
-      body,
+      title: `Clear all ${String(boundCount)} row(s) holding a layer?`,
+      body:
+        `Every row that holds a layer is cleared immediately, with no outro — whatever this ` +
+        `console currently believes is on it. That deliberately includes rows that read as ` +
+        `merely loaded: a cued row loses its pre-rolled graphic and will re-load on its next ` +
+        `play. The rows all stay on the stack and can be taken again.`,
       confirmLabel: 'Clear all',
       tone: 'clear',
     });
     if (!ok) return;
     try {
-      await window.cg.stack.clearAll();
+      /*
+        REPORT WHAT ACTUALLY WENT — the other half of B-122, and the half the operator
+        sees. The old code discarded the result entirely, which is how a bulk verb that
+        sent nothing could still look like it had worked.
+
+        The three outcomes are genuinely different operator situations and must never
+        share a message: nothing was owed; everything owed landed; or some of it did not
+        and those graphics are STILL ON AIR. `refused` is its own sentence because a
+        refusal is not a failure — a Live Source layer is not the operator's to clear,
+        and saying "failed" about it would send them looking for a fault.
+      */
+      const res = await window.cg.stack.clearAll();
+      const stuck = res.attempted - res.cleared;
+      const refusedNote =
+        res.refused.length > 0
+          ? ` ${String(res.refused.length)} live source layer(s) are not this console's to clear and were left alone.`
+          : '';
+      if (stuck > 0) {
+        reportCommandError(
+          `Cleared ${String(res.cleared)} of ${String(res.attempted)} — ${String(stuck)} did not go ` +
+            `and may still be on air. Try CLEAR on those rows.${refusedNote}`,
+        );
+      } else if (res.cleared > 0) {
+        reportCommandSuccess(`Cleared ${String(res.cleared)} row(s).${refusedNote}`);
+      } else {
+        // Never a green "done": nothing was sent, and saying so is the whole point.
+        reportCommandError(`No row holds a layer to clear — nothing was sent.${refusedNote}`);
+      }
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : 'Clear all failed.');
     }
-  }, [confirm, onAirCount]);
+  }, [confirm, boundCount]);
 
   /**
    * C-012 — STOP All: every on-air graphic runs its OWN outro and stays
@@ -462,16 +497,23 @@ export function LayersPanel({
             stands; reachability is a different question. With either hop down the
             command does not leave, so the button was not a remedy, only the
             appearance of one. It returns the instant both hops do.
+
+            ⭐ B-122 — AND THE VERB BEHIND IT IS NOW AS BROAD AS THE BUTTON LOOKS.
+            Always-enabled was only ever half the promise: the bridge still filtered
+            its candidates on status, so an always-available button could still send
+            nothing and report success. It now clears every row holding a layer,
+            which is why the label and title no longer say "on-air" — they used to
+            describe a narrower act than the one the operator was about to commit.
           */}
           <Button
             variant="neutral"
             disabled={needsCaspar}
-            aria-label="Clear all on-air items"
+            aria-label="Clear all rows holding a layer"
             data-verb-tone="clear"
             title={
               needsCaspar
                 ? needsCasparReason
-                : 'Every on-air graphic is cut immediately, with no outro'
+                : 'Every row holding a layer is cut immediately, with no outro — whatever its status reads'
             }
             onClick={() => void clearAll()}
           >

@@ -142,7 +142,7 @@ it('Clear-All CLEARs only our own layers — the program feed survives on air', 
   expect(mock.layerState(tickerSlot)?.onAir).toBe(true);
 
   // ── Clear-All ──
-  expect(await runtime.clearAll()).toEqual({ ok: true, cleared: 2 });
+  expect(await runtime.clearAll()).toEqual({ ok: true, cleared: 2, attempted: 2, refused: [] });
 
   // 1. THE WIRE: every CLEAR ever sent is per-LAYER. Not one is a channel-wide `CLEAR 1`.
   expect(clears.length).toBeGreaterThan(0);
@@ -187,7 +187,11 @@ it('an item holding no layer is never CLEARed — there is nothing of ours to cl
 
   // Nothing loaded ⇒ no item holds a slot ⇒ Clear-All has nothing of ours to clear. It must
   // NOT reach for the channel as a shortcut.
-  expect(await runtime.clearAll()).toEqual({ ok: true, cleared: 0 });
+  //
+  // B-122 — and it must not call that a success either. The ownership filter is the ONE
+  // filter this verb keeps (a slotless item holds no layer of ours), and it is the reason
+  // the honest answer here is `ok: false` rather than a completed clear of nothing.
+  expect(await runtime.clearAll()).toEqual({ ok: false, cleared: 0, attempted: 0, refused: [] });
 
   expect(clears).toEqual([]);
   // The program feed is exactly where it was.
