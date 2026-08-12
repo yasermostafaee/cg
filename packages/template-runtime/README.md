@@ -22,7 +22,8 @@ first.
 
 ## Public surface
 
-Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
+Almost everything consumers use is re-exported from [`src/index.ts`](./src/index.ts) — the two
+deliberate exceptions are the subpaths listed after the table:
 
 | Export                                                       | Role                                                                                                                               |
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -41,6 +42,29 @@ Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
 | `RepeaterDriver`, `repeaterDriverFor`, `coerceRepeaterItems` | Data-driven rows — stamp-at-play / live-values (model B), NOT a content source (D-030; normally owned by `createRuntime`).         |
 | `buildRepeaterRows`, `clampRowCount`, `repeaterItemValues`   | The row builder (flow cells + fresh row scopes) and its pure helpers.                                                              |
 | `LifecycleStateMachine`, `EventBus`, `applyTransform`        | Lifecycle state, events, value transforms.                                                                                         |
+
+### 🔴 The two SUBPATH exports, and why they are not on the table above
+
+`src/index.ts` is **esbuild's bundle ENTRY**, so its export list IS the export table of the runtime
+bundle inlined into every exported `.vcg`. Adding a name there costs bytes in every artifact on air,
+for a symbol no page calls. Two symbols are therefore reachable **only** through subpaths declared
+in `package.json`, and are deliberately absent from the entry:
+
+| Subpath                              | Export                               | Consumer                                                                    |
+| ------------------------------------ | ------------------------------------ | --------------------------------------------------------------------------- |
+| `@cg/template-runtime/scene-builder` | `SMPTE_BARS`, `smpteBarsGradient()`  | The Runtime's PVW live-plate placeholders (R-049) — ONE bar table, reused.  |
+| `@cg/template-runtime/position`      | the pure `position.ts` geometry half | The same overlay's scene-px → raster-px chain — ONE arithmetic, not a copy. |
+
+Two rules govern adding to either, both learned by measurement rather than argued:
+
+1. **Prefer a subpath to the entry index for anything the PAGE does not call.** Measured:
+   re-exporting these two from `src/index.ts` grows the IIFE export table by **121 bytes in every
+   `.vcg`**; through a subpath the generated bundle is byte-identical.
+2. **`@cg/template-runtime/position` exists because the entry cannot be imported by an app that owns
+   `window.cg`.** The index reaches `adapters/caspar-globals.ts`, whose `declare global` claims
+   `window.cg` for the SERVED PAGE's runtime. The Runtime app's `window.cg` is the bridge; importing
+   the index there merges the two declarations into one compilation and breaks typecheck across the
+   app. Two things legitimately own that name, and they must never share a program.
 
 ## How it's built — module map
 

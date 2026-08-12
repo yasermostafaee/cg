@@ -105,5 +105,16 @@
 
 - [x] 7.1 Full green gate for every touched workspace — including the exporters' suites, since
       `@cg/template-runtime` is shared with them.
-- [ ] 7.2 **Linux `gate:e2e`** — this changes a user-visible render surface, so a green Windows run
-      does NOT discharge the debt. Record the run URL beside this box. - Run URL: _pending_
+- [x] 7.2 **Linux `gate:e2e` — DISCHARGED.** This changes a user-visible render surface, so a green
+      Windows run does not discharge the debt; only a COMPLETED, GREEN `e2e` job on GitHub Actions
+      for the commit that carries the change does.
+      **Run URL: https://github.com/yasermostafaee/cg/actions/runs/31551511995** —
+      commit `455318b4559d3099efc866054073032f1c6fe353`, which is the commit carrying the change;
+      `status: completed`, `conclusion: success`, and the **`E2E (Playwright)` job RAN** rather than
+      being skipped, concluding `success` alongside `Lint • Typecheck • Test • Build`. A run whose
+      `e2e` job was SKIPPED would not have discharged this, which is why the job's own conclusion is
+      recorded and not merely the run's.
+- [x] 7.3 Engine doc-sync: `packages/template-runtime/README.md`'s "Public surface" claimed
+      everything consumers use is re-exported from `src/index.ts`, which the two new subpaths made
+      untrue. Corrected in the same change, carrying both byte measurements and the `window.cg`
+      collision — that section is where the next person adding an export will look.

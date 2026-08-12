@@ -2008,7 +2008,9 @@ opening a change of its own.
   has been met in operation is no longer a medium.
 -->
 
-**In progress:** `openspec/changes/rehearse-live-plate-placeholders/`.
+**In progress:** `openspec/changes/rehearse-live-plate-placeholders/`. Linux `gate:e2e` DISCHARGED —
+[run 31551511995](https://github.com/yasermostafaee/cg/actions/runs/31551511995) on commit
+`455318b4`, `conclusion: success`, with the `E2E (Playwright)` job RUN (not skipped) and green.
 
 **What:** in PVW, draw a **labelled placeholder** over each live plate's rect — procedural colour
 bars carrying the **plate's name** and, when one is assigned, **the assigned SOURCE's name**. Drawn
