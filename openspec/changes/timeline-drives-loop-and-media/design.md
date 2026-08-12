@@ -332,14 +332,36 @@ the span the clip is anchored on the composition's active in-point rather than t
 on air `play()` starts every Lottie regardless of a start-trimmed lifespan, and the canvas must
 agree with what goes on air.
 
-⚠ **A visible consequence, recorded because it will be noticed:** a Lottie no longer sits on its
-D-125 POSTER frame on the canvas. At the composition's in-point it now shows the clip's FIRST
-frame, which for a furniture clip that animates on from nothing is legitimately blank. That is not
-a regression of the poster decision but the removal of its premise: the poster existed because "the
-editor canvas is a static design surface that never plays" (`lottie-driver.ts`), and it is not one
-any more. It is also the behaviour keyframed elements have always had — an element animating in
-from opacity 0 is invisible at frame 0 on the canvas today — so this makes the two kinds agree
-rather than making the Lottie special.
+### 4.3 🔴 D-125's POSTER SURVIVES — and CI is what established that, not judgement
+
+The first implementation positioned the clip faithfully at every frame, including the composition's
+in-point, where the mapped frame is `ip`. It was pushed with that recorded as an accepted visible
+consequence ("the poster's premise is gone; keyframed elements have always behaved this way"). **The
+Linux `e2e` job failed it, and the failure was right.** Two D-125 tests — "a placed Lottie whose
+intro animates ON renders a settled frame on the EDITOR canvas (not the invisible frame 0)" and "a
+MARKER-LESS furniture clip renders a VISIBLE poster" — assert a non-zero painted bbox on the canvas.
+`ip` is the intro-START, where a furniture clip has scaled the graphic to nothing, and **a scene
+opens with its playhead at the in-point**, so every Lottie became an empty box on the design
+surface: the exact bug the poster was filed to fix, re-introduced one surface later.
+
+**The settled rule: at or before the composition's in-point the canvas RESTS on the poster; from the
+frame after it, the playhead owns the frame.** The two requirements answer different questions and
+both survive intact — the poster is what the canvas shows when the playhead has NOT entered the
+composition, the mapping is what it shows when it has. There is a visible STEP between the in-point
+and the frame after it. That is the price, it is paid knowingly, and it is the same trade D-125 made
+when it refused to park on `ip`.
+
+Two lessons worth more than the fix:
+
+1. **"The premise of the old decision is gone" is a claim about a SPEC, and a spec is not retired by
+   an implementation that finds it inconvenient.** D-125's poster is a living requirement with E2E
+   coverage; retiring it is the owner's call and would need its own `## MODIFIED Requirements`.
+2. **The E2E debt earned its keep on the first change that owed it.** No unit test in this package
+   would have caught it — the poster's value is that the painted graphic is VISIBLE, which is a
+   pixel fact about a real clip. The unit suite now guards the rule (both drivers' tests), but it is
+   guarding a rule the browser found.
+
+---
 
 ---
 

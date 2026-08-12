@@ -129,10 +129,13 @@ Sequenced first deliberately: it makes the acceptance demonstrable on one elemen
 is still open, and it validates the frame↔time mapping the video half then reuses. No new
 architecture, no decoder.
 
-⚠ **Visible consequence, deliberate:** a canvas Lottie no longer sits on its D-125 POSTER frame — at
-the composition's in-point it shows the clip's first frame, which for a furniture clip is
-legitimately blank. The poster existed because the canvas never played; that premise is gone, and
-keyframed elements have always behaved this way. See design §4.2.
+🔴 **D-125's POSTER SURVIVES — the first implementation got this wrong and CI caught it.** At or
+before the composition's in-point the canvas RESTS on the poster (a representative VISIBLE frame);
+from the frame after it, the playhead owns the frame. Positioning faithfully at the in-point paints
+`ip` — the intro-START, scaled to nothing — and a scene OPENS there, so every Lottie became an empty
+box on the design surface: the exact bug D-125's poster was filed to fix. The Linux `e2e` job failed
+on the two D-125 canvas tests and was right to. See design §4.3; the rule is now guarded at unit
+level in BOTH drivers' tests as well.
 
 ## 5. D-135 — the video half ⟨GATE: §9.5 — the forward-1× hybrid — and §9.4⟩
 

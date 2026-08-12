@@ -360,6 +360,13 @@ override) on its **own** timeline.
   - **A driver running its own lifecycle OWNS the frame.** `positionAt` is a no-op while the
     driver is running or holding a frame it drove to, so a tick reaching a PLAYING host (the
     same page serves the Preview) can never yank a clip out from under its own driver.
+  - 🔴 **At or before the composition's in-point the canvas RESTS on the D-125 poster**, and the
+    mapping takes over from the frame after it. `ip` is the intro-START — a furniture clip has
+    scaled the graphic to nothing there — and a scene opens with its playhead at the in-point, so
+    positioning faithfully would put an empty box on the design surface, which is the bug the
+    poster was filed to fix. The two requirements answer different questions: the poster is what
+    the canvas shows when the playhead has NOT entered the composition. The visible step between
+    the in-point and the next frame is the deliberate price.
   - **`drivesHold` is NOT read on this path** (design §9.4): it answers "does this element
     gate the HOLD", which is a different question from "does the canvas show its frame".
     Furniture that deliberately does not drive the hold still follows the playhead.

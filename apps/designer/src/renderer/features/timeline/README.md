@@ -120,11 +120,13 @@ show, and an invented mapping would disagree with air. A `<video>` does not foll
 that half is designed and gated on an open owner decision
 (`openspec/changes/timeline-drives-loop-and-media/design.md` §9.5).
 
-⚠ **Consequence worth knowing at the surface:** a Lottie on the canvas no longer sits on
-its D-125 "poster" frame. At the composition's in-point it shows the clip's FIRST frame —
-which for a furniture clip that animates on from nothing is legitimately blank, exactly as
-it is on air at that frame, and exactly as a keyframed element animating in from opacity 0
-already behaves. Move the playhead and the clip animates.
+⚠ **The one rule that is NOT the mapping:** at or before the composition's in-point the canvas
+**rests on the D-125 poster** — the representative VISIBLE frame a Lottie is parked on for
+layout — and the playhead owns the frame only from the frame AFTER the in-point. The faithful
+answer at the in-point would be `ip`, the intro-START, where a furniture clip has scaled the
+graphic to nothing; a scene OPENS with its playhead there, so that would leave every Lottie an
+empty box on the design surface. There is a visible step between the in-point and the next frame,
+and it is deliberate.
 
 ### Time ↔ pixel — the crux of every gesture
 

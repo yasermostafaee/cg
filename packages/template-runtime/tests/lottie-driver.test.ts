@@ -251,7 +251,9 @@ describe('LottieDriver — positionAt (the Designer playhead)', () => {
   it('paints exactly what the driver’s own clock paints, across intro, hold and outro', () => {
     // A sweep rather than a spot check: the two paths must agree at every phase and at
     // every boundary, which is what makes a later fork fail loudly instead of drifting.
-    for (const elapsed of [0, 10, 25, 49, 50, 51, 120, 1000]) {
+    // Elapsed 0 and below is deliberately absent — that is the D-125 POSTER rest rule,
+    // which sits ON TOP of the mapping and is asserted in its own test below.
+    for (const elapsed of [10, 25, 49, 50, 51, 120, 1000]) {
       const clocked = makeDriver({ introEnd: 5, holdBehavior: 'freeze' });
       clocked.driver.reset();
       clocked.driver.start();
@@ -288,10 +290,35 @@ describe('LottieDriver — positionAt (the Designer playhead)', () => {
     expect(last(handle)).toBe(5);
   });
 
-  it('a playhead before the run’s start clamps to the clip start (never extrapolated back)', () => {
-    const { driver, handle } = makeDriver({ ip: 3, introEnd: 50 });
+  it('🔴 at or before the run’s start it rests on the POSTER, never on `ip`', () => {
+    // D-125 SURVIVES D-135. `ip` is the intro-START, where a furniture clip has scaled
+    // the graphic to nothing, and a scene OPENS with its playhead at the in-point — so
+    // painting the mapped frame here would put an empty box on the design surface, which
+    // is the exact bug the poster was filed to fix. The two answer different questions:
+    // the poster is what the canvas shows when the playhead has NOT entered the
+    // composition, the mapping is what it shows when it has.
+    const { driver, handle } = makeDriver({ ip: 3, introEnd: 50, posterFrame: 30 });
+    driver.positionAt(0, null);
+    expect(last(handle)).toBe(30);
     driver.positionAt(-500, null);
-    expect(last(handle)).toBe(3);
+    expect(last(handle)).toBe(30);
+    // One frame in, the playhead owns it again.
+    driver.positionAt(10, null);
+    expect(last(handle)).toBe(4);
+  });
+
+  it('with no explicit posterFrame the rest frame falls back to the hold frame', () => {
+    const { driver, handle } = makeDriver({ ip: 3, introEnd: 50 });
+    driver.positionAt(0, null);
+    expect(last(handle)).toBe(50);
+  });
+
+  it('the OUT phase is never the poster — an out-point at the in-point still positions', () => {
+    // The rest rule is keyed on the INTRO elapsed only: a playhead that has entered the
+    // OUT phase is being scrubbed, whatever the intro elapsed reads.
+    const { driver, handle } = makeDriver({ ip: 0, introEnd: 5, outroStart: 50, op: 60 });
+    driver.positionAt(0, 0);
+    expect(last(handle)).toBe(50);
   });
 
   it('it never starts a clock, and a LIVE driver is not fought', () => {

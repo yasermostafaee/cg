@@ -349,6 +349,26 @@ export class LottieDriver {
    */
   positionAt(introElapsedMs: number, outroElapsedMs: number | null): void {
     if (this.destroyed || this.running || this.settledHold) return;
+    // 🔴 D-125 SURVIVES D-135, and this line is where the two meet.
+    //
+    // AT OR BEFORE the composition's in-point nothing has been scrubbed INTO yet: the
+    // canvas is at REST, and its resting state is the POSTER — a representative VISIBLE
+    // frame (see {@link poster}). Painting the mapped frame here instead would be the
+    // faithful answer and the WRONG one: at the in-point the mapped frame is `ip`, the
+    // intro-START, where a furniture clip has scaled the graphic to nothing. A scene
+    // opens with its playhead at the in-point, so every Lottie would be an empty box on
+    // the design surface — exactly the bug D-125's poster was filed to fix, re-introduced
+    // one surface later.
+    //
+    // The apparent contradiction dissolves once the two are read as answering different
+    // questions: the poster is what the canvas shows when the playhead has NOT entered
+    // the composition, and the mapping is what it shows when the playhead has. There is
+    // a visible step between the in-point and the frame after it — that is the price,
+    // and it is the same trade D-125 made deliberately when it refused to park on `ip`.
+    if (outroElapsedMs === null && introElapsedMs <= 0) {
+      this.paint(this.o.posterFrame ?? this.o.introEnd);
+      return;
+    }
     const pos =
       outroElapsedMs === null
         ? this.clipPositionAt(introElapsedMs, 'intro')
@@ -356,6 +376,7 @@ export class LottieDriver {
     this.paint(pos.frame);
   }
 
+  /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   private armComplete(): Promise<void> {
