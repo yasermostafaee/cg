@@ -70,18 +70,28 @@ function makeDriver(over: Partial<LottieDriverOptions> = {}): {
 } {
   const handle = mockHandle();
   const clock = makeClock();
-  const driver = new LottieDriver({
+  const resolved = {
     handle,
     fr: 100, // 100 fps → 1 frame every 10ms (clean math)
     ip: 0,
     op: 100,
     speed: 1,
     introEnd: 5,
+    // A DEGENERATE outro by default (`outroStart === op`), which is what a marker-less
+    // clip gets. An earlier revision omitted `outroStart` entirely and every outro
+    // computation ran on `undefined`.
+    outroStart: 100,
     idleIn: 5,
     idleOut: 10,
-    holdBehavior: 'freeze',
+    holdBehavior: 'freeze' as const,
     clock,
     ...over,
+  };
+  // Mirrors the runtime's own derivation so a test never has to remember to keep the two
+  // in step; pass `hasOutro` explicitly to assert on a mismatch deliberately.
+  const driver = new LottieDriver({
+    ...resolved,
+    hasOutro: over.hasOutro ?? resolved.outroStart < resolved.op,
   });
   return { driver, handle, clock };
 }

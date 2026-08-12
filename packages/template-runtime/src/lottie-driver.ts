@@ -51,6 +51,18 @@ export interface LottieDriverOptions {
    * resolves immediately so the exit never strands (§D6.4.1).
    */
   outroStart: number;
+  /**
+   * Does this clip HAVE an outro — i.e. is `outroStart < op`? Passed in rather than
+   * re-derived, because the runtime already computes it (`hasOutro`, beside the
+   * `outroStart` fallback) to decide the `cgOutro` guard and the scope's outro ledger,
+   * and one rule spelled three ways is how the three come to disagree (golden rule 6).
+   *
+   * FALSE is the DEGENERATE outro: a marker-less clip, or an outro-start authored at the
+   * last frame. The element then has no exit of its own — `playOutro()` resolves
+   * immediately (§D6.4.1) and the composition's own exit animates it off — so the frame
+   * it holds is the HOLD frame, never `op`.
+   */
+  hasOutro: boolean;
   /** Idle-loop range start (only used for `holdBehavior: 'idle-loop'`). */
   idleIn: number;
   /** Idle-loop range end. */
@@ -251,10 +263,10 @@ export class LottieDriver {
   playOutro(): Promise<void> {
     // Already torn down — nothing to play, and nothing may await a dead driver.
     if (this.destroyed) return Promise.resolve();
-    const { outroStart, op } = this.o;
-    // DEGENERATE / absent outro (no `phases`, or `outroStart >= op`) — resolve at
-    // once so the exit proceeds straight to the background (never a strand).
-    if (outroStart >= op) return Promise.resolve();
+    // DEGENERATE / absent outro (a marker-less clip, or an outro-start authored at the
+    // last frame) — resolve at once so the exit proceeds straight to the background (never
+    // a strand). `hasOutro` is the runtime's single derivation, not a second comparison here.
+    if (!this.o.hasOutro) return Promise.resolve();
     // Supersede any outro already in flight, then re-open a frozen hold to drive OUT.
     this.settleOutro();
     this.cancelFrame();
@@ -376,13 +388,31 @@ export class LottieDriver {
    */
   positionAt(introElapsedMs: number, outroElapsedMs: number | null): void {
     if (this.destroyed || this.running || this.settledHold) return;
+    // 🔴 A DEGENERATE outro takes the INTRO mapping past the out-point, and this is a
+    // choice about WHICH mapping applies — the same kind of choice as the intro/outro
+    // selection itself, which is why it belongs here and never inside `clipPositionAt`
+    // (whose singularity is a tested requirement).
+    //
+    // Without it, every frame at or past the composition's out-point asked for the OUT
+    // phase of a clip that HAS no out phase: `outroStart` is `op`, so the mapping
+    // clamped to `op` — the frame a furniture clip has animated OFF to — and the element
+    // vanished from the canvas from the out-point onward. That contradicted air in the
+    // one phase this feature exists to stop it contradicting air in: on air a degenerate
+    // `playOutro()` resolves immediately (§D6.4.1), leaving the HOLD frame painted while
+    // the composition's own exit animates the element off.
+    //
+    // With the intro mapping, elapsed keeps growing past the out-point and
+    // `clipPositionAt` returns `freeze-hold` (or keeps cycling an idle-loop) — the
+    // correct picture, falling out of the shipped mapping rather than special-cased into
+    // it.
     const pos =
-      outroElapsedMs === null
+      outroElapsedMs === null || !this.o.hasOutro
         ? this.clipPositionAt(introElapsedMs, 'intro')
         : this.clipPositionAt(outroElapsedMs, 'outro');
     this.paint(pos.frame);
   }
 
+  /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   private armComplete(): Promise<void> {
     return new Promise<void>((res) => {

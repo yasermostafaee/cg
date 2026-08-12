@@ -145,6 +145,22 @@ architecture, no decoder.
       at the in-point (blank, the clip's first frame) and after a scrub into the held region
       (visible). The old assertions encoded the superseded rule; what they were really protecting —
       that a real player renders real content, reachable by the operator — is preserved
+- [x] 🔴 **A DEGENERATE outro no longer vanishes at the out-point.** `outroStart` falls back to `op`
+      for a clip with no outro marker, and `tick` passed a non-null `outroElapsedMs` for every frame
+      at or past the out-point regardless — so the OUT mapping was asked for the out phase of a clip
+      that HAS none and clamped to `op`, the frame a furniture clip has animated OFF to. Fixed
+      caller-side in `positionAt` (a degenerate outro takes the INTRO mapping), with `clipPositionAt`
+      untouched. `hasOutro` is now a driver OPTION computed once by the runtime — the driver had been
+      re-deriving the same comparison inside `playOutro`, and that second copy is gone. Design §4.4
+- [x] Test: degenerate outro holds its settled frame at the out-point, +10 and at `active.out`, and
+      `op` never appears once across the sweep — on a fixture where `introEnd` differs from BOTH
+      `op` and `ip`, or the assertion cannot tell the settled frame from the blank one
+- [x] Test: a clip that HAS an outro still maps its OUT phase — the control that stops the cheapest
+      wrong fix (never use outro mode) from passing
+- [x] Test: `idle-loop` + degenerate outro keeps cycling past the out-point, matching air
+- [x] Test: ⚠ the LIMIT — a MARKER-LESS clip settles on `op` because `introEnd` falls back to `op`
+      too, so the canvas agrees with air and both are blank. Pinned so it is not "fixed" into
+      disagreeing with air; the real finding is design §4.5
 
 ## 5. D-135 — the video half ⟨GATE: §9.5 — the forward-1× hybrid — and §9.4⟩
 

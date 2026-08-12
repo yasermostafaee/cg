@@ -402,6 +402,90 @@ describe('D-135 — the playhead positions every Lottie on the canvas', () => {
     runtime.tick(15); // 5 composition frames in = 10 clip frames
     expect(lastFrame()).toBe(10);
   });
+  it('🔴 a DEGENERATE outro holds its settled frame past the out-point — it does not vanish', () => {
+    // The defect: `outroStart` defaults to `op` for a clip with no outro marker, so every
+    // frame at or past the composition's out-point asked for the OUT phase of a clip that
+    // HAS no out phase. The mapping clamped to `op` — the frame a furniture clip has
+    // animated OFF to — and the element disappeared from the canvas from the out-point on.
+    //
+    // The fixture is deliberately NOT marker-less: `introEnd` (40) must differ from BOTH
+    // `op` (100) and `ip` (0), or the assertion cannot tell the settled frame from the
+    // blank one and passes vacuously. `outroStart: 100 === op` is what makes it degenerate.
+    const runtime = createRuntime(
+      scene([lottieElement({ phases: { introEnd: 40, outroStart: 100, source: 'markers' } })], {
+        lifecycle: { outPoint: 60 },
+      }),
+      { skipFontLoad: true, installGlobals: false, lottieAssets },
+    );
+    for (const frame of [60, 70, 100]) {
+      runtime.tick(frame);
+      expect(lastFrame()).toBe(40);
+    }
+    // `op` must not appear ONCE across the whole sweep — a single frame of it is the bug.
+    expect(painted()).not.toContain(100);
+  });
+
+  it('a clip that HAS an outro still maps the OUT phase — the guard is not a blanket opt-out', () => {
+    // The control. Without it the cheapest wrong fix — never use the outro mapping —
+    // passes the test above and silently deletes the OUT phase for every marked clip.
+    const runtime = createRuntime(
+      scene([lottieElement({ phases: { introEnd: 40, outroStart: 60, source: 'markers' } })], {
+        lifecycle: { outPoint: 60 },
+      }),
+      { skipFontLoad: true, installGlobals: false, lottieAssets },
+    );
+    runtime.tick(59); // before the out-point: the held intro end
+    expect(lastFrame()).toBe(40);
+    runtime.tick(70); // 10 composition frames past it = 20 clip frames into the outro
+    expect(lastFrame()).toBe(80);
+  });
+
+  it('an idle-loop hold with a degenerate outro keeps cycling past the out-point', () => {
+    // Matching air: an idle-loop clip never settles, so the composition's out-point is not
+    // a boundary for it either.
+    const runtime = createRuntime(
+      scene(
+        [
+          lottieElement({
+            // `idle` lives INSIDE `phases` — the runtime reads `phases?.idle?.[0]`. As a
+            // sibling it is silently ignored and `idleOut` falls back to `outroStart`.
+            phases: { introEnd: 40, outroStart: 100, idle: [40, 60], source: 'markers' },
+            holdBehavior: 'idle-loop',
+          }),
+        ],
+        { lifecycle: { outPoint: 60 } },
+      ),
+      { skipFontLoad: true, installGlobals: false, lottieAssets },
+    );
+    // advanced = 2 × frame; idleFrames = advanced − (introEnd − ip); wrapped into [40, 60).
+    runtime.tick(60);
+    expect(lastFrame()).toBe(40);
+    runtime.tick(65);
+    expect(lastFrame()).toBe(50);
+    runtime.tick(70);
+    expect(lastFrame()).toBe(40);
+    expect(painted()).not.toContain(100);
+  });
+
+  it('⚠ a MARKER-LESS clip settles on `op` — the canvas agrees with air, and both are blank', () => {
+    // The limit of the fix above, pinned so nobody reads it as broken and "fixes" it into
+    // disagreeing with air. With NO `phases` the runtime resolves `introEnd = op`, so the
+    // settled frame IS the clip's last frame. The canvas now shows exactly what the driver
+    // holds on air — which for a furniture clip that animates OFF at its end is blank.
+    //
+    // That a marker-less clip ends blank AT ALL is a real product finding (design §4.4),
+    // and it is NOT a canvas defect: it is what the shipped hold does on every surface.
+    const runtime = createRuntime(
+      scene([lottieElement({ phases: undefined })], { lifecycle: { outPoint: 60 } }),
+      { skipFontLoad: true, installGlobals: false, lottieAssets },
+    );
+    runtime.tick(70);
+    expect(lastFrame()).toBe(100); // === op === introEnd for a marker-less clip
+    // …and the frames BEFORE the clip runs out are its real content, not the blank end.
+    runtime.tick(10);
+    expect(lastFrame()).toBe(20);
+  });
+
   it('a LIVE driver owns the frame — a tick reaching a PLAYING host never fights it', async () => {
     // The canvas never sends `play`, but the SAME host page serves the Preview, which
     // does. A stray tick there must not yank a clip out from under its own driver.

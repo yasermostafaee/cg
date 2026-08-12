@@ -360,13 +360,15 @@ override) on its **own** timeline.
   - **A driver running its own lifecycle OWNS the frame.** `positionAt` is a no-op while the
     driver is running or holding a frame it drove to, so a tick reaching a PLAYING host (the
     same page serves the Preview) can never yank a clip out from under its own driver.
-  - 🔴 **The composition's IN-POINT is not a special case**, and an implementation must never make
-    it one. It maps like every other frame — to `ip`, the clip's first frame, which for a build-on
-    furniture clip is legitimately blank. A revision that rested the in-point on the D-125 poster
-    instead made it the ONE frame on the canvas that did not show the clip: deterministic, so
-    scrubbing away and back never healed it, and invisible to a unit suite that asserted the same
-    exception. `LottieDriver.poster()` is now a PRE-TICK transient — the first tick overwrites it,
-    and on the broadcast surfaces the stage is blank until `play()` so it is never seen at all.
+  - 🔴 **A DEGENERATE outro takes the INTRO mapping past the out-point.** `outroStart` falls back to
+    `op` for a clip with no outro marker, so asking for the OUT phase there clamps to `op` — the
+    frame a furniture clip has animated OFF to — and the element vanishes from the out-point onward.
+    A clip with no outro of its own holds its settled frame instead, which is what the runtime does
+    on air (a degenerate `playOutro()` resolves immediately; the composition's exit animates the
+    element off). The guard is in `positionAt`, never in `clipPositionAt`: it selects WHICH mapping
+    applies, exactly like the intro/outro selection itself. `hasOutro` is a driver option, computed
+    once by the runtime — not re-derived from `outroStart >= op` at each site that needs it.
+  - 🔴 **The composition's IN-POINT is not a special case**
   - **`drivesHold` is NOT read on this path** (design §9.4): it answers "does this element
     gate the HOLD", which is a different question from "does the canvas show its frame".
     Furniture that deliberately does not drive the hold still follows the playhead.

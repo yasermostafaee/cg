@@ -43,6 +43,19 @@ This is stated as a requirement because the boundary is where it broke: an imple
 special-cased the in-point made it the ONE frame on the canvas that did not show the clip, while
 every other frame was correct.
 
+**A clip with NO OUTRO OF ITS OWN keeps its settled frame past the out-point.** When a Lottie's
+`outroStart` is at or past its `op` — a marker-less clip, or an outro-start authored at the last
+frame — it HAS no out phase, and the canvas SHALL keep showing its held frame for every frame at and
+past the composition's out-point, exactly as the runtime does on air (a degenerate `playOutro()`
+resolves immediately and the composition's own exit animates the element off). The canvas SHALL NOT
+drive such a clip to its last frame, which for a furniture clip is the frame it has animated OFF to.
+
+#### Scenario: A clip with no outro of its own does not vanish at the out-point
+
+- **WHEN** a composition with an out-point contains a Lottie whose outro is degenerate
+- **THEN** at and past the out-point the canvas shows the clip's held frame, never its last frame
+- **AND** a clip that DOES have an outro still maps its OUT phase from the out-point
+
 #### Scenario: The in-point shows the clip's first frame, not a poster
 
 - **WHEN** the playhead sits at the composition's in-point

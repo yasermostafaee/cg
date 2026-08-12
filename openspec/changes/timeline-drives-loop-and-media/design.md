@@ -410,11 +410,102 @@ is the only level that can tell "the driver asked for frame 0" apart from "the a
 
 ---
 
-## 5. 🔴 D-135's architecture question — ANSWERED
+### 4.4 🔴 The DEGENERATE outro — and a finding that is bigger than the bug (2026-08-13)
 
-> The question, in the hand-off's words: driving video frames on the canvas is either **"let it
-> play and re-anchor"** or **"position by `currentTime` per frame"**, and those are different
-> architectures. Say which, and why, with the cost of each.
+**The defect.** Add an out-point to a composition holding a Lottie and the clip vanished from the
+canvas from that frame onward. `tick(frame)` passes a non-null `outroElapsedMs` for every frame at
+or past the out-point, unconditionally — but `outroStart` falls back to `op` for a clip with no
+outro marker, so the OUT mapping was being asked for the out phase of a clip that HAS no out phase.
+It clamped to `op`: the frame a furniture clip has animated OFF to. Blank.
+
+**Why that is wrong rather than merely ugly:** a degenerate outro means the clip has no exit of its
+own. On air `playOutro()` resolves immediately (§D6.4.1), the driver leaves the HOLD frame painted,
+and the composition's own exit animates the element off. The canvas was contradicting air in the one
+phase this feature exists to stop it contradicting air in.
+
+**The fix** is caller-side, in `positionAt`: a degenerate outro takes the INTRO mapping past the
+out-point, so elapsed keeps growing and `clipPositionAt` returns `freeze-hold` (or keeps cycling an
+idle-loop). `clipPositionAt` is untouched — its singularity is a tested requirement, and this is a
+choice about WHICH mapping applies, exactly like the intro/outro selection itself. `hasOutro` is now
+a driver OPTION, computed once by the runtime beside the `outroStart` fallback: the driver had been
+re-deriving the same comparison inside `playOutro`, and that second copy is now gone too.
+
+#### ⚠ The limit of the fix, pinned by a test so it is not mistaken for a bug
+
+For a **marker-less** clip the fix changes the picture not at all, and it is important to understand
+why before "improving" it: `introEnd` also falls back to `op`, so the settled frame IS the clip's
+last frame. The canvas now shows exactly what the driver holds on air. Both are blank.
+
+That is not a canvas defect. It is what the shipped hold does on every surface — which is the
+finding below.
+
+### 4.5 🔴 FINDING — a marker-less Lottie goes BLANK at the end of its own playthrough, everywhere
+
+The owner also reported that a Lottie's visible duration in the Preview "equals `holdMs`". The
+mechanism proposed for that report was that a Lottie starts at the content-start frame — which
+defaults to the out-point — and therefore gets exactly `holdMs` of screen time. **That mechanism is
+false, and it was checked three ways in the tree at `ac1be366` before being discarded:**
+
+- `startOwnContent` (`runtime.ts`) resets and starts `scopeTickers`, `scopeClocks`,
+  `scopeSequences`. **No Lotties.**
+- the content-start VISIBILITY gate collects hosts from `scope.tickers`, `scope.clocks`,
+  `scope.sequences`. **No Lotties.**
+- the play path starts every Lottie at PLAY, with a comment that says so in as many words: _"the
+  Lottie intro starts at PLAY (not at hold entry like the time-driven content)"_.
+
+**`lifecycle.contentStart` has no effect whatsoever on a Lottie.** A measured sweep of the real
+runtime under a fake clock (scene 25 fps, out-point 60, `holdMs` **5000**, one clip whose own length
+is 2000 ms) settles it:
+
+| t (ms) | MARKER-LESS clip            | MARKED clip (`introEnd` 40) |
+| ------ | --------------------------- | --------------------------- |
+| 250    | frame 12                    | frame 12                    |
+| 1000   | frame 50                    | frame 40 (settled)          |
+| 2000   | **frame 100 = `op`, blank** | frame 40                    |
+| 5000   | frame 100, still blank      | frame 40                    |
+
+The clip starts painting immediately at PLAY, and what bounds its visible life is **its own length**
+— not `holdMs`, which was 5000 ms in both columns and bounded nothing. A marker-less clip freezes on
+`op` after one playthrough; a marked clip freezes on `introEnd` and stays visible for the whole
+composition. Where the owner's clip length happened to sit near `holdMs`, the two coincide — which
+is how the report reads as it does.
+
+#### The operator has no reachable control for this, and the reason is NOT `hasContentElement`
+
+The two levers proposed for this were: (1) pin `contentStart` earlier; (2) `drivesHold: true` +
+`holdSource: 'content-driven'`. Checked:
+
+- **Lever 1 is a no-op for a Lottie**, per the three findings above. It moves ticker / clock /
+  sequence content and nothing else. **So this observation does NOT motivate D-133 task §1**, and
+  citing it there would have written a false motivation into the item.
+- **Lever 2 IS reachable today.** `drivesHold` is authorable on the Lottie inspector
+  (`StyleSection.tsx`), and setting it makes `hasContentElement` true, which reveals the Hold-source
+  select. So "both levers sit behind `hasContentElement`" is false as well. But it does not solve
+  this: a content-driven hold ends when the clip's intro completes, which for a marker-less clip is
+  the moment it goes blank. It shortens the composition to the clip; it does not keep the clip
+  visible.
+
+**What the operator actually lacks is phase markers, and the inspector will not let them add any.**
+`StyleSection` renders editable `introEnd` / `outroStart` inputs only when `phases.source ===
+'manual'`; a clip with no phases at all gets a hint — _"No phase markers — plays once then
+freezes."_ — and no control. So the honest summary is: an imported clip with no markers plays once,
+goes blank, and there is nothing in the UI that changes that.
+
+Two directions, both the owner's to weigh, and **no item number is minted here**:
+
+1. **Offer MANUAL phases for a marker-less clip.** The manual-phase editor already exists and is
+   already the right shape; it is simply not offered when `phases === undefined`. Cheapest, and it
+   changes no runtime behaviour — the operator authors the `introEnd` the clip lacks.
+2. **Change the marker-less `introEnd` fallback** so the freeze lands somewhere visible (the clip
+   midpoint, mirroring what the D-125 poster did). Cheaper still to implement and strictly worse to
+   decide: it changes what goes ON AIR for every existing marker-less clip, silently.
+
+Direction 1 is this design's recommendation. It is recorded rather than acted on because it is a
+Designer-side authoring change with no place in this change's scope.
+
+---
+
+## 5. 🔴 D-135's architecture question — ANSWERED
 
 ### 5.1 THE ANSWER: position by `currentTime`
 

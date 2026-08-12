@@ -3491,6 +3491,16 @@ error-prone.
 > an out-point, and authoring a loop range never creates one as a side effect — creating one moves
 > the composition out of `static`, which changes what it does on air at stop time.
 >
+> ⚠ **A motivation that was proposed for this item and is FALSE — recorded so it is not
+> re-derived.** An operator report ("a Lottie's visible duration equals `holdMs`") was read as
+> motivating task §1, on the reasoning that pinning `contentStart` earlier would start the clip
+> before the out-point and lengthen its screen time. **`lifecycle.contentStart` has no effect
+> whatsoever on a Lottie**, verified three ways in the tree (`startOwnContent` starts tickers /
+> clocks / sequences only; the content-start visibility gate collects those same three kinds only;
+> and the play path starts every Lottie at PLAY, with a comment saying exactly that). Task §1 is
+> worth building on its own merits — it is NOT worth building for this reason, and the real cause of
+> that report is recorded in `design.md` §4.5.
+>
 > ⚠ **Consequence:** because the loop range is offered only where an out-point exists, what
 > discharges this item's "the conditional affordance is at most a shortcut, never the only path" is
 > `tasks.md` §3 — the loop range being **present by default** for a composition that loops or holds.
@@ -3592,12 +3602,28 @@ like they ignore `timezone`.
 > been replaced.
 >
 > The in-point clause
-> composition's in-point.\*\* That last clause took three attempts and is worth reading in
-> `design.md` §4.3: an interim revision rested the in-point on D-125's poster frame (to keep a
-> build-on clip from opening blank on the design surface), and the result — observed on the real
-> canvas — was that the in-point became the ONE frame that did not show the clip, while every other
-> frame animated correctly. The poster is now a pre-tick transient; the operator reaches the settled
-> look by moving the playhead.
+> took three attempts and is worth reading in `design.md` §4.3: an interim revision rested the
+> in-point on D-125's poster frame (to keep a build-on clip from opening blank on the design
+> surface), and the result — observed on the real canvas — was that the in-point became the ONE
+> frame that did not show the clip, while every other frame animated correctly. The poster is now a
+> pre-tick transient; the operator reaches the settled look by moving the playhead.
+>
+> 🔴 **A second canvas defect, fixed 2026-08-13 (`design.md` §4.4):** a Lottie with **no outro
+> marker** vanished from the out-point onward. `outroStart` falls back to `op`, so every frame at or
+> past the out-point asked for the OUT phase of a clip that has none and clamped to `op` — the frame
+> a furniture clip has animated OFF to. A degenerate outro now takes the INTRO mapping and holds its
+> settled frame, which is what the runtime does on air.
+>
+> ⚠ **AND A FINDING THAT IS BIGGER THAN THAT BUG — `design.md` §4.5, no item minted, yours to
+> weigh.** A **marker-less** Lottie goes blank at the end of its own playthrough on EVERY surface,
+> not just the canvas: `introEnd` also falls back to `op`, so the freeze-hold frame IS the clip's
+> blank last frame. Measured on the real runtime (out-point 60, `holdMs` **5000**, clip length 2000
+> ms): the clip paints from PLAY, reaches `op` at 2000 ms, and stays blank for the remaining 3 s.
+> **`holdMs` bounds nothing here** — the clip's own length does. The operator has no reachable
+> control: `StyleSection` offers editable phase inputs only when `phases.source === 'manual'`, and a
+> clip with no phases at all gets the hint _"No phase markers — plays once then freezes"_ and no
+> control. §4.5 records two directions; offering MANUAL phases for a marker-less clip is the
+> recommended one, because the other changes what goes on air for every existing clip.
 >
 > 🔴 **ONE NEW QUESTION, OPEN — `design.md` §9.5, and it gates the VIDEO half alone.** The
 > measurement shows the gap between positioning (~10 fps) and real forward-1× playback (25 fps) in

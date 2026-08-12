@@ -923,6 +923,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           speed: l.element.speed,
           introEnd,
           outroStart,
+          // D-135 — the SAME `hasOutro` the `cgOutro` guard and the scope's outro ledger
+          // read, computed once above. The driver needs it to know that a degenerate
+          // outro takes the INTRO mapping past the composition's out-point.
+          hasOutro,
           idleIn,
           idleOut,
           holdBehavior: l.element.holdBehavior,
