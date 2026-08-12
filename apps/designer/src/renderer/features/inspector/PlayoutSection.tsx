@@ -112,7 +112,14 @@ function mediaHoldItem(el: Extract<Element, { type: 'video' | 'lottie' }>): Cont
     name: el.name,
     type: el.type,
     drivesHold: el.drivesHold === true,
-    infinite: el.holdBehavior === 'loop',
+    // 🔴 BOTH never-completing hold values, because the two media kinds SPELL IT
+    // DIFFERENTLY: a video's is `loop` and a Lottie's is `idle-loop` (their schema enums are
+    // `['loop','freeze']` and `['freeze','idle-loop']`). Testing only `'loop'` silently marked
+    // every idle-loop LOTTIE as a finite closer — while the runtime says the opposite in as
+    // many words: "an idle-loop Lottie holds until stop(), like an infinite ticker", and only a
+    // freeze Lottie resolves `whenComplete`. So the row showed no infinity chip and the
+    // never-closes alert did not escalate for a graphic that genuinely never closes.
+    infinite: el.holdBehavior === 'loop' || el.holdBehavior === 'idle-loop',
   };
 }
 
@@ -188,6 +195,20 @@ interface NestedHoldDriver {
   override: boolean | undefined;
   /** D-112 — effective participation in THIS parent's hold = `override ?? drivesHold`. */
   effective: boolean;
+}
+
+/**
+ * `a`, `a and b`, `a, b and c` — the culprit list in the never-closes alert.
+ *
+ * ONE message, parameterised, rather than a separate all-infinite variant. The REMEDY is
+ * identical in both cases ("give a driver a finite repeat, exclude one below, or switch to a
+ * timed hold"), and naming the drivers is strictly more useful than asserting "every" — which
+ * is the same list spelled less helpfully, and which was the wording that could go stale the
+ * moment a finite driver joined.
+ */
+function listSentence(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1] ?? ''}`;
 }
 
 interface NestedHoldGroup {
@@ -463,31 +484,57 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
   // D-112 — hold-driving content inside nested composition instances drives the parent's hold too
   // (D-104); each instance's own direct content is now WRITABLE per-instance (its `holdOverrides`).
   const nested = nestedHoldGroupsOf(scene);
-  // D-111/D-112 — a content-driven hold is `Promise.all` over its EFFECTIVE drivers, so ANY
-  // infinite-repeat driver (still effectively participating) keeps the graphic on air until stop().
-  // Flag each such row; escalate to a prominent alert when EVERY effective driver (own + nested,
-  // per-instance overrides applied) is infinite, so nothing can end the hold on content.
-  const ownDrivers = items.filter((it) => it.drivesHold);
-  const totalDrivers = ownDrivers.length + nested.reduce((n, g) => n + g.effectiveCount, 0);
-  const infiniteDrivers =
-    ownDrivers.filter((it) => it.infinite).length +
-    nested.reduce((n, g) => n + g.effectiveInfinite, 0);
-  const allInfinite = infiniteDrivers > 0 && infiniteDrivers === totalDrivers;
   const labels = disambiguate(items.map((it) => it.name));
   const nestedLabels = disambiguate(nested.map((g) => g.name));
+  // D-111/D-112 — a content-driven hold is `Promise.all` over its EFFECTIVE drivers, so ANY
+  // infinite-repeat driver (still effectively participating) keeps the graphic on air until
+  // stop(). Flag each such row, AND escalate to the alert on ANY of them.
+  //
+  // 🔴 It escalated on EVERY until 2026-08-13, and the gap was worse than a missed warning. With
+  // an infinite ticker and a Lottie, ticking the Lottie added a FINITE driver (a `freeze` hold
+  // completes at its intro end), `every` stopped holding, and the banner UNMOUNTED — while its
+  // headline claim, "this graphic won't auto-close", was still true. An alert that disappears at
+  // the moment the operator acts reads as confirmation that the action fixed it. The comment
+  // above already said ANY; only the code said EVERY.
+  //
+  // The culprits are named from the SAME arrays the counts come from (`items` + `nested`, each
+  // with its disambiguated label), so the sentence and the condition cannot disagree — and the
+  // effective-driver derivation stays exactly where it was, in `contentHoldElementsOf` /
+  // `nestedHoldGroupsOf`.
+  const infiniteOwn = items
+    .map((it, i) => ({ it, label: labels[i] ?? it.name }))
+    .filter(({ it }) => it.drivesHold && it.infinite);
+  // A nested group names its INSTANCE: `effectiveInfinite` counts drivers reachable through it
+  // (its own direct content plus deeper instances, per-level overrides applied), and the deeper
+  // ones have no row of their own to name.
+  const infiniteNested = nested
+    .map((g, i) => ({ g, label: nestedLabels[i] ?? g.name }))
+    .filter(({ g }) => g.effectiveInfinite > 0);
+  const infiniteLabels = [
+    ...infiniteOwn.map(({ label }) => `“${label}”`),
+    ...infiniteNested.map(({ label }) => `content inside “${label}”`),
+  ];
+  const anyInfinite = infiniteLabels.length > 0;
   return (
     <>
-      {allInfinite && (
+      {anyInfinite && (
         <div className={s.row} style={{ display: 'block' }}>
           {/* `role="alert"` restored: #352 recoloured this banner danger→caution and the
               variant-derived role silently demoted it to `status`. The COLOUR changed
-              because an all-infinite hold is a legitimate state, not an error — but it is
+              because a never-closing hold is a legitimate state, not an error — but it is
               still an assertive announcement ("this graphic will not auto-close"), so it
-              stays in the alert channel. Styling and semantics are independent. */}
+              stays in the alert channel. Styling and semantics are independent.
+
+              🔴 This banner has now lost accuracy TWICE through a change that looked local:
+              once in styling (#352's variant swap silently demoting the role) and once in
+              logic (escalating on EVERY infinite driver instead of ANY). Both times the
+              banner kept rendering something, so nothing looked broken. Keep the variant
+              and the role BOTH explicit, and keep the condition tied to the consequence. */}
           <Callout variant="caution" role="alert">
-            This graphic won’t auto-close — every content driver repeats forever, so the
-            content-driven hold runs until stop. Give a driver a finite repeat, exclude one below,
-            or switch to a timed hold.
+            This graphic won’t auto-close — {listSentence(infiniteLabels)}{' '}
+            {infiniteLabels.length === 1 ? 'repeats' : 'repeat'} forever, so the content-driven hold
+            runs until stop. Give a driver a finite repeat, exclude one below, or switch to a timed
+            hold.
           </Callout>
         </div>
       )}
