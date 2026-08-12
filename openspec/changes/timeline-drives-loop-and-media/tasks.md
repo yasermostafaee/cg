@@ -202,11 +202,12 @@ test pairs the two, so it can never pass by nothing happening).
       `apps/designer/src/renderer/features/timeline/README.md` (a new "What the playhead drives on
       the canvas" section, including the poster consequence), `docs/engines/overview.md`
 - [x] Full green gate for every touched workspace (`pnpm gate`, uncached, exit 0; openspec 48/48)
-- [x] **E2E**: DISCHARGED for `f492939d` — <https://github.com/yasermostafaee/cg/actions/runs/31633111026>
-      `conclusion: success`, and the `e2e` job **RAN** (not skipped). This SUPERSEDES the earlier
-      discharge rather than joining it: the debt follows the pushed HEAD, and `6e620f70`'s run
-      (<https://github.com/yasermostafaee/cg/actions/runs/31612094833>) verified a tree whose canvas
-      behaviour at the in-point has since been replaced.
+- [x] **E2E**: DISCHARGED for `0d2d0c3b` — <https://github.com/yasermostafaee/cg/actions/runs/31639516131>
+      `conclusion: success`, and the `e2e` job **RAN** (not skipped). This SUPERSEDES every earlier
+      discharge rather than joining them — the debt follows the pushed HEAD, and each earlier run
+      verified a tree whose canvas behaviour has since been replaced:
+      `f492939d` (<https://github.com/yasermostafaee/cg/actions/runs/31633111026>) and `6e620f70`
+      (<https://github.com/yasermostafaee/cg/actions/runs/31612094833>).
       ⚠ **This change's history carries one RED run**, on `f2ce18ae`
       (<https://github.com/yasermostafaee/cg/actions/runs/31589324495>) — not a flake and not
       infrastructure: the D-125 canvas tests, failing on a real regression. It discharges nothing
