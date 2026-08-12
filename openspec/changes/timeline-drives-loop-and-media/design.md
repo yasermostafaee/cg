@@ -332,36 +332,81 @@ the span the clip is anchored on the composition's active in-point rather than t
 on air `play()` starts every Lottie regardless of a start-trimmed lifespan, and the canvas must
 agree with what goes on air.
 
-### 4.3 🔴 D-125's POSTER SURVIVES — and CI is what established that, not judgement
+**Every frame maps, and the composition's in-point is not exempt** — at the in-point the clip shows
+`ip`, its first frame, which for a build-on furniture clip is legitimately blank. That is what a
+keyframed element animating in from opacity 0 has always done on this canvas, so the two kinds
+agree. §4.3 is the record of how that rule was decided, unwound, and decided again.
 
-The first implementation positioned the clip faithfully at every frame, including the composition's
-in-point, where the mapped frame is `ip`. It was pushed with that recorded as an accepted visible
-consequence ("the poster's premise is gone; keyframed elements have always behaved this way"). **The
-Linux `e2e` job failed it, and the failure was right.** Two D-125 tests — "a placed Lottie whose
-intro animates ON renders a settled frame on the EDITOR canvas (not the invisible frame 0)" and "a
-MARKER-LESS furniture clip renders a VISIBLE poster" — assert a non-zero painted bbox on the canvas.
-`ip` is the intro-START, where a furniture clip has scaled the graphic to nothing, and **a scene
-opens with its playhead at the in-point**, so every Lottie became an empty box on the design
-surface: the exact bug the poster was filed to fix, re-introduced one surface later.
+### 4.3 🔴 THE IN-POINT IS NOT A SPECIAL CASE — one rule, decided twice, and the second time on the real canvas
 
-**The settled rule: at or before the composition's in-point the canvas RESTS on the poster; from the
-frame after it, the playhead owns the frame.** The two requirements answer different questions and
-both survive intact — the poster is what the canvas shows when the playhead has NOT entered the
-composition, the mapping is what it shows when it has. There is a visible STEP between the in-point
-and the frame after it. That is the price, it is paid knowingly, and it is the same trade D-125 made
-when it refused to park on `ip`.
+This section records a rule that was written, reverted, and then reverted again, because the
+sequence is the whole lesson and a bare conclusion would invite a third attempt.
 
-Two lessons worth more than the fix:
+**Attempt 1 (`e44afbf0`) — the mapping at every frame.** Faithful, and at the composition's in-point
+it paints `ip`: the intro-START, where a build-on furniture clip has scaled the graphic to nothing.
 
-1. **"The premise of the old decision is gone" is a claim about a SPEC, and a spec is not retired by
-   an implementation that finds it inconvenient.** D-125's poster is a living requirement with E2E
-   coverage; retiring it is the owner's call and would need its own `## MODIFIED Requirements`.
-2. **The E2E debt earned its keep on the first change that owed it.** No unit test in this package
-   would have caught it — the poster's value is that the painted graphic is VISIBLE, which is a
-   pixel fact about a real clip. The unit suite now guards the rule (both drivers' tests), but it is
-   guarding a rule the browser found.
+**Attempt 2 (`6e620f70`) — the poster at the in-point.** The Linux `e2e` job failed attempt 1 on two
+D-125 tests asserting a placed Lottie renders a VISIBLE frame on the canvas. Read as "a living
+requirement outranks an implementation's convenience", the fix made the in-point rest on the poster.
+It went green.
 
----
+**Attempt 3 (this change, and the settled one) — the mapping at every frame, INCLUDING the
+in-point.** The owner watched attempt 2 on the real canvas and reported the defect it actually is:
+**the in-point was the one frame that did not show the clip.** Every other frame animated correctly;
+the boundary showed a mid-clip picture that belonged to no playhead position at all.
+
+**The cause was not a race, a dropped paint, or a falsy-zero guard** — the three shapes a
+"frame 0 is wrong" report usually has. It was an explicit branch in `positionAt`
+(`if (outroElapsedMs === null && introElapsedMs <= 0) paint(posterFrame)`), added by attempt 2. The
+owner's own observation is what rules the other shapes out and it is worth keeping as a diagnostic
+habit: **the fault was not history-dependent.** Scrubbing to frame 50 and back to 0 still showed the
+poster. A race loses to whichever paint lands last and heals on the next scrub; a swallowed zero
+would leave the previous frame, not a specific unrelated one. Only a deterministic function of the
+frame reproduces on every visit — which points at a branch, not at timing.
+
+#### Why the poster cannot be rescued, even though its observation is still true
+
+D-125's comment gave two reasons for the poster. They did not age the same way:
+
+- _"a design surface that never plays"_ — **DEAD.** The playhead drives the canvas now.
+- _"both ends of a furniture clip are commonly blank"_ — **still true, and unactionable.** Acting on
+  it requires an "at rest" exception, and the canvas cannot know parked-from-playing: §1.3
+  established that it receives ONE `scrub` stream and has no other signal. The only available
+  approximation is frame-based ("the in-point is at rest"), and that is exactly attempt 2 — which
+  additionally flashes the poster for one frame on every PLAY from the top.
+
+So the honest resolution is not a better exception; it is that **the mapping wins at every frame**
+and the operator reaches the settled look by moving the playhead, which is the gesture D-135 exists
+to make meaningful.
+
+#### Is `driver.poster()` still worth calling at build? — YES, but for a smaller reason
+
+The question is worth answering rather than assuming, because the obvious move after this fix is to
+delete it. It is KEPT, and its meaning is narrowed:
+
+- On the canvas it is a **pre-tick transient** — `preview.ts` ticks after every `applyScene`, so the
+  first tick overwrites it immediately.
+- On the broadcast surfaces it is never seen: the stage is blank (`cg-pending`) until `play()`.
+- It is kept because a host that builds a runtime and never ticks still needs a defined first frame,
+  and because removing it is a behavioural claim about those hosts that this defect does not need to
+  make. (Had the cause been an ordering race, deleting the poster would have been the right fix —
+  "stop painting something the tick will overwrite" beats sequencing the race. The cause was not a
+  race, so that reasoning does not apply.)
+
+`lottie-driver.ts`'s `poster()` comment is annotated in place with which half of its rationale died
+and which survives-but-is-unactionable, so this is not re-litigated from the conclusion alone.
+
+#### What the test suites did and did not do — the part worth carrying forward
+
+790 unit tests were green across attempts 1 and 2, and the boundary was broken in attempt 2. The
+tests were not absent: **one asserted the wrong rule, deliberately.** That is the failure mode to
+watch for — not a missing test but a test that encodes a decision, which then makes the decision
+un-observable when it turns out to be wrong. The suites now pin the boundary from both sides: unit
+tests assert the mapped frame at the in-point with a MARKER-LESS fixture (so `posterFrame` is the
+clip midpoint and can never coincide with `ip` — with `phases` present the two can collide and the
+assertion passes vacuously), and the canvas E2E reads the **rendered** bbox in a real browser, which
+is the only level that can tell "the driver asked for frame 0" apart from "the animation shows frame
+0".
 
 ---
 
@@ -758,6 +803,21 @@ position it by `currentTime`.**
 
 **Not decided here.** Answering it means weighing frame-true forward play against the one-call
 guarantee D-135's acceptance rests on.
+
+#### ⚠ §5 also owes a CONSISTENCY debt the Lottie half just created
+
+`<video>` on the canvas still sits at its own poster: `scene-builder.ts` stamps
+`data-cg-poster-ms` and the paused element is seeked there, so a transparent frame 0 does not show
+as a black or empty box. That was the same reasoning as the Lottie's poster — and §4.3 has now
+settled that reasoning against the Lottie, at every frame including the in-point. **So the two
+frame-mapped media kinds currently disagree at rest**: a Lottie shows the frame under the playhead,
+a video shows a poster.
+
+**Task §5 resolves this by DROPPING the video's canvas poster to match the Lottie, not by restoring
+the Lottie's.** It is recorded here rather than fixed now because touching video behaviour is
+exactly what §5 is gated on: whichever way §9.5 goes, the video's canvas frame becomes something
+`tick(frame)` owns, and the poster is the thing it would overwrite. Doing it early would change
+video rendering in a change that has deliberately not decided how video is driven.
 
 ## 10. What was expected and NOT found
 

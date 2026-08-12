@@ -258,13 +258,13 @@ describe('D-135 — the playhead positions every Lottie on the canvas', () => {
       installGlobals: false,
       lottieAssets,
     });
-    // Before any tick the canvas shows the D-125 poster (the marked hold frame).
+    // Before any tick the canvas shows the D-125 poster (the marked hold frame) — a
+    // PRE-TICK transient now, not a resting state: the first tick owns the frame.
     expect(lastFrame()).toBe(40);
 
-    // AT the in-point the canvas is at REST and KEEPS the poster (D-125 survives — see
-    // the dedicated test below); the mapping takes over from the frame after it.
+    // AT the in-point the mapping wins like everywhere else: `ip`.
     runtime.tick(0);
-    expect(lastFrame()).toBe(40);
+    expect(lastFrame()).toBe(0);
 
     // 2 clip frames per composition frame (25 fps against fr 50 × speed 1).
     runtime.tick(5);
@@ -289,8 +289,8 @@ describe('D-135 — the playhead positions every Lottie on the canvas', () => {
       lottieAssets,
     });
     const before = painted().length;
-    for (let f = 1; f <= 10; f += 1) runtime.tick(f);
-    expect(painted().slice(before)).toEqual([2, 4, 6, 8, 10, 12, 14, 16, 18, 20]);
+    for (let f = 0; f <= 10; f += 1) runtime.tick(f);
+    expect(painted().slice(before)).toEqual([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]);
     // The SAME frame reached by a single scrub — no accumulated state, no drift between
     // the two halves of the acceptance, because there is only one call to disagree with.
     handles.length = 0;
@@ -365,39 +365,43 @@ describe('D-135 — the playhead positions every Lottie on the canvas', () => {
     expect(lastFrame()).toBe(30);
   });
 
-  it('🔴 D-125 SURVIVES: at or before the in-point the canvas rests on the POSTER, not on `ip`', () => {
-    // The regression this guards is a real, filed one: `ip` is the intro-START, where a
-    // furniture clip has scaled the graphic to nothing, and a scene OPENS with its
-    // playhead at the in-point — so the faithful mapping would put an empty box on the
-    // design surface, which is exactly the bug D-125's poster was filed to fix. The
-    // canvas E2E asserts the painted bbox is non-zero; this is that rule at unit level.
-    const runtime = createRuntime(scene([lottieElement()], { activeRange: { in: 10, out: 90 } }), {
-      skipFontLoad: true,
-      installGlobals: false,
-      lottieAssets,
-    });
-    runtime.tick(0); // before the in-point — at rest
-    expect(lastFrame()).toBe(40);
-    runtime.tick(10); // AT the in-point — still at rest
-    expect(lastFrame()).toBe(40);
-    // Past it the playhead owns the frame: anchored on the ACTIVE in-point, so frame 15
-    // is 5 composition frames = 10 clip frames in.
-    runtime.tick(15);
-    expect(lastFrame()).toBe(10);
-  });
-
-  it('a MARKER-LESS clip rests on the midpoint poster, never on `op` (the invisible outro-end)', () => {
-    // The same rule with the other poster: absent `phases`, `introEnd` falls back to `op`
-    // (the outro-END, scale 0), so the runtime posters the clip MIDPOINT instead.
+  it('🔴 THE IN-POINT IS NOT SPECIAL — it maps like every other frame, never to the poster', () => {
+    // The defect this pins: the in-point was the ONE frame that showed the D-125 poster
+    // instead of its mapped frame, and it did so DETERMINISTICALLY (an explicit branch,
+    // not a race — which is why scrubbing away and back never healed it).
+    //
+    // The fixture is MARKER-LESS on purpose, so `posterFrame` is the clip MIDPOINT (50)
+    // and can never coincide with `ip` (0). With `phases` present the two can collide and
+    // the assertion passes vacuously — which is exactly how the boundary went unnoticed.
     const runtime = createRuntime(scene([lottieElement({ phases: undefined })]), {
       skipFontLoad: true,
       installGlobals: false,
       lottieAssets,
     });
-    runtime.tick(0);
-    expect(lastFrame()).toBe(50);
+    expect(handles[0]?.frames.at(-1)).toBe(50); // the pre-tick poster, so the test can tell them apart
+
+    runtime.tick(0); // THE BOUNDARY — `ip`, not the poster
+    expect(lastFrame()).toBe(0);
+    runtime.tick(1); // the CONTROL: this frame was always correct
+    expect(lastFrame()).toBe(2);
+    runtime.tick(50); // scrub away…
+    expect(lastFrame()).toBe(100);
+    runtime.tick(0); // …and back: still mapped, because it never depended on history
+    expect(lastFrame()).toBe(0);
   });
 
+  it('the in-point is the ACTIVE in-point, not frame 0, and before it the clip clamps to `ip`', () => {
+    const runtime = createRuntime(
+      scene([lottieElement({ phases: undefined })], { activeRange: { in: 10, out: 90 } }),
+      { skipFontLoad: true, installGlobals: false, lottieAssets },
+    );
+    runtime.tick(10); // the in-point maps to `ip`
+    expect(lastFrame()).toBe(0);
+    runtime.tick(0); // BEFORE it: clamped to the clip start, still never the poster
+    expect(lastFrame()).toBe(0);
+    runtime.tick(15); // 5 composition frames in = 10 clip frames
+    expect(lastFrame()).toBe(10);
+  });
   it('a LIVE driver owns the frame — a tick reaching a PLAYING host never fights it', async () => {
     // The canvas never sends `play`, but the SAME host page serves the Preview, which
     // does. A stray tick there must not yank a clip out from under its own driver.

@@ -3585,13 +3585,13 @@ like they ignore `timezone`.
 > this engine**, so that recommendation is deleted rather than hedged.
 >
 > ✅ **The LOTTIE half is BUILT and CI-verified.** `tick(frame)` positions every Lottie at the
-> playhead; scrub and PLAY are the same call by construction. Linux `e2e` DISCHARGED for
-> `6e620f70` — <https://github.com/yasermostafaee/cg/actions/runs/31612094833> (`success`, and the
-> `e2e` job RAN). ⚠ The push before it went RED on a real regression this change introduced — it
-> broke D-125's canvas POSTER by positioning faithfully at the in-point, where `ip` is the
-> scale-0 intro start and a scene opens. Settled rule: **at or before the in-point the canvas rests
-> on the poster; the playhead owns the frame from the frame after it.** Both requirements survive;
-> see `design.md` §4.3.
+> playhead; scrub and PLAY are the same call by construction; **every frame maps, including the
+> composition's in-point.** That last clause took three attempts and is worth reading in
+> `design.md` §4.3: an interim revision rested the in-point on D-125's poster frame (to keep a
+> build-on clip from opening blank on the design surface), and the result — observed on the real
+> canvas — was that the in-point became the ONE frame that did not show the clip, while every other
+> frame animated correctly. The poster is now a pre-tick transient; the operator reaches the settled
+> look by moving the playhead.
 >
 > 🔴 **ONE NEW QUESTION, OPEN — `design.md` §9.5, and it gates the VIDEO half alone.** The
 > measurement shows the gap between positioning (~10 fps) and real forward-1× playback (25 fps) in

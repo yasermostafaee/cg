@@ -137,14 +137,33 @@ export class LottieDriver {
   }
 
   /**
-   * D-125 — paint a REPRESENTATIVE, VISIBLE static frame for a design surface that never
-   * plays (the editor canvas). Both ENDS of a furniture clip are commonly blank: `ip` is
-   * the intro-START (animated ON from nothing) and `op` is the outro-END (animated OFF to
-   * nothing), so parking at either shows an empty box. The runtime supplies
+   * D-125 — paint a REPRESENTATIVE, VISIBLE static frame. The runtime supplies
    * {@link LottieDriverOptions.posterFrame} — the marked hold-start (`introEnd`) when the
    * clip has phase markers, else the clip MIDPOINT (in the held/visible region), NEVER
    * `op`. Absent an explicit poster frame this falls back to `introEnd`. The play() path
    * calls {@link reset} (→ `ip`), so the intro still plays from the start when played.
+   *
+   * ⚠ D-135 CHANGED WHAT THIS IS FOR. The original rationale had two halves, and they
+   * did not age the same way — annotated here rather than deleted, so the reasoning is
+   * not re-litigated from the conclusion alone:
+   *
+   *  - _"a design surface that never plays"_ — **DEAD.** The playhead drives the canvas
+   *    now: `tick(frame)` positions every Lottie, under scrub and under PLAY alike. This
+   *    is no longer a surface that parks.
+   *  - _"both ends of a furniture clip are commonly blank"_ — **still TRUE as an
+   *    observation, and UNACTIONABLE as a rule.** Acting on it needs an "at rest"
+   *    exception, and the canvas cannot know parked-from-playing: it receives ONE
+   *    `scrub` stream and nothing else (design §1.3). A frame-based approximation —
+   *    "the in-point is at rest" — flashes the poster for one frame on every PLAY from
+   *    the top, and makes the in-point lie about the clip while every other frame tells
+   *    the truth. That was implemented, observed on the real canvas, and reverted.
+   *
+   * What survives: this is the PRE-TICK paint. On the canvas the first `tick` overwrites
+   * it immediately (`preview.ts` ticks after `applyScene`), so it is a transient rather
+   * than a resting state; on the broadcast surfaces the stage is blank (`cg-pending`)
+   * until `play()`, so it is never seen there at all. It is kept because a host that
+   * builds a runtime and never ticks still needs a defined first frame — not because
+   * the canvas needs a poster.
    */
   poster(): void {
     this.cancelFrame();
@@ -344,31 +363,19 @@ export class LottieDriver {
    * poster); it may never fight a live one, which is what a stray tick reaching a
    * PLAYING host would otherwise do.
    *
+   * 🔴 THE IN-POINT IS NOT A SPECIAL CASE, and this method must never make it one. A
+   * revision of this code returned {@link LottieDriverOptions.posterFrame} at zero
+   * elapsed, to keep a build-on clip from resting blank on the design surface. The
+   * result was that the composition's in-point became the ONE frame on the canvas that
+   * did not show the clip — deterministically, so scrubbing away and back never healed
+   * it — while every other frame was right. The mapping wins at EVERY frame; see
+   * {@link poster} for what is left of the poster's rationale.
+   *
    * It does NOT start a clock, mint a completion, or settle an outro: the playhead is
    * the only clock on this path, and a paint is all it is entitled to.
    */
   positionAt(introElapsedMs: number, outroElapsedMs: number | null): void {
     if (this.destroyed || this.running || this.settledHold) return;
-    // 🔴 D-125 SURVIVES D-135, and this line is where the two meet.
-    //
-    // AT OR BEFORE the composition's in-point nothing has been scrubbed INTO yet: the
-    // canvas is at REST, and its resting state is the POSTER — a representative VISIBLE
-    // frame (see {@link poster}). Painting the mapped frame here instead would be the
-    // faithful answer and the WRONG one: at the in-point the mapped frame is `ip`, the
-    // intro-START, where a furniture clip has scaled the graphic to nothing. A scene
-    // opens with its playhead at the in-point, so every Lottie would be an empty box on
-    // the design surface — exactly the bug D-125's poster was filed to fix, re-introduced
-    // one surface later.
-    //
-    // The apparent contradiction dissolves once the two are read as answering different
-    // questions: the poster is what the canvas shows when the playhead has NOT entered
-    // the composition, and the mapping is what it shows when the playhead has. There is
-    // a visible step between the in-point and the frame after it — that is the price,
-    // and it is the same trade D-125 made deliberately when it refused to park on `ip`.
-    if (outroElapsedMs === null && introElapsedMs <= 0) {
-      this.paint(this.o.posterFrame ?? this.o.introEnd);
-      return;
-    }
     const pos =
       outroElapsedMs === null
         ? this.clipPositionAt(introElapsedMs, 'intro')
@@ -376,8 +383,6 @@ export class LottieDriver {
     this.paint(pos.frame);
   }
 
-  /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
-  /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   private armComplete(): Promise<void> {
     return new Promise<void>((res) => {

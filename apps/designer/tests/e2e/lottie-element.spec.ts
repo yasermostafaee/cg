@@ -311,7 +311,33 @@ test.describe('Lottie element (D-125 Phase 1)', () => {
     await app.stop();
   });
 
-  test('a placed Lottie whose intro animates ON renders a settled frame on the EDITOR canvas (not the invisible frame 0)', async ({
+  /**
+   * The painted size of the canvas Lottie's rendered content. `getBBox()` collapses to
+   * ~0 where the clip has scaled the graphic to nothing (both ends of a furniture clip)
+   * and is full-size in the held region — so it reads what the animation ACTUALLY
+   * RENDERED, not what the driver was asked to paint. That distinction is the point of
+   * asserting this in a browser at all: a spy on `goToFrame` passes whether or not
+   * lottie-web honoured the call.
+   */
+  const paintedSize = (app: DesignerApp): Promise<number> =>
+    app.canvasFrame
+      .locator('[data-cg-element-id] svg')
+      .first()
+      .evaluate((el) => {
+        try {
+          const b = (el as unknown as SVGGraphicsElement).getBBox();
+          return Math.min(b.width, b.height);
+        } catch {
+          return 0;
+        }
+      });
+
+  // Composition frame 20 maps into the clip's VISIBLE region for every plausible project
+  // fps: at 25/30/50 fps a 30 fps clip lands on clip frame 24/20/12, all inside the
+  // [10, 50] held span of both fixtures.
+  const VISIBLE_FRAME = 20;
+
+  test('the canvas Lottie follows the playhead — INCLUDING at the in-point, which is not a special case', async ({
     app,
   }) => {
     await app.newProject('Lottie canvas');
@@ -321,38 +347,36 @@ test.describe('Lottie element (D-125 Phase 1)', () => {
     const svg = app.canvasFrame.locator('[data-cg-element-id] svg').first();
     await expect(svg).toBeAttached();
 
-    // The DESIGN SURFACE is static (it never plays), so it must park on a
-    // REPRESENTATIVE frame — the settled hold frame (intro-end), where the graphic is
-    // fully ON — not `ip` (frame 0), where the intro has scaled the graphic to nothing.
-    // Assert the RENDERED CONTENT has a non-zero painted size: getBBox() collapses to
-    // ~0 at the scale-0 intro-start and is full-size at the settled frame. This bites
-    // the pre-fix "empty box on the canvas" state.
-    await expect
-      .poll(
-        async () =>
-          svg.evaluate((el) => {
-            try {
-              const b = (el as unknown as SVGGraphicsElement).getBBox();
-              return Math.min(b.width, b.height);
-            } catch {
-              return 0;
-            }
-          }),
-        { timeout: 5000 },
-      )
-      .toBeGreaterThan(5);
+    // D-135 — the canvas shows the frame under the PLAYHEAD, and the composition's
+    // in-point is not exempt. This clip's intro scales ON from nothing over frames 0..10,
+    // so at the in-point the honest picture is the scale-0 intro-START: painted size ~0.
+    //
+    // This assertion REPLACES a D-125 one that required a VISIBLE "poster" frame here.
+    // That requirement is superseded by the owner's decision that the mapping wins at
+    // every frame: the poster's rationale was "a design surface that never plays", and
+    // the playhead drives the canvas now. See `lottie-driver.ts` `poster()`, where which
+    // half of that rationale died is annotated.
+    await expect.poll(async () => paintedSize(app), { timeout: 5000 }).toBeLessThan(5);
+
+    // Scrub INTO the clip: the graphic is fully ON, so real content is painted. This is
+    // what the retired assertion was really protecting — that the player renders, and
+    // that the operator can SEE the clip on the canvas — and it still holds, one gesture
+    // later.
+    await app.scrubToFrame(VISIBLE_FRAME);
+    await expect.poll(async () => paintedSize(app), { timeout: 5000 }).toBeGreaterThan(5);
+
+    // Back to the in-point: blank AGAIN. The in-point's frame is a function of the
+    // playhead alone, never of how the playhead got there — the defect this replaces was
+    // the opposite, and survived a round trip.
+    await app.scrubToFrame(0);
+    await expect.poll(async () => paintedSize(app), { timeout: 5000 }).toBeLessThan(5);
   });
 
-  test('a MARKER-LESS furniture clip renders a VISIBLE poster on the editor canvas (not the invisible outro-end)', async ({
+  test('a MARKER-LESS furniture clip maps at the in-point too, and its held region renders', async ({
     app,
   }) => {
     await app.newProject('Lottie no-markers');
     await importAndPlaceLottie(app, 'furniture-nomarkers.json', MARKERLESS_FURNITURE);
-
-    // The real furniture bug: with NO phase markers the runtime's `introEnd` fell back to
-    // `op` (the LAST frame = outro-END, scale 0 = invisible), and #338's poster parked
-    // there — so the canvas showed an EMPTY box while Preview (which the operator PLAYS)
-    // worked. The player DID mount; the poster FRAME was invisible.
 
     // The lottie_light player is mounted on the EDITOR CANVAS (a real <svg>, in the
     // canvas iframe — the parent-doc selection gizmo <polygon> is NOT in this frame).
@@ -360,22 +384,16 @@ test.describe('Lottie element (D-125 Phase 1)', () => {
     await expect(svg).toBeAttached();
     await expect(svg).toHaveAttribute('viewBox', /\d/); // a real lottie_light svg, not a stub
 
-    // And it posters a VISIBLE frame (the clip midpoint, in the held region): the rendered
-    // content has a non-zero painted size. On the pre-fix build the poster is `op` (the
-    // scale-0 outro-end) and this collapses to ~0 — the test bites.
-    await expect
-      .poll(
-        async () =>
-          svg.evaluate((el) => {
-            try {
-              const b = (el as unknown as SVGGraphicsElement).getBBox();
-              return Math.min(b.width, b.height);
-            } catch {
-              return 0;
-            }
-          }),
-        { timeout: 5000 },
-      )
-      .toBeGreaterThan(5);
+    // A MARKER-LESS clip is the case that can hide a boundary bug: with no `phases` the
+    // poster frame is the clip MIDPOINT, far from `ip`, so "poster" and "mapped" can
+    // never coincide. At the in-point the mapped frame is `ip` — scale 0 — and that is
+    // what must render.
+    await expect.poll(async () => paintedSize(app), { timeout: 5000 }).toBeLessThan(5);
+
+    // #338's real value, preserved: the operator can still SEE this clip on the canvas.
+    // The old bug was a poster parked on `op` (the invisible outro-end) with no way to
+    // reach the held region; now the held region is one scrub away and it renders.
+    await app.scrubToFrame(VISIBLE_FRAME);
+    await expect.poll(async () => paintedSize(app), { timeout: 5000 }).toBeGreaterThan(5);
   });
 });

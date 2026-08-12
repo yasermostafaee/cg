@@ -129,13 +129,22 @@ Sequenced first deliberately: it makes the acceptance demonstrable on one elemen
 is still open, and it validates the frame↔time mapping the video half then reuses. No new
 architecture, no decoder.
 
-🔴 **D-125's POSTER SURVIVES — the first implementation got this wrong and CI caught it.** At or
-before the composition's in-point the canvas RESTS on the poster (a representative VISIBLE frame);
-from the frame after it, the playhead owns the frame. Positioning faithfully at the in-point paints
-`ip` — the intro-START, scaled to nothing — and a scene OPENS there, so every Lottie became an empty
-box on the design surface: the exact bug D-125's poster was filed to fix. The Linux `e2e` job failed
-on the two D-125 canvas tests and was right to. See design §4.3; the rule is now guarded at unit
-level in BOTH drivers' tests as well.
+- [x] 🔴 **THE IN-POINT IS NOT A SPECIAL CASE** — settled after the rule was decided twice and the
+      second decision was watched on the real canvas. An interim revision rested the in-point on the
+      D-125 poster; the result was that the composition's in-point became the ONE frame that did not
+      show the clip, deterministically, while every other frame animated correctly. The mapping now
+      wins at EVERY frame, `poster()` is a pre-tick transient, and D-125's comment is annotated in
+      place with which half of its rationale died. Design §4.3
+- [x] Test: the in-point maps like every other frame, on a MARKER-LESS fixture so `posterFrame` (the
+      clip midpoint) can never coincide with `ip` — with `phases` present the two collide and the
+      assertion passes vacuously, which is how the boundary went unobserved
+- [x] Test: `in + 1` (the control that proves the assertion discriminates) and a return to the
+      in-point after scrubbing away (the fault was not history-dependent, so a one-shot test would
+      have missed nothing — but a reader needs to see that pinned)
+- [x] E2E: the two D-125 canvas tests are RETARGETED, not deleted — they now read the RENDERED bbox
+      at the in-point (blank, the clip's first frame) and after a scrub into the held region
+      (visible). The old assertions encoded the superseded rule; what they were really protecting —
+      that a real player renders real content, reachable by the operator — is preserved
 
 ## 5. D-135 — the video half ⟨GATE: §9.5 — the forward-1× hybrid — and §9.4⟩
 

@@ -32,10 +32,26 @@ frame under the playhead is a different question with a different answer. A Lott
 deliberately not a hold driver — a logo animation, say — SHALL still animate on the canvas, because
 a frozen one is exactly the misrepresentation this capability exists to remove.
 
-#### Scenario: A Lottie that is not a hold driver still follows the playhead
+**The composition's IN-POINT is not a special case.** At the in-point the canvas SHALL show the clip
+frame the mapping assigns to it — `ip`, the clip's first frame — exactly as at every other frame.
+For a clip that animates ON from nothing that frame is legitimately blank, and the canvas SHALL show
+it blank rather than substituting a representative frame: the operator reaches the settled look by
+moving the playhead, which is the gesture this capability exists to make meaningful. A static
+"poster" frame MAY be painted before the first tick, but it SHALL NOT survive one.
 
-- **WHEN** a composition contains a Lottie whose `drivesHold` is absent or `false`
-- **THEN** it is positioned at the playhead's mapped frame exactly as an opted-in one is
+This is stated as a requirement because the boundary is where it broke: an implementation that
+special-cased the in-point made it the ONE frame on the canvas that did not show the clip, while
+every other frame was correct.
+
+#### Scenario: The in-point shows the clip's first frame, not a poster
+
+- **WHEN** the playhead sits at the composition's in-point
+- **THEN** the canvas shows the clip frame the mapping assigns to it, never a substituted
+  representative frame
+- **AND** this holds on the first visit and on every later return to the in-point, because the
+  frame shown is a function of the playhead alone and never of how the playhead got there
+
+#### Scenario: A Lottie that is not a hold driver still follows the playhead
 
 #### Scenario: Scrubbing moves a Lottie to the frame under the playhead
 
