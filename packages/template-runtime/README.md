@@ -343,6 +343,29 @@ override) on its **own** timeline.
   crawl, the clock, and the sequence are wall-clock-driven and have no
   representation in `tick()`** — scrubbing moves none of them (by design;
   D-028/D-027/D-029).
+- **D-135 — `tick(frame)` also POSITIONS every Lottie** (`LottieDriver.positionAt`), so the
+  canvas shows the clip frame under the playhead instead of its static poster. Three things
+  about that contract are load-bearing:
+  - **The composition→clip ANCHOR lives here; the phase MAPPING lives in the driver.**
+    `tick` converts the playhead to elapsed TIME — from the composition's `activeRange.in`
+    for the IN/HOLD phases, and from `lifecycle.outPoint` for the OUT phase — and the driver
+    resolves that to a clip frame through the same `clipPositionAt` its own clock uses. The
+    clip is never RESCALED onto the composition's markers (§D1.1): it plays at its authored
+    `fr × speed` and the anchor only says where it starts.
+  - **Scrub and PLAY are the same call.** The Designer canvas has no `play()` path at all —
+    its transport advances the store's frame and the canvas posts one `scrub` per change —
+    so both halves of D-135's acceptance are this one function. A second path for play would
+    be a fork, and the tests assert the singularity (`tests/lottie-driver.test.ts`), not just
+    matching frames.
+  - **A driver running its own lifecycle OWNS the frame.** `positionAt` is a no-op while the
+    driver is running or holding a frame it drove to, so a tick reaching a PLAYING host (the
+    same page serves the Preview) can never yank a clip out from under its own driver.
+  - **`drivesHold` is NOT read on this path** (design §9.4): it answers "does this element
+    gate the HOLD", which is a different question from "does the canvas show its frame".
+    Furniture that deliberately does not drive the hold still follows the playhead.
+  - **A `<video>` does NOT follow the playhead yet** — that half is designed
+    (position by `currentTime`, paused) and gated on an open owner decision; see
+    `openspec/changes/timeline-drives-loop-and-media/design.md` §9.5.
 - **Per-element lifespan visibility** (a `lifespan {in,out}` from a timeline start/end
   trim) is gated **per scope**. Each `FieldScope` owns a `lifespanGates` list, registered at
   BUILD time in `buildLayer` beside `scope.animated`, and that scope's controller evaluates

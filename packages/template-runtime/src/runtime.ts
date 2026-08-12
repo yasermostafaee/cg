@@ -1585,6 +1585,24 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const allAnimated: AnimatedElement[] = [];
   collectScopeAnimated(built.scopeTree, allAnimated);
 
+  // D-135 — the COMPOSITION→CLIP anchor the scrubber positions frame-mapped media by.
+  //
+  // A Lottie's intro starts at `play()`, which on the timeline is the composition's
+  // ACTIVE IN (`activeRangeOf`), and its OUT phase starts at the lifecycle's out-point
+  // (IN = `[active.in, outPoint]`, HOLD = the held `outPoint`, OUT =
+  // `[outPoint, active.out]`). Both are converted to elapsed TIME here, because the clip
+  // plays at its own authored `fr × speed` and is never rescaled onto the composition's
+  // markers (§D1.1) — the driver owns the frame mapping, this owns only the anchor.
+  //
+  // The ROOT scene's range and lifecycle anchor EVERY scope, including nested instances:
+  // `tick()` paints ONE shared frame across the whole tree (see `allAnimated` above and
+  // the lifespan-gate note below), and a Lottie inside a nested instance is started by
+  // the same `play()` as the root's own. Anchoring it anywhere else would make the
+  // canvas disagree with what goes on air.
+  const scrubActiveIn = activeRangeOf(scene).in;
+  const scrubOutPoint = scene.lifecycle?.outPoint;
+  const scrubMsPerFrame = scene.frameRate > 0 ? 1000 / scene.frameRate : 0;
+
   // Per-element lifespan gates — only elements with an explicit
   // `lifespan` are tracked here; the rest stay visible for every
   // frame (the default behaviour the Designer ships with). We
@@ -2119,9 +2137,35 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           for (const row of r.stampedRows) row.applyFrame(frame);
         }
       }
+      // D-135 — position every LOTTIE at the playhead's frame. Until this landed the
+      // canvas painted keyframed properties, stamped rows and lifespan gates only, so a
+      // Lottie sat on its poster frame while the composition moved underneath it — the
+      // canvas silently misrepresenting the composition during the one operation the
+      // operator uses to judge it.
+      //
+      // EVERY Lottie, regardless of `drivesHold` (design §9.4 (a)). The two flags are
+      // ORTHOGONAL: `drivesHold` answers "does this element gate the HOLD"; whether the
+      // canvas shows its frame under the playhead is a different question. Furniture that
+      // deliberately does not gate the hold is exactly what would sit frozen otherwise.
+      //
+      // `subtrees` (not the boot-time `lotties` union) because a repeater re-stamps fresh
+      // row scopes at every play and on `setItems` — the same reason the lifespan gates
+      // below iterate the live tree.
+      //
+      // The CARVE-OUT holds here by construction: ticker / sequence / clock drivers are
+      // NOT in this loop and must never join it. They are functions of REAL time, not of
+      // composition frame — there is no frame N of a crawl to show, and an invented
+      // mapping would disagree with what goes on air.
+      const introElapsedMs = (frame - scrubActiveIn) * scrubMsPerFrame;
+      const outroElapsedMs =
+        scrubOutPoint !== undefined && frame >= scrubOutPoint
+          ? (frame - scrubOutPoint) * scrubMsPerFrame
+          : null;
+      for (const sub of subtrees) {
+        for (const l of sub.lotties) l.positionAt(introElapsedMs, outroElapsedMs);
+      }
       applyLifespanGatesAtFrame(frame);
     },
-
     on(event, listener) {
       return bus.on(event, listener);
     },

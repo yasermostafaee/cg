@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { LottiePlayerHandle } from '@cg/lottie-bridge';
 import { LottieDriver, type LottieDriverOptions } from '../src/lottie-driver.js';
 
@@ -209,5 +209,126 @@ describe('LottieDriver — driven-frame render', () => {
     const count = handle.frames.length;
     clock.advance(50);
     expect(handle.frames).toHaveLength(count); // no paint after destroy
+  });
+});
+
+/**
+ * D-135 — the PLAYHEAD path. `positionAt()` paints the frame the Designer's playhead
+ * asks for, through the SAME mapping the driver's own clock uses.
+ *
+ * The singularity IS the requirement, not an implementation detail that happens to hold:
+ * D-135's acceptance is that scrub and play agree, and the cheapest way to guarantee that
+ * is for there to be nothing to reconcile. A forked implementation could satisfy every
+ * frame assertion below and still be wrong, so the first test asserts the MECHANISM.
+ */
+describe('LottieDriver — positionAt (the Designer playhead)', () => {
+  /** The one mapping both paths must route through. */
+  const mapping = (): unknown =>
+    (LottieDriver.prototype as unknown as Record<string, unknown>)['clipPositionAt'];
+
+  it('the clock path and the playhead path resolve the frame through ONE function', () => {
+    const spy = vi.spyOn(
+      LottieDriver.prototype as unknown as { clipPositionAt: (...a: unknown[]) => unknown },
+      'clipPositionAt',
+    );
+    expect(mapping()).toBeTypeOf('function');
+    try {
+      const a = makeDriver({ introEnd: 100 });
+      a.driver.reset();
+      a.driver.start(); // the driver's OWN clock
+      a.clock.advance(10);
+      const viaClock = spy.mock.calls.length;
+      expect(viaClock).toBeGreaterThan(0);
+
+      const b = makeDriver({ introEnd: 100 });
+      b.driver.positionAt(10, null); // the PLAYHEAD
+      expect(spy.mock.calls.length).toBeGreaterThan(viaClock);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('paints exactly what the driver’s own clock paints, across intro, hold and outro', () => {
+    // A sweep rather than a spot check: the two paths must agree at every phase and at
+    // every boundary, which is what makes a later fork fail loudly instead of drifting.
+    for (const elapsed of [0, 10, 25, 49, 50, 51, 120, 1000]) {
+      const clocked = makeDriver({ introEnd: 5, holdBehavior: 'freeze' });
+      clocked.driver.reset();
+      clocked.driver.start();
+      clocked.clock.advance(elapsed);
+
+      const positioned = makeDriver({ introEnd: 5, holdBehavior: 'freeze' });
+      positioned.driver.positionAt(elapsed, null);
+      expect(last(positioned.handle)).toBe(last(clocked.handle));
+    }
+  });
+
+  it('positions the OUT phase from the composition’s out-point, clamped at `op`', () => {
+    const { driver, handle } = makeDriver({ introEnd: 5, outroStart: 50, op: 60 });
+    driver.positionAt(0, 0);
+    expect(last(handle)).toBe(50);
+    driver.positionAt(0, 50); // +5 frames at 100fps
+    expect(last(handle)).toBe(55);
+    driver.positionAt(0, 200); // past `op` — clamped, never overshot
+    expect(last(handle)).toBe(60);
+  });
+
+  it('an idle-loop hold wraps under the playhead exactly as it does under the clock', () => {
+    const { driver, handle } = makeDriver({
+      introEnd: 5,
+      idleIn: 5,
+      idleOut: 10,
+      holdBehavior: 'idle-loop',
+    });
+    driver.positionAt(50, null); // advanced 5 → the hold entry
+    expect(last(handle)).toBe(5);
+    driver.positionAt(70, null); // advanced 7 → 2 into the 5-frame idle span
+    expect(last(handle)).toBe(7);
+    driver.positionAt(100, null); // advanced 10 → wrapped
+    expect(last(handle)).toBe(5);
+  });
+
+  it('a playhead before the run’s start clamps to the clip start (never extrapolated back)', () => {
+    const { driver, handle } = makeDriver({ ip: 3, introEnd: 50 });
+    driver.positionAt(-500, null);
+    expect(last(handle)).toBe(3);
+  });
+
+  it('it never starts a clock, and a LIVE driver is not fought', () => {
+    const { driver, handle, clock } = makeDriver({ introEnd: 100 });
+    driver.positionAt(10, null);
+    expect(last(handle)).toBe(1);
+    // No rAF was armed: the playhead is the only clock on this path.
+    expect(clock.pending).toHaveLength(0);
+
+    // Once the driver runs its own lifecycle it OWNS the frame — a stray tick is a no-op.
+    driver.reset();
+    driver.start();
+    clock.advance(30);
+    const owned = last(handle);
+    const count = handle.frames.length;
+    driver.positionAt(0, null);
+    driver.positionAt(900, null);
+    expect(handle.frames).toHaveLength(count);
+    expect(last(handle)).toBe(owned);
+  });
+
+  it('a frozen hold is owned too — the playhead does not yank it out of the hold', () => {
+    const { driver, handle, clock } = makeDriver({ introEnd: 5 });
+    driver.reset();
+    driver.start();
+    clock.advance(100); // past introEnd → settled freeze at 5
+    expect(last(handle)).toBe(5);
+    const count = handle.frames.length;
+    driver.positionAt(0, null);
+    expect(handle.frames).toHaveLength(count);
+  });
+
+  it('a destroyed driver paints nothing', () => {
+    const { driver, handle } = makeDriver();
+    driver.destroy();
+    const count = handle.frames.length;
+    driver.positionAt(10, null);
+    expect(handle.frames).toHaveLength(count);
   });
 });

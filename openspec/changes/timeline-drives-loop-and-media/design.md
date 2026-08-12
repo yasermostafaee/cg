@@ -272,15 +272,74 @@ delivered to the client, so the compatibility floor is unset ([[P-031]]).
 
 ---
 
-## 4. D-135 — the Lottie half (cheap, and it goes first)
+## 4. D-135 — the Lottie half (cheap, and it goes first) — ✅ BUILT 2026-08-12
 
 `LottieDriver` is already a positioned renderer: `goToAndStop(frame)` per tick. Extending
 `tick(frame)` to map composition frame → clip frame through the element's phase mapping and call
 `goToAndStop` is the whole of it. No new architecture, no timing risk, no decoder.
 
-It is called out separately because it should land **first and alone**: it makes the acceptance
-demonstrable on one element kind while §5's video question is still open, and it validates the
-frame↔time mapping that the video half then reuses.
+It was called out to land **first and alone**: it makes the acceptance demonstrable on one element
+kind while §9.5's video question is open, and it validates the frame↔time mapping the video half
+then reuses.
+
+### 4.1 Recon inside the runtime — the three questions asked before any code, and their answers
+
+**(a) Who calls `runtime.tick(frame)`, and can this fight the real `LottieDriver`?**
+`tick` has exactly FOUR call sites, all in `apps/designer/src/platform/preview.ts` — the host page
+BOTH surfaces run: the boot tick after `applyScene`, the `update` handler (already guarded
+`!playing`, D-106), the `scrub` handler, and the `reset` handler. The senders are `CanvasArea.tsx`
+(scrub per frame change) and `PreviewModal.tsx` (ONE `scrub` to frame 0, in its `cg-preview-ready`
+seed). **The canvas never sends `play`/`stop`/`pause`/`resume` at all** — its whole vocabulary is
+`scene-replace`, `asset-urls`, `lottie-assets`, `editing-text`, `scrub` — so on the canvas the
+drivers sit at their poster and nothing else is driving them.
+
+That is TODAY's answer, and it is not the one to build on. The Preview modal plays on the same host
+page, and `reset` (unlike `update`) re-ticks without a `!playing` guard. So the guard is placed
+where it cannot be bypassed by a future message: **`positionAt` is a no-op while the driver is
+running its own lifecycle or holding a frame it drove to.** The driver knows whether it owns the
+frame; the host would have to be asked, and remembered, and kept correct.
+
+**(b) The phase mapping — reused, not re-derived.** `tick` converts the playhead to elapsed TIME
+(from `activeRange.in` for IN/HOLD, from `lifecycle.outPoint` for OUT) and the DRIVER resolves it
+to a clip frame. The arithmetic was extracted out of `LottieDriver.tick()` into one pure
+`clipPositionAt(elapsedMs, mode)`, which both the driver's own clock and the playhead now call. No
+second mapping exists to drift — §1.5's standing warning about a seventh derivation applies here
+literally, and a test asserts the singularity by spying on that one function rather than by
+comparing frames (a fork would produce identical frames today and diverge later).
+
+**(c) Does a Lottie player handle survive `scene-replace`? — NO STALENESS IS POSSIBLE, and here is
+why, so the next reader does not re-ask.** B-137's shape needs a node that OUTLIVES a rebuild and
+is re-parented into it. That is exactly what `preview.ts`'s `videoPool` does — it transplants the
+live `<video>` across `applyScene` so the media does not re-download and re-decode, which is why
+`VideoDriver` needs `live()`. **There is no Lottie pool.** `scene-replace` runs `applyScene` →
+`runtime.remove()` + `createRuntime()`, and every `LottieDriver` is rebuilt with a fresh
+`createLottiePlayer(container, …)` over the freshly built container; the old drivers are destroyed
+with their runtime. A captured handle therefore dies with the thing that captured it, and cannot be
+commanded detached.
+
+⚠ The asymmetry is worth stating as the RULE rather than the observation: **a `live()`-style
+re-resolution is owed exactly where a HOST pools and transplants nodes.** If a Lottie is ever
+pooled for the same reason a `<video>` is (mount cost), this changes on that day — and §5.5's
+constraint on the video half stands regardless.
+
+### 4.2 What landed
+
+`tick(frame)` positions EVERY Lottie — `drivesHold` is not read on this path (§9.4 (a)) — at the
+mapped clip frame via the driver's `goToFrame`. It never calls `play()` on a canvas Lottie and
+never starts a clock: the playhead is the only clock, and a paint is all the path is entitled to.
+Outside the element's lifespan the resting state is unchanged (the gate still hides it), and INSIDE
+the span the clip is anchored on the composition's active in-point rather than the trim — because
+on air `play()` starts every Lottie regardless of a start-trimmed lifespan, and the canvas must
+agree with what goes on air.
+
+⚠ **A visible consequence, recorded because it will be noticed:** a Lottie no longer sits on its
+D-125 POSTER frame on the canvas. At the composition's in-point it now shows the clip's FIRST
+frame, which for a furniture clip that animates on from nothing is legitimately blank. That is not
+a regression of the poster decision but the removal of its premise: the poster existed because "the
+editor canvas is a static design surface that never plays" (`lottie-driver.ts`), and it is not one
+any more. It is also the behaviour keyframed elements have always had — an element animating in
+from opacity 0 is invisible at frame 0 on the canvas today — so this makes the two kinds agree
+rather than making the Lottie special.
 
 ---
 

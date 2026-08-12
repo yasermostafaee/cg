@@ -103,6 +103,31 @@ row's live value are **self-subscribing leaves** (`RulerPlayhead`,
 `BodyPlayhead`, `FrameReadout`, `TrackRowLabel`), so a playback tick re-renders
 only the moving parts, not the whole tree.
 
+### What the playhead drives on the canvas (D-135)
+
+The transport does exactly one thing: it advances the store's `currentFrame` at
+`scene.frameRate`. **The canvas is never told to "play"** — `CanvasArea` posts one
+`{ action: 'scrub', frame }` per change and the iframe turns that into
+`runtime.tick(frame)`. So on this surface **scrub and play are the same call**, which is
+what makes them unable to disagree, and it is why the transport's BACKWARD (`J`) and
+BOUNCE modes work on everything the tick reaches without any special case.
+
+What that tick reaches: keyframed properties, stamped repeater rows, per-element lifespan
+gates, and — since D-135 — **every Lottie**, positioned at the clip frame the playhead
+maps to (regardless of `drivesHold`). A **ticker, a sequence and a clock deliberately do
+NOT follow it**: they are functions of real time, so there is no frame N of a crawl to
+show, and an invented mapping would disagree with air. A `<video>` does not follow it yet —
+that half is designed and gated on an open owner decision
+(`openspec/changes/timeline-drives-loop-and-media/design.md` §9.5).
+
+⚠ **Consequence worth knowing at the surface:** a Lottie on the canvas no longer sits on
+its D-125 "poster" frame. At the composition's in-point it shows the clip's FIRST frame —
+which for a furniture clip that animates on from nothing is legitimately blank, exactly as
+it is on air at that frame, and exactly as a keyframed element animating in from opacity 0
+already behaves. Move the playhead and the clip animates.
+
+### Time ↔ pixel — the crux of every gesture
+
 ### Time ↔ pixel — the crux of every gesture
 
 Two pixel spaces meet on the lane, and the conversions are all pure in

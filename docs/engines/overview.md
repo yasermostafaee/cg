@@ -74,13 +74,16 @@ the editor UI and the runtime renderer (the "Where features go" map in
   drivers — the D-031 steps seam; the repeater's RepeaterDriver stamps one
   child-composition scope per data row through the `wireScopeSubtree`
   factory — count at play, values live),
+- **positions frame-mapped media at the Designer playhead** — D-135: `tick(frame)`
+  reaches every `LottieDriver` (`positionAt`), so scrubbing AND timeline play animate a
+  Lottie on the canvas instead of leaving it on a static poster frame. The canvas has no
+  `play()` path of its own — its transport advances the frame and posts one `scrub` per
+  change — so scrub and play are literally the same call, and the driver's own phase
+  mapping is what resolves the clip frame (never a second copy). A driver that is running
+  its own lifecycle owns the frame and is not fought. The ticker, the clock and the
+  sequence are DELIBERATELY carved out: they are functions of real time, with no frame N
+  of a crawl to show. The `<video>` half is designed but gated on an open owner decision,
 - lets an **element own its own exit** — the D-125 element-outro seam: `out()` /
-  `stop()` await every outro-owning driver's `playOutro()` (today the
-  `LottieDriver`'s authored `[outroStart → op]`) BEFORE the background outro, so
-  the background never closes over an element that has not played out. A Lottie
-  drives the content-driven hold only by explicit opt-in (`drivesHold === true` —
-  the inverse of the ticker/clock/sequence default), and a hidden Lottie (or one
-  under a hidden ancestor) is fully inert,
 - cascades all of the above through **nested composition instances**.
 
 The renderer talks to its "backend" only through the typed `window.cg` bridge; the

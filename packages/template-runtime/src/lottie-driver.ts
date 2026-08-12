@@ -70,6 +70,19 @@ export interface LottieDriverOptions {
   clock?: RuntimeClock | undefined;
 }
 
+/**
+ * D-135 — WHERE the clip sits at a given elapsed time, resolved through the phase
+ * mapping above. The `phase` rides along because the caller's REACTION differs by
+ * phase (a freeze hold settles the completion signal; an outro that has reached `op`
+ * releases the exit) while the FRAME never does.
+ */
+type ClipPosition =
+  | { frame: number; phase: 'intro' }
+  | { frame: number; phase: 'idle-loop' }
+  | { frame: number; phase: 'freeze-hold' }
+  | { frame: number; phase: 'outro' }
+  | { frame: number; phase: 'outro-end' };
+
 export class LottieDriver {
   private readonly o: LottieDriverOptions;
   private readonly raf: (cb: (t: number) => void) => number;
@@ -249,52 +262,101 @@ export class LottieDriver {
     });
   }
 
-  private tick(): void {
-    // Derive the frame from ELAPSED WALL-TIME (not a tick count), so a dropped /
-    // long rAF frame still lands on the right frame — the FrameDriver invariant.
-    const elapsedMs = this.now() - this.startedAt;
+  /**
+   * D-135 — THE frame mapping, and the reason it is a function of its own: the
+   * driver's clock (`tick`) and the Designer's PLAYHEAD ({@link positionAt}) resolve
+   * the clip frame through THIS call and no other. D-135's acceptance is that scrub
+   * and play agree; the cheapest way to guarantee that is for there to be nothing to
+   * reconcile — so a second copy of this arithmetic, however faithful, defeats the
+   * requirement even while producing identical numbers today.
+   *
+   * PURE: it reads `this.o` and its arguments, and touches no driver state.
+   */
+  private clipPositionAt(elapsedMs: number, mode: 'intro' | 'outro'): ClipPosition {
     const { ip, fr, speed, introEnd, holdBehavior, idleIn, idleOut, outroStart, op } = this.o;
-    const advanced = Math.floor((elapsedMs / 1000) * fr * speed);
-    // OUT phase — drive [outroStart → op] once, then resolve (§D1 / §D6.2).
-    if (this.mode === 'outro') {
+    // Derive the frame from ELAPSED TIME (not a tick count), so a dropped / long rAF
+    // frame still lands on the right frame — the FrameDriver invariant. A NEGATIVE
+    // elapsed (a playhead sitting before the composition's in-point) clamps to the
+    // run's start rather than extrapolating backwards past `ip`.
+    const advanced = Math.floor((Math.max(0, elapsedMs) / 1000) * fr * speed);
+    // OUT phase — [outroStart → op] once (§D1 / §D6.2).
+    if (mode === 'outro') {
       const outroFrame = outroStart + advanced;
-      if (outroFrame < op) {
-        this.paint(outroFrame);
-        return;
-      }
-      // CLAMP the final paint to `op`, then resolve — the FrameDriver.finishOnce
-      // pattern. Overshooting past `op` would ask lottie-web for a frame that
-      // does not exist; resolving here releases the awaiting exit.
-      this.paint(op);
-      this.running = false;
-      this.cancelFrame();
-      this.settleOutro();
-      return;
+      // CLAMP the final position to `op` — overshooting would ask lottie-web for a
+      // frame that does not exist. `outro-end` is what releases the awaiting exit.
+      return outroFrame < op
+        ? { frame: outroFrame, phase: 'outro' }
+        : { frame: op, phase: 'outro-end' };
     }
     const frame = ip + advanced;
-    if (frame < introEnd) {
-      this.paint(frame);
-      return;
-    }
+    if (frame < introEnd) return { frame, phase: 'intro' };
     // The intro has played out — HOLD.
     if (holdBehavior === 'idle-loop' && idleOut > idleIn) {
       // Loop the idle segment: keep advancing, wrapping within [idleIn, idleOut).
       const span = idleOut - idleIn;
       const idleFrames = advanced - (introEnd - ip);
-      this.paint(idleIn + (idleFrames % span));
-      return;
+      return { frame: idleIn + (idleFrames % span), phase: 'idle-loop' };
     }
-    // FREEZE — clamp to the hold frame and stop ticking (resume() won't reopen it).
-    this.paint(introEnd);
-    this.settledHold = true;
-    this.running = false;
-    this.cancelFrame();
-    // §D6.3 — the FREEZE hold is the completion point for a `drivesHold` Lottie. The
-    // idle-loop branch above returns before here and so never resolves: an idle-loop
-    // Lottie holds until stop(), like an infinite ticker.
-    this.completeResolve();
+    // FREEZE — clamp to the hold frame.
+    return { frame: introEnd, phase: 'freeze-hold' };
   }
 
+  private tick(): void {
+    const pos = this.clipPositionAt(this.now() - this.startedAt, this.mode);
+    this.paint(pos.frame);
+    if (pos.phase === 'outro-end') {
+      // The FrameDriver.finishOnce pattern: stop ticking, then resolve — resolving
+      // here is what releases the awaiting exit.
+      this.running = false;
+      this.cancelFrame();
+      this.settleOutro();
+      return;
+    }
+    if (pos.phase === 'freeze-hold') {
+      // Stop ticking (resume() won't reopen it). §D6.3 — the FREEZE hold is the
+      // completion point for a `drivesHold` Lottie. The idle-loop phase never reaches
+      // here and so never resolves: an idle-loop Lottie holds until stop(), like an
+      // infinite ticker.
+      this.settledHold = true;
+      this.running = false;
+      this.cancelFrame();
+      this.completeResolve();
+    }
+  }
+
+  /**
+   * D-135 — POSITION the clip at the Designer playhead, through the same mapping the
+   * driver's own clock uses ({@link clipPositionAt}). The Designer canvas has no
+   * `play()` path at all — its transport advances the store's frame and the canvas
+   * posts one `scrub` per change — so SCRUB and PLAY on that surface are the same
+   * stream of calls into here, which is precisely why they cannot disagree.
+   *
+   * `introElapsedMs` is time since the composition's IN (the frame `play()` would have
+   * reset+started this clip at). `outroElapsedMs`, when non-null, is time since the
+   * composition's OUT-POINT and WINS — the playhead has entered the OUT phase, which
+   * on air is `playOutro()`. Both are elapsed TIME, not composition frames: the clip
+   * plays at its own authored `fr × speed` and is never rescaled onto the
+   * composition's markers (§D1.1).
+   *
+   * 🔴 A driver that is RUNNING ITS OWN LIFECYCLE — or holding a frame it drove to —
+   * OWNS the frame, and this is a no-op for it. The playhead may position a clip that
+   * nothing else is driving (the authoring canvas, where every driver sits at its
+   * poster); it may never fight a live one, which is what a stray tick reaching a
+   * PLAYING host would otherwise do.
+   *
+   * It does NOT start a clock, mint a completion, or settle an outro: the playhead is
+   * the only clock on this path, and a paint is all it is entitled to.
+   */
+  positionAt(introElapsedMs: number, outroElapsedMs: number | null): void {
+    if (this.destroyed || this.running || this.settledHold) return;
+    const pos =
+      outroElapsedMs === null
+        ? this.clipPositionAt(introElapsedMs, 'intro')
+        : this.clipPositionAt(outroElapsedMs, 'outro');
+    this.paint(pos.frame);
+  }
+
+  /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   private armComplete(): Promise<void> {
     return new Promise<void>((res) => {

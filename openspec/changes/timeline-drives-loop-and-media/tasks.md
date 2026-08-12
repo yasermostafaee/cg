@@ -1,6 +1,6 @@
 # Tasks — the playhead drives the canvas, and the loop range is authorable
 
-> ✅ **§9.1–§9.4 ANSWERED (2026-08-12). The Lottie half (§4) is UNBLOCKED and lands in this change.**
+> ✅ **§9.1–§9.4 ANSWERED (2026-08-12). The Lottie half (§4) and the carve-out (§6) are BUILT.**
 >
 > Every implementation task still carries its **GATE** naming the `design.md` §9 question behind
 > it, kept as the record of what unblocked it. Answering §9.3 opened ONE new question — **§9.5**,
@@ -105,19 +105,34 @@ section is what discharges D-133's "the conditional affordance is at most a shor
 only path"**. It is part of the item's acceptance, not decoration — it must not be dropped or
 deferred out of this change.
 
-## 4. D-135 — the Lottie half ⟨§9.4 ANSWERED: (a)⟩ — LANDS FIRST
+## 4. D-135 — the Lottie half ⟨§9.4 ANSWERED: (a)⟩ — LANDS FIRST ✅ DONE
 
-- [ ] Extend `tick(frame)` to map composition frame → clip frame through the element's phase mapping
+- [x] Recon first (design §4.1): `tick`'s FOUR call sites are all in `preview.ts`, the canvas never
+      sends `play`, the phase mapping is REUSED (one `clipPositionAt`, not a second copy), and a
+      Lottie handle CANNOT go stale across `scene-replace` — only `<video>` is pooled and
+      transplanted, which is why B-137 needed `live()` and this does not. Recorded in the design so
+      it is not re-asked
+- [x] Extend `tick(frame)` to map composition frame → clip frame through the element's phase mapping
       and call `goToAndStop`, for EVERY Lottie regardless of `drivesHold`
-- [ ] Test: scrub positions a Lottie at the mapped frame
-- [ ] Test: PLAY animates it, through the SAME call (assert the mechanism, not just the pixels —
-      the singularity is the requirement)
-- [ ] Test: outside its span, the resting state is unchanged under both scrub and play
-- [ ] Test: a Lottie with `drivesHold` absent/false follows the playhead exactly as an opted-in one
+- [x] Test: scrub positions a Lottie at the mapped frame
+- [x] Test: PLAY animates it, through the SAME call — asserted on the MECHANISM (a spy on the one
+      mapping function both paths route through), not only on matching pixels, because a fork would
+      produce identical frames today
+- [x] Test: outside its span, the resting state is unchanged under both scrub and play
+- [x] Test: a Lottie with `drivesHold` absent/false follows the playhead exactly as an opted-in one
+- [x] Test: a LIVE driver owns the frame — a tick reaching a PLAYING host is a no-op, so the
+      playhead can never yank a clip out from under its own driver
+- [x] Test: the OUT phase maps from the out-point at the clip's own rate, clamped at `op`; a
+      playhead before the in-point clamps to the clip start
 
 Sequenced first deliberately: it makes the acceptance demonstrable on one element kind while §9.5
 is still open, and it validates the frame↔time mapping the video half then reuses. No new
 architecture, no decoder.
+
+⚠ **Visible consequence, deliberate:** a canvas Lottie no longer sits on its D-125 POSTER frame — at
+the composition's in-point it shows the clip's first frame, which for a furniture clip is
+legitimately blank. The poster existed because the canvas never played; that premise is gone, and
+keyframed elements have always behaved this way. See design §4.2.
 
 ## 5. D-135 — the video half ⟨GATE: §9.5 — the forward-1× hybrid — and §9.4⟩
 
@@ -137,18 +152,27 @@ architecture, no decoder.
       this test's premise for forward-1× play⟩
 - [ ] Test: a reparented node is re-resolved and positioned, not commanded detached
 
-## 6. The carve-out
+## 6. The carve-out ✅ DONE
 
-- [ ] Test: a ticker ignores the playhead under scrub
-- [ ] Test: a ticker ignores the playhead under **PLAY** — the half the carve-out newly covers, and
-      the half that only becomes assertable once `tick` drives media
-- [ ] Test: a sequence and a clock are unaffected by either half
+- [x] Test: a ticker ignores the playhead under scrub
+- [x] Test: a ticker ignores the playhead under **PLAY** — asserted on BOTH halves: the canvas's
+      play (a stream of ticks) and a PLAYING host receiving ticks, where the crawl is already
+      running on its own clock. The test proves the observable is LIVE (the clock still moves it)
+      before proving the ticks do not, so it cannot pass on a ticker that had simply stopped
+- [x] Test: a sequence and a clock are unaffected by either half — under scrub, under the play
+      stream, and on a playing host
+
+None of these needed the video half: the carve-out is about what `tick` must NOT reach, and it is
+now assertable precisely because `tick` demonstrably DOES reach a Lottie in the same scene (each
+test pairs the two, so it can never pass by nothing happening).
 
 ## 7. Docs and gate
 
-- [ ] **Engine doc-sync** — `tick(frame)`'s contract changes in this change:
-      `packages/template-runtime/README.md`,
-      `apps/designer/src/renderer/features/timeline/README.md`, `docs/engines/overview.md`
+- [x] **Engine doc-sync** — `tick(frame)`'s contract changed, so all three are updated:
+      `packages/template-runtime/README.md` (the anchor-here / mapping-in-the-driver split, the
+      singularity, the live-driver guard, `drivesHold` unread on this path),
+      `apps/designer/src/renderer/features/timeline/README.md` (a new "What the playhead drives on
+      the canvas" section, including the poster consequence), `docs/engines/overview.md`
 - [ ] Full green gate for every touched workspace
 - [ ] **E2E**: this is user-facing UI and rendering, so a Linux `gate:e2e` is OWED. Record the
       completed, green run URL beside this box — a tick with no URL is a claim, not a discharge
