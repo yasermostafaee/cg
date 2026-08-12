@@ -3584,6 +3584,15 @@ like they ignore `timezone`.
 > design's "~5 s keyframe interval" premise was stale by 5×; and **`fastSeek()` does not exist on
 > this engine**, so that recommendation is deleted rather than hedged.
 >
+> ✅ **The LOTTIE half is BUILT and CI-verified.** `tick(frame)` positions every Lottie at the
+> playhead; scrub and PLAY are the same call by construction. Linux `e2e` DISCHARGED for
+> `6e620f70` — <https://github.com/yasermostafaee/cg/actions/runs/31612094833> (`success`, and the
+> `e2e` job RAN). ⚠ The push before it went RED on a real regression this change introduced — it
+> broke D-125's canvas POSTER by positioning faithfully at the in-point, where `ip` is the
+> scale-0 intro start and a scene opens. Settled rule: **at or before the in-point the canvas rests
+> on the poster; the playhead owns the frame from the frame after it.** Both requirements survive;
+> see `design.md` §4.3.
+>
 > 🔴 **ONE NEW QUESTION, OPEN — `design.md` §9.5, and it gates the VIDEO half alone.** The
 > measurement shows the gap between positioning (~10 fps) and real forward-1× playback (25 fps) in
 > precisely the operation this item's "Why" names as the one the operator judges the composition
