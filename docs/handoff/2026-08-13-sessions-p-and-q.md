@@ -102,7 +102,10 @@ missing `introEnd` — which is what §2 now supplies.
 - P: 5 affordance tests (4 failing first), plus the shared-call assertion on both sides.
 - Q: 6 writer tests (4 failing first).
 - Package suites green; `pnpm gate` green, uncached.
-- Linux `e2e` URL recorded beside `tasks.md` §7 and in the D-135 item, superseding `0d2d0c3b`'s.
+- Linux `e2e` DISCHARGED for `f9a35507` —
+  <https://github.com/yasermostafaee/cg/actions/runs/31644333051>, `conclusion: success`, `e2e` job
+  RAN (not skipped). Recorded beside `tasks.md` §7 and in the D-135 item, **superseding**
+  `0d2d0c3b`'s rather than joining it — the debt follows the pushed HEAD.
 
 ## Not in these sessions
 
