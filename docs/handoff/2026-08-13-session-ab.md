@@ -59,8 +59,9 @@ Two of those rows are findings the owner's report did not contain:
   "no gate boundary strictly inside the entrance leg", and the gate is per-SCOPE — in the
   owner's composition the ticker's own span was simply the only one that could supply one.
   That is also why the earlier "shorten the ticker" workaround appeared to help.
-- **The marker-less path is genuinely unaffected**, and provably so rather than by luck: with
-  no marker, `holdEntry` can only be later than `active.in` because of keyframes or a Lottie
+- **The marker-less path is unaffected BY THIS defect** — not problem-free (see the mirror
+  defect below), but provably immune to the early start rather than accidentally so: with no
+  marker, `holdEntry` can only be later than `active.in` because of keyframes or a Lottie
   settle, and both already force the sweep (`hasAnimation`; D-125 Phase 3a's lottie term).
 
 ## The fix
@@ -147,9 +148,16 @@ neither `@cg/shared-schema` nor `@cg/vcg-format` drops it.
 looking for the wrong shape: not a falsy zero but a **boundary-correct paint predicate that a
 timing seam was resting on**. Grep will not find that class — the tell is a `?.()` predicate
 whose name asks a visual question being read by a caller that needs a temporal answer.
-D-125 Phase 3a had already patched this exact seam for the Lottie case by threading a settle
-into `needsFrameSweep`; that term is now redundant for the entrance leg but left in place
-(removing it also touches a static-settle-leg edge case, which is a separate change).
+D-125 Phase 3a had already patched this exact seam for the Lottie case, by threading a settle
+into `needsFrameSweep` — the same conflation, treated one kind at a time.
+
+⚠️ **Do NOT read that as "the lottie term is now redundant" and delete it.** It is redundant
+only on the ANCHORED path, where `mustConsumeDuration` supersedes it. On the MARKER-LESS path
+it is the ONLY thing that makes a Lottie entrance sweep: `holdEntry` is then
+`entranceSettleFrame`, which folds in the Lottie settle, and a Lottie contributes neither
+keyframes (`hasAnimation` false) nor gates — so `outF <= lottieSettle` is the sole surviving
+sweep reason. Removing it restores the D-125 Phase 3a bug exactly (content at play while the
+furniture is still animating on).
 
 ## Gate
 
