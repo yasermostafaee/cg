@@ -79,9 +79,15 @@
 - [x] 7.2 Engine doc-sync: `packages/template-runtime/README.md` (driver window options +
       resolution), `docs/engines/overview.md` if the contract summary needs the third source.
 - [x] 7.3 `pnpm openspec validate media-phases-follow-composition --strict` green.
-- [ ] 7.4 Full green gate (uncached) for every touched workspace.
-- [ ] 7.5 Commit + push to `dev`; remote head verified.
-- [ ] 7.6 **E2E**: Linux `gate:e2e` debt discharged by a COMPLETED, GREEN `e2e` job that RAN for
-      the pushed commit — run URL recorded HERE beside this box when it exists.
-- [ ] 7.7 Handoff `docs/handoff/2026-08-13-session-s.md` (mint no item number; PRD registration
-      of this change is the owner's).
+- [x] 7.4 Full green gate (uncached) for every touched workspace — `pnpm gate` on the final
+      tree, `0 cached, 85 total`.
+- [x] 7.5 Committed as `ea7a8f03` (feature) + `219bfec8` (docs family); pushed;
+      `git ls-remote origin dev` = `219bfec8` = local HEAD.
+- [x] 7.6 **E2E**: DISCHARGED for `219bfec8` —
+      <https://github.com/yasermostafaee/cg/actions/runs/31657175754>, run
+      `conclusion: success`, and the `E2E (Playwright)` job **RAN** (`completed success`, not
+      skipped). This SUPERSEDES session R's run for `d43a9adb`
+      (<https://github.com/yasermostafaee/cg/actions/runs/31647897276>) as the latest
+      verification of the tree — the debt follows the pushed HEAD.
+- [x] 7.7 Handoff `docs/handoff/2026-08-13-session-s.md` (no item number minted; PRD
+      registration of this change is the owner's).
