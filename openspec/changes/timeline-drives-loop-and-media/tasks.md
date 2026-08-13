@@ -299,11 +299,15 @@ test pairs the two, so it can never pass by nothing happening).
       content-driven hold renders as a repeating range and that the wrap re-renders the
       composition frame only
 - [x] Full green gate for every touched workspace (`pnpm gate`, uncached, exit 0; openspec 48/48)
-- [ ] **E2E — OWED for D-133 (2026-08-14).** §1–§3 alter the Inspector, the timeline rendering AND
-      playback, so a fresh Linux `e2e` is owed on the commit that carries them; the run URL is
-      recorded here the moment it completes green with the `E2E (Playwright)` job actually RAN.
-      Until then this box stays UNTICKED — a ticked box with no URL is a claim, not a discharge.
-      The previous discharge below verified a tree that has since been replaced
+- [x] **E2E — DISCHARGED for D-133 (2026-08-14)** — `de1e5565`,
+      <https://github.com/yasermostafaee/cg/actions/runs/31744207434>: run
+      `conclusion: success`, and the **`E2E (Playwright)` job RAN** (`completed success`, not
+      skipped — a skipped job discharges nothing, `P-029`). §1–§3 alter the Inspector, the timeline
+      rendering AND on-air playback, so the debt was real and it follows the pushed HEAD. The
+      commit that carries §1–§3 is `04053b61`; `de1e5565` is a later `dev` HEAD that CONTAINS it
+      (two docs-only commits on top), which the discharge rule allows explicitly. This SUPERSEDES
+      the discharge below rather than joining it — that run verified a tree that has since been
+      replaced
 - [x] **E2E**: DISCHARGED for `710f0ab0` (the video half, session U) —
       <https://github.com/yasermostafaee/cg/actions/runs/31683317925>, run
       `conclusion: success`, and the `E2E (Playwright)` job **RAN** (`completed success`, not
@@ -325,10 +329,9 @@ test pairs the two, so it can never pass by nothing happening).
 - [x] D-133 and D-135 are `[~]` with this change dir; **archive only on the owner's confirmation**.
       **As of 2026-08-14 EVERY section is built** — §0–§0b (design + corrections), §1–§3 (D-133),
       §4–§5 (D-135, both halves), §5a (D-133's E2E), §6 (the carve-out) and §7 (docs) — and every
-      owner decision (§9.1–§9.5) is answered. **The ONE thing standing between this change and
-      archive-readiness is the E2E discharge above**: a completed, green Linux `e2e` whose job
-      actually RAN, for the commit that carries §1–§3. With that URL recorded, the change is
-      archive-ready and waiting only on the owner's word
+      owner decision (§9.1–§9.5) is answered, and the E2E debt above is **DISCHARGED** (run
+      31744207434, `e2e` RAN). **NOTHING IS OUTSTANDING: this change is ARCHIVE-READY and waiting
+      only on the owner's word.**
 
 ## Not in this change
 
