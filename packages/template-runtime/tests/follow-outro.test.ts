@@ -560,3 +560,113 @@ describe('session V (sharpened brief) — the outro BOUNDARY is exact, and it TR
     r.remove();
   });
 });
+
+/** A finite 2-pass drain ticker whose crawl OUTLIVES the out point by design. */
+function slowTicker(id: string, over: Record<string, unknown> = {}): Element {
+  return {
+    id,
+    name: id,
+    type: 'ticker',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    font: {
+      family: 'Vazirmatn',
+      weight: 500,
+      style: 'normal',
+      size: 36,
+      lineHeight: 1.4,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    direction: 'ltr',
+    speed: 50,
+    gap: 10,
+    repeat: 2,
+    cycleBoundary: 'drain',
+    items: [
+      { id: 'a', text: 'aaaaaaaaaa' },
+      { id: 'b', text: 'bbbbbbbbbb' },
+      { id: 'c', text: 'cccccccccc' },
+    ],
+    ...over,
+  } as unknown as Element;
+}
+
+describe('session X — the CONTENT-DRIVEN hold: the outro begins at content completion, NOT at the out point', () => {
+  // The owner's file, measured (design.md §10.2): auto-out + content-driven + a repeat-2 drain
+  // ticker ⇒ the video left H 4.94 s AFTER the out point's wall position — exactly the ticker's
+  // remaining crawl. That is the SHIPPED lifecycle: `outPoint` is where the HOLD begins; a
+  // content-driven hold lasts until the content completes, so the outro CANNOT begin at the out
+  // point by construction. Pinned here so the contract is explicit, with a TIMED control
+  // proving the delay is the hold source and nothing else.
+  const DOC = {
+    activeRange: { in: 0, out: 150 },
+    frameRange: { in: 0, out: 150 },
+    lifecycle: { outPoint: 75, contentStart: 25 },
+    playout: { mode: 'auto-out', holdSource: 'content-driven' },
+  };
+  // Follow window on the 5 s clip: entrance 0.5 s ⇒ H = 3000 (holdAt); OUT span 1.5 s ⇒
+  // outro [3000 → 4500]. The ticker's 2-pass drain crawl at 50 px/s runs ~14 s ≫ the
+  // out point's 1.5 s wall position.
+
+  async function playAndTrack(
+    over: Record<string, unknown>,
+    tickerOver: Record<string, unknown> = {},
+  ): Promise<{ leftHms: number; endMs: number; finalT: number }> {
+    const clock = makeClock();
+    document.body.innerHTML = '';
+    const r = createRuntime(
+      scene([bgShape('bg'), slowTicker('tk', tickerOver), followVideo('v', { holdAt: 3000 })], {
+        ...DOC,
+        ...over,
+      }),
+      { skipFontLoad: true, installGlobals: false, clock, tickerMeasure },
+    );
+    const times = spyVideoTimes(clock);
+    await r.play({});
+    let leftHms = -1;
+    for (let i = 1; i <= 3000; i++) {
+      clock.advance(20);
+      for (let j = 0; j < 6; j += 1) await Promise.resolve();
+      if (leftHms === -1 && clock.now() > 1000 && times.get('v')!() > 3.0005) {
+        leftHms = clock.now();
+      }
+      if (leftHms !== -1 && clock.now() >= leftHms + 2000) break;
+    }
+    const endMs = clock.now();
+    const finalT = times.get('v')!();
+    r.remove();
+    return { leftHms, endMs, finalT };
+  }
+
+  it('the video holds H well past the out point, leaves it when the crawl drains, then plays its outro', async () => {
+    const { leftHms, finalT } = await playAndTrack({});
+    // The out point sits at 1.5 s wall. The outro must NOT have begun there — the hold is
+    // content-driven and the crawl is still running (this is the owner's measured delay).
+    expect(leftHms).toBeGreaterThan(1500 + 5000); // WELL past — the content governs, not the marker
+    // And once the content completes, the follow outro itself is intact: [3000 → 4500].
+    expect(finalT).toBeCloseTo(4.5, 2);
+  });
+
+  it('the ticker LIFESPAN trimmed to the out point does NOT shorten the hold — the gate is visibility-only', async () => {
+    // The owner's workaround attempt: `lifespan {in: 25, out: 75}` (= contentStart → outPoint).
+    // Measured on his file: the crawl runs on regardless — the lifespan gate hides frames, it
+    // neither ends the crawl nor detaches it from the hold. Recorded for session W's design.
+    const base = await playAndTrack({});
+    const trimmed = await playAndTrack({}, { lifespan: { in: 25, out: 75 } });
+    expect(trimmed.leftHms).toBeGreaterThan(1500 + 5000); // still content-governed
+    expect(Math.abs(trimmed.leftHms - base.leftHms)).toBeLessThanOrEqual(40); // same crawl, same hold
+  });
+
+  it('CONTROL — a TIMED hold starts the outro at outPoint + holdMs: the delay IS the hold source', async () => {
+    const { leftHms, finalT } = await playAndTrack({
+      playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 200 },
+    });
+    expect(leftHms).toBeGreaterThan(1600); // never early — the hold is real
+    expect(leftHms).toBeLessThanOrEqual(1840); // out point (1500) + holdMs (200) + timer granularity
+    expect(finalT).toBeCloseTo(4.5, 2);
+  });
+});

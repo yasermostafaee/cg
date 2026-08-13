@@ -229,11 +229,19 @@ How real authoring produces the shape (store-probed, all four):
   recon found NO test drove a follow element through `out()`/`stop()` — the derivation, registry
   and ledger were each unit-tested and their COMPOSITION never was.
 
-**Raised to the owner, not decided here:** if a follower's outro should instead track the ruler's
-room after the out point (`frameRange.out`), that is a RULE change — today the OUT segment is
-`[outPoint → activeRange.out]` everywhere (air, preview, canvas mapping, follow derivation), and
-this session kept all four consistent. The evidence for pricing it: the ruler shows frames the
-composition will never play, and nothing but the new hint says so.
+**Raised to the owner — and ✅ ANSWERED (2026-08-13): a follower's outro room STAYS
+`[outPoint → activeRange.out]`; the ruler-room (`frameRange.out`) alternative is REJECTED.**
+Both candidates, kept as the reasoning:
+
+- **Active-range room (CHOSEN):** the OUT segment is `[outPoint → activeRange.out]` everywhere —
+  air, preview lifecycle, canvas mapping, follow derivation — so the markers stay READABLE (what
+  you see between the out point and the active end is what plays) and the exit stays PREDICTABLE
+  (the composition never animates through frames playback will not reach). The silent-zero case
+  this consistency can produce is covered by the `noOutSegment` clamp + hint, which names the
+  remedy.
+- **Ruler room (REJECTED):** deriving the outro from `frameRange.out` would let a follower play
+  through frames the composition itself never plays — the canvas and air would disagree about
+  the exit, and the out marker would stop meaning "where the OUT begins" for followers alone.
 
 ### 10.1 The sharpened report — "the outro starts LATE" — MEASURED, and it does not reproduce
 
@@ -262,3 +270,53 @@ kinds and both surfaces, plus the out-point tracking pin and the first auto-out 
 (`follow-outro.test.ts`) — a wrong-anchor regression now fails one frame past the out point, not
 "eventually". If the owner reproduces the delay again, the scene FILE is the decisive artifact —
 these pins prove the shape they pin cannot be the one failing.
+
+### 10.2 Session X (2026-08-13) — the owner's FILE, and what each hypothesis measured
+
+The owner re-tested at `2f2d6221` and supplied `videotickeroutrobug.cgproj`: root scene with NO
+lifecycle and NO layers; everything — the video (`durationMs` 14 320, follow source), the
+repeat-2 drain ticker (`lifespan {251 → 525}`), and `lifecycle {outPoint: 525, contentStart:
+251}` + `playout {auto-out, content-driven}` — on `compositions[0]`. Derived window: `H` 5020 ms,
+outro `[5020 → 8840]`, `hasOutro` true. The document shape no session-V fixture had.
+
+**Hypothesis 1 (the scene-level scrub anchors go blind on this shape) — REFUTED, empirically.**
+The question "what does the Designer hand `applyScene`" was logged on the real file, not
+guessed: BOTH surfaces hand the runtime the active composition PROMOTED to the scene root —
+`editSceneOf` for the canvas, `scopeSceneToComposition` (which builds on it) for the preview —
+lifecycle, frameRange and layers included. The runtime never receives the raw document, so
+`scrubOutPoint = scene.lifecycle?.outPoint` IS the scope's own out point for everything the
+canvas shows, and the boundary on the owner's real file measures EXACT: `t(524) = t(525) =
+5.020` (H), `t(526) = 5.040`, `t(600) = 6.520`. The scene-level anchors and `followAnchors`
+coincide BY the projection contract, which is now pinned as such
+(`apps/designer/tests/follow-document-shape.test.ts` — the real store load, the real projection,
+the runtime, the one-frame boundary, on the owner's numbers). No canvas fix is owed; a
+failing-first canvas fixture for this shape cannot be honestly written at this tree.
+
+**Hypothesis 2 (the preview delay) — CONFIRMED as (a): the CONTENT-DRIVEN hold, working as
+specified.** Measured on the real projection (fake clock, harness text metrics): the intro
+FrameDriver reaches the out point at 10 500 ms wall; the ticker's two-pass drain crawl (started
+at content start, 5 020 ms) completes at ≈ 15 440 ms; the video leaves `H` at 15 440 ms —
+**4 940 ms after the out point, exactly the crawl's remainder** — and then plays its follow
+outro to the derived end (8 840 ms clip time) correctly. Under `holdSource: 'content-driven'`,
+`outPoint` is where the HOLD begins and the hold's length is the content's remaining run — the
+outro CANNOT begin at the out point by construction. (Real browser glyph metrics change the
+absolute number, not the mechanism.) Pinned with a TIMED-hold control proving the delay is the
+hold source and nothing else (`follow-outro.test.ts`, session-X describes).
+
+🔴 **The owner's decision, OPEN — not "fixed" silently:** with a content-driven hold, which
+behaviour does he want on this scene?
+
+- keep content-driven and accept that the outro starts when the ticker drains (the crawl is the
+  clock — the current, specified behaviour);
+- switch the composition to a TIMED hold (the outro then starts at `outPoint + holdMs` — the
+  control test shows this exact);
+- shorten the content (fewer repeats / faster crawl) so it drains by the out point;
+- or a DESIGN change (e.g. "the OUT phase interrupts unfinished content") — a rule change with
+  on-air consequences, priced separately.
+
+**Input for session W, measured:** the ticker's `lifespan {in: 251, out: 525}` does NOT end the
+crawl — during the hold the held frame is the out point itself, the gate keeps the ticker
+visible and crawling, and trimming `lifespan.out` to the out point leaves the hold's length
+unchanged (pinned: the trimmed and untrimmed scenes leave `H` within one tick of each other).
+The lifespan gate is VISIBILITY-only; it neither completes a content driver nor detaches it
+from the hold aggregation.
