@@ -121,6 +121,24 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       SIZE while sliding the hole by the stroke width (measured in Chromium). An outline takes no
       layout, so the declared rect is unmoved under any box model and any scale. The stroke
       SHORTHAND is still one shared implementation (`strokeShorthand`).
+      **Linux e2e for the parts that ARE built:** discharged by the same run recorded on 1.5g below
+      — <https://github.com/yasermostafaee/cg/actions/runs/31753678406> (commit `b011005c`, `e2e` RAN and
+      green). It covers the Inspector control and the exporter round-trip; it says nothing about the
+      punch assertion, which does not exist to run.
+      🔴 **SCOPE BOUNDARY — STROKE ONLY (owner, 2026-08-13). `box-shadow` is ALLOWED BY THE DESIGN
+      AND DELIBERATELY NOT BUILT.** §9a.1's box-shadow amendment permits a shadow on a plate — same
+      class as the stroke, paint on the template layer, outside the hole — and this session did not
+      build it. **Re-verified at HEAD, and the gap is WIDER than "the Inspector withholds it": a
+      shadow is absent at ALL THREE layers.** There is no `shadow` / `boxShadow` field on
+      `VideoPlaceholderElementSchema`; `buildLiveSource` applies none; and `LIVE_SOURCE_STATIC`
+      (`field-registry.ts`) carries neither `BOX_DESCS` nor `BOX_SHADOW_DESCS`, so no Inspector row
+      exists either. Adding it is a schema field + a render line + an Inspector row — the same four
+      parts the stroke took — not a registry tweak.
+      **Recorded rather than left silent**, because the design says one thing and the product does
+      another and that divergence is invisible from either side alone. The boundary is the owner's
+      call and it stands. One fact for whoever picks it up: the `outline` decision above does NOT
+      apply to a shadow — `box-shadow` already paints outside the border box and takes no layout, so
+      it needs no equivalent escape from the `border-box` reset.
       ⚠ **A pre-existing gap this control inherits (not one it introduces):** `updateElement` is
       shallow (`locate` walks only a layer's direct children), so a plate nested in a CONTAINER
       takes no edit from the Frame rows — nor from the source-id or aspect rows, which have always
@@ -150,12 +168,17 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       field of its own onto the wire; and the render geometry in a REAL browser
       (`apps/designer/tests/e2e/live-source.spec.ts`) — the hole is at the same page position and
       size before and after an 8px frame, which is the only place layout actually exists.
-      ⚠ **On "shadow":** `video-placeholder` carries no `shadow` field today (1.5e's scope is colour + width), so the guarantee pinned is the one that covers both without needing the field —
+      ⚠ **On "shadow" — the half that could NOT be exercised, said plainly rather than faked.** This task's wording covers "neither stroke nor shadow", and only the STROKE half is driven by a real value: a shadow is absent from the schema, the renderer AND the Inspector (see the `box-shadow` scope note on 1.5e — allowed by the design, deliberately not built, owner's call 2026-08-13). A "shadow overlap is not a fault" test would have to construct a field nothing can author, and would assert nothing. What IS pinned is the guarantee that covers both without needing the field —
       `frameAabb` and `sceneRect` compose `transform` alone, so NO paint property is an input to the
       geometry. A shadow lands inside that guarantee the day it is added, and the byte-identical
       test above is what fails if a paint property is ever routed into the rect.
       **This is what makes 1.5e safe to ship before the punch exists:** it fixes the contract the
       punch will have to respect.
+      **Linux e2e DISCHARGED:** <https://github.com/yasermostafaee/cg/actions/runs/31753678406> — `ubuntu-latest`,
+      commit `b011005c`, **`conclusion: success`, and the `E2E (Playwright)` job COMPLETED and green**
+      (it RAN — not skipped, not cancelled). That commit carries 1.5e and 1.5g in full, including the
+      Inspector's Frame control, the exporter round-trips and the restructured `live-source.spec.ts`.
+      This supersedes session AA's run as the change's current discharge.
 - [ ] 1.5d **`border-radius` on a Live Source — revisit AFTER 1.5c, not before.** The Inspector
       withholds it today (a `video-placeholder` is a "bare" kind in `field-registry.ts` and never
       carried `BOX_DESCS`), and `design.md` §9a records why that is pending rather than settled:

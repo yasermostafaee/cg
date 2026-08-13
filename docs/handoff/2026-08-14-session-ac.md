@@ -55,7 +55,7 @@ out of the punch.
 
 ## What shipped
 
-### 1.5e — the plate gains a stroke (⚠ box left UNTICKED, deliberately)
+### 1.5e — the plate gains a stroke (⚠ box left UNTICKED, deliberately — TWO gaps named)
 
 - **Schema** — `stroke?: StrokeSchema` on `VideoPlaceholderElementSchema`, optional and additive, no
   version bump. The SHARED `StrokeSchema` unchanged; no second stroke concept, no alignment field.
@@ -91,10 +91,40 @@ Pinned in three places, deliberately, because the property has three distinct wa
   hole is at the same page position and the same size before and after an 8px frame. This is the
   only place layout actually exists, and it is the assertion that caught the `content-box` slide.
 
-⚠ **On "shadow".** `video-placeholder` carries no `shadow` field today (1.5e's scope is colour +
-width; verified at HEAD). The guarantee pinned is the one that covers both without needing the
-field: `frameAabb` and `sceneRect` compose `transform` alone, so **no paint property is an input to
-the geometry**. A shadow lands inside that guarantee the day it is added.
+⚠ **On "shadow" — the half that could NOT be exercised.** 1.5g's wording covers "neither stroke nor
+shadow", and only the stroke half is driven by a real value (see the scope boundary below: a shadow
+is absent from the schema, the renderer and the Inspector). A "shadow overlap is not a fault" test
+would have to construct a field nothing can author, and would assert nothing — so it was not
+written. What IS pinned is the guarantee that covers both without needing the field: `frameAabb` and
+`sceneRect` compose `transform` alone, so **no paint property is an input to the geometry**. A shadow
+lands inside that guarantee the day it is added, and the byte-identical preflight test is what fails
+if a paint property is ever routed into the rect.
+
+### 🔴 Scope boundary — STROKE ONLY, and the `box-shadow` gap that leaves
+
+**Owner's call, 2026-08-13: this session builds the STROKE only. `box-shadow` is allowed by the
+design and deliberately not built.** Recorded here and on 1.5e in `tasks.md` rather than left
+silent, because the design says one thing and the product does another, and that divergence is
+invisible from either side alone.
+
+**Re-verified at HEAD, and the gap is wider than the brief assumed.** It is not "the design allows a
+shadow but `field-registry.ts` withholds the control" — **a shadow is absent at all three layers**:
+
+| Layer     | State at HEAD                                                                             |
+| --------- | ----------------------------------------------------------------------------------------- |
+| Schema    | no `shadow` / `boxShadow` field on `VideoPlaceholderElementSchema` at all                 |
+| Renderer  | `buildLiveSource` applies no shadow                                                       |
+| Inspector | `LIVE_SOURCE_STATIC` carries neither `BOX_DESCS` nor `BOX_SHADOW_DESCS`, so no row exists |
+
+So adding it is the same four parts the stroke took — schema field, render line, Inspector row,
+exporter round-trip — not a registry tweak. One fact for whoever picks it up: **the `outline`
+decision does NOT apply to a shadow.** `box-shadow` already paints outside the border box and takes
+no layout, so it needs no equivalent escape from the `border-box` reset.
+
+**The kit's criterion 2 is unaffected and stays as written.** `punch-probe.html` is a hand-written
+standalone page, not Designer output, so its plates carry a real `box-shadow` in their markup
+regardless of what the Inspector offers — and they must, because a mechanism that eats a shadow will
+eat one later even if nothing authors it today.
 
 ### The 1.5b measurement kit — `tools/live-source-punch-probe/`
 
@@ -157,4 +187,8 @@ every row at once, as its own change.
 - `pnpm gate` — green, uncached (`0 cached, 85 total`), plus `pnpm format:check`.
 - `pnpm openspec validate live-source-multibox --strict` — valid.
 - `apps/designer` Playwright `live-source.spec.ts` — 13/13 on Windows Chromium. **Windows is
-  non-authoritative**; the Linux `e2e` debt is discharged by the CI run recorded in `tasks.md`.
+  non-authoritative** and discharges nothing.
+- **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/31753678406>, `ubuntu-latest`,
+  commit `b011005c`, `conclusion: success`, with the **`E2E (Playwright)` job COMPLETED and green
+  (it RAN — not skipped, not cancelled)**. Recorded in `tasks.md` beside 1.5g. **This supersedes
+  session AA's run** as the change's current discharge.
