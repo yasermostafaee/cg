@@ -1,11 +1,14 @@
 import {
   activeRangeOf,
+  followsComposition,
+  followWindowMs,
   listBoundSequenceIds,
   migrateScenePaths,
   playoutOf,
   sequenceItemInstanceId,
   sequenceItemTextFieldIds,
   type ClockTarget,
+  type FollowAnchors,
   type FrameRange,
   type ListItem,
   type NestedFieldValues,
@@ -79,6 +82,7 @@ import {
   createLottiePlayer,
   lottieClipMeta,
   lottieClipMidpoint,
+  lottieFollowWindow,
   lottieTiming,
 } from '@cg/lottie-bridge';
 import { registerLottiePlayer } from './lottie-registry.js';
@@ -887,8 +891,60 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
        * frames OFFSET from `active.in` (the frame the Lottie's intro starts — `play()` resets +
        * starts every Lottie, see the play path). Fed to `entranceSettleFrame` below so the
        * furniture's intro derives the scope's entrance settle exactly like keyframe tracks do.
+       *
+       * media-phases-follow-composition — computed as a PRE-PASS (it used to live inside the
+       * driver loop) because a FOLLOW-source element's window needs the EFFECTIVE content
+       * start at driver construction, and that value aggregates every settle first. A
+       * follower is fed the marker-less shape (`phases: undefined`) ON PURPOSE — it derives
+       * FROM the effective content start, so it must not vote on it. That is EXACTLY the
+       * existing marker-less null rule ("the ABSENCE of information, not an authored claim"),
+       * reused rather than re-derived: no new branch in the aggregation.
        */
       const lottieSettleOffsets: number[] = [];
+      for (const l of scope.lotties) {
+        const data = options.lottieAssets?.[l.element.assetId];
+        // Mirrors the driver loop's gates below: an unresolved asset builds no driver, and a
+        // HIDDEN Lottie is fully inert (B-034) — neither contributes a settle.
+        if (data === undefined || l.element.visible === false) continue;
+        const timing = lottieTiming({
+          data,
+          speed: l.element.speed,
+          phases: followsComposition(l.element.phases) ? undefined : l.element.phases,
+          compositionFps: scene.frameRate,
+        });
+        if (timing.settleOffset !== null) lottieSettleOffsets.push(timing.settleOffset);
+      }
+      // D-104 follow-up — the frame where content starts: the designer's EXPLICIT
+      // content-start marker (`lifecycle.contentStart`) when placed, else the
+      // `entranceSettleFrame()` heuristic (entrance completion). The marker is the
+      // deterministic source of truth; the heuristic is only its default. Clamp to
+      // [active.in, outPoint] defensively (the schema already constrains it).
+      // (Hoisted above the media driver loops for media-phases-follow-composition: a
+      // follower's window is derived FROM these anchors at driver construction. ONE
+      // computation — the hold-entry wiring below reads these same consts.)
+      const activeRange = activeRangeOf(scope.source);
+      const outPoint = scope.source.lifecycle?.outPoint ?? activeRange.out;
+      const marker = scope.source.lifecycle?.contentStart;
+      // D-125 Phase 3a — the Lottie-derived settles in ABSOLUTE composition frames (the
+      // offsets above ride `active.in`, where their intros start).
+      const lottieSettles = lottieSettleOffsets.map((o) => activeRange.in + o);
+      const holdEntry =
+        marker !== undefined
+          ? Math.max(activeRange.in, Math.min(outPoint, marker))
+          : entranceSettleFrame(scope.animated, activeRange.in, outPoint, lottieSettles);
+      // media-phases-follow-composition — the comp-side anchors a FOLLOW-source element
+      // derives its window from. `null` when the composition has no lifecycle: there is
+      // nothing to follow, and the follower behaves as marker-less (the Inspector says why).
+      const followAnchors: FollowAnchors | null =
+        scope.source.lifecycle !== undefined
+          ? {
+              activeIn: activeRange.in,
+              contentStart: holdEntry,
+              outPoint,
+              activeOut: activeRange.out,
+              fps: scene.frameRate,
+            }
+          : null;
       for (const l of scope.lotties) {
         const data = options.lottieAssets?.[l.element.assetId];
         if (data === undefined) continue;
@@ -900,37 +956,66 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-125 Phase 3c — expose the mounted player to the binding path, so a
         // `lottie-override` field routes to this animation (mirrors tickerDriverFor).
         registerLottiePlayer(l.container, handle);
+        // media-phases-follow-composition — resolve the phase WINDOW. Three shapes:
+        //  - markers/manual: the shipped mapping (the window is the clip's own [ip, op]);
+        //  - follow + lifecycle: the DERIVED window (`lottieFollowWindow` — the one
+        //    derivation, anchored at the hold time H);
+        //  - follow + NO lifecycle: nothing to follow — marker-less behaviour exactly
+        //    (a follower's stored numbers are ignored either way; the Inspector says why).
+        const follows = followsComposition(l.element.phases);
+        const fw =
+          follows && followAnchors !== null
+            ? lottieFollowWindow(meta, l.element.speed, followAnchors, l.element.phases?.holdAt)
+            : null;
+        const phasesEff = follows ? undefined : l.element.phases;
         // Resolve the phase frames onto the animation's frame space: absent `phases`
         // ⇒ the whole clip is the intro, held (frozen) at `op`. The idle segment
-        // defaults to the hold window `[introEnd, outroStart]` (§D2.2).
-        const introEnd = l.element.phases?.introEnd ?? meta.op;
-        const idleIn = l.element.phases?.idle?.[0] ?? introEnd;
-        const idleOut = l.element.phases?.idle?.[1] ?? l.element.phases?.outroStart ?? meta.op;
-        // §D1 — the OUT phase maps to `[outroStart → op]` in ANIMATION frames, BY PHASE
-        // (never rescaled onto the composition's `outPoint`): the element owns its own
-        // outro timing at the authored speed. Absent `phases` ⇒ `outroStart = op` ⇒ a
-        // DEGENERATE outro, which `playOutro()` resolves immediately (§D6.4.1).
-        const outroStart = l.element.phases?.outroStart ?? meta.op;
-        const hasOutro = outroStart < meta.op;
+        // defaults to the hold window `[introEnd, outroStart]` (§D2.2) — except under
+        // follow, where an AUTHORED idle range composes with H and an ABSENT one means
+        // FREEZE (a zero span, the driver's own fallback): the derived hold is H's look,
+        // and the stored [introEnd, outroStart] must not smuggle a loop range back in.
+        const introStart = fw?.introStartFrame;
+        const introEnd = fw !== null ? fw.holdFrame : (phasesEff?.introEnd ?? meta.op);
+        const idleIn =
+          fw !== null
+            ? (l.element.phases?.idle?.[0] ?? fw.holdFrame)
+            : (phasesEff?.idle?.[0] ?? introEnd);
+        const idleOut =
+          fw !== null
+            ? (l.element.phases?.idle?.[1] ?? fw.holdFrame)
+            : (phasesEff?.idle?.[1] ?? phasesEff?.outroStart ?? meta.op);
+        // §D1 — the OUT phase maps to `[outroStart → outroEnd]` in ANIMATION frames, BY
+        // PHASE (never rescaled onto the composition's `outPoint`): the element owns its
+        // own outro timing at the authored speed. Absent `phases` ⇒ `outroStart = op` ⇒ a
+        // DEGENERATE outro, which `playOutro()` resolves immediately (§D6.4.1). Under
+        // follow the outro is `[H → min(H + outSpan, clipEnd)]` — continuous from the held
+        // frame, SIZED to the OUT segment.
+        const outroStart = fw !== null ? fw.holdFrame : (phasesEff?.outroStart ?? meta.op);
+        const outroEnd = fw?.outroEndFrame;
+        const hasOutro = fw !== null ? fw.window.hasOutro : outroStart < meta.op;
         // D-125 — the STATIC canvas poster frame. When phase markers define the hold
         // start (`introEnd`, fully ON) park there. ABSENT markers `introEnd` fell back to
         // `op` (the LAST frame): for a real AE furniture clip that animates OFF in its
         // outro, `op` is the outro-END (invisible), so parking there leaves the editor
         // canvas EMPTY (the bug). The clip MIDPOINT sits in the held/visible region, so it
         // is the representative "settled" look; never `op`. Only the poster frame — the
-        // always-revealed canvas — changes; play() still resets()→`ip`.
+        // always-revealed canvas — changes; play() still resets()→the window start.
         // D-135 — the midpoint comes from `@cg/lottie-bridge`, which is also where the
         // Designer's manual-phase SEED reads it. One definition: if the two drifted,
         // converting a marker-less clip to manual phases would move its picture.
-        const posterFrame = l.element.phases?.introEnd ?? lottieClipMidpoint(meta);
+        // Under follow the poster IS the derived H — the held look, by definition.
+        const posterFrame =
+          fw !== null ? fw.holdFrame : (phasesEff?.introEnd ?? lottieClipMidpoint(meta));
         const driver = new LottieDriver({
           handle,
           fr: meta.fr,
           ip: meta.ip,
           op: meta.op,
           speed: l.element.speed,
+          introStart,
           introEnd,
           outroStart,
+          outroEnd,
           // D-135 — the SAME `hasOutro` the `cgOutro` guard and the scope's outro ledger
           // read, computed once above. The driver needs it to know that a degenerate
           // outro takes the INTRO mapping past the composition's out-point.
@@ -969,18 +1054,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // one-liner; do not "normalize" it to match the other content kinds.
           const drivesHold = l.element.drivesHold === true;
           if (drivesHold) holdLotties.push(driver);
-          // D-125 Phase 3a — contribute this Lottie's intro to the scope's entrance settle.
-          // Inside the B-034 visible gate ON PURPOSE: a HIDDEN Lottie is fully inert and must
-          // not delay content for furniture nobody can see. A MARKER-LESS clip yields `null`
-          // (see `lottieTiming` — the `introEnd = op` fallback is missing information, not an
-          // authored intro), so it contributes nothing and pre-D-125 scenes are unchanged.
-          const timing = lottieTiming({
-            data,
-            speed: l.element.speed,
-            phases: l.element.phases,
-            compositionFps: scene.frameRate,
-          });
-          if (timing.settleOffset !== null) lottieSettleOffsets.push(timing.settleOffset);
+          // D-125 Phase 3a — this Lottie's settle contribution now happens in the PRE-PASS
+          // above (media-phases-follow-composition hoisted it: a follower's window needs the
+          // aggregated result at construction time). Same gates, same `lottieTiming`.
           // D-112 — exposed UNFILTERED so a parent instance override can re-filter it.
           contentDrivers.push({
             id: l.element.id,
@@ -997,15 +1073,51 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const v of scope.videos) {
         const el = v.element;
         const durationMs = el.durationMs;
-        const hasPhases = el.phases !== undefined;
+        // media-phases-follow-composition — resolve the phase WINDOW, mirroring the Lottie
+        // block above. Video is the ms-native kind, so it consumes the comp-side core
+        // (`followWindowMs`) directly — no unit adapter. Follow without a lifecycle behaves
+        // as absent phases (nothing to follow).
+        const followsV = followsComposition(el.phases);
+        const vw =
+          followsV && followAnchors !== null
+            ? followWindowMs(followAnchors, { durationMs, holdAtMs: el.phases?.holdAt })
+            : null;
+        const phasesEffV = followsV ? undefined : el.phases;
+        const hasPhases = phasesEffV !== undefined;
         // Absent phases (decision (b)): the whole clip is the intro, the hold loops
         // the whole clip, and there is NO outro (outroStart = duration ⇒ degenerate).
-        const introEndMs = el.phases?.introEnd ?? durationMs;
-        const outroStartMs = el.phases?.outroStart ?? durationMs;
-        const idle = el.phases?.idle;
-        const loopStartMs = idle ? idle.start : hasPhases ? introEndMs : 0;
-        const loopEndMs = idle ? idle.end : hasPhases ? outroStartMs : durationMs;
-        const hasOutro = outroStartMs < durationMs;
+        const introStartMs = vw?.introStartMs;
+        const introEndMs = vw !== null ? vw.holdMs : (phasesEffV?.introEnd ?? durationMs);
+        const outroStartMs = vw !== null ? vw.holdMs : (phasesEffV?.outroStart ?? durationMs);
+        const outroEndMs = vw?.outroEndMs;
+        // Under follow, an AUTHORED idle range composes with H; ABSENT idle means the hold
+        // FREEZES at H even for `holdBehavior: 'loop'` — looping the whole clip would
+        // abandon the held look, which is the one thing follow promises to keep (design
+        // §2). The STORED holdBehavior is untouched; only the resolved hold reads this
+        // way, and the Playout checklist's `infinite` mirror says the same.
+        const idle = vw !== null ? el.phases?.idle : phasesEffV?.idle;
+        const loopStartMs =
+          vw !== null
+            ? idle
+              ? idle.start
+              : vw.holdMs
+            : idle
+              ? idle.start
+              : hasPhases
+                ? introEndMs
+                : 0;
+        const loopEndMs =
+          vw !== null
+            ? idle
+              ? idle.end
+              : vw.holdMs
+            : idle
+              ? idle.end
+              : hasPhases
+                ? outroStartMs
+                : durationMs;
+        const holdBehaviorEff = vw !== null && idle === undefined ? 'freeze' : el.holdBehavior;
+        const hasOutro = vw !== null ? vw.hasOutro : outroStartMs < durationMs;
         // MUTABLE: `recover()` rebuilds the element in place (a terminal decode
         // error kills the NODE, not the driver) and re-points every handle member,
         // and B-137's `live()` below re-points it when a HOST reparents the node.
@@ -1138,15 +1250,21 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const driver = new VideoDriver({
           handle,
           durationMs,
+          introStartMs,
           introEndMs,
           outroStartMs,
+          outroEndMs,
           loopStartMs,
           loopEndMs,
-          holdBehavior: el.holdBehavior,
+          holdBehavior: holdBehaviorEff,
           clock: options.clock,
         });
         scopeVideos.push(driver);
         videos.push(driver);
+        // media-phases-follow-composition — the at-rest poster shows the derived H (the held
+        // look). The scene-builder wrote `holdAt ?? midpoint` (it has no comp anchors); the
+        // runtime REFINES it here, before the host's poster seek reads the dataset.
+        if (vw !== null) media.dataset['cgPosterMs'] = String(Math.round(vw.holdMs));
         // D-105 — content root so the coordinated exit can select it (data-cg-content='video').
         media.dataset['cgContent'] = 'video';
         // §D6.2 — a video that OWNS an outro animates itself off; guard it from the
@@ -1282,21 +1400,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         child.visible = c.visible !== false;
         return child;
       });
-      const activeRange = activeRangeOf(scope.source);
-      // D-104 follow-up — the frame where content starts: the designer's EXPLICIT
-      // content-start marker (`lifecycle.contentStart`) when placed, else the
-      // `entranceSettleFrame()` heuristic (entrance completion). The marker is the
-      // deterministic source of truth; the heuristic is only its default. Clamp to
-      // [active.in, outPoint] defensively (the schema already constrains it).
-      const outPoint = scope.source.lifecycle?.outPoint ?? activeRange.out;
-      const marker = scope.source.lifecycle?.contentStart;
-      // D-125 Phase 3a — the Lottie-derived settles in ABSOLUTE composition frames (the
-      // offsets above ride `active.in`, where their intros start).
-      const lottieSettles = lottieSettleOffsets.map((o) => activeRange.in + o);
-      const holdEntry =
-        marker !== undefined
-          ? Math.max(activeRange.in, Math.min(outPoint, marker))
-          : entranceSettleFrame(scope.animated, activeRange.in, outPoint, lottieSettles);
+      // D-104 follow-up — `activeRange` / `outPoint` / `holdEntry` are computed ONCE, above
+      // the media driver loops (media-phases-follow-composition hoisted them: a follower's
+      // window derives from these anchors at driver construction). The wiring below reads
+      // those same consts — a second computation here is exactly the two-reads trap
+      // golden rule 7 exists to prevent.
       // D-104 follow-up (content-start VISIBILITY) — a content host must show its static
       // initial content (a clock's frozen time, a sequence's item 1, a ticker's band) only
       // FROM the content-start frame, matching the ticker's empty-until-crawl behaviour;

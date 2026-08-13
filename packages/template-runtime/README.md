@@ -571,9 +571,15 @@ media clock, so `VideoDriver` does not paint frames — it keeps the element in
 lockstep with the injected `RuntimeClock` through a `VideoHandle`
 (`play`/`pause`/`seek`/`currentTime`/`seeking`/`dead`/`recover`), built in
 `runtime.ts` around the scene-builder's registered `<video>`. Phase mapping:
-intro `[0 → introEnd]`, hold loops `[loopStart, loopEnd]` or freezes at
-`introEnd`, outro `[outroStart → duration]` through the same element-outro seam
-as a Lottie.
+intro `[introStartMs → introEndMs]` (`introStartMs` defaults to 0), hold loops
+`[loopStart, loopEnd]` or freezes at `introEndMs`, outro
+`[outroStartMs → outroEndMs]` (`outroEndMs` defaults to `durationMs`) through the
+same element-outro seam as a Lottie. The window bounds serve the FOLLOW phase
+source exactly as the Lottie's (see above) — video consumes `followWindowMs`
+directly (ms-native, no unit adapter), and under follow an ABSENT idle range
+resolves the hold to a FREEZE at `H` even for `holdBehavior: 'loop'` (looping the
+whole clip would abandon the held look follow promises to keep; the stored value
+is untouched).
 
 **THE SEEK POLICY (2026-07-25 — the fragile-alpha-seek root cause):** on
 VP8+alpha WebM whose alpha side-stream keyframes misalign with the main
@@ -633,9 +639,21 @@ the whole lifecycle is deterministic under a fake clock.
 
 The composition lifecycle maps onto the animation's own frame space **by phase**
 (never rescaled onto `outPoint`): `play()` → `reset()`+`start()` drives
-`[ip → introEnd]` once; the HOLD **freezes** at `introEnd` or **loops**
-`[idleIn, idleOut]` per `holdBehavior`; `out()`/`stop()` → `playOutro()` drives
-`[outroStart → op]` once.
+`[introStart → introEnd]` once (`introStart` defaults to `ip`); the HOLD
+**freezes** at `introEnd` or **loops** `[idleIn, idleOut]` per `holdBehavior`;
+`out()`/`stop()` → `playOutro()` drives `[outroStart → outroEnd]` once
+(`outroEnd` defaults to `op`).
+
+**The window bounds (`introStart` / `outroEnd`) exist for the FOLLOW phase source**
+(`media-phases-follow-composition`): a `phases.source: 'composition'` element derives
+its window from the composition's lifecycle anchors — intro `[H − entranceSpan → H]`,
+hold at `H` (`holdAt`, else the entrance span), outro `[H → min(H + outSpan, clipEnd)]`
+— through ONE derivation: `followWindowMs` (`@cg/shared-schema`, ms — video's native
+unit) + the `lottieFollowWindow` frames↔ms adapter (`@cg/lottie-bridge`). `runtime.ts`
+resolves it at driver construction (the settle aggregation is a PRE-PASS so the
+effective content start exists there), a follower contributes `settleOffset: null`
+(it derives FROM that value, so it must not vote on it), and NOTHING bakes the derived
+numbers — every surface re-derives from the stored relationship.
 
 **The element-outro seam** is the one structural change to the D-105 split exit.
 `out()` / `stop()` collect every outro-owning driver (`collectElementOutros()`)
@@ -657,7 +675,8 @@ Two signals are kept deliberately separate:
   `drivesHold`.
 
 **Invariants.** `playOutro()` ALWAYS resolves — a degenerate/absent outro
-(`outroStart >= op`) resolves immediately, the final paint is clamped to `op`, and
+(`hasOutro: false`) resolves immediately, the final paint is clamped to the
+window end (`outroEnd`, default `op`), and
 `reset()` / `stop()` / `destroy()` settle a still-pending outro — so a superseding
 `play()`, a second `out()`, or a hard kill can never strand the exit. `reset()`
 also re-mints `whenComplete()` (B-033), so a replay's hold waits again.

@@ -42,6 +42,15 @@ export interface LottieDriverOptions {
   op: number;
   /** Playback speed multiplier. */
   speed: number;
+  /**
+   * media-phases-follow-composition — where the INTRO WINDOW begins. Defaults to `ip` (the
+   * shipped behaviour for every markers/manual clip). A FOLLOW-source clip's window is anchored
+   * at the hold time `H`: the intro is `[H − entranceSpan → H]`, skipping as much of the clip's
+   * head as the composition's entrance cannot fit — so the clip reaches its hold look EXACTLY
+   * at the effective content start. Honoured inside {@link clipPositionAt} (and `reset()`'s
+   * park frame) ONLY — the one mapping, never a branch beside it.
+   */
+  introStart?: number | undefined;
   /** Frame where the intro ends and the hold begins (`ip ≤ introEnd ≤ op`). */
   introEnd: number;
   /**
@@ -51,6 +60,14 @@ export interface LottieDriverOptions {
    * resolves immediately so the exit never strands (§D6.4.1).
    */
   outroStart: number;
+  /**
+   * media-phases-follow-composition — where the OUTRO WINDOW ends. Defaults to `op` (the
+   * shipped behaviour). A FOLLOW-source clip's outro is `[H → min(H + outSpan, clipEnd)]` —
+   * CONTINUOUS from the held frame (no hold→outro pop by construction) and sized to the
+   * composition's OUT segment, so `playOutro()` resolves at `outroEnd`, never driving on to a
+   * clip tail the OUT segment has no time for. Honoured inside {@link clipPositionAt} only.
+   */
+  outroEnd?: number | undefined;
   /**
    * Does this clip HAVE an outro — i.e. is `outroStart < op`? Passed in rather than
    * re-derived, because the runtime already computes it (`hasOutro`, beside the
@@ -145,7 +162,9 @@ export class LottieDriver {
     this.pausedElapsed = 0;
     this.mode = 'intro';
     this.complete = this.armComplete();
-    this.paint(this.o.ip);
+    // The park frame is the WINDOW start — `ip` for every markers/manual clip; the derived
+    // intro start for a follow clip (whose head is deliberately outside the window).
+    this.paint(this.o.introStart ?? this.o.ip);
   }
 
   /**
@@ -305,27 +324,34 @@ export class LottieDriver {
    */
   private clipPositionAt(elapsedMs: number, mode: 'intro' | 'outro'): ClipPosition {
     const { ip, fr, speed, introEnd, holdBehavior, idleIn, idleOut, outroStart, op } = this.o;
+    // media-phases-follow-composition — the WINDOW bounds. Both default to the clip's own
+    // (`ip` / `op`), so every markers/manual clip maps exactly as it always has; a FOLLOW
+    // clip's runtime passes the derived window and the same mapping plays it.
+    const introStart = this.o.introStart ?? ip;
+    const outroEnd = this.o.outroEnd ?? op;
     // Derive the frame from ELAPSED TIME (not a tick count), so a dropped / long rAF
     // frame still lands on the right frame — the FrameDriver invariant. A NEGATIVE
     // elapsed (a playhead sitting before the composition's in-point) clamps to the
-    // run's start rather than extrapolating backwards past `ip`.
+    // run's start rather than extrapolating backwards past the window start.
     const advanced = Math.floor((Math.max(0, elapsedMs) / 1000) * fr * speed);
-    // OUT phase — [outroStart → op] once (§D1 / §D6.2).
+    // OUT phase — [outroStart → outroEnd] once (§D1 / §D6.2; outroEnd is `op` unless a
+    // follow window bounds it).
     if (mode === 'outro') {
       const outroFrame = outroStart + advanced;
-      // CLAMP the final position to `op` — overshooting would ask lottie-web for a
-      // frame that does not exist. `outro-end` is what releases the awaiting exit.
-      return outroFrame < op
+      // CLAMP the final position to the window end — overshooting would ask lottie-web for
+      // a frame that does not exist (or, under follow, drive on into a clip tail the OUT
+      // segment has no time for). `outro-end` is what releases the awaiting exit.
+      return outroFrame < outroEnd
         ? { frame: outroFrame, phase: 'outro' }
-        : { frame: op, phase: 'outro-end' };
+        : { frame: outroEnd, phase: 'outro-end' };
     }
-    const frame = ip + advanced;
+    const frame = introStart + advanced;
     if (frame < introEnd) return { frame, phase: 'intro' };
     // The intro has played out — HOLD.
     if (holdBehavior === 'idle-loop' && idleOut > idleIn) {
       // Loop the idle segment: keep advancing, wrapping within [idleIn, idleOut).
       const span = idleOut - idleIn;
-      const idleFrames = advanced - (introEnd - ip);
+      const idleFrames = advanced - (introEnd - introStart);
       return { frame: idleIn + (idleFrames % span), phase: 'idle-loop' };
     }
     // FREEZE — clamp to the hold frame.
@@ -412,7 +438,6 @@ export class LottieDriver {
     this.paint(pos.frame);
   }
 
-  /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   /** Mint a fresh completion deferred, capturing its resolver (B-033 re-arm). */
   private armComplete(): Promise<void> {
     return new Promise<void>((res) => {

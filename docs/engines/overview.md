@@ -83,6 +83,14 @@ the editor UI and the runtime renderer (the "Where features go" map in
   its own lifecycle owns the frame and is not fought. The ticker, the clock and the
   sequence are DELIBERATELY carved out: they are functions of real time, with no frame N
   of a crawl to show. The `<video>` half is designed but gated on an open owner decision,
+- **derives FOLLOW-source media windows from the composition's lifecycle** —
+  `media-phases-follow-composition`: a Lottie/video whose `phases.source` is
+  `'composition'` stores the RELATIONSHIP (intro settles at the content start, outro fits
+  the OUT segment, hold at `holdAt`), and `createRuntime` derives the concrete window at
+  driver construction through `followWindowMs` (`@cg/shared-schema`) + the
+  `lottieFollowWindow` unit adapter (`@cg/lottie-bridge`) — one derivation, re-run on
+  every scene replace, never baked. A follower contributes nothing to the entrance
+  settle (it derives FROM it),
 - lets an **element own its own exit** — the D-125 element-outro seam: `out()` /
 - cascades all of the above through **nested composition instances**.
 

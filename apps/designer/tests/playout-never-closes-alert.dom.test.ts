@@ -222,7 +222,16 @@ describe('R — the never-closes alert tracks the consequence', () => {
     // A video's never-completing hold is `loop`; a Lottie's is `idle-loop`. The checklist tested
     // only `'loop'`, so an idle-loop Lottie was marked a finite CLOSER while the runtime holds it
     // until stop() ("like an infinite ticker").
-    render(scene([lottie('Loop', { drivesHold: true, hold: 'idle-loop' })]));
+    //
+    // media-phases-follow-composition sharpened the fixture: the runtime loops only a NON-EMPTY
+    // idle span (`clipPositionAt` requires `idleOut > idleIn`; a marker-less clip's span is
+    // zero and FREEZES — it completes). So the infinite Lottie this test names carries a real
+    // span; the marker-less case is pinned FINITE in `media-hold-infinity.dom.test.ts`.
+    const el = {
+      ...(lottie('Loop', { drivesHold: true, hold: 'idle-loop' }) as object),
+      phases: { introEnd: 10, outroStart: 40, idle: [10, 30], source: 'manual' },
+    } as Element;
+    render(scene([el]));
     expect(alert()).not.toBeNull();
     expect(alertText()).toContain('Loop');
   });

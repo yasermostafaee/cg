@@ -524,3 +524,71 @@ describe('VideoDriver — sync robustness (background throttle / freeze / resume
     expect(video.plays).toBeGreaterThan(playsAfterResume); // playback re-engaged
   });
 });
+
+describe('VideoDriver — the follow window: an intro at an OFFSET, an outro with a BOUNDED end', () => {
+  // media-phases-follow-composition — the window [introStartMs → introEndMs] / hold at H /
+  // [outroStartMs → outroEndMs], resolved through the ONE mapping (`expectedClipMs`). The
+  // owner's case in ms on a 5 s clip: intro [2000 → 3000], hold 3000, outro [3000 → 3500].
+  const FOLLOW = {
+    durationMs: 5000,
+    introStartMs: 2000,
+    introEndMs: 3000,
+    outroStartMs: 3000,
+    outroEndMs: 3500,
+    loopStartMs: 3000,
+    loopEndMs: 3000,
+    holdBehavior: 'freeze' as const,
+  };
+
+  it('start() seeks the WINDOW start and freezes at H — the head is never played', () => {
+    const { driver, video, clock } = makeDriver({ ...FOLLOW, durationMs: 5000 });
+    driver.start();
+    expect(video.seeks).toEqual([2]); // the intro-start seek, in seconds
+    run(clock, 400);
+    expect(video.at()).toBeCloseTo(2.4, 1);
+    run(clock, 700); // past the 1000 ms intro span
+    expect(video.at()).toBeCloseTo(3, 2); // frozen at H
+    expect(video.pauses).toBeGreaterThan(0);
+  });
+
+  it('a freeze at H resolves whenComplete', async () => {
+    const { driver, clock } = makeDriver(FOLLOW);
+    driver.start();
+    run(clock, 1200);
+    await expect(driver.whenComplete()).resolves.toBeUndefined();
+  });
+
+  it('reset() parks at the window start, not clip time 0', () => {
+    const { driver, video } = makeDriver(FOLLOW);
+    driver.reset();
+    expect(video.seeks.at(-1)).toBe(2);
+  });
+
+  it('the outro plays [outroStart → outroEnd] once, clamps the final paint to outroEnd, and resolves', async () => {
+    const { driver, video, clock } = makeDriver(FOLLOW);
+    driver.start();
+    run(clock, 1200); // settle the hold at H
+    const done = driver.playOutro();
+    expect(video.seeks.at(-1)).toBe(3); // outro starts at H
+    run(clock, 600); // past the 500 ms outro span
+    await expect(done).resolves.toBeUndefined();
+    expect(video.seeks.at(-1)).toBeCloseTo(3.5, 3); // final paint clamps to outroEnd, never 5.0
+    expect(video.at()).toBeLessThanOrEqual(3.5);
+  });
+
+  it('a degenerate follow outro (outroEnd === outroStart) resolves immediately', async () => {
+    const { driver } = makeDriver({ ...FOLLOW, outroEndMs: 3000 });
+    await expect(driver.playOutro()).resolves.toBeUndefined();
+  });
+
+  it('absent introStartMs / outroEndMs keep the shipped defaults (0 / durationMs)', async () => {
+    const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze' });
+    driver.start();
+    expect(video.seeks).toEqual([0]);
+    run(clock, 2100); // settle the freeze hold at introEndMs 2000
+    const done = driver.playOutro(); // [8000 → 10000]
+    run(clock, 2200);
+    await expect(done).resolves.toBeUndefined();
+    expect(video.seeks.at(-1)).toBeCloseTo(10, 3);
+  });
+});

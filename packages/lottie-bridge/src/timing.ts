@@ -19,6 +19,7 @@
  * slaving the Lottie so its intro-end lands on a fixed composition frame — because that
  * would require resampling the animation's frames, violating its opacity.)
  */
+import { followWindowMs, type FollowAnchors, type FollowWindow } from '@cg/shared-schema';
 
 /** Bodymovin frame metadata: in-point, out-point, native frame rate. */
 export interface LottieClipMeta {
@@ -61,6 +62,55 @@ export function lottieClipMeta(data: unknown): LottieClipMeta {
  */
 export function lottieClipMidpoint(meta: LottieClipMeta): number {
   return Math.round((meta.ip + meta.op) / 2);
+}
+
+/**
+ * media-phases-follow-composition — the LOTTIE UNIT ADAPTER for the follow window. The
+ * comp-side arithmetic lives ONCE in `@cg/shared-schema`'s `followWindowMs` (ms — video's
+ * native unit, consumed there directly); this adapter converts animation frames ↔ clip ms at
+ * the edge through `fr × speed` and delegates every comp-side decision. It lives HERE because
+ * this module's charter is already "the ONE place a Lottie's phase frames are converted
+ * between frame spaces" — a second conversion elsewhere is how two surfaces come to disagree.
+ */
+export interface LottieFollowWindow {
+  /** The derived window in clip ms, clamps included — for the Inspector's hint lines. */
+  window: FollowWindow;
+  /** Where the intro window begins, in ANIMATION frames. */
+  introStartFrame: number;
+  /** `H` — the held frame (intro end AND outro start), in ANIMATION frames. */
+  holdFrame: number;
+  /** Where the outro window ends, in ANIMATION frames. */
+  outroEndFrame: number;
+}
+
+/**
+ * Derive the follow window for one Lottie in one composition. `holdAtFrames` is an ABSOLUTE
+ * animation frame (like `introEnd`/`outroStart`); the returned frames are rounded to the
+ * nearest whole frame at the edge, which is the only rounding anywhere in the derivation.
+ */
+export function lottieFollowWindow(
+  meta: LottieClipMeta,
+  speed: number,
+  anchors: FollowAnchors,
+  holdAtFrames?: number | undefined,
+): LottieFollowWindow {
+  const spd = Number.isFinite(speed) && speed > 0 ? speed : 1;
+  // Animation frames consumed per second of wall-clock; 0 for a malformed clip, which
+  // degenerates every span to zero rather than NaN (mirrors `lottieTiming`).
+  const rate = meta.fr * spd;
+  const msPerFrame = rate > 0 ? 1000 / rate : 0;
+  const durationMs = Math.max(0, meta.op - meta.ip) * msPerFrame;
+  const holdAtMs =
+    holdAtFrames === undefined ? undefined : Math.max(0, holdAtFrames - meta.ip) * msPerFrame;
+  const window = followWindowMs(anchors, { durationMs, holdAtMs });
+  const toFrame = (ms: number): number =>
+    meta.ip + (msPerFrame > 0 ? Math.round(ms / msPerFrame) : 0);
+  return {
+    window,
+    introStartFrame: toFrame(window.introStartMs),
+    holdFrame: toFrame(window.holdMs),
+    outroEndFrame: toFrame(window.outroEndMs),
+  };
 }
 
 /** One phase measured in all three spaces. */

@@ -1,4 +1,4 @@
-import { pathVisualBBox } from '@cg/shared-schema';
+import { followsComposition, pathVisualBBox } from '@cg/shared-schema';
 import type {
   AnchorPoint,
   BoxStyle,
@@ -1228,10 +1228,19 @@ function buildVideo(element: VideoElement, ctx: BuildCtx): HTMLElement {
  * hold frame is meaningful), else the clip midpoint. Inlined here (the designer
  * has its own `posterTimeMs`) exactly as the D-125 Lottie poster rule is inlined
  * at `runtime.ts` — the runtime package cannot import from the designer app.
+ *
+ * media-phases-follow-composition — a FOLLOW-source clip's stored `introEnd` is IGNORED
+ * data, so the poster falls back to `holdAt` (the authored held look) else the midpoint.
+ * This is only the NO-ANCHORS fallback: `createRuntime` REFINES the dataset to the exact
+ * derived `H` at driver construction, where the comp anchors exist.
  */
 function videoPosterMs(element: VideoElement): number {
-  const introEnd = element.phases?.introEnd;
-  if (introEnd !== undefined && introEnd > 0 && introEnd < element.durationMs) return introEnd;
+  const posterAnchor = followsComposition(element.phases)
+    ? element.phases?.holdAt
+    : element.phases?.introEnd;
+  if (posterAnchor !== undefined && posterAnchor > 0 && posterAnchor < element.durationMs) {
+    return posterAnchor;
+  }
   return Math.round(element.durationMs / 2);
 }
 

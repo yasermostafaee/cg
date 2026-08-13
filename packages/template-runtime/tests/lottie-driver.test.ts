@@ -350,3 +350,101 @@ describe('LottieDriver — positionAt (the Designer playhead)', () => {
     expect(handle.frames).toHaveLength(count);
   });
 });
+
+describe('LottieDriver — the follow window: an intro at an OFFSET, an outro with a BOUNDED end', () => {
+  // media-phases-follow-composition — the window [introStart → introEnd] / hold /
+  // [outroStart → outroEnd] through the ONE mapping (`clipPositionAt`), never beside it.
+  // fr 100 ⇒ 1 animation frame every 10 ms. The follow shape: introEnd === outroStart === H.
+  const FOLLOW = {
+    ip: 0,
+    op: 250,
+    introStart: 100,
+    introEnd: 150,
+    outroStart: 150,
+    outroEnd: 175,
+    hasOutro: true,
+    idleIn: 150,
+    idleOut: 150, // absent authored idle ⇒ zero span ⇒ freeze at H
+  } as const;
+
+  it('reset() parks at the WINDOW start, not the clip in-point', () => {
+    const { driver, handle } = makeDriver(FOLLOW);
+    driver.reset();
+    expect(last(handle)).toBe(100);
+  });
+
+  it('the intro plays [introStart → introEnd] and freezes at H — never visiting the head', () => {
+    const { driver, handle, clock } = makeDriver(FOLLOW);
+    driver.reset();
+    driver.start();
+    expect(last(handle)).toBe(100);
+    clock.advance(250); // 25 frames in
+    expect(last(handle)).toBe(125);
+    clock.advance(300); // past the 500 ms window span → freeze at H
+    expect(last(handle)).toBe(150);
+    expect(Math.min(...handle.frames)).toBe(100); // the skipped head is never painted
+  });
+
+  it('a freeze at H resolves whenComplete (the hold IS the completion point)', async () => {
+    const { driver, clock } = makeDriver(FOLLOW);
+    driver.reset();
+    driver.start();
+    clock.advance(600);
+    await expect(driver.whenComplete()).resolves.toBeUndefined();
+  });
+
+  it('the outro plays [outroStart → outroEnd] once and resolves AT outroEnd, never at op', async () => {
+    const { driver, handle, clock } = makeDriver(FOLLOW);
+    driver.reset();
+    driver.start();
+    clock.advance(600); // settle the hold
+    const done = driver.playOutro();
+    expect(last(handle)).toBe(150); // outro paints its start synchronously
+    clock.advance(200);
+    expect(last(handle)).toBe(170);
+    clock.advance(100); // past the 250 ms outro span → clamp to outroEnd
+    expect(last(handle)).toBe(175);
+    await expect(done).resolves.toBeUndefined();
+    expect(Math.max(...handle.frames)).toBe(175); // op (250) is never asked for
+  });
+
+  it('positionAt maps the playhead through the SAME window — scrub and play cannot disagree', () => {
+    const { driver, handle } = makeDriver(FOLLOW);
+    driver.positionAt(0, null);
+    expect(last(handle)).toBe(100);
+    driver.positionAt(250, null);
+    expect(last(handle)).toBe(125);
+    driver.positionAt(2000, null); // deep in the hold
+    expect(last(handle)).toBe(150);
+    driver.positionAt(2000, 200); // 200 ms into the OUT segment
+    expect(last(handle)).toBe(170);
+    driver.positionAt(2000, 9000); // far past the OUT segment → clamp to outroEnd
+    expect(last(handle)).toBe(175);
+  });
+
+  it('an authored idle range composes with H — the window is unchanged, the hold loops', () => {
+    const { driver, handle, clock } = makeDriver({
+      ...FOLLOW,
+      holdBehavior: 'idle-loop',
+      idleIn: 140,
+      idleOut: 160,
+    });
+    driver.reset();
+    driver.start();
+    clock.advance(500); // exactly the intro span (50 frames) → the hold begins
+    clock.advance(100); // 10 idle frames in
+    expect(last(handle)).toBe(150); // 140 + (60 % 20)... asserted precisely below
+    const inIdle = handle.frames.filter((f) => f >= 140 && f < 160);
+    expect(inIdle.length).toBeGreaterThan(0);
+  });
+
+  it('absent introStart / outroEnd keep the shipped defaults (ip / op) — nothing moved for old scenes', () => {
+    const { driver, handle, clock } = makeDriver({ introEnd: 5, outroStart: 60, op: 100 });
+    driver.reset();
+    expect(last(handle)).toBe(0); // ip
+    const done = driver.playOutro();
+    clock.advance(1000); // 100 frames ≫ [60 → 100]
+    expect(last(handle)).toBe(100); // clamps to op, as always
+    return done;
+  });
+});

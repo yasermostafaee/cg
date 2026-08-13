@@ -44,7 +44,10 @@ function video(
 }
 function lottie(
   id: string,
-  o: { drivesHold?: boolean; holdBehavior?: 'loop' | 'freeze' } = {},
+  // A Lottie's never-completing hold is `idle-loop` (the schema enum is
+  // `['freeze','idle-loop']` — `loop` is the VIDEO spelling; an earlier fixture here used
+  // it and only matched the coarse pre-follow predicate by accident).
+  o: { drivesHold?: boolean; holdBehavior?: 'idle-loop' | 'freeze' } = {},
 ): Element {
   return {
     ...T,
@@ -52,6 +55,10 @@ function lottie(
     name: id,
     type: 'lottie',
     holdBehavior: o.holdBehavior ?? 'freeze',
+    // The runtime loops only a NON-EMPTY idle span — give an idle-loop fixture a real one.
+    ...(o.holdBehavior === 'idle-loop'
+      ? { phases: { introEnd: 10, outroStart: 40, idle: [10, 30], source: 'manual' } }
+      : {}),
     ...(o.drivesHold !== undefined ? { drivesHold: o.drivesHold } : {}),
   } as unknown as Element;
 }
@@ -98,7 +105,7 @@ describe('D-128 — media joins the content-driven hold closer list', () => {
 
   it('lists a drivesHold lottie too (media parity)', () => {
     const items = contentHoldElementsOf(
-      scene([lottie('l', { drivesHold: true, holdBehavior: 'loop' })]),
+      scene([lottie('l', { drivesHold: true, holdBehavior: 'idle-loop' })]),
     );
     expect(items[0]).toMatchObject({ type: 'lottie', drivesHold: true, infinite: true });
   });

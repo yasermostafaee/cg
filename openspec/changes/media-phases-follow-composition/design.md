@@ -1,0 +1,194 @@
+# Design — media phases follow the composition
+
+## 1. The decision (owner, 2026-08-12)
+
+**A third phase source: `'composition'`.** The element stores the RELATIONSHIP, not the numbers:
+its intro ends at the composition's effective content start; its outro fits the composition's OUT
+segment. Values are DERIVED wherever phases are resolved, so dragging `outPoint` / `contentStart`
+moves them with no re-sync step.
+
+### 1.1 A one-shot snap button was considered and REJECTED
+
+A "snap to composition" button writing the currently-correct values into manual phases would be a
+STALE COPY: correct at the click, silently wrong after the next marker drag. That is the same
+stale-second-derivation family this codebase has now catalogued four instances of (the D-149
+intrinsic-size field rejection, the B-100 twice-read boolean, the P-012 second lock copy, the
+`lottieClipMidpoint` extraction rationale — a second copy of one rule is how the two come to
+disagree). The snap GESTURE survives as **Detach**: bake the currently-derived values into
+`source: 'manual'` and edit from there — an explicit, operator-invoked transition OUT of the
+relationship, not a shadow of it.
+
+### 1.2 Deferred, not rejected
+
+Dragging element phase markers on the timeline in comp space — revisit after D-133's timeline
+marker work exists. Recorded here so the idea is not re-invented from scratch; no item number is
+minted (PRD registration is the owner's).
+
+## 2. The model — a CONTINUOUS WINDOW through the clip, anchored at the HOLD TIME `H`
+
+Settled after the owner's decisive case (5 s clip, hold look at clip-second 3, 2 s composition):
+anchoring the intro at the clip's START cannot express "be on second 3 when the content shows"
+inside a short entrance — reaching second 3 at 1× takes 3 seconds. The anchor must be the hold
+time.
+
+Anchors, comp side: `active.in`, effective content start, `lifecycle.outPoint`, `active.out`.
+Spans: entrance span ms = `(contentStartEff − active.in) × 1000 / compFps`; OUT span ms =
+`(active.out − outPoint) × 1000 / compFps`.
+
+- **`H` — the clip time whose look the composition HOLDS — is authorable under follow** (`holdAt`,
+  clip-native units: Lottie animation frames, video ms). Absent ⇒ `H = clip start + entrance
+span`, which degenerates exactly to "play the clip from its head" — the simple case costs
+  nothing and is the general rule at `H = entranceSpan`, not a separate branch.
+- **intro** = `[max(clipStart, H − entranceSpan) → H]`. The clip reaches its hold look EXACTLY at
+  the effective content start, skipping as much of the clip's head as the entrance cannot fit.
+  This is a NEW driver capability — an intro that starts at an OFFSET, not at the clip start — and
+  it lands in the ONE mapping function per kind (`LottieDriver.clipPositionAt`,
+  `VideoDriver.expectedClipMs`), never beside it.
+- **hold** = freeze at `H`. An authored `idle` range keeps working and composes with `H`; `idle`
+  is NOT derived — absent means freeze. (For a video whose `holdBehavior` is `loop` with NO
+  authored idle range, the hold under follow is a freeze at `H`: looping the whole clip would
+  abandon `H`'s look, which is the one thing follow promises to keep. The stored `holdBehavior`
+  is untouched; only the resolved hold under follow reads this way, and the Playout checklist's
+  `infinite` mirror says the same — see §8.)
+- **outro** = `[H → min(H + outSpan, clipEnd)]` — CONTINUOUS from the held frame, so there is no
+  hold→outro pop by construction, and the cut at stage-clear is covered by the composition's own
+  exit animation.
+- `speed` is NEVER touched — §D1.1 (archived Lottie design). The window changes WHICH frames
+  play, never the rate.
+
+### 2.1 Rejected alternative: anchor the outro to the clip's END
+
+`[clipEnd − outSpan → clipEnd]` would show an authored build-off tail — and was REJECTED because
+the held frame would cut to a distant frame at the OUT boundary, the exact discontinuity follow
+exists to remove. An operator who wants the clip's authored ending uses markers/manual phases.
+
+### 2.2 The owner's case — the motivating example (tested verbatim, both kinds)
+
+5 s clip, hold look at clip-second 3, composition 2 s, content start at 1 s, OUT segment 0.5 s.
+Under follow + `holdAt = 3 s`: the intro plays clip `[2 s → 3 s]` during the 1 s entrance; the
+clip sits on second-3's look from the moment the ticker shows, through the entire hold; the outro
+plays clip `[3 s → 3.5 s]` inside the OUT segment. Head `[0 → 2 s]` and tail `[3.5 s → 5 s]`
+deliberately unplayed. Nothing rescaled, nothing pops.
+
+### 2.3 Consequences, stated so they are not later filed as bugs
+
+- **A clip LONGER than the composition always fits**: both spans are ≤ the comp's length, so no
+  clamp fires. The unplayed parts are the head before the window and the tail after it —
+  deliberate; do not file "follow skips part of my clip".
+- **The 2 s timeline is not the on-air duration**: the HOLD stretches real time, so a long clip's
+  hold look survives arbitrarily long holds by freezing (or idle-looping), never by having to fit.
+- **On air, the element outro and the background OUT segment are SEQUENCED (content-first,
+  shipped D-105/D-125 ordering), while the canvas scrub overlays them across the OUT segment.**
+  The window's outro LENGTH equals the OUT span in both, which is the decision this change makes;
+  the exit ordering is shipped behaviour this change does not touch.
+- **D-151's open question is ANSWERED by this change's existence** (owner: sharpened Candidate A —
+  the third add-time choice becomes "Add as backdrop — follow the composition", which CONFIGURES
+  the deliberate pattern rather than dismissing a warning). Recorded in the D-151 PRD item; the
+  dialog is a later session. A follow-source element never triggers D-151's warning on any later
+  re-check — absorbing the length mismatch is what follow means.
+
+### 2.4 Clamps — surfaced through the EXISTING hint machinery, no second warning surface
+
+- `H < entranceSpan` ⇒ the intro starts at the clip start and is SHORTER than the entrance — the
+  clip freezes early; hint flags it (`introShort`).
+- `H + outSpan > clipEnd` ⇒ the outro clamps at the clip end; hint flags it (`outroClamped`).
+- `H > clipEnd` (stale `holdAt` after swapping the asset) ⇒ clamp to `clipEnd`, flag
+  (`holdPastEnd`).
+- Clip shorter than the entrance with default `H` ⇒ the short-clip clamp: `H` clamps to the clip
+  end and the intro is shorter than the entrance — both flags above fire.
+
+## 3. Schema (all additive; stored scenes round-trip unchanged)
+
+- Lottie: `source: z.enum(['markers', 'manual'])` grows `'composition'`.
+- Video: `VideoPhasesSchema` had NO source field; it gains `source` (optional) with absent ⇒
+  `'manual'`-equivalent. The two schemas' shapes are otherwise untouched — units are NOT unified.
+- Under `'composition'`, stored `introEnd`/`outroStart` values are IGNORED (the schema comment
+  says so); they stay REQUIRED-present so a Detach has somewhere to land without a shape change,
+  and so a `markers` clip that follows and detaches keeps parsing everywhere.
+- `holdAt` — optional, clip-native units per kind (Lottie animation frames, video ms), meaningful
+  ONLY under `source: 'composition'` (ignored otherwise; the comment says so).
+
+## 4. ONE derivation, time-space, one thin unit adapter
+
+The comp-side arithmetic exists ONCE: `followWindowMs` in `@cg/shared-schema/follow-window.ts`
+(the package every consumer — runtime, designer, exporters — already depends on, and the package
+that already carries scene derivations: `activeRangeOf`, `playoutOf`, `hasEffectiveHoldDrivers`).
+It works in MILLISECONDS — video's native unit — so the video "adapter" is the identity: the
+runtime and `VideoSections` consume it directly. The ONE real unit adapter is
+`lottieFollowWindow` in `@cg/lottie-bridge/timing.ts` — the module whose charter is already "the
+ONE place a Lottie's phase frames are converted between frame spaces" — converting animation
+frames ↔ clip ms through `fr × speed` at the edges and delegating every comp-side decision to
+`followWindowMs`. The `followsComposition(phases)` predicate also lives beside the core helper,
+so "is this element a follower" is spelled once (golden rule 6).
+
+## 5. Resolution runs where phases are resolved — no baked copies
+
+Derivation runs in `createRuntime` (driver construction), so the canvas re-derives on every
+`scene-replace` (marker drags included), and preview/export/air run the SAME code on the same
+scene. Verified before building: `buildPlayoutMetadata` bakes NO element phases (comp-level
+playout only), and both exporters inline the scene whole — the relationship travels, not numbers.
+The scene-builder's `data-cg-poster-ms` is the one pre-resolution surface: it falls back to
+`holdAt ?? midpoint` for a follower, and the runtime OVERWRITES it with the exact derived `H` at
+driver construction (anchors exist only there).
+
+### 5.1 The runtime reorder this required
+
+The effective content start (`holdEntry` = marker ?? `entranceSettleFrame(...)`) was computed
+AFTER the media driver loops; a follower's window needs it AT driver construction. The settle
+aggregation is therefore hoisted into a PRE-PASS over `scope.lotties` (same visible gate, same
+`lottieTiming`, same null rule) and `holdEntry` is computed once, before the driver loops, and
+reused below — one read, one derivation, no second copy (golden rule 7's spirit).
+
+## 6. No circularity — a follower contributes `settleOffset: null`
+
+When `lifecycle.contentStart` is absent, the effective content start is the entrance-settle
+heuristic, which aggregates Lottie `settleOffset`s. A follower derives FROM that value, so it must
+not vote on it: a `source: 'composition'` element is fed to `lottieTiming` with `phases:
+undefined`, which is EXACTLY the existing marker-less rule ("the ABSENCE of information, not an
+authored claim") — the null path is reused, no new branch in the aggregation. The PlayoutSection
+mirror (`contentStartDefault`) walks keyframes only (verified), so it needs no change.
+
+## 7. No-lifecycle case
+
+A composition with no `lifecycle` gives a follower no anchors. The runtime behaves as marker-less
+(the shipped fallback — whole-clip intro, hold per kind, degenerate outro), and the Inspector SAYS
+why the mode is doing nothing — the §9.1 rule, now settled twice: an inert control that does not
+explain itself is a defect. The option is not silently disabled.
+
+## 8. The Playout checklist's `infinite` mirror — kept truthful (and a found-beside fix)
+
+`mediaHoldItem` must answer "does this element's hold ever complete" the way the DRIVERS answer
+it, or the never-closes alert lies (the session-R class). Under follow: infinite ⇔ an authored
+idle range is present AND the hold behaviour loops it (absent idle ⇒ freeze at `H` ⇒ completes).
+Found beside it and fixed with tests: a marker-less (or degenerate-idle-span) `idle-loop` Lottie
+was listed infinite, but `clipPositionAt` falls back to FREEZE on a zero idle span
+(`idleOut > idleIn` fails) and RESOLVES `whenComplete` — the graphic auto-closes. A video `loop`
+hold stays infinite regardless of span (its loop branch never resolves). The predicate now spells
+these driver facts exactly, per kind.
+
+## 9. Inspector
+
+- The phase-source control gains "Follow composition" for both media kinds — same presentation in
+  `LottieSections` and `VideoSections`. **The affordances are BUTTONS, not a select** (the brief's
+  shorthand said "select", but the shipped phase-source control is state+buttons — Add phase
+  markers / Clear phase marks / a "from markers" row the E2E asserts by text — and the follow
+  transitions are ONE-WAY gestures a select would misrepresent: `markers` is not re-enterable
+  after a Detach bakes over it, and leaving follow is a bake, not a toggle). Every state gains a
+  "Follow composition" button; the follow state carries "Detach — edit as manual".
+- Detach bakes the derived HOLD into the manual model: `introEnd = outroStart = H`, `source:
+'manual'`, `holdAt` KEPT (re-attaching restores the same hold time). The offset intro and
+  bounded outro are FOLLOW-ONLY capabilities the manual model cannot express — leaving follow
+  returns to `[ip → introEnd]` / `[outroStart → op]` — so the hold, the load-bearing look, is
+  what lands. A following ex-`markers` clip still carries its stored marker values until a
+  Detach bakes over them (one-way, by design: the markers were a claim about the clip, the bake
+  is a claim about this composition).
+- Under follow: the derived window is shown READ-ONLY with comp equivalents (the existing hint
+  machinery), plus ONE editable input — "hold at" (`holdAt`, clip time). First set seeds it from
+  the SHARED poster/midpoint helper (`lottieClipMidpoint` / `posterTimeMs` midpoint — the
+  project's definition of "the representative settled look"); clearing it reverts to default `H`.
+- The settle/clear hint lines keep working under follow, reading derived values and showing the
+  window's clip times. When the content-start marker is absent, the hint derives the entrance
+  span from the SAME keyframes-only default the Playout section's pin uses (extracted, not
+  copied), labelled as derived; the runtime's richer heuristic (which also folds in OTHER
+  Lotties' settles) remains authoritative on air — a known, pre-existing display limitation of
+  the keyframes-only mirror, unchanged by this feature.

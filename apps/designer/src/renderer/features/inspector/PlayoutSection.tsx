@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import {
   activeRangeOf,
+  followsComposition,
   hasEffectiveHoldDrivers,
   playoutOf,
   type Composition,
@@ -16,6 +17,7 @@ import { Callout } from '../../ui/Callout.js';
 import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
 import { designerStore } from '../../state/store.js';
+import { contentStartDefaultFrom } from './content-start-default.js';
 import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput } from './controls.js';
 import * as s from './InspectorPanel.css.js';
@@ -112,15 +114,42 @@ function mediaHoldItem(el: Extract<Element, { type: 'video' | 'lottie' }>): Cont
     name: el.name,
     type: el.type,
     drivesHold: el.drivesHold === true,
-    // 🔴 BOTH never-completing hold values, because the two media kinds SPELL IT
-    // DIFFERENTLY: a video's is `loop` and a Lottie's is `idle-loop` (their schema enums are
-    // `['loop','freeze']` and `['freeze','idle-loop']`). Testing only `'loop'` silently marked
-    // every idle-loop LOTTIE as a finite closer — while the runtime says the opposite in as
-    // many words: "an idle-loop Lottie holds until stop(), like an infinite ticker", and only a
-    // freeze Lottie resolves `whenComplete`. So the row showed no infinity chip and the
-    // never-closes alert did not escalate for a graphic that genuinely never closes.
-    infinite: el.holdBehavior === 'loop' || el.holdBehavior === 'idle-loop',
+    infinite: mediaHoldIsInfinite(el),
   };
+}
+
+/**
+ * Does this media element's hold EVER complete? Answered the way the DRIVERS answer it —
+ * the session-R lesson is that this banner goes stale precisely when this mirror and the
+ * runtime disagree, so the predicate spells the driver facts per kind:
+ *
+ *  - 🔴 The two media kinds SPELL the never-completing hold DIFFERENTLY: a video's is
+ *    `loop` and a Lottie's is `idle-loop` (schema enums `['loop','freeze']` /
+ *    `['freeze','idle-loop']`). Testing only `'loop'` once marked every idle-loop Lottie
+ *    a finite closer (session R's found-beside fix).
+ *  - A video `loop` hold NEVER resolves — `VideoDriver`'s loop branch has no completion,
+ *    even on a zero-length range — EXCEPT under follow with no authored idle, where the
+ *    runtime resolves the hold to a FREEZE at `H` (looping the whole clip would abandon
+ *    the held look follow promises to keep) and the freeze completes.
+ *  - A Lottie `idle-loop` loops only a NON-EMPTY effective span (`clipPositionAt` requires
+ *    `idleOut > idleIn`; a zero span falls back to freeze and RESOLVES `whenComplete`).
+ *    A MARKER-LESS clip's span is zero (`idleIn = idleOut = op`) — it COMPLETES, which the
+ *    coarse `holdBehavior === 'idle-loop'` check got wrong (found beside the follow work:
+ *    the alert claimed a graphic would never close that the runtime auto-closes).
+ *  - Under follow (`source: 'composition'`) the stored `introEnd`/`outroStart` are IGNORED
+ *    and must not smuggle a loop range in: only an AUTHORED idle range loops.
+ */
+function mediaHoldIsInfinite(el: Extract<Element, { type: 'video' | 'lottie' }>): boolean {
+  const follows = followsComposition(el.phases);
+  if (el.type === 'video') {
+    if (el.holdBehavior !== 'loop') return false;
+    return follows ? el.phases?.idle !== undefined : true;
+  }
+  if (el.holdBehavior !== 'idle-loop') return false;
+  const p = el.phases;
+  if (follows) return p?.idle !== undefined && p.idle[1] > p.idle[0];
+  if (p === undefined) return false; // marker-less: zero span, freezes, completes
+  return p.idle !== undefined ? p.idle[1] > p.idle[0] : p.outroStart > p.introEnd;
 }
 
 /**
@@ -687,32 +716,19 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
 
   /**
    * D-104 follow-up — the content-start marker's DEFAULT frame: the LATEST entrance
-   * keyframe strictly inside `(active.in, outPoint)` across the comp's animated elements
-   * — i.e. where the entrance has finished moving. This matches the runtime's
+   * keyframe strictly inside `(active.in, outPoint)`. This matches the runtime's
    * `entranceSettleFrame()` heuristic for a normal (monotonic, possibly multi-track)
    * entrance, so PINNING the marker makes the current behavior explicit without a jump;
-   * the operator then drags it. Falls back to `outPoint` when there is no entrance to
-   * settle (a continuous in→out animation, or none).
+   * the operator then drags it.
+   *
+   * The walk itself lives in `content-start-default.ts` (media-phases-follow-composition
+   * extracted it: the follow hint derives its entrance span from the SAME default — one
+   * definition, two callers).
    */
   function contentStartDefault(): number {
     const r = activeRangeOf(scene);
     const out = lifecycle?.outPoint ?? r.out;
-    let settle = -1;
-    const walk = (els: readonly Element[]): void => {
-      for (const el of els) {
-        if (el.animation !== undefined) {
-          for (const track of Object.values(el.animation.tracks)) {
-            if (track === undefined) continue;
-            for (const kf of track.keyframes) {
-              if (kf.frame > r.in && kf.frame < out && kf.frame > settle) settle = kf.frame;
-            }
-          }
-        }
-        if (el.type === 'container') walk(el.children);
-      }
-    };
-    for (const layer of scene.layers) walk(layer.children);
-    return settle < 0 ? out : settle;
+    return contentStartDefaultFrom(scene.layers, r.in, out);
   }
 
   function changeMode(next: PlayoutMode): void {

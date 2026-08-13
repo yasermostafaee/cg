@@ -984,14 +984,33 @@ export function migratePathGeometry(el: PathElement): PathElement {
  * no distinct intro/outro — the whole clip is the intro, held at `op`, empty outro.
  */
 export const LottiePhasesSchema = z.object({
-  /** Animation frame where the intro ends and the hold begins. */
+  /**
+   * Animation frame where the intro ends and the hold begins.
+   *
+   * ⚠ IGNORED under `source: 'composition'` — the window is DERIVED from the composition's
+   * lifecycle anchors (`followWindowMs` / `lottieFollowWindow`), never read from here. The value
+   * stays REQUIRED-present so a Detach has somewhere to land without a shape change, and so a
+   * clip that followed and detaches keeps parsing everywhere.
+   */
   introEnd: z.number().nonnegative(),
-  /** Animation frame where the outro begins. `introEnd ≤ outroStart`. */
+  /** Animation frame where the outro begins. `introEnd ≤ outroStart`. ⚠ IGNORED under `source: 'composition'` (see `introEnd`). */
   outroStart: z.number().nonnegative(),
-  /** Optional `[in, out]` idle-loop range inside the hold window. */
+  /** Optional `[in, out]` idle-loop range inside the hold window. Under `'composition'` it COMPOSES with the derived hold time (idle is never derived — absent means freeze). */
   idle: z.tuple([z.number().nonnegative(), z.number().nonnegative()]).optional(),
-  /** Whether the frames came from bodymovin markers or manual marking. */
-  source: z.enum(['markers', 'manual']),
+  /**
+   * Where the mapping comes from: bodymovin markers, manual marking, or — the third source
+   * (media-phases-follow-composition) — DERIVED from the composition's lifecycle
+   * (`'composition'`): intro settles at the effective content start, outro fits the OUT segment.
+   * The element stores the RELATIONSHIP, not numbers, so a marker drag moves the window with no
+   * re-sync step.
+   */
+  source: z.enum(['markers', 'manual', 'composition']),
+  /**
+   * The clip time whose look the composition HOLDS (`H`), in ANIMATION frames — meaningful ONLY
+   * under `source: 'composition'`, ignored otherwise. Absent ⇒ `H` = clip start + entrance span,
+   * which degenerates exactly to "play the clip from its head". Optional + additive.
+   */
+  holdAt: z.number().nonnegative().optional(),
 });
 export type LottiePhases = z.infer<typeof LottiePhasesSchema>;
 
@@ -1137,15 +1156,35 @@ export type VideoPlaceholderElement = z.infer<typeof VideoPlaceholderElementSche
  */
 export const VideoPhasesSchema = z
   .object({
-    /** End of the IN phase (ms from clip start). The hold point. */
+    /**
+     * End of the IN phase (ms from clip start). The hold point.
+     *
+     * ⚠ IGNORED under `source: 'composition'` — the window is DERIVED from the composition's
+     * lifecycle anchors (`followWindowMs`), never read from here. The value stays
+     * REQUIRED-present so a Detach has somewhere to land without a shape change.
+     */
     introEnd: z.number().nonnegative(),
-    /** Start of the OUT phase (ms); the outro is `[outroStart → clip end]`. */
+    /** Start of the OUT phase (ms); the outro is `[outroStart → clip end]`. ⚠ IGNORED under `source: 'composition'` (see `introEnd`). */
     outroStart: z.number().nonnegative(),
-    /** Optional hold segment looped instead of `[introEnd → outroStart]`. */
+    /** Optional hold segment looped instead of `[introEnd → outroStart]`. Under `'composition'` it COMPOSES with the derived hold time (idle is never derived — absent means freeze at `H`). */
     idle: z
       .object({ start: z.number().nonnegative(), end: z.number().nonnegative() })
       .refine((r) => r.start <= r.end, { message: 'idle.start must not exceed idle.end' })
       .optional(),
+    /**
+     * Where the marks come from (media-phases-follow-composition). Video had NO source field —
+     * manual was the only possibility — so this is OPTIONAL and absent ⇒ exactly
+     * `'manual'`-equivalent: every stored scene round-trips unchanged. `'composition'` DERIVES
+     * the window from the composition's lifecycle (see `introEnd`'s note). Units are NOT unified
+     * with the Lottie's: video stays in the clip's own ms.
+     */
+    source: z.enum(['manual', 'composition']).optional(),
+    /**
+     * The clip time whose look the composition HOLDS (`H`), in MS — meaningful ONLY under
+     * `source: 'composition'`, ignored otherwise. Absent ⇒ `H` = entrance span ("play the clip
+     * from its head"). Optional + additive.
+     */
+    holdAt: z.number().nonnegative().optional(),
   })
   .refine((p) => p.introEnd <= p.outroStart, {
     message: 'introEnd must not exceed outroStart',

@@ -288,6 +288,28 @@ describe('LottieElement', () => {
     };
     expect(LottieElementSchema.parse(l)).toEqual(l);
   });
+
+  it('media-phases-follow-composition — the third source + holdAt round-trip as the RELATIONSHIP', () => {
+    // The element stores the relationship, not numbers: `source: 'composition'` + `holdAt`
+    // survive save/reload untouched; the (ignored) introEnd/outroStart slots survive too —
+    // they are the Detach landing, not derived output.
+    const l = {
+      ...baseProps,
+      type: 'lottie' as const,
+      assetId: 'asset-backdrop',
+      speed: 1,
+      loopMode: 'none' as const,
+      phases: {
+        introEnd: 40,
+        outroStart: 60,
+        source: 'composition' as const,
+        holdAt: 150,
+        idle: [140, 160] as [number, number],
+      },
+      holdBehavior: 'idle-loop' as const,
+    };
+    expect(LottieElementSchema.parse(l)).toEqual(l);
+  });
 });
 
 describe('VideoPlaceholderElement', () => {
@@ -351,6 +373,40 @@ describe('VideoElement (D-128)', () => {
         introEnd: 1200,
         outroStart: 6500,
         idle: { start: 2000, end: 5000 },
+      },
+    };
+    expect(VideoElementSchema.parse(v)).toEqual(v);
+  });
+
+  it('media-phases-follow-composition — absent `source` stays ABSENT (manual-equivalent), no injection', () => {
+    // Video phases had NO source field before this change; additive means a stored scene
+    // round-trips byte-identically — the parser must not inject `source: 'manual'`.
+    const v = {
+      ...baseProps,
+      type: 'video' as const,
+      assetId: 'asset-clip',
+      durationMs: 4000,
+      holdBehavior: 'loop' as const,
+      phases: { introEnd: 1000, outroStart: 3000 },
+    };
+    const parsed = VideoElementSchema.parse(v);
+    expect(parsed).toEqual(v);
+    expect(parsed.phases !== undefined && 'source' in parsed.phases).toBe(false);
+  });
+
+  it('media-phases-follow-composition — the third source + holdAt (ms) round-trip', () => {
+    const v = {
+      ...baseProps,
+      type: 'video' as const,
+      assetId: 'asset-backdrop',
+      durationMs: 5000,
+      holdBehavior: 'loop' as const,
+      phases: {
+        introEnd: 400,
+        outroStart: 600,
+        source: 'composition' as const,
+        holdAt: 3000,
+        idle: { start: 2500, end: 3500 },
       },
     };
     expect(VideoElementSchema.parse(v)).toEqual(v);
