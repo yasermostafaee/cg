@@ -137,7 +137,43 @@ did not show the clip, with every other frame correct. The settled answer is tha
 reaches the settled look by moving the playhead — the gesture this feature exists to make
 meaningful.
 
-### Time ↔ pixel — the crux of every gesture
+### The HOLD LOOP range, and the three loops (D-133)
+
+The lane body draws a **hold loop range** — `[content start → out point]` — for every
+composition that has an out-point, i.e. every composition that holds. It is **present by
+default**, not hand-added: that is what makes it the item's acceptance rather than
+decoration, because the loop range is only OFFERED where an out-point exists, so the range
+being drawn unprompted is what keeps the Inspector's pin affordance "at most a shortcut,
+never the only path".
+
+Three pieces, and the split matters:
+
+| piece                                     | where it lives        | why                                                             |
+| ----------------------------------------- | --------------------- | --------------------------------------------------------------- |
+| the draggable GRIPS (`phaseMarkerIn/Out`) | inside the scene lane | a grip needs a row to be grabbed on                             |
+| the INDICATOR LINES (`loopRangeLine`)     | the lane-body overlay | full timeline height — line keyframes up against the boundaries |
+| the range BAND (`loopRangeBand`)          | the lane-body overlay | the range readable at a glance                                  |
+
+The lines and the band are siblings of `BodyPlayhead`, the shipped full-height overlay, so
+"full height" is a structural property rather than a styling one. The start position is the
+**effective** content start: the marker when pinned, else the same
+[`contentStartDefaultFrom`](../inspector/content-start-default.ts) the Inspector's "Pin
+content start" writes — one definition, three callers, so what is drawn and what pinning
+produces cannot disagree. An **unpinned** start draws dashed: it is derived, and a
+derivation must not be presented as an authored decision. A **degenerate** range (no
+entrance to settle ⇒ the effective content start IS the out-point) draws nothing.
+
+⚠ **Three different loops can be true of one composition at once, so none of them is called
+plain "loop".** They are named for where they live: **Preview loop** (this app's transport
+toggle — the editor playhead wrapping over the ruler; session state, never exported), **Loop
+cycle** (`playout.mode` — the whole in → hold → out repeating on air) and **Hold loop**
+(this range — the furniture replaying during a content-driven hold while the content runs
+straight through every seam). Do not reintroduce a bare "Loop" label on any of them.
+
+The RENDERING half lives in `@cg/template-runtime`
+(`PlayoutController.startHoldLoop`); the timeline only draws the range, and the range is
+inert whenever the hold is not content-driven — which the Playout panel states in words,
+naming the missing condition.
 
 ### Time ↔ pixel — the crux of every gesture
 

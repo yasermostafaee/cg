@@ -235,21 +235,42 @@ if the playhead behaviour matches". The mapping above is chosen precisely becaus
 restart **unreachable** rather than merely forbidden — the same move as making a bad call
 unrepresentable instead of guarded against.
 
-### 3.4 ⚠ The naming collision: two different loops
+### 3.4 ⚠ The naming collision — THREE loops, and the names are now DECIDED (2026-08-14)
 
-`mode: 'loop-cycle'` already exists and already means "loop". It is **not** this loop:
+An earlier revision of this section counted **two** loops and deferred the naming to
+implementation. Both halves of that are superseded. There are **three**, because the Designer's
+transport bar has carried a `loop` / `bounce` toggle since long before either playout loop
+existed, and it was simply not in view when this section was written:
 
-|                 | `loop-cycle` (shipped)          | The D-133 loop range (this change)          |
-| --------------- | ------------------------------- | ------------------------------------------- |
-| What repeats    | the whole IN → HOLD → OUT cycle | the frame range `[contentStart → outPoint]` |
-| The intro       | **re-runs every cycle**         | runs once                                   |
-| Content drivers | restarted per cycle             | **run continuously across every seam**      |
-| Counted by      | `playout.repeat`                | not counted — ends when the DRIVER ends     |
-| Applies during  | the whole composition           | the HOLD only                               |
+|                 | Transport toggle (shipped)              | `loop-cycle` (shipped)          | The D-133 loop range (this change)          |
+| --------------- | --------------------------------------- | ------------------------------- | ------------------------------------------- |
+| What repeats    | the EDITOR playhead, over the ruler     | the whole IN → HOLD → OUT cycle | the frame range `[contentStart → outPoint]` |
+| The intro       | n/a — nothing is played                 | **re-runs every cycle**         | runs once                                   |
+| Content drivers | untouched (the canvas never plays them) | restarted per cycle             | **run continuously across every seam**      |
+| Counted by      | nothing — it runs until toggled off     | `playout.repeat`                | not counted — ends when the DRIVER ends     |
+| Applies during  | authoring only                          | the whole composition           | the HOLD only                               |
+| Stored?         | **no** — session state, never exported  | `playout.mode`                  | the two lifecycle markers                   |
 
-**They can coexist on one composition and mean different things simultaneously.** Any UI that
-offers both must not call both "loop". Naming is deferred to implementation, but the requirement
-that they be distinguishable is a spec requirement, not a preference.
+**All three can be true of one composition simultaneously**, so the spec's requirement is that
+none of them reads as another.
+
+**THE DECISION — each is named for WHERE IT LIVES, and none is called plain "loop":**
+
+| surface                         | name             | why that word                                                                   |
+| ------------------------------- | ---------------- | ------------------------------------------------------------------------------- |
+| the transport bar's wrap toggle | **Preview loop** | it never leaves the editor; naming the surface is also the disclaimer           |
+| `mode: 'loop-cycle'`            | **Loop cycle**   | shipped, already unambiguous, and its own label spells the cycle out            |
+| `[contentStart → outPoint]`     | **Hold loop**    | it exists only during the hold — which is also the whole of why it can be INERT |
+
+"Hold loop" is deliberately not "loop range": the WHERE is the part an operator needs, and it
+is the same word that explains the §9.1 inert case, so one name carries both facts. The
+transport toggle's `aria-label` changed from `Loop` to `Preview loop` (no test or E2E located
+it by the old name — checked, not assumed).
+
+⚠ **The Hold-source select is a FOURTH thing that is not a loop and must not acquire the word.**
+`holdSource: 'content-driven'` decides when the hold ENDS; the hold loop decides what the hold
+RENDERS. They are read together on one panel, so the caption names the hold source as a
+CONDITION ("set hold to Content-driven to activate the loop") rather than as another loop.
 
 ### 3.5 Unconditional authoring
 
@@ -270,6 +291,54 @@ never creates one as a side effect.
 
 **No backward compatibility is owed** to the conditional UI: the item records that nothing has been
 delivered to the client, so the compatibility floor is unset ([[P-031]]).
+
+### 3.6 ✅ WHAT LANDED (2026-08-14) — §1–§3, and the four decisions inside them
+
+The mapping above needed no revision to build. Four things are worth recording because they are
+choices a reader would otherwise have to reverse-engineer from the diff.
+
+**1. The hold loop is one `FrameDriver` in `'loop'` mode, opened in `onIntroEnd`'s
+content-driven branch and nowhere else.** `PlayoutController.startHoldLoop()` is reachable from
+exactly one call site, AFTER `waitForContent()` has returned non-null (so a zero-length hold never
+opens one). Its only output is `applyFrame` — the driver's sole callback — which is what makes
+§3.3's invariant structural rather than guarded: **there is no path from the loop to a content
+driver to reset.** `mode: 'loop'` is the FrameDriver's original, shipped behaviour (the pre-D-020
+full-range loop), so this reuses a machine that already wraps by modulo rather than adding one.
+
+Scoping falls out of the branch, not out of new conditions: `manual` / `static` return before it
+(§9.1 correction 4 — they ignore `holdSource` entirely), and B-032 has already resolved a
+driver-less `content-driven` back to `timed` in `effectivePlayoutFor`, so **reaching
+`startHoldLoop` means real drivers exist**. The Inspector's inert caption is computed from the
+SAME two facts (`playoutOf().mode` and the already-computed `hasEffectiveHoldDrivers`), in the
+same order, so the surface and the runtime cannot disagree about whether a range is live.
+
+**2. `frameDependent(inF, outF)` was EXTRACTED, not copied.** `playRange`'s collapse decision and
+the hold loop ask the identical question — "does anything in this range paint differently from its
+end?" — and a range with nothing frame-dependent in it has nothing to replay. Both now call one
+private method. This is the §1.5 rule applied one level down: the copy is what drifts, and the
+test asserts the shared consequence (a driver COUNT) rather than two equal pixel readings, because
+matching pixels would pass against a duplicate.
+
+**3. `startOutro()` stops the driver up front.** `playRange` already stops it, but that call can be
+deferred behind an async `beforeOutro` gate (element outros) or a pause — and a hold loop still
+wrapping the furniture while the graphic is exiting would be visible on air. The exit owns the
+frame from the moment it begins.
+
+**4. ⚠ A DEGENERATE range is silence, in both surfaces, and the reason is the same one.** When
+`contentStart` is absent and there is no entrance to settle, the effective content start IS the
+out-point (`entranceSettleFrame`'s "there is NO entrance" sentinel — session AB's finding, and the
+value is `outPoint` verbatim). The runtime then parks exactly as before, and the timeline draws
+nothing: a zero-width band with two coincident lines reads as one stray marker, which is worse
+than silence. The Playout panel is where such a composition is told what its range is — its
+caption still reports `frames N → N`, so the operator can see the degeneracy and drag out of it.
+
+**⚠ One CONSEQUENCE, recorded rather than special-cased.** The loop re-renders the composition
+frame, and per-frame gates are part of a frame: an element whose `lifespan` excludes part of
+`[contentStart → outPoint]` will disappear and reappear on every pass. That is the honest meaning
+of "replay the range" — the element is trimmed to frames the loop keeps revisiting — and
+suppressing it would mean the hold loop paints a frame differently from the intro that just
+painted the same frame. Left as-is deliberately; if it ever reads as a defect, the fix is an
+authoring answer (a trim that spans the loop range), not a second rendering rule.
 
 ---
 

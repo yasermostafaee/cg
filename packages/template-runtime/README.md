@@ -312,10 +312,47 @@ replays the crawl from its entering edge / re-runs the count / restarts the rota
 item 1 (a fresh run per cycle), and a `content-driven` wait (taken at `outPoint`) always
 awaits the run it already started.
 
+#### The HOLD LOOP — what a content-driven hold RENDERS (D-133)
+
+A hold used to be one parked frame. A **content-driven** hold now **replays
+`[contentStart → outPoint]`** underneath the running content — `startHoldLoop()` opens a
+single `FrameDriver` in `'loop'` mode over that range at hold entry, and `startOutro()`
+stops it. Nothing about the hold's start condition, its end condition, or the OUT phase
+changed: **looping is a rendering of the existing hold, not a new phase, and no
+`PlayoutMode` value was added.** The range is the two shipped lifecycle markers, so a
+"loop range" is not stored anywhere new.
+
+🔴 **The wrap is a re-render of the COMPOSITION FRAME and nothing else.** The loop driver's
+only output is `applyFrame`, so it CANNOT `reset()` / `start()` / transition a content
+driver — there is no path from it to one. That is structural, not a guard: a content-driven
+hold holds _because_ its drivers run on their own clocks, independent of the composition
+frame, so a crawl's position is not a function of the frame and wrapping the frame cannot
+move it. A ticker set to repeat 3× flows unbroken across every seam and consumes no repeat
+through a wrap; when it completes, playback passes the loop end without wrapping and the OUT
+phase runs. If an implementation ever needs a guard here, it has been built wrong.
+(`tests/hold-loop-range.test.ts` asserts this on the mechanism — prototype spies on every
+content driver's lifecycle methods — because the requirement is satisfiable by accident.)
+
+Two conditions keep it narrow, and both reuse existing answers rather than adding one:
+
+- **Content-driven holds only.** `manual` / `static` return before the branch (they ignore
+  `holdSource` entirely), and B-032 has already resolved a driver-less `content-driven` back
+  to `timed` in `effectivePlayoutFor` — so reaching `startHoldLoop` means real drivers exist.
+  Under any other hold the range is **INERT**: the timeline still parks on `outPoint`.
+- **A range with something to replay.** A degenerate range (`contentStart` at or past
+  `outPoint` — including `entranceSettleFrame`'s "there is NO entrance" fallback, which
+  returns `outPoint` verbatim), or one in which nothing paints differently from its end,
+  keeps the parked frame. The second test is `playRange`'s OWN collapse predicate, extracted
+  as `frameDependent` and shared — one definition, two readers.
+
+⚠ Per-frame gates are part of a frame, so an element whose `lifespan` excludes part of the
+loop range disappears and reappears on every pass. That is the honest meaning of replaying
+the range; it is recorded, not special-cased.
+
 **Invariants**
 
 - `pause()` / `resume()` freeze and continue **both** the driver and the hold-timer
-  countdown.
+  countdown — including the hold loop, which is the same `driver` field.
 - A **settled** controller (its lifecycle finished: `auto-out` exited, or a finite
   `loop-cycle` ran out of cycles) is a **no-op on `stop()`** — a cascaded parent
   `stop()` must not replay the exit on a child that's already done. An infinite

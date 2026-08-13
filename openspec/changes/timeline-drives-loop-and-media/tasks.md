@@ -69,39 +69,67 @@
       backdrop at `H` for most judging time; the hybrid stays recoverable (the driver machinery
       ships). Both candidates kept in §9.5 as the record of why
 
-## 1. D-133 — authoring the loop range ⟨§9.2 ANSWERED⟩
+## 1. D-133 — authoring the loop range ⟨§9.2 ANSWERED⟩ ✅ DONE
 
-- [ ] Remove the `hasContent` half of the "Pin content start" gate (`PlayoutSection.tsx` ~`:780`),
-      so the loop option is offered on a shapes-only scene that has an out-point
-- [ ] **No change to the out-point path** — §9.2 settled it: the existing "Add out point" button IS
+- [x] Remove the `hasContent` half of the "Pin content start" gate (`PlayoutSection.tsx`), so the
+      loop option is offered on a shapes-only scene that has an out-point. The
+      `lifecycle !== undefined` half is KEPT, and the gate at the Hold-source select /
+      `ContentHoldChecklist` is untouched by design (§8 risk 5's recorded residual)
+- [x] **No change to the out-point path** — §9.2 settled it: the existing "Add out point" button IS
       the path, and authoring a loop range must NOT create an out-point as a side effect. This item
-      is a decision to make no change, kept visible rather than deleted, and it carries a test:
-      assert the loop-range surface never calls `setLifecycle`
-- [ ] Regression guard, **not a fix**: a composition whose only hold driver is an opted-in Lottie
+      is a decision to make no change, kept visible rather than deleted, and it carries a test: the
+      loop-range surface never calls `setLifecycle`, with the out-point path as the CONTROL that
+      proves the spy discriminates (`loop-range-authoring.dom.test.ts`)
+- [x] Regression guard, **not a fix**: a composition whose only hold driver is an opted-in Lottie
       can pin its content start. This already holds today (`hasContentElement` counts opted-in
       media) — the earlier "removing the gate resolves a discrepancy" claim was false and is
       withdrawn — so the test exists to keep it true, not to prove a change
-- [ ] Name the three loops distinguishably on the surface (transport loop / `loop-cycle` /
-      loop range) — §3.4
+- [x] Name the three loops distinguishably on the surface — **DECIDED and recorded in §3.4**:
+      **Preview loop** (the transport toggle; its `aria-label` changed from the bare `Loop`),
+      **Loop cycle** (the shipped mode, unchanged) and **Hold loop** (this range). Each is named
+      for where it lives; none is called plain "loop". §3.4 also CORRECTS its own earlier count —
+      there are THREE loops, not two, because the transport toggle was not in view when it was
+      written
+- [x] §9.1's inert explanation lives on this same surface: one caption states the range and, when
+      it has no playback effect, WHICH condition is missing — resolved in the runtime's own order
+      (mode first: `manual`/`static` ignore `holdSource` entirely; then the effective driver set;
+      only then the hold select). The tests read the CLAIM, and assert the WRONG advice is absent
 
-## 2. D-133 — the loop range at playback ⟨§9.1 ANSWERED: INERT⟩
+## 2. D-133 — the loop range at playback ⟨§9.1 ANSWERED: INERT⟩ ✅ DONE
 
-- [ ] Render the HOLD as a repeating `[contentStart → outPoint]` instead of a parked frame, for a
-      content-driven hold
-- [ ] 🔴 **Test the seam invariant directly**: assert the wrap issues NO driver lifecycle call
-      (`reset`/`start`/any transition). §8 risk 1 — this must be a test, never a comment, because
-      the requirement is satisfiable by accident and breakable by accident
-- [ ] Test: a ticker set to repeat 3× flows unbroken across two seams and consumes no repeat through
-      the wraps
-- [ ] Test: after the driver's Nth repeat, playback passes the loop end and the OUT phase runs
-- [ ] §9.1's answer for a `timed` hold: the range is **INERT** — no playback change — **and the
+- [x] Render the HOLD as a repeating `[contentStart → outPoint]` instead of a parked frame, for a
+      content-driven hold — `PlayoutController.startHoldLoop()`, ONE `FrameDriver` in the shipped
+      `'loop'` mode, opened from `onIntroEnd`'s content-driven branch and nowhere else (design §3.6)
+- [x] 🔴 **Test the seam invariant directly**: the wrap issues NO driver lifecycle call. Asserted on
+      the MECHANISM — prototype spies on `reset`/`start`/`stop`/`pause`/`resume` for ticker, clock
+      AND sequence, baselined at hold entry and re-read after two seams. The seams are COUNTED in
+      the same test, so it can never pass on a controller that simply never loops
+- [x] Test: a ticker set to repeat 3× flows unbroken across two seams and consumes no repeat through
+      the wraps — the crawl's `translateX` is sampled across the whole hold (never resets to `''`,
+      never goes backwards), and the exit lands where the ticker's OWN arithmetic puts it, with a
+      no-loop neighbour as the control
+- [x] Test: after the driver's Nth repeat, playback passes the loop end and the OUT phase runs
+- [x] §9.1's answer for a `timed` hold: the range is **INERT** — no playback change (pinned by
+      timed- AND manual-hold tests that park across what would have been two seams) — **and the
       surface states that it is inert and what would make it active**, naming the missing condition
       from the already-computed `hasEffectiveHoldDrivers` rather than saying something generic
+- [x] Extracted, not copied: `playRange`'s collapse predicate and the hold loop ask one question, so
+      both call one `frameDependent`. Asserted by the SHARED CONSEQUENCE (a frame-driver count), not
+      by two equal pixel readings — which would pass against a duplicate
 
-## 3. D-133 — timeline rendering ⚠ LOAD-BEARING for the item's acceptance
+## 3. D-133 — timeline rendering ⚠ LOAD-BEARING for the item's acceptance ✅ DONE
 
-- [ ] Draw the loop range with start/end markers whose indicator lines span the full timeline height
-- [ ] Present by default for a composition that loops or holds, not hand-added
+- [x] Draw the loop range with start/end markers whose indicator lines span the full timeline
+      height — the draggable GRIPS stay in the scene lane (a grip needs a row to live on) and the
+      INDICATOR LINES + the range band are body-level overlays alongside the playhead. The unit
+      test asserts the structural half (same parent as the shipped full-height playhead, never
+      inside the scene row); the E2E MEASURES the rendered boxes against the playhead and the scene
+      row, because jsdom applies no stylesheet and the pixel claim would otherwise go untested
+- [x] Present by default for a composition that loops or holds, not hand-added — drawn from the
+      EFFECTIVE content start (the marker, else the same `contentStartDefaultFrom` the pin button
+      writes: one definition, now three callers), so an UNPINNED composition shows its range too. An
+      unpinned start draws DASHED — it is derived, and the timeline must not present a derivation as
+      an authored decision. A degenerate range draws nothing (design §3.6.4)
 
 ⚠ §9.2's consequence: because the loop range is offered only where an out-point exists, **this
 section is what discharges D-133's "the conditional affordance is at most a shortcut, never the
@@ -223,6 +251,19 @@ architecture, no decoder.
       the tick's seek always lands last (pinned in `preview-video-poster-guard.test.ts`; the
       runtime-level rest pin is in `playhead-drives-media.test.ts`)
 
+## 5a. D-133's E2E — the scenarios that need a real stylesheet
+
+- [x] `apps/designer/tests/e2e/loop-range.spec.ts` — four scenarios mapped from
+      `specs/designer-playout-lifecycle/spec.md`: the shapes-only pin, the range drawn BY
+      DEFAULT with its lines MEASURED against the body playhead and the scene row, the three
+      loops named apart (including that nothing on screen is called plain "Loop"), and the inert
+      caption walked through all three of its reasons in the runtime's own resolution order
+- [x] ⚠ The PLAYBACK half is deliberately NOT here: the wrap, the seam invariant and leaving the
+      loop after the Nth repeat are covered deterministically against an injected clock in
+      `packages/template-runtime/tests/hold-loop-range.test.ts`. A real-timer E2E cannot separate
+      "the furniture replayed the range" from "the furniture was repainted for some other reason"
+      without reproducing that clock — the same division `content-start-hold-entry.spec.ts` draws
+
 ## 6. The carve-out ✅ DONE
 
 - [x] Test: a ticker ignores the playhead under scrub
@@ -247,8 +288,22 @@ test pairs the two, so it can never pass by nothing happening).
       **RE-SYNCED for the video half (2026-08-13, §5 built):** the same three docs now state that
       `tick(frame)` positions every `<video>` (paused, `expectedClipMs`, skip-in-flight, `live()`,
       the nearest-decodable-frame contract) and that the video's canvas poster is a pre-tick
-      transient like the Lottie's
+      transient like the Lottie's.
+      **RE-SYNCED AGAIN for D-133 (2026-08-14, §1–§3 built):** `packages/template-runtime/README.md`
+      gains "The HOLD LOOP — what a content-driven hold RENDERS" under `PlayoutController` (the
+      seam invariant stated as structural, the two narrowing conditions, the shared
+      `frameDependent`, the lifespan-gate consequence);
+      `apps/designer/src/renderer/features/timeline/README.md` gains "The HOLD LOOP range, and the
+      three loops" (the grips/lines/band split, the effective content start's one definition, the
+      dashed-when-derived rule, and the three names); `docs/engines/overview.md` states that a
+      content-driven hold renders as a repeating range and that the wrap re-renders the
+      composition frame only
 - [x] Full green gate for every touched workspace (`pnpm gate`, uncached, exit 0; openspec 48/48)
+- [ ] **E2E — OWED for D-133 (2026-08-14).** §1–§3 alter the Inspector, the timeline rendering AND
+      playback, so a fresh Linux `e2e` is owed on the commit that carries them; the run URL is
+      recorded here the moment it completes green with the `E2E (Playwright)` job actually RAN.
+      Until then this box stays UNTICKED — a ticked box with no URL is a claim, not a discharge.
+      The previous discharge below verified a tree that has since been replaced
 - [x] **E2E**: DISCHARGED for `710f0ab0` (the video half, session U) —
       <https://github.com/yasermostafaee/cg/actions/runs/31683317925>, run
       `conclusion: success`, and the `E2E (Playwright)` job **RAN** (`completed success`, not
@@ -267,11 +322,13 @@ test pairs the two, so it can never pass by nothing happening).
       Design §4.3 tells the whole sequence, including that the fix which turned it green was itself
       reverted after the owner watched it on the real canvas
 - [x] `pnpm openspec validate timeline-drives-loop-and-media --strict`
-- [x] D-133 and D-135 are `[~]` with this change dir; **archive only on the owner's confirmation** —
-      and this change is NOT ready for it yet: **D-135 is now WHOLE (§4 + §5 both built,
-      2026-08-13), but §1–§3 (D-133 — the loop range) remain unbuilt.** What remains before
-      archiving: build §1–§3, then the owner confirms. Nothing else is outstanding in this
-      change — §0–§0b, §4–§7 are done and every owner decision is answered
+- [x] D-133 and D-135 are `[~]` with this change dir; **archive only on the owner's confirmation**.
+      **As of 2026-08-14 EVERY section is built** — §0–§0b (design + corrections), §1–§3 (D-133),
+      §4–§5 (D-135, both halves), §5a (D-133's E2E), §6 (the carve-out) and §7 (docs) — and every
+      owner decision (§9.1–§9.5) is answered. **The ONE thing standing between this change and
+      archive-readiness is the E2E discharge above**: a completed, green Linux `e2e` whose job
+      actually RAN, for the commit that carries §1–§3. With that URL recorded, the change is
+      archive-ready and waiting only on the owner's word
 
 ## Not in this change
 

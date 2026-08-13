@@ -680,6 +680,90 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
 }
 
 /**
+ * D-133 §9.1 — WHY an authored hold loop has no playback effect, or `null` when it has one.
+ *
+ * The loop range renders the HOLD, and only a CONTENT-DRIVEN hold; every other resolution
+ * parks on `outPoint` exactly as it does today. The order below is the resolution order the
+ * runtime itself uses, and it is not cosmetic:
+ *
+ *  - `manual` / `static` ignore `holdSource` ENTIRELY (`HoldSourceSchema`'s own comment), so
+ *    the select's value is not the reason and must not be reported as one (§9.1 correction 4);
+ *  - with NO effective hold driver, `content-driven` falls back to `timed` in the runtime,
+ *    the exporter AND this panel (B-032) — so a select reading "Content-driven" is still a
+ *    timed hold, and saying "switch the select" would be a lie;
+ *  - only then is the select itself the missing condition.
+ *
+ * `hasDrivers` is the ALREADY-COMPUTED `hasEffectiveHoldDrivers` from the panel — passed in,
+ * never re-derived here (§1.5's standing rule: one predicate, one call).
+ */
+export type HoldLoopInertReason = 'static' | 'manual' | 'no-drivers' | 'timed-hold';
+
+export function holdLoopInertReason(
+  mode: PlayoutMode,
+  holdSource: HoldSource | undefined,
+  hasDrivers: boolean,
+): HoldLoopInertReason | null {
+  if (mode === 'static') return 'static';
+  if (mode === 'manual') return 'manual';
+  if (!hasDrivers) return 'no-drivers';
+  // Absent ⇒ 'timed' (`PlayoutObjectSchema`), which is the DEFAULT even with drivers present.
+  if ((holdSource ?? 'timed') !== 'content-driven') return 'timed-hold';
+  return null;
+}
+
+/**
+ * D-133 §3.4 — the loop range's own caption, and the surface that names it.
+ *
+ * THE THREE LOOPS, named apart (a spec requirement, not a preference):
+ *
+ *  | surface                    | name here      | what repeats                          |
+ *  | -------------------------- | -------------- | ------------------------------------- |
+ *  | transport bar toggle       | "Preview loop" | the EDITOR playhead, over the ruler    |
+ *  | `mode: 'loop-cycle'`       | "Loop cycle"   | the whole IN → hold → OUT cycle        |
+ *  | `[contentStart→outPoint]`  | "Hold loop"    | the furniture, DURING the hold         |
+ *
+ * They can all be true of one composition at once, so none of them is called plain "loop".
+ * "Hold loop" names WHERE it applies, which is also the whole of why it can be inert.
+ *
+ * §9.1 — an inert control that does not explain itself is a defect. When the range has no
+ * playback effect this states so and NAMES THE MISSING CONDITION exactly; it reuses this
+ * panel's existing caption surface rather than introducing a second hint style.
+ */
+function HoldLoopCaption({
+  reason,
+  from,
+  to,
+}: {
+  reason: HoldLoopInertReason | null;
+  from: number;
+  to: number;
+}): JSX.Element {
+  const range = `frames ${String(from)} → ${String(to)}`;
+  if (reason === null) {
+    return (
+      <p className={cls.caption} data-testid="hold-loop-state">
+        Hold loop: during the hold the composition replays {range} until the content finishes — the
+        content itself keeps running across every repeat, it never restarts. (Not the
+        transport&rsquo;s preview loop, and not Loop cycle, which repeats the whole in → hold →
+        out.)
+      </p>
+    );
+  }
+  return (
+    <p className={cls.caption} data-testid="hold-loop-state">
+      Hold loop ({range}) has no playback effect here:{' '}
+      {reason === 'static'
+        ? 'a static composition holds the out point and cuts on stop, so it never runs a hold source. Pick auto-out or loop-cycle to give it one.'
+        : reason === 'manual'
+          ? 'a manual hold waits for the operator to stop it, so the hold source is ignored. Pick auto-out or loop-cycle to activate the loop.'
+          : reason === 'no-drivers'
+            ? 'this composition has no effective hold driver — no ticker, sequence or countdown clock, and no Lottie or video opted in to drive the hold — so its hold is timed however the hold source reads. Add one to activate the loop.'
+            : 'the hold is timed, so it parks on the out point for the hold duration. Set hold to Content-driven to activate the loop.'}
+    </p>
+  );
+}
+
+/**
  * D-020 — no-code "Playout" inspector section. Picks the composition's playout
  * `mode` (the design-time decision: what kind of template this is), wired to
  * `designerStore.setPlayout`. The single `outPoint` marker is dragged on the
@@ -839,46 +923,63 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
         </>
       )}
 
-      {lifecycle !== undefined &&
-        hasContent &&
-        (lifecycle.contentStart !== undefined ? (
-          <>
-            <div className={cls.actionRow}>
-              <span className={cls.actionLabel}>Content start</span>
-              <span className={cls.actionValue}>frame {String(lifecycle.contentStart)}</span>
-              <Button
-                variant="danger"
-                size="sm"
-                // `title`, NOT `aria-label`: an aria-label would REPLACE the accessible
-                // name, leaving the visible text absent from it (WCAG 2.5.3 Label in Name)
-                // and breaking name-based locators. The tooltip supplements instead.
-                title="Reset the content start to automatic (entrance completion)"
-                onClick={() => designerStore.setContentStart(null)}
-              >
-                Reset to auto
-              </Button>
-            </div>
-            <p className={cls.caption}>Drag the cyan marker on the timeline.</p>
-          </>
-        ) : (
-          <>
-            <div className={cls.actionRow}>
-              <span className={cls.actionLabel}>Content start</span>
-              <span className={cls.actionValue}>auto (entrance)</span>
-              <Button
-                variant="markerIn"
-                size="sm"
-                onClick={() => designerStore.setContentStart(contentStartDefault())}
-              >
-                Pin content start
-              </Button>
-            </div>
-            <p className={cls.caption}>
-              Content starts automatically at the entrance completion. Pin it to set an exact frame,
-              then drag it on the timeline.
-            </p>
-          </>
-        ))}
+      {/*
+       * D-133 — the HOLD LOOP range, offered on EVERY composition that has an out-point.
+       * The `hasContent` half of this gate is GONE (design §9.2 / §3.5): a shapes-only
+       * scene can pin its content start, because the loop range is the two SHIPPED
+       * markers and needs no content element to exist. The `lifecycle !== undefined`
+       * half is KEPT deliberately — `contentStart` is schema-constrained to
+       * `[activeRange.in, outPoint]`, and creating an out-point changes what the
+       * composition does ON AIR at stop time, so it stays the explicit "Add out point"
+       * step above. NOTHING here calls `setLifecycle`.
+       */}
+      {lifecycle !== undefined && (
+        <>
+          {lifecycle.contentStart !== undefined ? (
+            <>
+              <div className={cls.actionRow}>
+                <span className={cls.actionLabel}>Content start</span>
+                <span className={cls.actionValue}>frame {String(lifecycle.contentStart)}</span>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  // `title`, NOT `aria-label`: an aria-label would REPLACE the accessible
+                  // name, leaving the visible text absent from it (WCAG 2.5.3 Label in Name)
+                  // and breaking name-based locators. The tooltip supplements instead.
+                  title="Reset the content start to automatic (entrance completion)"
+                  onClick={() => designerStore.setContentStart(null)}
+                >
+                  Reset to auto
+                </Button>
+              </div>
+              <p className={cls.caption}>Drag the cyan marker on the timeline.</p>
+            </>
+          ) : (
+            <>
+              <div className={cls.actionRow}>
+                <span className={cls.actionLabel}>Content start</span>
+                <span className={cls.actionValue}>auto (entrance)</span>
+                <Button
+                  variant="markerIn"
+                  size="sm"
+                  onClick={() => designerStore.setContentStart(contentStartDefault())}
+                >
+                  Pin content start
+                </Button>
+              </div>
+              <p className={cls.caption}>
+                Content starts automatically at the entrance completion. Pin it to set an exact
+                frame, then drag it on the timeline.
+              </p>
+            </>
+          )}
+          <HoldLoopCaption
+            reason={holdLoopInertReason(mode, playout.holdSource, hasDrivers)}
+            from={lifecycle.contentStart ?? contentStartDefault()}
+            to={lifecycle.outPoint}
+          />
+        </>
+      )}
     </CollapseSection>
   );
 }

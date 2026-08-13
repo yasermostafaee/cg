@@ -3503,7 +3503,16 @@ error-prone.
 
 **Notes:** additive schema field, default absent.
 
-## [~] D-133 — loop range visualization ON the timeline, and an UNCONDITIONALLY authorable loop range (Cinegy-style) ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-135]] as ONE change; **all four owner decisions ANSWERED 2026-08-12** — every D-133 task is unblocked, none is gated)
+## [~] D-133 — loop range visualization ON the timeline, and an UNCONDITIONALLY authorable loop range (Cinegy-style) ⟨priority: high — client-required⟩ — **BUILT 2026-08-14** in `openspec/changes/timeline-drives-loop-and-media/` (with [[D-135]] as ONE change; all four owner decisions ANSWERED 2026-08-12, `tasks.md` §1–§3 now all `[x]`)
+
+> **✅ BUILT (2026-08-14) — all three sections.** Authoring (the `hasContent` half of the "Pin
+> content start" gate removed, so a shapes-only scene with an out-point can author the range),
+> playback (`PlayoutController.startHoldLoop` renders a content-driven hold as a repeating
+> `[contentStart → outPoint]`, with the seam invariant asserted on the MECHANISM), and timeline
+> rendering (full-height indicator lines + the range band, present by default from the EFFECTIVE
+> content start). The three loops are named apart — **Preview loop** / **Loop cycle** / **Hold
+> loop** — recorded as a decision in `design.md` §3.4. Stays `[~]` pending the owner's archive
+> confirmation; nothing else in the change is outstanding.
 
 > **Owner decisions (`design.md` §9), answered 2026-08-12 — the two that bind this item:**
 > **§9.1 — the loop range under a `timed` hold is INERT**, exactly as this item's acceptance says,
@@ -3597,7 +3606,7 @@ the clock renders that offset's time.
 **Notes:** additive field alongside `timezone` (`ClockElementSchema`); countdown/countup ignore it
 like they ignore `timezone`.
 
-## [~] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; §5 answers play-and-re-anchor vs position-by-`currentTime`; **all FIVE §9 decisions ANSWERED** — §9.1–§9.4 on 2026-08-12, §9.5 on 2026-08-13: (a), position everywhere — **BOTH halves are BUILT**; the item stays `[~]` only because it shares its change dir with [[D-133]], whose §1–§3 are unbuilt)
+## [~] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; §5 answers play-and-re-anchor vs position-by-`currentTime`; **all FIVE §9 decisions ANSWERED** — §9.1–§9.4 on 2026-08-12, §9.5 on 2026-08-13: (a), position everywhere — **BOTH halves are BUILT**; [[D-133]]'s §1–§3 are now built too, so the item stays `[~]` only pending the owner's archive confirmation)
 
 > **Owner decisions (`design.md` §9), answered 2026-08-12 — the two that bind this item:**
 > **§9.4 — EVERY Lottie and EVERY video follows the playhead, regardless of `drivesHold`.** The

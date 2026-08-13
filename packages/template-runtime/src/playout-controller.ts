@@ -344,9 +344,10 @@ export class PlayoutController {
   private onIntroEnd(): void {
     this.phase = 'hold';
     // The intro played `[active.in → outPoint]` (entrance + static settle) and the driver
-    // left the graphic painted at `outPoint`; the HOLD simply keeps that frame. Content
-    // already started at the entrance-settle frame (onContentStart) — here we only start
-    // the hold TIMING. (A looping idle while holding is D-021's opt-in, not this change.)
+    // left the graphic painted at `outPoint`; a TIMED hold simply keeps that frame, and a
+    // CONTENT-DRIVEN one replays the loop range over it (D-133 — `startHoldLoop` below).
+    // Content already started at the entrance-settle frame (onContentStart) — here we only
+    // start the hold TIMING. (A looping idle while holding is D-021's opt-in, not this.)
     this.stopDriver();
     // D-114 — `manual` and `static` both hold the out-point frozen until `stop()`; `static`
     // additionally has no outro (a no-out-point composition — it cuts on stop, see `startOutro`).
@@ -365,6 +366,9 @@ export class PlayoutController {
         this.scheduleHold(0, () => this.startOutro());
         return;
       }
+      // D-133 — RENDER the hold as the repeating loop range instead of a parked frame.
+      // Started AFTER `waitForContent()` so a zero-length hold above never opens one.
+      this.startHoldLoop();
       void wait.then(() => {
         if (token === this.holdToken && this.phase === 'hold') this.startOutro();
       });
@@ -373,8 +377,59 @@ export class PlayoutController {
     this.scheduleHold(this.o.playout.holdMs ?? 0, () => this.startOutro());
   }
 
+  /**
+   * D-133 — THE HOLD LOOP: render a content-driven hold as a repeating
+   * `[contentStart → outPoint]` instead of a parked `outPoint` frame.
+   *
+   * 🔴 **This is a re-render of the COMPOSITION FRAME and nothing else.** The only thing
+   * the loop can reach is `applyFrame` — the FrameDriver's sole output — so a wrap cannot
+   * `reset()` / `start()` / transition any content driver: there is no path from here to
+   * one. That is the design's point (`design.md` §3.3): the restart the item forbids is
+   * UNREACHABLE, not merely guarded. If a future edit gives this method a driver handle,
+   * it has stopped being the loop D-133 asked for. The seam invariant is pinned by a test
+   * (`hold-loop-range.test.ts`), never by this comment.
+   *
+   * Why the content drivers are untouched by construction: a content-driven hold holds
+   * BECAUSE its drivers run on their own clocks, independent of the composition frame. The
+   * crawl's position is not a function of the frame, so wrapping the frame cannot move it.
+   *
+   * Scope, deliberately narrow:
+   *  - CONTENT-DRIVEN holds only — §9.1's answer is that the range is INERT under any other
+   *    hold, and the caller's branch is what enforces it. Note that `playout` here is the
+   *    EFFECTIVE playout, so B-032 has already resolved a driver-less `content-driven` back
+   *    to `timed`: reaching this method means real drivers exist.
+   *  - A degenerate range (`contentStart` at or past `outPoint` — including
+   *    `entranceSettleFrame`'s "there is NO entrance" fallback, which returns `outPoint`
+   *    verbatim) has nothing to replay, so the hold parks exactly as it does today.
+   *  - A range with nothing frame-dependent in it would paint the same pixels every wrap,
+   *    so it keeps the parked frame and its rAF stays off. That reuses `playRange`'s OWN
+   *    collapse predicate through the shared `frameDependent` — one rule, one call site's
+   *    worth of logic, not a second copy that can drift.
+   */
+  private startHoldLoop(): void {
+    const from = this.holdEntry();
+    const to = this.outPoint();
+    if (to <= from || !this.frameDependent(from, to)) return;
+    this.stopDriver();
+    this.driver = new FrameDriver({
+      frameRate: this.o.frameRate,
+      range: { in: from, out: to },
+      mode: 'loop',
+      onFrame: this.o.applyFrame,
+      raf: this.clock.raf,
+      cancel: this.clock.cancel,
+      now: this.clock.now,
+    });
+    this.driver.start();
+  }
+
   private startOutro(): void {
     this.clearHold();
+    // D-133 — the exit owns the frame from here: stop any hold loop BEFORE the element-outro
+    // gate, not only when the background leg finally plays. `playRange` also stops the driver,
+    // but it can be deferred behind an async `beforeOutro` (and by pause), and a hold loop
+    // still wrapping the furniture while the graphic is exiting would be visible.
+    this.stopDriver();
     this.phase = 'outro';
     const finalExit = this.isFinalOutro();
     if (finalExit) this.announceExit();
@@ -451,6 +506,19 @@ export class PlayoutController {
   }
 
   /**
+   * Does anything in `[inF, outF]` paint differently from `outF`? Keyframes are one reason;
+   * a `lifespan` gate boundary (or a Lottie settle) crossing the leg is another.
+   *
+   * ONE definition, two readers: `playRange`'s collapse decision below and D-133's
+   * `startHoldLoop` (a range with nothing frame-dependent in it has nothing to replay).
+   * Extracted rather than copied — a second local copy is exactly how the two would drift
+   * apart, and they must answer the same question about the same range.
+   */
+  private frameDependent(inF: number, outF: number): boolean {
+    return this.o.hasAnimation || (this.o.needsFrameSweep?.(inF, outF) ?? false);
+  }
+
+  /**
    * Play `[inF, outF]` once then call `onEnd`; instant when NOTHING in the leg is
    * frame-dependent.
    *
@@ -490,7 +558,7 @@ export class PlayoutController {
     mustConsumeDuration = false,
   ): void {
     this.stopDriver();
-    const frameDependent = this.o.hasAnimation || (this.o.needsFrameSweep?.(inF, outF) ?? false);
+    const frameDependent = this.frameDependent(inF, outF);
     if (outF <= inF || (!frameDependent && !mustConsumeDuration)) {
       this.o.applyFrame(outF);
       onEnd();

@@ -66,6 +66,15 @@ the editor UI and the runtime renderer (the "Where features go" map in
   values are numbers, hex colours, or D-110 whole-shape path snapshots — the
   path morph interpolates anchors by stable id via the schema's shared
   `lerpPathSnapshot` and feeds the same `pathD` builder the static render uses),
+- **renders a content-driven HOLD as a repeating `[contentStart → outPoint]`** — D-133's
+  hold loop: the furniture replays the range while the content runs, instead of the
+  timeline parking on one frame. It is a RENDERING of the existing hold, not a new phase
+  and not a new `PlayoutMode`: the range is the two shipped lifecycle markers, and the
+  hold's start/end conditions and the OUT after it are unchanged. 🔴 The wrap re-renders the
+  COMPOSITION FRAME ONLY — it cannot reset or restart a content driver, because the loop
+  driver's sole output is `applyFrame` and a content driver runs on its own clock. Under any
+  hold that is not content-driven the range is INERT (the Designer's Playout panel says so,
+  and names the missing condition),
 - **drives** the broadcast lifecycle and playout timing — entrance → hold → exit,
   auto-out / loop cycles with timed or content-driven holds (PlayoutController +
   FrameDriver; the ticker's TickerDriver, the countdown clock's ClockDriver, and
