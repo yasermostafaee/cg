@@ -132,6 +132,13 @@ export interface VideoDriverOptions {
    * `start()`/`reset()` seek — never a branch beside them.
    */
   introStartMs?: number | undefined;
+  /**
+   * Session Y — comp-side WAIT (ms of active time) before the intro starts. Non-zero only for
+   * a follow clip whose AUTHORED intro is shorter than the composition's entrance: the element
+   * parks on the intro's first frame, then plays [introStart → introEnd] so it FINISHES at the
+   * content start. Honoured inside {@link expectedClipMs} and its inverse — never beside them.
+   */
+  introDelayMs?: number | undefined;
   /** End of the intro / the hold point (ms). Absent phases ⇒ `durationMs`. */
   introEndMs: number;
   /** Start of the outro (ms). `>= outroEnd` ⇒ NO outro (degenerate). */
@@ -197,6 +204,7 @@ export class VideoDriver implements ElementOutroDriver {
   private readonly o: {
     durationMs: number;
     introStartMs: number;
+    introDelayMs: number;
     introEndMs: number;
     outroStartMs: number;
     outroEndMs: number;
@@ -240,6 +248,7 @@ export class VideoDriver implements ElementOutroDriver {
       // The window bounds default to the clip's own ([0, durationMs]) — every
       // manual/absent-phases clip maps exactly as it always has (follow passes a window).
       introStartMs: options.introStartMs ?? 0,
+      introDelayMs: options.introDelayMs ?? 0,
       introEndMs: options.introEndMs,
       outroStartMs: options.outroStartMs,
       outroEndMs: options.outroEndMs ?? options.durationMs,
@@ -426,12 +435,17 @@ export class VideoDriver implements ElementOutroDriver {
     if (mode === 'outro') {
       return Math.min(this.o.outroStartMs + elapsedMs, this.o.outroEndMs);
     }
+    // Session Y — an AUTHORED follow intro can be shorter than the composition's entrance:
+    // the element PARKS on the intro's first frame for `introDelayMs`, then plays, so the
+    // intro FINISHES at the content start. Zero for every other configuration.
+    const active = elapsedMs - this.o.introDelayMs;
+    if (active < 0) return this.o.introStartMs;
     const introSpanMs = this.o.introEndMs - this.o.introStartMs;
-    if (elapsedMs < introSpanMs) return this.o.introStartMs + elapsedMs;
+    if (active < introSpanMs) return this.o.introStartMs + active;
     if (this.o.holdBehavior === 'freeze') return this.o.introEndMs;
     const span = this.o.loopEndMs - this.o.loopStartMs;
     if (span <= 0) return this.o.loopStartMs;
-    return this.o.loopStartMs + ((elapsedMs - introSpanMs) % span);
+    return this.o.loopStartMs + ((active - introSpanMs) % span);
   }
 
   /**
@@ -500,7 +514,7 @@ export class VideoDriver implements ElementOutroDriver {
       this.reconcile(this.expectedClipMs(elapsedMs));
       return;
     }
-    if (elapsedMs < this.o.introEndMs - this.o.introStartMs) {
+    if (elapsedMs < this.o.introDelayMs + (this.o.introEndMs - this.o.introStartMs)) {
       this.reconcile(this.expectedClipMs(elapsedMs)); // intro
       return;
     }
@@ -582,15 +596,18 @@ export class VideoDriver implements ElementOutroDriver {
 
   /** The active-elapsed that maps (via {@link expectedClipMs}) back to the media's actual clip-ms. */
   private elapsedForActual(actualMs: number): number {
+    const delay = this.o.introDelayMs;
     const introSpanMs = this.o.introEndMs - this.o.introStartMs;
     if (this.mode === 'outro') return Math.max(0, actualMs - this.o.outroStartMs);
-    if (actualMs < this.o.introEndMs) return Math.max(0, actualMs - this.o.introStartMs);
-    if (this.o.holdBehavior === 'freeze') return introSpanMs;
+    // Media parked at/behind the intro start reads as delay CONSUMED (never re-parking a
+    // clip that already started), which keeps a rebase during the park benign.
+    if (actualMs < this.o.introEndMs) return delay + Math.max(0, actualMs - this.o.introStartMs);
+    if (this.o.holdBehavior === 'freeze') return delay + introSpanMs;
     const span = this.o.loopEndMs - this.o.loopStartMs;
-    if (span <= 0) return introSpanMs;
+    if (span <= 0) return delay + introSpanMs;
     // First-cycle phase that matches the media; the loop simply continues from there.
     const within = Math.min(Math.max(0, actualMs - this.o.loopStartMs), span);
-    return introSpanMs + within;
+    return delay + introSpanMs + within;
   }
 
   private armComplete(): Promise<void> {

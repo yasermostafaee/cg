@@ -77,22 +77,60 @@ export interface LottieFollowWindow {
   window: FollowWindow;
   /** Where the intro window begins, in ANIMATION frames. */
   introStartFrame: number;
-  /** `H` — the held frame (intro end AND outro start), in ANIMATION frames. */
+  /** The HELD frame (`H`, or the authored `introEnd`), in ANIMATION frames. */
   holdFrame: number;
-  /** Where the outro window ends, in ANIMATION frames. */
+  /**
+   * Session Y — where the OUTRO begins, in ANIMATION frames: the clip's own ending
+   * (end-anchored `clipEnd − outSpan`, or the authored `outroStart`). No longer the hold frame.
+   */
+  outroStartFrame: number;
+  /** Where the outro window ends, in ANIMATION frames — the clip's `op`, always. */
   outroEndFrame: number;
+  /** Comp-side wait (ms) before an AUTHORED intro starts, so it finishes at the content start. */
+  introDelayMs: number;
+}
+
+/** The phases block the adapter consumes — all frame-valued, all optional. */
+export interface LottieFollowPhases {
+  introEnd?: number | undefined;
+  outroStart?: number | undefined;
+  holdAt?: number | undefined;
 }
 
 /**
- * Derive the follow window for one Lottie in one composition. `holdAtFrames` is an ABSOLUTE
- * animation frame (like `introEnd`/`outroStart`); the returned frames are rounded to the
- * nearest whole frame at the edge, which is the only rounding anywhere in the derivation.
+ * Session Y — the Lottie side of the ONE authored-vs-seed discrimination (the video's is
+ * `videoFollowClipFacts` in `@cg/shared-schema`): attach used to seed a marker-less clip with
+ * `{introEnd: lottieClipMidpoint(meta), outroStart: meta.op}` — values the old rule ignored.
+ * Under the corrected rule authored values GOVERN, so the seed signature derives as if absent.
+ * A clip whose phases came from real MARKERS keeps them, and they now genuinely win.
+ */
+export function lottieFollowClipFacts(
+  meta: LottieClipMeta,
+  phases: LottieFollowPhases | undefined,
+): { authoredIntroEndFrame?: number; authoredOutroStartFrame?: number } {
+  if (phases === undefined) return {};
+  const out: { authoredIntroEndFrame?: number; authoredOutroStartFrame?: number } = {};
+  if (phases.introEnd !== undefined && phases.introEnd !== lottieClipMidpoint(meta)) {
+    out.authoredIntroEndFrame = phases.introEnd;
+  }
+  if (phases.outroStart !== undefined && phases.outroStart !== meta.op) {
+    out.authoredOutroStartFrame = phases.outroStart;
+  }
+  return out;
+}
+
+/**
+ * Derive the follow window for one Lottie in one composition. Frame-valued inputs
+ * (`holdAt`/`introEnd`/`outroStart`) are ABSOLUTE animation frames; the returned frames are
+ * rounded to the nearest whole frame at the edge, which is the only rounding anywhere in the
+ * derivation. Every comp-side decision — end-anchoring, authored precedence, the delay, the
+ * clamps — is delegated to `followWindowMs`; this adapter only converts units.
  */
 export function lottieFollowWindow(
   meta: LottieClipMeta,
   speed: number,
   anchors: FollowAnchors,
-  holdAtFrames?: number | undefined,
+  phases?: LottieFollowPhases | undefined,
 ): LottieFollowWindow {
   const spd = Number.isFinite(speed) && speed > 0 ? speed : 1;
   // Animation frames consumed per second of wall-clock; 0 for a malformed clip, which
@@ -100,16 +138,27 @@ export function lottieFollowWindow(
   const rate = meta.fr * spd;
   const msPerFrame = rate > 0 ? 1000 / rate : 0;
   const durationMs = Math.max(0, meta.op - meta.ip) * msPerFrame;
-  const holdAtMs =
-    holdAtFrames === undefined ? undefined : Math.max(0, holdAtFrames - meta.ip) * msPerFrame;
-  const window = followWindowMs(anchors, { durationMs, holdAtMs });
+  const toMs = (frame: number): number => Math.max(0, frame - meta.ip) * msPerFrame;
+  const facts = lottieFollowClipFacts(meta, phases);
+  const window = followWindowMs(anchors, {
+    durationMs,
+    holdAtMs: phases?.holdAt === undefined ? undefined : toMs(phases.holdAt),
+    ...(facts.authoredIntroEndFrame !== undefined
+      ? { authoredIntroEndMs: toMs(facts.authoredIntroEndFrame) }
+      : {}),
+    ...(facts.authoredOutroStartFrame !== undefined
+      ? { authoredOutroStartMs: toMs(facts.authoredOutroStartFrame) }
+      : {}),
+  });
   const toFrame = (ms: number): number =>
     meta.ip + (msPerFrame > 0 ? Math.round(ms / msPerFrame) : 0);
   return {
     window,
     introStartFrame: toFrame(window.introStartMs),
     holdFrame: toFrame(window.holdMs),
+    outroStartFrame: toFrame(window.outroStartMs),
     outroEndFrame: toFrame(window.outroEndMs),
+    introDelayMs: window.introDelayMs,
   };
 }
 
@@ -162,7 +211,7 @@ export interface LottieTimingInput {
   /** The element's playback speed multiplier. */
   speed: number;
   /** The element's authored phase mapping, in ANIMATION frames. Absent ⇒ marker-less. */
-  phases?: { introEnd: number; outroStart: number } | undefined;
+  phases?: { introEnd?: number | undefined; outroStart?: number | undefined } | undefined;
   /** The composition's frame rate (project-level `Scene.frameRate`). */
   compositionFps: number;
 }

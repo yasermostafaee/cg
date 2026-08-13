@@ -2,6 +2,7 @@ import {
   activeRangeOf,
   followsComposition,
   followWindowMs,
+  videoFollowClipFacts,
   listBoundSequenceIds,
   migrateScenePaths,
   playoutOf,
@@ -963,9 +964,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         //  - follow + NO lifecycle: nothing to follow — marker-less behaviour exactly
         //    (a follower's stored numbers are ignored either way; the Inspector says why).
         const follows = followsComposition(l.element.phases);
+        // Session Y — the adapter now takes the WHOLE phases block: authored
+        // `introEnd`/`outroStart` (real markers, or manual values) WIN, the attach seed
+        // signature derives as if absent, and the outro is the clip's own ending.
         const fw =
           follows && followAnchors !== null
-            ? lottieFollowWindow(meta, l.element.speed, followAnchors, l.element.phases?.holdAt)
+            ? lottieFollowWindow(meta, l.element.speed, followAnchors, l.element.phases)
             : null;
         const phasesEff = follows ? undefined : l.element.phases;
         // Resolve the phase frames onto the animation's frame space: absent `phases`
@@ -988,9 +992,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // PHASE (never rescaled onto the composition's `outPoint`): the element owns its
         // own outro timing at the authored speed. Absent `phases` ⇒ `outroStart = op` ⇒ a
         // DEGENERATE outro, which `playOutro()` resolves immediately (§D6.4.1). Under
-        // follow the outro is `[H → min(H + outSpan, clipEnd)]` — continuous from the held
-        // frame, SIZED to the OUT segment.
-        const outroStart = fw !== null ? fw.holdFrame : (phasesEff?.outroStart ?? meta.op);
+        // follow (session Y) the outro is THE CLIP'S OWN ENDING — authored
+        // `[outroStart → op]`, or end-anchored `[op − outSpan → op]` — never the
+        // hold-anchored static middle the superseded rule played.
+        const outroStart = fw !== null ? fw.outroStartFrame : (phasesEff?.outroStart ?? meta.op);
         const outroEnd = fw?.outroEndFrame;
         const hasOutro = fw !== null ? fw.window.hasOutro : outroStart < meta.op;
         // D-125 — the STATIC canvas poster frame. When phase markers define the hold
@@ -1013,6 +1018,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           op: meta.op,
           speed: l.element.speed,
           introStart,
+          introDelayMs: fw?.introDelayMs,
           introEnd,
           outroStart,
           outroEnd,
@@ -1078,17 +1084,26 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // (`followWindowMs`) directly — no unit adapter. Follow without a lifecycle behaves
         // as absent phases (nothing to follow).
         const followsV = followsComposition(el.phases);
+        // Session Y — the corrected rule: a follower's outro is the CLIP'S OWN ENDING.
+        // AUTHORED introEnd/outroStart win (the seed-signature shim `videoFollowClipFacts`
+        // keeps attach-written seeds from masquerading as intent); absent, the outro is
+        // END-anchored `[clipEnd − outSpan → clipEnd]` and the intro is unchanged.
         const vw =
           followsV && followAnchors !== null
-            ? followWindowMs(followAnchors, { durationMs, holdAtMs: el.phases?.holdAt })
+            ? followWindowMs(followAnchors, {
+                durationMs,
+                holdAtMs: el.phases?.holdAt,
+                ...videoFollowClipFacts(el.phases, durationMs),
+              })
             : null;
         const phasesEffV = followsV ? undefined : el.phases;
         const hasPhases = phasesEffV !== undefined;
         // Absent phases (decision (b)): the whole clip is the intro, the hold loops
         // the whole clip, and there is NO outro (outroStart = duration ⇒ degenerate).
         const introStartMs = vw?.introStartMs;
+        const introDelayMs = vw?.introDelayMs;
         const introEndMs = vw !== null ? vw.holdMs : (phasesEffV?.introEnd ?? durationMs);
-        const outroStartMs = vw !== null ? vw.holdMs : (phasesEffV?.outroStart ?? durationMs);
+        const outroStartMs = vw !== null ? vw.outroStartMs : (phasesEffV?.outroStart ?? durationMs);
         const outroEndMs = vw?.outroEndMs;
         // Under follow, an AUTHORED idle range composes with H; ABSENT idle means the hold
         // FREEZES at H even for `holdBehavior: 'loop'` — looping the whole clip would
@@ -1251,6 +1266,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           handle,
           durationMs,
           introStartMs,
+          introDelayMs,
           introEndMs,
           outroStartMs,
           outroEndMs,

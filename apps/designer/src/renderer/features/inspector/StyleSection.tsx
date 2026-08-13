@@ -49,6 +49,7 @@ import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { activeDocOf, activeFieldData, activeLayersOf } from '../../state/scene-doc.js';
 import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/follow-attach.js';
+import { videoFollowClipFacts } from '@cg/shared-schema';
 import { contentStartDefaultFrom } from './content-start-default.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { useAssetUrl, useAssets } from '../assets/useAssets.js';
@@ -972,8 +973,23 @@ function FollowNoAnchors(): JSX.Element {
 }
 
 /** The derived window's clamp warnings — the EXISTING hint styling, no second warning surface. */
-function FollowClampHints({ clamps }: { clamps: FollowWindow['clamps'] }): JSX.Element | null {
-  if (!clamps.introShort && !clamps.outroClamped && !clamps.holdPastEnd && !clamps.noOutSegment) {
+function FollowClampHints({
+  clamps,
+  seam,
+}: {
+  clamps: FollowWindow['clamps'];
+  /** The hold and outro-start clip times, formatted by the calling panel's own formatter. */
+  seam?: { hold: string; outroStart: string };
+}): JSX.Element | null {
+  if (
+    !clamps.introShort &&
+    !clamps.holdPastEnd &&
+    !clamps.noOutSegment &&
+    !clamps.wholeClipOutro &&
+    !clamps.outroCutByRemoval &&
+    !clamps.lateSettle &&
+    !clamps.holdJump
+  ) {
     return null;
   }
   return (
@@ -989,17 +1005,35 @@ function FollowClampHints({ clamps }: { clamps: FollowWindow['clamps'] }): JSX.E
           the clip is shorter than the entrance from its head to the hold — it will freeze early.
         </p>
       ) : null}
-      {clamps.outroClamped ? (
-        <p className={lt.warn}>
-          the outro runs past the clip end — clamped; the last frame holds through the rest of the
-          OUT.
-        </p>
-      ) : null}
       {clamps.noOutSegment ? (
         <p className={lt.warn}>
           the composition has no OUT segment — the out point sits at the end of the active range, so
           this clip has NO outro and holds its look through the exit. Drag the out point earlier, or
           extend the active range past it.
+        </p>
+      ) : null}
+      {clamps.wholeClipOutro ? (
+        <p className={lt.warn}>
+          the OUT segment is longer than the whole clip — the outro plays the clip from its start.
+        </p>
+      ) : null}
+      {clamps.outroCutByRemoval ? (
+        <p className={lt.warn}>
+          the clip's authored outro is longer than the OUT segment — the timeline removes the
+          element mid-outro (on air the exit waits for it instead). It is never rescaled.
+        </p>
+      ) : null}
+      {clamps.lateSettle ? (
+        <p className={lt.warn}>
+          the clip's authored intro is longer than the entrance — it starts at the composition's in
+          and settles late.
+        </p>
+      ) : null}
+      {clamps.holdJump && seam !== undefined ? (
+        <p className={lt.warn}>
+          on exit the clip jumps from its held look ({seam.hold}) to its outro start (
+          {seam.outroStart}) — invisible for a clip that is static in its middle; check it if this
+          clip is not.
         </p>
       ) : null}
     </div>
@@ -1032,7 +1066,7 @@ function LottieFollowPanel({
   if (phases === undefined) return null;
   if (anchors === null) return <FollowNoAnchors />;
   if (timing === null) return null;
-  const fw = lottieFollowWindow(timing.meta, element.speed, anchors, phases.holdAt);
+  const fw = lottieFollowWindow(timing.meta, element.speed, anchors, phases);
   const rate = timing.meta.fr * (element.speed > 0 ? element.speed : 1);
   const sec = (f: number): string => secs(rate > 0 ? (f - timing.meta.ip) / rate : 0);
   const entranceFrames = Math.round(anchors.contentStart - anchors.activeIn);
@@ -1050,10 +1084,15 @@ function LottieFollowPanel({
           : ' · freezes'}
       </p>
       <p className={lt.muted}>
-        outro: clip [{sec(fw.holdFrame)} → {sec(fw.outroEndFrame)}] through the OUT ({outFrames}{' '}
-        comp frames)
+        outro: clip [{sec(fw.outroStartFrame)} → {sec(fw.outroEndFrame)}] — the clip’s own ending,
+        through the OUT ({outFrames} comp frames)
       </p>
-      {phases.holdAt === undefined ? (
+      {fw.window.authored ? (
+        <p className={dds.hint} data-testid="follow-hold-authored">
+          hold frame: the clip’s own intro end (frame {fw.holdFrame}) — authored phases govern the
+          window; `hold at` does not apply.
+        </p>
+      ) : phases.holdAt === undefined ? (
         <>
           <p className={dds.hint}>
             hold at: the frame the entrance reaches (the clip plays from its head) — set one to hold
@@ -1097,15 +1136,20 @@ function LottieFollowPanel({
           </Button>
         </>
       )}
-      <FollowClampHints clamps={fw.window.clamps} />
+      <FollowClampHints
+        clamps={fw.window.clamps}
+        seam={{ hold: sec(fw.holdFrame), outroStart: sec(fw.outroStartFrame) }}
+      />
       <Button
         variant="secondary"
         onClick={() =>
           designerStore.updateElement(id, {
+            // Session Y — Detach bakes the derived window: hold frame + the clip's own outro
+            // start. Truthful by construction.
             phases: {
               ...phases,
               introEnd: fw.holdFrame,
-              outroStart: fw.holdFrame,
+              outroStart: fw.outroStartFrame,
               source: 'manual',
             },
           } as Partial<Element>)
@@ -1230,7 +1274,7 @@ function LottieSections({
               onClick={() => {
                 if (timing === null) return;
                 designerStore.updateElement(id, {
-                  phases: lottieFollowAttachPhases(timing.meta),
+                  phases: lottieFollowAttachPhases(),
                 } as Partial<Element>);
               }}
             >
@@ -1266,7 +1310,7 @@ function LottieSections({
           <>
             <NumberField
               label="intro end"
-              value={phases.introEnd}
+              value={phases.introEnd ?? (timing !== null ? lottieClipMidpoint(timing.meta) : 0)}
               step={1}
               min={0}
               suffix="f"
@@ -1281,7 +1325,7 @@ function LottieSections({
             ) : null}
             <NumberField
               label="outro start"
-              value={phases.outroStart}
+              value={phases.outroStart ?? timing?.meta.op ?? 0}
               step={1}
               min={0}
               suffix="f"
@@ -1350,7 +1394,11 @@ function VideoFollowPanel({
   if (phases === undefined) return null;
   if (anchors === null) return <FollowNoAnchors />;
   const duration = element.durationMs;
-  const w = followWindowMs(anchors, { durationMs: duration, holdAtMs: phases.holdAt });
+  const w = followWindowMs(anchors, {
+    durationMs: duration,
+    holdAtMs: phases.holdAt,
+    ...videoFollowClipFacts(phases, duration),
+  });
   const s = (ms: number): string => `${(ms / 1000).toFixed(2)} s`;
   const entranceFrames = Math.round(anchors.contentStart - anchors.activeIn);
   const outFrames = Math.round(anchors.activeOut - anchors.outPoint);
@@ -1367,9 +1415,15 @@ function VideoFollowPanel({
           : ' · freezes'}
       </p>
       <p className={lt.muted}>
-        outro: clip [{s(w.holdMs)} → {s(w.outroEndMs)}] through the OUT ({outFrames} comp frames)
+        outro: clip [{s(w.outroStartMs)} → {s(w.outroEndMs)}] — the clip’s own ending, through the
+        OUT ({outFrames} comp frames)
       </p>
-      {phases.holdAt === undefined ? (
+      {w.authored ? (
+        <p className={dds.hint} data-testid="follow-hold-authored">
+          hold frame: the clip’s own intro end ({s(w.holdMs)}) — authored phases govern the window;
+          `hold at` does not apply.
+        </p>
+      ) : phases.holdAt === undefined ? (
         <>
           <p className={dds.hint}>
             hold at: the time the entrance reaches (the clip plays from its head) — set one to hold
@@ -1414,15 +1468,21 @@ function VideoFollowPanel({
           </Button>
         </>
       )}
-      <FollowClampHints clamps={w.clamps} />
+      <FollowClampHints
+        clamps={w.clamps}
+        seam={{ hold: s(w.holdMs), outroStart: s(w.outroStartMs) }}
+      />
       <Button
         variant="secondary"
         onClick={() =>
           designerStore.updateElement(id, {
+            // Session Y — Detach bakes the CURRENTLY-DERIVED window: the hold point and the
+            // clip's own outro start. Truthful by construction — manual then plays the same
+            // phases follow was playing.
             phases: {
               ...phases,
               introEnd: Math.round(w.holdMs),
-              outroStart: Math.round(w.holdMs),
+              outroStart: Math.round(w.outroStartMs),
               source: 'manual',
             },
           } as Partial<Element>)
@@ -1464,8 +1524,8 @@ function VideoSections({
   function commitPhase(next: { introEnd?: number; outroStart?: number }): void {
     if (phases === undefined) return;
     const clamp = (v: number): number => Math.min(Math.max(0, Math.round(v)), duration);
-    let introEnd = clamp(next.introEnd ?? phases.introEnd);
-    let outroStart = clamp(next.outroStart ?? phases.outroStart);
+    let introEnd = clamp(next.introEnd ?? phases.introEnd ?? Math.round(duration / 2));
+    let outroStart = clamp(next.outroStart ?? phases.outroStart ?? duration);
     // keep the invariant: whichever mark the operator moved wins, the other yields.
     if (introEnd > outroStart) {
       if (next.introEnd !== undefined) outroStart = introEnd;
@@ -1546,7 +1606,7 @@ function VideoSections({
               variant="secondary"
               onClick={() =>
                 designerStore.updateElement(id, {
-                  phases: videoFollowAttachPhases(duration),
+                  phases: videoFollowAttachPhases(),
                 } as Partial<Element>)
               }
             >
@@ -1559,7 +1619,7 @@ function VideoSections({
           <>
             <NumberField
               label="in point"
-              value={phases.introEnd}
+              value={phases.introEnd ?? Math.round(duration / 2)}
               step={100}
               min={0}
               max={duration}
@@ -1568,7 +1628,7 @@ function VideoSections({
             />
             <NumberField
               label="out point"
-              value={phases.outroStart}
+              value={phases.outroStart ?? duration}
               step={100}
               min={0}
               max={duration}

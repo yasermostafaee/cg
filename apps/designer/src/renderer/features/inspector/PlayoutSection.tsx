@@ -149,7 +149,7 @@ function mediaHoldIsInfinite(el: Extract<Element, { type: 'video' | 'lottie' }>)
   const p = el.phases;
   if (follows) return p?.idle !== undefined && p.idle[1] > p.idle[0];
   if (p === undefined) return false; // marker-less: zero span, freezes, completes
-  return p.idle !== undefined ? p.idle[1] > p.idle[0] : p.outroStart > p.introEnd;
+  return p.idle !== undefined ? p.idle[1] > p.idle[0] : (p.outroStart ?? 0) > (p.introEnd ?? 0);
 }
 
 /**

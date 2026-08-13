@@ -987,14 +987,15 @@ export const LottiePhasesSchema = z.object({
   /**
    * Animation frame where the intro ends and the hold begins.
    *
-   * ⚠ IGNORED under `source: 'composition'` — the window is DERIVED from the composition's
-   * lifecycle anchors (`followWindowMs` / `lottieFollowWindow`), never read from here. The value
-   * stays REQUIRED-present so a Detach has somewhere to land without a shape change, and so a
-   * clip that followed and detaches keeps parsing everywhere.
+   * Session Y — under `source: 'composition'` an AUTHORED value WINS (the clip's own intro,
+   * scheduled to finish at the effective content start); ABSENT (what attach writes now) the
+   * window is DERIVED (`followWindowMs` / `lottieFollowWindow`). The pre-Y attach SEED
+   * SIGNATURE (`introEnd == lottieClipMidpoint`, `outroStart == op`) derives as if absent —
+   * see `lottieFollowClipFacts`. OPTIONAL since session Y so attach can write the source alone.
    */
-  introEnd: z.number().nonnegative(),
-  /** Animation frame where the outro begins. `introEnd ≤ outroStart`. ⚠ IGNORED under `source: 'composition'` (see `introEnd`). */
-  outroStart: z.number().nonnegative(),
+  introEnd: z.number().nonnegative().optional(),
+  /** Animation frame where the outro begins. `introEnd ≤ outroStart`. Session Y: optional; authored wins under follow (the clip's own `[outroStart → op]`), absent derives END-anchored. */
+  outroStart: z.number().nonnegative().optional(),
   /** Optional `[in, out]` idle-loop range inside the hold window. Under `'composition'` it COMPOSES with the derived hold time (idle is never derived — absent means freeze). */
   idle: z.tuple([z.number().nonnegative(), z.number().nonnegative()]).optional(),
   /**
@@ -1159,13 +1160,15 @@ export const VideoPhasesSchema = z
     /**
      * End of the IN phase (ms from clip start). The hold point.
      *
-     * ⚠ IGNORED under `source: 'composition'` — the window is DERIVED from the composition's
-     * lifecycle anchors (`followWindowMs`), never read from here. The value stays
-     * REQUIRED-present so a Detach has somewhere to land without a shape change.
+     * Session Y — under `source: 'composition'` an AUTHORED value WINS (the clip's own intro,
+     * scheduled to finish at the effective content start); ABSENT (what attach writes now) the
+     * window is DERIVED (`followWindowMs`). The pre-Y attach SEED SIGNATURE
+     * (`introEnd == round(durationMs/2)`, `outroStart == durationMs`) derives as if absent —
+     * see `videoFollowClipFacts`. OPTIONAL since session Y so attach can write the source alone.
      */
-    introEnd: z.number().nonnegative(),
-    /** Start of the OUT phase (ms); the outro is `[outroStart → clip end]`. ⚠ IGNORED under `source: 'composition'` (see `introEnd`). */
-    outroStart: z.number().nonnegative(),
+    introEnd: z.number().nonnegative().optional(),
+    /** Start of the OUT phase (ms); the outro is `[outroStart → clip end]`. Session Y: optional; authored wins under follow, absent derives END-anchored. */
+    outroStart: z.number().nonnegative().optional(),
     /** Optional hold segment looped instead of `[introEnd → outroStart]`. Under `'composition'` it COMPOSES with the derived hold time (idle is never derived — absent means freeze at `H`). */
     idle: z
       .object({ start: z.number().nonnegative(), end: z.number().nonnegative() })
@@ -1186,9 +1189,10 @@ export const VideoPhasesSchema = z
      */
     holdAt: z.number().nonnegative().optional(),
   })
-  .refine((p) => p.introEnd <= p.outroStart, {
-    message: 'introEnd must not exceed outroStart',
-  });
+  .refine(
+    (p) => p.introEnd === undefined || p.outroStart === undefined || p.introEnd <= p.outroStart,
+    { message: 'introEnd must not exceed outroStart' },
+  );
 export type VideoPhases = z.infer<typeof VideoPhasesSchema>;
 
 /**

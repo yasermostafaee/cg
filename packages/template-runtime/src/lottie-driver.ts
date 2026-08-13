@@ -51,6 +51,13 @@ export interface LottieDriverOptions {
    * park frame) ONLY — the one mapping, never a branch beside it.
    */
   introStart?: number | undefined;
+  /**
+   * Session Y — comp-side WAIT (ms of active time) before the intro starts: a follow clip
+   * whose AUTHORED intro is shorter than the entrance parks on the intro start frame, then
+   * plays so the intro FINISHES at the content start. Honoured inside {@link clipPositionAt}
+   * only — the one mapping, never beside it. Default 0.
+   */
+  introDelayMs?: number | undefined;
   /** Frame where the intro ends and the hold begins (`ip ≤ introEnd ≤ op`). */
   introEnd: number;
   /**
@@ -333,7 +340,14 @@ export class LottieDriver {
     // frame still lands on the right frame — the FrameDriver invariant. A NEGATIVE
     // elapsed (a playhead sitting before the composition's in-point) clamps to the
     // run's start rather than extrapolating backwards past the window start.
-    const advanced = Math.floor((Math.max(0, elapsedMs) / 1000) * fr * speed);
+    // Session Y — an AUTHORED follow intro shorter than the entrance PARKS for
+    // `introDelayMs` before playing (zero everywhere else). Outro elapsed is anchored at
+    // the composition's out-point and never delayed.
+    const delayed =
+      mode === 'intro'
+        ? Math.max(0, elapsedMs) - (this.o.introDelayMs ?? 0)
+        : Math.max(0, elapsedMs);
+    const advanced = Math.floor((Math.max(0, delayed) / 1000) * fr * speed);
     // OUT phase — [outroStart → outroEnd] once (§D1 / §D6.2; outroEnd is `op` unless a
     // follow window bounds it).
     if (mode === 'outro') {

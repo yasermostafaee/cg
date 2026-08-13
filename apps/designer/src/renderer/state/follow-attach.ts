@@ -1,35 +1,30 @@
-import { lottieClipMidpoint, type LottieClipMeta } from '@cg/lottie-bridge';
 import type { LottiePhases, VideoPhases } from '@cg/shared-schema';
-import { posterTimeMs } from '../features/assets/video-convert-args.js';
 
 /**
- * media-phases-follow-composition / add-time-duration-guard — the CLAIM-LEAST phase slots
- * written when an element ENTERS the follow mode without any authored phases: the stored
- * `introEnd`/`outroStart` are IGNORED under `source: 'composition'` and exist only as the
- * Detach landing, so they carry the two values that claim the least — the shared
- * poster/midpoint (the project's definition of "the representative settled look") and the
- * clip end (a degenerate outro: "no outro claimed").
+ * media-phases-follow-composition / add-time-duration-guard — the phases written when an
+ * element ENTERS follow mode without any authored phases.
  *
- * EXTRACTED here because the seed now has TWO writers — the Inspector's "Follow composition"
- * attach buttons (session S) and the add-time duration guard's "Add as backdrop" commit — and
- * a second copy of one seed rule is how the two drift (the session-P extraction rule; asserted
- * by tests that spy the SHARED midpoint call rather than comparing equal numbers).
+ * ⭐ SESSION Y — the source ALONE, no seeded numbers. The pre-Y seeds
+ * (`introEnd: midpoint, outroStart: clipEnd`) were a STORED LIE: fields that described no
+ * behaviour (the old rule ignored them) and, under the corrected rule — where an authored
+ * value GOVERNS the window — they would have masqueraded as intent. Absent fields mean
+ * "derive everything from the composition and the clip's ending", which is exactly what
+ * attaching follow asks for; Detach bakes the CURRENTLY-DERIVED window into manual values
+ * (truthful by construction), so nothing needs a landing slot here. Existing scenes that
+ * carry the old seeds derive identically through the seed-signature shims
+ * (`videoFollowClipFacts` / `lottieFollowClipFacts`).
+ *
+ * EXTRACTED because the attach has TWO writers — the Inspector's "Follow composition" buttons
+ * and the duration guard's "Add as backdrop" commit — and a second copy of one rule is how the
+ * two drift (the session-P extraction rule).
  */
 
-/** The follow-attach slots for a video with no authored phases (ms). */
-export function videoFollowAttachPhases(durationMs: number): VideoPhases {
-  return {
-    introEnd: posterTimeMs(durationMs),
-    outroStart: durationMs,
-    source: 'composition',
-  };
+/** The follow-attach phases for a video with no authored phases: the source, nothing else. */
+export function videoFollowAttachPhases(): VideoPhases {
+  return { source: 'composition' };
 }
 
-/** The follow-attach slots for a Lottie with no authored phases (animation frames). */
-export function lottieFollowAttachPhases(meta: LottieClipMeta): LottiePhases {
-  return {
-    introEnd: lottieClipMidpoint(meta),
-    outroStart: meta.op,
-    source: 'composition',
-  };
+/** The follow-attach phases for a Lottie with no authored phases: the source, nothing else. */
+export function lottieFollowAttachPhases(): LottiePhases {
+  return { source: 'composition' };
 }

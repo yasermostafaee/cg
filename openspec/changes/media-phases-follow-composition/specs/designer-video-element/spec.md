@@ -12,9 +12,11 @@ milliseconds are already its native space — the Lottie is the kind that needs 
 `VideoPhasesSchema` SHALL gain an optional `source` (`'manual' | 'composition'`); an absent
 `source` SHALL be exactly manual-equivalent, so every stored scene round-trips unchanged. An
 optional `holdAt` (ms) SHALL be meaningful only under `'composition'` and ignored otherwise.
-Under `'composition'`, stored `introEnd`/`outroStart` are IGNORED but remain present (the Detach
-landing slot), and the element's window through the clip SHALL be derived exactly as the Lottie's
-— same anchors, same hold-time model, same clamps, through the SAME `followWindowMs` helper — with
+Under `'composition'` — session Y — an AUTHORED `introEnd`/`outroStart` GOVERNS the window and
+an ABSENT one derives (the fields are OPTIONAL; attach writes the source alone; the pre-Y seed
+signature `round(durationMs/2)`/`durationMs` derives as if absent via `videoFollowClipFacts`),
+exactly as the Lottie's — same anchors, same hold-time model, same clamps, same END-anchored
+ending, through the SAME `followWindowMs` helper — with
 one kind-specific resolution: a `loop` hold with NO authored idle range resolves to a FREEZE at
 `H` under follow (looping the whole clip would abandon the held look follow promises to keep); an
 authored idle range keeps looping. The stored `holdBehavior` is untouched; only the resolved hold
@@ -29,8 +31,9 @@ reads this way, and the Playout checklist's `infinite` mirror agrees with it.
 
 - **WHEN** a 5 s clip (`durationMs` 5000) follows a 2 s composition whose content starts at 1 s
   with a 0.5 s OUT segment, with `holdAt` 3000
-- **THEN** the derived window is intro `[2000 → 3000]`, hold at 3000, outro `[3000 → 3500]` —
-  in the clip's own milliseconds, through the same helper the Lottie adapter delegates to
+- **THEN** the derived window is intro `[2000 → 3000]`, hold at 3000, and — session Y — the
+  END-anchored outro `[4500 → 5000]`: the clip's own ending, in the clip's own milliseconds,
+  through the same helper the Lottie adapter delegates to
 
 #### Scenario: A follow video with no idle range freezes at the hold time
 

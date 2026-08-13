@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { followWindowMs, followsComposition, type FollowAnchors } from '../src/index.js';
+import {
+  followWindowMs,
+  followsComposition,
+  videoFollowClipFacts,
+  type FollowAnchors,
+} from '../src/index.js';
 
 /**
  * media-phases-follow-composition — the ONE comp-side derivation, in TIME SPACE (ms —
- * video's native unit; the Lottie adapter converts at the edge). The model: a CONTINUOUS
- * window through the clip anchored at the HOLD time `H`, so the clip reaches its hold look
- * EXACTLY at the effective content start and eases onward through the OUT segment with no
- * hold→outro pop by construction.
+ * video's native unit; the Lottie adapter converts at the edge).
+ *
+ * ⭐ SESSION Y RE-PIN, deliberate: the OUTRO ANCHOR MOVED. The superseded rule played
+ * `[H → H + outSpan]` — the hold-anchored window, which for a real furniture clip is its
+ * motionless middle, while the authored build-off never played (the owner reported the
+ * consequence three times). The corrected rule: **a follower's outro is the CLIP'S OWN
+ * ENDING** — end-anchored `[clipEnd − outSpan → clipEnd]`, or the clip's authored
+ * `[outroStart → clipEnd]` when genuinely authored phases exist (they WIN). Intro and hold
+ * derivations are UNCHANGED and their assertions below are byte-identical to the old suite.
  */
 
 /** The owner's decisive case: 2 s composition at 25 fps, content start 1 s, OUT 0.5 s. */
@@ -18,90 +28,128 @@ const OWNER: FollowAnchors = {
   fps: 25,
 };
 
-describe('followWindowMs — the owner case and the default degeneracy', () => {
-  it("the owner's case: 5 s clip, hold at second 3 ⇒ window [2 s → 3 s] / 3 s / [3 s → 3.5 s]", () => {
+const NO_CLAMPS = {
+  introShort: false,
+  holdPastEnd: false,
+  noOutSegment: false,
+  wholeClipOutro: false,
+  outroCutByRemoval: false,
+  lateSettle: false,
+  holdJump: false,
+};
+
+describe('followWindowMs — the owner case, corrected: the outro is the clip’s ending', () => {
+  it("the owner's case: 5 s clip, hold at second 3 ⇒ intro [2 s → 3 s], hold 3 s, outro [4.5 s → 5 s]", () => {
     const w = followWindowMs(OWNER, { durationMs: 5000, holdAtMs: 3000 });
+    // Intro and hold: UNCHANGED from the shipped rule.
     expect(w.entranceSpanMs).toBeCloseTo(1000);
     expect(w.outSpanMs).toBeCloseTo(500);
     expect(w.introStartMs).toBeCloseTo(2000);
+    expect(w.introDelayMs).toBe(0);
     expect(w.holdMs).toBeCloseTo(3000);
-    expect(w.outroEndMs).toBeCloseTo(3500);
+    // The corrected outro: END-anchored — the clip's last half-second, landing on its end.
+    expect(w.outroStartMs).toBeCloseTo(4500);
+    expect(w.outroEndMs).toBeCloseTo(5000);
     expect(w.hasOutro).toBe(true);
-    expect(w.clamps).toEqual({
-      introShort: false,
-      outroClamped: false,
-      holdPastEnd: false,
-      noOutSegment: false,
-    });
+    expect(w.authored).toBe(false);
+    // The hold→outro seam jumps (3 s → 4.5 s) — deliberately accepted, named for the hint.
+    expect(w.clamps).toEqual({ ...NO_CLAMPS, holdJump: true });
   });
 
-  it('absent holdAt degenerates to "play the clip from its head" — the general rule at H = entrance span', () => {
+  it('absent holdAt degenerates to "play the clip from its head" — H = entrance span; the outro is still the ending', () => {
     const w = followWindowMs(OWNER, { durationMs: 5000 });
-    // intro [0 → entranceSpan], outro [entranceSpan → entranceSpan + outSpan]: no separate branch.
     expect(w.introStartMs).toBe(0);
     expect(w.holdMs).toBeCloseTo(1000);
-    expect(w.outroEndMs).toBeCloseTo(1500);
-    expect(w.clamps).toEqual({
-      introShort: false,
-      outroClamped: false,
-      holdPastEnd: false,
-      noOutSegment: false,
-    });
+    expect(w.outroStartMs).toBeCloseTo(4500);
+    expect(w.outroEndMs).toBeCloseTo(5000);
+    expect(w.clamps.holdJump).toBe(true);
   });
 
-  it('a clip LONGER than the composition always fits — both spans are ≤ the comp length, no clamp fires', () => {
+  it('a clip LONGER than the composition always fits — no clamp beyond the seam jump fires', () => {
     const w = followWindowMs(OWNER, { durationMs: 60_000, holdAtMs: 30_000 });
-    expect(w.clamps).toEqual({
-      introShort: false,
-      outroClamped: false,
-      holdPastEnd: false,
-      noOutSegment: false,
-    });
     expect(w.introStartMs).toBeCloseTo(29_000);
-    expect(w.outroEndMs).toBeCloseTo(30_500);
+    expect(w.outroStartMs).toBeCloseTo(59_500);
+    expect(w.outroEndMs).toBeCloseTo(60_000);
+    expect(w.clamps).toEqual({ ...NO_CLAMPS, holdJump: true });
+  });
+
+  it('a hold that happens to sit exactly at the outro start does NOT flag the seam', () => {
+    // 5 s clip, outSpan 0.5 s ⇒ outroStart 4.5 s; holdAt exactly there ⇒ continuous.
+    const w = followWindowMs(OWNER, { durationMs: 5000, holdAtMs: 4500 });
+    expect(w.holdMs).toBeCloseTo(4500);
+    expect(w.outroStartMs).toBeCloseTo(4500);
+    expect(w.clamps.holdJump).toBe(false);
+  });
+});
+
+describe('followWindowMs — AUTHORED phases win (the precedence rule)', () => {
+  it('an authored intro shorter than the entrance DELAYS, so it finishes at the content start', () => {
+    const w = followWindowMs(OWNER, { durationMs: 5000, authoredIntroEndMs: 400 });
+    expect(w.authored).toBe(true);
+    expect(w.introStartMs).toBe(0);
+    expect(w.holdMs).toBeCloseTo(400); // the hold frame IS the authored introEnd
+    expect(w.introDelayMs).toBeCloseTo(600); // parks 0.6 s, plays 0.4 s, settles at 1 s
+    expect(w.clamps.lateSettle).toBe(false);
+  });
+
+  it('an authored intro LONGER than the entrance starts at active.in and settles late — flagged', () => {
+    const w = followWindowMs(OWNER, { durationMs: 5000, authoredIntroEndMs: 2500 });
+    expect(w.introDelayMs).toBe(0);
+    expect(w.holdMs).toBeCloseTo(2500);
+    expect(w.clamps.lateSettle).toBe(true);
+  });
+
+  it('an authored outro plays the clip’s own [outroStart → clipEnd]; longer than the OUT segment flags the cut', () => {
+    const w = followWindowMs(OWNER, { durationMs: 5000, authoredOutroStartMs: 4000 });
+    expect(w.authored).toBe(true);
+    expect(w.outroStartMs).toBeCloseTo(4000);
+    expect(w.outroEndMs).toBeCloseTo(5000);
+    // 1 s of authored outro against a 0.5 s OUT segment: the timeline removes mid-outro
+    // (on air the exit waits instead) — flagged, never rescaled.
+    expect(w.clamps.outroCutByRemoval).toBe(true);
+  });
+
+  it('an authored outro that FITS the OUT segment does not flag', () => {
+    const w = followWindowMs(OWNER, { durationMs: 5000, authoredOutroStartMs: 4600 });
+    expect(w.clamps.outroCutByRemoval).toBe(false);
+  });
+
+  it('holdAt is IGNORED when an authored intro governs — the hold frame is introEnd', () => {
+    const w = followWindowMs(OWNER, {
+      durationMs: 5000,
+      holdAtMs: 3000,
+      authoredIntroEndMs: 400,
+    });
+    expect(w.holdMs).toBeCloseTo(400);
   });
 });
 
 describe('followWindowMs — clamps, each flagged for the hint machinery', () => {
   it('H smaller than the entrance span ⇒ the intro starts at the clip start, shorter than the entrance', () => {
     const w = followWindowMs(OWNER, { durationMs: 5000, holdAtMs: 400 });
-    expect(w.introStartMs).toBe(0); // cannot start before the clip
+    expect(w.introStartMs).toBe(0);
     expect(w.holdMs).toBeCloseTo(400);
     expect(w.clamps.introShort).toBe(true);
-    expect(w.clamps.outroClamped).toBe(false);
-  });
-
-  it('H + outSpan past the clip end ⇒ the outro clamps at the clip end', () => {
-    const w = followWindowMs(OWNER, { durationMs: 5000, holdAtMs: 4800 });
-    expect(w.outroEndMs).toBe(5000);
-    expect(w.clamps.outroClamped).toBe(true);
   });
 
   it('H past the clip end (stale holdAt after an asset swap) ⇒ clamps to the clip end, flagged', () => {
     const w = followWindowMs(OWNER, { durationMs: 2000, holdAtMs: 9000 });
     expect(w.holdMs).toBe(2000);
     expect(w.clamps.holdPastEnd).toBe(true);
-    // At the very end there is nothing left to play out — the outro is degenerate.
-    expect(w.outroEndMs).toBe(2000);
-    expect(w.hasOutro).toBe(false);
+    // The ending still plays: outro [1.5 s → 2 s] — a BACKWARD seam jump, still flagged.
+    expect(w.outroStartMs).toBeCloseTo(1500);
+    expect(w.hasOutro).toBe(true);
+    expect(w.clamps.holdJump).toBe(true);
   });
 
   it('a clip shorter than the entrance under DEFAULT H ⇒ the short-clip clamp, flagged', () => {
     const w = followWindowMs(OWNER, { durationMs: 600 });
-    // Default H = entranceSpan (1000) clamps to the clip end; the intro is the whole clip and
-    // still shorter than the entrance — the clip freezes early, and the hint says so.
     expect(w.holdMs).toBe(600);
     expect(w.clamps.holdPastEnd).toBe(true);
     expect(w.clamps.introShort).toBe(true);
   });
 
   it('no OUT segment (outPoint at active.out) ⇒ a degenerate outro — FLAGGED, never silent (session V)', () => {
-    // The owner-observed defect's cause: an out point at the very end of the active range
-    // derives outSpan 0 ⇒ outroEndMs === holdMs ⇒ no outro — while the intro half stays
-    // perfect. Reachable by ordinary authoring (the marker drag CLAMPS at active.out, and
-    // a shrink-then-regrow of the total pins active.out below the ruler's end). The RULE
-    // stands (the OUT segment on air is [outPoint → active.out]); what changes is that the
-    // silence stops: the window now carries the flag, and the Inspector explains itself.
     const w = followWindowMs({ ...OWNER, outPoint: 50 }, { durationMs: 5000, holdAtMs: 3000 });
     expect(w.outSpanMs).toBe(0);
     expect(w.hasOutro).toBe(false);
@@ -118,9 +166,36 @@ describe('followWindowMs — clamps, each flagged for the hint machinery', () =>
     expect(w.clamps.noOutSegment).toBe(true);
   });
 
-  it('a REAL OUT segment does not flag', () => {
+  it('a REAL OUT segment does not flag noOutSegment', () => {
     const w = followWindowMs(OWNER, { durationMs: 5000, holdAtMs: 3000 });
     expect(w.clamps.noOutSegment).toBe(false);
+  });
+
+  it('an OUT segment longer than the clip ⇒ the WHOLE clip is the outro, flagged', () => {
+    const w = followWindowMs(OWNER, { durationMs: 300 });
+    expect(w.outroStartMs).toBe(0);
+    expect(w.outroEndMs).toBe(300);
+    expect(w.clamps.wholeClipOutro).toBe(true);
+  });
+});
+
+describe('videoFollowClipFacts — the attach SEED SIGNATURE derives as if absent', () => {
+  it('the exact seeds (midpoint / durationMs) are NOT authored', () => {
+    expect(videoFollowClipFacts({ introEnd: 2500, outroStart: 5000 }, 5000)).toEqual({});
+  });
+
+  it('a genuinely authored value survives; a seed beside it does not', () => {
+    expect(videoFollowClipFacts({ introEnd: 2000, outroStart: 5000 }, 5000)).toEqual({
+      authoredIntroEndMs: 2000,
+    });
+    expect(videoFollowClipFacts({ introEnd: 2500, outroStart: 4200 }, 5000)).toEqual({
+      authoredOutroStartMs: 4200,
+    });
+  });
+
+  it('absent phases and absent fields are absent facts', () => {
+    expect(videoFollowClipFacts(undefined, 5000)).toEqual({});
+    expect(videoFollowClipFacts({}, 5000)).toEqual({});
   });
 });
 
@@ -136,24 +211,21 @@ describe('followWindowMs — unit conversion across frame rates', () => {
       { durationMs: 5000, holdAtMs: 3000 },
     );
     expect(at2997.introStartMs).toBeCloseTo(at50.introStartMs, 5);
+    expect(at2997.holdMs).toBeCloseTo(at50.holdMs, 5);
+    expect(at2997.outroStartMs).toBeCloseTo(at50.outroStartMs, 5);
     expect(at2997.outroEndMs).toBeCloseTo(at50.outroEndMs, 5);
-    // …and the hold look lands at the effective content start within one comp frame.
-    const frameMs = 1000 / 29.97;
-    expect(Math.abs(at2997.holdMs - at2997.introStartMs - at2997.entranceSpanMs)).toBeLessThan(
-      frameMs,
-    );
   });
 
-  it('a zero/invalid fps yields a degenerate (all-zero-span) window rather than NaN', () => {
+  it('a zero/invalid fps degenerates every span to zero — never NaN', () => {
     const w = followWindowMs({ ...OWNER, fps: 0 }, { durationMs: 5000, holdAtMs: 3000 });
     expect(w.entranceSpanMs).toBe(0);
     expect(w.outSpanMs).toBe(0);
-    expect(Number.isFinite(w.holdMs)).toBe(true);
+    expect(Number.isFinite(w.outroStartMs)).toBe(true);
   });
 });
 
-describe('followsComposition — the ONE spelling of "is this element a follower"', () => {
-  it('true only for source composition; manual, markers, and absent are not followers', () => {
+describe('followsComposition — the one spelling of "is this a follower"', () => {
+  it('matches only the composition source, both kinds’ shapes', () => {
     expect(followsComposition({ source: 'composition' })).toBe(true);
     expect(followsComposition({ source: 'manual' })).toBe(false);
     expect(followsComposition({ source: 'markers' })).toBe(false);

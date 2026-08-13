@@ -50,25 +50,46 @@ span`, which degenerates exactly to "play the clip from its head" — the simple
   abandon `H`'s look, which is the one thing follow promises to keep. The stored `holdBehavior`
   is untouched; only the resolved hold under follow reads this way, and the Playout checklist's
   `infinite` mirror says the same — see §8.)
-- **outro** = `[H → min(H + outSpan, clipEnd)]` — CONTINUOUS from the held frame, so there is no
-  hold→outro pop by construction, and the cut at stage-clear is covered by the composition's own
-  exit animation.
+- **outro** — ⭐ CORRECTED in session Y (2026-08-13): **the clip's OWN ENDING.** With no
+  authored phases: `[clipEnd − outSpan → clipEnd]`, landing on the clip's last frame exactly as
+  the composition removes the element. With authored phases (`introEnd`/`outroStart` from
+  markers or manual): **they WIN** — intro = the clip's `[0 → introEnd]` scheduled (via
+  `introDelayMs`) to FINISH at the content start; hold = freeze at `introEnd`; outro = the
+  clip's own `[outroStart → clipEnd]`. Authored content always beats derived. The hold→outro
+  seam MAY jump for a clip that is not static in its middle — deliberately accepted, flagged
+  (`holdJump`) with both clip times named in the hint. See §2.1 for the superseded rule and
+  §11 for the evidence that corrected it.
 - `speed` is NEVER touched — §D1.1 (archived Lottie design). The window changes WHICH frames
   play, never the rate.
 
-### 2.1 Rejected alternative: anchor the outro to the clip's END
+### 2.1 ⭐ REVERSED (session Y): end-anchoring was rejected on a FALSE premise — the record
 
-`[clipEnd − outSpan → clipEnd]` would show an authored build-off tail — and was REJECTED because
-the held frame would cut to a distant frame at the OUT boundary, the exact discontinuity follow
-exists to remove. An operator who wants the clip's authored ending uses markers/manual phases.
+The original decision, kept verbatim as the lesson:
+
+> `[clipEnd − outSpan → clipEnd]` would show an authored build-off tail — and was REJECTED
+> because the held frame would cut to a distant frame at the OUT boundary, the exact
+> discontinuity follow exists to remove. An operator who wants the clip's authored ending uses
+> markers/manual phases.
+
+**Why the premise fails (the owner proved it with two project files, §11):** a furniture
+backdrop is built to be STATIC between its build-on and its build-off — so the held frame and
+the end-anchored outro's first frame both sit inside that static region and CANNOT visibly pop.
+The old rule optimised against an unreachable hazard and, in exchange, made follow unable to
+ever show a clip's ending: the "outro" it played was the motionless middle, and the authored
+build-off never played. The corrected rule (§2) is one sentence: **a follower's outro is the
+clip's own ending — follow decides WHEN phases happen, never WHICH frames the ending consists
+of.** For the genuinely non-static clip the seam jump is flagged with both clip times
+(`holdJump`), which is strictly better than never showing the ending.
 
 ### 2.2 The owner's case — the motivating example (tested verbatim, both kinds)
 
 5 s clip, hold look at clip-second 3, composition 2 s, content start at 1 s, OUT segment 0.5 s.
 Under follow + `holdAt = 3 s`: the intro plays clip `[2 s → 3 s]` during the 1 s entrance; the
-clip sits on second-3's look from the moment the ticker shows, through the entire hold; the outro
-plays clip `[3 s → 3.5 s]` inside the OUT segment. Head `[0 → 2 s]` and tail `[3.5 s → 5 s]`
-deliberately unplayed. Nothing rescaled, nothing pops.
+clip sits on second-3's look from the moment the ticker shows, through the entire hold; the
+outro — session Y — plays the clip's ENDING `[4.5 s → 5 s]` inside the OUT segment, landing on
+the last frame at removal. The head `[0 → 2 s]` and the mid-section `[3 s → 4.5 s]` stay
+unplayed. Nothing rescaled; the 3 s → 4.5 s seam jump is flagged and invisible on a
+static-middle clip.
 
 ### 2.3 Consequences, stated so they are not later filed as bugs
 
@@ -89,22 +110,35 @@ deliberately unplayed. Nothing rescaled, nothing pops.
 
 ### 2.4 Clamps — surfaced through the EXISTING hint machinery, no second warning surface
 
-- `H < entranceSpan` ⇒ the intro starts at the clip start and is SHORTER than the entrance — the
-  clip freezes early; hint flags it (`introShort`).
-- `H + outSpan > clipEnd` ⇒ the outro clamps at the clip end; hint flags it (`outroClamped`).
-- `H > clipEnd` (stale `holdAt` after swapping the asset) ⇒ clamp to `clipEnd`, flag
-  (`holdPastEnd`).
-- Clip shorter than the entrance with default `H` ⇒ the short-clip clamp: `H` clamps to the clip
-  end and the intro is shorter than the entrance — both flags above fire.
+Session Y replaced `outroClamped` (an artefact of the superseded hold-anchored outro) with the
+corrected rule's set:
+
+- `introShort` — no-phases: `H < entranceSpan`; the intro starts at the clip start, shorter than
+  the entrance, and freezes early.
+- `holdPastEnd` — no-phases: `H` (stale `holdAt`, or a clip shorter than the entrance under
+  default `H`) clamps to the clip end.
+- `noOutSegment` — session V: zero OUT segment ⇒ no outro; never silent.
+- `wholeClipOutro` — no-phases: `outSpan ≥ clip length` ⇒ the outro plays the whole clip from
+  its start.
+- `outroCutByRemoval` — authored outro longer than the OUT segment ⇒ the timeline removes the
+  element mid-outro (on air the exit WAITS instead — content-first ordering); never rescaled.
+- `lateSettle` — authored intro longer than the entrance ⇒ starts at `active.in`, settles late.
+- `holdJump` — the hold→outro seam jumps (either direction); informational, both clip times
+  named in the hint.
 
 ## 3. Schema (all additive; stored scenes round-trip unchanged)
 
 - Lottie: `source: z.enum(['markers', 'manual'])` grows `'composition'`.
 - Video: `VideoPhasesSchema` had NO source field; it gains `source` (optional) with absent ⇒
   `'manual'`-equivalent. The two schemas' shapes are otherwise untouched — units are NOT unified.
-- Under `'composition'`, stored `introEnd`/`outroStart` values are IGNORED (the schema comment
-  says so); they stay REQUIRED-present so a Detach has somewhere to land without a shape change,
-  and so a `markers` clip that follows and detaches keeps parsing everywhere.
+- ⭐ Session Y: `introEnd`/`outroStart` are OPTIONAL in both kinds' schemas. Under
+  `'composition'` an AUTHORED value GOVERNS the window (the precedence rule); ABSENT — what
+  attach writes now — means derive, with the outro as the clip's ending. The pre-Y attach SEED
+  SIGNATURE (video `round(durationMs/2)`/`durationMs`, lottie midpoint/`op`) derives as if
+  absent via the one discrimination per kind (`videoFollowClipFacts` /
+  `lottieFollowClipFacts`), so every already-saved follow scene — the owner's included —
+  derives correctly. Detach bakes the currently-derived hold + the clip's own outro start:
+  truthful by construction.
 - `holdAt` — optional, clip-native units per kind (Lottie animation frames, video ms), meaningful
   ONLY under `source: 'composition'` (ignored otherwise; the comment says so).
 
@@ -320,3 +354,35 @@ visible and crawling, and trimming `lifespan.out` to the out point leaves the ho
 unchanged (pinned: the trimmed and untrimmed scenes leave `H` within one tick of each other).
 The lifespan gate is VISIBILITY-only; it neither completes a content driver nor detaches it
 from the hold aggregation.
+
+## 11. Session Y (2026-08-13) — the DESIGN CORRECTION, and why two instrumented sessions found nothing
+
+**This was not a code defect. The runtime did what this design specified; the specification was
+wrong.** Sessions V and X instrumented below the specification — driver options, exit ledgers,
+elapsed anchors, hold sources — and correctly found every mechanism sound, because the fault was
+the RULE those mechanisms implemented: the outro window `[H → H + outSpan]` is, for a real
+furniture clip, its motionless middle.
+
+**The owner's paired evidence files** (`normal.cgproj` / `follow.cgproj` — the same scene before
+and after attaching follow; comp 358 f @ 25 fps, `contentStart 125`, `outPoint 260`; the
+converted clip is 358 frames @ 25 fps, so clip and comp frames are 1:1): his clip is intro
+`0 → 125`, static `125 → 260`, authored build-off `260 → 358`, and he set the markers to those
+numbers deliberately. The old rule derived outro `[125 → 223]` in clip frames — THE STATIC
+MIDDLE — while frames `223 → 358`, the entire authored build-off, never played on any surface.
+His words: "the completed section keeps showing, then it suddenly disappears." End-anchored, the
+same numbers give `[260 → 358]` — his build-off, exactly, with no extra authoring.
+
+**The two files also exposed the stored lie:** attaching follow WROTE seed values
+(`introEnd: 7160 = durationMs/2`, `outroStart: 14320 = durationMs`) into an element that had no
+phases — fields describing no behaviour. Under the corrected rule (authored wins) they would
+have masqueraded as intent, so: attach now writes `{source: 'composition'}` alone (the fields
+went optional), and the seed SIGNATURE derives as if absent (the per-kind shims), keeping every
+already-saved follow scene correct. A hand-authored value that happens to equal the seed derives
+as derived — a corner accepted here: the derived behaviour is closest to such a clip's intent,
+and the alternative (a version flag) buys nothing an operator can see.
+
+**What deliberately did NOT change:** the intro/hold halves (byte-identical assertions carried
+through every re-pinned suite); §D1.1 (`speed` untouched); the OUT segment definition
+(`[outPoint → activeRange.out]`, §10.1's settled answer); the content-driven hold timing
+(§10.2 — the owner's separate open decision); and the exit ordering. Every outro re-pin in the
+test suites is labelled "session Y re-pin" with the old and new anchors named.

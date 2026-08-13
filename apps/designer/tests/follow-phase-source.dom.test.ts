@@ -177,10 +177,11 @@ describe('Lottie — attach, window, hold at, detach, no-anchors', () => {
     click(follow!);
     const p = (stored('lot') as LottieElement).phases!;
     expect(p.source).toBe('composition');
-    // The landing slots are the claim-least seed (midpoint / op) — IGNORED under follow,
-    // present so a later Detach has somewhere to land.
-    expect(p.introEnd).toBe(30);
-    expect(p.outroStart).toBe(60);
+    // Session Y — the source ALONE: seeded numbers were a stored lie (under the corrected
+    // rule an authored value GOVERNS, so a seed would masquerade as intent). Absent fields
+    // mean derive-from-the-composition, with the outro as the clip's ending.
+    expect(p.introEnd).toBeUndefined();
+    expect(p.outroStart).toBeUndefined();
   });
 
   it('a manual clip can attach too, keeping its stored numbers exactly', () => {
@@ -194,7 +195,9 @@ describe('Lottie — attach, window, hold at, detach, no-anchors', () => {
   });
 
   it('under follow the derived window renders read-only, and "Set hold frame" seeds via the SHARED helper', () => {
-    const el = lottieEl({ phases: { introEnd: 12, outroStart: 44, source: 'composition' } });
+    // Session Y: source-only — the attach state. (Authored values now govern the window and
+    // replace the hold-at affordance; that path is pinned separately below.)
+    const el = lottieEl({ phases: { source: 'composition' } });
     mount(el);
     expect(host.querySelector('[data-testid="follow-window"]')).not.toBeNull();
     // No holdAt yet — the default plays from the clip head; the seed affordance exists.
@@ -207,9 +210,7 @@ describe('Lottie — attach, window, hold at, detach, no-anchors', () => {
   });
 
   it('clearing hold at reverts to the default (play from the head)', () => {
-    const el = lottieEl({
-      phases: { introEnd: 12, outroStart: 44, source: 'composition', holdAt: 30 },
-    });
+    const el = lottieEl({ phases: { source: 'composition', holdAt: 30 } });
     mount(el);
     const clear = button(/clear hold frame/i);
     expect(clear).not.toBeNull();
@@ -218,17 +219,16 @@ describe('Lottie — attach, window, hold at, detach, no-anchors', () => {
   });
 
   it('Detach bakes the EXACT currently-derived values into manual and keeps holdAt', () => {
-    const el = lottieEl({
-      phases: { introEnd: 12, outroStart: 44, source: 'composition', holdAt: 30 },
-    });
+    const el = lottieEl({ phases: { source: 'composition', holdAt: 30 } });
     mount(el);
     const detach = button(/detach/i);
     expect(detach).not.toBeNull();
     click(detach!);
     const p = (stored('lot') as LottieElement).phases!;
-    // Derived: H = frame 30. The manual model expresses the window's HOLD: both marks land
-    // on it (the offset intro and bounded outro are follow-only capabilities).
-    expect(p).toMatchObject({ introEnd: 30, outroStart: 30, source: 'manual', holdAt: 30 });
+    // Session Y — truthful bake: hold H = frame 30, and the clip's OWN outro start — the
+    // END-anchored 60 − 18 (OUT 0.6 s at fr 30) = frame 42. Manual then plays what follow
+    // was playing.
+    expect(p).toMatchObject({ introEnd: 30, outroStart: 42, source: 'manual', holdAt: 30 });
   });
 
   it('with NO lifecycle the mode explains itself instead of silently doing nothing', () => {
@@ -248,12 +248,13 @@ describe('video — the same affordances in the clip’s ms units', () => {
     click(follow!);
     const p = (stored('vid') as VideoElement).phases!;
     expect(p.source).toBe('composition');
-    expect(p.introEnd).toBe(2500); // the shared poster midpoint (ms)
-    expect(p.outroStart).toBe(5000);
+    // Session Y — the source alone; no seeded numbers (see the lottie attach pin above).
+    expect(p.introEnd).toBeUndefined();
+    expect(p.outroStart).toBeUndefined();
   });
 
-  it('under follow: window renders, "Set hold time" seeds the poster midpoint, Detach bakes H', () => {
-    const el = videoEl({ phases: { introEnd: 400, outroStart: 600, source: 'composition' } });
+  it('under follow: window renders, "Set hold time" seeds the poster midpoint, Detach bakes truthfully', () => {
+    const el = videoEl({ phases: { source: 'composition' } });
     mount(el);
     expect(host.querySelector('[data-testid="follow-window"]')).not.toBeNull();
     click(button(/set hold time/i)!);
@@ -262,8 +263,8 @@ describe('video — the same affordances in the clip’s ms units', () => {
     render(stored('vid') as unknown as Element);
     click(button(/detach/i)!);
     const p = (stored('vid') as VideoElement).phases!;
-    // H = holdAt 2500 ms; entrance 1000 ms; OUT 600 ms ⇒ derived hold 2500, baked to both.
-    expect(p).toMatchObject({ introEnd: 2500, outroStart: 2500, source: 'manual', holdAt: 2500 });
+    // Session Y — H = holdAt 2500 ms; OUT 600 ms ⇒ the clip's own outro start 5000 − 600.
+    expect(p).toMatchObject({ introEnd: 2500, outroStart: 4400, source: 'manual', holdAt: 2500 });
   });
 
   it('with NO lifecycle the video panel explains itself too', () => {
@@ -301,5 +302,24 @@ describe('session V — the zero-OUT-segment clamp explains itself (never a sile
     });
     const clamps = host.querySelector('[data-testid="follow-clamps"]');
     expect(clamps?.textContent ?? '').not.toMatch(/no OUT segment/i);
+  });
+});
+
+describe('session Y — authored phases govern, and the seam hint names both clip times', () => {
+  it('authored values replace the hold-at affordance with the explanatory line', () => {
+    // 12/44 are genuinely authored (≠ the 30/60 seed signature for the 60-frame clip).
+    mount(lottieEl({ phases: { introEnd: 12, outroStart: 44, source: 'composition' } }));
+    expect(host.querySelector('[data-testid="follow-hold-authored"]')).not.toBeNull();
+    expect(button(/set hold frame/i)).toBeNull();
+  });
+
+  it('the hold→outro seam jump is named with both clip times (the deliberate-jump hint)', () => {
+    // Source-only video: H = entrance 1000 ms; END-anchored outro starts at 4400 ms — a jump.
+    mount(videoEl({ phases: { source: 'composition' } }));
+    const clamps = host.querySelector('[data-testid="follow-clamps"]');
+    expect(clamps).not.toBeNull();
+    expect(clamps!.textContent).toMatch(/jumps from its held look/i);
+    expect(clamps!.textContent).toContain('1.00 s');
+    expect(clamps!.textContent).toContain('4.40 s');
   });
 });

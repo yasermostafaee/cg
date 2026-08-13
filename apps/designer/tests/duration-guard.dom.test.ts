@@ -196,9 +196,11 @@ describe('the guard decision — video (adapter: durationMs)', () => {
     expect(hostFrames()).toBe(50);
     const el = children()[0] as VideoElement;
     expect(el.phases?.source).toBe('composition');
-    // The claim-least slots are the SHARED follow-attach seed (poster midpoint / duration).
-    expect(el.phases?.introEnd).toBe(2500);
-    expect(el.phases?.outroStart).toBe(5000);
+    // Session Y — the attach writes the SOURCE alone; absent fields mean derive-from-the-
+    // composition with the outro as the clip's ending (a seeded number would masquerade as
+    // authored intent now).
+    expect(el.phases?.introEnd).toBeUndefined();
+    expect(el.phases?.outroStart).toBeUndefined();
   });
 
   it('CANCEL leaves the scene IDENTICAL (object identity — stronger than byte equality)', () => {
@@ -266,11 +268,13 @@ describe('lottie parity (adapter: (op − ip) / fr at 1× — the creation defau
     expect(children()).toHaveLength(1);
   });
 
-  it('BACKDROP seeds the SHARED follow-attach slots (midpoint / op)', () => {
+  it('BACKDROP writes the follow source alone (session Y — no seeded numbers)', () => {
     act(() => guard.guardedAddLottie(lottieEl(), meta));
     click(dialogButton(/backdrop/i)!);
     const el = children()[0] as Extract<Element, { type: 'lottie' }>;
-    expect(el.phases).toMatchObject({ introEnd: 75, outroStart: 150, source: 'composition' });
+    expect(el.phases?.source).toBe('composition');
+    expect(el.phases?.introEnd).toBeUndefined();
+    expect(el.phases?.outroStart).toBeUndefined();
     expect(hostFrames()).toBe(50);
   });
 

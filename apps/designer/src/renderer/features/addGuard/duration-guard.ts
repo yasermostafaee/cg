@@ -104,12 +104,14 @@ export function guardedAddVideo(element: VideoElement): void {
     commitBackdrop: () =>
       designerStore.addElement({
         ...element,
-        // A fresh video door never carries phases; the claim-least slots are the SHARED
-        // follow-attach seed (one rule with the Inspector's attach button).
+        // Session Y — a fresh video door never carries phases; the attach writes the SOURCE
+        // alone (one rule with the Inspector's attach button): absent fields mean 'derive the
+        // window; the outro is the clip's ending'. Authored phases keep their values — they
+        // now genuinely govern the window.
         phases:
           element.phases !== undefined && !followsComposition(element.phases)
             ? { ...element.phases, source: 'composition' as const }
-            : (element.phases ?? videoFollowAttachPhases(element.durationMs)),
+            : (element.phases ?? videoFollowAttachPhases()),
       } as Element),
   });
 }
@@ -131,13 +133,14 @@ export function guardedAddLottie(element: LottieElement, meta: LottieClipMeta): 
     commitBackdrop: () =>
       designerStore.addElement({
         ...element,
-        // A clip that arrived WITH bodymovin markers keeps its marker values in the slots and
-        // just takes the follow source (session S's attach-from-markers semantics); a
-        // marker-less clip gets the shared claim-least seed.
+        // A clip that arrived WITH bodymovin markers keeps its marker values and takes the
+        // follow source — under session Y's corrected rule those authored values now GOVERN
+        // (the clip's own intro/outro, scheduled by the composition). A marker-less clip gets
+        // the source alone: absent fields mean 'derive; the outro is the clip's ending'.
         phases:
           element.phases !== undefined
             ? { ...element.phases, source: 'composition' as const }
-            : lottieFollowAttachPhases(meta),
+            : lottieFollowAttachPhases(),
       } as Element),
   });
 }

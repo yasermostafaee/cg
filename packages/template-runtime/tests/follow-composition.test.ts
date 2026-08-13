@@ -74,9 +74,12 @@ function followLottie(over: Record<string, unknown> = {}): Element {
     speed: 1,
     loopMode: 'none',
     holdBehavior: 'freeze',
-    // The stored numbers are DELIBERATELY absurd: under follow they are IGNORED, and any
-    // test failing with 40/60-shaped output has caught a read of the stored values.
-    phases: { introEnd: 40, outroStart: 60, source: 'composition', holdAt: 150 },
+    // Session Y — the stored numbers are the pre-Y attach SEED SIGNATURE (midpoint 125,
+    // op 250): under the corrected rule they derive AS IF ABSENT (a genuinely authored value
+    // would now GOVERN the window — the precedence rule), so this fixture models every
+    // already-saved follow scene. A test failing with 125/250-shaped intro output has caught
+    // the seed masquerading as intent.
+    phases: { introEnd: 125, outroStart: 250, source: 'composition', holdAt: 150 },
     ...over,
   } as unknown as Element;
 }
@@ -101,7 +104,8 @@ function followVideo(over: Record<string, unknown> = {}): Element {
     assetId: 'asset-vid',
     durationMs: 5000,
     holdBehavior: 'loop',
-    phases: { introEnd: 400, outroStart: 600, source: 'composition', holdAt: 3000 },
+    // The seed signature for the 5 s clip (2500 / 5000) — derives as absent (session Y).
+    phases: { introEnd: 2500, outroStart: 5000, source: 'composition', holdAt: 3000 },
     ...over,
   } as unknown as Element;
 }
@@ -143,7 +147,7 @@ beforeEach(() => {
   handles.length = 0;
 });
 
-describe("the owner's case through the scrub path — window [100 → 150] / 150 / [150 → 175]", () => {
+describe("the owner's case through the scrub path — window [100 → 150] / 150 / outro [225 → 250] (session Y: the clip's ending)", () => {
   it('the playhead drives the derived window, not the stored numbers', () => {
     const r = mount(scene([followLottie()]));
     r.tick(0); // the composition's in-point → the WINDOW start (clip-second 2)
@@ -155,12 +159,12 @@ describe("the owner's case through the scrub path — window [100 → 150] / 150
     r.tick(65); // deep in the hold — still the held look
     expect(lastFrame()).toBe(150);
     r.tick(87); // 12 comp frames past the out-point = 240 ms into the OUT segment
-    expect(lastFrame()).toBe(162);
-    r.tick(100); // the active out — the outro has exactly fitted the OUT segment
-    expect(lastFrame()).toBe(175);
-    // The head [0 → 100] and tail [175 → 250] are deliberately unplayed.
+    expect(lastFrame()).toBe(237); // session Y: END-anchored outro [225 → 250] — the ending
+    r.tick(100); // the active out — the clip's LAST frame, exactly at removal
+    expect(lastFrame()).toBe(250);
+    // The head [0 → 100] and the static middle [150 → 225] beyond the hold stay unplayed.
     expect(Math.min(...handles[0]!.frames)).toBeGreaterThanOrEqual(100);
-    expect(Math.max(...handles[0]!.frames)).toBeLessThanOrEqual(175);
+    expect(Math.max(...handles[0]!.frames)).toBe(250);
     r.remove();
   });
 
@@ -171,14 +175,14 @@ describe("the owner's case through the scrub path — window [100 → 150] / 150
 
   it('absent holdAt degenerates to "play the clip from its head"', () => {
     const r = mount(
-      scene([followLottie({ phases: { introEnd: 40, outroStart: 60, source: 'composition' } })]),
+      scene([followLottie({ phases: { introEnd: 125, outroStart: 250, source: 'composition' } })]),
     );
     r.tick(0);
     expect(lastFrame()).toBe(0); // intro [0 → 50] — the head, exactly as a manual clip would
     r.tick(50);
     expect(lastFrame()).toBe(50); // H = entrance span
     r.tick(100);
-    expect(lastFrame()).toBe(75); // outro [50 → 75]
+    expect(lastFrame()).toBe(250); // session Y: the outro is the clip's ending [225 → 250]
     r.remove();
   });
 });
@@ -187,13 +191,15 @@ describe('re-derivation — dragging a lifecycle marker moves the window with no
   it('moving the out-point re-derives the outro span on the next build', () => {
     const r1 = mount(scene([followLottie()]));
     r1.tick(100);
-    expect(lastFrame()).toBe(175); // OUT span 0.5 s
+    expect(lastFrame()).toBe(250); // OUT span 0.5 s ⇒ outro [225 → 250] (session Y)
     r1.remove();
     handles.length = 0;
-    // The SAME stored element, a moved marker: outPoint 85 ⇒ OUT span 0.3 s ⇒ outroEnd 165.
+    // The SAME stored element, a moved marker: outPoint 85 ⇒ OUT span 0.3 s ⇒ outro [235 → 250].
     const r2 = mount(scene([followLottie()], { lifecycle: { outPoint: 85, contentStart: 50 } }));
+    r2.tick(90); // 5 comp frames past the new out-point = 100 ms in
+    expect(lastFrame()).toBe(240);
     r2.tick(100);
-    expect(lastFrame()).toBe(165);
+    expect(lastFrame()).toBe(250);
     r2.remove();
   });
 
@@ -208,15 +214,16 @@ describe('re-derivation — dragging a lifecycle marker moves the window with no
 
 describe('no circularity — a follower contributes NOTHING to the entrance settle', () => {
   it('the effective content start comes from the OTHER furniture; the follower is null', () => {
-    // No content-start marker. A marker'd Lottie settles at 20 comp frames; the follower's
-    // stored introEnd (240 ⇒ 4.8 s ⇒ clamped to the out-point 75) would DRAG the heuristic
-    // to 75 if it voted. Correct: holdEntry 20 ⇒ entrance 0.4 s ⇒ the follower's intro
-    // window starts at H − 0.4 s = clip frame 130.
+    // No content-start marker. A marker'd Lottie settles at 20 comp frames; if the follower
+    // voted it would DRAG the heuristic. Correct: holdEntry 20 ⇒ entrance 0.4 s ⇒ the
+    // follower's intro window starts at H − 0.4 s = clip frame 130.
     const s = scene(
       [
         markedLottie('other', 20),
         followLottie({
-          phases: { introEnd: 240, outroStart: 250, source: 'composition', holdAt: 150 },
+          // The seed signature (125 / 250) — NOT authored; a genuinely authored introEnd
+          // would govern the follower's own window but STILL never votes on the settle.
+          phases: { introEnd: 125, outroStart: 250, source: 'composition', holdAt: 150 },
         }),
       ],
       { lifecycle: { outPoint: 75 } },
@@ -248,8 +255,8 @@ describe('an authored idle range composes with H', () => {
         followLottie({
           holdBehavior: 'idle-loop',
           phases: {
-            introEnd: 40,
-            outroStart: 60,
+            introEnd: 125,
+            outroStart: 250,
             source: 'composition',
             holdAt: 150,
             idle: [140, 160],
@@ -286,8 +293,8 @@ describe('video follow wiring — the ms-native kind through the same derivation
 
 describe('D-135 §5 — a follow-mode video under the playhead: the derived window on the canvas', () => {
   // The first surface where follow's VIDEO half becomes visible. Owner's case, ms-native:
-  // 5 s clip, holdAt 3000, entrance 1 s, OUT 0.5 s ⇒ window [2000 → 3000] / H 3000 /
-  // [3000 → 3500] — driven by the playhead, through the same mapping the driver plays.
+  // 5 s clip, holdAt 3000, entrance 1 s, OUT 0.5 s ⇒ intro [2000 → 3000], H 3000, and —
+  // session Y — the END-anchored outro [4500 → 5000]: the clip's own ending.
   it('tick at the comp content start lands on H; before it, inside the derived intro window', () => {
     const r = mount(scene([followVideo()]));
     const media = document.querySelector<HTMLVideoElement>('video[data-cg-element-id="vid"]')!;
@@ -299,13 +306,13 @@ describe('D-135 §5 — a follow-mode video under the playhead: the derived wind
     expect(media.currentTime).toBeCloseTo(3);
     r.tick(70); // parked at H through the hold (absent idle ⇒ freeze)
     expect(media.currentTime).toBeCloseTo(3);
-    r.tick(75); // the out-point — the outro continues FROM H
-    expect(media.currentTime).toBeCloseTo(3);
-    r.tick(85); // 0.2 s into the derived outro
-    expect(media.currentTime).toBeCloseTo(3.2);
-    r.tick(100); // clamped to the derived outro end, never the clip tail
-    expect(media.currentTime).toBeCloseTo(3.5);
-    // The stored decoys (introEnd 400 / outroStart 600) never leaked into any of this.
+    r.tick(75); // the out-point — session Y: the clip's own ENDING begins (the seam jump)
+    expect(media.currentTime).toBeCloseTo(4.5);
+    r.tick(85); // 0.2 s into the end-anchored outro
+    expect(media.currentTime).toBeCloseTo(4.7);
+    r.tick(100); // the active out — the clip's LAST moment, exactly at removal
+    expect(media.currentTime).toBeCloseTo(5.0);
+    // The stored seed values (2500 / 5000) never leaked into any of this.
     r.remove();
   });
 });

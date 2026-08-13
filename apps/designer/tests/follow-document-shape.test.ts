@@ -19,8 +19,9 @@ import { createRuntime } from '@cg/template-runtime';
  * breaks and where.
  *
  * The boundary assertions are the owner's own numbers: 50 fps, outPoint 525, contentStart 251,
- * 14 320 ms clip ⇒ H = 5020 ms, outro [5020 → 8840]. `tick(525)` must paint H and `tick(526)`
- * must have LEFT it — the one-frame boundary the sharpened session-V brief made canonical.
+ * 14 320 ms clip ⇒ H = 5020 ms and — session Y's corrected rule — the END-anchored outro
+ * [10 500 → 14 320]: the clip's own ending. `tick(525)` paints the ending's first frame and
+ * `tick(526)` has already advanced — the one-frame boundary stays canonical.
  */
 
 const { designerStore } = await import('../src/renderer/state/store.js');
@@ -131,7 +132,7 @@ describe('session X — the document shape reaches the runtime PROMOTED, and the
     expect(s.layers[0]!.children.map((c) => c.type)).toEqual(['video']);
   });
 
-  it('video: tick(525) paints H exactly and tick(526) has already left it', () => {
+  it('video: the hold sits at H; at the out point the clip’s ENDING begins (session Y re-pin)', () => {
     const r = createRuntime(canvasSceneFor('video'), {
       skipFontLoad: true,
       installGlobals: false,
@@ -147,14 +148,17 @@ describe('session X — the document shape reaches the runtime PROMOTED, and the
     });
     r.tick(524);
     expect(t).toBeCloseTo(5.02, 3); // frozen at H through the hold
-    r.tick(525); // the out point — the outro's own start IS H
-    expect(t).toBeCloseTo(5.02, 3);
+    // Session Y: the stored seeds (7160 = durationMs/2, 14320 = durationMs) are the attach
+    // SEED SIGNATURE and derive as absent, so the outro is END-anchored:
+    // [14320 − 3820 → 14320] — the clip's own build-off, not the static middle.
+    r.tick(525); // the out point — the ending's first frame (the deliberate seam jump)
+    expect(t).toBeCloseTo(10.5, 3);
     r.tick(526); // ONE frame past — the boundary that must not be late
-    expect(t).toBeCloseTo(5.04, 3);
-    r.tick(600); // 75 frames into the OUT — 1.5 s past H
-    expect(t).toBeCloseTo(6.52, 3);
-    r.tick(716); // the active end clamps at the derived outroEnd = 8840 ms
-    expect(t).toBeCloseTo(8.84, 3);
+    expect(t).toBeCloseTo(10.52, 3);
+    r.tick(600); // 75 frames into the OUT — 1.5 s into the ending
+    expect(t).toBeCloseTo(12.0, 3);
+    r.tick(716); // the active end — the clip's LAST moment, exactly at removal
+    expect(t).toBeCloseTo(14.32, 3);
     r.remove();
   });
 
