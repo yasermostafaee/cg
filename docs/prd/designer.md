@@ -4399,10 +4399,13 @@ may later be added to a 3 s scene and a 30 s one. A check placed at import would
 moment, against nothing, and would have to fire again anyway. Composition-into-composition insert is
 the same event by a different route and must go through the same path.
 
-**⚠ OPEN QUESTION — do NOT resolve this at filing time; the owner decides at implementation.** A
-LOOPING background video in a short scene (loop on, content-driven hold) is a legitimate pattern the
-owner uses deliberately, and at add time the loop intent is **unknowable** — the operator has not
-configured the element yet. So the two-choice dialog above may be wrong for that case:
+**✅ ANSWERED (owner, 2026-08-12, recorded with `media-phases-follow-composition`): Candidate A,
+SHARPENED by the follow-composition phase source.** The third choice is **"Add as backdrop — follow
+the composition"**, and taking it adds the element with `phases.source: 'composition'` — the
+element's window through the clip is thereafter DERIVED from the host's lifecycle
+(intro settled at the content start, still through the hold, build-off riding the OUT segment).
+
+Both candidates, kept as the record of why:
 
 - **Candidate A — a THIRD choice.** The dialog offers "Add anyway — it will loop / hold", which adds
   the element without extending the host. This keeps the deliberate pattern one click away, at the
@@ -4411,8 +4414,15 @@ configured the element yet. So the two-choice dialog above may be wrong for that
   extends the host, or sets up the loop first and accepts that add-time asks a question they answer
   by extending and then trimming back.
 
-Both are defensible and the choice changes the acceptance above, so it is recorded here rather than
-guessed. Whoever implements this must have the owner's answer before writing the dialog.
+Why the recorded concern about A is now answered: the third button **no longer dismisses
+anything — it CONFIGURES the exact deliberate pattern this question was written around.** And the
+premise that made the question hard — "at add time the loop intent is unknowable" — no longer
+holds once the intent is declarable in one click. Two consequences for the implementation:
+
+- A **follow-source element never triggers this warning on any later re-check** — absorbing the
+  length mismatch is what follow means.
+- The dialog itself is a **later session**; `media-phases-follow-composition` (schema, derivation,
+  runtime, Inspector) is what makes the decision implementable, not the dialog.
 
 **Related:** [[D-133]]'s loop semantics are the other half of the looping-background case — that
 item is where "a loop range is authorable unconditionally" lives, and it is what makes the open
