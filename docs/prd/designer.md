@@ -4369,7 +4369,7 @@ class of defect B-104 is. Packaging reuses `@cg/vcg-format`'s `writeZip`/`readZi
 `.cgproj` is a different DOCUMENT from `.vcg` (which strips `editorBackdrop`, embeds the runtime,
 and carries a signable broadcast manifest) — reasoning in the proposal.
 
-## [ ] D-151 — adding content LONGER than its host warns, and offers to extend the host duration ⟨priority: high — client-required⟩
+## [~] D-151 — adding content LONGER than its host warns, and offers to extend the host duration ⟨priority: high — client-required⟩ — in progress: `openspec/changes/add-time-duration-guard/`
 
 **What:** At the moment content is **ADDED TO A SCENE OR COMPOSITION**, compare the added content's
 intrinsic duration against the host's duration. If the content is longer, warn that the host is too
@@ -4423,6 +4423,9 @@ holds once the intent is declarable in one click. Two consequences for the imple
   length mismatch is what follow means.
 - The dialog itself is a **later session**; `media-phases-follow-composition` (schema, derivation,
   runtime, Inspector) is what makes the decision implementable, not the dialog.
+- **Scoping (recorded with `add-time-duration-guard`, the implementing change): the settled
+  answer covers MEDIA.** A composition-into-composition insert has no `phases` and cannot follow,
+  so ITS dialog keeps the item's firm two-choice form (Extend / Cancel — decline-means-not-added).
 
 **Related:** [[D-133]]'s loop semantics are the other half of the looping-background case — that
 item is where "a loop range is authorable unconditionally" lives, and it is what makes the open
