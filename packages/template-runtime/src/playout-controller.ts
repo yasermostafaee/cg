@@ -304,17 +304,41 @@ export class PlayoutController {
     // this collapses to today's single intro.
     const holdEntry = this.holdEntry();
     const outPoint = this.outPoint();
-    this.playRange(this.o.active.in, holdEntry, () => {
-      this.o.onContentStart?.();
-      // Only play the static settle leg when it is non-empty; when the entrance ends AT
-      // the out-point (or there is no animation) `holdEntry === outPoint` and we go
-      // straight to the hold — no redundant second paint of the out-point frame.
-      if (holdEntry < outPoint) {
-        this.playRange(holdEntry, outPoint, () => this.onIntroEnd());
-      } else {
-        this.onIntroEnd();
-      }
-    });
+    this.playRange(
+      this.o.active.in,
+      holdEntry,
+      () => {
+        this.o.onContentStart?.();
+        // Only play the static settle leg when it is non-empty; when the entrance ends AT
+        // the out-point (or there is no animation) `holdEntry === outPoint` and we go
+        // straight to the hold — no redundant second paint of the out-point frame.
+        if (holdEntry < outPoint) {
+          this.playRange(holdEntry, outPoint, () => this.onIntroEnd());
+        } else {
+          this.onIntroEnd();
+        }
+        // The ENTRANCE leg ends at the content-start moment, so when that moment is
+        // ANCHORED it must consume its real duration whatever the leg paints — see
+        // `mustConsumeDuration` on `playRange`. Only this leg: the static settle and the
+        // outro end at a PAINT (the out-point / the exit), so they still collapse.
+        //
+        // "Anchored" is exactly `lifecycle.contentStart` being AUTHORED, and the distinction
+        // is load-bearing rather than a tidy-up. `holdEntryFrame` has two provenances and the
+        // frame number alone cannot tell them apart:
+        //
+        //   - an authored marker — a PROMISE ABOUT TIME ("content starts at frame 30"), which
+        //     the leg must honour even with nothing on screen moving;
+        //   - `entranceSettleFrame`'s fallback, which returns `outPoint` verbatim for a scene
+        //     with no keyframes and no Lottie settle. That is the "there is NO entrance"
+        //     sentinel, not a promise: those scenes have always started their content at play,
+        //     and forcing the leg to consume `[active.in → outPoint]` would delay content by
+        //     the WHOLE composition.
+        //
+        // The derived-but-real settles need no flag: keyframes force the sweep via
+        // `hasAnimation`, and a Lottie settle via `needsFrameSweep` (D-125 Phase 3a).
+      },
+      this.o.lifecycle?.contentStart !== undefined,
+    );
   }
 
   private onIntroEnd(): void {
@@ -439,11 +463,35 @@ export class PlayoutController {
    *
    * Every leg routes through here — both intro legs (entrance + static settle) and the
    * outro — so the predicate covers all three without each caller repeating it.
+   *
+   * 🔴 `mustConsumeDuration` — the collapse decides a PAINT question ("does every frame in
+   * this leg look like `outF`?"), and it answers it correctly. What it may NOT decide is a
+   * CLOCK question, because collapsing calls `onEnd` SYNCHRONOUSLY: a leg whose completion
+   * is an EVENT AT A SCHEDULED MOMENT must consume its real duration even when nothing in
+   * it moves. The entrance leg is exactly that — its `onEnd` fires `onContentStart` — and
+   * a caller that needs the moment honoured passes this flag rather than relying on a
+   * paint predicate to be incidentally true.
+   *
+   * That reliance is what broke: with no keyframes (a VIDEO or LOTTIE backdrop contributes
+   * no `animated` entry), `needsFrameSweep`'s only remaining term was a `lifespan` gate
+   * TRANSITION inside `(inF, outF]` — so whether the content started on time came down to
+   * whether some element's span happened to begin after the leg's first frame. A ticker
+   * spanning from frame 0 is already ON at `inF`, does not transition, and the entrance
+   * collapsed: the crawl began at frame 0. The same ticker spanning from frame 1 swept and
+   * was correct — one frame of authoring flipping a timing guarantee.
+   *
+   * `outF <= inF` still short-circuits to instant ahead of the flag: a zero-length entrance
+   * (no marker and no animation ⇒ `holdEntry === active.in`) has no duration TO consume.
    */
-  private playRange(inF: number, outF: number, onEnd: () => void): void {
+  private playRange(
+    inF: number,
+    outF: number,
+    onEnd: () => void,
+    mustConsumeDuration = false,
+  ): void {
     this.stopDriver();
     const frameDependent = this.o.hasAnimation || (this.o.needsFrameSweep?.(inF, outF) ?? false);
-    if (!frameDependent || outF <= inF) {
+    if (outF <= inF || (!frameDependent && !mustConsumeDuration)) {
       this.o.applyFrame(outF);
       onEnd();
       return;
