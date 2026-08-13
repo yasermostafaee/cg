@@ -973,7 +973,9 @@ function FollowNoAnchors(): JSX.Element {
 
 /** The derived window's clamp warnings — the EXISTING hint styling, no second warning surface. */
 function FollowClampHints({ clamps }: { clamps: FollowWindow['clamps'] }): JSX.Element | null {
-  if (!clamps.introShort && !clamps.outroClamped && !clamps.holdPastEnd) return null;
+  if (!clamps.introShort && !clamps.outroClamped && !clamps.holdPastEnd && !clamps.noOutSegment) {
+    return null;
+  }
   return (
     <div data-testid="follow-clamps">
       {clamps.holdPastEnd ? (
@@ -991,6 +993,13 @@ function FollowClampHints({ clamps }: { clamps: FollowWindow['clamps'] }): JSX.E
         <p className={lt.warn}>
           the outro runs past the clip end — clamped; the last frame holds through the rest of the
           OUT.
+        </p>
+      ) : null}
+      {clamps.noOutSegment ? (
+        <p className={lt.warn}>
+          the composition has no OUT segment — the out point sits at the end of the active range, so
+          this clip has NO outro and holds its look through the exit. Drag the out point earlier, or
+          extend the active range past it.
         </p>
       ) : null}
     </div>

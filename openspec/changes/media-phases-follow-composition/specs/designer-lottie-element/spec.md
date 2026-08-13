@@ -68,8 +68,13 @@ The derivation SHALL exist ONCE (comp-side math in `followWindowMs`, the Lottie 
 conversion in `lottieFollowWindow`), and SHALL run where phases are resolved (`createRuntime`), so
 the canvas re-derives on every scene replace and preview/export/air run the same code on the same
 scene — no surface bakes a copy. Clamped cases (`H` smaller than the entrance span; `H + outSpan`
-past the clip end; `H` past the clip end; a clip shorter than the entrance under default `H`)
-SHALL clamp as stated and be surfaced through the EXISTING hint machinery.
+past the clip end; `H` past the clip end; a clip shorter than the entrance under default `H`;
+**a zero-length OUT segment — the out point at, or on a legacy scene past, `activeRange.out` —
+which derives NO outro**) SHALL clamp as stated and be surfaced through the EXISTING hint
+machinery. The zero-OUT-segment case in particular SHALL NEVER be silent (session V,
+owner-observed 2026-08-13): the shape is reachable by ordinary authoring, and an unexplained
+frozen outro reads as a defect — the window carries a `noOutSegment` clamp flag and the Inspector
+explains it and names the way out (move the out point, or extend the active range).
 
 #### Scenario: The owner's case — 5 s clip, hold at second 3, 2 s composition
 
@@ -98,6 +103,24 @@ entranceSpan + outSpan]` — the simple case is the general rule at `H` = entran
   `holdAt` sits past the clip end
 - **THEN** the window clamps to the clip's bounds as specified and the Inspector's existing hint
   machinery flags it — no second warning surface
+
+#### Scenario: A zero-length OUT segment is flagged, never silent
+
+- **WHEN** the composition's out point sits at the end of the active range (`outSpan` 0), with a
+  follow-source element on the scene
+- **THEN** the derived window has NO outro (`outroEnd == H` — the held look persists through the
+  exit, on the canvas and on air alike), the window's clamps carry `noOutSegment`, and the
+  Inspector's hint says so and names the remedy — drag the out point earlier or extend the active
+  range past it
+
+#### Scenario: Shrinking the active window re-clamps the lifecycle markers
+
+- **WHEN** the total duration or the active-region bar is pulled below the out point (or the
+  content-start marker)
+- **THEN** the markers ride the SAME clamp `setLifecycle` applies (`activeRange.in ≤ contentStart
+≤ outPoint ≤ activeRange.out`) instead of stranding outside the active range — a stranded marker
+  made the scene UNPARSEABLE (`refineLifecycle` rejects it, so a save could not re-load) and
+  silently zeroed every follower's OUT segment
 
 #### Scenario: An authored idle range composes with the hold time
 

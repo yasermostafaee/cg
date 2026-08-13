@@ -272,3 +272,34 @@ describe('video — the same affordances in the clip’s ms units', () => {
     expect(host.querySelector('[data-testid="follow-no-anchors"]')).not.toBeNull();
   });
 });
+
+describe('session V — the zero-OUT-segment clamp explains itself (never a silent no-outro)', () => {
+  it('video: an out point at the end of the active range raises the noOutSegment hint', () => {
+    mount(videoEl({ phases: { introEnd: 2500, outroStart: 5000, source: 'composition' } }), {
+      outPoint: 100, // == active end (frameRange {0,100}, no activeRange) ⇒ outSpan 0
+      contentStart: 25,
+    });
+    const clamps = host.querySelector('[data-testid="follow-clamps"]');
+    expect(clamps).not.toBeNull();
+    expect(clamps!.textContent).toMatch(/no OUT segment/i);
+  });
+
+  it('lottie: the same hint through the same shared component', () => {
+    mount(lottieEl({ phases: { introEnd: 40, outroStart: 60, source: 'composition' } }), {
+      outPoint: 100,
+      contentStart: 25,
+    });
+    const clamps = host.querySelector('[data-testid="follow-clamps"]');
+    expect(clamps).not.toBeNull();
+    expect(clamps!.textContent).toMatch(/no OUT segment/i);
+  });
+
+  it('a REAL OUT segment shows no such hint', () => {
+    mount(videoEl({ phases: { introEnd: 2500, outroStart: 5000, source: 'composition' } }), {
+      outPoint: 85,
+      contentStart: 25,
+    });
+    const clamps = host.querySelector('[data-testid="follow-clamps"]');
+    expect(clamps?.textContent ?? '').not.toMatch(/no OUT segment/i);
+  });
+});

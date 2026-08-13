@@ -27,7 +27,12 @@ describe('followWindowMs — the owner case and the default degeneracy', () => {
     expect(w.holdMs).toBeCloseTo(3000);
     expect(w.outroEndMs).toBeCloseTo(3500);
     expect(w.hasOutro).toBe(true);
-    expect(w.clamps).toEqual({ introShort: false, outroClamped: false, holdPastEnd: false });
+    expect(w.clamps).toEqual({
+      introShort: false,
+      outroClamped: false,
+      holdPastEnd: false,
+      noOutSegment: false,
+    });
   });
 
   it('absent holdAt degenerates to "play the clip from its head" — the general rule at H = entrance span', () => {
@@ -36,12 +41,22 @@ describe('followWindowMs — the owner case and the default degeneracy', () => {
     expect(w.introStartMs).toBe(0);
     expect(w.holdMs).toBeCloseTo(1000);
     expect(w.outroEndMs).toBeCloseTo(1500);
-    expect(w.clamps).toEqual({ introShort: false, outroClamped: false, holdPastEnd: false });
+    expect(w.clamps).toEqual({
+      introShort: false,
+      outroClamped: false,
+      holdPastEnd: false,
+      noOutSegment: false,
+    });
   });
 
   it('a clip LONGER than the composition always fits — both spans are ≤ the comp length, no clamp fires', () => {
     const w = followWindowMs(OWNER, { durationMs: 60_000, holdAtMs: 30_000 });
-    expect(w.clamps).toEqual({ introShort: false, outroClamped: false, holdPastEnd: false });
+    expect(w.clamps).toEqual({
+      introShort: false,
+      outroClamped: false,
+      holdPastEnd: false,
+      noOutSegment: false,
+    });
     expect(w.introStartMs).toBeCloseTo(29_000);
     expect(w.outroEndMs).toBeCloseTo(30_500);
   });
@@ -80,10 +95,32 @@ describe('followWindowMs — clamps, each flagged for the hint machinery', () =>
     expect(w.clamps.introShort).toBe(true);
   });
 
-  it('no OUT segment (outPoint at active.out) ⇒ a degenerate outro', () => {
+  it('no OUT segment (outPoint at active.out) ⇒ a degenerate outro — FLAGGED, never silent (session V)', () => {
+    // The owner-observed defect's cause: an out point at the very end of the active range
+    // derives outSpan 0 ⇒ outroEndMs === holdMs ⇒ no outro — while the intro half stays
+    // perfect. Reachable by ordinary authoring (the marker drag CLAMPS at active.out, and
+    // a shrink-then-regrow of the total pins active.out below the ruler's end). The RULE
+    // stands (the OUT segment on air is [outPoint → active.out]); what changes is that the
+    // silence stops: the window now carries the flag, and the Inspector explains itself.
     const w = followWindowMs({ ...OWNER, outPoint: 50 }, { durationMs: 5000, holdAtMs: 3000 });
     expect(w.outSpanMs).toBe(0);
     expect(w.hasOutro).toBe(false);
+    expect(w.clamps.noOutSegment).toBe(true);
+  });
+
+  it('a STRANDED out point (past active.out — a pre-clamp-fix scene) also flags, never NaN/negative', () => {
+    const w = followWindowMs(
+      { ...OWNER, outPoint: 80, activeOut: 50 },
+      { durationMs: 5000, holdAtMs: 3000 },
+    );
+    expect(w.outSpanMs).toBe(0);
+    expect(w.hasOutro).toBe(false);
+    expect(w.clamps.noOutSegment).toBe(true);
+  });
+
+  it('a REAL OUT segment does not flag', () => {
+    const w = followWindowMs(OWNER, { durationMs: 5000, holdAtMs: 3000 });
+    expect(w.clamps.noOutSegment).toBe(false);
   });
 });
 

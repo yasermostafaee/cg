@@ -1,4 +1,4 @@
-import type { Playout, Scene } from '@cg/shared-schema';
+import type { Lifecycle, Playout, Scene } from '@cg/shared-schema';
 import { migrateScenePaths } from '@cg/shared-schema';
 import { activeRangeOf, playoutOf } from '@cg/shared-schema';
 import {
@@ -20,6 +20,35 @@ import {
   withActiveDoc,
   type EditDocFields,
 } from '../scene-doc.js';
+
+/**
+ * Session V — THE ONE lifecycle-clamp rule: `active.in ≤ contentStart ≤ outPoint ≤
+ * active.out` (`refineLifecycle`'s invariant), applied wherever either SIDE of the
+ * relation moves. `setLifecycle` always clamped its own marker writes — but the writers
+ * that move the WINDOW (`setSceneDurationFrames` shrinking the total, `setSceneActiveOut`
+ * dragging the bar) never re-clamped the markers, so an out point could STRAND outside
+ * the active range: the scene stopped parsing (`refineLifecycle` rejects it — a save that
+ * cannot re-load), and every follow-source clip's OUT segment silently clamped to zero
+ * (the owner's frozen-outro defect, instrumented 2026-08-13). One rule, one place —
+ * the instrumented cause was precisely this rule existing in ONE writer and not the
+ * others (the one-rule-twice family, B-100/P-012).
+ *
+ * Returns the ORIGINAL object when nothing moves, so untouched lifecycles stay
+ * byte-identical (no spurious history entries, object-identity tests keep holding).
+ */
+function clampLifecycleTo(
+  active: { in: number; out: number },
+  lifecycle: Lifecycle | undefined,
+): Lifecycle | undefined {
+  if (lifecycle === undefined) return undefined;
+  const out = Math.max(active.in, Math.min(active.out, lifecycle.outPoint));
+  const cs =
+    lifecycle.contentStart === undefined
+      ? undefined
+      : Math.max(active.in, Math.min(out, lifecycle.contentStart));
+  if (out === lifecycle.outPoint && cs === lifecycle.contentStart) return lifecycle;
+  return cs === undefined ? { outPoint: out } : { outPoint: out, contentStart: cs };
+}
 
 /**
  * Document slice — project lifecycle (load/close, top-level view, the toast
@@ -214,8 +243,16 @@ export const documentSlice = {
       const aIn = Math.max(inFrame, Math.min(prevActive.in, aOut - 1));
       activeRange = { in: aIn, out: aOut };
     }
+    // Session V — a shrink can pull the ACTIVE WINDOW below the lifecycle markers; the
+    // markers ride the same clamp `setLifecycle` applies (see clampLifecycleTo), else the
+    // scene stops parsing and follow-source outros silently collapse to zero.
+    const lifecycle = clampLifecycleTo(activeRange ?? { in: inFrame, out }, doc.lifecycle);
     set({
-      scene: withActiveDoc(current.scene, { frameRange: { in: inFrame, out }, activeRange }),
+      scene: withActiveDoc(current.scene, {
+        frameRange: { in: inFrame, out },
+        activeRange,
+        ...(lifecycle !== doc.lifecycle ? { lifecycle } : {}),
+      }),
       currentFrame: nextFrame,
     });
   },
@@ -234,7 +271,15 @@ export const documentSlice = {
     const out = Math.max(inFrame + 1, Math.min(total1, Math.round(outFrames)));
     const prev = doc.activeRange;
     if (prev !== undefined && prev.in === inFrame && prev.out === out) return;
-    set({ scene: withActiveDoc(current.scene, { activeRange: { in: inFrame, out } }) });
+    // Session V — dragging the bar below the markers pulls them along (clampLifecycleTo:
+    // the ONE invariant rule), never strands them outside the parseable range.
+    const lifecycle = clampLifecycleTo({ in: inFrame, out }, doc.lifecycle);
+    set({
+      scene: withActiveDoc(current.scene, {
+        activeRange: { in: inFrame, out },
+        ...(lifecycle !== doc.lifecycle ? { lifecycle } : {}),
+      }),
+    });
   },
 
   /**
@@ -268,13 +313,21 @@ export const documentSlice = {
     }
     const doc = activeDocOf(current.scene);
     const active = activeRangeOf(doc);
-    const out = Math.max(active.in, Math.min(active.out, Math.round(marker.outPoint)));
     const prev = doc.lifecycle;
     // D-104 follow-up — PRESERVE the content-start marker across an out-point drag, but
-    // re-clamp it to `[active.in, out]` (dragging the out-point below it pulls it along).
-    const cs = prev?.contentStart === undefined ? undefined : Math.min(prev.contentStart, out);
-    if (prev !== undefined && prev.outPoint === out && prev.contentStart === cs) return;
-    const lifecycle = cs === undefined ? { outPoint: out } : { outPoint: out, contentStart: cs };
+    // re-clamp it (dragging the out-point below it pulls it along). Session V — the
+    // clamp arithmetic is clampLifecycleTo, THE one rule every writer shares.
+    const lifecycle = clampLifecycleTo(active, {
+      outPoint: Math.round(marker.outPoint),
+      ...(prev?.contentStart !== undefined ? { contentStart: prev.contentStart } : {}),
+    })!;
+    if (
+      prev !== undefined &&
+      prev.outPoint === lifecycle.outPoint &&
+      prev.contentStart === lifecycle.contentStart
+    ) {
+      return;
+    }
     // D-114 — ADDING the first out-point to a stored-`static` composition lands it on `manual` (the
     // benign default for an out-point composition; `static` means no out-point). This does NOT
     // restore any prior `auto-out` / `loop-cycle` (the clear-revert stays one-directional). Dragging

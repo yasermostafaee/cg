@@ -63,6 +63,17 @@ export interface FollowWindow {
     outroClamped: boolean;
     /** `H` (authored or defaulted) sat past the clip end — a stale `holdAt` after an asset swap, or a clip shorter than the entrance. */
     holdPastEnd: boolean;
+    /**
+     * Session V — the COMPOSITION's OUT segment has zero length (`outPoint` at — or,
+     * on a pre-clamp-fix scene, past — `activeRange.out`), so a follower has NO outro:
+     * `outroEndMs === holdMs` and the held look simply persists. The rule is deliberate
+     * (the OUT on air plays `[outPoint → active.out]`, and zero room is zero outro) but
+     * it must never be SILENT — this shape is reachable by ordinary authoring (the out
+     * marker drag clamps at the active end; a shrink-then-regrow of the total pins the
+     * active end below the ruler's), and an unexplained frozen outro reads as a defect
+     * (owner-observed, 2026-08-13). §9.1's settled rule: inert behaviour explains itself.
+     */
+    noOutSegment: boolean;
   };
 }
 
@@ -89,6 +100,7 @@ export function followWindowMs(anchors: FollowAnchors, clip: FollowClip): Follow
       introShort: holdMs < entranceSpanMs,
       outroClamped: holdMs + outSpanMs > durationMs,
       holdPastEnd: holdRaw > durationMs,
+      noOutSegment: outSpanMs <= 0,
     },
   };
 }

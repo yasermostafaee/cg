@@ -76,3 +76,44 @@ describe('designerStore — scene active region', () => {
     expect(designerStore.get().currentFrame).toBe(42);
   });
 });
+
+describe('session V — shrinking the active window RE-CLAMPS the lifecycle (the invariant has ONE rule)', () => {
+  // Found by instrumentation: `setLifecycle` clamps itself into the active range, but the
+  // two mutations that SHRINK that range never re-clamped the lifecycle — a stranded
+  // `outPoint` past `activeRange.out` violates `refineLifecycle`, so the scene STOPS
+  // PARSING (a save of it cannot be re-loaded), and the follow window's outSpan clamps
+  // to 0 silently. One rule, one place: every writer that can move the active window
+  // keeps `activeRange.in ≤ contentStart ≤ outPoint ≤ activeRange.out` true.
+
+  it('setSceneDurationFrames (shrink) pulls a now-outside outPoint to the new active end — and the scene still parses', async () => {
+    const { SceneSchema } = await import('@cg/shared-schema');
+    designerStore.setLifecycle({ outPoint: 40 });
+    designerStore.setSceneDurationFrames(30);
+    expect(scene().lifecycle?.outPoint).toBe(30);
+    expect(SceneSchema.safeParse(designerStore.get().scene).success).toBe(true);
+  });
+
+  it('setSceneActiveOut (bar drag) does the same', async () => {
+    const { SceneSchema } = await import('@cg/shared-schema');
+    designerStore.setLifecycle({ outPoint: 40 });
+    designerStore.setSceneActiveOut(25);
+    expect(scene().lifecycle?.outPoint).toBe(25);
+    expect(SceneSchema.safeParse(designerStore.get().scene).success).toBe(true);
+  });
+
+  it('the contentStart marker rides the same clamp (in ≤ contentStart ≤ outPoint)', () => {
+    designerStore.setLifecycle({ outPoint: 40 });
+    designerStore.setContentStart(35);
+    designerStore.setSceneDurationFrames(30);
+    const lc = scene().lifecycle!;
+    expect(lc.outPoint).toBe(30);
+    expect(lc.contentStart).toBe(30);
+  });
+
+  it('a shrink that never crosses the lifecycle leaves it byte-identical', () => {
+    designerStore.setLifecycle({ outPoint: 20 });
+    const before = scene().lifecycle;
+    designerStore.setSceneDurationFrames(40);
+    expect(scene().lifecycle).toBe(before);
+  });
+});

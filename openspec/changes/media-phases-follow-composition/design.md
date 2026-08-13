@@ -192,3 +192,43 @@ these driver facts exactly, per kind.
   copied), labelled as derived; the runtime's richer heuristic (which also folds in OTHER
   Lotties' settles) remains authoritative on air — a known, pre-existing display limitation of
   the keyframes-only mirror, unchanged by this feature.
+
+## 10. Session V (2026-08-13) — the frozen follow-outro, instrumented to one field
+
+**Owner-observed:** a follow video played its intro, froze at the right `H`, and past the out
+point never played its outro — canvas AND preview — while manual phase marks on the same scene
+played both halves. **Instrumented cause (not reasoned from source): `outroEndMs === holdMs`,**
+because `outSpanMs = (activeRange.out − outPoint) × frameMs` was **0**: the out point sat AT the
+end of the active range while the operator-visible "room after it" lived only in the frameRange —
+the ruler's tail, which neither the OUT segment nor air ever plays. Manual phases diverge because
+they never consult the anchors; their outro window is stored clip time.
+
+How real authoring produces the shape (store-probed, all four):
+
+- shrink-then-regrow of the total duration PINS `activeRange.out` at the short value while the
+  ruler regrows — nothing announces it;
+- the out-marker drag CLAMPS silently at `activeRange.out`, so "drag it toward the visible end"
+  lands it exactly there;
+- and two mutations could STRAND the markers entirely: `setSceneDurationFrames` (shrink) and
+  `setSceneActiveOut` re-sized the window without re-clamping the lifecycle, leaving
+  `outPoint > activeRange.out` — a scene `refineLifecycle` REJECTS, i.e. a save that cannot
+  re-load.
+
+**What changed (the rule did NOT):**
+
+- `followWindowMs` clamps gain `noOutSegment` (`outSpanMs <= 0`), surfaced through the ONE
+  existing hint surface for both kinds — the §9.1 rule: inert behaviour explains itself.
+- The lifecycle-clamp invariant now has ONE rule in ONE place (`clampLifecycleTo`,
+  `state/slices/document.ts`), applied by `setLifecycle` AND by both window-movers. The
+  instrumented cause was precisely this rule living in one writer and not the others — the
+  one-rule-twice family (B-100/P-012): a clamp that exists only where the MARKER moves is a lie
+  wherever the WINDOW moves.
+- Runtime-level exit coverage for follow media now exists at all (`follow-outro.test.ts`): the
+  recon found NO test drove a follow element through `out()`/`stop()` — the derivation, registry
+  and ledger were each unit-tested and their COMPOSITION never was.
+
+**Raised to the owner, not decided here:** if a follower's outro should instead track the ruler's
+room after the out point (`frameRange.out`), that is a RULE change — today the OUT segment is
+`[outPoint → activeRange.out]` everywhere (air, preview, canvas mapping, follow derivation), and
+this session kept all four consistent. The evidence for pricing it: the ruler shows frames the
+composition will never play, and nothing but the new hint says so.
