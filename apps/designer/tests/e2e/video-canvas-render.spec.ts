@@ -148,6 +148,8 @@ test('a seek-fragile VP8+alpha clip (the canvas-blank class) renders its poster 
   page,
 }) => {
   await app.newProject('VideoFragileSeek');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(500);
   const assetId = await storeAndPlace(page, FRAGILE, 'fragile-alpha-seek.webm');
   // The element lands and is selected (the drop's metadata probe resolved).
   await expect(app.inspector.getByRole('textbox', { name: 'Element name' })).toHaveValue('Video');
@@ -183,6 +185,8 @@ test('A/B: the seek-safe control and the fragile clip BOTH render on one canvas 
   // waits plus app boot — not a bumped budget covering a flake (B-078 rule).
   test.setTimeout(60_000);
   await app.newProject('VideoSeekAB');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(500);
   const safeId = await storeAndPlace(page, SAFE, 'seek-safe.webm');
   const fragileId = await storeAndPlace(page, FRAGILE, 'fragile-alpha-seek.webm');
   await expectCanvasVideoRenders(page, safeId);
