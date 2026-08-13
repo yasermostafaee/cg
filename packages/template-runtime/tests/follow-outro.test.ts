@@ -470,3 +470,93 @@ describe('session V — the FOUND SEAM, pinned: outPoint at the active end ⇒ N
     r.remove();
   });
 });
+
+describe('session V (sharpened brief) — the outro BOUNDARY is exact, and it TRACKS the out point', () => {
+  // The owner's second report read the follow outro as starting LATE — delay ≈ the comp's own
+  // [active.in → outPoint] span. MEASURED at HEAD across seven variants and both preview exit
+  // mechanisms: the delay does not exist — first motion is at outPoint + 1 frame everywhere,
+  // and moving the out point moves first motion WITH it. These pins hold the boundary EXACT
+  // (the earlier pins sat 8–10 frames past it, where a comp-intro-sized delay could hide) so
+  // a wrong-anchor regression in the tick pair or the mode selection fails loudly, one frame
+  // past the out point, not "eventually".
+  const OWNER_SHARP = {
+    activeRange: { in: 0, out: 240 },
+    frameRange: { in: 0, out: 240 },
+    lifecycle: { outPoint: 140, contentStart: 25 },
+  };
+
+  it('video canvas: t(outPoint) == H exactly, and t(outPoint + 1) has ALREADY left it', () => {
+    const r = createRuntime(scene([followVideo('v', { holdAt: 3000 })], OWNER_SHARP), {
+      skipFontLoad: true,
+      installGlobals: false,
+    });
+    const times = spyVideoTimes({ now: () => 0 });
+    r.tick(139);
+    expect(times.get('v')!()).toBeCloseTo(3.0, 3); // frozen at H through the hold
+    r.tick(140); // the out point: outro elapsed 0 — the outro's own start IS H
+    expect(times.get('v')!()).toBeCloseTo(3.0, 3);
+    r.tick(141); // ONE frame past: 20 ms into the OUT — this is the assertion that catches a delay
+    expect(times.get('v')!()).toBeCloseTo(3.02, 3);
+    r.tick(142);
+    expect(times.get('v')!()).toBeCloseTo(3.04, 3);
+    r.remove();
+  });
+
+  it('video canvas: moving the out point moves the boundary WITH it (no residual anchor)', () => {
+    for (const outP of [60, 100, 140]) {
+      document.body.innerHTML = '';
+      const r = createRuntime(
+        scene([followVideo('v', { holdAt: 3000 })], {
+          ...OWNER_SHARP,
+          lifecycle: { outPoint: outP, contentStart: 25 },
+        }),
+        { skipFontLoad: true, installGlobals: false },
+      );
+      const times = spyVideoTimes({ now: () => 0 });
+      r.tick(outP);
+      expect(times.get('v')!()).toBeCloseTo(3.0, 3);
+      r.tick(outP + 1);
+      expect(times.get('v')!()).toBeCloseTo(3.02, 3);
+      r.remove();
+    }
+  });
+
+  it('lottie canvas: the same one-frame boundary through the frames adapter', () => {
+    const r = createRuntime(scene([followLottie('lot')], OWNER_SHARP), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    r.tick(140); // H's frame (holdAt 60 on the fr-100 clip)
+    expect(handles[0]!.frames.at(-1)).toBe(60);
+    r.tick(141); // 20 ms = 2 clip frames at fr 100
+    expect(handles[0]!.frames.at(-1)).toBe(62);
+    r.remove();
+  });
+
+  it('preview AUTO-OUT (timed hold): the outro leaves H the moment the OUT phase begins', async () => {
+    // The auto-exit path (PlayoutController.startOutro → beforeOutro → the ledger) had NO
+    // follow coverage: comp intro [0 → 140] is 2.8 s wall, hold 400 ms, so the OUT begins at
+    // 3200 ms — the clip must leave H within a tick of it, never a comp-anchored offset later.
+    const clock = makeClock();
+    const r = createRuntime(
+      scene([bgShape('bg'), followVideo('v', { holdAt: 3000 })], {
+        ...OWNER_SHARP,
+        playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 400 },
+      }),
+      { skipFontLoad: true, installGlobals: false, clock, tickerMeasure },
+    );
+    const times = spyVideoTimes(clock);
+    await r.play({});
+    let firstOutroMs = -1;
+    for (let i = 0; i < 400 && firstOutroMs === -1; i++) {
+      clock.advance(20);
+      for (let j = 0; j < 6; j += 1) await Promise.resolve();
+      const t = times.get('v')!();
+      if (clock.now() > 1000 && t > 3.0005) firstOutroMs = clock.now();
+    }
+    expect(firstOutroMs).toBeGreaterThan(3150); // never EARLY (the hold is real)
+    expect(firstOutroMs).toBeLessThanOrEqual(3280); // and never late beyond timer granularity
+    r.remove();
+  });
+});

@@ -198,9 +198,11 @@ these driver facts exactly, per kind.
 **Owner-observed:** a follow video played its intro, froze at the right `H`, and past the out
 point never played its outro — canvas AND preview — while manual phase marks on the same scene
 played both halves. **Instrumented cause (not reasoned from source): `outroEndMs === holdMs`,**
-because `outSpanMs = (activeRange.out − outPoint) × frameMs` was **0**: the out point sat AT the
-end of the active range while the operator-visible "room after it" lived only in the frameRange —
-the ruler's tail, which neither the OUT segment nor air ever plays. Manual phases diverge because
+because `outSpanMs = (activeRange.out − outPoint) × frameMs` derives **0** when the out point
+sits AT the end of the active range while the operator-visible "room after it" lives only in the
+frameRange — the ruler's tail, which neither the OUT segment nor air ever plays (the unique
+configuration reproducing the FIRST report; see §10.1 for the sharpened second report and its
+measurement). Manual phases diverge because
 they never consult the anchors; their outro window is stored clip time.
 
 How real authoring produces the shape (store-probed, all four):
@@ -232,3 +234,31 @@ room after the out point (`frameRange.out`), that is a RULE change — today the
 `[outPoint → activeRange.out]` everywhere (air, preview, canvas mapping, follow derivation), and
 this session kept all four consistent. The evidence for pricing it: the ruler shows frames the
 composition will never play, and nothing but the new hint says so.
+
+### 10.1 The sharpened report — "the outro starts LATE" — MEASURED, and it does not reproduce
+
+The owner re-observed and sharpened the report: the outro is DELAYED, not absent — by roughly the
+composition's own `[active.in → outPoint]` span — with the expectation (the shipped design's own
+statement) that the element's outro begins exactly AT the out point. **Measured at HEAD, per the
+brief's step 0, the delay does not exist and does not track `(outPoint − activeIn)`:**
+
+- CANVAS, seven variants (holdAt set/absent, contentStart set/absent, `activeIn > 0`, authored
+  idle, and the out point at 60/100/140 as a tracking test): `t(outPoint) == H` exactly and first
+  motion at `outPoint + 1` frame, every variant; moving the out point moves first motion WITH it.
+- PREVIEW, both exit mechanisms: `out()` → first clip motion within one 20 ms step; AUTO-OUT
+  (timed hold, comp intro 2.8 s + hold 400 ms) → outro first motion at 3240 ms against 3200
+  expected — hold-timer granularity, not a comp-anchored offset.
+- No subtraction in the outro path CAN produce a comp-intro-sized offset: the drivers receive
+  only clip-side ms; the comp-side pair is anchored once (`scrubActiveIn` / `scrubOutPoint`) and
+  the outro mapping is `outroStart + elapsed` from the out point.
+
+The runtime positioning paths are IDENTICAL at `a553f79d` (the report's read state) — the session
+V fix touched schema/designer only — so the measurement covers the reported build too. Both
+observations are consistent with §10's family: the FIRST (permanent freeze) is the silent
+zero-OUT-segment; the SECOND (motion "later than the out point" after pulling it earlier) fits a
+SHORT clamped outro window on a pinned active range — brief motion, then the held clamp, read as
+lateness. **What this session adds against a recurrence: exact one-frame boundary pins** on both
+kinds and both surfaces, plus the out-point tracking pin and the first auto-out follow coverage
+(`follow-outro.test.ts`) — a wrong-anchor regression now fails one frame past the out point, not
+"eventually". If the owner reproduces the delay again, the scene FILE is the decisive artifact —
+these pins prove the shape they pin cannot be the one failing.
