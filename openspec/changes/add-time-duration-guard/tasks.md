@@ -9,8 +9,9 @@
 
 ## 2. The guard + intrinsic durations
 
-- [x] 2.1 One chokepoint (`requestAddElement`) all doors call; raw `addElement` untouched for
-      paste/duplicate. Pending state OUTSIDE the undoable store state.
+- [x] 2.1 One chokepoint (`requestGuardedAdd`, reached through the three kind adapters) all
+      doors call; raw `addElement` untouched for paste/duplicate. Pending state OUTSIDE the
+      undoable store state.
 - [x] 2.2 Intrinsic durations, one derivation each: video `durationMs`; Lottie `(op − ip) / fr`
       at 1× (creation default — the element does not exist yet, authored speed cannot apply);
       nested comp active-range length at the project frame rate. Host via `activeRangeOf`.
@@ -48,12 +49,18 @@
 
 - [x] 5.1 D-151 marked `[~]` with this change dir; comp-insert two-choice scoping recorded in
       the item.
-- [ ] 5.2 `pnpm openspec validate add-time-duration-guard --strict` green.
-- [ ] 5.3 Full green gate (uncached).
-- [ ] 5.4 Commit + push to `dev`; remote head verified.
-- [ ] 5.5 **E2E**: discharged by a COMPLETED, GREEN `e2e` job that RAN for the pushed commit —
-      URL recorded HERE, superseding session S's.
-- [ ] 5.6 Handoff `docs/handoff/2026-08-13-session-t.md`.
+- [x] 5.2 `pnpm openspec validate add-time-duration-guard --strict` green (and `--all --strict`
+      in the gate).
+- [x] 5.3 Full green gate (uncached) on the final tree.
+- [x] 5.4 Committed as `613dce9a` (feature) + `099789e8` / `556fd695` (docs family); pushed;
+      `git ls-remote origin dev` = `556fd695` = local HEAD.
+- [x] 5.5 **E2E**: DISCHARGED for `556fd695` —
+      <https://github.com/yasermostafaee/cg/actions/runs/31663201250>, run
+      `conclusion: success`, and the `E2E (Playwright)` job **RAN** (`completed success`, not
+      skipped). This SUPERSEDES session S's run for `cb5413e0`'s tree
+      (<https://github.com/yasermostafaee/cg/actions/runs/31657175754>) as the latest
+      verification — the debt follows the pushed HEAD.
+- [x] 5.6 Handoff `docs/handoff/2026-08-13-session-t.md`.
 
 ### Door-test mapping (4.9, recorded so the ticks are checkable)
 
