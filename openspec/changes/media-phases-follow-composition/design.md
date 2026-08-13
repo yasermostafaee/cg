@@ -305,6 +305,43 @@ kinds and both surfaces, plus the out-point tracking pin and the first auto-out 
 "eventually". If the owner reproduces the delay again, the scene FILE is the decisive artifact —
 these pins prove the shape they pin cannot be the one failing.
 
+#### ✅ THE OUTRO ROOM — SETTLED by the owner (2026-08-14): `[outPoint → activeRange.out]`, as shipped
+
+The measurement above kept pointing at the same underlying question, so the owner settled it
+outright rather than leaving it to be re-derived: **a follower's outro room is the ACTIVE range's
+tail, `[outPoint → activeRange.out]`.** No change to what ships; what changes is that this is now
+a recorded decision with its alternative and the reason, instead of an implementation detail two
+sessions in a row read as possibly-a-bug.
+
+Both candidates, kept as the record of why:
+
+- **(a) ✅ CHOSEN — the ACTIVE range's tail, `[outPoint → activeRange.out]`.** The outro occupies
+  exactly the segment the composition itself plays on exit, so what the operator drags is what the
+  clip gets. **Cost:** pull the active range's end back onto the out point and the room becomes
+  ZERO — the clip has no outro at all and holds its look straight through the exit. That is a real
+  authoring trap, and it is the one the FIRST report in §10 turned out to be.
+- **(b) ❌ REJECTED — the RULER's tail, `[outPoint → frameRange.out]`.** The room would come from
+  the scene's total duration rather than its active window, so it could never silently collapse to
+  zero: there is always ruler past the out point.
+
+**Why (a), in three parts:**
+
+1. **The markers stay readable.** The active range is the thing the operator drags, sees dimmed
+   past its end, and plays; deriving the outro from a DIFFERENT span would put the clip's exit on
+   a timeline nobody is looking at. A follower exists to make the clip agree with the composition
+   — agreeing with a span the composition itself does not play is the opposite of the feature.
+2. **The exit stays predictable.** `[outPoint → activeRange.out]` is already the OUT segment for
+   the background and for every keyframed element; (b) would give a follower a longer exit than
+   the composition it follows, so the background would settle while the clip was still animating
+   off — the precise inversion D-125's element-outro gate exists to prevent.
+3. **(b) fixes the zero case by hiding it, and the zero case is already covered by words.** The
+   `noOutSegment` clamp hint (`StyleSection`'s `FollowClampHints`) says exactly what happened and
+   what to do — "the out point sits at the end of the active range, so this clip has NO outro …
+   drag the out point earlier, or extend the active range past it". Silently borrowing room from
+   the ruler would make a mis-authored composition look correct while playing something the
+   timeline does not show. This is the same rule §9.1 settled for the inert control, one surface
+   over: **explain the degenerate case, do not paper over it.**
+
 ### 10.2 Session X (2026-08-13) — the owner's FILE, and what each hypothesis measured
 
 The owner re-tested at `2f2d6221` and supplied `videotickeroutrobug.cgproj`: root scene with NO
