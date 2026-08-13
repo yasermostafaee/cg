@@ -363,6 +363,15 @@ export class Preview {
                   url,
                 );
               }
+              // D-135 §5 — the poster is SUBORDINATE to the tick: it stays as the
+              // load path + the sequential-decode recovery for seek-fragile assets
+              // (and paints only as a PRE-TICK transient), but the playhead owns the
+              // at-rest frame. The routine settles ASYNC — after applyScene's own
+              // tick — so without this chained re-tick the poster's seek would land
+              // LAST and the canvas would rest on a mid-clip poster, disagreeing
+              // with the Lottie beside it (the §9.5 consistency debt). Never while
+              // playing: the controller owns the frame then (B-029's rule).
+              if (runtime && !playing) runtime.tick(currentFrame);
             },
           );
         }
@@ -587,6 +596,13 @@ export class Preview {
             await runtime.update(currentFields);
             runtime.tick(currentFrame);
             applyAssetUrls();
+            // D-135 §5 — tick AGAIN after the asset walk: reconcileVideos (inside
+            // applyAssetUrls) may have TRANSPLANTED a pooled <video> over the node the
+            // tick above just positioned, and the pooled node's currentTime predates
+            // the rebuild. The re-tick resolves it through the driver's live() and
+            // re-positions — so a phases edit shows its NEW mapping at the same
+            // playhead, not the pooled node's stale frame.
+            runtime.tick(currentFrame);
             applyEditingHide();
           } finally {
             busy = false;

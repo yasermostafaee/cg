@@ -82,28 +82,38 @@ async function storeAndPlace(page: Page, file: string, filename: string): Promis
 }
 
 /**
- * Wait for the canvas iframe's <video> for `assetId` to show a REAL poster
- * frame: blob src wired, no media error, decoded data, off frame 0, and —
- * the actual "not blank" assertion — visible pixels when drawn to a canvas.
+ * Wait for the canvas iframe's <video> for `assetId` to show a REAL frame at the
+ * PLAYHEAD's clip time (D-135 §5 — the tick owns the canvas frame; callers scrub
+ * off frame 0 first so "renders" is provable): blob src wired, no media error,
+ * decoded data, at the mapped time, and — the actual "not blank" assertion —
+ * visible pixels when drawn to a canvas. The poster ladder still runs first as
+ * the LOAD path (its recovery rung is what makes a later seek safe on the
+ * seek-fragile class); a mid-ladder sample reads playbackRate 16 or an
+ * off-target currentTime, so settled = paused, rate restored, ON the tick's time.
  */
-async function expectCanvasVideoRenders(page: Page, assetId: string): Promise<void> {
+async function expectCanvasVideoRenders(
+  page: Page,
+  assetId: string,
+  expectedTimeSec: number,
+): Promise<void> {
   const frame = page.frameLocator('iframe[title="cgpreview"]');
   const videoLoc = frame.locator(`video[data-cg-asset-id="${assetId}"]`);
   await expect(videoLoc).toBeAttached({ timeout: 15_000 });
-  const render = await videoLoc.evaluate(async (v: HTMLVideoElement) => {
+  const render = await videoLoc.evaluate(async (v: HTMLVideoElement, expectedT: number) => {
     const deadline = Date.now() + 15_000;
     while (Date.now() < deadline) {
       if (v.error !== null) return { ok: false, error: v.error.message };
       const src = v.getAttribute('src') ?? '';
-      // SETTLED poster, not merely progressing: the routine's recovery rung
-      // plays muted at 16x toward the poster time, so a mid-recovery sample
-      // would read currentTime > 0 with playbackRate 16. Settled = paused with
-      // the rate restored (rung 1 never plays; rung 2 pauses + restores on
-      // reaching the poster).
+      // SETTLED at the tick's time, not merely progressing: the poster ladder's
+      // recovery rung plays muted at 16x toward the poster, so a mid-ladder sample
+      // would read playbackRate 16 or the poster's own time. Settled = paused, rate
+      // restored, and ON the playhead's mapped clip time (the chained re-tick lands
+      // LAST — D-135 §5's one deterministic paint order).
       if (
         src.startsWith('blob:') &&
         v.readyState >= 2 &&
-        v.currentTime > 0 &&
+        Math.abs(v.currentTime - expectedT) < 0.25 &&
+        !v.seeking &&
         v.paused &&
         v.playbackRate === 1
       ) {
@@ -130,10 +140,10 @@ async function expectCanvasVideoRenders(page: Page, assetId: string): Promise<vo
       ok: false,
       error: `never rendered: rs=${String(v.readyState)} t=${String(v.currentTime)} src=${v.getAttribute('src') ?? ''}`,
     };
-  });
+  }, expectedTimeSec);
   expect(render, JSON.stringify(render)).toMatchObject({ ok: true });
   if (render.ok) {
-    // The mid-clip poster, not the (transparent) frame 0.
+    // The playhead's frame, not the (transparent) frame 0 (callers scrubbed off 0).
     expect(render.currentTime).toBeGreaterThan(1.2);
     // NOT BLANK — the moving band pattern is ~31% opaque at any frame.
     expect(render.visibleFrac).toBeGreaterThan(0.05);
@@ -143,7 +153,7 @@ async function expectCanvasVideoRenders(page: Page, assetId: string): Promise<vo
   }
 }
 
-test('a seek-fragile VP8+alpha clip (the canvas-blank class) renders its poster on the canvas AND in the assets panel', async ({
+test('a seek-fragile VP8+alpha clip (the canvas-blank class) renders the playhead’s frame on the canvas AND its poster in the assets panel', async ({
   app,
   page,
 }) => {
@@ -153,7 +163,10 @@ test('a seek-fragile VP8+alpha clip (the canvas-blank class) renders its poster 
   const assetId = await storeAndPlace(page, FRAGILE, 'fragile-alpha-seek.webm');
   // The element lands and is selected (the drop's metadata probe resolved).
   await expect(app.inspector.getByRole('textbox', { name: 'Element name' })).toHaveValue('Video');
-  await expectCanvasVideoRenders(page, assetId);
+  // D-135 §5 — the playhead owns the canvas frame; park it at frame 100 (50 fps ⇒ 2.0 s)
+  // so "renders" is provable off the transparent frame 0.
+  await app.scrubToFrame(100);
+  await expectCanvasVideoRenders(page, assetId, 2.0);
 
   // A PARENT-document thumbnail (assets-panel tile / Inspector strip — both are
   // the shared VideoPoster) runs the same routine — pre-fix these were equally
@@ -189,6 +202,8 @@ test('A/B: the seek-safe control and the fragile clip BOTH render on one canvas 
   await app.setSceneDuration(500);
   const safeId = await storeAndPlace(page, SAFE, 'seek-safe.webm');
   const fragileId = await storeAndPlace(page, FRAGILE, 'fragile-alpha-seek.webm');
-  await expectCanvasVideoRenders(page, safeId);
-  await expectCanvasVideoRenders(page, fragileId);
+  // D-135 §5 — one scrub parks the playhead; BOTH elements must show its frame.
+  await app.scrubToFrame(100);
+  await expectCanvasVideoRenders(page, safeId, 2.0);
+  await expectCanvasVideoRenders(page, fragileId, 2.0);
 });

@@ -622,3 +622,168 @@ describe('D-135 — the carve-out: ticker, sequence and clock do NOT follow the 
     expect(elText('clk')).toBe(clkPlaying);
   });
 });
+
+/**
+ * D-135 §5 — THE VIDEO HALF (§9.5 answered (a), 2026-08-13): the same playhead, the same
+ * one message, now positioning every `<video>` by `currentTime` on a PAUSED element.
+ * The mapping lives in `VideoDriver.expectedClipMs` — the SAME function the driver's own
+ * clock reconciles against on air — and `positionAt` resolves through it; the node is
+ * resolved through the handle's `live()` on every access (B-137's constraint, §1.8/§5.5).
+ */
+function videoElement(over: Record<string, unknown> = {}): Element {
+  return {
+    id: 'vid',
+    name: 'clip',
+    type: 'video',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    assetId: 'clip1',
+    durationMs: 10_000,
+    holdBehavior: 'freeze',
+    phases: { introEnd: 2000, outroStart: 8000 },
+    ...over,
+  } as unknown as Element;
+}
+
+const vNode = (id = 'vid'): HTMLVideoElement =>
+  document.querySelector<HTMLVideoElement>(`video[data-cg-element-id="${id}"]`)!;
+
+describe('D-135 §5 — the playhead positions every <video> on the canvas', () => {
+  it('SCRUB positions the clip time its phase mapping assigns — PAUSED, never play()ed', () => {
+    const runtime = createRuntime(scene([videoElement()]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    const v = vNode();
+    let plays = 0;
+    v.play = () => {
+      plays++;
+      return Promise.resolve();
+    };
+    runtime.tick(10); // 10 frames × 40 ms = 400 ms into the intro
+    expect(v.currentTime).toBeCloseTo(0.4);
+    runtime.tick(0); // the in-point is not a special case
+    expect(v.currentTime).toBe(0);
+    runtime.tick(60); // 2400 ms — past introEnd 2000: the freeze hold's frame
+    expect(v.currentTime).toBeCloseTo(2);
+    // What the element SHOWS is a paused frame: nothing ever played it.
+    expect(plays).toBe(0);
+    expect(v.paused).toBe(true);
+  });
+
+  it('PLAY animates it through the SAME call — a stream of ticks, one mapping', () => {
+    const runtime = createRuntime(scene([videoElement()]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    const v = vNode();
+    const seen: number[] = [];
+    for (let f = 0; f <= 10; f += 1) {
+      runtime.tick(f);
+      seen.push(v.currentTime);
+    }
+    expect(seen.map((s) => Math.round(s * 1000))).toEqual([
+      0, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400,
+    ]);
+    // …and a FRESH runtime scrubbed straight to frame 10 lands on the same time: play
+    // and scrub cannot disagree, because they are the same call by construction.
+    document.body.innerHTML = '';
+    const fresh = createRuntime(scene([videoElement()]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    fresh.tick(10);
+    expect(vNode().currentTime).toBeCloseTo(0.4);
+  });
+
+  it('a tick during `seeking` issues NO seek — skip, never queue', () => {
+    const runtime = createRuntime(scene([videoElement()]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    const v = vNode();
+    runtime.tick(5);
+    expect(v.currentTime).toBeCloseTo(0.2);
+    Object.defineProperty(v, 'seeking', { configurable: true, get: () => true });
+    runtime.tick(10);
+    runtime.tick(20);
+    expect(v.currentTime).toBeCloseTo(0.2); // both skipped — nearest decodable frame stands
+    Object.defineProperty(v, 'seeking', { configurable: true, get: () => false });
+    runtime.tick(30);
+    expect(v.currentTime).toBeCloseTo(1.2); // the NEXT tick's target — nothing was queued
+  });
+
+  it('backward ticks position monotonically backward — no direction branch anywhere', () => {
+    const runtime = createRuntime(scene([videoElement()]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    const v = vNode();
+    const seen: number[] = [];
+    for (const f of [10, 8, 6, 4, 2, 0]) {
+      runtime.tick(f);
+      seen.push(Math.round(v.currentTime * 1000));
+    }
+    expect(seen).toEqual([400, 320, 240, 160, 80, 0]);
+  });
+
+  it('a video that is NOT a hold driver follows the playhead exactly as an opted-in one (§9.4 (a))', () => {
+    const runtime = createRuntime(
+      scene([videoElement({ id: 'v-plain' }), videoElement({ id: 'v-holds', drivesHold: true })]),
+      { skipFontLoad: true, installGlobals: false, lottieAssets },
+    );
+    runtime.tick(10);
+    expect(vNode('v-plain').currentTime).toBeCloseTo(0.4);
+    expect(vNode('v-holds').currentTime).toBeCloseTo(0.4);
+  });
+
+  it('the OUT phase positions from the out-point; a clip with NO outro keeps the intro mapping', () => {
+    const runtime = createRuntime(scene([videoElement()], { lifecycle: { outPoint: 80 } }), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    const v = vNode();
+    runtime.tick(85); // 5 frames past the out-point = 200 ms into the outro [8000 → 10000]
+    expect(v.currentTime).toBeCloseTo(8.2);
+    runtime.tick(100);
+    expect(v.currentTime).toBeCloseTo(8.8);
+
+    // DEGENERATE outro (absent phases ⇒ outroStart = duration): the intro mapping holds
+    // past the out-point — the held look stays painted, exactly the Lottie's rule.
+    document.body.innerHTML = '';
+    const degenerate = createRuntime(
+      scene([videoElement({ phases: undefined })], { lifecycle: { outPoint: 80 } }),
+      { skipFontLoad: true, installGlobals: false, lottieAssets },
+    );
+    degenerate.tick(85); // 3400 ms — inside the whole-clip intro, NOT clamped to the end
+    expect(vNode().currentTime).toBeCloseTo(3.4);
+  });
+
+  it('the resting state is the TICK’s, not the old poster’s — under scrub and back', () => {
+    const runtime = createRuntime(scene([videoElement()]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    const v = vNode();
+    // The poster dataset is still stamped — it names the PRE-TICK transient's target…
+    expect(v.dataset['cgPosterMs']).toBe('2000'); // introEnd, phases marked
+    // …and the host's poster seek may land (simulated here) — but the tick always wins:
+    v.currentTime = 2.0;
+    runtime.tick(0);
+    expect(v.currentTime).toBe(0); // at rest the video sits where the playhead says
+    runtime.tick(50); // scrub away — freeze hold at introEnd
+    expect(v.currentTime).toBeCloseTo(2);
+    runtime.tick(0); // and back: never the poster, never history-dependent
+    expect(v.currentTime).toBe(0);
+  });
+});

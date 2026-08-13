@@ -283,3 +283,29 @@ describe('video follow wiring — the ms-native kind through the same derivation
     r.remove();
   });
 });
+
+describe('D-135 §5 — a follow-mode video under the playhead: the derived window on the canvas', () => {
+  // The first surface where follow's VIDEO half becomes visible. Owner's case, ms-native:
+  // 5 s clip, holdAt 3000, entrance 1 s, OUT 0.5 s ⇒ window [2000 → 3000] / H 3000 /
+  // [3000 → 3500] — driven by the playhead, through the same mapping the driver plays.
+  it('tick at the comp content start lands on H; before it, inside the derived intro window', () => {
+    const r = mount(scene([followVideo()]));
+    const media = document.querySelector<HTMLVideoElement>('video[data-cg-element-id="vid"]')!;
+    r.tick(0); // the comp's IN — the intro window's start, NOT the clip's head
+    expect(media.currentTime).toBeCloseTo(2);
+    r.tick(25); // 0.5 s into the entrance
+    expect(media.currentTime).toBeCloseTo(2.5);
+    r.tick(50); // the comp's content start — the entrance settles, the clip is AT H
+    expect(media.currentTime).toBeCloseTo(3);
+    r.tick(70); // parked at H through the hold (absent idle ⇒ freeze)
+    expect(media.currentTime).toBeCloseTo(3);
+    r.tick(75); // the out-point — the outro continues FROM H
+    expect(media.currentTime).toBeCloseTo(3);
+    r.tick(85); // 0.2 s into the derived outro
+    expect(media.currentTime).toBeCloseTo(3.2);
+    r.tick(100); // clamped to the derived outro end, never the clip tail
+    expect(media.currentTime).toBeCloseTo(3.5);
+    // The stored decoys (introEnd 400 / outroStart 600) never leaked into any of this.
+    r.remove();
+  });
+});

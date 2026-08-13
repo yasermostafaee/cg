@@ -1,8 +1,9 @@
 # designer-animation-timeline — delta (D-135, 2026-08-12)
 
-Encodes what the PLAYHEAD DRIVES on the canvas, and what deliberately does not follow it. The
-Lottie half is implemented in this change; the video half is gated on `design.md` §9.5 (see
-`tasks.md` §5) and its requirements below are the settled design it will be built to.
+Encodes what the PLAYHEAD DRIVES on the canvas, and what deliberately does not follow it. BOTH
+halves are implemented in this change: the Lottie half landed first, and the video half followed
+once `design.md` §9.5 was answered (2026-08-13: (a) — position everywhere, the forward-1× hybrid
+rejected; see `tasks.md` §5).
 
 ## ADDED Requirements
 
@@ -153,6 +154,14 @@ commanding a detached orphan while the viewer watches a frozen picture.
 - **WHEN** the canvas rebuilds the scene and the host transplants the live `<video>` node
 - **THEN** the next playhead tick positions the node that is IN THE DOCUMENT, not the one captured
   when the driver was built
+
+#### Scenario: At rest the canvas video sits at the playhead's frame, not a poster
+
+- **WHEN** a video element is on the canvas and the playhead is at rest (no scrub, no play)
+- **THEN** the video shows the clip time the playhead maps to — including the clip's first frame
+  at the composition's in-point, even when that frame is transparent — exactly as the Lottie does
+- **AND** the host's poster routine remains only a PRE-TICK transient (the load path and the
+  seek-fragile recovery), never the owner of the resting frame: the tick's seek lands last
 
 ### Requirement: Ticker, sequence and clock stay time-driven and do NOT follow the playhead
 

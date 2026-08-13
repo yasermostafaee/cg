@@ -88,3 +88,43 @@ describe('D-128 — the canvas wires video posters through the shared robust rou
     expect(html).toMatch(/playbackRate\s*=\s*1[^0-9]/);
   });
 });
+
+describe('D-135 §5 — the poster is SUBORDINATE to the tick: the playhead owns the frame', () => {
+  let html: string;
+
+  beforeAll(() => {
+    urlGlobals.createObjectURL = () => 'blob:stub';
+    urlGlobals.revokeObjectURL = () => undefined;
+    const preview = new Preview({
+      cgJs: 'export const noop = 1;',
+      cgCss: '.cg-stage{}',
+      fontsCss: '',
+    });
+    html = preview.load(SCENE).html;
+  });
+
+  it('the poster routine settling chains a re-tick, so the tick’s seek always lands LAST', () => {
+    // One paint order, deterministic: load → (poster transient →) tick. Without this
+    // chain the ASYNC poster seek lands after the build-time tick and the canvas rests
+    // on a mid-clip poster — the exact disagreement-at-rest §9.5's consistency debt
+    // recorded. The poster is a PRE-TICK transient (the Lottie's shipped semantics);
+    // the settled frame is always the playhead's.
+    // Anchored INSIDE the routine's settle callback (the 'update' handler carries the
+    // same guarded line elsewhere — a bare toContain would pass vacuously).
+    expect(html).toMatch(
+      /function wireVideoPoster[\s\S]{0,2500}?if \(runtime && !playing\) runtime\.tick\(currentFrame\);/,
+    );
+  });
+
+  it('the scene-apply re-ticks AFTER the asset walk, so a pooled/transplanted node is positioned', () => {
+    // applyScene ticks before applyAssetUrls (fresh nodes), and again after it: the
+    // transplant (reconcileVideos) swaps the freshly-positioned node for the pooled one,
+    // whose currentTime predates the rebuild — the second tick re-positions it through
+    // live(), so a phases edit shows its NEW mapping at the same playhead.
+    // Anchored on applyEditingHide(), which only follows the applyScene call site — the
+    // comment block between the walk and the re-tick is allowed to grow.
+    expect(html).toMatch(
+      /applyAssetUrls\(\);[\s\S]{0,900}?runtime\.tick\(currentFrame\);\s*\n\s*applyEditingHide\(\);/,
+    );
+  });
+});

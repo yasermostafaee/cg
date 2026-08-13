@@ -372,9 +372,26 @@ override) on its **own** timeline.
   - **`drivesHold` is NOT read on this path** (design §9.4): it answers "does this element
     gate the HOLD", which is a different question from "does the canvas show its frame".
     Furniture that deliberately does not drive the hold still follows the playhead.
-  - **A `<video>` does NOT follow the playhead yet** — that half is designed
-    (position by `currentTime`, paused) and gated on an open owner decision; see
-    `openspec/changes/timeline-drives-loop-and-media/design.md` §9.5.
+  - **A `<video>` follows the playhead the same way** (§9.5 answered (a), 2026-08-13:
+    position everywhere; the forward-1× hybrid was REJECTED — ONE mechanism for scrub,
+    forward, backward and bounce). `tick` hands the SAME elapsed pair to
+    `VideoDriver.positionAt`, which resolves the clip time through `expectedClipMs` — the
+    same function the driver's own clock reconciles against on air — and seeks a PAUSED
+    element (never `play()`). Three video-specific points:
+    - **Skip, never queue.** A tick that finds `seeking()` true issues nothing — the
+      canvas shows the NEAREST DECODABLE frame. That is the measured, specified contract
+      (~10 distinct fps on a 1080p VP8+alpha element; the Preview stays the frame-true
+      rendition), not a defect.
+    - **Every node access resolves through `live()`** (the handle's B-137 re-resolution):
+      the canvas reparents `<video>` nodes across `scene-replace`, and a captured
+      reference would command an orphan.
+    - **The at-rest poster is a PRE-TICK TRANSIENT now** (matching the Lottie): the host's
+      poster routine is kept as the LOAD path + seek-fragile recovery, but it chains a
+      re-tick on settle, so the tick's seek always lands last and the canvas rests at the
+      playhead's frame — including a build-on clip's transparent frame 0.
+    - A FOLLOW-source clip (`media-phases-follow-composition`) composes for free: the
+      derived window (`introStartMs`/`holdMs`/`outroEndMs`) is already inside
+      `expectedClipMs`, so the playhead shows the parked-at-`H` look the driver plays.
 - **Per-element lifespan visibility** (a `lifespan {in,out}` from a timeline start/end
   trim) is gated **per scope**. Each `FieldScope` owns a `lifespanGates` list, registered at
   BUILD time in `buildLayer` beside `scope.animated`, and that scope's controller evaluates

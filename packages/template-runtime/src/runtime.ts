@@ -2283,6 +2283,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           : null;
       for (const sub of subtrees) {
         for (const l of sub.lotties) l.positionAt(introElapsedMs, outroElapsedMs);
+        // D-135 §5 (§9.5 answered (a), 2026-08-13) — and every VIDEO, through the same
+        // elapsed pair and the same rule set: §9.4 (a) (regardless of `drivesHold`), no
+        // direction special case (§9.3 (a)), the driver's own `expectedClipMs` as the one
+        // mapping, `live()` inside the handle for every node access (B-137). The driver's
+        // positionAt seeks a PAUSED element and skips while a seek is in flight — the
+        // nearest-decodable-frame contract of §5.2–§5.3.
+        for (const v of sub.videos) v.positionAt(introElapsedMs, outroElapsedMs);
       }
       applyLifespanGatesAtFrame(frame);
     },

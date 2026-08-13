@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { VideoDriver, type VideoDriverOptions, type VideoHandle } from '../src/video-driver.js';
 
 /**
@@ -590,5 +590,146 @@ describe('VideoDriver — the follow window: an intro at an OFFSET, an outro wit
     run(clock, 2200);
     await expect(done).resolves.toBeUndefined();
     expect(video.seeks.at(-1)).toBeCloseTo(10, 3);
+  });
+});
+
+describe('VideoDriver — positionAt (the Designer playhead) — D-135 §5, §9.5 (a)', () => {
+  it('the clock path and the playhead path resolve the clip time through ONE function', () => {
+    // §9.5 (a)'s singularity, asserted on the MECHANISM: `expectedClipMs` is the one
+    // mapping, and `positionAt` must call it — a second copy of the arithmetic defeats
+    // the requirement even while producing identical numbers.
+    const spy = vi.spyOn(
+      VideoDriver.prototype as unknown as { expectedClipMs: (...a: unknown[]) => number },
+      'expectedClipMs',
+    );
+    try {
+      const a = makeDriver({ holdBehavior: 'freeze' });
+      a.driver.start(); // the driver's OWN clock
+      a.clock.advance(50);
+      const viaClock = spy.mock.calls.length;
+      expect(viaClock).toBeGreaterThan(0);
+
+      const b = makeDriver({ holdBehavior: 'freeze' });
+      b.driver.positionAt(50, null); // the PLAYHEAD
+      expect(spy.mock.calls.length).toBeGreaterThan(viaClock);
+      // And the seek issued is EXACTLY the mapping's own output — no re-derivation.
+      expect(b.video.seeks.at(-1)).toBeCloseTo((spy.mock.results.at(-1)!.value as number) / 1000);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('positions across intro, freeze hold and outro — including elapsed 0 at each boundary', () => {
+    const { driver, video } = makeDriver({ holdBehavior: 'freeze' });
+    // Intro [0 → 2000], then freeze at introEnd.
+    driver.positionAt(0, null);
+    expect(video.seeks.at(-1)).toBe(0);
+    driver.positionAt(100, null);
+    expect(video.seeks.at(-1)).toBeCloseTo(0.1);
+    driver.positionAt(1999, null);
+    expect(video.seeks.at(-1)).toBeCloseTo(1.999);
+    driver.positionAt(2000, null);
+    expect(video.seeks.at(-1)).toBeCloseTo(2);
+    driver.positionAt(60_000, null);
+    expect(video.seeks.at(-1)).toBeCloseTo(2); // freeze holds the introEnd frame
+    // Negative elapsed clamps to the window start — never extrapolated back.
+    driver.positionAt(-500, null);
+    expect(video.seeks.at(-1)).toBe(0);
+    // The OUT phase, from the composition's out-point — elapsed 0 IS the outro start.
+    driver.positionAt(0, 0);
+    expect(video.seeks.at(-1)).toBeCloseTo(8);
+    driver.positionAt(0, 500);
+    expect(video.seeks.at(-1)).toBeCloseTo(8.5);
+    driver.positionAt(0, 60_000);
+    expect(video.seeks.at(-1)).toBeCloseTo(10); // clamped to outroEnd, never past the clip
+  });
+
+  it('a loop hold positions deterministically from elapsed — the wrap is in the mapping', () => {
+    const { driver, video } = makeDriver(); // loop [2000 → 8000]
+    driver.positionAt(5000, null);
+    expect(video.seeks.at(-1)).toBeCloseTo(5); // 2000 + (3000 % 6000)
+    driver.positionAt(9000, null);
+    expect(video.seeks.at(-1)).toBeCloseTo(3); // 2000 + (7000 % 6000) — wrapped, no history
+  });
+
+  it('a DEGENERATE outro takes the INTRO mapping past the out-point (the Lottie rule)', () => {
+    // outroStart ≥ outroEnd ⇒ no outro. Without this, every frame at or past the
+    // composition's out-point would clamp to the clip's END — the frame a furniture clip
+    // has animated OFF to. The intro mapping keeps the HELD look, which is what a
+    // degenerate `playOutro()` leaves painted on air.
+    const { driver, video } = makeDriver({ holdBehavior: 'freeze', outroStartMs: 10_000 });
+    driver.positionAt(3000, 500);
+    expect(video.seeks.at(-1)).toBeCloseTo(2); // freeze-hold frame, NOT 10.0+
+  });
+
+  it('a follow window flows through the SAME mapping — H anchors it (session S composes)', () => {
+    // The session-S window: intro [2000 → 3000], H = 3000, outro [3000 → 3500].
+    const opts = {
+      introStartMs: 2000,
+      introEndMs: 3000,
+      outroStartMs: 3000,
+      outroEndMs: 3500,
+      loopStartMs: 3000,
+      loopEndMs: 3000,
+      holdBehavior: 'freeze' as const,
+    };
+    const { driver, video } = makeDriver(opts);
+    driver.positionAt(0, null);
+    expect(video.seeks.at(-1)).toBeCloseTo(2); // the intro window's start, not clip 0
+    driver.positionAt(500, null);
+    expect(video.seeks.at(-1)).toBeCloseTo(2.5);
+    driver.positionAt(1000, null);
+    expect(video.seeks.at(-1)).toBeCloseTo(3); // H — the parked look
+    driver.positionAt(9000, null);
+    expect(video.seeks.at(-1)).toBeCloseTo(3); // parked at H for the rest of the hold
+    driver.positionAt(0, 200);
+    expect(video.seeks.at(-1)).toBeCloseTo(3.2); // outro continues FROM H
+    driver.positionAt(0, 900);
+    expect(video.seeks.at(-1)).toBeCloseTo(3.5); // clamped to the derived outro end
+  });
+
+  it('SKIPS, never queues, while a seek is in flight — and never play()s or arms a clock', () => {
+    const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze' });
+    driver.positionAt(100, null);
+    expect(video.seeks).toHaveLength(1);
+    video.seeking = true; // a seek is settling — the mock's slow-seek switch
+    driver.positionAt(200, null);
+    driver.positionAt(300, null);
+    expect(video.seeks).toHaveLength(1); // skipped, and nothing was queued for later
+    video.seeking = false;
+    driver.positionAt(400, null);
+    expect(video.seeks).toHaveLength(2);
+    expect(video.seeks.at(-1)).toBeCloseTo(0.4); // the NEXT tick's target, not a replay
+    // Paused, always: the playhead is the only clock on this path.
+    expect(video.plays).toBe(0);
+    expect(clock.pending).toHaveLength(0);
+  });
+
+  it('backward positions exactly as forward — same call, no direction branch', () => {
+    const { driver, video } = makeDriver({ holdBehavior: 'freeze' });
+    for (const e of [1000, 800, 600, 400, 200, 0]) driver.positionAt(e, null);
+    expect(video.seeks).toEqual([1, 0.8, 0.6, 0.4, 0.2, 0]);
+  });
+
+  it('a driver RUNNING its own lifecycle owns the element — a stray tick is a no-op', () => {
+    const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze' });
+    driver.start();
+    clock.advance(500);
+    const seeks = video.seeks.length;
+    const plays = video.plays;
+    driver.positionAt(0, null);
+    driver.positionAt(9000, null);
+    expect(video.seeks).toHaveLength(seeks);
+    expect(video.plays).toBe(plays);
+  });
+
+  it('a SETTLED freeze hold is owned too — the playhead does not yank it out', () => {
+    const { driver, video, clock } = makeDriver({ holdBehavior: 'freeze' });
+    driver.start();
+    run(clock, 2600); // through the intro, into the settled freeze at 2.0
+    const seeks = video.seeks.length;
+    driver.positionAt(0, null);
+    expect(video.seeks).toHaveLength(seeks);
+    expect(video.at()).toBeCloseTo(2);
   });
 });

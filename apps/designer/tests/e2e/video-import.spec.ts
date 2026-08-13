@@ -159,7 +159,7 @@ test('back-to-back conversions of a known-good file BOTH succeed (fresh worker p
   await expect(page.getByText('clip-1', { exact: false }).first()).toBeVisible();
 });
 
-test('an imported video RENDERS in the canvas frame at a NON-BLANK mid-clip poster (D-128 Phase 3)', async ({
+test('an imported video RENDERS in the canvas frame AT THE PLAYHEAD — at rest on frame 0, and at the scrubbed frame (D-135 §5; supersedes the D-128 poster rest)', async ({
   app,
   page,
 }) => {
@@ -189,28 +189,48 @@ test('an imported video RENDERS in the canvas frame at a NON-BLANK mid-clip post
   const videoLoc = frame.locator('video[data-cg-asset-id]');
   await expect(videoLoc).toBeAttached({ timeout: 15_000 });
 
-  // The host seeks it OFF frame 0 to the mid-clip poster (decision (a)): once the
-  // blob src is wired + decoded, currentTime advances to ~midpoint of the clip.
-  const render = await videoLoc.evaluate(async (v: HTMLVideoElement) => {
+  // D-135 §5 (§9.5 (a)) — the PLAYHEAD owns the canvas frame. The poster routine still
+  // runs (load path + seek-fragile recovery) but paints only a PRE-TICK transient: the
+  // settled rest state with the playhead on frame 0 is clip time 0, and the chained
+  // re-tick guarantees the tick's seek lands LAST (one paint order, deterministic).
+  const rest = await videoLoc.evaluate(async (v: HTMLVideoElement) => {
     const deadline = Date.now() + 12_000;
     while (Date.now() < deadline) {
       const src = v.getAttribute('src') || '';
-      if (src.indexOf('blob:') === 0 && v.readyState >= 1 && v.currentTime > 0) {
+      // Settled = loaded AND back on the playhead's frame (the poster transient may
+      // read > 0 mid-flight; the tick must win).
+      if (src.indexOf('blob:') === 0 && v.readyState >= 1 && v.currentTime === 0 && !v.seeking) {
         return { ok: true, currentTime: v.currentTime, posterMs: Number(v.dataset.cgPosterMs) };
       }
       await new Promise((r) => setTimeout(r, 100));
     }
     return { ok: false, rs: v.readyState, t: v.currentTime, src: v.getAttribute('src') };
   });
-  expect(render, JSON.stringify(render)).toMatchObject({ ok: true });
-  if (render.ok) {
-    // poster time is the clip midpoint (~0.8s of the 1.6s fixture), NOT frame 0
-    expect(render.currentTime).toBeGreaterThan(0.4);
-    expect(render.posterMs).toBeGreaterThan(400);
+  expect(rest, JSON.stringify(rest)).toMatchObject({ ok: true });
+  if (rest.ok) {
+    // The poster dataset is still stamped (the transient's target) — it just no longer
+    // owns the resting frame.
+    expect(rest.posterMs).toBeGreaterThan(400);
   }
+
+  // SCRUB — the frame follows the playhead: frame 50 at 50 fps maps to clip time 1.0 s.
+  // Read back what the element SHOWS (currentTime after the seek settles), not just
+  // that a call was made.
+  await app.scrubToFrame(50);
+  const scrubbed = await videoLoc.evaluate(async (v: HTMLVideoElement) => {
+    const deadline = Date.now() + 12_000;
+    while (Date.now() < deadline) {
+      if (v.readyState >= 1 && !v.seeking && Math.abs(v.currentTime - 1.0) < 0.25) {
+        return { ok: true, currentTime: v.currentTime };
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return { ok: false, rs: v.readyState, t: v.currentTime };
+  });
+  expect(scrubbed, JSON.stringify(scrubbed)).toMatchObject({ ok: true });
 });
 
-test('a video element is NOT remounted across transform changes — it stays visible on its poster (D-128 Bug 1)', async ({
+test('a video element is NOT remounted across transform changes — it stays visible at the playhead’s frame (D-128 Bug 1; rest re-owned by D-135 §5)', async ({
   app,
   page,
 }) => {
@@ -238,17 +258,19 @@ test('a video element is NOT remounted across transform changes — it stays vis
   const videoLoc = frame.locator('video[data-cg-asset-id]');
   await expect(videoLoc).toBeAttached({ timeout: 15_000 });
 
-  // Wait for the poster to seek off 0, then MARK the live node so we can prove it
+  // D-135 §5 — the playhead owns the canvas frame now, so park it OFF frame 0 first
+  // (frame 50 at 50 fps ⇒ clip time 1.0 s), then MARK the live node so we can prove it
   // is the SAME element (not a remounted one) after transforms.
+  await app.scrubToFrame(50);
   const before = await videoLoc.evaluate(async (v: HTMLVideoElement & { __cgMark?: string }) => {
     const deadline = Date.now() + 12_000;
-    while (Date.now() < deadline && !(v.readyState >= 1 && v.currentTime > 0)) {
+    while (Date.now() < deadline && !(v.readyState >= 1 && !v.seeking && v.currentTime > 0)) {
       await new Promise((r) => setTimeout(r, 100));
     }
     v.__cgMark = 'keep-me';
     return { t: v.currentTime, rs: v.readyState };
   });
-  expect(before.t).toBeGreaterThan(0); // showing a real (non-blank) poster frame
+  expect(before.t).toBeGreaterThan(0); // showing a real (non-blank) frame — the playhead's
 
   // Several transform changes → several full scene-replaces (the drag simulacrum).
   // BEFORE the fix each of these tore down + reloaded the <video> (blank for a beat).

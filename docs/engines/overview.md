@@ -75,14 +75,19 @@ the editor UI and the runtime renderer (the "Where features go" map in
   child-composition scope per data row through the `wireScopeSubtree`
   factory — count at play, values live),
 - **positions frame-mapped media at the Designer playhead** — D-135: `tick(frame)`
-  reaches every `LottieDriver` (`positionAt`), so scrubbing AND timeline play animate a
-  Lottie on the canvas instead of leaving it on a static poster frame. The canvas has no
-  `play()` path of its own — its transport advances the frame and posts one `scrub` per
-  change — so scrub and play are literally the same call, and the driver's own phase
-  mapping is what resolves the clip frame (never a second copy). A driver that is running
-  its own lifecycle owns the frame and is not fought. The ticker, the clock and the
-  sequence are DELIBERATELY carved out: they are functions of real time, with no frame N
-  of a crawl to show. The `<video>` half is designed but gated on an open owner decision,
+  reaches every `LottieDriver` AND every `VideoDriver` (`positionAt`), so scrubbing AND
+  timeline play animate a Lottie and a `<video>` on the canvas instead of leaving them on
+  a static poster frame. The canvas has no `play()` path of its own — its transport
+  advances the frame and posts one `scrub` per change — so scrub and play are literally
+  the same call, and the driver's own phase mapping (`clipPositionAt` / `expectedClipMs`)
+  is what resolves the clip frame/time (never a second copy). A driver that is running
+  its own lifecycle owns the frame and is not fought. The video is positioned PAUSED by
+  `currentTime` (§9.5 (a) — the forward-1× hybrid rejected): a tick that finds a seek in
+  flight skips, so play shows the nearest decodable frame while the Preview stays the
+  frame-true rendition; the node is resolved through the handle's `live()` on every
+  access (B-137), and the at-rest canvas poster is now a pre-tick transient for video
+  exactly as for the Lottie. The ticker, the clock and the sequence are DELIBERATELY
+  carved out: they are functions of real time, with no frame N of a crawl to show,
 - **derives FOLLOW-source media windows from the composition's lifecycle** —
   `media-phases-follow-composition`: a Lottie/video whose `phases.source` is
   `'composition'` stores the RELATIONSHIP (intro settles at the content start, outro fits

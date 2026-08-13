@@ -3597,7 +3597,7 @@ the clock renders that offset's time.
 **Notes:** additive field alongside `timezone` (`ClockElementSchema`); countdown/countup ignore it
 like they ignore `timezone`.
 
-## [~] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; §5 answers play-and-re-anchor vs position-by-`currentTime`; **all four §9 decisions ANSWERED 2026-08-12** — the LOTTIE half is unblocked and built, the VIDEO half is gated on ONE new question, §9.5)
+## [~] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; §5 answers play-and-re-anchor vs position-by-`currentTime`; **all FIVE §9 decisions ANSWERED** — §9.1–§9.4 on 2026-08-12, §9.5 on 2026-08-13: (a), position everywhere — **BOTH halves are BUILT**; the item stays `[~]` only because it shares its change dir with [[D-133]], whose §1–§3 are unbuilt)
 
 > **Owner decisions (`design.md` §9), answered 2026-08-12 — the two that bind this item:**
 > **§9.4 — EVERY Lottie and EVERY video follows the playhead, regardless of `drivesHold`.** The
@@ -3646,12 +3646,26 @@ like they ignore `timezone`.
 > control. §4.5 records two directions; offering MANUAL phases for a marker-less clip is the
 > recommended one, because the other changes what goes on air for every existing clip.
 >
-> 🔴 **ONE NEW QUESTION, OPEN — `design.md` §9.5, and it gates the VIDEO half alone.** The
-> measurement shows the gap between positioning (~10 fps) and real forward-1× playback (25 fps) in
-> precisely the operation this item's "Why" names as the one the operator judges the composition
-> by. So a hybrid §5 never considered is on the table: forward-1× play through the shipped
-> `VideoDriver`, with scrub / backward / bounce positioned. **Not decided.** It does NOT gate the
-> Lottie half, and it does not gate anything in [[D-133]].
+> ✅ **§9.5 ANSWERED (2026-08-13): (a) — position everywhere; the forward-1× HYBRID is
+> REJECTED.** ONE mechanism for all four transport modes — no hand-off at mode boundaries, no
+> second path on a surface that reparents nodes (B-137's shape, the risk the question itself
+> named); the ~10 fps cost was already the stated §5.2–§5.3 contract; follow mode parks a
+> backdrop video at `H` for most judging time; the hybrid stays recoverable (the driver
+> machinery ships). Both candidates are kept in `design.md` §9.5 as the record of why.
+>
+> ✅ **The VIDEO half is BUILT (2026-08-13, session U).** `tick(frame)` positions every
+> `<video>` by `currentTime`, PAUSED, through `VideoDriver.positionAt` — resolving the clip
+> time through `expectedClipMs`, the SAME function the driver's clock reconciles against on
+> air (the singularity is spy-asserted). A tick that finds a seek in flight SKIPS (nearest
+> decodable frame — the specified contract); the node resolves through `live()` on every
+> access; a follow-source clip's derived window composes for free; and the CONSISTENCY DEBT
+> is paid — the canvas `<video>` no longer rests on its mid-clip poster: the poster routine
+> stays as the load path + seek-fragile recovery, painting only a pre-tick transient, and
+> the canvas at rest shows the playhead's frame exactly as the Lottie does.
+> ⚠ **One §5.3 claim remains UNMEASURED: two or more simultaneous video elements.** The
+> ~10 distinct fps figure was measured on ONE 1080p VP8+alpha element (1 s GOP, Chrome 151,
+> 25 fps); the multi-element clause in `design.md` §5.3 is qualitative — treat the number as
+> a floor for one element, not a promise for two.
 
 **What:** The canvas follows the playhead for both frame-mapped element kinds, under BOTH ways the
 playhead moves. **(a) Scrub:** while scrubbing, each Lottie element on the canvas shows the exact

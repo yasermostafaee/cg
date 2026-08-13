@@ -413,9 +413,17 @@ export class VideoDriver implements ElementOutroDriver {
    * Intro is `[introStart, introEnd]` (introStart 0 unless a follow window offsets it);
    * a `freeze` hold clamps to `introEnd`; a `loop` hold wraps within
    * `[loopStart, loopEnd]`; the outro is `[outroStart → outroEnd]`.
+   *
+   * THE ONE MAPPING (D-135 §5 / §9.5 (a)) — the driver's own clock (`tick`) and the
+   * Designer's playhead ({@link positionAt}) both resolve the clip time HERE. `mode`
+   * defaults to the driver's own lifecycle mode for the clock path; the playhead path
+   * passes it explicitly, because the playhead's phase comes from the composition's
+   * frame, not from this driver's state. Negative elapsed clamps to the window start
+   * (the playhead can sit before the composition's active-in) — never extrapolated back.
    */
-  private expectedClipMs(elapsedMs: number): number {
-    if (this.mode === 'outro') {
+  private expectedClipMs(rawElapsedMs: number, mode: 'intro' | 'outro' = this.mode): number {
+    const elapsedMs = Math.max(0, rawElapsedMs);
+    if (mode === 'outro') {
       return Math.min(this.o.outroStartMs + elapsedMs, this.o.outroEndMs);
     }
     const introSpanMs = this.o.introEndMs - this.o.introStartMs;
@@ -424,6 +432,43 @@ export class VideoDriver implements ElementOutroDriver {
     const span = this.o.loopEndMs - this.o.loopStartMs;
     if (span <= 0) return this.o.loopStartMs;
     return this.o.loopStartMs + ((elapsedMs - introSpanMs) % span);
+  }
+
+  /**
+   * D-135 §5 — POSITION the element at the Designer playhead, through the same mapping
+   * the driver's own clock reconciles against ({@link expectedClipMs}). The Designer
+   * canvas has no `play()` path at all — its transport advances the store's frame and
+   * the canvas posts one `scrub` per change — so SCRUB and PLAY on that surface are the
+   * same stream of calls into here, which is why they cannot disagree (§9.5 (a): ONE
+   * mechanism for all four transport modes; the forward-1× hybrid was REJECTED).
+   *
+   * `introElapsedMs` is time since the composition's IN; `outroElapsedMs`, when
+   * non-null, is time since the composition's OUT-POINT and WINS. A DEGENERATE outro
+   * (`outroStart >= outroEnd` — a clip with no OUT phase) takes the INTRO mapping past
+   * the out-point, exactly the Lottie's rule: the mapping then freezes (or idles) on
+   * the held look, which is what a degenerate `playOutro()` leaves painted on air —
+   * never a clamp to the clip's end frame.
+   *
+   * PAUSED, ALWAYS: this never calls `play()` — it seeks a paused element, and a seek
+   * that finds one still in flight SKIPS, never queues (the same `seeking()` guard the
+   * clock path uses): the canvas shows the NEAREST DECODABLE frame, which is the
+   * measured, specified contract (§5.2–§5.3), not a defect. The seek goes through the
+   * handle, whose members resolve the node via `live()` on EVERY access — B-137's
+   * constraint (§1.8/§5.5): the canvas reparents nodes across `scene-replace`.
+   *
+   * 🔴 A driver RUNNING its own lifecycle — or holding a frame it drove to — OWNS the
+   * element, and this is a no-op for it: the playhead may position what nothing else is
+   * driving; it may never fight a live one.
+   */
+  positionAt(introElapsedMs: number, outroElapsedMs: number | null): void {
+    if (this.destroyed || this.running || this.settledHold) return;
+    if (this.handle.seeking()) return; // skip, never queue — the seek-storm guard
+    const hasOutro = this.o.outroStartMs < this.o.outroEndMs;
+    const ms =
+      outroElapsedMs === null || !hasOutro
+        ? this.expectedClipMs(introElapsedMs, 'intro')
+        : this.expectedClipMs(outroElapsedMs, 'outro');
+    this.handle.seek(ms / 1000);
   }
 
   private tick(): void {

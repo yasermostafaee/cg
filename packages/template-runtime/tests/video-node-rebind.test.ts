@@ -155,3 +155,26 @@ describe('B-137 — a rejected play() is reported ONCE per element', () => {
     r.remove();
   });
 });
+
+describe('D-135 §5 — the playhead positions a REPARENTED <video> through live()', () => {
+  it('a tick positions the attached replacement; the detached original is not commanded', async () => {
+    // B-137's shape, pinned on the SECOND surface: the canvas posts a scene-replace on
+    // every mutation and reparents nodes, so per-frame positioning must resolve through
+    // `live()` on EVERY access — a captured reference would command the orphan.
+    const r = createRuntime(scene([video('v')]), { skipFontLoad: true, installGlobals: false });
+    await r.ready;
+
+    const built = vidEl('v');
+    const replacement = built.cloneNode(false) as HTMLVideoElement;
+    stubMedia(built); // jsdom has no media stack — inert play/pause, like the tests above
+    stubMedia(replacement);
+    built.replaceWith(replacement);
+    built.currentTime = 0;
+    replacement.currentTime = 0;
+
+    r.tick(10); // 10 frames × 20 ms = 200 ms → intro end of the 1 s clip's [0 → 200]
+    expect(replacement.currentTime, 'the visible node was positioned').toBeCloseTo(0.2);
+    expect(built.currentTime, 'the orphan was left alone').toBe(0);
+    r.remove();
+  });
+});

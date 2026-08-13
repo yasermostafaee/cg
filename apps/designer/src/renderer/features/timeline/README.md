@@ -113,12 +113,20 @@ what makes them unable to disagree, and it is why the transport's BACKWARD (`J`)
 BOUNCE modes work on everything the tick reaches without any special case.
 
 What that tick reaches: keyframed properties, stamped repeater rows, per-element lifespan
-gates, and — since D-135 — **every Lottie**, positioned at the clip frame the playhead
-maps to (regardless of `drivesHold`). A **ticker, a sequence and a clock deliberately do
-NOT follow it**: they are functions of real time, so there is no frame N of a crawl to
-show, and an invented mapping would disagree with air. A `<video>` does not follow it yet —
-that half is designed and gated on an open owner decision
-(`openspec/changes/timeline-drives-loop-and-media/design.md` §9.5).
+gates, and — since D-135 — **every Lottie AND every `<video>`**, positioned at the clip
+frame/time the playhead maps to (regardless of `drivesHold`). A **ticker, a sequence and a
+clock deliberately do NOT follow it**: they are functions of real time, so there is no
+frame N of a crawl to show, and an invented mapping would disagree with air.
+
+The video half (§9.5 answered (a), 2026-08-13 — position everywhere, the forward-1×
+hybrid REJECTED) positions a PAUSED element by `currentTime` through the driver's own
+`expectedClipMs` mapping; a tick that finds a seek in flight SKIPS, so under PLAY the
+canvas shows the **nearest decodable frame** (~10 distinct fps on a 1080p VP8+alpha
+element — the measured, specified contract; the Preview stays the frame-true rendition).
+**The poster consequence:** the canvas `<video>` no longer RESTS on its mid-clip
+`data-cg-poster-ms` — the poster routine is kept as the load path + seek-fragile recovery
+and paints only a PRE-TICK transient (the iframe chains a re-tick on its settle), so at
+rest the video sits where the playhead says, exactly like the Lottie.
 
 ⚠ **There is no exception at the in-point, and adding one is a known mistake.** Every frame maps,
 including `activeRange.in`, where the clip shows its first frame — legitimately blank for a clip

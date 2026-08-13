@@ -1,10 +1,11 @@
 # Design — the playhead drives the canvas, and the loop range is authorable
 
-> **DESIGN-FIRST — and §9 is ANSWERED as of 2026-08-12.** This document is the deliverable. All
-> four owner decisions (§9.1–§9.4) are answered, with the reasoning, the measurement and the
-> corrections kept beside them. Answering §9.3 opened exactly ONE new question — **§9.5**, the
-> forward-1× hybrid — which gates `tasks.md` §5 (the video half) and nothing else. §4 (the Lottie
-> half) and every D-133 task are unblocked.
+> **DESIGN-FIRST — and §9 is ANSWERED IN FULL as of 2026-08-13.** This document is the
+> deliverable. All four owner decisions (§9.1–§9.4) are answered, with the reasoning, the
+> measurement and the corrections kept beside them. Answering §9.3 opened exactly ONE new
+> question — **§9.5**, the forward-1× hybrid — answered by the owner on 2026-08-13: **(a),
+> position everywhere; the hybrid is REJECTED** (see §9.5 for the record). Nothing in this
+> change is gated any more; §4 (the Lottie half) and §5 (the video half) are both built.
 
 ---
 
@@ -278,9 +279,9 @@ delivered to the client, so the compatibility floor is unset ([[P-031]]).
 `tick(frame)` to map composition frame → clip frame through the element's phase mapping and call
 `goToAndStop` is the whole of it. No new architecture, no timing risk, no decoder.
 
-It was called out to land **first and alone**: it makes the acceptance demonstrable on one element
-kind while §9.5's video question is open, and it validates the frame↔time mapping the video half
-then reuses.
+It was called out to land **first and alone**: it made the acceptance demonstrable on one element
+kind while §9.5's video question was open, and it validated the frame↔time mapping the video half
+now reuses (§9.5 answered 2026-08-13; §5 built).
 
 ### 4.1 Recon inside the runtime — the three questions asked before any code, and their answers
 
@@ -665,10 +666,11 @@ be "genuinely better, in the one mode where it works" while not knowing how much
 measurement says: ~10 fps against 25 fps. That does not revive play-and-re-anchor as the whole
 answer — (a) still stands, and backward and bounce still have no expression in it — but it does put
 a **HYBRID** on the table that this section never considered: forward-1× play through the shipped
-`VideoDriver`, everything else positioned. It is filed as **§9.5, OPEN**, and it gates `tasks.md`
-§5. Note that this section's own objection — that a re-anchoring path would "re-import the whole
+`VideoDriver`, everything else positioned. It was filed as **§9.5** and gated `tasks.md` §5. Note
+that this section's own objection — that a re-anchoring path would "re-import the whole
 drift/re-base/resume-grace machine" — is weaker than written: that machine is shipped, and the
-Preview uses it.
+Preview uses it. **§9.5 is now ANSWERED (2026-08-13): the hybrid is REJECTED — (a) stands whole,
+position everywhere.**
 
 ### 5.5 The hard constraint from §1.8
 
@@ -741,16 +743,16 @@ and `docs/engines/overview.md`.
 
 ---
 
-## 9. OWNER DECISIONS — §9.1–§9.4 ANSWERED (2026-08-12), §9.5 newly OPEN
+## 9. OWNER DECISIONS — §9.1–§9.4 ANSWERED (2026-08-12), §9.5 ANSWERED (2026-08-13)
 
 Each names both candidate answers and what each costs. They are recorded here rather than left in
 the prompt that raised them, because a prompt is ephemeral and the spec is the memory. **The
 candidates and their costs are KEPT after the answer** — the record of why a decision went the way
 it did is worth more than the decision restated alone.
 
-> **Status.** §9.1, §9.2, §9.3 and §9.4 are ANSWERED. Answering §9.3 opened a NEW question — §9.5,
-> the forward-1× hybrid — which gates `tasks.md` §5 (the video half) and NOTHING else. §4 (the
-> Lottie half) and all of D-133's tasks are unblocked.
+> **Status.** All five are ANSWERED. §9.1–§9.4 on 2026-08-12; §9.5 — the forward-1× hybrid that
+> §9.3's measurement opened, gating `tasks.md` §5 (the video half) and NOTHING else — on
+> 2026-08-13: (a), position everywhere, hybrid REJECTED. Nothing in this change is gated.
 
 ### 9.1 What does a loop range MEAN under a `timed` hold? — GATED tasks 2.x — ✅ ANSWERED: (a) INERT
 
@@ -934,11 +936,30 @@ playhead-following would not be being unreasonable — which is precisely why th
 loud rather than leaving it to be inferred from an implementation that simply never reads the flag
 on this path.
 
-### 9.5 🔴 NEW — OPEN: does forward-1× PLAY drive a canvas video through the shipped `VideoDriver`? — GATES tasks 5.x ONLY
+### 9.5 Does forward-1× PLAY drive a canvas video through the shipped `VideoDriver`? — ✅ ANSWERED: (a) — position everywhere; the HYBRID is REJECTED
 
-**Opened by §9.3's measurement, 2026-08-12. NOT decided.** It gates `tasks.md` §5 (the video half)
-together with §9.4. It does **NOT** gate §4 (the Lottie half), and it does not gate anything in
-D-133.
+**ANSWER (owner, 2026-08-13): (a) — position everywhere.** Every transport mode — scrub, forward
+play, backward play, bounce — positions the canvas `<video>` by `currentTime` from `tick(frame)`,
+through the shipped `VideoDriver` mapping. The hybrid below is REJECTED. Why:
+
+- **ONE mechanism for all four transport modes.** Nothing to hand off, no seek-then-play
+  re-synchronisation at every entry to and exit from forward-1× play, and no second path on a
+  surface that reparents nodes — B-137's shape, which is the risk this question itself named in
+  its AGAINST bullet. The SINGULARITY of one call is what D-135's acceptance rests on (§5.1(b)),
+  and the hybrid spends it to buy smoothness in one mode.
+- **The measured cost is already a stated spec contract**, not a discovery this answer has to
+  absorb: ~10 distinct fps on a 1080p VP8+alpha element, nearest-decodable-frame, with the
+  Preview remaining the frame-true rendition (§5.2–§5.3, measured 2026-08-12 with the conditions
+  recorded beside the number).
+- **Follow mode (`media-phases-follow-composition`) shifts the economics.** A backdrop video is
+  PARKED at its hold time `H` for most of the operator's judging time — smooth 1× motion on the
+  canvas matters less than when this question was filed.
+- **Rejected but RECOVERABLE:** if canvas-video judging at 1× ever becomes a real workflow, the
+  hybrid can be revisited — the driver machinery it would reuse ships and is not being removed.
+
+The question and both positions are kept below exactly as filed, as the record of why. Opened by
+§9.3's measurement, 2026-08-12; it gated `tasks.md` §5 (the video half) together with §9.4. It
+never gated §4 (the Lottie half) or anything in D-133.
 
 §5.4 rejected play-and-re-anchor and conceded it would be "genuinely better, in the one mode where
 it works" — **without knowing the size of the gap.** The measurement supplies it: the gap is
@@ -958,10 +979,10 @@ position it by `currentTime`.**
   of one call is what guarantees scrub and play agree — plus a hand-off at every ENTRY to and EXIT
   from forward-1× play, on a surface that reparents nodes (B-137's shape, §1.8).
 
-**Not decided here.** Answering it means weighing frame-true forward play against the one-call
-guarantee D-135's acceptance rests on.
+~~**Not decided here.** Answering it means weighing frame-true forward play against the one-call
+guarantee D-135's acceptance rests on.~~ — decided above, 2026-08-13: the one-call guarantee won.
 
-#### ⚠ §5 also owes a CONSISTENCY debt the Lottie half just created
+#### ⚠ §5 also owes a CONSISTENCY debt the Lottie half just created — ✅ PAID by §5 (2026-08-13)
 
 `<video>` on the canvas still sits at its own poster: `scene-builder.ts` stamps
 `data-cg-poster-ms` and the paused element is seeked there, so a transparent frame 0 does not show
@@ -975,6 +996,30 @@ the Lottie's.** It is recorded here rather than fixed now because touching video
 exactly what §5 is gated on: whichever way §9.5 goes, the video's canvas frame becomes something
 `tick(frame)` owns, and the poster is the thing it would overwrite. Doing it early would change
 video rendering in a change that has deliberately not decided how video is driven.
+
+**How it was paid (2026-08-13, §5 built).** The poster's OWNERSHIP of the at-rest frame is
+dropped; its LOAD MACHINERY is kept, subordinate to the tick — because the two were never the
+same thing:
+
+- `attachRobustVideoPoster` is not only a seek: it is the eager-load path (`preload='auto'` +
+  seek-after-metadata, measured safe on every previously-failing GOP) and the sequential 16×
+  rate-play recovery for pre-`2026-07-25.5` seek-fragile assets, plus the one place a media load
+  error reaches the console. Removing it from the canvas would make the FIRST operation a cold
+  `currentTime` seek from `positionAt` — the exact operation that is a terminal
+  `PIPELINE_ERROR_DECODE` on misaligned-GOP assets. **The recovery path IS load-bearing on the
+  canvas for old assets**, so it stays — subordinate.
+- Subordination is enforced by ORDER, not by luck: the iframe host chains
+  `runtime.tick(currentFrame)` onto the poster routine's settle (and re-ticks after
+  `applyAssetUrls`'s pooled-node transplant), so the tick's seek always lands LAST. The poster is
+  a PRE-TICK TRANSIENT — exactly the Lottie's shipped semantics (`playhead-drives-media.test.ts`
+  pins the same words for the Lottie poster) — and the settled frame is ALWAYS the playhead's,
+  including the transparent frame 0 of a build-on clip at rest, which is what the Lottie already
+  shows and what the owner accepted after watching it on the real canvas (§4.3).
+- The OTHER consumers of the routine are untouched: the assets-panel / Inspector thumbnails
+  (`VideoPoster.tsx`) and the import modal's post-store verification (`video-asset-probe.ts`)
+  are poster surfaces with no playhead, and keep their seek. `data-cg-poster-ms` stays stamped
+  (scene-builder, and the follow-`H` refinement in runtime.ts) — it now names the transient's
+  target, not the resting state.
 
 ## 9A. 🔴 FINDINGS FROM THE 2026-08-13 AUDITS — one closed, one WIDE OPEN
 

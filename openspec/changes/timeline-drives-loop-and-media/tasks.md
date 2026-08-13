@@ -62,9 +62,12 @@
       ("backward is the worst case") is true of PLAYBACK and false of POSITIONING
 - [x] **`design.md` §9.4** — **(a)**: every Lottie and every video follows the playhead, regardless
       of `drivesHold`. The two are orthogonal, and the spec now says so
-- [ ] 🔴 **`design.md` §9.5 — NEW, OPEN.** Does forward-1× PLAY drive a canvas video through the
-      shipped `VideoDriver`, with scrub/backward/bounce positioned? Opened by §9.3's measurement
-      (10 fps against 25 fps in the dominant mode). **GATES §5 ONLY** — not §4, not D-133
+- [x] **`design.md` §9.5 — ANSWERED 2026-08-13: (a), position everywhere; the HYBRID is
+      REJECTED.** ONE mechanism for all four transport modes — no hand-off at mode boundaries, no
+      second path on a surface that reparents nodes (B-137's shape, the risk the question itself
+      named). The ~10 fps cost is already the stated §5.2–§5.3 contract; follow mode parks a
+      backdrop at `H` for most judging time; the hybrid stays recoverable (the driver machinery
+      ships). Both candidates kept in §9.5 as the record of why
 
 ## 1. D-133 — authoring the loop range ⟨§9.2 ANSWERED⟩
 
@@ -187,23 +190,38 @@ architecture, no decoder.
       through `createRuntime` with real values. No assertion was vacuous; one test NAME was
       misleading and is now true, and the latent NaN hazard is closed
 
-## 5. D-135 — the video half ⟨GATE: §9.5 — the forward-1× hybrid — and §9.4⟩
+## 5. D-135 — the video half ⟨§9.5 ANSWERED: (a) position everywhere — and §9.4 (a)⟩ ✅ DONE
 
-> 🔴 **STILL GATED.** §9.3 is answered, so direction is no longer the open question; what is open is
-> whether forward-1× play uses the shipped `VideoDriver` instead of positioning (§9.5). That
-> decides whether the tasks below describe one mechanism or two, so none of them may start.
+> **UNGATED 2026-08-13 — and built.** §9.5 is answered: the hybrid is REJECTED, every transport
+> mode positions the `<video>` through ONE mechanism (`VideoDriver.positionAt`, resolving through
+> the same `expectedClipMs` the driver's own clock uses). The tasks below describe one mechanism,
+> and they are done.
 
-- [ ] Position each `<video>` by `currentTime`, PAUSED, from `tick(frame)` ⟨GATE: §9.5⟩
-- [ ] Skip (never queue) a tick that finds a seek in flight, reusing the existing guard
-- [ ] 🔴 Resolve the node through `live()` on EVERY access — never a build-time reference. §1.8 /
-      §5.5: the canvas is a second host that reparents nodes, which is B-137's exact shape
-- [ ] Backward play and bounce position exactly as forward does — §9.3 (a), no direction special
+- [x] Position each `<video>` by `currentTime`, PAUSED, from `tick(frame)` —
+      `VideoDriver.positionAt`, resolving through `expectedClipMs` (the driver's own clock
+      mapping; the singularity is spy-asserted, not inferred from matching numbers). The tick
+      hands videos the SAME elapsed pair as Lotties; §9.4 (a) holds (`drivesHold` unread); a
+      degenerate outro takes the INTRO mapping (the Lottie rule); a follow window composes for
+      free (`follow-composition.test.ts` drives the owner's case through the playhead)
+- [x] Skip (never queue) a tick that finds a seek in flight, reusing the existing guard —
+      `positionAt`'s first media read is the same `seeking()` gate `reconcile`/`tick` use
+- [x] 🔴 Resolve the node through `live()` on EVERY access — never a build-time reference. §1.8 /
+      §5.5: the canvas is a second host that reparents nodes, which is B-137's exact shape.
+      Satisfied at the HANDLE: `positionAt` seeks through `handle.seek`, whose every member
+      resolves via `live()` — pinned by the reparent test in `video-node-rebind.test.ts`
+- [x] Backward play and bounce position exactly as forward does — §9.3 (a), no direction special
       case, no badge, no deferral. (The former "prefer `fastSeek()` where available" task is
       **deleted**: `fastSeek` is not implemented in Chromium and appears nowhere in this repo —
       measured `typeof video.fastSeek === 'undefined'` on Chrome 151)
-- [ ] Test: the canvas element is never `play()`ed ⟨re-read after §9.5 — the hybrid would change
-      this test's premise for forward-1× play⟩
-- [ ] Test: a reparented node is re-resolved and positioned, not commanded detached
+- [x] Test: the canvas element is never `play()`ed ⟨re-read after §9.5: (a) — position everywhere —
+      keeps this test's premise for ALL transport modes, forward-1× included⟩
+- [x] Test: a reparented node is re-resolved and positioned, not commanded detached
+- [x] **The §9.5 consistency debt is PAID**: the canvas `<video>` no longer RESTS on
+      `data-cg-poster-ms` — the poster routine is kept as the load path + seek-fragile recovery
+      (load-bearing for pre-`2026-07-25.5` assets) and paints only a PRE-TICK transient; the
+      iframe chains a re-tick on its settle and re-ticks after the pooled-node transplant, so
+      the tick's seek always lands last (pinned in `preview-video-poster-guard.test.ts`; the
+      runtime-level rest pin is in `playhead-drives-media.test.ts`)
 
 ## 6. The carve-out ✅ DONE
 
@@ -225,7 +243,11 @@ test pairs the two, so it can never pass by nothing happening).
       `packages/template-runtime/README.md` (the anchor-here / mapping-in-the-driver split, the
       singularity, the live-driver guard, `drivesHold` unread on this path),
       `apps/designer/src/renderer/features/timeline/README.md` (a new "What the playhead drives on
-      the canvas" section, including the poster consequence), `docs/engines/overview.md`
+      the canvas" section, including the poster consequence), `docs/engines/overview.md`.
+      **RE-SYNCED for the video half (2026-08-13, §5 built):** the same three docs now state that
+      `tick(frame)` positions every `<video>` (paused, `expectedClipMs`, skip-in-flight, `live()`,
+      the nearest-decodable-frame contract) and that the video's canvas poster is a pre-tick
+      transient like the Lottie's
 - [x] Full green gate for every touched workspace (`pnpm gate`, uncached, exit 0; openspec 48/48)
 - [x] **E2E**: DISCHARGED for `d43a9adb` — <https://github.com/yasermostafaee/cg/actions/runs/31647897276>
       `conclusion: success`, and the `e2e` job **RAN** (not skipped). This SUPERSEDES every earlier
@@ -244,7 +266,10 @@ test pairs the two, so it can never pass by nothing happening).
       reverted after the owner watched it on the real canvas
 - [x] `pnpm openspec validate timeline-drives-loop-and-media --strict`
 - [x] D-133 and D-135 are `[~]` with this change dir; **archive only on the owner's confirmation** —
-      and this change is NOT ready for it: §1–§3 (D-133) and §5 (the video half) are unbuilt
+      and this change is NOT ready for it yet: **D-135 is now WHOLE (§4 + §5 both built,
+      2026-08-13), but §1–§3 (D-133 — the loop range) remain unbuilt.** What remains before
+      archiving: build §1–§3, then the owner confirms. Nothing else is outstanding in this
+      change — §0–§0b, §4–§7 are done and every owner decision is answered
 
 ## Not in this change
 
