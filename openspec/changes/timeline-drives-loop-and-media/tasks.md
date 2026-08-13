@@ -249,10 +249,12 @@ test pairs the two, so it can never pass by nothing happening).
       the nearest-decodable-frame contract) and that the video's canvas poster is a pre-tick
       transient like the Lottie's
 - [x] Full green gate for every touched workspace (`pnpm gate`, uncached, exit 0; openspec 48/48)
-- [x] **E2E**: DISCHARGED for `d43a9adb` — <https://github.com/yasermostafaee/cg/actions/runs/31647897276>
-      `conclusion: success`, and the `e2e` job **RAN** (not skipped). This SUPERSEDES every earlier
-      discharge rather than joining them — the debt follows the pushed HEAD, and each earlier run
-      verified a tree that has since been replaced:
+- [x] **E2E**: DISCHARGED for `710f0ab0` (the video half, session U) —
+      <https://github.com/yasermostafaee/cg/actions/runs/31683317925>, run
+      `conclusion: success`, and the `E2E (Playwright)` job **RAN** (`completed success`, not
+      skipped). This SUPERSEDES every earlier discharge rather than joining them — the debt
+      follows the pushed HEAD, and each earlier run verified a tree that has since been
+      replaced: `d43a9adb` (<https://github.com/yasermostafaee/cg/actions/runs/31647897276>),
       `f9a35507` (<https://github.com/yasermostafaee/cg/actions/runs/31644333051>),
       `0d2d0c3b`
       (<https://github.com/yasermostafaee/cg/actions/runs/31639516131>),
