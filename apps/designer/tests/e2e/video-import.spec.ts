@@ -32,6 +32,8 @@ test('a video imports, its stored WebM decodes (CSP media-src), and drag places 
   page,
 }) => {
   await app.newProject('VideoImport');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
 
   // ---- import through the real modal ----
   await page.getByRole('button', { name: 'Project assets' }).click();
@@ -121,6 +123,8 @@ test('back-to-back conversions of a known-good file BOTH succeed (fresh worker p
   // source hash, not filename), so this drives "Convert again" to still force a
   // second real encode — pinning both the dedupe detection AND the fresh worker.
   await app.newProject('VideoTwice');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const buffer = readFileSync(FIXTURE);
 
@@ -160,6 +164,8 @@ test('an imported video RENDERS in the canvas frame at a NON-BLANK mid-clip post
   page,
 }) => {
   await app.newProject('VideoRender');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -209,6 +215,8 @@ test('a video element is NOT remounted across transform changes — it stays vis
   page,
 }) => {
   await app.newProject('VideoDrag');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -263,6 +271,8 @@ test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-pr
   page,
 }) => {
   await app.newProject('VideoFringe');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -349,6 +359,8 @@ test('MOTION keeps transparency: source-transparent pixels stay transparent acro
   page,
 }) => {
   await app.newProject('VideoMotionAlpha');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -450,6 +462,8 @@ test('STALE-RESULT COHERENCE: ticking a correction after a completed conversion 
   // the PREVIOUS run's bytes. Changing a setting must clear the verdict, block
   // placing, and offer the re-convert path in place.
   await app.newProject('VideoSupersede');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -485,6 +499,8 @@ test('re-importing the same source is deduped: "Use existing" places an element 
   page,
 }) => {
   await app.newProject('VideoDedupe');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const buffer = readFileSync(FIXTURE);
 

@@ -48,6 +48,7 @@ import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { activeDocOf, activeFieldData, activeLayersOf } from '../../state/scene-doc.js';
+import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/follow-attach.js';
 import { contentStartDefaultFrom } from './content-start-default.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { useAssetUrl, useAssets } from '../assets/useAssets.js';
@@ -1212,18 +1213,15 @@ function LottieSections({
             </Button>
             {/* media-phases-follow-composition — the third source. The slots carry the same
                 claim-least seed as Add (midpoint / op); under follow they are IGNORED, kept
-                only so a later Detach has somewhere to land. */}
+                only so a later Detach has somewhere to land. The seed is SHARED with the
+                add-time duration guard's backdrop commit (`follow-attach.ts`) — one rule. */}
             <Button
               variant="secondary"
               disabled={timing === null}
               onClick={() => {
                 if (timing === null) return;
                 designerStore.updateElement(id, {
-                  phases: {
-                    introEnd: lottieClipMidpoint(timing.meta),
-                    outroStart: timing.meta.op,
-                    source: 'composition',
-                  },
+                  phases: lottieFollowAttachPhases(timing.meta),
                 } as Partial<Element>);
               }}
             >
@@ -1533,16 +1531,13 @@ function VideoSections({
             </Button>
             {/* media-phases-follow-composition — the third source, presented exactly as the
                 Lottie's. The slots carry the claim-least seed (poster midpoint / duration);
-                IGNORED under follow, kept as the Detach landing. */}
+                IGNORED under follow, kept as the Detach landing. Shared with the add-time
+                duration guard's backdrop commit (`follow-attach.ts`) — one rule. */}
             <Button
               variant="secondary"
               onClick={() =>
                 designerStore.updateElement(id, {
-                  phases: {
-                    introEnd: posterTimeMs(duration),
-                    outroStart: duration,
-                    source: 'composition',
-                  },
+                  phases: videoFollowAttachPhases(duration),
                 } as Partial<Element>)
               }
             >

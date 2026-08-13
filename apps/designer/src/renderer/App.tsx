@@ -8,6 +8,7 @@ import { CompositionActionBar } from './features/compositions/CompositionActionB
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { InputTooltip } from './features/shell/InputTooltip.js';
+import { DurationGuardDialog } from './features/addGuard/DurationGuardDialog.js';
 import { LandingView } from './features/shell/LandingView.js';
 import { Splitter } from './features/shell/Splitter.js';
 import { StorageNotice } from './features/shell/StorageNotice.js';
@@ -612,6 +613,10 @@ export function App(): JSX.Element {
         </>
       )}
       <StatusBar scene={editScene ?? scene} issues={issues} />
+      {/* D-151 — the add-time duration guard's dialog: mounted ONCE here because several add
+          doors (assets panel, canvas drops, compositions panel) raise it; it renders only
+          while a guarded add is pending. */}
+      <DurationGuardDialog />
       {notice !== null && <Toast message={notice} />}
       <InputTooltip />
     </main>

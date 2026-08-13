@@ -122,7 +122,14 @@ test.describe('D-125 Phase 3b-2 — auto-exit plays the element outro', () => {
     app,
   }) => {
     await app.newProject('LottieAutoExit');
+    // D-151 — this scenario DELIBERATELY pairs a 4 s clip with a 1 s host (the outro plays
+    // on EXIT, outside the timeline), which the add-time duration guard now interrupts.
+    // Place through a fitting host, then shrink back: the guard is ADD-time only (no
+    // re-check ever fires on an element already accepted), so the end state is byte-equal
+    // to the original scenario and every sub-second timing below stays valid.
+    await app.setSceneDuration(250);
     await importAndPlaceLottie(app, 'longoutro.json', LONG_OUTRO);
+    await app.setSceneDuration(50);
     // auto-out with the default zero hold: the composition ends its OWN hold right at
     // the out-point (seeded at 75% of the 1 s timeline ⇒ exit ≈ 0.75 s after play) —
     // the exact path that used to bypass the seam. No stop()/out() is ever sent.

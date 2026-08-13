@@ -267,6 +267,8 @@ test.describe('Lottie element (D-125 Phase 1)', () => {
     app,
   }) => {
     await app.newProject('Lottie');
+    // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+    await app.setSceneDuration(250);
 
     // Open the Project Assets panel (the left rail defaults to Compositions).
     await app.page.getByRole('button', { name: 'Project assets', exact: true }).click();
@@ -341,6 +343,8 @@ test.describe('Lottie element (D-125 Phase 1)', () => {
     app,
   }) => {
     await app.newProject('Lottie canvas');
+    // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+    await app.setSceneDuration(250);
     await importAndPlaceLottie(app, 'intro-furniture.json', ANIMATED_INTRO);
 
     // The player mounts (an <svg> exists) — Phase 1 already guaranteed this.
@@ -376,6 +380,8 @@ test.describe('Lottie element (D-125 Phase 1)', () => {
     app,
   }) => {
     await app.newProject('Lottie no-markers');
+    // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+    await app.setSceneDuration(250);
     await importAndPlaceLottie(app, 'furniture-nomarkers.json', MARKERLESS_FURNITURE);
 
     // The lottie_light player is mounted on the EDITOR CANVAS (a real <svg>, in the

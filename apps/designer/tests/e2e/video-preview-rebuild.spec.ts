@@ -98,6 +98,8 @@ test('a playing video SURVIVES a preview rebuild — the driver follows the node
   page,
 }) => {
   await app.newProject('VideoPreviewRebuild');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await importAndPlaceVideo(page);
 
   // A ticker beside it — the companion from the report, and what puts the
@@ -153,6 +155,8 @@ test('EXPERIMENT 2 — a video ALONE freezes on a rebuild too: the trigger is th
   page,
 }) => {
   await app.newProject('VideoAloneRebuild');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await importAndPlaceVideo(page);
   // An out-point so the preview's own timing knobs render at all. It adds no
   // animating element — the scene is still a video and nothing else.

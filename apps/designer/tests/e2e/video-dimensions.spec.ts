@@ -192,6 +192,8 @@ test('a lower-third-shaped clip KEEPS its opaque pixels through the full chain (
   const W = 960,
     H = 140;
   await app.newProject('LowerThirdAlpha');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -321,6 +323,8 @@ for (const [W, H] of [
     page,
   }) => {
     await app.newProject(`Dims${String(W)}x${String(H)}`);
+    // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+    await app.setSceneDuration(250);
     await page.getByRole('button', { name: 'Project assets' }).click();
     const chooser = page.waitForEvent('filechooser');
     await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');

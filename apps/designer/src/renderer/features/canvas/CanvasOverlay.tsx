@@ -1,7 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AnchorPoint, Element, LottiePhases, Scene, TextElement } from '@cg/shared-schema';
+import type {
+  AnchorPoint,
+  Element,
+  LottieElement,
+  LottiePhases,
+  Scene,
+  TextElement,
+} from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
-import { importLottie, lottieLayerNames, markersToSegments } from '@cg/lottie-bridge';
+import {
+  importLottie,
+  lottieClipMeta,
+  lottieLayerNames,
+  markersToSegments,
+} from '@cg/lottie-bridge';
+import {
+  guardedAddCompositionInstance,
+  guardedAddLottie,
+  guardedAddVideo,
+} from '../addGuard/duration-guard.js';
 import {
   designerStore,
   editSceneOf,
@@ -152,7 +169,7 @@ function lottieSize(w: number, h: number): { width: number; height: number } {
  * the clip plays once and freezes), and sizes the element to the animation's
  * native canvas. A malformed / rejected file surfaces a notice and inserts nothing.
  */
-async function insertLottieFromAsset(
+export async function insertLottieFromAsset(
   assetId: string,
   scenePoint: { x: number; y: number },
 ): Promise<void> {
@@ -186,14 +203,19 @@ async function insertLottieFromAsset(
         };
   const { width, height } = lottieSize(result.animation.w, result.animation.h);
   const id = `el-${String(Date.now())}`;
-  designerStore.addElement(
+  // D-151 — through the add-time duration guard (door L1, the ONLY Lottie door). The parsed
+  // animation's ip/op/fr are handed as the intrinsic-duration facts (at 1× — the creation
+  // default; `lottieAssetCache` is primed only post-insert, so it cannot be the source here).
+  // The guard commits via `addElement`, which also selects — a deferred/cancelled add must not
+  // leave a selection pointing at an id that was never inserted.
+  guardedAddLottie(
     defaultLottie(id, scenePoint.x, scenePoint.y, assetId, {
       ...(phases ? { phases } : {}),
       width,
       height,
-    }),
+    }) as LottieElement,
+    lottieClipMeta(result.animation),
   );
-  designerStore.setSelection([id]);
 }
 
 /**
@@ -207,7 +229,7 @@ async function insertLottieFromAsset(
  * 1920-wide clip at 1/4 size. An unreadable asset surfaces a notice and inserts
  * nothing.
  */
-async function insertVideoFromAsset(
+export async function insertVideoFromAsset(
   assetId: string,
   scenePoint: { x: number; y: number },
   resolution: { width: number; height: number },
@@ -223,7 +245,10 @@ async function insertVideoFromAsset(
     return;
   }
   const id = `el-${String(Date.now())}`;
-  designerStore.addElement(
+  // D-151 — through the add-time duration guard (door V3; V1/V2 are the import modal's
+  // place-on-confirm tail). Same convergence rule as before: both entry points build via the
+  // SHARED fitVideoElement, now both route the result through the same guard.
+  guardedAddVideo(
     fitVideoElement({
       id,
       x: scenePoint.x,
@@ -235,7 +260,6 @@ async function insertVideoFromAsset(
       resolution,
     }),
   );
-  designerStore.setSelection([id]);
 }
 
 interface Props {
@@ -659,15 +683,20 @@ export function CanvasOverlay({
     if (compId !== '') {
       e.preventDefault();
       const p = viewportToScene(e.clientX, e.clientY);
-      const ok = designerStore.addCompositionInstance(compId, {
-        x: Math.round(p.x),
-        y: Math.round(p.y),
-      });
-      if (!ok) {
+      // The cycle pre-check keeps the loop notice EXACT (the guard silently refuses a cyclic
+      // child, and this door's contract is to explain the refusal).
+      if (!designerStore.canNestCompositionInActive(compId)) {
         designerStore.showNotice(
           'Can’t place this composition here — it already contains the open composition, so nesting it would loop forever.',
         );
+        return;
       }
+      // D-151 — through the add-time duration guard (door C2; C1 is the panel's menu item). A
+      // longer child raises the TWO-choice dialog (an instance has no phases and cannot follow).
+      guardedAddCompositionInstance(compId, {
+        x: Math.round(p.x),
+        y: Math.round(p.y),
+      });
       return;
     }
     const assetId = e.dataTransfer.getData('application/x-cg-asset-id');

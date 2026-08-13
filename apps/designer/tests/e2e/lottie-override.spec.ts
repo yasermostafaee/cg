@@ -131,6 +131,8 @@ test.describe('D-125 Phase 3c — lottie-override field bindings', () => {
     app,
   }) => {
     await app.newProject('LottieOverride');
+    // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+    await app.setSceneDuration(250);
 
     // A field needs to exist before it can be re-bound: the Data-key convenience
     // layer creates one on a text element, and the × unbinds it (keeping the field).
