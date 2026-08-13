@@ -185,3 +185,75 @@ describe('pack → unpack round-trip', () => {
     },
   );
 });
+
+/**
+ * ⭐ Task 1.5e — the frame survives the `.vcg` exporter (the other half, the
+ * single-file HTML export, is pinned in
+ * `packages/single-file-export/tests/exporter-single-file.test.ts`).
+ *
+ * Not a formality: `pack()` runs `SceneSchema.parse` before writing
+ * `template.json`, so an element field that the schema does not know is a hard
+ * failure at export rather than a silently dropped property — which is exactly what
+ * makes this the assertion worth having on a NEW optional field.
+ *
+ * Maps `specs/designer-live-source/spec.md`:
+ *   - "A Live Source may carry a FRAME, and the frame never enters the hole"
+ */
+describe('1.5e — a Live Source FRAME round-trips through the `.vcg` exporter', () => {
+  const plate = (stroke?: unknown): Element =>
+    ({
+      id: 'live-a',
+      name: 'Guest box',
+      type: 'video-placeholder',
+      transform: {
+        position: { x: 300, y: 200 },
+        size: { w: 640, h: 360 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      routeKey: 'guest-1',
+      ...(stroke !== undefined ? { stroke } : {}),
+    }) as unknown as Element;
+
+  const packWith = async (el: Element): Promise<Scene> => {
+    const baseLayer = fixtureScene.layers[0];
+    if (!baseLayer) throw new Error('fixture missing layer 0');
+    const buf = await pack({
+      scene: {
+        ...fixtureScene,
+        layers: [{ ...baseLayer, children: [el] }, ...fixtureScene.layers.slice(1)],
+      },
+      manifestExtras: fixtureManifestExtras,
+      indexHtml: fixtureIndexHtml,
+      cgJs: fixtureCgJs,
+      cgCss: fixtureCgCss,
+    });
+    return (await unpack(buf)).scene;
+  };
+
+  it('carries width, colour and dash through pack → unpack', async () => {
+    const out = await packWith(plate({ width: 6, color: '#FF8800', dash: [8, 4] }));
+    const el = out.layers[0]?.children[0] as { stroke?: unknown } | undefined;
+    expect(el?.stroke).toEqual({ width: 6, color: '#FF8800', dash: [8, 4] });
+  });
+
+  it('carries a ZERO width — "no frame" is a stored state, not an absence', async () => {
+    // The falsy-zero trap at the artifact boundary: a serializer that treated 0 as
+    // "unset" would drop the key, and the plate would reopen at its remembered
+    // colour the next time the width went up.
+    const out = await packWith(plate({ width: 0, color: '#00FF00' }));
+    const el = out.layers[0]?.children[0] as { stroke?: unknown } | undefined;
+    expect(el?.stroke).toEqual({ width: 0, color: '#00FF00' });
+  });
+
+  it('an UNFRAMED plate round-trips with the key still absent', async () => {
+    const out = await packWith(plate());
+    const el = out.layers[0]?.children[0] as Record<string, unknown> | undefined;
+    expect(el && 'stroke' in el).toBe(false);
+  });
+});

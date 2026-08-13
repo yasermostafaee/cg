@@ -400,3 +400,84 @@ describe('D-137 — the default factory', () => {
     expect(liveSourceIssues(scene([el as unknown as Element]))).toEqual([]);
   });
 });
+
+/**
+ * ⭐ Task 1.5g — **NEITHER STROKE NOR SHADOW ENTERS THE HOLE RECT**, so neither
+ * touches 1.8's OVERLAP check.
+ *
+ * This is the pinning task that makes the frame (1.5e) safe to ship BEFORE the punch
+ * (1.5c) exists: it fixes the contract the punch will later have to respect. The
+ * property is one sentence — **the overlap check reads the DECLARED rect and must
+ * keep reading only that** — and the tests below are the three ways it could break.
+ *
+ * ⚠ **On "shadow".** §9a.1 names stroke AND shadow, but `video-placeholder` carries
+ * no `shadow` field today (1.5e's scope is colour + width; the schema was checked at
+ * HEAD). The guarantee asserted here is the one that covers both and does not need
+ * the field to exist: `frameAabb` composes `transform` alone, so NO paint property is
+ * an input to the geometry. A shadow lands inside that guarantee the day it is added
+ * — and the last test below is what will fail if someone ever routes a paint
+ * property into the rect.
+ *
+ * Maps `specs/designer-live-source/spec.md`:
+ *   - "A Live Source may carry a FRAME, and the frame never enters the hole"
+ */
+describe('1.5g — the frame is not geometry: overlapping FRAMES is not a fault', () => {
+  const FRAME = { width: 40, color: '#ff8800' };
+
+  it('two plates whose FRAMES overlap but whose HOLES do not: NO issue', () => {
+    // 640 wide at x=0 ends at 640; the next starts at x=660 — a 20px gap between the
+    // holes, which two 40px frames close and then some (each frame reaches 40px out,
+    // so they overlap by 60px). Under a border-box reading — or any check that added
+    // the stroke to the rect — this is a collision. It is not one.
+    const issues = liveSourceIssues(
+      scene([live('guest-1', 0, 0, { stroke: FRAME }), live('guest-2', 660, 0, { stroke: FRAME })]),
+    );
+    expect(issues.filter((i) => i.code === 'live-source-overlap')).toEqual([]);
+  });
+
+  it('two plates whose HOLES overlap IS a fault — frames or no frames', () => {
+    // The other half, and the reason the test above is not just "nothing is ever a
+    // fault": the real collision is still reported, against both elements.
+    const issues = liveSourceIssues(
+      scene([
+        live('guest-1', 100, 100, { stroke: FRAME }),
+        live('guest-2', 300, 200, { stroke: FRAME }),
+      ]),
+    );
+    expect(
+      issues
+        .filter((i) => i.code === 'live-source-overlap')
+        .map((i) => i.elementId)
+        .sort(),
+    ).toEqual(['guest-1', 'guest-2']);
+  });
+
+  it('a frame of ANY width leaves every preflight verdict byte-identical', () => {
+    // The general statement, rather than three sampled widths: the issue list is a
+    // pure function of the declared rects, so adding a stroke — of any width, up to
+    // one far larger than the plate — cannot change a single verdict, message or
+    // element id. This is the assertion a future "helpfully" stroke-aware AABB
+    // breaks, and it names the reason in its own failure.
+    const layout = (over: Record<string, unknown>): Scene =>
+      scene([
+        live('guest-1', 0, 0, over), // clear
+        live('guest-2', 660, 0, over), // 20px from guest-1's hole
+        live('guest-3', 700, 300, over), // overlaps guest-2's hole
+      ]);
+    const bare = liveSourceIssues(layout({}));
+    for (const width of [0, 1, 40, 5000]) {
+      expect(liveSourceIssues(layout({ stroke: { width, color: '#ffffff' } }))).toEqual(bare);
+    }
+    // …and the baseline is not vacuous: guest-2 and guest-3 really do collide.
+    expect(bare.filter((i) => i.code === 'live-source-overlap')).toHaveLength(2);
+  });
+
+  it('an off-frame verdict is the frame\u2019s business either: a frame cannot push a plate off', () => {
+    // 640 wide at x=1280 ends exactly at the 1920 edge — on frame. A 40px frame
+    // reaches to 1960, past the edge, and that is FINE: the template may paint
+    // outside the frame boundary like any other element, and the plate's CONTRACT
+    // (the hole) is still fully on frame.
+    const el = live('guest-1', 1280, 0, { stroke: { width: 40, color: '#ffffff' } });
+    expect(codes(scene([el]))).toEqual([]);
+  });
+});

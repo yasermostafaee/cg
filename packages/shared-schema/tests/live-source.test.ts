@@ -141,3 +141,71 @@ describe('the `live-source-id` binding target', () => {
     ).toBe(false);
   });
 });
+
+/**
+ * §9a.1 / task 1.5e — the plate's FRAME. Additive, optional, and the SHARED
+ * `StrokeSchema` rather than a second stroke concept.
+ *
+ * Maps `specs/designer-live-source/spec.md`:
+ *   - "A Live Source may carry a FRAME, and the frame never enters the hole"
+ */
+describe('the plate\u2019s stroke \u2014 §9a.1', () => {
+  it('is OPTIONAL: a scene authored before it still parses, with the field absent', () => {
+    const parsed = VideoPlaceholderElementSchema.parse({
+      ...base,
+      type: 'video-placeholder',
+      routeKey: 'guest-1',
+    });
+    expect(parsed.stroke).toBeUndefined();
+    // Additive, so no schema-version bump is implied and no migration is owed.
+    expect('stroke' in parsed).toBe(false);
+  });
+
+  it('takes the SHARED shape — width + color, and an optional dash', () => {
+    const parsed = VideoPlaceholderElementSchema.parse({
+      ...base,
+      type: 'video-placeholder',
+      routeKey: 'guest-1',
+      stroke: { width: 4, color: '#ff0000', dash: [6, 3] },
+    });
+    expect(parsed.stroke).toEqual({ width: 4, color: '#ff0000', dash: [6, 3] });
+  });
+
+  it('carries NO alignment notion — an `align` key is not part of the shape', () => {
+    // The stroke is OUTSIDE by construction (CSS `content-box` on a border), so
+    // there is nothing for an alignment field to choose. Pinned so a later
+    // "helpful" addition here has to argue with the design first (§9a.1).
+    const parsed = VideoPlaceholderElementSchema.parse({
+      ...base,
+      type: 'video-placeholder',
+      routeKey: 'guest-1',
+      stroke: { width: 2, color: '#ffffff', align: 'inside' },
+    });
+    expect(parsed.stroke).toEqual({ width: 2, color: '#ffffff' });
+  });
+
+  it('accepts width 0 — "no frame", NOT "unset"', () => {
+    // Zero is a legal, storable state that keeps the colour. Nothing downstream may
+    // read the falsy zero as absent and substitute a default.
+    const parsed = VideoPlaceholderElementSchema.parse({
+      ...base,
+      type: 'video-placeholder',
+      routeKey: 'guest-1',
+      stroke: { width: 0, color: '#00ff00' },
+    });
+    expect(parsed.stroke).toEqual({ width: 0, color: '#00ff00' });
+  });
+
+  it('refuses a negative width and a non-hex colour', () => {
+    const bad = (stroke: unknown): boolean =>
+      VideoPlaceholderElementSchema.safeParse({
+        ...base,
+        type: 'video-placeholder',
+        routeKey: 'guest-1',
+        stroke,
+      }).success;
+    expect(bad({ width: -1, color: '#ffffff' })).toBe(false);
+    expect(bad({ width: 2, color: 'white' })).toBe(false);
+    expect(bad({ width: 2 })).toBe(false);
+  });
+});

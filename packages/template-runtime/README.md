@@ -102,11 +102,28 @@ transforms.ts · css.ts   value formatters · baseline stylesheet
 ### scene-builder — `Scene` → DOM + the scope tree
 
 `buildScene` walks layers (sorted by `zIndex`) and creates one node per element
-(`text` / `ticker` / `clock` / `sequence` / `image` / `shape` / `lottie` rendered;
-`container` / `video-placeholder` emit a tagged placeholder div so layout and ids
-survive). It returns a **`scopeTree`** (a `FieldScope`): each composition instance
-owns its **own** `elementMap`, `textOriginals`, container, `animated` list,
-`tickers` + `clocks` + `sequences` + `lotties` lists, and lifecycle `source`.
+(`text` / `ticker` / `clock` / `sequence` / `image` / `shape` / `lottie` / `video` rendered;
+`container` emits a tagged placeholder div so layout and ids survive; `video-placeholder`
+is a **Live Source**, see below). It returns a **`scopeTree`** (a `FieldScope`): each
+composition instance owns its **own** `elementMap`, `textOriginals`, container,
+`animated` list, `tickers` + `clocks` + `sequences` + `lotties` lists, and lifecycle
+`source`.
+
+**A Live Source is a HOLE, and its geometry is a contract (D-137).** `buildLiveSource`
+branches on the render `mode`: `'author'` paints procedural SMPTE bars plus the id
+label (or a poster), `'output'` paints nothing inside the rect at all. What the element
+declares — `transform`, flattened by `collectLiveSources` at export — is the rect
+CasparCG composites a live input into, so **nothing may change that box**.
+
+That constraint is why the plate's optional `stroke` renders as a CSS **`outline`**
+rather than the `border` every other box kind gets. An outline is painted outside the
+box and takes **no layout**, so the hole stays exactly `transform` under any box model
+and any scale. A border cannot: the shipped baseline stylesheet resets
+`*{box-sizing:border-box}`, which would paint the frame INSIDE the rect and crop the
+live picture, and declaring `content-box` to escape that fixes the size while sliding
+the hole by the stroke width (`left`/`top` place the border edge). The stroke SHORTHAND
+is still one implementation — `strokeShorthand` — fed to `border` by `applyBoxStyle` and
+to `outline` here, so the property differs and the stroke grammar does not.
 
 **The editor backdrop never reaches output (B-129).** `Scene.editorBackdrop` and
 `Composition.editorBackdrop` are an **authoring affordance** — a viewing aid that makes

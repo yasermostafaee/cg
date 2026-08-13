@@ -15,6 +15,7 @@ import type {
   Scene,
   SequenceElement,
   Shadow,
+  Stroke,
   TextElement,
   TickerElement,
   ImageElement,
@@ -1245,6 +1246,21 @@ function videoPosterMs(element: VideoElement): number {
 }
 
 /**
+ * The CSS shorthand for a {@link Stroke} — `"<w>px <solid|dashed> <color>"`.
+ *
+ * ONE spelling, two properties: {@link applyBoxStyle} feeds it to `border` for the
+ * box kinds, {@link buildLiveSource} feeds the SAME string to `outline` for a Live
+ * Source (see there for why the property differs). The grammar is identical for
+ * both, so a dash rule or a unit that changed here could not reach one and miss the
+ * other — which is exactly how a plate's frame and a shape's would come to disagree
+ * about the same authored value.
+ */
+function strokeShorthand(stroke: Stroke): string {
+  const style = stroke.dash !== undefined && stroke.dash.length > 0 ? 'dashed' : 'solid';
+  return `${stroke.width}px ${style} ${stroke.color}`;
+}
+
+/**
  * D-042 — apply the shared box style to a background-capable element's node: the
  * border from `stroke` (a non-empty dash → `dashed`) and a uniform-or-per-corner
  * `border-radius`. Reused by every kind that mixes in `BoxStyleSchema` (shape,
@@ -1252,8 +1268,7 @@ function videoPosterMs(element: VideoElement): number {
  */
 function applyBoxStyle(el: HTMLElement, box: BoxStyle): void {
   if (box.stroke) {
-    const style = box.stroke.dash !== undefined && box.stroke.dash.length > 0 ? 'dashed' : 'solid';
-    el.style.border = `${box.stroke.width}px ${style} ${box.stroke.color}`;
+    el.style.border = strokeShorthand(box.stroke);
   }
   if (box.cornerRadius !== undefined) {
     el.style.borderRadius =
@@ -1459,11 +1474,20 @@ export { SMPTE_BARS, smpteBarsGradient };
  * contracts, which is why they are branched here on an explicit
  * {@link RenderMode} rather than differentiated by a stylesheet the host injects:
  *
- * - `'output'` (both exporters) — **ZERO PAINTED PIXELS.** No background, no
- *   children, no border. The element still emits its box (positioned, sized, id'd)
- *   so layout, bindings and the element map are unchanged, and so the hole's rect
- *   is inspectable in the artifact. It paints nothing because a live guest goes
- *   BEHIND it: anything painted here is a lid over the guest's face.
+ * - `'output'` (both exporters) — **ZERO PAINTED PIXELS INSIDE THE HOLE.** No
+ *   background and no children. The element still emits its box (positioned,
+ *   sized, id'd) so layout, bindings and the element map are unchanged, and so the
+ *   hole's rect is inspectable in the artifact. Nothing may paint INSIDE the rect,
+ *   because a live guest goes BEHIND it: a pixel painted there is a lid over the
+ *   guest's face.
+ *   ⭐ **AMENDED (owner, 2026-08-10; `live-source-multibox` design.md §9a.1) — an
+ *   authored `stroke` DOES paint, in BOTH modes, and that is not an exception to
+ *   the rule above.** It is rendered as a CSS `outline`, which is painted outside the
+ *   box and takes no layout, so the hole stays empty and the plate's box stays
+ *   exactly `transform` — the rect `collectLiveSources` declares and the overlap
+ *   preflight compares — under any box model and any scale. See the note in
+ *   {@link buildLiveSource} for why `border` was measured and rejected.
+ *
  * - `'author'` (canvas + Preview modal) — procedural SMPTE bars with the source id
  *   overlaid, or the poster image when one is set. Never an unmarked black box:
  *   with several holes on one frame, an unlabelled black rectangle tells the author
@@ -1481,6 +1505,45 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   el.dataset['cgLiveSource'] = element.routeKey;
   if (element.keySourceId !== undefined) el.dataset['cgLiveSourceKey'] = element.keySourceId;
   applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+
+  // ⭐ §9a.1 — THE FRAME, applied BEFORE the 'output' return on purpose: the stroke
+  // is the one thing a Live Source paints on air.
+  //
+  // 🔴 **`outline`, NOT `border`, and the difference is the whole requirement.** The
+  // hole is a CONTRACT: `collectLiveSources` declares `transform` — position AND size
+  // — and CasparCG composites the live picture into exactly that rect, so any frame
+  // that moves or resizes the content box desyncs the picture from the frame drawn
+  // around it. An outline is painted outside the border edge and occupies NO layout
+  // at all, so the plate's box stays `transform` under every box model and every
+  // scale. `border` cannot do that, and §9a.1's reasoning that it could does not
+  // survive contact with either surface — MEASURED, both of them:
+  //
+  //   1. §9a.1 argued the CSS default `content-box` paints a border outside the
+  //      declared size because this package sets no `box-sizing` reset. True of the
+  //      package, false of every page it renders on: the shipped baseline stylesheet
+  //      opens with `*{box-sizing:border-box}` (`@cg/single-file-export`'s `cgCss` —
+  //      the same bytes in every `.vcg`, the single-file export and the Preview) and
+  //      `@cg/ui`'s `theme.css` resets the canvas identically. Left implicit, the
+  //      frame would be painted INSIDE the rect, cropping the live picture.
+  //   2. Declaring `content-box` fixes the SIZE and breaks the POSITION: `left`/`top`
+  //      place the BORDER edge, so the content box — the hole — slides right and down
+  //      by the stroke width. Measured in Chromium at 8px stroke: the hole moved from
+  //      (5828, 3662) to (5836, 3670) while the declaration still named the old rect.
+  //      A negative-margin compensation is not a fix either: under `transform: scale`
+  //      with `transform-origin: 0 0` the required offset is `-scale × width`, so the
+  //      correction would have to track a value `collectLiveSources` composes
+  //      separately — two spellings of one geometry, which is the shape this repo
+  //      keeps paying for.
+  //
+  // The shorthand itself is still ONE implementation, shared with `applyBoxStyle`
+  // through {@link strokeShorthand} — the property differs, the stroke grammar does
+  // not. `cornerRadius` is deliberately not applied: it is not on this kind's schema,
+  // rounding waits on the punch (1.5d), and ⚠ when it lands, note that Chromium
+  // follows `border-radius` on an OUTLINE only from ~94 — well above the CEF 71
+  // baseline — so rounding the hole and the frame TOGETHER will need its own answer.
+  if (element.stroke !== undefined) {
+    el.style.outline = strokeShorthand(element.stroke);
+  }
 
   if (ctx.mode === 'output') return el;
 

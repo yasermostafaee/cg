@@ -643,11 +643,87 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         <p className={dds.hint}>
           A plate is <strong>static and axis-aligned</strong>: its rect is sent to CasparCG once, as
           a fixed box, so rotating or animating it — or a parent — would slide the live picture out
-          from behind the frame on air. Filters and opacity paint nothing on air either: the plate
-          is a hole, and the picture is composited behind it.
+          from behind the frame on air. Opacity and filters are withheld for the same reason: the
+          hole paints nothing on air, and the picture is composited on a layer behind it. The{' '}
+          <strong>frame</strong> below is the one thing this element draws, and it sits entirely{' '}
+          <strong>outside</strong> the hole.
         </p>
       </CollapseSection>
+      <LiveSourceFrameRow element={element} />
     </>
+  );
+}
+
+/**
+ * ⭐ §9a.1 — the plate's FRAME: colour + width, over the shared `stroke`.
+ *
+ * **The write path is `updateElement`, deliberately, and NOT `commitAnimatable`.**
+ * Checked rather than assumed, because "extend the list, forget the mutator" is how
+ * this repo has shipped an inert control before (B-051 — the D-109 path was left out
+ * of `writeStaticAnimatable`'s box-kind guard, so every Path Style stroke edit
+ * silently no-oped): `writeStaticAnimatable`'s `stroke.*` arms are gated on
+ * `boxKind = shape | text | path`, so routing this through them would write nothing
+ * at all unless that guard were widened. It is NOT widened, because the property is
+ * not keyframe-able here (below) and a static write through a keyframe router buys
+ * only the guard it would have to be exempted from.
+ *
+ * **Not keyframe-able, and not in `FIELD_REGISTRY`.** `LIVE_SOURCE_STATIC` (1.8b)
+ * removed every diamond from this kind under ONE rule; a stroke track would put two
+ * rows back on the timeline-left for a property whose interaction with the
+ * not-yet-chosen punch mechanism (1.5b/1.5c) is undecided. Withholding it now is a
+ * subtraction that can be widened later without touching a stored scene; shipping it
+ * and retracting it is not. `routeKey` / `expectedAspect` / a clock's `align` take
+ * the same non-keyframed `updateElement` route.
+ *
+ * **`width: 0` keeps the stroke OBJECT and remembers the colour.** Zero is the "no
+ * frame" state, not the "unset" state — it renders identically to an absent stroke,
+ * and the colour survives a round trip through 0 so an author who dials the frame off
+ * and back on does not lose it. Nothing here may read the zero as falsy-absent and
+ * substitute a default (the trap this repo has met twice).
+ *
+ * ⚠ `updateElement` is SHALLOW (`locate` walks only a layer's direct children), so a
+ * plate nested inside a container takes no edit from this row — nor from the source-id
+ * or aspect rows above it, which share the route. That is a pre-existing gap
+ * (`design.md` §9A.2), not one this control introduces, and it is recorded rather
+ * than worked around here: a second, deeper write path used by one row would be the
+ * two-spellings shape that gap already is.
+ */
+function LiveSourceFrameRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+  const id = element.id;
+  // The DISPLAYED colour is also the one a first width edit writes, so the swatch
+  // never disagrees with what the plate gets. White rather than the `#000000` used
+  // elsewhere: a frame is drawn around a guest box on a designed backdrop, and a
+  // black frame that lands invisibly reads as a control that did nothing.
+  const color = element.stroke?.color ?? '#ffffff';
+  const width = element.stroke?.width ?? 0;
+  const commit = (next: Stroke): void => {
+    designerStore.updateElement(id, { stroke: next } as Partial<Element>);
+  };
+  return (
+    <CollapseSection title="Frame" defaultExpanded>
+      <ColorField
+        label="stroke"
+        value={color}
+        onCommit={(next) => {
+          commit({ ...(element.stroke ?? { width }), color: next });
+        }}
+      />
+      <NumberField
+        label="stroke width"
+        value={width}
+        step={1}
+        min={0}
+        suffix="px"
+        onCommit={(next) => {
+          commit({ ...(element.stroke ?? { color }), width: Math.max(0, next) });
+        }}
+      />
+      <p className={dds.hint}>
+        The frame is painted by the TEMPLATE, <strong>outside</strong> the hole — it never covers
+        the live picture, and it does not move the rect CasparCG is given. A width of{' '}
+        <strong>0</strong> means no frame; the colour is kept.
+      </p>
+    </CollapseSection>
   );
 }
 

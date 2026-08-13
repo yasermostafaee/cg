@@ -73,6 +73,18 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       every local check passed). What must be SHOWN: real transparency in the EXPORTED single-file
       page, under that CEF, with the live layer visible behind it. **Record the measurement, not the
       expectation.** This task is the owner's to run; 1.5c is blocked on its result.
+      ⭐ **THE KIT IS BUILT AND READY TO RUN (session AC, 2026-08-14):
+      `tools/live-source-punch-probe/`.** One self-contained page — an opaque striped backdrop, two
+      plates above it carrying the frame and shadow the product actually renders, and BOTH candidate
+      mechanisms plus a CONTROL state, cycled with a single `CG NEXT` (or a click, or 0/A/B, or
+      `?m=`). Its `README.md` carries the two-criteria pass/fail card, the run recipe and an
+      UNFILLED result form; the page prints the CEF user-agent on screen so a photo records which
+      browser answered. `apps/designer/tests/live-source-punch-probe.test.ts` holds the probe to the
+      repo's own `CEF_BANNED_BUILTINS` list and to being self-contained, because a probe that fails
+      to BOOT on that CEF does not return a null result — it returns a wasted trip.
+      🔴 **STILL OPEN, and only the owner can close it.** No mechanism is chosen here and none may
+      be: the kit deliberately ships both plus the control. The task is discharged by the filled-in
+      form, not by the kit existing.
 - [ ] 1.5c Implement the mechanism 1.5b selects, and **test that the EXPORTED page's alpha is CLEAR
       over the plate's rect with an opaque backdrop present** — the assertion must be about the
       exported artifact, since that is what CEF loads, and a builder-level assertion would pass on a
@@ -90,6 +102,30 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       alignment notion, a Live Source offers only `outside`.
       Scope: the schema field, the **Inspector control**, the round-trip through **BOTH exporters**,
       and a test that **the stroke SURVIVES the punch** (1.5c).
+      ⭐ **BUILT 2026-08-14 (session AC) — three of the four parts, and the box stays UNTICKED.**
+      Shipped: the additive optional `stroke` on `VideoPlaceholderElementSchema` (the shared
+      `StrokeSchema`, unchanged); the Inspector's **Frame** section (colour + width) on the bare
+      `video-placeholder` kind, written through `updateElement` with the write path verified rather
+      than assumed; the round trip through BOTH exporters; and the render, in both modes, outside
+      the hole.
+      🔴 **NOT DONE, and this is the whole reason the box is unticked: the fourth assertion —
+      "the stroke SURVIVES the punch" — CANNOT BE WRITTEN YET, because the punch does not exist.**
+      It is 1.5c's, and 1.5c is blocked on 1.5b. Nothing here may be read as evidence that the frame
+      survives an erase; what IS pinned is the weaker property the punch will have to respect, in
+      1.5g.
+      ⚠ **CORRECTION to this task's own premise, recorded in `design.md` §9a.1 and load-bearing for
+      whoever takes 1.5c: the frame is a CSS `outline`, NOT a `border`.** The reasoning above — that
+      the CSS default `content-box` paints a border outside the declared size — was re-verified at
+      HEAD and does not hold: every surface the page renders on ships a `*{box-sizing:border-box}`
+      reset (`cgCss`, `@cg/ui`'s `theme.css`), and declaring `content-box` to escape that fixes the
+      SIZE while sliding the hole by the stroke width (measured in Chromium). An outline takes no
+      layout, so the declared rect is unmoved under any box model and any scale. The stroke
+      SHORTHAND is still one shared implementation (`strokeShorthand`).
+      ⚠ **A pre-existing gap this control inherits (not one it introduces):** `updateElement` is
+      shallow (`locate` walks only a layer's direct children), so a plate nested in a CONTAINER
+      takes no edit from the Frame rows — nor from the source-id or aspect rows, which have always
+      shared that route. Recorded rather than worked around; a second, deeper write path used by one
+      row would be the two-spellings shape the repo keeps paying for.
 - [ ] 1.5f 🔴 **THE PUNCH MUST NOT ERASE THE PLATE'S OWN PAINT — a requirement ON THE MECHANISM.**
       An erase driven by the element's own painted alpha (which `destination-out` is) would eat the
       stroke and leave nothing visible. **The punch is scoped to the HOLE'S FILL AREA; stroke and
@@ -102,10 +138,24 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       hole AND an intact stroke and shadow around it.** A mechanism that punches correctly and eats
       its own stroke passes the old criterion and fails the feature — criterion 2 is an independent
       way to fail, not a refinement of criterion 1.
-- [ ] 1.5g **Neither stroke nor shadow enters the hole rect**, so neither touches
+- [x] 1.5g **Neither stroke nor shadow enters the hole rect**, so neither touches
       `collectLiveSources`' geometry nor 1.8's OVERLAP check — pin that: **two plates whose strokes or
       shadows overlap is NOT a fault; two plates whose HOLES overlap is.** The overlap check reads the
       declared rect and must keep reading only that.
+      **DONE 2026-08-14 (session AC).** Pinned in three places, deliberately: the preflight
+      (`apps/designer/tests/live-source-preflight.test.ts`) — frames overlapping is no fault, holes
+      overlapping still is, and the whole issue list is byte-identical for strokes of 0 / 1 / 40 /
+      5000 px; the declaration (`packages/vcg-format/tests/live-sources.test.ts`) — a frame of any
+      width emits the identical `LiveSourceDeclaration`, nested and scaled included, and leaks no
+      field of its own onto the wire; and the render geometry in a REAL browser
+      (`apps/designer/tests/e2e/live-source.spec.ts`) — the hole is at the same page position and
+      size before and after an 8px frame, which is the only place layout actually exists.
+      ⚠ **On "shadow":** `video-placeholder` carries no `shadow` field today (1.5e's scope is colour + width), so the guarantee pinned is the one that covers both without needing the field —
+      `frameAabb` and `sceneRect` compose `transform` alone, so NO paint property is an input to the
+      geometry. A shadow lands inside that guarantee the day it is added, and the byte-identical
+      test above is what fails if a paint property is ever routed into the rect.
+      **This is what makes 1.5e safe to ship before the punch exists:** it fixes the contract the
+      punch will have to respect.
 - [ ] 1.5d **`border-radius` on a Live Source — revisit AFTER 1.5c, not before.** The Inspector
       withholds it today (a `video-placeholder` is a "bare" kind in `field-registry.ts` and never
       carried `BOX_DESCS`), and `design.md` §9a records why that is pending rather than settled:

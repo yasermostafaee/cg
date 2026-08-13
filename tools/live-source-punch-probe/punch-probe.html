@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Live Source backdrop-punch probe — task 1.5b</title>
+    <!--
+      ────────────────────────────────────────────────────────────────────────────
+      LIVE SOURCE BACKDROP-PUNCH PROBE — openspec/changes/live-source-multibox
+      task 1.5b (design.md §9a / §9a.1). READ tools/live-source-punch-probe/README.md
+      BEFORE RUNNING: it carries the pass/fail card and the result form.
+      ────────────────────────────────────────────────────────────────────────────
+
+      WHAT THIS IS. A single self-contained page that reproduces the ONE situation
+      the feature turns on: an opaque designed backdrop with plates above it, where
+      the plates must become a real HOLE in the page so a live input composited on a
+      LOWER CasparCG layer is visible through them.
+
+      It is NOT a mock of the product's own page. It is the smallest thing that can
+      answer 1.5b's question, in the browser the answer depends on — the CEF inside
+      the plant's CasparCG 2.3.2. `B-066` is exactly this class of mistake: a setting
+      that worked in every local check and `SyntaxError`d on CEF 71.
+
+      THREE STATES, cycled with `CG NEXT` (or the keyboard, or a click, or `?m=`):
+
+        0  none  — CONTROL. No punch at all. The backdrop covers the plates. This is
+                   what the product does TODAY and it is the state that proves the
+                   rig itself works: if the live layer shows through here, the
+                   backdrop is not opaque and NOTHING measured afterwards means
+                   anything.
+        A  destination-out — `mix-blend-mode: destination-out` on an INNER FILL node,
+                   with the frame and shadow on the OUTER node. Scoped deliberately
+                   per §9a.1 constraint 2, which is the ONLY form of (a) worth
+                   measuring: an unscoped erase eats its own frame.
+        B  mask   — the BACKDROP is masked with the plate rects (an SVG mask built
+                   from the same numbers the plates are laid out from, so it moves
+                   when they do — which is this mechanism's known cost).
+
+      NEITHER MECHANISM IS CHOSEN. Recording which one works IS the task. If both
+      work, say so; if neither does, that is a result too and it is the one that
+      matters most.
+
+      CEF-71 SAFETY. Everything below is deliberately old: no optional chaining, no
+      nullish coalescing, no `replaceAll` / `at` / `fromEntries` / `structuredClone`.
+      A probe that fails to boot on the browser under test wastes the trip, and
+      `apps/designer/tests/live-source-punch-probe.test.ts` holds this file to the
+      repo's own `CEF_BANNED_BUILTINS` list so it cannot rot into modern syntax.
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        /* MANDATORY. CasparCG composites this page over the layers below it; an
+           opaque page root would make every mechanism below untestable. */
+        background: transparent;
+        font-family: Consolas, "Courier New", monospace;
+      }
+
+      /* The designed OPAQUE backdrop — what a multi-box layout actually carries and
+         what must be erased at each plate. Striped so that "erased" cannot be
+         confused with "replaced by another opaque colour". */
+      #backdrop {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #123a5c;
+        background-image: repeating-linear-gradient(
+          45deg,
+          rgba(255, 255, 255, 0.07) 0,
+          rgba(255, 255, 255, 0.07) 18px,
+          rgba(0, 0, 0, 0) 18px,
+          rgba(0, 0, 0, 0) 36px
+        );
+      }
+
+      /* A plate. The FRAME is an `outline` and the SHADOW a `box-shadow` — both
+         painted OUTSIDE the plate's box, exactly as the product renders them
+         (`buildLiveSource`), so criterion 2 is measured on the real thing. */
+      .plate {
+        position: absolute;
+        outline: 12px solid #ffb000;
+        box-shadow: 0 0 44px 10px rgba(0, 0, 0, 0.9);
+      }
+
+      /* The inner FILL node. In mechanism A this is the eraser; the frame and shadow
+         live on the parent and are therefore outside anything it can reach. */
+      .fill {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        display: none;
+      }
+      body.m-a .fill {
+        display: block;
+        background: #000;
+        mix-blend-mode: destination-out;
+      }
+
+      /* The readout. Small and clear of the plates, so it never covers what is being
+         judged — and it prints the CEF build string, so a PHOTO of the screen
+         records the browser the measurement was taken on. */
+      #hud {
+        position: absolute;
+        left: 24px;
+        top: 24px;
+        max-width: 46%;
+        padding: 14px 18px;
+        background: rgba(0, 0, 0, 0.82);
+        color: #fff;
+        font-size: 20px;
+        line-height: 1.45;
+        border-left: 8px solid #ffb000;
+      }
+      #hud .m {
+        font-size: 30px;
+        font-weight: bold;
+        color: #ffb000;
+      }
+      #hud .ua {
+        font-size: 13px;
+        color: #9fd0ff;
+        word-break: break-all;
+      }
+      #hud .hint {
+        font-size: 14px;
+        color: #cfcfcf;
+      }
+    </style>
+  </head>
+  <body class="m-none">
+    <div id="backdrop"></div>
+    <div id="hud">
+      <div class="m" id="hud-mode">…</div>
+      <div id="hud-what">…</div>
+      <div class="hint">
+        CG NEXT · click · keys 0 / A / B — 1: hole transparent? 2: frame + shadow
+        intact?
+      </div>
+      <div class="ua" id="hud-ua">…</div>
+    </div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        /*
+          The plate rects, in the page's own pixels, as ONE table. Mechanism B's mask
+          is built from this same table rather than from a second set of numbers or
+          from a DOM measurement — the two must agree by construction, and "the
+          backdrop has to know where every plate is" is precisely the coupling
+          design.md §9a records as this mechanism's cost.
+
+          Two plates, not one: a layout with a single hole cannot show that an erase
+          scoped to one plate leaves the other alone.
+        */
+        var PLATES = [
+          { x: 240, y: 260, w: 900, h: 506 },
+          { x: 1240, y: 400, w: 520, h: 292 }
+        ];
+
+        var MODES = ['none', 'a', 'b'];
+        var LABEL = {
+          none: '0 — NONE (control: no punch)',
+          a: 'A — mix-blend-mode: destination-out',
+          b: 'B — mask the backdrop'
+        };
+        var WHAT = {
+          none:
+            'The backdrop should COVER both plates. If the live layer shows through ' +
+            'here, the rig is wrong — stop and fix that first.',
+          a:
+            'An inner fill node erases; the frame and shadow are on the outer node. ' +
+            'Watch whether the erase reaches the PAGE alpha, and whether it eats the frame.',
+          b:
+            'The backdrop is masked with the plate rects. The plates never erase ' +
+            'anything, so the frame cannot be eaten — but the mask itself may not work.'
+        };
+
+        var body = document.body;
+        var backdrop = document.getElementById('backdrop');
+        var mode = 'none';
+
+        /* Lay the plates out from the table above. */
+        for (var i = 0; i < PLATES.length; i++) {
+          var r = PLATES[i];
+          var el = document.createElement('div');
+          el.className = 'plate';
+          el.style.left = r.x + 'px';
+          el.style.top = r.y + 'px';
+          el.style.width = r.w + 'px';
+          el.style.height = r.h + 'px';
+          var fill = document.createElement('div');
+          fill.className = 'fill';
+          el.appendChild(fill);
+          body.appendChild(el);
+        }
+
+        /* Mechanism B's mask: white keeps, black punches. Built as an SVG data URI
+           because a mask image is the plainest expression of "the backdrop with
+           holes in it" — and if THIS is what CEF 71 cannot do, that is the finding. */
+        function maskUri() {
+          var w = window.innerWidth;
+          var h = window.innerHeight;
+          var svg =
+            "<svg xmlns='http://www.w3.org/2000/svg' width='" +
+            w +
+            "' height='" +
+            h +
+            "'><rect width='100%' height='100%' fill='#fff'/>";
+          for (var j = 0; j < PLATES.length; j++) {
+            var p = PLATES[j];
+            svg +=
+              "<rect x='" +
+              p.x +
+              "' y='" +
+              p.y +
+              "' width='" +
+              p.w +
+              "' height='" +
+              p.h +
+              "' fill='#000'/>";
+          }
+          svg += '</svg>';
+          return 'url("data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '")';
+        }
+
+        function apply() {
+          body.className = 'm-' + mode;
+
+          var uri = mode === 'b' ? maskUri() : '';
+          var size = mode === 'b' ? '100% 100%' : '';
+          /* Both the prefixed and unprefixed spellings: CEF 71 is Chromium 71, where
+             `-webkit-mask-image` is the supported one. Setting both costs nothing and
+             stops the measurement from being about the property name. */
+          backdrop.style.webkitMaskImage = uri;
+          backdrop.style.maskImage = uri;
+          backdrop.style.webkitMaskSize = size;
+          backdrop.style.maskSize = size;
+          backdrop.style.webkitMaskRepeat = 'no-repeat';
+          backdrop.style.maskRepeat = 'no-repeat';
+
+          document.getElementById('hud-mode').textContent = LABEL[mode];
+          document.getElementById('hud-what').textContent = WHAT[mode];
+        }
+
+        function setMode(next) {
+          for (var k = 0; k < MODES.length; k++) {
+            if (MODES[k] === next) {
+              mode = next;
+              apply();
+              return;
+            }
+          }
+        }
+
+        function cycle() {
+          setMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length]);
+        }
+
+        /* ── Ways in, in order of how likely they are to be usable at the plant ──
+           1. `CG NEXT <channel>-<layer>` — cycles. One AMCP command, nothing typed.
+           2. `CG UPDATE` with `{"m":"a"}` or CasparCG's XML templateData.
+           3. A click anywhere, or the keys 0 / A / B — for a browser or a touch panel.
+           4. `?m=a` in the URL — for opening the file directly.
+           `play` / `stop` are no-ops so CasparCG's normal template lifecycle does not
+           error; the probe has nothing to animate. */
+        window.next = cycle;
+        window.play = function () {};
+        window.stop = function () {};
+        window.update = function (payload) {
+          if (typeof payload !== 'string') return;
+          var text = payload;
+          var m = /value\s*=\s*"([^"]*)"/.exec(text);
+          if (m) {
+            setMode(m[1]);
+            return;
+          }
+          try {
+            var data = JSON.parse(text);
+            if (data && typeof data.m === 'string') setMode(data.m);
+          } catch (e) {
+            /* Not JSON and not templateData — leave the mode alone rather than
+               guessing. A probe that changes state on an unreadable payload would
+               make the recorded mechanism untrustworthy. */
+          }
+        };
+
+        document.addEventListener('click', cycle);
+        document.addEventListener('keydown', function (ev) {
+          if (ev.key === '0') setMode('none');
+          else if (ev.key === 'a' || ev.key === 'A') setMode('a');
+          else if (ev.key === 'b' || ev.key === 'B') setMode('b');
+          else if (ev.key === ' ' || ev.key === 'Enter') cycle();
+        });
+        window.addEventListener('resize', apply);
+
+        var q = /[?&]m=([a-z]+)/i.exec(window.location.search);
+        document.getElementById('hud-ua').textContent = navigator.userAgent;
+        setMode(q ? q[1].toLowerCase() : 'none');
+        apply();
+      })();
+    </script>
+  </body>
+</html>

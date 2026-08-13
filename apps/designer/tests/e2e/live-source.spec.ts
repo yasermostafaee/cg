@@ -68,9 +68,16 @@ async function openIssues(app: DesignerApp): Promise<void> {
   await expect(issuesModal(app)).toBeVisible();
 }
 
-/** The Inspector's W / H spinbuttons, for reading the fit action's result. */
+/**
+ * The Inspector's W / H spinbuttons, for reading the fit action's result.
+ *
+ * `exact` is REQUIRED, not tidiness: Playwright's `name` matches by SUBSTRING, and
+ * the §9a.1 Frame section below adds a `stroke width` row to this same Inspector — so
+ * an inexact `Width` resolves to two elements and fails strict mode. The under-
+ * specification was here all along; the new control is only what exposed it.
+ */
 const sizeField = (app: DesignerApp, which: 'Width' | 'Height') =>
-  app.inspector.getByRole('spinbutton', { name: which });
+  app.inspector.getByRole('spinbutton', { name: which, exact: true });
 
 test.describe('Live Source (D-137 phase 1)', () => {
   test('placeable, carries its id, and it round-trips through the Inspector', async ({ app }) => {
@@ -219,9 +226,19 @@ test.describe('Live Source (D-137 phase 1)', () => {
 
     // What DOES stay: the box itself. A static scale is composed into the declared
     // rect, so these six describe the hole, and the hole is the contract.
+    // (`exact` — the §9a.1 `stroke width` row makes an inexact `Width` match two.)
     for (const field of ['X position', 'Y position', 'Width', 'Height', 'Scale X', 'Scale Y']) {
-      await expect(app.inspector.getByRole('spinbutton', { name: field })).toHaveCount(1);
+      await expect(app.inspector.getByRole('spinbutton', { name: field, exact: true })).toHaveCount(
+        1,
+      );
     }
+
+    // ⭐ §9a.1 — and what the plate CAN honour is offered: the Frame. It is the one
+    // thing this element paints, it paints outside the hole, so it is not in the
+    // subtraction above. Asserted HERE, in the test that owns the subtraction, so the
+    // two can never drift into disagreeing about the same Inspector.
+    await expect(app.inspector.getByRole('spinbutton', { name: 'stroke width' })).toHaveCount(1);
+    await expect(app.inspector.getByRole('textbox', { name: 'stroke hex value' })).toHaveCount(1);
 
     // And the author is told WHY, here, rather than at export.
     await expect(app.inspector.getByText(/static and axis-aligned/i)).toBeVisible();
@@ -348,5 +365,207 @@ test.describe('Live Source (D-137 phase 1)', () => {
     const labels = await holes(app).locator('[data-cg-live-source-label]').allTextContents();
     expect(labels.sort()).toEqual(['live-1', 'live-2']);
     await expect(errorPill(app)).toHaveCount(0);
+  });
+});
+
+/**
+ * ⭐ Tasks 1.5e + 1.5g — **THE PLATE'S FRAME**, in the real browser.
+ *
+ * Maps `openspec/changes/live-source-multibox/specs/designer-live-source/spec.md`:
+ *   - "A frame is authored on the plate and survives both exports"
+ *   - "Overlapping frames are not a fault; overlapping holes are"
+ *
+ * The canvas is where the whole point is observable: the frame must paint AROUND the
+ * declared rect, not inside it, and only a real browser computes the cascade of the
+ * page's `*{box-sizing:border-box}` reset against the plate's own opt-out. jsdom
+ * agrees (`tests/live-source-frame.test.ts`) — this is the same claim on Chromium.
+ */
+test.describe('Live Source — the frame (§9a.1)', () => {
+  const strokeWidth = (app: DesignerApp) =>
+    app.inspector.getByRole('spinbutton', { name: 'stroke width' });
+  const strokeHex = (app: DesignerApp) =>
+    app.inspector.getByRole('textbox', { name: 'stroke hex value' });
+
+  /** Set the frame through the Inspector exactly as an author would. */
+  async function setFrame(app: DesignerApp, width: number, hex: string): Promise<void> {
+    await strokeHex(app).fill(hex);
+    await strokeHex(app).press('Enter');
+    await strokeWidth(app).fill(String(width));
+    await strokeWidth(app).press('Enter');
+  }
+
+  test('the frame paints around the plate, and the declared rect does not move', async ({
+    app,
+  }) => {
+    await app.newProject('LiveSourceFrame');
+    await app.addLiveSource({ x: 200, y: 160 });
+    await app.setLiveSourceId('guest-1');
+
+    /*
+      The HOLE — the plate's box, in page pixels — read BEFORE the frame exists.
+
+      This is the measurement that matters and the only one a REAL browser can give:
+      the hole is what CasparCG composites the live picture into, and
+      `collectLiveSources` declares it from `transform` alone. If the frame moves or
+      resizes it, the composited picture and the drawn frame disagree on air, and
+      nothing in the Designer would show it.
+    */
+    const readHole = () =>
+      holes(app)
+        .first()
+        .evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const cs = getComputedStyle(el);
+          return {
+            // Inset by any border, so this stays a CONTENT-box measurement even if a
+            // future change puts a border back — which is the case it must catch.
+            x: Math.round(r.left + parseFloat(cs.borderLeftWidth)),
+            y: Math.round(r.top + parseFloat(cs.borderTopWidth)),
+            w: Math.round(
+              r.width - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth),
+            ),
+            h: Math.round(
+              r.height - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth),
+            ),
+          };
+        });
+    const before = await readHole();
+
+    await setFrame(app, 8, 'FF8800');
+
+    // The write path is real — the row is not inert (the failure mode this repo has
+    // shipped before). Polled, because the canvas iframe rebuilds on the edit.
+    await expect
+      .poll(() =>
+        holes(app)
+          .first()
+          .evaluate((el) => getComputedStyle(el).outlineWidth),
+      )
+      .toBe('8px');
+    const after = await readHole();
+    const style = await holes(app)
+      .first()
+      .evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { outlineColor: cs.outlineColor, borderTopWidth: cs.borderTopWidth };
+      });
+
+    /*
+      THE ASSERTION, and it is about GEOMETRY rather than about a CSS property: the
+      hole is exactly where it was, at the size it was, with an 8px frame drawn
+      entirely outside it.
+
+      Two distinct ways a BORDER-based frame fails this, both silent on air and both
+      measured before the outline was chosen (see `buildLiveSource`):
+        - box-sizing left to the page's own `*{box-sizing:border-box}` reset → the
+          hole SHRINKS by 16px on each axis;
+        - `content-box` declared to escape that → `left`/`top` position the BORDER
+          edge, so the hole SLIDES 8px right and down while the declaration still
+          names the old rect.
+      An outline has neither failure mode: it takes no layout at all.
+    */
+    expect(after).toEqual(before);
+    expect(style.borderTopWidth).toBe('0px');
+    expect(style.outlineColor).toBe('rgb(255, 136, 0)');
+
+    // Still exportable: a frame is not a preflight concern.
+    await expect(errorPill(app)).toHaveCount(0);
+  });
+
+  test('a width of 0 means NO frame, and the colour is kept', async ({ app }) => {
+    await app.newProject('LiveSourceFrameZero');
+    await app.addLiveSource({ x: 200, y: 160 });
+    await setFrame(app, 8, '00FF00');
+    await expect
+      .poll(() =>
+        holes(app)
+          .first()
+          .evaluate((el) => getComputedStyle(el).outlineWidth),
+      )
+      .toBe('8px');
+
+    // Dial it off. Zero is "no frame", not "unset" — nothing paints…
+    await strokeWidth(app).fill('0');
+    await strokeWidth(app).press('Enter');
+    await expect
+      .poll(() =>
+        holes(app)
+          .first()
+          .evaluate((el) => getComputedStyle(el).outlineWidth),
+      )
+      .toBe('0px');
+    // …and the colour survives the trip through zero, so turning it back up returns
+    // the frame the author chose rather than a default.
+    await expect(strokeHex(app)).toHaveValue('00FF00');
+    await strokeWidth(app).fill('4');
+    await strokeWidth(app).press('Enter');
+    await expect
+      .poll(() =>
+        holes(app)
+          .first()
+          .evaluate((el) => getComputedStyle(el).outlineColor),
+      )
+      .toBe('rgb(0, 255, 0)');
+  });
+
+  test('1.5g — overlapping FRAMES are fine; overlapping HOLES are not', async ({ app }) => {
+    await app.newProject('LiveSourceFrameOverlap');
+
+    // Two plates, both framed thickly. The Designer's default plate is 640x360, so
+    // parking the second 20px clear of the first leaves the HOLES apart while the
+    // two 40px frames overlap by 60px.
+    await app.addLiveSource({ x: 200, y: 160 });
+    await app.setLiveSourceId('guest-1');
+    await setFrame(app, 40, 'FF8800');
+    const x1 = app.inspector.getByRole('spinbutton', { name: 'X position' });
+    const w1 = await sizeField(app, 'Width').inputValue();
+    await x1.fill('0');
+    await x1.press('Enter');
+
+    await app.addLiveSource({ x: 400, y: 160 });
+    await app.setLiveSourceId('guest-2');
+    await setFrame(app, 40, 'FF8800');
+    const x2 = app.inspector.getByRole('spinbutton', { name: 'X position' });
+    await x2.fill(String(Number(w1) + 20));
+    await x2.press('Enter');
+
+    await expect(holes(app)).toHaveCount(2);
+    // NOT a fault. The overlap check reads the declared rect and only that.
+    await expect(errorPill(app)).toHaveCount(0);
+
+    // Now overlap the HOLES themselves — that IS a fault, reported against both.
+    await x2.fill(String(Number(w1) - 40));
+    await x2.press('Enter');
+    await openIssues(app);
+    await expect(issueRows(app, /overlaps/)).toHaveCount(2);
+  });
+
+  test('the frame survives the export and comes back on reopen', async ({ app }) => {
+    await app.newProject('LiveSourceFrameExport');
+    await app.addLiveSource({ x: 200, y: 160 });
+    await app.setLiveSourceId('guest-1');
+    await setFrame(app, 6, 'FF8800');
+    await expect
+      .poll(() =>
+        holes(app)
+          .first()
+          .evaluate((el) => getComputedStyle(el).outlineWidth),
+      )
+      .toBe('6px');
+
+    const { html } = await app.exportHtml();
+    // The artifact CEF loads builds its DOM at boot from this inlined literal, so
+    // the stroke being IN it is what makes a frame possible on air at all.
+    const m = /var scene = (\{[\s\S]*?\});\n/.exec(html);
+    expect(m?.[1]).toBeDefined();
+    const scene = JSON.parse((m?.[1] ?? '{}').replace(/\u003c/g, '<')) as {
+      layers: { children: { type: string; stroke?: { width: number; color: string } }[] }[];
+    };
+    const plate = scene.layers
+      .flatMap((l) => l.children)
+      .find((c) => c.type === 'video-placeholder');
+    // Uppercase: the hex input normalises on commit (`normalizeHexColor`), so this
+    // is the value the scene actually holds rather than the text that was typed.
+    expect(plate?.stroke).toEqual({ width: 6, color: '#FF8800' });
   });
 });

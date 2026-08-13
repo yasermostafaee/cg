@@ -1543,16 +1543,52 @@ under their own frame.
 through `BoxStyleSchema` by shape / text / ticker / clock / sequence, and separately by `path`.
 🔴 **It has NO alignment notion — no inside / centre / outside anywhere.**
 
-**And it does not need one here.** Box kinds render a stroke as a CSS **`border`**
-(`scene-builder.ts:1133-1135`: `el.style.border = '<w>px <solid|dashed> <color>'`), and there is **no
-`box-sizing` reset anywhere in `@cg/template-runtime`** — so the CSS default `content-box` applies and
-the border is painted **OUTSIDE** the declared `width`/`height`. The declared rect stays the content
-box, which is exactly what `collectLiveSources` reads (`transform.size`).
+**And it does not need one here.** The element REUSES `StrokeSchema` unchanged; no alignment field is
+invented and no second stroke concept appears. If a later change adds an alignment notion for shapes,
+a Live Source offers only `outside` — for the reason above, not as a limitation of the control.
 
-**So: this element REUSES `StrokeSchema` unchanged and takes the OUTSIDE behaviour the existing
-renderer already produces. No alignment field is invented, and no second stroke concept appears.** If
-a later change adds an alignment notion for shapes, a Live Source offers only `outside` — for the
-reason above, not as a limitation of the control.
+#### ⭐ CORRECTED 2026-08-14 (session AC, on implementing 1.5e) — the OUTSIDE placement is DECLARED, not inherited
+
+**This paragraph originally said the outside placement came for free**, on this reasoning:
+
+> Box kinds render a stroke as a CSS `border`, and there is **no `box-sizing` reset anywhere in
+> `@cg/template-runtime`** — so the CSS default `content-box` applies and the border is painted
+> **OUTSIDE** the declared `width`/`height`.
+
+**Re-verified at HEAD before it was built on, and it does not hold. Two independent reasons, both
+measured, either one of which is enough to put the frame INSIDE the hole:**
+
+1. **No surface runs the CSS default.** The claim is true of the PACKAGE and false of every PAGE it
+   renders on. The shipped baseline stylesheet opens with `*{box-sizing:border-box}` —
+   `@cg/single-file-export`'s `cgCss`, the same bytes in every `.vcg`, in the single-file export and
+   in the Preview iframe — and the Designer canvas is reset identically by `@cg/ui`'s `theme.css`.
+   Under `border-box` a 6px border on a 640×360 plate leaves a **628×348** hole: the live picture
+   cropped 12px on each axis, silently, and §3's crop-to-fill computed for an area partly hidden
+   under the author's own frame. This is exactly the failure **constraint 1** forbids.
+2. **Declaring `content-box` fixes the SIZE and breaks the POSITION.** `left`/`top` place the BORDER
+   edge, so the content box — the hole — slides right and down by the stroke width. Measured in
+   Chromium with an 8px stroke: the hole moved from (5828, 3662) to (5836, 3670) while the export's
+   declaration still named the old rect. A negative-margin compensation is not a fix either: under
+   `transform: scale` with `transform-origin: 0 0` the required offset is `-scale × width`, so the
+   correction would have to track a value `collectLiveSources` composes separately — two spellings of
+   one geometry, which is the shape this repo keeps paying for (`B-100` / `P-012`).
+
+**The frame is therefore rendered as a CSS `outline`, not a `border`.** An outline is painted outside
+the border edge and occupies **no layout at all**, so the plate's box is exactly `transform` — the
+rect `collectLiveSources` reads and the overlap preflight compares — under any box model and any
+scale. The stroke SHORTHAND stays one implementation shared with the box kinds
+(`strokeShorthand` in `scene-builder.ts`, fed to `border` there and to `outline` here): the property
+differs by necessity, the stroke grammar does not.
+
+⚠ **The `border-box` reset is NOT a bug and must not be "fixed" globally.** Shapes and text have been
+authored against it since D-042 — their strokes paint inside their boxes and existing templates are
+drawn to that. A Live Source opts out for itself alone, because it is the one kind whose declared
+rect is a CONTRACT with another process rather than a drawing.
+
+⚠ **One consequence for 1.5d.** Chromium follows `border-radius` on an **outline** only from ~94,
+well above the CEF 71 baseline. Rounding the hole and the frame TOGETHER will therefore need its own
+answer rather than falling out of the punch — recorded here because 1.5d is where it will be looked
+for.
 
 #### Constraint 2 — 🔴 THE PUNCH MUST NOT ERASE WHAT THE ELEMENT PAINTS OUTSIDE ITS HOLE
 

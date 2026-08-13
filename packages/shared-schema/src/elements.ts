@@ -1143,6 +1143,36 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    * which is why the control went and this did not.
    */
   keySourceId: LiveSourceIdSchema.optional(),
+  /**
+   * ⭐ The plate's FRAME (owner, 2026-08-10; `live-source-multibox` design.md
+   * §9a.1). Optional and additive — no schema-version bump, and every stored scene
+   * keeps parsing with it absent.
+   *
+   * **This is `StrokeSchema`, unchanged — NOT a second stroke concept.** The shared
+   * schema is `{ width, color, dash? }` and has NO alignment notion; box kinds render
+   * it as a CSS `border`, and for a Live Source the renderer places that border
+   * OUTSIDE the declared `width`/`height` by declaring `box-sizing: content-box` on
+   * the plate.
+   *
+   * ⚠ That placement is DECLARED, not inherited from the CSS default: every surface
+   * the page renders on ships a `*{box-sizing:border-box}` reset (`cgCss` in both
+   * exporters and the Preview, `@cg/ui`'s `theme.css` on the canvas), so the default
+   * never applies. `scene-builder.ts`'s `buildLiveSource` carries the detail.
+   *
+   * 🔴 **That is the property the rest of the feature rests on: the declared rect
+   * stays the CONTENT box.** `collectLiveSources` reads `transform.size`, so a
+   * stroke of any width leaves the declared hole — and the overlap preflight that
+   * reads it — exactly where they were. Two plates whose FRAMES overlap is not a
+   * fault; two plates whose HOLES overlap is.
+   *
+   * `width: 0` is legal and means NO FRAME with the colour REMEMBERED: it renders
+   * identically to an absent stroke, so nothing may read the zero as "unset" and
+   * substitute a default (the falsy-zero trap this repo has already met twice).
+   *
+   * If shapes ever gain a stroke ALIGNMENT notion, a Live Source offers only
+   * `outside` — for the reason above, not as a limitation of the control.
+   */
+  stroke: StrokeSchema.optional(),
 });
 export type VideoPlaceholderElement = z.infer<typeof VideoPlaceholderElementSchema>;
 
