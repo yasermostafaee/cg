@@ -97,6 +97,11 @@ the editor UI and the runtime renderer (the "Where features go" map in
   every scene replace, never baked. A follower contributes nothing to the entrance
   settle (it derives FROM it),
 - lets an **element own its own exit** — the D-125 element-outro seam: `out()` /
+  `stop()` route every owning driver through a ONE-SHOT ledger and await it before the
+  background closes. That await is **bounded at the ledger entry** (session Z): a driver
+  whose `playOutro()` never settles would otherwise strand the exit — and, because
+  `stop()`/`out()` are guarded on the lifecycle state, take every later operator command
+  with it — so the bound fires an `error` event and lets the exit proceed,
 - cascades all of the above through **nested composition instances**.
 
 The renderer talks to its "backend" only through the typed `window.cg` bridge; the

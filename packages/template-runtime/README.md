@@ -91,6 +91,9 @@ createRuntime (runtime.ts)  ─ the orchestrator
  │      ROW SUBTREE per data item through wireScopeSubtree (count at play,
  │      values live); not a content source
  ├─ LifecycleStateMachine (lifecycle.ts)  pending→playing→on-air→exiting→stopped
+ │      plus exiting→playing: a play() SUPERSEDES an in-flight exit (the exit can
+ │      last the whole background OUT segment). stop()/out() are guarded on
+ │      on-air/playing, so a machine left behind the stage kills BOTH, silently
  ├─ EventBus (event-bus.ts)               play.start / stop.end / ready / …
  └─ installCasparGlobals (adapters/caspar-globals.ts)   window.* → runtime
 transforms.ts · css.ts   value formatters · baseline stylesheet

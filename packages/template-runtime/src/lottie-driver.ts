@@ -1,5 +1,6 @@
 import type { LottiePlayerHandle } from '@cg/lottie-bridge';
 import type { RuntimeClock } from './types.js';
+import { OUTRO_BACKSTOP_MARGIN_MS } from './video-driver.js';
 
 /**
  * D-125 §D3 — the driven-frame Lottie driver. The Lottie is a RENDERER, never an
@@ -124,6 +125,8 @@ export class LottieDriver {
   private readonly raf: (cb: (t: number) => void) => number;
   private readonly cancel: (h: number) => void;
   private readonly now: () => number;
+  private readonly setTimer: (cb: () => void, ms: number) => unknown;
+  private readonly clearTimer: (h: unknown) => void;
 
   private handle: number | null = null;
   private running = false;
@@ -137,6 +140,17 @@ export class LottieDriver {
   private mode: 'intro' | 'outro' = 'intro';
   /** Resolver of the in-flight `playOutro()`; null when no outro is pending. */
   private outroResolve: (() => void) | null = null;
+  /**
+   * Session Z — the wall-clock BACKSTOP that force-settles a stalled outro, mirroring
+   * the video driver's. This driver paints frame-by-frame off rAF, so a throttled tab
+   * or a `pause()` landing mid-outro stops `tick()` before it can ever reach `outro-end`
+   * — and `outro-end` is the ONLY thing that resolved `playOutro()`. The runtime's exit
+   * `await`s that promise through the shared ledger, so an unresolved one strands the
+   * whole exit (and the lifecycle machine with it: `stop()`/`out()` guard on
+   * on-air/playing and would refuse from then on). §D6.4.1 asserts playOutro ALWAYS
+   * resolves; before this it held for the video driver only.
+   */
+  private outroBackstop: unknown = null;
   /** Resolver of the current {@link whenComplete} deferred (re-minted by `reset()`). */
   private completeResolve: () => void = () => undefined;
   /** D-125 §D6.3 — the intro-completion signal a `drivesHold` Lottie contributes. */
@@ -147,6 +161,10 @@ export class LottieDriver {
     this.raf = options.clock?.raf ?? ((cb) => requestAnimationFrame(cb));
     this.cancel = options.clock?.cancel ?? ((h) => cancelAnimationFrame(h));
     this.now = options.clock?.now ?? ((): number => performance.now());
+    this.setTimer =
+      options.clock?.setTimeout ?? ((cb: () => void, ms: number): unknown => setTimeout(cb, ms));
+    this.clearTimer =
+      options.clock?.clearTimeout ?? ((h: unknown): void => clearTimeout(h as never));
     this.complete = this.armComplete();
   }
 
@@ -304,6 +322,17 @@ export class LottieDriver {
     const done = new Promise<void>((res) => {
       this.outroResolve = res;
     });
+    // BOUND (never-strand, session Z): the outro's OWN length plus a margin, so a normal
+    // outro always finishes on its own first and a stalled one still releases the exit.
+    // Speed 0 (or a zero-length window) leaves only the margin — a clip that can never
+    // reach its end must not be what decides whether the graphic can come off air.
+    const framesPerMs = (this.o.fr * this.o.speed) / 1000;
+    const outroEnd = this.o.outroEnd ?? this.o.op;
+    const outroMs = framesPerMs > 0 ? Math.max(0, (outroEnd - this.o.outroStart) / framesPerMs) : 0;
+    this.outroBackstop = this.setTimer(
+      () => this.settleOutro(),
+      outroMs + OUTRO_BACKSTOP_MARGIN_MS,
+    );
     // Paint `outroStart` synchronously so the first outro frame lands before the first
     // rAF; `tick()` may finish immediately (a one-frame outro).
     this.tick();
@@ -461,6 +490,10 @@ export class LottieDriver {
 
   /** Resolve a pending `playOutro()` exactly once. The always-resolve invariant. */
   private settleOutro(): void {
+    if (this.outroBackstop !== null) {
+      this.clearTimer(this.outroBackstop);
+      this.outroBackstop = null;
+    }
     const res = this.outroResolve;
     if (res === null) return;
     this.outroResolve = null;

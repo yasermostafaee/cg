@@ -1894,6 +1894,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   let pendingExitOutro = false;
   const exitSetTimeout =
     options.clock?.setTimeout ?? ((cb: () => void, ms: number): unknown => setTimeout(cb, ms));
+  const exitClearTimeout =
+    options.clock?.clearTimeout ??
+    ((h: unknown): void => {
+      clearTimeout(h as never);
+    });
   const contentRoots = (): HTMLElement[] =>
     Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-content]'));
   /**
@@ -1981,7 +1986,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           promise: Promise.resolve(),
           done: false,
         };
-        rec.promise = d.playOutro().then(() => {
+        rec.promise = boundedOutro(d.playOutro()).then(() => {
           rec.done = true;
         });
         outroLedger.set(d, rec);
@@ -1991,6 +1996,36 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     }
     if (waits.length === 0) return null;
     return Promise.all(waits).then(() => undefined);
+  };
+  /**
+   * Session Z — THE LEDGER'S OWN BACKSTOP, and the reason it is LOUD. Every driver bounds
+   * its own outro (§D6.4.1), so this must never fire. If it does, some driver's
+   * never-strand invariant is broken, and the consequence is severe AND silent: the
+   * background outro is never reached, so the graphic cannot come off air and the
+   * operator's stop/out appear to do nothing with nothing logged anywhere. Continuing the
+   * exit without the stranded element is strictly better than a graphic stuck on air;
+   * SAYING SO is what makes the next occurrence diagnosable instead of another "sometimes
+   * the button is dead". The bound is deliberately far longer than any real outro.
+   *
+   * Armed ONCE, around the LEDGER ENTRY — not around each caller's await. Both awaiting
+   * sites (this runtime's `stop()`/`out()`, and every controller's `beforeOutro` gate)
+   * subscribe to that one promise, so one bound covers both and a strand cannot be paid
+   * for twice; per-caller watchdogs would each wait the full window in turn.
+   */
+  const EXIT_OUTRO_WATCHDOG_MS = 30_000;
+  const boundedOutro = async (outro: Promise<void>): Promise<void> => {
+    let timer: unknown = null;
+    const expiry = new Promise<'timeout'>((res) => {
+      timer = exitSetTimeout(() => res('timeout'), EXIT_OUTRO_WATCHDOG_MS);
+    });
+    const outcome = await Promise.race([outro.then(() => 'settled' as const), expiry]);
+    if (timer !== null) exitClearTimeout(timer);
+    if (outcome === 'timeout') {
+      bus.emit('error', {
+        code: 'exit.outro-timeout',
+        message: `an element outro did not settle within ${String(EXIT_OUTRO_WATCHDOG_MS)} ms; the exit continued without it`,
+      });
+    }
   };
   const saveExitStyles = (n: HTMLElement): void => {
     if (n.dataset['cgExit'] !== undefined) return;
@@ -2113,6 +2148,19 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       };
       rearmSettled(rootNode);
       cascade(rootNode, (c) => c.play());
+      // Session Z — THE TRIPWIRE. Everything above put a graphic ON AIR. If the machine
+      // did not follow, the two have diverged, and the consequence is SILENT and total:
+      // `stop()`/`out()` return at their `on-air`/`playing` guard for the life of this
+      // runtime, so both operator buttons go dead with nothing logged anywhere (that is
+      // exactly how the dead-Preview-buttons bug reached the owner). Every legal entry —
+      // including superseding an in-flight exit — is in the transition table, so reaching
+      // here in any other state is an invariant break, not an expected refusal. Say so.
+      if (machine.state !== 'on-air') {
+        bus.emit('error', {
+          code: 'lifecycle.play-not-on-air',
+          message: `play() left the lifecycle machine in '${machine.state}'; stop()/out() will silently no-op until this runtime is rebuilt`,
+        });
+      }
       bus.emit('play.end');
     },
 

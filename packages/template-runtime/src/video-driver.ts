@@ -197,8 +197,14 @@ export interface ElementOutroDriver {
   playOutro(): Promise<void>;
 }
 
-/** Backstop margin past the outro's own duration before the wall-clock timer force-settles it. */
-const OUTRO_BACKSTOP_MARGIN_MS = 2000;
+/**
+ * Backstop margin past the outro's own duration before the wall-clock timer force-settles
+ * it. Exported because it bounds the {@link ElementOutroDriver} CONTRACT, not this class:
+ * the Lottie driver arms the same backstop from the same number (session Z — it had none,
+ * so §D6.4.1's "playOutro() ALWAYS resolves" was true of one implementer and merely
+ * intended of the other).
+ */
+export const OUTRO_BACKSTOP_MARGIN_MS = 2000;
 
 export class VideoDriver implements ElementOutroDriver {
   private readonly o: {

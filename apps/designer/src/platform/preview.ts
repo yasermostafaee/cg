@@ -502,16 +502,10 @@ export class Preview {
               document.fonts.add(face);
               loadedFonts.set(font.family, url);
             } catch (err) {
-              if (window.parent && window.parent !== window) {
-                window.parent.postMessage(
-                  {
-                    kind: 'cg-preview-error',
-                    label: 'font.load',
-                    payload: font.family + ': ' + (err && err.message ? err.message : String(err)),
-                  },
-                  '*',
-                );
-              }
+              postPreviewError(
+                'font.load',
+                font.family + ': ' + (err && err.message ? err.message : String(err)),
+              );
             }
           }
         }
@@ -535,6 +529,46 @@ export class Preview {
         function cssEscape(s) {
           if (window.CSS && CSS.escape) return CSS.escape(s);
           return String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\\\' + c);
+        }
+
+        // ── Session Z — AN INERT CONTROL MUST EXPLAIN ITSELF ──────────────────────
+        // Every diagnostic this document produces travels ONE channel: a
+        // 'cg-preview-error' postMessage the host logs as console.error('[cg-preview]',…).
+        // (No backticks in this block: it lives inside a template literal.)
+        function postPreviewError(label, payload) {
+          try {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage(
+                { kind: 'cg-preview-error', label: label, payload: String(payload) },
+                '*',
+              );
+            }
+          } catch (e) {
+            /* a diagnostic must never throw over the thing it is reporting */
+          }
+        }
+        // play / update / stop / out / next are delivered through the CasparCG globals
+        // installCasparGlobals(runtime) installs at the end of every applyScene. Those
+        // branches used to be GATED on 'typeof window.<name> === "function"', a guard that
+        // fails silently in both directions: a missing global dropped the command with no
+        // diagnostic anywhere, and window.stop is worse still — lib.dom ALWAYS defines it
+        // (the page-load canceller), so the guard reads "installed" and the click cancels
+        // nothing at all. The truthful test is whether window.cg is the runtime THIS
+        // document currently has; anything else is a stale or absent install.
+        function controlFn(name) {
+          if (runtime === null) return null;
+          if (window.cg !== runtime) return null;
+          if (typeof window[name] !== 'function') return null;
+          return window[name];
+        }
+        function reportDroppedControl(name) {
+          var why =
+            runtime === null
+              ? 'no runtime — the last scene build failed'
+              : window.cg !== runtime
+                ? 'the CasparCG globals point at a stale runtime'
+                : 'window.' + name + ' is not installed';
+          postPreviewError('control.dropped', name + ' — ' + why);
         }
 
         async function applyScene(scene) {
@@ -589,6 +623,17 @@ export class Preview {
               lottieAssets: lottieAssets,
             });
             installCasparGlobals(runtime);
+            // Session Z — the runtime's OWN diagnostics reach the parent console on the
+            // same channel. An invariant break such as 'lifecycle.play-not-on-air' is the
+            // whole difference between "the buttons are dead" and a named cause.
+            if (typeof runtime.on === 'function') {
+              runtime.on('error', (e) => {
+                postPreviewError(
+                  'runtime.error',
+                  (e && e.code ? e.code : '?') + ': ' + (e && e.message ? e.message : ''),
+                );
+              });
+            }
             await runtime.ready;
             // D-087 — a broadcast preview leaves cg-pending in place so the
             // stage stays blank until play(); the canvas reveals frame 0 now.
@@ -821,7 +866,17 @@ export class Preview {
           }
         }
 
-        await applyScene(${sceneJson});
+        // Session Z — the BOOT build must not take the message listener down with it.
+        // This await sits ABOVE the addEventListener further down, so a throw here (an
+        // element the builder rejects, a Lottie that fails to mount) used to abort the
+        // whole module: the document then received NOTHING, ever again, with no
+        // diagnostic — a live-looking preview whose every button is inert. Report it and
+        // carry on to the listener, so the next scene-replace can repair the document.
+        try {
+          await applyScene(${sceneJson});
+        } catch (e) {
+          postPreviewError('boot.applyScene', e && e.message ? e.message : String(e));
+        }
 
         // D-071 — the content-grown frame inset is a CSS variable on :root (which
         // createRuntime never recreates), so a moving offset re-insets .cg-stage live.
@@ -904,9 +959,11 @@ export class Preview {
               } else if (msg.action === 'editing-text') {
                 editingTextId = typeof msg.elementId === 'string' ? msg.elementId : null;
                 applyEditingHide();
-              } else if (msg.action === 'update' && typeof window.update === 'function') {
+              } else if (msg.action === 'update') {
                 currentFields = msg.fields ?? {};
-                window.update(JSON.stringify(currentFields));
+                const updateFn = controlFn('update');
+                if (updateFn === null) reportDroppedControl('update');
+                else updateFn(JSON.stringify(currentFields));
                 // D-106 — apply IN PLACE: update() swaps the bound values on the LIVE
                 // graphic; re-tick only when NOT playing (the canvas / static scrub), so a
                 // held graphic keeps its background + animation untouched (the CG UPDATE
@@ -918,7 +975,7 @@ export class Preview {
                 applyFrameOffset(msg.frameOffset);
                 currentFrame = msg.frame;
                 if (runtime) runtime.tick(currentFrame);
-              } else if (msg.action === 'play' && typeof window.play === 'function') {
+              } else if (msg.action === 'play') {
                 currentFields = msg.fields ?? {};
                 // B-091 — mount any Lottie map deferred during the LAST run before this one
                 // starts (rebuilds while nothing is on air; no-op when nothing is pending).
@@ -927,22 +984,37 @@ export class Preview {
                 // await them so the first pass a user ever sees measures with
                 // final glyphs (no-op when already loaded).
                 await applyFontFaces().catch(() => {});
-                playing = true;
-                window.play(JSON.stringify(currentFields));
+                // Resolved AFTER the flush: that rebuild reinstalls the globals.
+                const playFn = controlFn('play');
+                if (playFn === null) reportDroppedControl('play');
+                else {
+                  playing = true;
+                  playFn(JSON.stringify(currentFields));
+                }
                 // B-029 — do NOT re-tick currentFrame here. During playback the
                 // controller owns the frame (its per-frame applyFrame now drives the
                 // lifespan gate too); a static re-tick at the scrubbed frame could
                 // re-hide a start-trimmed (lifespan.in > 0) element at frame 0 just
                 // before play restores it. The prior scrub already painted currentFrame.
-              } else if (msg.action === 'stop' && typeof window.stop === 'function') {
-                playing = false;
-                window.stop();
-              } else if (msg.action === 'out' && typeof window.out === 'function') {
+              } else if (msg.action === 'stop') {
+                const stopFn = controlFn('stop');
+                if (stopFn === null) reportDroppedControl('stop');
+                else {
+                  playing = false;
+                  stopFn();
+                }
+              } else if (msg.action === 'out') {
                 // D-105 — the coordinated animated exit (content first, background last).
-                playing = false;
-                window.out();
-              } else if (msg.action === 'next' && typeof window.next === 'function') {
-                window.next();
+                const outFn = controlFn('out');
+                if (outFn === null) reportDroppedControl('out');
+                else {
+                  playing = false;
+                  outFn();
+                }
+              } else if (msg.action === 'next') {
+                const nextFn = controlFn('next');
+                if (nextFn === null) reportDroppedControl('next');
+                else nextFn();
               } else if (msg.action === 'pause') {
                 // D-020 — freeze the lifecycle (intro / hold countdown / outro).
                 if (runtime && typeof runtime.pause === 'function') runtime.pause();
@@ -958,7 +1030,15 @@ export class Preview {
                 }
               }
             } catch (e) {
-              /* swallow preview-side errors */
+              // Session Z — never swallow. A throw in here (a scene rebuild that failed,
+              // a runtime that errored under a control) is indistinguishable, from the
+              // operator's chair, from a button that simply does nothing.
+              postPreviewError(
+                'message.handler',
+                (msg && msg.action ? msg.action : '?') +
+                  ': ' +
+                  (e && e.message ? e.message : String(e)),
+              );
             }
           })();
         });
