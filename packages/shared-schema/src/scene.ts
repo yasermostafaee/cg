@@ -329,6 +329,132 @@ export function resolveDefaultPosition(scene: {
   return scene.defaultPosition ?? CENTERED_POSITION;
 }
 
+/**
+ * ⭐ **C-015 phase 6 (task 6.2a) — THE OUTPUT-PLACEMENT ARITHMETIC, AND WHY IT MOVED
+ * HERE FROM `@cg/template-runtime`'s `position.ts`.**
+ *
+ * Deriving a Live Source's `MIXER FILL` bridge-side means this placement arithmetic
+ * now exists on BOTH sides of the seam — the page composes a CSS transform from it,
+ * the bridge composes a normalized rect from it. **If one changes and the other does
+ * not, NOTHING ERRORS: the live box simply slides off its hole on air.** There is no
+ * operator signal, because the hole is transparent, so the failure looks exactly like
+ * a mis-authored template.
+ *
+ * This repo solved this class once already, in this same code path, and wrote down
+ * why — the bridge calls `positionQuery` (just above) rather than formatting the
+ * query itself, because _"two spellings of one override is how a preview comes to
+ * place a graphic differently from air"_. This is the same remedy applied to the
+ * ARITHMETIC instead of to the string.
+ *
+ * `@cg/shared-schema` is the home because it is the only package all three sides
+ * already depend on — the page, the bridge and `@cg/vcg-format` — so the move adds
+ * no dependency anywhere. `@cg/template-runtime` re-exports every name below, so no
+ * page-side import churned.
+ *
+ * **What deliberately did NOT move:** `applyOutputPosition` and `resolveChannelRaster`
+ * touch `document` and `window`. They are the page's alone, and a schema package that
+ * reached for a DOM would be a worse problem than the one this solves.
+ *
+ * 🔴 **Guard 1 of two, and it is only half the fix.** Sharing these terms makes them
+ * impossible to diverge; it does NOT make their COMPOSITION agree, because one side
+ * emits CSS and the other emits AMCP and neither can share that step. Guard 2 is the
+ * contract test pinning the two compositions to each other over a table of rasters —
+ * including a non-16:9 one, since on 16:9 `s = 1` and `pad = (0,0)` and every term
+ * below collapses to identity (task 6.2b).
+ */
+
+/** A pixel raster — the reference frame, or a channel's real geometry. */
+export interface Raster {
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * R-030 — the REFERENCE frame every manifest offset and keyframe is authored
+ * against. Deliberately a CONSTANT and not the channel's raster: the anchor
+ * calculation stays expressed in reference pixels, and the channel's real geometry
+ * is applied afterwards as ONE uniform scale ({@link outputScale}).
+ */
+export const REFERENCE_FRAME: Raster = { width: 1920, height: 1080 };
+
+/**
+ * Anchor → fractional handle on both axes (0 = start, 0.5 = middle, 1 = end).
+ *
+ * EXPORTED now, where it was module-private in `position.ts`: the bridge needs the
+ * same nine pairs, and a second table of them is exactly the divergence 6.2a exists
+ * to prevent — nine literals are nine chances to transpose one.
+ */
+export const ANCHOR_FRACTIONS: Record<PositionAnchor, { ax: number; ay: number }> = {
+  'top-left': { ax: 0, ay: 0 },
+  'top-center': { ax: 0.5, ay: 0 },
+  'top-right': { ax: 1, ay: 0 },
+  'mid-left': { ax: 0, ay: 0.5 },
+  center: { ax: 0.5, ay: 0.5 },
+  'mid-right': { ax: 1, ay: 0.5 },
+  'bottom-left': { ax: 0, ay: 1 },
+  'bottom-center': { ax: 0.5, ay: 1 },
+  'bottom-right': { ax: 1, ay: 1 },
+};
+
+/**
+ * Where the scene-sized stage lands inside the reference frame:
+ * `x = ax*(frameW − sceneW) + offset.x`, likewise for y. A full-frame scene computes
+ * (0,0) — pixel-identical to the pre-positioning output.
+ *
+ * R-049 — the first parameter is `Pick<Scene, 'resolution'>` and not a full `Scene`: a
+ * WIDENING, because the body only ever read `resolution`, and because two callers do
+ * not hold a scene at all. PVW's Live Source placeholder has only the `resolution`
+ * the template carries on `TemplateInfo.liveSources`, and the bridge has the same.
+ * Requiring a full `Scene` would have forced them to fabricate one or — far worse —
+ * to write their own copy of two lines of arithmetic.
+ */
+export function outputTranslate(
+  scene: { resolution: { width: number; height: number } },
+  position: Position,
+  frame: Raster = REFERENCE_FRAME,
+): { x: number; y: number } {
+  const { ax, ay } = ANCHOR_FRACTIONS[position.anchor];
+  return {
+    x: ax * (frame.width - scene.resolution.width) + position.offset.x,
+    y: ay * (frame.height - scene.resolution.height) + position.offset.y,
+  };
+}
+
+/**
+ * R-030 — the ONE uniform scale mapping the reference frame onto a raster:
+ * `min(rasterW/refW, rasterH/refH)`.
+ *
+ * `min` — never a per-axis pair — is what makes this UNIFORM, and uniform is what
+ * keeps every anchor and offset calculation above correct unchanged. A non-16:9
+ * raster therefore LETTERBOXES rather than distorting.
+ *
+ * 🔴 **This is also the exact point where the page and `MIXER FILL` disagree, and the
+ * reason the contract test needs a non-16:9 case.** The page scales uniformly and
+ * pads; `FILL` normalizes PER AXIS and stretches. They agree only where `s = 1` and
+ * the pad is zero — i.e. only on 16:9. The bridge reproduces the page's transform
+ * exactly, which is what makes them agree on every raster.
+ */
+export function outputScale(raster: Raster, frame: Raster = REFERENCE_FRAME): number {
+  return Math.min(raster.width / frame.width, raster.height / frame.height);
+}
+
+/**
+ * The letterbox padding that centres the scaled reference frame in the raster.
+ * Exactly `{ x: 0, y: 0 }` whenever the raster's aspect matches the reference (every
+ * 16:9 channel), so it costs the common case nothing; on a 4:3 channel it is what
+ * puts the bars top-and-bottom instead of pinning the picture to a corner.
+ */
+export function outputLetterbox(
+  raster: Raster,
+  frame: Raster = REFERENCE_FRAME,
+): { x: number; y: number } {
+  const scale = outputScale(raster, frame);
+  return {
+    x: (raster.width - frame.width * scale) / 2,
+    y: (raster.height - frame.height * scale) / 2,
+  };
+}
+
 /** Scene — root of the editor's domain model. */
 const SceneObjectSchema = z
   .object({

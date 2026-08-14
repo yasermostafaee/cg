@@ -1,9 +1,42 @@
 import {
+  ANCHOR_FRACTIONS,
+  outputLetterbox,
+  outputScale,
+  outputTranslate,
   PositionAnchorSchema,
+  REFERENCE_FRAME,
   resolveDefaultPosition,
   type Position,
+  type Raster,
   type Scene,
 } from '@cg/shared-schema';
+
+/**
+ * ⭐ **C-015 phase 6 (6.2a) — THE PURE ARITHMETIC MOVED TO `@cg/shared-schema`, AND
+ * IS RE-EXPORTED FROM HERE SO NO PAGE IMPORT CHURNED.**
+ *
+ * `REFERENCE_FRAME`, `ANCHOR_FRACTIONS`, `outputTranslate`, `outputScale` and
+ * `outputLetterbox` are now DEFINED beside `positionQuery` in `scene.ts` and merely
+ * re-exported here. The reason is the whole of 6.2a: the bridge derives a Live
+ * Source's `MIXER FILL` from the same terms, and a second copy of them would let a
+ * live box slide off its hole on air with nothing erroring and no operator signal —
+ * the hole is transparent, so it reads as a mis-authored template.
+ *
+ * These re-exports are NOT a compatibility shim to be cleaned up later. They are the
+ * point: a page-side caller keeps importing from `@cg/template-runtime`, which is
+ * where placement has always lived for it, while there is exactly one definition.
+ *
+ * `applyOutputPosition` and `resolveChannelRaster` stay HERE and are the page's
+ * alone — they touch `document` and `window`.
+ */
+export {
+  ANCHOR_FRACTIONS,
+  outputLetterbox,
+  outputScale,
+  outputTranslate,
+  REFERENCE_FRAME,
+  type Raster,
+};
 
 /**
  * R-011 — output-only stage placement ("author small, place anywhere").
@@ -23,52 +56,25 @@ import {
  */
 
 /**
- * R-030 — the REFERENCE frame every manifest offset and keyframe is authored
- * against. It is deliberately a CONSTANT and not the channel's raster: the
- * whole anchor calculation below stays expressed in reference pixels, and the
- * channel's real geometry is applied afterwards as ONE uniform scale
- * ({@link outputScale}).
- *
- * The name matters. This used to be called `OUTPUT_FRAME` while being
- * hardcoded 1920×1080, which made it a lie on any other channel: the anchor
- * maths computed against a frame the output did not have, so a 1920×1080 scene
- * overflowed a 720p channel (the C-018 recon worked around it with
- * `CG 1-10 INVOKE 0 "scrollTo(0,360)"`, a diagnostic trick that cannot be on
- * air). The output frame is now {@link resolveChannelRaster}; this is the
+ * R-030's REFERENCE frame and the anchor table now live in `@cg/shared-schema` and
+ * are re-exported above (6.2a). The name mattered then and still does: this used to
+ * be `OUTPUT_FRAME` while hardcoded 1920×1080, which made it a lie on any other
+ * channel — a 1920×1080 scene overflowed a 720p channel, worked around in the C-018
+ * recon with `CG 1-10 INVOKE 0 "scrollTo(0,360)"`, a diagnostic trick that cannot be
+ * on air. The OUTPUT frame is {@link resolveChannelRaster}; `REFERENCE_FRAME` is the
  * reference the author sees.
  *
- * REFLOW IS REJECTED, and the reason is recorded so it is not reproposed:
- * keyframes are authored in pixels and line-breaking/kerning are relative to
- * authored boxes, so reflowing makes on-air output non-deterministic and
- * breaks the preview-equals-air property the whole placement design exists to
- * preserve.
+ * REFLOW IS REJECTED and the reason is recorded so it is not reproposed: keyframes
+ * are authored in pixels and line-breaking/kerning are relative to authored boxes,
+ * so reflowing makes on-air output non-deterministic and breaks the
+ * preview-equals-air property the whole placement design exists to preserve.
  */
-export const REFERENCE_FRAME = { width: 1920, height: 1080 } as const;
-
-/** A pixel raster — the reference frame, or a channel's real geometry. */
-export interface Raster {
-  width: number;
-  height: number;
-}
 
 /** A `window`-shaped geometry source (the real `window`, or a test double). */
 export interface RasterView {
   innerWidth: number;
   innerHeight: number;
 }
-
-/** Anchor → fractional handle on both axes (0 = start, 0.5 = middle, 1 = end). */
-const ANCHOR_FRACTIONS: Record<Position['anchor'], { ax: number; ay: number }> = {
-  'top-left': { ax: 0, ay: 0 },
-  'top-center': { ax: 0.5, ay: 0 },
-  'top-right': { ax: 1, ay: 0 },
-  'mid-left': { ax: 0, ay: 0.5 },
-  center: { ax: 0.5, ay: 0.5 },
-  'mid-right': { ax: 1, ay: 0.5 },
-  'bottom-left': { ax: 0, ay: 1 },
-  'bottom-center': { ax: 0.5, ay: 1 },
-  'bottom-right': { ax: 1, ay: 1 },
-};
 
 /**
  * Parse the operator override from the served URL's query
@@ -104,38 +110,6 @@ export function parsePositionQuery(search: string): Position | null {
  */
 export function resolveOutputPosition(scene: Scene, search: string): Position {
   return parsePositionQuery(search) ?? resolveDefaultPosition(scene);
-}
-
-/**
- * Where the scene-sized stage lands inside the output frame:
- * `stageX = ax*(ow−fw) + offset.x`, `stageY = ay*(oh−fh) + offset.y`.
- * A full-frame scene computes (0,0) — pixel-identical to the
- * pre-positioning output.
- *
- * R-049 — the first parameter is `Pick<Scene, 'resolution'>`, not `Scene`. A
- * WIDENING, not a redesign: the body only ever read `scene.resolution`, every
- * existing caller still satisfies it, and no behaviour changes.
- *
- * It matters because the second caller does not hold a scene. PVW draws a
- * placeholder over each Live Source plate and needs the SAME anchor translate the
- * page computes for itself, from the `resolution` the template carries on
- * `TemplateInfo.liveSources` — the scene itself is discarded at import. Requiring
- * a full `Scene` here would have forced that caller to fabricate one or, far
- * worse, to write its own copy of two lines of arithmetic, which is exactly the
- * divergence `live-source-multibox` design.md §6's duplication guard exists to
- * prevent: nothing errors when the copies drift, the overlay simply stops sitting
- * on its hole.
- */
-export function outputTranslate(
-  scene: Pick<Scene, 'resolution'>,
-  position: Position,
-  frame: Raster = REFERENCE_FRAME,
-): { x: number; y: number } {
-  const { ax, ay } = ANCHOR_FRACTIONS[position.anchor];
-  return {
-    x: ax * (frame.width - scene.resolution.width) + position.offset.x,
-    y: ay * (frame.height - scene.resolution.height) + position.offset.y,
-  };
 }
 
 /**
@@ -181,40 +155,6 @@ export function resolveChannelRaster(search: string, view?: RasterView | null): 
     return { width: view.innerWidth, height: view.innerHeight };
   }
   return { width: REFERENCE_FRAME.width, height: REFERENCE_FRAME.height };
-}
-
-/**
- * R-030 — the ONE uniform scale that maps the reference frame onto the
- * channel's raster: `min(rasterW/refW, rasterH/refH)`.
- *
- * `min` (never a per-axis pair) is what makes this uniform, and uniform is what
- * keeps every anchor and offset calculation above correct UNCHANGED — the
- * reason scale was chosen over any coordinate rework. A non-16:9 raster
- * therefore LETTERBOXES rather than distorting: the smaller ratio wins and the
- * leftover is padding (see {@link outputLetterbox}).
- *
- * A 1920×1080 channel returns exactly 1 — the no-regression case.
- */
-export function outputScale(raster: Raster, frame: Raster = REFERENCE_FRAME): number {
-  return Math.min(raster.width / frame.width, raster.height / frame.height);
-}
-
-/**
- * The letterbox padding that centres the scaled reference frame in the raster.
- * Exactly `{ x: 0, y: 0 }` whenever the raster's aspect matches the reference
- * (every 16:9 channel, this plant throughout), so it costs the common case
- * nothing; on a 4:3 channel it is what puts the bars top-and-bottom instead of
- * pinning the picture to a corner.
- */
-export function outputLetterbox(
-  raster: Raster,
-  frame: Raster = REFERENCE_FRAME,
-): { x: number; y: number } {
-  const scale = outputScale(raster, frame);
-  return {
-    x: (raster.width - frame.width * scale) / 2,
-    y: (raster.height - frame.height * scale) / 2,
-  };
 }
 
 /**

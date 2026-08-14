@@ -12,7 +12,13 @@ import {
   type LayerSlot,
   type ServerLabel,
 } from '@cg/caspar-client';
-import { isRestorable, positionQuery } from '@cg/shared-schema';
+import {
+  isRestorable,
+  liveSourceFit,
+  positionQuery,
+  resolveDefaultPosition,
+  type LiveSourceFit,
+} from '@cg/shared-schema';
 import type {
   AuditEntry,
   FieldValues,
@@ -2585,6 +2591,67 @@ export class CasparRuntime {
       for (const record of records) keys.add(adoptionKey(record.slot));
     }
     return keys;
+  }
+
+  /**
+   * C-015 phase 6 (6.2) — **the EFFECTIVE output position of one stack item: the
+   * SAME three-step chain the page resolves for itself.**
+   *
+   * `operator override ?? the template's carried defaultPosition ?? centred`
+   *
+   * 🔴 **THE MIDDLE STEP IS THE ONE THAT WAS ALMOST MISSED, AND IT IS LOAD-BEARING.**
+   * An earlier draft of the design said `defaultPosition` need not reach the bridge,
+   * on the grounds that the bridge holds the operator's effective position in
+   * `#positions` and would otherwise use the same `centred` default the page does.
+   * That is wrong for every template whose author set a position: the bridge appends
+   * the position query **only when an override exists** (see `#sendAdd`), so with no
+   * override no `pos` rides the URL and the page falls back to
+   * `scene.defaultPosition` — while a bridge assuming `centred` would compute a
+   * different anchor translate and put the live box where the hole is not.
+   *
+   * The hole is transparent, so nothing on air would say why. That is the whole
+   * reason `defaultPosition` joins `resolution` on the `liveSources` carrier.
+   *
+   * `resolveDefaultPosition` (@cg/shared-schema) supplies the tail rather than a
+   * local `{ anchor: 'center' }` literal — the same rule as `positionQuery` one
+   * method over: two spellings of "centred" is how the composited box comes to sit
+   * somewhere the hole is not.
+   */
+  #effectivePosition(itemId: string, carried: Position | undefined): Position {
+    return this.#positions.get(itemId) ?? resolveDefaultPosition({ defaultPosition: carried });
+  }
+
+  /**
+   * C-015 phase 6 (6.2 / 6.3 / 6.4) — **the `FILL` + `CLIP` for ONE plate of one item.**
+   *
+   * Everything the arithmetic needs is resolved HERE, because only the bridge holds
+   * it: the channel raster (`ChannelSettingsStore.rasterFor` — which falls back to the
+   * reference frame, so it is never absent), the operator's override, and the
+   * template's carried `resolution` + `defaultPosition`. The arithmetic itself is
+   * `liveSourceFit` in `@cg/shared-schema` — the ONE implementation (6.2a), shared
+   * with the page's own placement terms and pinned to the page's composition by
+   * 6.2b's contract test.
+   *
+   * `sourceAspect` is passed in rather than resolved here: it comes from the
+   * ASSIGNED catalog entry through §3a's chain, which is the caller's to walk
+   * (a plate with no assignment refuses the take before any geometry is computed —
+   * 6.7).
+   */
+  liveSourceFitFor(input: {
+    channel: number;
+    itemId: string;
+    rect: { x: number; y: number; width: number; height: number };
+    sceneResolution: { width: number; height: number };
+    carriedDefaultPosition?: Position | undefined;
+    sourceAspect: number | null;
+  }): LiveSourceFit {
+    return liveSourceFit({
+      rect: input.rect,
+      sceneResolution: input.sceneResolution,
+      raster: this.#channelSettings.rasterFor(input.channel),
+      position: this.#effectivePosition(input.itemId, input.carriedDefaultPosition),
+      sourceAspect: input.sourceAspect,
+    });
   }
 
   /** Is this exact coordinate a bridge-owned Live Source layer? */
