@@ -1,5 +1,7 @@
 import { quote } from '@cg/caspar-client';
+import type { SourceProducer } from '@cg/shared-ipc';
 import type { FieldValues } from '@cg/shared-schema';
+import type { NormalizedRect } from './live-layers.js';
 
 /** A CasparCG `(channel, layer)` coordinate. */
 export interface CommandSlot {
@@ -139,6 +141,178 @@ export class CommandBuilder {
    */
   mixerVolume(slot: CommandSlot, volume: number): string {
     return `MIXER ${target(slot)} VOLUME ${String(volume)}`;
+  }
+
+  /**
+   * C-015 phase 6 (6.1) — **seat a LIVE SOURCE producer on a layer.**
+   *
+   * The eighth verb, and the first thing this builder has ever emitted that is not
+   * a `CG …` on an html producer. `take()` is `CG … PLAY 0` — it plays a template
+   * INSIDE an already-ADDed html producer and cannot start any other kind — so
+   * before this there was no way for the bridge to put a route, a card or a clip on
+   * a layer at all. (A broadcast-safety test had to open its own raw TCP socket to
+   * do it, documented there as "deliberately NOT the bridge"; that test was itself
+   * the evidence of this gap.)
+   *
+   * 🔴 **THE ARGUMENT IS BUILT FROM A PARSED SHAPE, NEVER FROM A STRING.**
+   * `SourceProducer` is a discriminated union on `kind`, so an unreachable producer
+   * form is a parse error at the config boundary rather than an AMCP `400` at take
+   * time — with a guest's box black and nothing on screen saying why. This method
+   * is the only place that union becomes wire text.
+   *
+   * The four spellings, and how much each is worth:
+   *
+   *   `route`    — `route://<channel>[-<layer>]`. MEASURED on the plant's 2.3.2
+   *                (design.md §0b): the form is accepted and does not run away. The
+   *                optional `-<layer>` tail is a SAFETY term and not merely grammar —
+   *                on a single-channel install, `route://<channel>` pointed at its own
+   *                channel is a feedback loop, so the studio plate can only be
+   *                addressed with the layer form (§9a.2).
+   *   `media`    — a bare file name, quoted. What CasparCG assumes for an
+   *                argument carrying no scheme and no keyword.
+   *   `decklink` — `DECKLINK DEVICE <n>`. ⚠ **PARSE-VERIFIED ONLY** on this
+   *                installation: it has no capture card (C-020 records
+   *                `<system-audio/> + <newtek-ivga/> + <screen/>`), so nothing here has
+   *                ever put a real device on air. That debt is **C-021's**, blocked
+   *                on hardware, and it is deliberately not a fog over this method —
+   *                see design.md §12.1.
+   *   `ndi`      — `NDI NAME "<source>"`. Same standing as `decklink`: no NDI source
+   *                exists on this plant, and the NDI module is gated. C-021.
+   *
+   * `keyDevice` is deliberately NOT read here. A fill+key pair is TWO layers, so it
+   * is a decision about how many producers to seat and where — the caller's, from
+   * the ledger's `role` — not a spelling this method can make. Reading it here would
+   * put a key signal on the fill layer.
+   */
+  playSource(slot: CommandSlot, producer: SourceProducer): string {
+    return `PLAY ${target(slot)} ${producerArgument(producer)}`;
+  }
+
+  /**
+   * C-015 phase 6 (6.1) — **the placement of a live layer: `FILL` AND `CLIP`, as ONE
+   * PAIR from ONE computation.**
+   *
+   * 🔴 **THIS RETURNS TWO COMMANDS ON PURPOSE, AND IT MUST NEVER BE SPLIT INTO
+   * `mixerFill` + `mixerClip`.** The reason is measured, not stylistic
+   * (design.md §3, on 2.5.0 and re-confirmed on the plant's 2.3.2): `CLIP` masks in
+   * the SAME channel-normalized space as `FILL` and does **not travel with it**. A
+   * fill box that moves out from under its clip window renders **NOTHING AT ALL** —
+   * on air, a black hole where a guest's face should be, with a `202` on the wire
+   * and no error anywhere.
+   *
+   * The measurement that proves it is the last row of §3's table:
+   * `MIXER 1-2 FILL 0.5 0.5 0.5 0.5` puts the box bottom-right, and
+   * `MIXER 1-2 CLIP 0 0 0.5 0.5` then makes it vanish entirely rather than clipping
+   * it — had `CLIP` been source-relative or travelled with the fill, some box would
+   * have survived.
+   *
+   * Two builder methods would make that a CALLER mistake — one someone makes once,
+   * at 2 a.m., by updating a fit and forgetting the mask. One method makes it
+   * **unrepresentable**. This is golden rule 7's shape exactly: one condition
+   * governing two commands is evaluated once, and here one geometry emitting two
+   * commands is emitted once.
+   *
+   * ORDER: `FILL` then `CLIP`. They go out in one batch on one connection, which is
+   * as atomic as this bridge can be today — whether they land on the SAME FRAME is
+   * a separate, open question (§3b: `MIXER … DEFER` + a CHANNEL-scoped `COMMIT`,
+   * which this project forbids until it is known whether `COMMIT` applies only the
+   * deferring connection's queue; on a plant running several stations against one
+   * CasparCG, a `COMMIT` that applies everyone's is the same harm the channel-scope
+   * ban exists to prevent).
+   */
+  mixerFit(slot: CommandSlot, fit: { fill: NormalizedRect; clip: NormalizedRect }): string[] {
+    return [
+      `MIXER ${target(slot)} FILL ${rect(fit.fill)}`,
+      `MIXER ${target(slot)} CLIP ${rect(fit.clip)}`,
+    ];
+  }
+
+  /**
+   * C-015 phase 6 (6.6) — reset a layer's mixer geometry: `MIXER <ch>-<layer> CLEAR`.
+   *
+   * **NOT optional tidiness.** Mixer state belongs to the CHANNEL'S MIXER, not to
+   * the producer, so it survives both a `CLEAR` of the layer and a `CG REMOVE` —
+   * the same fact `mixerVolume` above is built on, and measured on hardware. A Live
+   * Source teardown that omits this leaves a `FILL` **and a `CLIP`** on the layer for
+   * the next, entirely unrelated graphic to inherit.
+   *
+   * Of the two, the inherited `CLIP` is the worse: a stale `FILL` puts a graphic in
+   * the wrong PLACE, which someone sees and reports, while a stale `CLIP` makes an
+   * otherwise-correct graphic **invisible**, with nothing on the wire explaining why.
+   *
+   * It resets geometry only. `VOLUME` is deliberately left alone by the mock's model
+   * of this verb and by the real one, so R-022's rehearse restore keeps being tested
+   * on its own terms rather than being silently repaired by a teardown.
+   */
+  mixerClear(slot: CommandSlot): string {
+    return `MIXER ${target(slot)} CLEAR`;
+  }
+}
+
+/**
+ * One `MIXER` rect as four space-separated numbers, in the order AMCP takes them:
+ * `x y width height`, each a fraction of the channel raster ON ITS OWN AXIS.
+ *
+ * PER-AXIS is the measured basis (design.md §0b fact 1) and is the thing most
+ * likely to be "corrected" by someone who expects a uniform fraction. It is also
+ * why the page and the wire can disagree: the page scales UNIFORMLY and
+ * letterboxes, so the two agree only on a 16:9 raster — which is exactly why the
+ * contract test pinning them together requires a non-16:9 case.
+ *
+ * ⚠ **PRECISION IS NOT MEASURED.** §6 emits computed fractions rather than round
+ * numbers, and what rounding the server accepts for these four arguments has never
+ * been recorded (tasks.md 6.3a(b)). `numberArg` therefore emits at most 6 decimals,
+ * matching what the page's `css()` uses for the same geometry — chosen so the two
+ * sides round identically rather than because AMCP is known to want it. If a probe
+ * ever shows the server wants fewer, this is the one place to change.
+ */
+function rect(r: NormalizedRect): string {
+  return [r.x, r.y, r.width, r.height].map(numberArg).join(' ');
+}
+
+/**
+ * A number as an AMCP argument: at most 6 decimals, trailing zeros trimmed.
+ *
+ * Never exponential notation, which `String(1e-7)` would produce and which no AMCP
+ * parser is known to accept: `toFixed` first, then `Number` to trim, and a magnitude
+ * below the precision floor lands on a clean `0` rather than on `1e-7`.
+ */
+function numberArg(n: number): string {
+  return String(Number(n.toFixed(6)));
+}
+
+/**
+ * ONE producer union arm → its AMCP argument text.
+ *
+ * Every user-supplied value goes through `quote()` EXACTLY ONCE, per this module's
+ * contract. Note which values are quoted and which are not, because it is not
+ * uniform and the difference is the server's, not ours: a route address, a media
+ * file name and an NDI source NAME are single arguments and are quoted; the
+ * `DECKLINK` / `DEVICE` / `NAME` keywords and the device INDEX are AMCP syntax and
+ * would be refused if quoted.
+ *
+ * The device index is emitted through `String()` on a value the schema has already
+ * constrained to a positive integer — there is no path by which an operator string
+ * reaches the wire unquoted.
+ */
+function producerArgument(producer: SourceProducer): string {
+  switch (producer.kind) {
+    case 'route': {
+      // The layer tail is appended only when present. `layer` is
+      // `nonnegative()`, so **layer 0 is a real, addressable layer** and the test
+      // must be `!== undefined` — a truthiness check here would silently drop it
+      // and route the whole channel instead of one layer, which on a
+      // single-channel install is the feedback loop §9a.2 exists to avoid.
+      const tail = producer.layer === undefined ? '' : `-${String(producer.layer)}`;
+      return quote(`route://${String(producer.channel)}${tail}`);
+    }
+    case 'decklink':
+      // Keywords and the index are AMCP syntax, not values: unquoted.
+      return `DECKLINK DEVICE ${String(producer.device)}`;
+    case 'ndi':
+      return `NDI NAME ${quote(producer.source)}`;
+    case 'media':
+      return quote(producer.file);
   }
 }
 
