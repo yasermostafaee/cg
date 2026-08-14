@@ -900,6 +900,14 @@ Whoever takes part 2 should file the assembly as its own task and do it FIRST; t
 audio cluster (6.5) and the swap cluster (6.9) both hang off a seating path that
 does not exist yet.
 
+✅ **Part 1's Linux `gate:e2e` is DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31787014201
+(run 31787014201, `headSha b1e017ba`): `completed` + `success`, with the
+**E2E (Playwright) job itself having RUN** (its own `conclusion: success`, not a SKIP —
+a skipped `e2e` proves nothing about the suite, P-029). It was owed because
+`packages/shared-schema/` and `packages/template-runtime/` are both inside
+`UI_RENDER_PATTERNS`' render-dependency closure. `pnpm gate` was green uncached
+beforehand: 85/85, `0 cached`.
+
 - [x] 6.1 **DONE 2026-08-14.** `playSource` / `mixerFit` / `mixerClear` on
       `command-builder.ts`, all layer-scoped through `target()` — the channel-scoped
       form stays impossible by construction. `mixerFit` returns BOTH commands from one

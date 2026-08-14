@@ -126,12 +126,18 @@ picture inside a guest frame on air.** For the owner, to be put to CIAB.
 `openspec validate --all --strict` 50/50, plus `openspec validate live-source-multibox
 --strict`.
 
-🔴 **A Linux `gate:e2e` IS OWED.** The rule that applied: the change touches
-`packages/shared-schema/` and `packages/template-runtime/`, both of which are in
-`UI_RENDER_PATTERNS`' render-dependency closure — so it is classified as able to affect
-what renders, even though the page-side change is a re-export refactor with 899
-template-runtime tests unchanged. Discharge needs a COMPLETED, GREEN `e2e` job that
-actually RAN, cited by run URL.
+✅ **THE LINUX `gate:e2e` IS DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31787014201
+(run 31787014201, `push` on `dev`, `headSha b1e017ba` — this session's own tip).
+`conclusion: success`, `status: completed`, and the **E2E (Playwright) job RAN** —
+verified as that job's OWN `conclusion: success` rather than as "a green run exists",
+because a SKIPPED `e2e` is a statement about the diff and no evidence at all about the
+suite (P-029).
+
+The rule that made it owed: the change touches `packages/shared-schema/` and
+`packages/template-runtime/`, both in `UI_RENDER_PATTERNS`' render-dependency closure, so
+it is classified as able to affect what renders — even though the page-side change is a
+re-export refactor with 899 template-runtime tests unchanged. The classification is about
+the DIFF, not about how confident the author feels, which is the point of having one.
 
 ## NOT done, by instruction
 
