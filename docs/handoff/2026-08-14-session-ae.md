@@ -89,12 +89,13 @@ hand-written membership test.
 
 ## What is OWED — undischarged, and named as such
 
-1. 🔴 **A Linux `gate:e2e` for BOTH commits.** `e326a962` touches
-   `apps/runtime/src/renderer/**` (`rowState.ts`, `layerRowActions.ts`, `LayerRow.tsx`) and
-   `tests/e2e/**`. The Windows suite is **78/78 green** and that is a SIGNAL, never a
-   discharge. Discharge requires a COMPLETED, GREEN `e2e` job on GitHub Actions for the
-   commit carrying the change, with the `e2e` job having actually RUN, cited by run URL —
-   write it into both changes' `tasks.md` beside the ticked items.
+1. ✅ **The Linux `gate:e2e` is DISCHARGED for both commits** — https://github.com/yasermostafaee/cg/actions/runs/31760214543
+   (run 31760214543 on `dev` HEAD `6ee4c5d4`, which contains both `e326a962` and
+   `25c21420`). `conclusion: success`, `status: completed`, and the **E2E (Playwright)
+   job RAN** — verified as that job's own `conclusion: success` rather than as "a green run
+   exists", because a SKIPPED `e2e` is a statement about the diff and no evidence about the
+   suite (P-029). The URL is written into both changes' `tasks.md`, since a ticked box with
+   no URL is a claim rather than a discharge. The Windows 78/78 remains a signal only.
 2. 🔴 **Hardware.** R-021 **7.3 is deliberately left UNTICKED** — no hardware this week, and
    a green mock pass is not a hardware verification. R-028 9.3 likewise.
    Task 4.3's **RECON is still UNRUN** (`CG STOP` on a non-html layer on real 2.3.2).

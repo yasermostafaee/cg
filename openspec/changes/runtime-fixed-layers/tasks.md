@@ -273,11 +273,14 @@ naming slots. No open decisions block implementation.
 - [x] 7.1 `pnpm openspec validate runtime-fixed-layers --strict` — valid.
 - [x] 7.2 Full green gate (uncached) + the runtime E2E suite. Windows E2E: 78/78 green,
       including the two new `restore-blocked` specs in `fixed-layers.spec.ts`.
-      🔴 **THE LINUX `gate:e2e` IS OWED AND UNDISCHARGED.** This stage touches
-      `apps/runtime/src/renderer/**` (`rowState.ts`, `layerRowActions.ts`, `LayerRow.tsx`) and
-      `tests/e2e/**`, both of which match `UI_RENDER_PATTERNS`. A Windows pass is a signal
-      and NEVER a discharge — the debt is discharged only by a COMPLETED, GREEN `e2e` job on
-      GitHub Actions for the commit that carries this change, cited by run URL, with the
-      `e2e` job having actually RUN. Write that URL here when it exists.
+      ✅ **THE LINUX `gate:e2e` IS DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31760214543
+      (run 31760214543, `dev` HEAD `6ee4c5d4`, which CONTAINS this change's `e326a962`).
+      `conclusion: success`, `status: completed`, and the **E2E (Playwright) job RAN** —
+      checked as its own `conclusion: success` and not merely as "a run exists", because a
+      SKIPPED `e2e` (the P-029 case) is a statement about the diff and no evidence at all
+      about the suite. This stage touches `apps/runtime/src/renderer/**` (`rowState.ts`,
+      `layerRowActions.ts`, `LayerRow.tsx`) and `tests/e2e/**`, both matching
+      `UI_RENDER_PATTERNS`, so the debt was real. The Windows run (78/78) remains a signal
+      only and discharged nothing.
 - [ ] 7.3 Real-hardware pass on CasparCG 2.3.2 (fixed-slot load, restore-in-place, foreign
       occupancy handling) before archive — on-air behavior throughout.

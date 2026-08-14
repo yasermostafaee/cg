@@ -339,4 +339,10 @@ for what part A deliberately skipped or found un-runnable.**
 - [ ] 9.1 `pnpm openspec validate runtime-unified-layer-rows --strict`.
 - [ ] 9.2 Full green gate (uncached) + `gate:e2e`; Linux `gate:e2e` debt recorded honestly
       (see [B-078] — the local E2E gate is a known flake surface).
+      **STILL OPEN as a whole** — §8 and §9.3 are not done, so this box stays unticked.
+      ✅ **But the §6/§7 slice's Linux `e2e` IS discharged** — https://github.com/yasermostafaee/cg/actions/runs/31760214543
+      (run 31760214543, `dev` HEAD `6ee4c5d4`, which contains `25c21420`):
+      `conclusion: success`, `status: completed`, and the **E2E (Playwright) job RAN**
+      (its own `conclusion: success`, not a SKIP — a skipped `e2e` would prove nothing about
+      the suite, P-029). `pnpm gate` was green uncached locally beforehand: 85/85, `0 cached`.
 - [ ] 9.3 Real-hardware pass on CasparCG 2.3.2 before archive — on-air behaviour throughout.
