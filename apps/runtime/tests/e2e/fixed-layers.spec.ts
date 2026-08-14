@@ -2,8 +2,9 @@ import { test, expect, buildValidVcg } from './fixtures/runtime.js';
 
 /**
  * R-021 → R-028 part B — the declared-layer rows, driven against the offline
- * MockRuntime's CG_E2E_FIXED_BANK seed (channel 1, layers 70–87; 70–73 are the
- * four display cases html / ffmpeg / empty / unknown). The bridge-side truth —
+ * MockRuntime's CG_E2E_FIXED_BANK seed (channel 1, layers 70–88; 70–73 are the
+ * four display cases html / ffmpeg / empty / unknown, and 88 is R-021 stage 4's
+ * `restore-blocked` row — bound, over a producer that is not ours). The bridge-side truth —
  * real OSC tap + sweep + the exact-slot load — is integration-tested in
  * tools/caspar-bridge.
  *
@@ -41,7 +42,10 @@ test('no declared bank means no rows at all', async ({ app }) => {
 });
 
 test('a seeded bank renders permanent rows with aliases and honest occupancy', async ({ app }) => {
-  await expect(app.layers.locator('[data-layer]')).toHaveCount(18);
+  // 19 since R-021 stage 4 added the blocked row (88) — every other case was
+  // already spoken for, and none of 70–87 models a BOUND row over a FOREIGN
+  // producer (71 is foreign but unbound).
+  await expect(app.layers.locator('[data-layer]')).toHaveCount(19);
 
   // The ALIAS is the row's primary label.
   await expect(app.layerRow(70)).toContainText('CLOCK');
@@ -241,4 +245,67 @@ test('picking an already-imported template binds the same exact row, without a s
   await expect(app.layerRow(75)).toContainText('lower third');
   // Nothing was imported — the registry is exactly as it was.
   await expect.poll(() => app.templateCount()).toBe(registrySize);
+});
+
+/**
+ * R-021 stage 4 (design.md §d, owner decision d1) — **THE `restore-blocked` ROW,
+ * END TO END.**
+ *
+ * Spec scenario: *"Foreign-occupied fixed slot enters restore-blocked"* — the row
+ * shows the `restore-blocked` state naming the retained item and the observed
+ * occupancy, and the item is NOT loaded elsewhere, NOT adopted and NOT auto-cleared.
+ *
+ * The seeded row (88) is bound to an item retained as ON AIR while a decklink holds
+ * its layer, which is exactly the shape a bridge restart produces when somebody
+ * else's feed has landed on an operator's declared row.
+ */
+test('a restore-blocked row says BLOCKED, names what is on the layer, and offers no air verb', async ({
+  app,
+}) => {
+  const row = app.layerRow(88);
+  await expect(row).toBeVisible();
+
+  // THE WORD. Not the retained ON AIR — that is the assertion the whole state
+  // exists for: the item is not on that layer, and a green row would answer the
+  // control room's one urgent question with a confident lie.
+  await expect(row).toContainText('BLOCKED');
+  await expect(row).not.toContainText('ON AIR');
+  // The ATTENTION tone, asserted through the row's own stable hook rather than a
+  // colour value.
+  await expect(row.locator('[data-row-state="attention"]')).toHaveCount(1);
+
+  // BOTH FACTS. The row names the item that is waiting…
+  await expect(row).toContainText('STUDIO FEED');
+  // …and what CasparCG actually reports on the layer, which is what tells the
+  // operator this is somebody else's feed rather than a fault of ours.
+  const stateCell = row.locator('[data-row-state]');
+  await expect(stateCell).toHaveAttribute('title', /decklink/);
+
+  // NO VERB THAT WOULD COMMAND THAT LAYER. PLAY would re-ADD over the decklink,
+  // STOP would ask it to exit.
+  await expect(row.getByRole('button', { name: 'PLAY' })).toBeDisabled();
+  await expect(row.getByRole('button', { name: 'STOP' })).toBeDisabled();
+
+  // …AND THE WAY OUT IS LIVE. CLEAR is d1's first exit (Clear, then play) and the
+  // escape hatch; holding it on the one row whose whole problem is a producer in
+  // the way would be fail-STUCK rather than fail-safe.
+  await expect(row.getByRole('button', { name: 'CLEAR' })).toBeEnabled();
+});
+
+/**
+ * …and the confirmation for that CLEAR names the KIND it is about to destroy
+ * (task 4.3). Under silence the same dialog says outright that occupancy is
+ * unknown — the branch this row cannot exercise, covered in
+ * `layerRow.clearConfirm.dom.test.ts`.
+ */
+test('the blocked row’s CLEAR asks first, and names the producer it will destroy', async ({
+  app,
+}) => {
+  const row = app.layerRow(88);
+  await row.getByRole('button', { name: 'CLEAR' }).click();
+  const dialog = app.page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('decklink');
+  // The layer NUMBER, which is the vocabulary shared with the playout side.
+  await expect(dialog).toContainText('1-88');
 });

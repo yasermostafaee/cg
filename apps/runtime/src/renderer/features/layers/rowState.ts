@@ -5,6 +5,7 @@ import {
   CircleQuestionMark,
   LoaderCircle,
   MonitorPlay,
+  OctagonAlert,
   RefreshCw,
   CircleArrowOutDownRight,
   TriangleAlert,
@@ -206,6 +207,14 @@ export interface RowStateInput {
    * to air is interlocked off. Bridge-owned, so it is the same for every browser.
    */
   rehearsing: boolean;
+  /**
+   * R-021 stage 4 — the bridge's restore for THIS row PARKED: its layer is held by
+   * a producer that is provably not ours, so nothing was sent and the item is
+   * waiting. A published FACT (`binding.restoreBlocked`), decided by the bridge
+   * against a hearing tap — never re-derived here from `observed`, because the
+   * same shape from a BLIND tap means `unverified` and not this.
+   */
+  restoreBlocked: boolean;
 }
 
 /**
@@ -242,6 +251,7 @@ export function rowState({
   simulated,
   oscBlind,
   rehearsing,
+  restoreBlocked,
 }: RowStateInput): RowStateVisual {
   const wire = occupancyLabel(observed, linkDown);
   /**
@@ -316,6 +326,51 @@ export function rowState({
       title:
         'This row has a template bound, but the stack has not arrived from the bridge yet. ' +
         'It fills in as soon as the bridge answers — this is not an empty row.',
+    };
+  }
+
+  /**
+   * ── R-021 stage 4 — RESTORE-BLOCKED, AND IT OUTRANKS THE ITEM'S OWN STATUS ──
+   *
+   * FIRST among the bound cases, and that ordering is the honesty. The item is
+   * retained as it last was — usually `on-air` — so without this the row would
+   * publish the broadcast green over a layer we have just PROVEN is carrying
+   * somebody else's producer. That is the exact inversion of what this module
+   * exists for: the one urgent question is "what is on air", and a confident air
+   * claim for a graphic that is demonstrably not there is the worst possible
+   * answer to it.
+   *
+   * It is NOT `unverified`, and the difference is knowledge rather than degree.
+   * `unverified` says the wire cannot back the claim; this says the wire ANSWERED
+   * and the answer was somebody else. So it gets its own word, and it is not
+   * greyed — grey means "we cannot see", and here we can.
+   *
+   * SHAPE and HUE, per this module's rule. The octagon is the only one in the set
+   * (everything else is a circle bar rehearse's monitor) and reads as a stop sign
+   * without needing colour at all; amber is the established ATTENTION hue here
+   * — the same one `unconfirmed` and `unknown` wear — because a blocked row is
+   * precisely something to go and look at. Green was never a candidate, and red
+   * is reserved for error and destructive intent: nothing has failed and nothing
+   * is broken. A producer is simply in the way.
+   *
+   * The tooltip carries what the row cannot: the two facts d1 requires on screen
+   * together — the item is WAITING, and (via `withWire`) what CasparCG reports is
+   * actually on the layer — plus the operator's way out, which is a deliberate
+   * two-step Clear-then-play and never one compound verb.
+   */
+  if (restoreBlocked) {
+    return {
+      icon: OctagonAlert,
+      color: colors.pending,
+      label: 'BLOCKED',
+      tone: 'attention',
+      title: withWire(
+        'BLOCKED — this row’s layer is held by a producer that is not ours, so the bridge ' +
+          'restored the item WITHOUT touching the layer: nothing was cleared and nothing was ' +
+          'put on air. It stays here waiting. CLEAR the layer and then PLAY when you are sure ' +
+          'the layer is yours to take — or it clears itself the moment that producer leaves.',
+        wire,
+      ),
     };
   }
 

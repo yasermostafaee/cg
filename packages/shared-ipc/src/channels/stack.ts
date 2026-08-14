@@ -239,8 +239,21 @@ export const StackSnapshotChannel = defineChannel(
  *   `unknown-template` — the SPA re-delivers its library FIRST, so this means the
  *                        template is genuinely gone. The row is LOST.
  *   `no-layer`         — the range is exhausted. The row is LOST.
+ *   `fixed-slot-taken` — R-021 stage 4. The row's retained coordinate is a
+ *                        DECLARED operator row that another restored item had
+ *                        already bound. The row is LOST, and it is deliberately
+ *                        NOT `no-layer`: nothing is exhausted and freeing a
+ *                        dynamic layer would not help, so the two need opposite
+ *                        instructions. A declared row may never be re-homed onto
+ *                        a dynamic layer (that is the whole of R-021), so the
+ *                        only honest outcome is to say so and skip.
  */
-export const RestoreSkipReasonSchema = z.enum(['already-held', 'unknown-template', 'no-layer']);
+export const RestoreSkipReasonSchema = z.enum([
+  'already-held',
+  'unknown-template',
+  'no-layer',
+  'fixed-slot-taken',
+]);
 export type RestoreSkipReason = z.infer<typeof RestoreSkipReasonSchema>;
 
 export const RestoreSkipSchema = z.object({

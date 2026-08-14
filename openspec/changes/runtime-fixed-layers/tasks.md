@@ -40,7 +40,20 @@
   to an installation that restarts its bridge. Owes a Linux `gate:e2e` (the Windows run is
   a signal, non-authoritative for render geometry) and the stage-3 hardware pass (7.3).
 - **Stage 4** = 3.1–3.3, 4.3, 4.4 — restore branch + `restore-blocked` + the fixed-row
-  Clear carve-out; owes hardware.
+  Clear carve-out. **Shipped (this PR).** Honest notes: **(D12)** the restore branch turned up
+  a SECOND defect beside the one D11 predicted — B-114 REPLACED `reserve()` with
+  `bindFixed()` instead of branching, so every DYNAMIC retained coordinate had silently lost
+  its exact-slot restore and fell straight through to `#allocate()` (the
+  wrong-layer-occupancy hazard `#slotForRestore`'s own contract forbids). Both doors are now
+  reached through an explicit `isFixed` test, and §d test 5 pins both halves; it was
+  verified FAILING before the fix. **(D13)** `restore-blocked` is a RECORDED decision
+  (`#restoreBlocked`, written only in `#decidePendingRestores` against a HEARING tap) and
+  never re-derived from `observed` — the same shape from a BLIND tap means `unverified`,
+  and collapsing the two would let silence claim knowledge (B-093). **(D14)** 4.3's
+  graceful-Stop half needs no RECON to be SAFE: STOP is withheld wherever the observation is
+  not `html`, so `CG STOP` is never addressed to a foreign producer. The probe itself
+  (what real 2.3.2 does with `CG STOP` on a non-html layer) is STILL UNRUN and stays owed
+  with 7.3. Owes a Linux `gate:e2e` and the stage-4 hardware pass (7.3).
 
 ## 0. Owner decisions — ANSWERED (owner, 2026-07-23; encoded in design.md + specs delta)
 
@@ -84,17 +97,43 @@ naming slots. No open decisions block implementation.
 
 ## 3. Restore branch (tools/caspar-bridge)
 
-- [ ] 3.1 `#slotForRestore` (`caspar-runtime.ts:814-824`): fixed retained slot → NEVER
-      `#allocate()` fall-through; reservable → same-slot reserve + standard B-092 deferred
-      adopt-vs-re-ADD; unreservable (foreign observed) → the named `restore-blocked` state
-      (d1), zero wire traffic, honest row state.
-- [ ] 3.2 Tests 1–5 from design.md §d (same-layer adopt; `restore-blocked` on foreign with
-      the producer surviving and zero CLEAR; own-html adopt without CLEAR; silent-slot
-      deferral; dynamic fall-through regression).
-- [ ] 3.3 `restore-blocked` lifecycle tests (design.md §d test 8): entered on
+- [x] 3.1 `#slotForRestore` + `#decidePendingRestores` (`caspar-runtime.ts` — the
+      `:814-824` hint was stale; locate by symbol): fixed retained slot → NEVER
+      `#allocate()` fall-through; bindable → same-slot `bindFixed` + standard B-092
+      deferred adopt-vs-re-ADD; foreign observed → the named `restore-blocked` state (d1),
+      zero wire traffic, honest row state.
+      **Where the two halves landed, and why they are not in one place.** The fall-through ban
+      is a SLOT-SELECTION rule and lives in `#slotForRestore`; the foreign-observed branch
+      is a DECISION and lives in `#decidePendingRestores`, because at restore time CasparCG
+      may not be reachable at all and occupancy is not yet knowable. (The design's
+      "quarantined" wording predates `quarantine()` becoming a no-op on fixed slots — stage 1
+      recorded that stage 4 would read the TAP instead, and it does.) Keeping the item in
+      `#pendingRestore` while blocked is what makes d1's second exit work with NO separate
+      un-block mechanism to drift from the first.
+      A third case the design did not name — the retained fixed slot already bound by another
+      restored item — is SKIPPED with its own `fixed-slot-taken` reason (B-108), never
+      allocated elsewhere.
+- [x] 3.2 Tests 1–5 from design.md §d — `tools/caspar-bridge/tests/fixed-restore-branch.integration.test.ts`
+      (same-layer adopt; `restore-blocked` on foreign with the producer surviving and zero
+      CLEAR; own-html adopt without CLEAR; silent-slot deferral; dynamic fall-through
+      regression, plus the `fixed-slot-taken` skip). Asserted on the WIRE — the mock's NDJSON
+      trace: which layer a `CG ADD` addressed, and that no `CLEAR` was sent at all — never
+      on internal bookkeeping, because the failure being prevented is a broadcast one.
+      **Verified failing first:** with ONLY `caspar-runtime.ts` reverted, 6 of the 9 fail,
+      including the dynamic regression. The 3 that pass are the ones B-114 had already made
+      true (free-slot same-layer restore, own-html adopt, blind-tap deferral), which is the
+      honest result rather than a tuned one.
+- [x] 3.3 `restore-blocked` lifecycle tests (design.md §d test 8): entered on
       foreign-occupied restore; exits via explicit operator Clear + take AND via the foreign
       producer vacating (observed empty → deferred re-ADD); never via allocate-elsewhere or
-      auto-clear; the row names the retained item and the observed occupancy while blocked.
+      auto-clear; and a REMOVED item takes its block with it. Renderer half in
+      `apps/runtime/tests/layerRow.restoreBlocked.dom.test.ts`: the row names the retained
+      item and the observed occupancy while blocked; **BLOCKED outranks the item's own
+      (usually `on-air`) status**, which is the assertion the whole state exists for — a row
+      that published the retained status would wear the broadcast colour over a layer we have
+      just proven is not carrying it; every verb that would COMMAND the layer is held behind
+      ONE shared reason; and CLEAR/REMOVE stay live, because CLEAR is the documented way OUT
+      and holding the escape hatch here would be fail-STUCK rather than fail-safe.
 
 ## 4. Bridge surface + channels
 
@@ -124,13 +163,34 @@ naming slots. No open decisions block implementation.
       disconnect honestly re-publishes `unknown` instead of freezing stale state. The
       wire carries FACTS only — `{observed, binding}` — never a computed row state
       (design (f) note); `binding` ships now, null until stage 3.
-- [ ] 4.3 Fixed-row hard Clear per (b)/b1: confirm-gated always; under OSC silence the
-      confirmation dialog states occupancy is unknown AND names the layer number; outside
-      the fixed range R-015's silence-refusal is untouched (regression-test the boundary).
-      Graceful Stop offered only for observed `html` (RECON: `CG STOP` on a non-html layer
-      on real 2.3.2 — probe via `tools/caspar-amcp-probe`, never assume).
-- [ ] 4.4 Test 6 from design.md §d (Clear observed vs silent-with-honest-dialog; C-012
-      Stop/Clear distinction; outside-range refusal unchanged).
+- [x] 4.3 Fixed-row hard Clear per (b)/b1: confirm-gated always; under OSC silence the
+      confirmation dialog states occupancy is unknown AND names the layer number; outside the
+      fixed range R-015's silence-refusal is untouched.
+      The MECHANISM shipped early, with R-028 part B: `clearBankLayer` is gated by STRUCTURE
+      (in the declared bank AND not reserved) rather than by observation, which IS b1, and its
+      guard is already attacked from every angle in `clear-bank-scoped.integration.test.ts`.
+      What stage 4 adds is the DIALOG's honesty. Allowing a blind clear is only safe if the
+      confirmation does not imply the console looked, so the sentence now branches on what the
+      wire actually said — unknown → says outright that it CANNOT tell · producer → names the
+      KIND (the fact that stops a wrong click, and the `restore-blocked` row's own case) ·
+      empty → says so, because warning about destroying a graphic on an observably free layer
+      is how an operator is trained to click through the warnings that matter. Every branch
+      names the LAYER NUMBER, which under silence is the only fact they can carry to a rack.
+      Graceful STOP is offered only for an observed `html` producer: a blocked row's STOP is
+      held, so `CG STOP` is never addressed to a foreign producer.
+      ⚠ **The RECON is STILL UNRUN** (what real 2.3.2 does with `CG STOP` on a non-html
+      layer) — no hardware this week — and it stays owed with 7.3. Nothing shipped here rests
+      on its answer; it could only ever let STOP be WIDENED, never narrowed.
+- [x] 4.4 Test 6 from design.md §d — the dialog's three branches in
+      `apps/runtime/tests/layerRow.clearConfirm.dom.test.ts`, and the BOUNDARY in
+      `tools/caspar-bridge/tests/clear-bank-scoped.integration.test.ts`: both doors exercised
+      under ONE silence, one layer apart (in-bank 70 clears; 69 — one below the floor and NOT
+      reserved, so it isolates the membership half of the guard — is still refused `foreign`),
+      and the same pair again with a foreign producer OBSERVED. Deliberately one test rather
+      than two files: two passing tests in two places is precisely how these two rules would
+      drift apart without anything going red. C-012's Stop/Clear split is what makes the
+      permission safe and is asserted on the row (STOP held for a non-html observation, CLEAR
+      not).
 
 ## 5. Runtime UI
 
@@ -196,14 +256,28 @@ naming slots. No open decisions block implementation.
 
 ## 6. Docs + PRD
 
-- [ ] 6.1 Engine doc-sync where contracts changed; `docs/prd/runtime.md` R-021 → `[~]` with an
-      honest status note (hardware verification owed: on-air behavior changes).
+- [x] 6.1 Engine doc-sync where contracts changed; `docs/prd/runtime.md` R-021 → `[~]` with an
+      honest status note (hardware verification owed: on-air behavior changes). Stage 4's
+      status note is in place, naming what landed, the D12 defect found in passing, and BOTH
+      debts (Linux `gate:e2e`, hardware 7.3 incl. 4.3's unrun RECON). Engine doc-sync is a
+      NO-OP for this stage, verified rather than assumed: none of the five engine docs
+      (`docs/engines/overview.md` + the four deep-dives) covers the bridge at all — grep for
+      `caspar-runtime` / `caspar-bridge` / `restore` across `docs/engines/` returns nothing.
+      The contracts that DID change are documented where they live: the wire field on
+      `FixedSlotStateSchema`, and the branch on `#slotForRestore` / `#restoreBlocked`.
 - [ ] 6.2 Cross-refs: R-023 binds shortcuts to the (f) declaration point; R-024/C-002 use the
       (h) binding shape.
 
 ## 7. Gate
 
-- [ ] 7.1 `pnpm openspec validate runtime-fixed-layers --strict`.
-- [ ] 7.2 Full green gate (uncached) + `gate:e2e`; Linux `gate:e2e` debt recorded honestly.
+- [x] 7.1 `pnpm openspec validate runtime-fixed-layers --strict` — valid.
+- [x] 7.2 Full green gate (uncached) + the runtime E2E suite. Windows E2E: 78/78 green,
+      including the two new `restore-blocked` specs in `fixed-layers.spec.ts`.
+      🔴 **THE LINUX `gate:e2e` IS OWED AND UNDISCHARGED.** This stage touches
+      `apps/runtime/src/renderer/**` (`rowState.ts`, `layerRowActions.ts`, `LayerRow.tsx`) and
+      `tests/e2e/**`, both of which match `UI_RENDER_PATTERNS`. A Windows pass is a signal
+      and NEVER a discharge — the debt is discharged only by a COMPLETED, GREEN `e2e` job on
+      GitHub Actions for the commit that carries this change, cited by run URL, with the
+      `e2e` job having actually RUN. Write that URL here when it exists.
 - [ ] 7.3 Real-hardware pass on CasparCG 2.3.2 (fixed-slot load, restore-in-place, foreign
       occupancy handling) before archive — on-air behavior throughout.

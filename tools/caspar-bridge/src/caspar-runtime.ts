@@ -30,6 +30,7 @@ import {
   type LayerClearReason,
   type PLAYOUT_CLEAR_REASONS,
   type RestoreSkip,
+  type RestoreSkipReason,
   type PlayoutLayerState,
   type DelimiterOption,
   type ChannelResponse,
@@ -84,6 +85,16 @@ import {
 
 /** R-010 — the `connections.set-config` response shape. */
 type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
+
+/**
+ * R-021 stage 4 (task 3.1) — where a restored item is put, or WHY it is not.
+ *
+ * A bare `CommandSlot | null` could not carry the second answer, and B-108's rule
+ * is that every skip is reported WITH ITS REASON: "your operator row was already
+ * taken" and "the dynamic range is exhausted" send the operator to two different
+ * places, and only one of them can be fixed by removing something.
+ */
+type RestorePlacement = { slot: CommandSlot } | { skip: RestoreSkipReason };
 
 /** R-028 part B — a refused deliberate playout clear. */
 type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
@@ -444,6 +455,33 @@ export class CasparRuntime {
     string,
     { slot: CommandSlot; templateId: string; fields: FieldValues }
   >();
+
+  /**
+   * R-021 stage 4 (task 3.1, owner decision d1) — **RESTORE-BLOCKED**: a retained
+   * item whose DECLARED row is held by a producer that is provably not ours, so
+   * the restore parked instead of acting.
+   *
+   * ⭐ **WHY IT IS RECORDED AND NOT DERIVED.** "Non-html producer under a binding"
+   * is the same shape as several honest, non-blocked situations, and the one that
+   * separates them is our KNOWLEDGE at the moment of decision: from a BLIND tap
+   * that shape means `unverified` (B-093 — silence is evidence of nothing), and
+   * only from a HEARING tap does it mean blocked. A re-derivation at publish time
+   * cannot see which of those actually happened, so it would eventually claim
+   * blocked on evidence that never existed. This map is written at exactly ONE
+   * place — the decision itself, in `#decidePendingRestores` — and read at
+   * exactly one — `#computeFixedState`, which puts it on the wire.
+   *
+   * The entry keeps the OBSERVED producer beside the slot so the reason survives
+   * with the state rather than being re-looked-up from a tap that has since moved
+   * on.
+   *
+   * It is cleared by every route out of the state: the item is decided (the
+   * foreign producer vacated, or it turned out to be ours), the operator issues
+   * any command (`#retirePendingRestore`), or the item is removed. It may NEVER
+   * be cleared by allocate-elsewhere or by an automatic CLEAR — those are the two
+   * exits d1 forbids.
+   */
+  readonly #restoreBlocked = new Map<string, { slot: CommandSlot; producer: string }>();
   #seq = 0;
   #lastFailover: ConnectionHealth['lastFailover'] = undefined;
 
@@ -759,11 +797,11 @@ export class CasparRuntime {
         if (this.#adapter.currentPrimary !== label) return; // only the primary feeds the reconciler
         if (to === 'healthy') {
           this.#reconciler.setLinkDown(false);
-          const occupiedKeys = new Set(
-            session.osc.occupancy
-              .occupied(this.#occupancyStaleMs)
-              .map((o) => `${String(o.channel)}:${String(o.layer)}`),
-          );
+          // R-021 stage 4 — sampled ONCE, with the producer KIND, and the key set
+          // derived from it. `reconcileOnReconnect` only asks "occupied?"; the
+          // restore decision additionally asks "ours?" on a declared row.
+          const observedProducers = this.#observedProducers(session);
+          const occupiedKeys = new Set(observedProducers.keys());
           // B-092 — decide the pending RESTORES here, against this same drained
           // occupancy sample, and BEFORE `reconcileOnReconnect`. This is the
           // only point where the answer exists: the tap resets on resync and
@@ -776,7 +814,7 @@ export class CasparRuntime {
           // reconciler — a re-ADDed item already reads `played: false` and is
           // correctly left alone by it.
           const heard = session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
-          void this.#decidePendingRestores(occupiedKeys, heard);
+          void this.#decidePendingRestores(observedProducers, heard);
           // The SAME blind-tap distinction applies here, and this path had the
           // bug too: `reconcileOnReconnect` resets a `played` item to IDLE when
           // its slot is not in `occupiedKeys`, treating silence as proof the
@@ -1293,11 +1331,12 @@ export class CasparRuntime {
         skipped.push({ itemId: item.itemId, reason: 'unknown-template' });
         continue;
       }
-      const slot = this.#slotForRestore(item);
-      if (slot === null) {
-        skipped.push({ itemId: item.itemId, reason: 'no-layer' });
+      const placement = this.#slotForRestore(item);
+      if ('skip' in placement) {
+        skipped.push({ itemId: item.itemId, reason: placement.skip });
         continue;
       }
+      const { slot } = placement;
       if (
         this.#reconciler.restoreItem({
           itemId: item.itemId,
@@ -1369,13 +1408,8 @@ export class CasparRuntime {
     // and errored rows restores rows but licenses no wire action, and sampling
     // occupancy for it would be work done to reach a no-op.
     if (this.#pendingRestore.size > 0 && this.#adapter.primarySession.state === 'healthy') {
-      const occupiedKeys = new Set(
-        this.#adapter.primarySession.osc.occupancy
-          .occupied(this.#occupancyStaleMs)
-          .map((o) => `${String(o.channel)}:${String(o.layer)}`),
-      );
       await this.#decidePendingRestores(
-        occupiedKeys,
+        this.#observedProducers(this.#adapter.primarySession),
         this.#adapter.primarySession.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs),
       );
     }
@@ -1383,15 +1417,67 @@ export class CasparRuntime {
   }
 
   /**
-   * B-092 — the layer a restored item takes. The RETAINED slot is preferred and
-   * reserved exactly: it is the layer the surviving producer is actually on, so
-   * it is the layer whose occupancy decides adopt-vs-re-ADD. Re-allocating some
-   * other free layer would consult the wrong layer's occupancy and could ADD a
-   * second producer beside a live one. Falls back to normal allocation when the
-   * intent carries no slot or the layer is already taken; `null` when the range
-   * is exhausted (the item is skipped, exactly as a load would fail).
+   * R-021 stage 4 — the tap's observation as `adoptionKey → producer KIND`.
+   *
+   * The restore decision used to take a bare `Set` of occupied keys, which
+   * answered "is something there?" and could not answer "is it OURS?" — and those
+   * are different questions with opposite safe answers on a DECLARED row. One
+   * helper rather than a third hand-rolled loop: the key format is `adoptionKey`
+   * (the sweep's own), and the staleness bound is `#occupancyStaleMs` and never a
+   * second constant.
+   *
+   * The caller decides whether the tap is HEARING at all (`hasFreshOsc`); this
+   * only reports what it heard. An empty map from a hearing tap means empty
+   * layers (B-053); from a blind one it means nothing whatsoever, which is why
+   * the distinction never lives in here.
    */
-  #slotForRestore(item: RetainedStackItem): CommandSlot | null {
+  #observedProducers(session: ServerSession): ReadonlyMap<string, string> {
+    const byKey = new Map<string, string>();
+    for (const o of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
+      byKey.set(adoptionKey({ channel: o.channel, layer: o.layer }), o.producer);
+    }
+    return byKey;
+  }
+
+  /**
+   * B-092 — the layer a restored item takes. The RETAINED slot is preferred and
+   * taken exactly: it is the layer the surviving producer is actually on, so it
+   * is the layer whose occupancy decides adopt-vs-re-ADD. Re-allocating some
+   * other free layer would consult the wrong layer's occupancy and could ADD a
+   * second producer beside a live one.
+   *
+   * ⭐ **R-021 stage 4 (task 3.1) — THE BRANCH IS THE POINT: A DECLARED ROW AND A
+   * DYNAMIC LAYER GET OPPOSITE ANSWERS WHEN THE EXACT SLOT CANNOT BE TAKEN.**
+   *
+   *   DYNAMIC → #368's fall-through to `#allocate()`, unchanged and
+   *     hardware-validated. Re-homing an anonymous layer costs nothing an
+   *     operator can perceive; the item just comes back somewhere in its range.
+   *   DECLARED (fixed) → **NEVER `#allocate()`.** R-021's acceptance is "the item
+   *     survives ON THE SAME layer", and the row IS the promise ("layer 72 is the
+   *     clock"). An item bound to 72 coming back on 61 silently breaks the whole
+   *     item — and under R-028's declared model EVERY item is on a declared row,
+   *     so the fall-through would misplace every row after a bridge restart, not
+   *     an edge case. Skipped honestly instead (`fixed-slot-taken`).
+   *
+   * 🔴 **THE TWO DOORS ARE DIFFERENT FUNCTIONS AND THAT IS LOAD-BEARING.**
+   * `reserve()` refuses a fixed slot BY CONSTRUCTION (born allocated, so never
+   * "free" to reserve) and `bindFixed()` refuses a non-fixed one, so neither can
+   * stand in for the other. B-114 replaced `reserve()` with `bindFixed()` rather
+   * than branching, which fixed the declared row and silently cost the DYNAMIC
+   * row its exact-slot restore: every dynamic retained coordinate fell straight
+   * through to `#allocate()`, which is precisely the wrong-layer-occupancy hazard
+   * this method's own contract forbids. Both doors are now reached through an
+   * explicit `isFixed` test, so neither branch can be "simplified" into the other
+   * again (design.md §d test 5 pins it).
+   *
+   * The bound value for a declared row is the REGISTRY's `templateType`, resolved
+   * exactly as `fixedLoad` resolves it — the row reads this straight back out as
+   * its label, so binding the raw id here would restore the row under a UUID.
+   *
+   * `null` means the item is SKIPPED, with the caller reporting which of the two
+   * reasons applied (B-108 — every skip is reported WITH ITS REASON).
+   */
+  #slotForRestore(item: RetainedStackItem): RestorePlacement {
     if (item.slot !== undefined) {
       // R-028 / C-015 — a retained coordinate now inside the RESERVED playout
       // range is SKIPPED, never re-homed. Falling through to `#allocate()`
@@ -1401,32 +1487,30 @@ export class CasparRuntime {
       // playout layer — two copies on air, with the row pointing at the wrong
       // one. Skipping keeps the wire untouched, exactly like the
       // exhausted-range case; the survivor is the playout team's to deal with.
-      if (this.#reservedSet.has(item.slot.layer)) return null;
+      if (this.#reservedSet.has(item.slot.layer)) return { skip: 'no-layer' };
       const slot = { channel: item.slot.channel, layer: item.slot.layer };
-      // B-114 — a retained coordinate inside the DECLARED BANK is re-bound with
-      // `bindFixed`, not `reserve`.
+      // ── A DECLARED OPERATOR ROW — the exact slot or nothing. ───────────────
       //
-      // `reserve()` refuses a fixed slot BY CONSTRUCTION (a fixed slot is born
-      // allocated, so it is never "free" to reserve). Falling through to
-      // `#allocate()` for one is wrong twice over: it re-homes the operator's
-      // row onto some dynamic layer, and for a `custom` template type that
-      // range IS the reserved playout range, so allocation throws and the item
-      // is SKIPPED entirely. Either way `fixedBinding` is never recorded, so
-      // after a bridge restart every declared row published `binding: null` —
-      // the operator's templates vanished from the surface, and the rows also
-      // refused a fresh LOAD because their occupancy is `unknown` until OSC
-      // arrives. The row was left with nothing on it and no way to fill it.
-      //
-      // The bound value is the REGISTRY's `templateType`, resolved exactly as
-      // `fixedLoad` resolves it — the row reads this straight back out as its
-      // label, so binding the raw id here would restore the row under a UUID.
-      const templateType = this.#templates.get(item.templateId)?.templateType ?? item.templateId;
-      if (this.#layers.bindFixed(slot, templateType)) return slot;
+      // B-114's reason for `bindFixed` stands and is why the branch exists at
+      // all: `reserve()` refuses a fixed slot, and for a `custom` template type
+      // `#allocate()` would additionally throw (that range IS the reserved playout
+      // range), so a declared row used to come back with `fixedBinding` unrecorded
+      // — publishing `binding: null`, the operator's templates gone from the
+      // surface, and the row refusing a fresh LOAD because its occupancy reads
+      // `unknown` until OSC arrives.
+      if (this.#layers.isFixed(slot)) {
+        const templateType = this.#templates.get(item.templateId)?.templateType ?? item.templateId;
+        // The `false` case is a row ANOTHER restored item already bound. It is
+        // returned as a skip and NOT allocated elsewhere — see the method's note.
+        return this.#layers.bindFixed(slot, templateType) ? { slot } : { skip: 'fixed-slot-taken' };
+      }
+      // ── A DYNAMIC layer — #368, unchanged: exact slot first, then elsewhere. ──
+      if (this.#layers.reserve(slot, item.templateId)) return { slot };
     }
     try {
-      return this.#allocate(item.templateId);
+      return { slot: this.#allocate(item.templateId) };
     } catch {
-      return null;
+      return { skip: 'no-layer' };
     }
   }
 
@@ -1469,7 +1553,7 @@ export class CasparRuntime {
    * the healthy transition relies on that (see `#wireAdapter`).
    */
   async #decidePendingRestores(
-    occupiedSlotKeys: ReadonlySet<string>,
+    observedProducers: ReadonlyMap<string, string>,
     tapHasReceivedOsc: boolean,
   ): Promise<void> {
     if (this.#pendingRestore.size === 0) return;
@@ -1499,12 +1583,20 @@ export class CasparRuntime {
 
     const pending = [...this.#pendingRestore];
     this.#pendingRestore.clear();
+    /*
+     * R-021 stage 4 — the entries this pass could not decide, re-parked verbatim
+     * at the end. Collected rather than left in place because the loop below
+     * consults `#pendingRestore` through nothing else, and re-adding DURING the
+     * iteration would make "was this decided?" depend on map ordering.
+     */
+    const stillPending = new Map<string, (typeof pending)[number][1]>();
 
     // The restore pass does not report per-item reasons anywhere (it is a bulk
     // rebuild with no operator waiting on it), so it takes `#sendAdd`'s result
     // whole and looks at neither half.
     const adds: Promise<{ ok: boolean; errorCode?: string }>[] = [];
-    for (const [itemId, { slot, templateId, fields }] of pending) {
+    for (const [itemId, entry] of pending) {
+      const { slot, templateId, fields } = entry;
       // A remove landed between the restore and this decision — the item is
       // gone; its slot was already released by remove(). Nothing to do.
       if (this.#reconciler.get(itemId) === null) continue;
@@ -1513,15 +1605,55 @@ export class CasparRuntime {
       // previous, blind pass had set it.)
       this.#reconciler.setUnverifiable(itemId, false);
 
-      if (occupiedSlotKeys.has(adoptionKey(slot))) {
+      const producer = observedProducers.get(adoptionKey(slot));
+      if (producer !== undefined) {
+        /*
+         * 🔴 R-021 stage 4 (task 3.1, owner decision d1) — RESTORE-BLOCKED.
+         *
+         * A DECLARED operator row holding a producer that is provably not ours.
+         * All three of the obvious moves are wrong, and each is wrong for a
+         * reason this codebase has already paid for:
+         *
+         *   ADOPT IN PLACE — NO. Adopting a decklink as our html item is B-092's
+         *     recorded misadoption lie: the row would claim an item that is not
+         *     on that layer, and `#adopted` would additionally suppress the one
+         *     CLEAR that could later fix it.
+         *   CLEAR IT — NO. An automatic CLEAR of a live non-html producer is the
+         *     blind-destruction class R-015 exists to prevent. The hard Clear is
+         *     an OPERATOR power (task 4.3); a restore is not an operator action,
+         *     and automatic paths never destroy.
+         *   ALLOCATE ELSEWHERE — NO, and doubly so: `#slotForRestore` has already
+         *     refused it for this row, because the row IS the promise.
+         *
+         * So it PARKS: nothing is sent, the item keeps its slot and its binding,
+         * and the row states both facts — the item waiting and what is observed.
+         * It stays in `#pendingRestore`, which is what makes the second exit d1
+         * names work by itself: when the foreign producer vacates, this same
+         * decision runs from the sweep, sees a silent layer, and re-ADDs through
+         * the ordinary path. No separate un-block mechanism exists to drift.
+         *
+         * "Not html" fails safe and video kinds are never enumerated — the same
+         * discriminator `clearLayer` and the playout tab use, never a second list.
+         */
+        if (this.#layers.isFixed(slot) && producer !== 'html') {
+          this.#restoreBlocked.set(itemId, { slot, producer });
+          stillPending.set(itemId, entry);
+          this.#markDirty(itemId);
+          continue;
+        }
         // Adopted by OBSERVATION, not by a CLEAR — so this deliberately does
         // NOT go through `#markAdoptedOnPrimary`, whose owned-occupancy
         // resolution means "provably cleared". We proved the opposite: there IS
         // a producer, and it is ours.
+        this.#restoreBlocked.delete(itemId);
         this.#adopted.add(adoptionKey(slot));
         continue;
       }
 
+      // The layer is silent, so nothing is blocking this row any more — the
+      // marker goes BEFORE the re-ADD, so a publish triggered by it cannot carry
+      // a stale block.
+      this.#restoreBlocked.delete(itemId);
       // Silent layer: no producer survived, so the honest state is `loaded`.
       // Re-creating the record through the ordinary `load` intent is what makes
       // it honest — it resets play evidence, so the item can no longer claim
@@ -1533,6 +1665,7 @@ export class CasparRuntime {
       this.#reconciler.assignSlot(itemId, { ...slot, server: 'primary' });
       adds.push(this.#sendAdd(itemId, slot, templateId, fields, seq));
     }
+    for (const [itemId, entry] of stillPending) this.#pendingRestore.set(itemId, entry);
     await Promise.all(adds);
   }
 
@@ -1636,6 +1769,12 @@ export class CasparRuntime {
    * waiting to infer, so it simply retires the restore.
    */
   #retirePendingRestore(itemId: string): void {
+    // R-021 stage 4 — an explicit operator command is the FIRST of d1's two exits
+    // from `restore-blocked` ("Clear, then take"). Dropped unconditionally and
+    // beside the pending entry, so there is exactly one place a block dies by the
+    // operator's hand and no route can retire the restore while leaving the row
+    // still reading BLOCKED.
+    this.#restoreBlocked.delete(itemId);
     if (this.#pendingRestore.delete(itemId)) {
       // The doubt is resolved by the operator's own command; drop the marker so
       // the row stops reading `unverified` on the strength of it.
@@ -2382,6 +2521,18 @@ export class CasparRuntime {
             };
           }
         }
+        /*
+         * R-021 stage 4 (task 3.1) — the RESTORE-BLOCKED fact, read from the
+         * ledger the decision itself wrote and never re-derived from
+         * `observed` (see `#restoreBlocked`).
+         *
+         * Guarded on the SLOT as well as the item: the block is about THIS row,
+         * so an item that somehow moved must not carry a stale block onto its
+         * new row. Absent, never `false` — the wire says nothing about rows
+         * that are not blocked, so an old browser reads them exactly as before.
+         */
+        const blocked =
+          itemId !== undefined && this.#restoreBlocked.get(itemId)?.slot.layer === slot.layer;
         return {
           channel: slot.channel,
           layer: slot.layer,
@@ -2389,7 +2540,7 @@ export class CasparRuntime {
           observed,
           binding:
             itemId !== undefined && templateType !== undefined
-              ? { itemId, templateType, ...identity }
+              ? { itemId, templateType, ...identity, ...(blocked ? { restoreBlocked: true } : {}) }
               : null,
         };
       });
@@ -2560,12 +2711,7 @@ export class CasparRuntime {
       this.#pendingRestore.size > 0 &&
       session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs)
     ) {
-      const occupiedKeys = new Set(
-        session.osc.occupancy
-          .occupied(this.#occupancyStaleMs)
-          .map((o) => `${String(o.channel)}:${String(o.layer)}`),
-      );
-      void this.#decidePendingRestores(occupiedKeys, true);
+      void this.#decidePendingRestores(this.#observedProducers(session), true);
     }
 
     // C-014 — keep the allocation quarantine in step with what the tap sees;
@@ -3148,7 +3294,10 @@ export class CasparRuntime {
     // B-092 — a restore awaiting its occupancy decision dies with the item too:
     // the operator removed it, so there is nothing left to adopt or re-ADD (the
     // urgent CLEAR below is the removal's own, and it is unconditional).
+    // R-021 stage 4 — and so does its `restore-blocked` marker, or the row would
+    // publish a block for an item that no longer exists.
     this.#pendingRestore.delete(itemId);
+    this.#restoreBlocked.delete(itemId);
     if (slot !== undefined) {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);

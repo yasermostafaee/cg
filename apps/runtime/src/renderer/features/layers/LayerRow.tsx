@@ -299,6 +299,17 @@ export function LayerRow({
    */
   const templateMissing = item !== null && template === null;
 
+  /**
+   * R-021 stage 4 — the bridge PARKED this row's restore: a producer that is not
+   * ours holds its layer, so the item is on the row but not on the layer.
+   *
+   * Read ONCE here and handed to both consumers — the state cell's word and the
+   * verbs' gate — so the row cannot come to say BLOCKED while offering PLAY. The
+   * bridge decided it (`binding.restoreBlocked`); nothing here re-derives it from
+   * `observed`, which cannot tell a decided block from a blind tap's ignorance.
+   */
+  const restoreBlocked = slot.binding?.restoreBlocked === true;
+
   const coord = { channel: slot.channel, layer: slot.layer };
   const actions = layerRowActions({
     // THE UNION, not `item`. See the `binding` prop's note: this is the whole of
@@ -310,6 +321,7 @@ export function LayerRow({
     casparReach,
     dirty,
     rehearsing,
+    restoreBlocked,
     // R-022 — one toggle, both directions. The bridge answers
     // `{ ok, reason?, message? }`; the row's verbs speak `AsyncResult`, so the
     // guard's `reason` rides through as `errorCode` for operator wording — the
@@ -390,12 +402,40 @@ export function LayerRow({
       // it is the escape hatch for exactly the situation where the console's model is
       // wrong, so the wording promises only what is certain — the layer is cleared,
       // whatever happens to be on it — and never implies we know it is empty.
+      /**
+       * R-021 task 4.3 (owner decision b1) — WHAT THE DIALOG SAYS ABOUT OCCUPANCY.
+       *
+       * The hard Clear is PERMITTED on a declared row under OSC silence — that is
+       * the whole of b1, and it is why `clearBankLayer` is gated by STRUCTURE (in
+       * the bank, not reserved) rather than by observation. The price of allowing
+       * it blind is that the dialog must not imply we can see: an operator who
+       * believes the console checked will press through a confirmation they would
+       * otherwise have read.
+       *
+       * So the sentence is chosen by what the WIRE actually says about the layer,
+       * and every branch names the layer NUMBER — under silence that number is the
+       * only thing the operator can carry to a rack.
+       *
+       *   unknown  → say so outright, and say what will happen anyway.
+       *   producer → name the KIND. "There is an ffmpeg on 1-72" is the fact that
+       *              stops a wrong click, and it is exactly the state a
+       *              `restore-blocked` row is in.
+       *   empty    → say that too. A confirmation that warns about destroying a
+       *              graphic when the layer is observably free trains the operator
+       *              to click through the ones that matter.
+       */
+      const occupancySentence =
+        slot.observed.kind === 'unknown'
+          ? `CasparCG is not reporting layer ${layerName} right now, so the console CANNOT tell you what is on it — this clears it anyway, whatever it is.`
+          : slot.observed.kind === 'producer'
+            ? `CasparCG reports a ${slot.observed.producer} producer on layer ${layerName}; it leaves air immediately, with no outro.`
+            : `CasparCG reports layer ${layerName} as empty, so this should have nothing to destroy.`;
       return withConfirm(action, () =>
         confirm(
           item !== null
             ? {
                 title: `Clear ${rowName}?`,
-                body: `Layer ${layerName} is cleared immediately — the graphic leaves air with no outro. The template stays on the row and can be played again.`,
+                body: `Layer ${layerName} is cleared immediately — the graphic leaves air with no outro. The template stays on the row and can be played again. ${occupancySentence}`,
                 confirmLabel: 'Clear layer',
                 tone: 'clear',
               }
@@ -404,8 +444,7 @@ export function LayerRow({
                 body:
                   `This row holds no template, so this clears the LAYER itself: ` +
                   `whatever is on ${layerName} leaves air immediately, with no outro. ` +
-                  `Use it when a layer is stuck or the console cannot tell you what is ` +
-                  `on it — it does not need to know in order to clear it.`,
+                  `${occupancySentence}`,
                 confirmLabel: 'Clear layer',
                 tone: 'clear',
               },
@@ -500,6 +539,7 @@ export function LayerRow({
     simulated,
     oscBlind,
     rehearsing,
+    restoreBlocked,
   });
 
   // The wire's occupancy report is no longer rendered as a column — `rowState` folds

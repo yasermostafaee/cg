@@ -132,6 +132,64 @@ it('THE REQUIREMENT — an UNKNOWN occupancy does NOT block the clear', async ()
   expect(lines.some((l) => l.startsWith('CLEAR 1-77'))).toBe(true);
 });
 
+/**
+ * R-021 task 4.4 (design.md §d test 6) — **THE BOUNDARY, WITH BOTH DOORS OPEN AT
+ * ONCE.**
+ *
+ * b1 gave the DECLARED bank a hard Clear that survives OSC silence. The obvious
+ * failure mode of granting that is not that it fails to work — the test above
+ * proves it works — it is that it quietly becomes a general clear-anything door,
+ * and R-015's silence refusal stops applying to the layers it was written for.
+ *
+ * So this exercises BOTH doors under ONE silence, one layer apart. It is a single
+ * test on purpose: two tests in two files, each passing, is exactly how these two
+ * rules would drift apart without anything going red.
+ */
+it('R-015 IS UNTOUCHED one layer outside the bank — the same silence, the opposite answer', async () => {
+  const b = await boot();
+  if (mock === null || tracePath === null) throw new Error('mock not booted');
+
+  // Layer 69 is one below the bank floor and NOT reserved (the reservation is
+  // 50–59), so it isolates the membership half of the guard. Nothing has ever been
+  // observed on either layer, so both are `unknown` — the SAME state of knowledge.
+  //
+  // INSIDE the bank: cleared. The permission is structural (config says this layer
+  // is the operator's), and silence may not withdraw it — that is b1.
+  expect(await b.runtime.clearBankLayer(1, 70)).toEqual({ ok: true });
+  // ONE LAYER OUTSIDE it: refused, and `foreign` — the R-015 rule, unchanged.
+  // Silence licenses nothing there, because nothing declares that layer ours, and
+  // it could be carrying anybody's live graphic.
+  expect(await b.runtime.clearLayer(1, 69)).toEqual({ ok: false, reason: 'foreign' });
+
+  const lines = await recvLines(mock, tracePath);
+  expect(lines.some((l) => l.startsWith('CLEAR 1-70'))).toBe(true);
+  // The refusal is a refusal on the WIRE, not merely in the return value.
+  expect(lines.some((l) => l.startsWith('CLEAR 1-69'))).toBe(false);
+});
+
+/**
+ * …and the same boundary with the layer OBSERVED as foreign, which is the
+ * `restore-blocked` row's own situation.
+ *
+ * C-012's Stop/Clear split is what makes this safe to allow: STOP is the graceful
+ * exit and is offered only where a producer of OURS is resident (the row holds it
+ * for a non-html observation — `layerRow.restoreBlocked.dom.test.ts`), while CLEAR
+ * is the hard kill and is deliberately available whatever is there. An operator
+ * clearing a decklink off their own declared row is the sanctioned act; asking it
+ * to exit gracefully is not a thing to try on air.
+ */
+it('a FOREIGN producer on a declared row is still clearable — and not one layer outside', async () => {
+  const b = await boot();
+  if (mock === null || tracePath === null) throw new Error('mock not booted');
+
+  mock.emitOsc('/channel/1/stage/layer/72/foreground/producer', ['decklink']);
+  mock.emitOsc('/channel/1/stage/layer/69/foreground/producer', ['decklink']);
+  await new Promise((r) => setTimeout(r, 300));
+
+  expect(await b.runtime.clearBankLayer(1, 72)).toEqual({ ok: true });
+  expect(await b.runtime.clearLayer(1, 69)).toEqual({ ok: false, reason: 'foreign' });
+});
+
 it('refuses a layer ONE BELOW the bank floor and ONE ABOVE its ceiling — and sends nothing', async () => {
   const b = await boot();
   if (mock === null || tracePath === null) throw new Error('mock not booted');

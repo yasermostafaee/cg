@@ -89,6 +89,10 @@ export function rowDeps(over: Partial<LayerRowActionDeps> = {}): LayerRowActionD
     casparReach: 'reachable',
     dirty: false,
     rehearsing: false,
+    // R-021 stage 4 — a spec that is ABOUT the blocked row sets this AND the
+    // matching observation; every other spec describes a row whose restore was
+    // never parked, which is the ordinary case.
+    restoreBlocked: false,
     templateAvailable: true,
     toggleRehearse: () => Promise.resolve({ accepted: true }),
     load: () => Promise.resolve({ accepted: true }),

@@ -155,7 +155,7 @@ export class MockRuntime {
   /** R-022 parity — rows in REHEARSE, keyed by item id. Session state, like the bridge's. */
   readonly #rehearsing = new Map<string, Rehearsal>();
 
-  #stack: StackItemState[] = seedStack();
+  #stack: StackItemState[] = [...seedStack(), ...seedBlockedStackItem()];
   #templates = new Map<string, TemplateInfo>(seedTemplates().map((t) => [t.templateId, t]));
   /** R-028 part B parity — ids removed here, so a re-delivery cannot revive them. */
   readonly #removedTemplateIds = new Set<string>();
@@ -181,6 +181,9 @@ export class MockRuntime {
       .filter((i) => i.status !== 'idle')
       .map((i) => i.itemId),
   );
+  // R-021 stage 4 — the blocked row's item is deliberately NOT in `#loaded`: the
+  // whole claim of the state is that nothing of ours is on that layer. The bridge's
+  // real restore never issued the `CG ADD`, so no producer exists for it.
 
   // ── stack ───────────────────────────────────────────────────────────
 
@@ -684,6 +687,12 @@ export class MockRuntime {
                 ...(boundInfo?.sourceFileName !== undefined && boundInfo.sourceFileName !== ''
                   ? { sourceFileName: boundInfo.sourceFileName }
                   : {}),
+                // R-021 stage 4 parity — the bridge publishes this from the ledger
+                // its restore decision wrote (`#restoreBlocked`). The offline mock
+                // runs no restore, so the SEED stands in for the decision; what
+                // matters for parity is that the FIELD exists on this wire and is
+                // absent (never `false`) on every other row.
+                ...(isSeededBlockedLayer(layer) ? { restoreBlocked: true as const } : {}),
               }
             : null,
       });
@@ -1408,8 +1417,19 @@ function seedFixedBank(): FixedLayerBank | null {
         // gate refuses a load onto anything not observably empty — an unbound
         // row can still carry a live graphic — one empty row would let exactly
         // one spec load, once.
-        count: 18,
-        aliases: { '70': 'CLOCK', '71': 'LOWER THIRD', '86': 'TICKER', '87': 'LOGO BUG' },
+        // R-021 stage 4 — NINETEEN. Layer 88 is the `restore-blocked` row: bound,
+        // observed carrying a producer that is not ours, and the item waiting. It
+        // needs its own row because every other case is already spoken for, and
+        // because the property under test is a BOUND row over a FOREIGN producer —
+        // which none of 70–87 models (71 is foreign but unbound).
+        count: 19,
+        aliases: {
+          '70': 'CLOCK',
+          '71': 'LOWER THIRD',
+          '86': 'TICKER',
+          '87': 'LOGO BUG',
+          '88': 'STUDIO FEED',
+        },
       }
     : null;
 }
@@ -1440,6 +1460,10 @@ function seedFixedObservations(): Map<number, FixedSlotObservation> {
         // a bound row over an empty layer is not a contradiction.
         [86, { kind: 'empty' }],
         [87, { kind: 'empty' }],
+        // R-021 stage 4 — the blocked row's layer, held by somebody else's feed.
+        // A kind our system never places, so "not html" is decidable from the wire
+        // alone (video kinds are never enumerated).
+        [88, { kind: 'producer', producer: 'decklink' }],
       ])
     : new Map();
 }
@@ -1484,6 +1508,41 @@ function seedPlayoutLayers(): Map<number, FixedSlotObservation> {
  * Bound to 70 and 71 — the two rows the seed already gives producers, so the
  * binding and the observation agree the way they would on a real bridge.
  */
+/**
+ * R-021 stage 4 — the `restore-blocked` row's own seeded item, e2e-only.
+ *
+ * Deliberately NOT added to `seedStack()`: that seed is the offline mock's ordinary
+ * stack for every user, and a fourth row would change what an operator sees with no
+ * flag armed. This one exists only while `CG_E2E_FIXED_BANK` is set, beside the
+ * bank it belongs to.
+ *
+ * It is seeded `on-air` because that is the whole point of the state: retention
+ * brings the item back as it last was, so a row that simply published its status
+ * would wear the broadcast colour over a layer we have proven is carrying a
+ * decklink. BLOCKED has to outrank it, and the E2E has to be able to see that.
+ */
+const BLOCKED_SEED = {
+  layer: 88,
+  itemId: 'item-blocked-restore',
+  templateType: 'clock',
+} as const;
+
+/** The blocked row's stack item, or [] when the bank seed is not armed. */
+export function seedBlockedStackItem(): StackItemState[] {
+  if (!fixedBankSeedArmed()) return [];
+  const templateId = seedStack()[0]?.templateId ?? 'irib-news';
+  return [
+    {
+      itemId: BLOCKED_SEED.itemId,
+      templateId,
+      fields: {},
+      status: 'on-air',
+      pending: false,
+      slot: { channel: 1, layer: BLOCKED_SEED.layer, server: 'primary' },
+    },
+  ];
+}
+
 function seedFixedBindings(): [
   number,
   { itemId: string; templateType: string; templateId: string },
@@ -1496,8 +1555,26 @@ function seedFixedBindings(): [
   // stay UNBOUND so they keep modelling the foreign-producer / empty / unknown
   // display cases cleanly.
   const layers = [70, 86, 87];
-  return seedStack().map((item, i) => [
-    layers[i] ?? 88 + i,
-    { itemId: item.itemId, templateType: types[i] ?? 'custom', templateId: item.templateId },
-  ]);
+  const bindings: [number, { itemId: string; templateType: string; templateId: string }][] =
+    seedStack().map((item, i) => [
+      layers[i] ?? 89 + i,
+      { itemId: item.itemId, templateType: types[i] ?? 'custom', templateId: item.templateId },
+    ]);
+  // R-021 stage 4 — and the blocked row, bound over a foreign producer.
+  for (const item of seedBlockedStackItem()) {
+    bindings.push([
+      BLOCKED_SEED.layer,
+      {
+        itemId: item.itemId,
+        templateType: BLOCKED_SEED.templateType,
+        templateId: item.templateId,
+      },
+    ]);
+  }
+  return bindings;
+}
+
+/** Is this seeded layer the e2e `restore-blocked` row? */
+function isSeededBlockedLayer(layer: number): boolean {
+  return fixedBankSeedArmed() && layer === BLOCKED_SEED.layer;
 }

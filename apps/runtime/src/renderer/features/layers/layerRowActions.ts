@@ -94,6 +94,18 @@ export const MISSING_TEMPLATE_REASON =
  * answers" — because it is the same PROMISE: a bounded wait that ends on the data,
  * never on a timer, and never on the operator doing anything.
  */
+/**
+ * R-021 stage 4 — why the AIR verbs are held on a `restore-blocked` row.
+ *
+ * Exported for the same reason `MISSING_TEMPLATE_REASON` is: the fact belongs on
+ * the ROW as well as on the control, and the two surfaces must read the same
+ * string by construction rather than by two people writing the same sentence.
+ *
+ * It names the way OUT, because every held verb here has one and it is short.
+ */
+export const RESTORE_BLOCKED_REASON =
+  'This row’s layer is held by a producer that is not ours, so the item is not on it. Sending this would command somebody else’s graphic. CLEAR the layer first, then PLAY.';
+
 export const AWAITING_ROW_REASON =
   'Connecting… this row’s contents have not arrived from the bridge yet, so its actions are held. They return as soon as it answers.';
 
@@ -152,6 +164,19 @@ export interface LayerRowActionDeps {
    * would make rehearse "a preview pane we hope nobody plays from".
    */
   rehearsing: boolean;
+  /**
+   * R-021 stage 4 — the bridge's restore for this row PARKED: a producer that is
+   * not ours holds the layer, so our item is NOT on it (`binding.restoreBlocked`).
+   *
+   * It holds every verb that would COMMAND that layer, and only those. CLEAR and
+   * REMOVE stay available deliberately — CLEAR is the documented way out of the
+   * state (d1's "Clear, then take"), and holding the escape hatch on a row whose
+   * whole problem is a producer in the way would be fail-STUCK rather than
+   * fail-safe. This is a courtesy gate: the bridge sends nothing on its own while
+   * blocked, and a blocked row's PLAY would be an ordinary take that the bridge
+   * has no reason to refuse — which is precisely why the console must not offer it.
+   */
+  restoreBlocked: boolean;
   /** Enter or leave rehearse — one toggle in a fixed slot, like LOAD/REMOVE. */
   toggleRehearse: (itemId: string) => Promise<AsyncResult>;
   /**
@@ -295,6 +320,14 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    * answer, and every consumer below decides for itself which way to fail. The
    * one thing none of them may do is treat silence as a fact (B-101).
    */
+  /**
+   * R-021 stage 4 — this row's layer is not ours to command right now.
+   *
+   * Read off the BINDING and never re-derived from `observed`: "a non-html
+   * producer under a binding" also describes a BLIND tap's honest ignorance, and
+   * only the bridge knows which of the two actually happened.
+   */
+  const blocked = deps.restoreBlocked;
   const onAir = item !== null && isOnAir(item);
   // PLAY's own gate is narrower than `isOnAir`: an item already playing has
   // nothing to take. Kept as the stack row had it so the two never disagree
@@ -500,11 +533,19 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         // reason rehearse is a mode rather than a pane. This disabled state is the
         // courtesy; the bridge's own refusal (`errorCode: 'rehearsing'`) is the
         // guarantee, and it is what holds when a second browser's snapshot is stale.
-        empty || playing || deps.rehearsing || needsCaspar,
+        // `blocked` is the load-bearing one here: a take on a blocked row issues
+        // `CG ADD` + PLAY onto a layer carrying somebody else's producer, which
+        // replaces it — the destructive act d1 says may only ever happen through
+        // the operator's own explicit CLEAR.
+        empty || playing || deps.rehearsing || blocked || needsCaspar,
         () => (item === null ? noop() : deps.play(item.itemId)),
         Play,
       ),
-      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
+      ...(blocked
+        ? { title: RESTORE_BLOCKED_REASON }
+        : needsCaspar || awaiting
+          ? { title: casparVerbReason }
+          : {}),
       tone: 'play',
       // ENGAGED = the state this verb produces is already true, which for PLAY is
       // ON AIR. It is disabled in exactly that case, so the fill lands on a
@@ -557,7 +598,11 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         // feature are R-022's rehearse, and renaming the identity to match a
         // label would be renaming the thing to match its caption.
         deps.rehearsing ? 'OFF PVW' : 'ON PVW',
-        empty || (!deps.rehearsing && onAir),
+        // Blocked holds ENTRY only: rehearse MUTES the layer, and muting a layer
+        // that is carrying another system's live feed is the same trespass PLAY
+        // would be. Leaving is never held — it is the only way back to a playable
+        // row, and it commands nothing.
+        empty || (!deps.rehearsing && (onAir || blocked)),
         () => (item === null ? noop() : deps.toggleRehearse(item.itemId)),
         MonitorPlay,
       ),
@@ -572,11 +617,15 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       ...act(
         'next',
         'NEXT',
-        empty || !onAir || !deps.hasNext || needsCaspar,
+        empty || !onAir || !deps.hasNext || blocked || needsCaspar,
         () => (item === null ? noop() : deps.next(item.itemId)),
         ArrowRightFromLine,
       ),
-      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
+      ...(blocked
+        ? { title: RESTORE_BLOCKED_REASON }
+        : needsCaspar || awaiting
+          ? { title: casparVerbReason }
+          : {}),
       tone: 'next',
     },
     // UPDATE pushes staged field edits to a LIVE producer. Its primary surface
@@ -585,23 +634,31 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     act(
       'update',
       'UPDATE',
-      empty || !onAir || !deps.dirty || needsCaspar,
+      empty || !onAir || !deps.dirty || blocked || needsCaspar,
       () => (item === null ? noop() : deps.update(item.itemId)),
       RefreshCw,
       'menu',
       // UPDATE reaches air: on a row with a resident producer it sends
       // `CG UPDATE` (measured). So it carries the same reason as the rest.
-      needsCaspar ? casparVerbReason : undefined,
+      blocked ? RESTORE_BLOCKED_REASON : needsCaspar ? casparVerbReason : undefined,
     ),
     {
       ...act(
         'stop',
         'STOP',
-        empty || !onAir || needsCaspar,
+        // R-021 4.3 — the graceful STOP is offered only where a producer of OURS
+        // is resident. A blocked row's observation is emphatically not `html`, so
+        // `CG STOP` there would be addressed to another system's producer, and
+        // what 2.3.2 does with it is not something to find out on air.
+        empty || !onAir || blocked || needsCaspar,
         () => (item === null ? noop() : deps.stop(item.itemId)),
         CircleArrowOutDownRight,
       ),
-      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
+      ...(blocked
+        ? { title: RESTORE_BLOCKED_REASON }
+        : needsCaspar || awaiting
+          ? { title: casparVerbReason }
+          : {}),
       tone: 'stop',
     },
     /**

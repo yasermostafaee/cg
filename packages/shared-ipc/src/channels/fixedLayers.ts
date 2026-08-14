@@ -281,6 +281,29 @@ export const FixedSlotStateSchema = z.object({
       templateName: z.string().min(1).optional(),
       /** The imported `.vcg` file name, verbatim (display resolution input). */
       sourceFileName: z.string().min(1).optional(),
+      /**
+       * R-021 stage 4 (task 3.1) — **RESTORE-BLOCKED**: this row's retained item
+       * came back from a bridge restart, its declared layer is occupied by a
+       * producer that is provably NOT ours, and the restore therefore PARKED
+       * instead of acting. Absent (never `false`) on every other row.
+       *
+       * It rides the BINDING rather than an `observed` variant because it is a
+       * fact about the ITEM's restore, not about the layer: the layer's own
+       * account is already complete in `observed`
+       * (`{ kind: 'producer', producer: 'decklink' }`), and the two together are
+       * exactly what the row must show — "your clock is waiting; a decklink is on
+       * layer 72". Publishing a computed `restore-blocked` ROW STATE instead
+       * would be the second derivation this schema's header forbids: verb
+       * derivation stays ONE function of `(localItem, observation)` in the
+       * renderer.
+       *
+       * A DECIDED fact, never an inferred one. It is set only where the decision
+       * is actually taken (`#decidePendingRestores`, against a HEARING tap), and
+       * never re-derived from "a non-html producer sits under a binding" — a
+       * BLIND tap yields `unverified`, not `blocked`, and collapsing the two
+       * would let silence claim knowledge (B-093).
+       */
+      restoreBlocked: z.literal(true).optional(),
     }),
   ]),
 });

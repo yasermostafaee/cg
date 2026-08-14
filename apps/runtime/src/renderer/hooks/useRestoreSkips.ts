@@ -44,6 +44,14 @@ export function restoreSkipReason(reason: RestoreSkip['reason']): string {
     case 'no-layer':
       return 'no layer was free for it — remove something and load it again';
     /*
+     * R-021 stage 4 — a DECLARED row, already taken. Deliberately worded away from
+     * `no-layer`'s "free something up": there is nothing to free, and the fix is on
+     * a specific row the operator can go and look at. A declared item is never
+     * re-homed onto a dynamic layer, so this row genuinely did not come back.
+     */
+    case 'fixed-slot-taken':
+      return 'its operator row was already taken by another item — load it onto a row again';
+    /*
      * Unreachable by contract: `WebSocketRuntime.#resync` filters the benign skip out
      * before publishing, because a page reload against a live bridge loses no row and
      * an alarm for it would be a false one. Handled rather than thrown on, so a future

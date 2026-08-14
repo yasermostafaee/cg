@@ -166,6 +166,41 @@ fixed slots per R-021 and the #368 narrowing) and must NOT auto-clear. Leaving
 vacating (next sweep observes empty → the normal deferred re-ADD proceeds). Tests for the
 state are enumerated in tasks.md (unimplemented).
 
+## ⭐ AMENDED IN IMPLEMENTATION (stage 4, 2026-08-14) — where the branch actually went
+
+The decision above is unchanged. Two things about it turned out to be wrong in the DETAIL,
+and both are recorded here rather than silently coded around.
+
+**1. "Fixed slot not reservable (quarantined)" is not the test, and could not be.** That
+wording predates stage 1, which made `quarantine()` and `observe()` NO-OPS on a fixed slot
+(a fenced slot is not an allocation candidate, and a quarantined one would break
+`bindFixed`) and recorded that stage 4 would read the OCCUPANCY TAP instead. It does. But
+the tap cannot be read at `#slotForRestore` time at all: a restore runs at bridge boot,
+BEFORE CasparCG is necessarily reachable, which is the whole reason `#pendingRestore`
+exists. So the decision splits across the two places it belongs:
+
+- `#slotForRestore` carries the SLOT-SELECTION rule — a fixed slot is bound exactly or the
+  item is skipped; `#allocate()` is unreachable for one. This is the ban.
+- `#decidePendingRestores` carries the OBSERVATION — a fixed slot observed holding a
+  non-html producer parks in `restore-blocked` instead of adopting. This is the state.
+
+The item STAYS in `#pendingRestore` while blocked, and that is what makes d1's second exit
+(the foreign producer vacating) work with no separate un-block mechanism: the same decision
+re-runs from the sweep, sees a silent layer, and re-ADDs through the ordinary path. A
+dedicated "unblock" path would have been a second copy of a rule that already exists.
+
+**2. There is a THIRD case, and the design named only two.** A retained fixed slot can also
+be already BOUND — by another restored item naming the same row. It is skipped with its own
+reason (`fixed-slot-taken`), never re-homed: nothing is exhausted, so `no-layer` would
+send the operator to free a dynamic layer that could not possibly help.
+
+**3. The dynamic half was ALREADY BROKEN when stage 4 opened it (D12).** B-114 fixed the
+declared row by REPLACING `reserve()` with `bindFixed()` rather than branching — so every
+DYNAMIC retained coordinate lost its exact-slot restore and fell straight through to
+`#allocate()`, consulting a different layer's occupancy, which is precisely the hazard
+`#slotForRestore`'s own contract forbids. Test 5 below was written for a property that was
+supposed to be untouched and found it already gone; it is now pinned in both halves.
+
 **Tests this needs (planned in tasks.md, all unimplemented):**
 
 1. Restore, fixed slot free → adopt-in-place on the SAME layer; never re-allocated elsewhere.
