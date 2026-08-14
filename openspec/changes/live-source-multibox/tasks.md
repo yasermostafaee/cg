@@ -896,6 +896,14 @@ did nothing at all, which is the exact reading a green task list can give when t
 list is missing its integration step. `extend the list, forget the mutator` — one
 level up, in the plan instead of the code.
 
+✅ **Part 2's Linux `gate:e2e` is DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31800246101
+(run 31800246101, `headSha cecc676c`): `completed` + `success`, with the
+**E2E (Playwright) job itself having RUN** (its own `conclusion: success`, not a SKIP —
+a skipped `e2e` proves nothing about the suite, P-029). It was owed because this
+session changes UI and render paths directly: a new dialog, a new row verb and
+`apps/runtime/src/renderer/**` edits. `pnpm gate` was green uncached beforehand:
+85/85, `0 cached`.
+
 ✅ **Part 1's Linux `gate:e2e` is DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31787014201
 (run 31787014201, `headSha b1e017ba`): `completed` + `success`, with the
 **E2E (Playwright) job itself having RUN** (its own `conclusion: success`, not a SKIP —

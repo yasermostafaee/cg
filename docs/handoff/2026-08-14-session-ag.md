@@ -174,12 +174,16 @@ special case built now is one that has to be dug out later.
 clean, and `openspec validate --all --strict` 50/50 plus
 `openspec validate live-source-multibox --strict`.
 
-🔴 **A Linux `gate:e2e` IS OWED.** The rule that applied: this session changes UI and
-render paths directly — a new dialog (`LiveSourceSwapDialog`), a new row verb, and
-`apps/runtime/src/renderer/**` edits — so the diff is classified as able to affect
-what renders, with no argument needed about closures. Discharge requires a COMPLETED,
-GREEN `e2e` job that actually RAN, cited by run URL; a SKIPPED `e2e` is a statement
-about the diff and no evidence about the suite (P-029).
+✅ **THE LINUX `gate:e2e` IS DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31800246101
+(run 31800246101, `push` on `dev`, `headSha cecc676c` — this session's own tip).
+`conclusion: success`, `status: completed`, and the **E2E (Playwright) job RAN** —
+verified as that job's OWN `conclusion: success` rather than as "a green run exists",
+because a SKIPPED `e2e` is a statement about the DIFF and no evidence whatsoever about
+the suite (P-029).
+
+The rule that made it owed: this session changes UI and render paths DIRECTLY — a new
+dialog (`LiveSourceSwapDialog`), a new row verb, and `apps/runtime/src/renderer/**`
+edits — so no argument about dependency closures was needed to classify it.
 
 ## P-014 flag
 
