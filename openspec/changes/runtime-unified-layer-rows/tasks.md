@@ -21,7 +21,13 @@ for what part A deliberately skipped or found un-runnable.**
 
 ## 1. Prerequisites that must land FIRST
 
-- [ ] 1.1 **R-021 stage 4 task 3.1** (`#slotForRestore`: a declared row NEVER falls through to
+- [x] 1.1 **R-021 stage 4 task 3.1 — LANDED 2026-08-14 (`e326a962`), so this section is
+      unblocked.** `#slotForRestore` now BRANCHES on `isFixed`: a declared row is bound
+      exactly (`bindFixed`) or the item is SKIPPED (`fixed-slot-taken`), and `#allocate()` is
+      unreachable for one. Verified against the code and pinned by
+      `tools/caspar-bridge/tests/fixed-restore-branch.integration.test.ts` (design §d tests
+      1–5 + 8), which was checked FAILING before the fix. Original text: **R-021 stage 4 task
+      3.1** (`#slotForRestore`: a declared row NEVER falls through to
       `#allocate()`). Under this model every item is on a declared row, so the fall-through would
       misplace EVERY item after a bridge restart, not an edge case (design.md §l). Blocking.
 - [x] 1.2 **C-015 `reservedLayers` wired to real config** — the playout split's only mechanism.
@@ -137,7 +143,20 @@ for what part A deliberately skipped or found un-runnable.**
 
 ## 6. Retiring the dynamic path (design.md §k — each piece keeps its recorded reason)
 
-- [ ] 6.1 **REWRITTEN 2026-08-08** (`live-source-multibox` §7.2 — see 6.5 below).
+- [x] 6.1 **DONE 2026-08-14 — and it is TWO tests on purpose, because the claim has two
+      halves and either alone is misleading.**
+      `apps/runtime/tests/noOperatorAllocation.test.ts` asserts the OPERATOR half by SOURCE
+      SCAN: no renderer module reaches `stack.load` (the one bridge verb that allocates), and
+      — the guard on the guard — the exact-slot row load is still present, so the absence
+      cannot be satisfied by deleting the feature instead of redirecting it. A source scan
+      rather than a behavioural test because the claim is about what EXISTS: a behavioural
+      test can only say "this button did not allocate", never "no button can".
+      `packages/caspar-client/tests/layer-manager.test.ts` asserts the PERMITTED half in the
+      same breath: a declared, non-operator caller still allocates across the freed 10–59
+      span, and the two fences above it (reserved 60–69, bank 70+) still hold. That is the
+      half this task was rewritten to protect — written as "no caller at all", 6.1 would have
+      been a silently correct-looking fixture forbidding C-015's third ownership class.
+      Original text: **REWRITTEN 2026-08-08** (`live-source-multibox` §7.2 — see 6.5 below).
       `LayerManager.allocate()` keeps existing but MUST have no caller that puts an **operator
       graphic** on air. Assert that in a test, rather than deleting code other items may need.
       ⚠ **The test asserts the absence of an OPERATOR-graphic caller, NOT the absence of every
@@ -146,7 +165,27 @@ for what part A deliberately skipped or found un-runnable.**
       range, recorded in a bridge-owned ledger, and never an operator's graphic. Written as "no
       caller at all", this test is a **silently correct-looking** fixture that forbids the third
       ownership class, and nothing in review would flag it.
-- [ ] 6.2 R-009 orphan sweep NARROWED, still running: candidates become layers nobody declared —
+- [x] 6.2 **DONE 2026-08-14.** The sweep now reads the ONE class list (`#declaredLayerClass`,
+      6.5) instead of two hand-written membership tests, and behaviour is unchanged.
+      ✅ **THE THREE DOOR TESTS WERE RUN AND ARE GREEN, BY NAME**, not merely "the suite
+      passed": DOOR 1 ("a ledgered Live Source layer is never an orphan — its unledgered
+      NEIGHBOUR still is") · DOOR 1 boundary ("releasing the ledger hands the layer BACK to
+      the sweep") · DOOR 2 · DOOR 2 ordering · DOOR 3 · DOOR 3 boundary · the ledger/slot-map
+      separation. None was rewritten; the `for (const key of this.#liveLayerKeys()) owned.add(key)`
+      line is untouched.
+      ⚠ **ONE DIVERGENCE FROM THIS TASK'S WORDING, STATED RATHER THAN CODED AROUND.** "Candidates
+      become layers nobody declared" would exclude the OPERATOR BANK too, and that is wrong:
+      DECLARED and OWNED are different facts. A row declares the layer is the operator's to
+      USE; it says nothing about what is on it. A bank layer carrying an item WE bound is
+      already owned via `#slots`, so what remains is exactly "a producer on the operator's own
+      layer that we did not put there" — an orphan by the definition, and since an unbound row
+      now reads EMPTY unconditionally, excluding it here would report it NOWHERE. That
+      reversal was already made deliberately (the sweep's own note) and is preserved, not
+      re-litigated. New coverage:
+      `tools/caspar-bridge/tests/declared-layer-classes.integration.test.ts` — all three
+      classes declared at once, three different correct answers from ONE tick, with an
+      undeclared layer as the control so the assertions cannot pass on a dead sweep.
+      Original text: R-009 orphan sweep NARROWED, still running: candidates become layers nobody declared —
       **against all THREE declared classes** (6.5), not two. Requires 1.2 first — otherwise it flags
       healthy playout graphics as orphans (§i) — and requires 6.5, or it flags live guest boxes as
       orphans, which is an operator being invited to clear a face off air.
@@ -175,12 +214,29 @@ for what part A deliberately skipped or found un-runnable.**
       ordering only protects you if you remember it, and a failing test protects you whether you
       remember or not. **If one of these goes red, the sweep is wrong — not the test.**
 
-- [ ] 6.3 R-015's foreign refusal unchanged outside declared ranges; regression-test the boundary.
+- [x] 6.3 **DONE 2026-08-14.** Asserted by REASON and not merely by refusal — all of these
+      are refused, so a test checking only `ok: false` would pass with every reason scrambled,
+      and the reason is the whole operator-facing content (`foreign` means "provably not
+      ours", which is a false statement about a layer the bridge seated a producer on).
+      `declared-layer-classes.integration.test.ts` walks all four cases in one boot:
+      `live-source` · `reserved` · an undeclared layer refused `foreign` (R-015 unchanged) ·
+      an unbound bank layer, also `foreign` through `layers.clear` — b1 widened the operator's
+      own bank-scoped door (`clearBankLayer`) and never loosened this one, which R-021 stage
+      4's `clear-bank-scoped` boundary test pins from the other side.
+      Original text: R-015's foreign refusal unchanged outside declared ranges; regression-test the boundary.
       **The Live Source range is INSIDE a declared range under 6.5**, so the refusal does not reach
       it — and it is refused there for a different, distinct reason (`live-source`), never as
       `foreign`. See `live-source-multibox` design.md §4 (C5): granting C-015's exemption as
       originally worded would have made those layers operator-CLEARABLE, inverting the protection.
-- [ ] 6.4 `LayerPolicy` ranges become DESCRIPTIVE. Record that `logo-bug` remains a `templateType`
+- [x] 6.4 **DONE 2026-08-14** — recorded in BOTH places the misreading could happen, and made
+      executable. Beside `DEFAULT_LAYER_POLICY` (`layer-manager.ts`): the ranges are
+      descriptive, `allocate()` is NOT deprecated (deleting the map to "finish" 6.1 would break
+      the third ownership class while looking like tidying), and the freed residue is 10–59.
+      Beside `TemplateTypeSchema` (`scene.ts`): the type is descriptive metadata that travels
+      in every `.vcg` and does NOT go with its range — `logo-bug` is the one to watch, since
+      its range already moved 90–99 → 40–49. Pinned by a test asserting the key still exists
+      with that range, and by the fence test proving 10–59 is the residue.
+      Original text: `LayerPolicy` ranges become DESCRIPTIVE. Record that `logo-bug` remains a `templateType`
       in the scene schema (`scene.ts:123`) even when its 90–99 RANGE is freed — the type does not
       go with the range (§c).
       ✅ **CONFIRMED 2026-08-08 that this frees 10–59** — `live-source-multibox` §7.3, and checked
@@ -192,7 +248,19 @@ for what part A deliberately skipped or found un-runnable.**
       directly below the 70–99 operator bank, which is the range C-015 needs (sources must sit BELOW
       the template's layer). Note `logo-bug` has since MOVED from 90–99 to 40–49, inside the freed
       span, so §c's "90–99" wording is about the bank and this confirmation does not rest on it.
-- [ ] 6.5 🔴 **AMEND SECTION 6 TO A THREE-CLASS DECLARED MODEL — BEFORE 6.1–6.3 ARE
+- [x] 6.5 **DONE 2026-08-14 — the three classes now have ONE SPELLING, and it returns a CLASS,
+      not a boolean.** `CasparRuntime#declaredLayerClass(channel, layer)` →
+      `'playout' | 'live-source' | 'operator-row' | null`, each arm DELEGATING to that class's
+      existing single source (`#reservedSet` · `#liveLayerKeys` · `LayerManager.isFixed`) and
+      re-deriving none of them. The danger this task named was never that a class was
+      implemented wrongly — each had one source already — it was that **nothing enumerated the
+      LIST**, so a narrowing could be written against two of three and look correct. The list
+      is now load-bearing: the sweep reads it.
+      🔴 **RETURNING A BOOLEAN WOULD HAVE BEEN THE BUG.** The three classes make three
+      DIFFERENT claims and get three different answers (see 6.2's divergence note); an
+      `isDeclared()` would have collapsed them into the strongest one and silently excluded the
+      operator bank from the sweep. Original text: 🔴 **AMEND SECTION 6 TO A THREE-CLASS
+      DECLARED MODEL — BEFORE 6.1–6.3 ARE
       IMPLEMENTED.** Added 2026-08-08 as `live-source-multibox`'s cross-change obligation (§7.1
       there; the full argument is that change's design.md §4). Section 6 as originally written
       cements a **TWO**-class model — fixed operator rows and the reserved playout range — with no
@@ -232,10 +300,26 @@ for what part A deliberately skipped or found un-runnable.**
 
 ## 7. Migration
 
-- [ ] 7.1 Items already on dynamic layers are NOT auto-relocated; they keep running until removed.
-      Auto-moving a live graphic at upgrade is an unattended on-air action (§m).
-- [ ] 7.2 Upgrade note in `docs/operator-guide/README.md`: clear and reload onto rows at a safe
-      moment.
+- [x] 7.1 **DONE 2026-08-14** — asserted as a BEHAVIOUR rather than trusted to the absence of
+      migration code (`declared-layer-classes.integration.test.ts`): with all three classes
+      declared, an item retained on an old dynamic layer restores onto THAT layer and no
+      declared row acquires it. Both halves matter — a relocation is a CLEAR on the old layer
+      plus a fresh `CG ADD` on the new one, so a live graphic would blink off and back at
+      whatever moment the bridge happened to restart, with nobody watching; and a row that
+      silently gained an item the operator never put there is the same lie from the other
+      direction. R-021 stage 4's restored exact-slot `reserve()` is what makes the first half
+      true rather than accidental.
+- [x] 7.2 **DONE 2026-08-14** — "Upgrading from the old dynamic stack" in
+      `docs/operator-guide/README.md`: nothing is moved for you and why, the three steps at a
+      safe moment (play out or CLEAR → REMOVE → LOAD onto the row, with an alias), and that
+      there is no deadline. Two adjacent falsehoods the same section was still carrying were
+      fixed in passing rather than left beside a new note: the bridge-restart warning ("an
+      item can come back on an ordinary stack layer") — retired by R-021 stage 4 and replaced
+      with what now happens, including the BLOCKED row and its two exits — and "the slot count
+      can GROW", which part A's `resize-refused` made false.
+      ⚠ **STILL OWED under 8.1:** the section describes a "FIXED LAYERS panel above the stack",
+      and part B deleted that panel in favour of the one Layers list. That is a wider rewrite
+      of the guide's structure and belongs to the doc-sync task, not to a migration note.
 
 ## 8. Docs + PRD
 

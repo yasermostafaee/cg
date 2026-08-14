@@ -46,6 +46,34 @@ export type LayerPolicy = Record<string, [low: number, high: number]>;
  * enforced separately by `reservedLayers` — a layer in a dynamic range can still be
  * fenced off by the reservation.
  */
+/**
+ * ⭐ **R-028 (6.4) — THESE RANGES ARE DESCRIPTIVE NOW, AND WHAT THAT DOES AND DOES NOT MEAN.**
+ *
+ * Under R-028 every OPERATOR graphic is placed on a DECLARED ROW by its exact coordinate
+ * (`bindFixed`), so a `templateType` no longer selects where an operator's graphic lands.
+ * The map below therefore stopped being the operator's placement policy and became what its
+ * name always claimed: a description of which decade a type conventionally lives in.
+ *
+ * **IT IS NOT DEAD, AND `allocate()` IS NOT DEPRECATED.** Design §k keeps both, and the
+ * reason is C-015: the bridge itself allocates Live Source layers — declared, non-operator,
+ * recorded in a bridge-owned ledger — and rundowns/presets may yet need the same door. Task
+ * 6.1's test asserts the absence of an OPERATOR-graphic caller and deliberately NOT the
+ * absence of every caller; deleting this map to "finish" that narrowing would break the
+ * third ownership class while looking like tidying.
+ *
+ * 🔴 **THE TYPE DOES NOT GO WITH THE RANGE.** `logo-bug` is also a first-class
+ * `templateType` in the scene schema (`packages/shared-schema/src/scene.ts`, mirrored in
+ * `packages/shared-ipc/src/channels/projects.ts`) and travels inside every `.vcg`. A future
+ * reader deleting `'logo-bug'` from this map could reasonably think the type went with it.
+ * It does not: with placement no longer derived from the type, the type is descriptive
+ * metadata a scene declares about itself, and removing it would break existing packages.
+ *
+ * **What is FREED by this, checked against the code rather than against prose:** the whole
+ * span these ranges cover is 10–69, of which `custom`'s 60–69 is the reserved playout range
+ * (fenced separately by `reservedLayers`). The residue is exactly **10–59** — fifty layers
+ * directly below the 70–99 operator bank, which is the range C-015 needs, since a source must
+ * sit BELOW the template's layer.
+ */
 export const DEFAULT_LAYER_POLICY: LayerPolicy = {
   'logo-bug': [40, 49],
   'lower-third': [10, 19],

@@ -327,3 +327,56 @@ describe('LayerManager — reserved playout layers (R-028 / C-015)', () => {
     expect(lm.reserve({ channel: 2, layer: 60 }, 'x')).toBe(false);
   });
 });
+
+describe('R-028 (6.1/6.4) — allocation is not the OPERATOR path, and is not retired either', () => {
+  /**
+   * The half that must PASS, stated as its own test so nobody satisfies 6.1 by
+   * deleting the mechanism.
+   *
+   * 6.1 asserts the absence of an OPERATOR-graphic caller of `allocate()` (see
+   * `apps/runtime/tests/noOperatorAllocation.test.ts`). Written as "no caller at
+   * all" it would be a silently correct-looking fixture that forbids C-015's
+   * third ownership class — bridge-owned Live Source layers, which ARE allocated,
+   * on a declared range, and are never an operator's graphic. These two tests are
+   * the two halves of one claim and should be read together.
+   */
+  it('a DECLARED, non-operator caller can still allocate across the freed 10–59 span', () => {
+    const lm = new LayerManager();
+    // The span R-028 6.4 frees is exactly 10–59: `custom`'s 60–69 is the reserved
+    // playout range and stays fenced, and 70–99 is the operator bank. Allocation
+    // must still serve every decade inside it.
+    expect(lm.allocate('lower-third', 1).layer).toBe(10);
+    expect(lm.allocate('ticker', 1).layer).toBe(20);
+    expect(lm.allocate('breaking-news', 1).layer).toBe(30);
+    expect(lm.allocate('logo-bug', 1).layer).toBe(40);
+    expect(lm.allocate('fullscreen', 1).layer).toBe(50);
+  });
+
+  it('the freed span is 10–59 EXACTLY — the two fences above it still hold', () => {
+    // Asserted against the two mechanisms rather than against the prose, because
+    // "10–59" is a claim about where a fence is, and a fence is the only thing
+    // that can be checked.
+    const lm = new LayerManager({
+      reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
+      fixed: [
+        { channel: 1, layer: 70 },
+        { channel: 1, layer: 71 },
+      ],
+    });
+    // 60–69: declared to the playout team. Allocation cannot spill onto it, so
+    // `custom` — whose whole range IS that decade — fails honestly instead.
+    expect(() => lm.allocate('custom', 1)).toThrow(OutOfLayersError);
+    // 70+: the operator bank, born allocated. `reserve()` refuses it by
+    // construction and nothing dynamic can land there.
+    expect(lm.reserve({ channel: 1, layer: 70 }, 'lower-third')).toBe(false);
+    // …and everything below both fences is still allocatable.
+    expect(lm.allocate('fullscreen', 1)).toEqual({ channel: 1, layer: 50 });
+  });
+
+  it('`logo-bug` is still a policy KEY even though its range moved — the type did not go with it', () => {
+    // 6.4's record, made executable. The range moved 90–99 → 40–49 and is now
+    // descriptive; deleting the key (or the `templateType`) would break every
+    // `.vcg` that carries it.
+    expect(DEFAULT_LAYER_POLICY['logo-bug']).toEqual([40, 49]);
+  });
+});

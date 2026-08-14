@@ -2593,6 +2593,52 @@ export class CasparRuntime {
   }
 
   /**
+   * R-028 (6.5) — **WHICH DECLARED CLASS A LAYER BELONGS TO. THE ONE SPELLING.**
+   *
+   * The model has THREE declared classes, and the danger 6.5 exists for is not
+   * that any one of them is implemented wrongly — each has had exactly one source
+   * of truth for a while — it is that **nothing enumerated the LIST**. A narrowing
+   * written against two of three is not a bug review catches; it is a
+   * correct-looking test that silently forbids the missing class. So the list
+   * lives here, once, and every arm DELEGATES to that class's existing single
+   * source rather than re-deriving it (golden rule 6):
+   *
+   *   `playout`      — the reserved range from install config (`#reservedSet`).
+   *                   Declared as SOMEBODY ELSE'S. Channel-agnostic: a layer
+   *                   NUMBER is reserved, because the playout team owns the
+   *                   number across the machine.
+   *   `live-source`  — a coordinate in the bridge's OWN ledger
+   *                   (`#liveLayerKeys`). Declared as OURS, and the only class
+   *                   that is a runtime record rather than a static range —
+   *                   which is exactly what makes it ownable at all (C-015).
+   *   `operator-row` — a layer of the declared bank (`LayerManager.isFixed`).
+   *                   Declared as the operator's TERRITORY.
+   *
+   * ⚠ **"Declared" is NOT a synonym for "not an orphan", and reading it that way
+   * is the mistake this function is shaped to prevent.** The three classes make
+   * three DIFFERENT claims, and the consumer decides what each is worth:
+   * `playout` says the layer is not ours to touch, `live-source` says we put that
+   * producer there ourselves, and `operator-row` says only that the operator may
+   * USE this layer — it says nothing about what is on it right now. Returning a
+   * bare boolean here would have collapsed all three into the strongest one.
+   *
+   * Order is deliberate and matters where the sets could overlap. `playout` first
+   * because the reservation is absolute (the validator refuses a bank that
+   * intersects it, so this is defence in depth); `live-source` before
+   * `operator-row` because a ledgered coordinate is a fact about a producer we
+   * seated, which outranks a fact about a range.
+   */
+  #declaredLayerClass(
+    channel: number,
+    layer: number,
+  ): 'playout' | 'live-source' | 'operator-row' | null {
+    if (this.#reservedSet.has(layer)) return 'playout';
+    if (this.#isLiveLayer(channel, layer)) return 'live-source';
+    if (this.#layers.isFixed({ channel, layer })) return 'operator-row';
+    return null;
+  }
+
+  /**
    * Record the Live Source layers an item owns. **Bookkeeping ONLY — this sends
    * no AMCP and creates no producer.**
    *
@@ -2727,7 +2773,7 @@ export class CasparRuntime {
     // owns nor watches these layers; it just declares them off limits.
     const occupied = session.osc.occupancy
       .occupied(this.#occupancyStaleMs)
-      .filter((o) => !this.#reservedSet.has(o.layer));
+      .filter((o) => this.#declaredLayerClass(o.channel, o.layer) !== 'playout');
     const owned = new Set<string>();
     for (const slot of this.#slots.values()) {
       owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
@@ -2749,15 +2795,39 @@ export class CasparRuntime {
      * this is the declaration. Without it the sweep surfaces a live guest box as
      * reclaimable and invites the operator to clear a face off air.
      *
-     * ⚠ R-028's own section 6 will REWRITE this sweep to narrow its candidates.
-     * When it does, it must narrow against all THREE declared classes (its task
-     * 6.5), not two. `live-source-orphan-sweep` in
-     * `tests/live-source-ownership.integration.test.ts` fails if this line is
-     * dropped in that rewrite — which is the point of pinning it now.
+     * ⭐ R-028 (6.2/6.5) — THE NARROWING IS DONE, and it is done against the ONE
+     * class list (`#declaredLayerClass`) rather than against two hand-written
+     * membership tests. Each class gets the treatment its own CLAIM justifies,
+     * which is why the list returns a class and not a boolean:
+     *
+     *   `playout`      → filtered out of the candidates entirely, above. Not ours,
+     *                    never surfaced: an html playout graphic is
+     *                    indistinguishable from ours on the wire, so surfacing it
+     *                    would invite the operator to clear live automation output.
+     *   `live-source`  → OWNED (this line). We seated that producer and know the
+     *                    coordinate from our own ledger.
+     *   `operator-row` → deliberately NOT excluded — see the note below, which is
+     *                    the one place the three classes are treated differently
+     *                    and the reason it is argued rather than asserted.
+     *
+     * DOOR 1 in `tests/live-source-ownership.integration.test.ts` fails if this
+     * line is dropped, which is what protects it through any later rewrite.
      */
     for (const key of this.#liveLayerKeys()) owned.add(key);
     /*
-     * BANK LAYERS ARE NO LONGER EXCLUDED — the exclusion's own premise expired.
+     * 🔴 THE ONE CLASS THAT IS DECLARED AND STILL A CANDIDATE — read this before
+     * "finishing" the narrowing.
+     *
+     * R-028 task 6.2 says the sweep's candidates become "layers nobody declared",
+     * and taken literally that would exclude the operator bank too. It must not,
+     * and the reason is that DECLARED and OWNED are different facts. An operator
+     * row declares that the layer is the operator's to USE; it says nothing about
+     * what is on it. A bank layer carrying an item WE bound is already `owned`
+     * above through `#slots`, so what remains here is exactly "a producer on the
+     * operator's own layer that we did not put there" — which is the definition of
+     * an orphan, on the one surface whose owner can actually deal with it.
+     *
+     * BANK LAYERS WERE ONCE EXCLUDED, and the exclusion's own premise expired.
      *
      * It read: "fixed slots are excluded from the orphan surface: the fixed
      * bank's PERMANENT row is its occupancy surface, and a bank fenced from

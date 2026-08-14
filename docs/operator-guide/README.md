@@ -28,14 +28,39 @@ reports for that layer:
 - **`not connected — occupancy unknown`** — the Runtime's link to its bridge is down, so
   even a previously reported state can no longer be trusted. Reconnect first.
 
-**Check the fixed rows after any bridge restart:** until a later update lands, an item that
-was on a fixed layer can come back on an ordinary stack layer instead of its own — so if a
-row that had something now reads empty, load it again.
+### After a bridge restart
 
-The header's **Configure** opens the bank settings: the slot count can GROW (at the end,
-up to layer 89) and aliases can change live; the channel and the start layer are fixed at
-install and cannot change mid-session. A refused change tells you the rule it broke and
-the specific layers involved.
+**Your rows come back on their own layers.** An item that was on layer 72 returns to layer
+72 or does not return at all — it is never re-homed onto some other layer, because the row
+IS the promise ("layer 72 is the clock"). If the graphic was still on air when the bridge
+died, it is adopted exactly where it is and nothing is sent to the server at all.
+
+**One row state is worth knowing:** **BLOCKED**. It means the item is back on its row, but
+the layer is carrying a producer that is **not ours** — another system put something there
+while the bridge was down. Nothing was cleared and nothing was put on air: destroying
+somebody else's live feed is not something the Runtime will do on its own. The row shows
+what the server reports (e.g. "a decklink producer on 1-72") beside the item that is
+waiting, and the air verbs are held, because sending one would command that other
+producer.
+
+There are exactly two ways out, and both are safe:
+
+- **You clear it.** Press CLEAR on the row — it asks first and names what it is about to
+  destroy — and then PLAY. Two deliberate steps, never one button that does both.
+- **It clears itself.** The moment the other producer leaves, the Runtime puts your
+  template back on the layer by itself.
+
+A row that reads BLOCKED for longer than you expect is a question for whoever owns the
+other system, not a fault of the Runtime.
+
+The header's **Configure** opens the bank settings: **aliases** and each row's
+**visibility** tick can change live. The channel, the start layer and the COUNT are all
+fixed at install and cannot change mid-session — the set of candidate layers is an
+agreement with whoever else uses the machine, so it is not something to renegotiate during
+a show. A refused change tells you the rule it broke and the specific layers involved. A
+row cannot be hidden while it is occupied, or while the Runtime cannot see whether it is:
+unknown fails closed, because hiding a row that may be on air would leave you no surface
+for a live graphic.
 
 ### One CasparCG, one bank — everywhere
 
@@ -47,6 +72,31 @@ re-establish — on air. The Runtime cannot detect a divergent bank on another s
 (stations share only the CasparCG wire, which carries no config), so this is an
 **installation requirement**, the same class of contract as pointing the server's OSC at
 the bridge: check it when you set up or change any station's config.
+
+### Upgrading from the old dynamic stack
+
+Older versions placed each graphic on whatever layer was free in its template type's range,
+and the Library and Stack were separate panels. This version replaces both with ONE list of
+declared rows.
+
+**Nothing is moved for you, and that is deliberate.** Items already running on old dynamic
+layers keep running exactly where they are — the upgrade does not relocate a live graphic,
+because moving something that is on air is an action nobody asked for and nobody is
+watching. They stay until you remove them.
+
+**What to do, at a safe moment — not mid-show:**
+
+1. Let the current graphics play out, or CLEAR them as you normally would.
+2. REMOVE each old item once it is off air. The old layer is released.
+3. LOAD the template onto the row you want it on from now on, and give the row an alias
+   that matches how you talk about it on air ("CLOCK", "LOWER THIRD").
+
+From then on that template lives on that layer, survives a bridge restart on it, and is
+where an operator shortcut or a rundown can point.
+
+Until you do this, an old item shows on the list on its original layer and works normally.
+There is no deadline and nothing expires; the only thing you lose by waiting is that the
+graphic has no row of its own.
 
 ## Lock mode
 

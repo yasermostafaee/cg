@@ -118,7 +118,18 @@ function refineLifecycle(
   }
 }
 
-/** Categories of broadcast template. v1 set; `custom` is the escape hatch. */
+/**
+ * Categories of broadcast template. v1 set; `custom` is the escape hatch.
+ *
+ * ⭐ **R-028 (6.4) — THIS IS DESCRIPTIVE METADATA, AND IT NO LONGER SELECTS A LAYER.**
+ * These values once doubled as the key of `DEFAULT_LAYER_POLICY`'s allocation ranges. Under
+ * R-028 every operator graphic is placed on a DECLARED ROW by its exact coordinate, so a
+ * type no longer decides where anything lands — but the type STAYS, because a scene declares
+ * it about itself and it travels inside every `.vcg` ever exported. `logo-bug` is the one
+ * to watch: its allocation range moved (90–99 → 40–49) and is now descriptive, and someone
+ * reading that as "the type was retired" would break every package carrying it. The range
+ * moved; the type did not go with it. Same fact recorded beside the policy itself.
+ */
 export const TemplateTypeSchema = z.enum([
   'logo-bug',
   'lower-third',
