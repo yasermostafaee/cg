@@ -2731,6 +2731,50 @@ export class CasparRuntime {
     this.#liveLayers.delete(itemId);
   }
 
+  /**
+   * C-015 phase 6 (task 6.6) — **TEAR DOWN an item's Live Source layers: clear the
+   * producer AND reset the mixer, then release the ledger.**
+   *
+   * 🔴 **THE `MIXER … CLEAR` IS NOT TIDINESS, AND OMITTING IT IS THE BUG.** Mixer
+   * state belongs to the CHANNEL'S MIXER, not to the producer, so it survives both
+   * the `CLEAR` on the line above and a `CG REMOVE` (measured on hardware, and the
+   * same fact R-022's rehearse volume restore is built on). A teardown that clears
+   * only the producer leaves a `FILL` **and a `CLIP`** on that layer, waiting for
+   * whatever the bridge puts there next.
+   *
+   * Of the two, the inherited **`CLIP` is far worse**: a stale `FILL` puts the next
+   * graphic in the wrong PLACE, which somebody sees and reports, whereas a stale
+   * `CLIP` makes an otherwise-correct graphic **INVISIBLE** — with a `202` on the
+   * wire, nothing in any log, and an operator staring at a layer that reports a
+   * healthy producer and shows nothing.
+   *
+   * ORDER: the `CLEAR` first, then the `MIXER CLEAR`. The producer goes before its
+   * geometry so there is never a window in which a live picture is on the layer with
+   * its mask already reset — which would flash the un-masked, oversized crop-to-fill
+   * rect across the frame.
+   *
+   * THE LEDGER IS RELEASED LAST, and only after the sends. Releasing it first would
+   * hand the layer back to the R-009 orphan sweep (DOOR 1's boundary case) while a
+   * producer of ours is still on it — the sweep would then surface our own live layer
+   * as a reclaimable orphan for the moment between.
+   *
+   * Best-effort per layer: one failing send must not strand the rest, exactly as
+   * `removeAll` does not let one stuck item strand the graphics behind it.
+   */
+  async teardownLiveLayers(itemId: string): Promise<void> {
+    const records = this.#liveLayers.get(itemId);
+    if (records === undefined || records.length === 0) {
+      // Still release: an empty entry is bookkeeping to drop, not a no-op to skip.
+      this.#liveLayers.delete(itemId);
+      return;
+    }
+    for (const record of records) {
+      await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
+      await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
+    }
+    this.#liveLayers.delete(itemId);
+  }
+
   /** The ledger, for tests and for phase 6's re-emission of `FILL`/`CLIP`. */
   liveLayers(): ReadonlyMap<string, readonly LiveLayerRecord[]> {
     return new Map([...this.#liveLayers].map(([id, rs]) => [id, [...rs]]));
