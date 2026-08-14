@@ -72,6 +72,28 @@ export interface LiveLayerRecord {
   readonly fill: NormalizedRect;
   /** The `MIXER … CLIP` mask emitted in the SAME batch as {@link fill}. */
   readonly clip: NormalizedRect;
+  /**
+   * C-015 phase 6 (6.5 / 6.9c) — **the volume this PLATE is intended to have.**
+   *
+   * `0` for every plate the bridge seats today: every producer it creates is
+   * created muted, and audio is raised only by an explicit recorded intent naming
+   * the layer (design.md §7).
+   *
+   * 🔴 **PER RECORD, AND NOT `INTENDED_VOLUME`.** The global constant answers "what
+   * volume does an OPERATOR ROW have", and a Live Source layer is not an operator
+   * row — `#reassertDeclaredVolumes` blankets the declared bank with `VOLUME 1` and
+   * consults nothing about what is on those layers, which is the second reason the
+   * band was carved OUTSIDE that bank (§7 consequence 3). Its own comment calls it
+   * _"the seam a future per-layer volume feature would replace"_; this is that
+   * feature, scoped to Live Sources.
+   *
+   * 🔴 **IT BELONGS TO THE PLATE, NOT TO THE PRODUCER INSTANCE (6.9c).** That is
+   * what makes an on-air swap safe: the new producer is born muted like every
+   * other, so a deliberately-raised plate would go silent at the exact moment the
+   * operator was fixing it unless the swap re-asserts this value. A swap that
+   * silently mutes a guest is its own on-air fault.
+   */
+  readonly intendedVolume: number;
 }
 
 /**

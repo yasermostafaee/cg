@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -21,6 +21,7 @@ import {
 } from '../fixedLayers/fixedSlotLoad.js';
 import { useTemplatePicker } from '../fixedLayers/useTemplatePicker.js';
 import { layerRowActions, MISSING_TEMPLATE_REASON } from './layerRowActions.js';
+import { LiveSourceSwapDialog } from './LiveSourceSwapDialog.js';
 import { rowState, type RowBinding } from './rowState.js';
 import {
   ROW_GEOMETRY,
@@ -310,6 +311,10 @@ export function LayerRow({
    */
   const restoreBlocked = slot.binding?.restoreBlocked === true;
 
+  // R-048 (6.9e) — the per-plate source picker for THIS row. Local state, because
+  // it is one row opening its own dialog and nothing outside the row needs to know.
+  const [swapOpen, setSwapOpen] = useState(false);
+
   const coord = { channel: slot.channel, layer: slot.layer };
   const actions = layerRowActions({
     // THE UNION, not `item`. See the `binding` prop's note: this is the whole of
@@ -391,6 +396,14 @@ export function LayerRow({
       return { accepted: res.ok, ...(res.reason !== undefined ? { errorCode: res.reason } : {}) };
     },
     remove: (itemId) => window.cg.stack.remove({ itemId }),
+    // R-048 (6.9 / 6.9e) — the per-plate source swap, offered only where the bound
+    // template actually declares plates. The verb OPENS the picker; the swap itself
+    // is committed from inside it, which is what keeps the whole act to two actions.
+    hasLivePlates: (template?.liveSources?.sources.length ?? 0) > 0,
+    swapSource: () => {
+      setSwapOpen(true);
+      return Promise.resolve({ accepted: true });
+    },
     onError: reportCommandError,
   }).map((action) => {
     // Confirm gates attached at DECLARATION time, so button and menu share them.
@@ -767,6 +780,18 @@ export function LayerRow({
       )}
       {confirmDialog}
       {pickerDialog}
+      {swapOpen && item !== null && template !== null && (
+        <LiveSourceSwapDialog
+          item={item}
+          template={template}
+          onSwap={(plateId, sourceId) =>
+            window.cg.stack.swapLiveSource({ itemId: item.itemId, plateId, sourceId })
+          }
+          onClose={() => {
+            setSwapOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

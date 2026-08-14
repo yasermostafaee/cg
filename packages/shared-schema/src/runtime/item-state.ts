@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { IdSchema, ISODateSchema } from '../primitives.js';
 import { FieldValuesSchema } from '../fields.js';
 import { PositionSchema } from '../scene.js';
+import { LiveSourceOverrideSchema } from '../live-source.js';
 
 /** A CasparCG (channel, layer) coordinate plus which server it lives on. */
 export const LayerSlotSchema = z.object({
@@ -52,6 +53,14 @@ export const StackItemStateSchema = z.object({
    * template's manifest default, exactly as before the field existed.
    */
   position: PositionSchema.optional(),
+  /**
+   * R-048 / C-015 phase 6 (6.9) — the operator’s PER-ITEM live-source override,
+   * published for the same reason `position` is: the row has to be able to show
+   * that this plate is not on its configured source. See
+   * {@link LiveSourceOverrideSchema} for the three-level layering and for why it
+   * never writes back. ABSENT means every plate is on its template assignment.
+   */
+  sourceOverride: LiveSourceOverrideSchema.optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;
 
@@ -243,5 +252,16 @@ export const RetainedStackItemSchema = z.object({
   errorCode: z.string().optional(),
   slot: LayerSlotSchema.optional(),
   position: PositionSchema.optional(),
+  /**
+   * R-048 / C-015 phase 6 (6.9d) — the per-plate source override, on the OPEN
+   * axis beside `position` exactly as the note above prescribes.
+   *
+   * 🔴 **RETENTION MUST CARRY IT, or a momentary bridge blip silently reverts the
+   * plate to the DEAD source the operator patched around.** That is the
+   * `B-107`/`B-109` class — retention dropping state it did not model — which is
+   * why it is a requirement with a test rather than an assumption. Nothing about
+   * the CLOSED `state` axis changes and no consumer branches differently.
+   */
+  sourceOverride: LiveSourceOverrideSchema.optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;

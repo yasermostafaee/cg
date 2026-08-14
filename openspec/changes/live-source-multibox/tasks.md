@@ -1215,6 +1215,23 @@ beforehand: 85/85, `0 cached`.
       `play()` lifecycle, enforced at export/validate time — which is a `@cg/template-runtime` +
       exporter change and is OUT of this design's scope (`design.md` §7, _"What this rule does NOT
       close"_). R-029 stays `[~]` carrying exactly that residual.
+- [ ] 6.5f ⭐ **FILED 2026-08-14 (session AG) — THE RAISE HALF OF THE AUDIO RULE HAS NO
+      OPERATOR SURFACE, AND NO TASK EVER ASKED FOR ONE.**
+      6.5–6.5e enumerate the MUTE half at five sub-items. The rule's other half is
+      _"audio is raised only by an EXPLICIT RECORDED INTENT naming the layer"_, and
+      nothing in this phase enumerates the surface that records it. So today every
+      Live Source plate is permanently silent: the bridge holds the mechanism
+      (`LiveLayerRecord.intendedVolume` + `CasparRuntime.setLivePlateVolume`, which
+      survives a swap and a re-seat and is tested), and no operator control reaches it.
+      🔴 **This is task 6.0's hole a second time, found by looking for it.** The
+      standing rule after 6.0 was to check whether any other phase-6 cluster had the
+      same shape of gap — a list that enumerates one side of a rule and forgets the
+      mutator for the other. The audio cluster does. FILED rather than quietly built,
+      because deciding WHERE a per-plate volume lives (the row? the swap dialog? a
+      plate strip?) is a product decision, not a wiring one.
+      What it needs: an IPC channel over `setLivePlateVolume`, a control that names
+      the PLATE (never the layer number), and a published read-back so every console
+      shows the same state. 6.9c already depends on the value being real.
 - [x] 6.6 **DONE 2026-08-14** — `CasparRuntime.teardownLiveLayers` sends the producer
       `CLEAR` and `MIXER … CLEAR` per layer, asserted ON THE WIRE (the mock models
       mixer state surviving a `CLEAR`, which is what makes the omission catchable
@@ -1282,14 +1299,40 @@ beforehand: 85/85, `0 cached`.
       it as a visible lag between two views of the same studio. Record that consequence **with the
       figure beside it**: "N frames" is a number an author can design around; "there may be some
       latency" is not.
-- [ ] 6.8c ⚠ **OWNER QUESTION, not a recon item — which layer does CIAB put the studio picture on?**
-      (`design.md` §12.6.) No measurement in this repo can answer it and no code can discover it: it
-      is an installation fact owned by the playout system. Without it the studio plate's catalog
-      entry **cannot be configured on this installation** — the schema accepts the address and the
-      SourcesModal already renders it, so nothing is blocked in CODE, but the value the operator must
-      type is unknown and **a guess puts an arbitrary layer's picture inside a guest frame on air.**
-      Put it to the owner, to be put to CIAB.
-- [ ] 6.9 ⭐ **R-048 — swap a plate's input WHILE THE TEMPLATE IS ON AIR. A CLIENT REQUIREMENT**,
+- [x] 6.8c ⭐ **DELETED 2026-08-14 — the owner ANSWERED it, and the answer dissolves the
+      task rather than closing it.** It asked which layer CIAB puts the studio picture
+      on. Two independent reasons, either sufficient (`design.md` §12.6):
+      **(1) THE STUDIO IS NOT SPECIAL.** A live source is an ADDRESS mapped to a symbolic
+      name; a DECKLINK, an NDI and a `route://1-2` carrying the studio are the same kind of
+      thing to every part of this design. 6.8c asked the GENERAL question — what addresses
+      do this installation's sources have? — in a costume that made it look like a
+      studio-specific fact. That question already has a home: **C-022**, the named
+      live-source list.
+      **(2) THE ADDRESS IS NOT FIXED.** It may be 1-1, 1-2 or another, chosen at the moment
+      of use — so no configured constant can be right, and even a perfect answer from CIAB
+      would have held only until the next gallery decision. Choosing live is exactly what
+      **R-048 / 6.9** is: the installation declares the candidates as separate NAMED
+      sources and the operator picks between them at take time.
+      🔴 **CONSEQUENCE:** R-048 is therefore not a convenience — it is how a moment-chosen
+      source is addressable at all. And **no studio-specific behaviour goes anywhere in the
+      code**: a special case built now is one that has to be dug out later.
+- [x] 6.9 **DONE 2026-08-14 (session AG).** `CasparRuntime.swapLiveSource` +
+      `#sourceOverrides` (the `#positions` precedent exactly: process memory, keyed by
+      itemId, dropped at remove, carried across a restart by the browser's retention).
+      The override is resolved INSIDE `resolvePlateAssignments` rather than by a second
+      path — an override is not a different KIND of thing from an assignment, it is the
+      same question answered by a higher authority, and a swap path that resolved plates
+      its own way would be a second spelling of "which producer is behind this hole".
+      `sourceId: null` REVERTS the plate to its assignment. Not in the item as written,
+      and added deliberately: an emergency patch the operator cannot undo is its own
+      trap. An EMPTY override map is deleted rather than kept, so a row back on its
+      assignment never reads as substituted.
+      **THE LAYERING IS IN THE UI, in the dialog's first paragraph** — this row only,
+      the template's assignment untouched, the installation's list untouched, every
+      other row carrying the template unaffected — and pinned by a DOM test, because an
+      operator who cannot tell those three apart cannot use this safely and the failure
+      is SILENT.
+      Original: ⭐ **R-048 — swap a plate's input WHILE THE TEMPLATE IS ON AIR. A CLIENT REQUIREMENT**,
       filed in `docs/prd/runtime.md` and implemented here, the same pattern D-147 used for phase 1.
       A PER-ITEM OVERRIDE — the template's ASSIGNMENT and the installation's CATALOG are both
       untouched, exactly like the position override — replacing `producer` on ONE `#liveLayers`
@@ -1298,7 +1341,20 @@ beforehand: 85/85, `0 cached`.
       TEMPLATE-LEVEL default, shared by every row carrying that template; this swap is the PER-RUN
       override on top of it; and the override **does NOT write back**, because an emergency
       substitution must never silently become the permanent configuration.
-- [ ] 6.9a **A REPLACE, never a clear-then-add.** `PLAY` on the occupied layer substitutes the
+- [x] 6.9a **DONE 2026-08-14 — a REPLACE, and the test asserts the ABSENCE of a CLEAR
+      on the wire, not merely the presence of a PLAY.** A clear-then-add is the `B-126`
+      window arriving during an emergency: a destructive step committed before the
+      constructive one was known to succeed, leaving the operator with a BLACK plate
+      where they had a merely-dead one. On failure the previous producer stays, the
+      ledger is unchanged, **the override is NOT recorded** (a row claiming the new
+      source while the layer carries the old is worse than the failure), and the
+      message says so in as many words.
+      🔴 **THE 2.3.2 MEASUREMENT IS STILL OWED — NO HARDWARE THIS SESSION.** The mock
+      models `PLAY` on an occupied layer as a substitution, so the tests prove the code
+      is self-consistent and prove NOTHING about the server. Ride it with `design.md`
+      §3b's `DEFER`/`COMMIT` question and 6.3a's `CLIP` intersection probe — three AMCP
+      probes on the same build, one session instead of three.
+      Original: **A REPLACE, never a clear-then-add.** `PLAY` on the occupied layer substitutes the
       producer in place. A `CLEAR` then a `PLAY` that fails is the `B-126` window arriving during an
       emergency: a destructive step committed before the constructive one was known to succeed. On
       failure the previous (black) producer stays and the row says so honestly.
@@ -1306,14 +1362,39 @@ beforehand: 85/85, `0 cached`.
       requiring a prior clear — do not assume it, and record the measurement.** Run it in the SAME
       `amcp-poke` session as `design.md` §3b's `DEFER`/`COMMIT` question; both are AMCP probes on the
       same build and pairing them costs one session instead of two.
-- [ ] 6.9b **The fit recomputes automatically**, in the same action: the new source may carry a
+- [x] 6.9b **DONE 2026-08-14.** The fit re-derives through §3a's chain in the same
+      action — including its REFUSAL, so a substitution the author's `expectedAspect`
+      contradicts is refused rather than silently cropping a face. Asserted by swapping
+      a 16:9 plate onto a 4:3 source and reading the FILL back off the mock: it changes,
+      and its CLIP does not, because the mask still belongs to the hole. No second
+      operator step — under pressure a second step is a step that does not happen.
+      Original: **The fit recomputes automatically**, in the same action: the new source may carry a
       different format, so crop-to-fill re-derives through §3a's chain. The operator must not have a
       second step — under pressure a second step is a step that does not happen.
-- [ ] 6.9c **Audio intent survives the swap.** Every bridge-created producer is born muted (6.5), so
+- [x] 6.9c **DONE 2026-08-14 — the intent is on the PLATE, and it survives both a swap
+      AND a re-take.** `LiveLayerRecord.intendedVolume` replaces the global
+      `INTENDED_VOLUME` for Live Source layers, which is the per-layer volume feature
+      that constant's own comment calls _"the seam a future per-layer volume feature
+      would replace"_. The swap re-asserts it onto the new producer, which was born
+      muted like every other.
+      ⚠ **NO OPERATOR CONTROL RAISES A PLATE YET — see the newly filed 6.5f.** The
+      mechanism is complete and tested through `setLivePlateVolume`; the surface that
+      records the explicit intent was never enumerated by this phase. Said here rather
+      than left for the next reader to discover, because it makes this item's guarantee
+      real but currently unreachable from the console.
+      Original: **Audio intent survives the swap.** Every bridge-created producer is born muted (6.5), so
       a deliberately-raised plate must be re-raised by the swap itself: the intent belonged to the
       PLATE, not to the producer instance, and a swap that silently mutes a guest is its own on-air
       fault.
-- [ ] 6.9d **The override survives a bridge restart.** Retention must carry it, or a momentary blip
+- [x] 6.9d **DONE 2026-08-14 — exactly where the item said, and re-applied BEFORE any
+      decision runs.** `RetainedStackItem.sourceOverride` on the OPEN axis beside
+      `position`; mirrored in `StackRetentionStore.toRetained` from the published
+      `StackItemState`; re-applied in `restore()` on the line after `#positions.set(...)`.
+      Nothing about the CLOSED `state` axis changed and no consumer branches differently.
+      The test does not stop at "the field came back": it restores into a FRESH
+      `CasparRuntime` and then TAKES, asserting the substituted producer reaches the
+      wire. A restored override nobody reads is not a restored override.
+      Original: **The override survives a bridge restart.** Retention must carry it, or a momentary blip
       silently reverts the plate to the DEAD source. This is the `B-107` / `B-109` class — retention
       dropping state it did not model — so it is a requirement with a test, not an assumption.
       ⭐ **THE MODEL THIS ATTACHES TO NOW EXISTS** (2026-08-11,
@@ -1327,9 +1408,23 @@ beforehand: 85/85, `0 cached`.
       R-011's placement — which is BEFORE any adopt-vs-re-ADD decision, so a re-issued producer
       carries it. Nothing about `state` changes; no consumer branches differently. See the two-axes
       note on `RetainedStackItemSchema`.
-- [ ] 6.9e **Reachable in one or two actions from the row.** Used under pressure, on air: not in
+- [x] 6.9e **DONE 2026-08-14 — two actions, and the second one commits.** A
+      menu-placed `SOURCE` verb on the row opens `LiveSourceSwapDialog`; choosing a
+      source commits on change. There is deliberately no Apply: an Apply is a third
+      action, and under pressure a third action is one that does not happen.
+      Offered ONLY on a row whose template declares plates — a permanently-disabled
+      entry in thirty row menus is furniture that teaches the operator to stop reading
+      the menu — and NOT gated on `onAir`, because patching around a dead feed on a live
+      graphic is the entire use of it.
+      Original: **Reachable in one or two actions from the row.** Used under pressure, on air: not in
       settings, not behind a modal chain, not anywhere the operator must first find the item.
-- [ ] 6.9f **Recorded as OUT of scope, so neither is re-proposed as part of this:** a PRE-ARMED
+- [x] 6.9f **RECORDED 2026-08-14 — both remain out of scope, and the reasons are the
+      item's own.** A PRE-ARMED backup source per plate: in a real failure the operator
+      often needs a source nobody predicted, and an open list beats a pre-chosen wrong
+      one — revisit only if use shows otherwise. Automatic DETECTION of a dead input: a
+      separate capability, and C-023's thumbnails already give the operator eyes.
+      Neither is a gap this change left; both are decisions it made.
+      Original: **Recorded as OUT of scope, so neither is re-proposed as part of this:** a PRE-ARMED
       backup source per plate (v2 — in a real failure the operator often needs a source nobody
       predicted, and an open list beats a pre-chosen wrong one; revisit only if use shows otherwise),
       and automatic DETECTION of a dead input (a separate capability; C-023's thumbnails already give

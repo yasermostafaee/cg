@@ -151,6 +151,42 @@ export const StackSetPositionChannel = defineChannel(
 );
 
 /**
+ * R-048 / C-015 phase 6 (6.9) — **point ONE plate of ONE row at a different live
+ * source, WHILE the template is on air.**
+ *
+ * Modelled on `stack.set-position` deliberately: it is the same KIND of thing — a
+ * per-item operator override the bridge holds, which never writes back to the
+ * configuration it overrides. The differences are that this one names a PLATE as
+ * well as an item, and that it is usable while the graphic is on air, which is the
+ * entire point of it (`set-position` refuses `on-air` because moving a live graphic
+ * mid-shot is a different act from patching around a dead feed).
+ *
+ * `sourceId: null` CLEARS the override and puts the plate back on its template
+ * assignment. An emergency patch the operator cannot undo is its own trap.
+ *
+ * The reasons are open (`z.string()`) rather than an enum because two of them are
+ * refusals produced deeper in — the plate-resolution and aspect refusals a take
+ * uses (`live-source-unassigned`, `live-source-aspect-mismatch`) — and re-listing
+ * them here would be a second copy of a vocabulary that already has an owner. The
+ * `message` is what the operator reads; the reason is for logs and tests.
+ */
+export const StackSwapLiveSourceChannel = defineChannel(
+  'stack.swap-live-source',
+  z.object({
+    itemId: IdSchema,
+    /** The SCENE's handle for the hole (`guest-1`), never a catalog id. */
+    plateId: z.string().min(1),
+    /** A catalog entry's id, or `null` to revert to the template's assignment. */
+    sourceId: z.string().min(1).nullable(),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.string().optional(),
+    message: z.string().optional(),
+  }),
+);
+
+/**
  * R-010 — clear EVERYTHING in one operation: every stack item is OUTed and
  * REMOVEd (per-item CLEAR-destroys semantics, in sequence), clearing air and
  * emptying the list. The sanctioned path to unblock a server reconfiguration.

@@ -77,6 +77,20 @@ export function resolvePlateAssignments(input: {
   declarations: readonly LiveSourceDeclaration[];
   assignments: SourceAssignments;
   catalog: SourceCatalog;
+  /**
+   * R-048 / C-015 phase 6 (6.9) — this ROW's per-plate substitutions, which
+   * outrank the template assignment for this run only.
+   *
+   * 🔴 **RESOLVED HERE RATHER THAN BY A SECOND PATH, and that is the point.** An
+   * override is not a different KIND of thing from an assignment — it is the same
+   * question ("which catalog entry does this plate use") answered by a higher
+   * authority, so it belongs in the same resolution. A swap path that resolved
+   * plates its own way would be a second spelling of "which producer is behind
+   * this hole", and the two would eventually disagree about a plate that is on
+   * air. It also means an override naming a retired source reaches the SAME
+   * refusal as a stale assignment, with the wording already written for it.
+   */
+  overrides?: Readonly<Record<string, string>> | undefined;
 }): PlateAssignmentOutcome {
   const byId = new Map(input.catalog.sources.map((s) => [s.id, s] as const));
   const assigned = new Map(
@@ -84,6 +98,11 @@ export function resolvePlateAssignments(input: {
       .filter((a) => a.templateId === input.templateId)
       .map((a) => [a.plateId, a.sourceId] as const),
   );
+  // The override wins where it exists, and only there. Applied on top of the map
+  // rather than consulted separately, so every reader below sees ONE answer.
+  for (const [plateId, sourceId] of Object.entries(input.overrides ?? {})) {
+    assigned.set(plateId, sourceId);
+  }
 
   const plates: ResolvedPlate[] = [];
   const unassigned: string[] = [];

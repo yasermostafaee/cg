@@ -42,6 +42,7 @@ import {
   StackRemoveAllChannel,
   StackRemoveChannel,
   StackSetPositionChannel,
+  StackSwapLiveSourceChannel,
   StackSnapshotChannel,
   StackStateChangedChannel,
   StackTakeChannel,
@@ -697,6 +698,13 @@ export function buildRoutes(
     // R-011 — the operator's per-item on-air position override.
     route(StackSetPositionChannel, (r: { itemId: string; position: never }) =>
       b.setPosition(r.itemId, r.position),
+    ),
+    // R-048 — the operator repoints ONE plate of ONE row, on air. A per-item
+    // override: the template assignment and the installation catalog are untouched.
+    route(
+      StackSwapLiveSourceChannel,
+      (r: { itemId: string; plateId: string; sourceId: string | null }) =>
+        b.swapLiveSource(r.itemId, r.plateId, r.sourceId),
     ),
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
     route(StackRemoveAllChannel, () => b.removeAll()),

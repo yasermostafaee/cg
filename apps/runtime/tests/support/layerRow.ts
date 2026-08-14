@@ -104,6 +104,10 @@ export function rowDeps(over: Partial<LayerRowActionDeps> = {}): LayerRowActionD
     clear: () => Promise.resolve({ accepted: true }),
     clearLayer: () => Promise.resolve({ accepted: true }),
     remove: () => Promise.resolve({ accepted: true }),
+    // R-048 (6.9) — the default row's template declares NO live plates, which is
+    // the ordinary case; a spec about the swap says so explicitly.
+    hasLivePlates: false,
+    swapSource: () => Promise.resolve({ accepted: true }),
     onError: () => undefined,
     ...over,
   };

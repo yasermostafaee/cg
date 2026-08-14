@@ -4,6 +4,7 @@ import {
   Download,
   MonitorPlay,
   Play,
+  Radio,
   RefreshCw,
   Trash2,
   XSquare,
@@ -221,6 +222,24 @@ export interface LayerRowActionDeps {
    */
   clearLayer: () => Promise<AsyncResult>;
   remove: (itemId: string) => Promise<AsyncResult>;
+  /**
+   * R-048 (6.9 / 6.9e) — does this row carry a template with LIVE PLATES?
+   *
+   * The verb is OFFERED only where it means something. A row whose template has
+   * no plates has nothing to repoint, and a permanently-disabled entry in every
+   * row menu is thirty pieces of furniture that teach the operator to stop
+   * reading the menu.
+   */
+  hasLivePlates: boolean;
+  /**
+   * R-048 (6.9e) — open the per-plate source picker for THIS row.
+   *
+   * MENU-PLACED, not a button: seven verbs across thirty rows is already 210
+   * controls, and this one is reached in an emergency the operator is looking
+   * straight at rather than scanned for. Two actions total (open, choose), which
+   * is what 6.9e asks for.
+   */
+  swapSource: () => Promise<AsyncResult>;
   onError: (message: string) => void;
 }
 
@@ -611,6 +630,28 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   ];
 
   actions.push(
+    /*
+      R-048 (6.9 / 6.9e) — SOURCE: repoint one plate of this row, on air.
+
+      Present only on a row whose template DECLARES plates, and gated on the same
+      reachability every AMCP verb is: the swap emits a `PLAY` on a live layer.
+      Deliberately NOT gated on `onAir` — patching around a dead feed on an on-air
+      graphic is the entire use of it, and a row that is merely loaded may be
+      repointed before the take, which is the same act done early.
+    */
+    ...(deps.hasLivePlates
+      ? [
+          act(
+            'swap-source',
+            'SOURCE',
+            empty || blocked || needsCaspar,
+            () => deps.swapSource(),
+            Radio,
+            'menu',
+            blocked ? RESTORE_BLOCKED_REASON : undefined,
+          ),
+        ]
+      : []),
     // NEXT — ALWAYS present (the shape never changes), enabled only when the
     // template actually has a step to advance to and the item is on air.
     {

@@ -110,5 +110,12 @@ function toRetained(item: StackItemState): RetainedStackItem {
     ...(state === 'error' && item.errorCode !== undefined && { errorCode: item.errorCode }),
     ...(item.slot !== undefined && { slot: item.slot }),
     ...(item.position !== undefined && { position: item.position }),
+    // R-048 / C-015 phase 6 (6.9d) — the per-plate source override travels with
+    // the row, for the same reason `position` does and with a sharper cost: a
+    // momentary bridge blip that dropped it would silently revert the plate to
+    // the DEAD source the operator patched around, on air, with the row still
+    // showing the substitution. That is the B-107 / B-109 class exactly —
+    // retention dropping state it did not model.
+    ...(item.sourceOverride !== undefined && { sourceOverride: item.sourceOverride }),
   };
 }

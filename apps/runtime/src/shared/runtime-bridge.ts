@@ -37,6 +37,7 @@ import type {
   StackRemoveAllChannel,
   StackRemoveChannel,
   StackSetPositionChannel,
+  StackSwapLiveSourceChannel,
   StackSnapshotChannel,
   StackStopAllChannel,
   StackTakeChannel,
@@ -146,6 +147,15 @@ export interface RuntimeBridge {
     setPosition(
       req: ChannelRequest<typeof StackSetPositionChannel>,
     ): Promise<ChannelResponse<typeof StackSetPositionChannel>>;
+    /**
+     * R-048 — point ONE plate of ONE row at a different live source, WHILE the
+     * template is on air. A per-item override that never writes back to the
+     * template assignment or the installation catalog; a `sourceId` of `null`
+     * reverts the plate to its assignment.
+     */
+    swapLiveSource(
+      req: ChannelRequest<typeof StackSwapLiveSourceChannel>,
+    ): Promise<ChannelResponse<typeof StackSwapLiveSourceChannel>>;
     /**
      * R-010 — OUT + REMOVE every stack item (clears air, empties the list).
      * The sanctioned path to unblock a server reconfiguration.

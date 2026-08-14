@@ -88,3 +88,38 @@ export const LiveSourceDeclarationSchema = z.object({
   keyDynamic: z.boolean().optional(),
 });
 export type LiveSourceDeclaration = z.infer<typeof LiveSourceDeclarationSchema>;
+
+/**
+ * R-048 / C-015 phase 6 (6.9) — **THE PER-ITEM SOURCE OVERRIDE: which catalog
+ * entry a plate points at FOR THIS RUN ONLY.**
+ *
+ * A three-plate template is on air, one input drops, and that plate goes black
+ * while the other two are fine. The operator must be able to point that plate
+ * somewhere else without taking the graphic off air. This is the value that
+ * expresses it.
+ *
+ * ── THE LAYERING, WHICH IS THE WHOLE DESIGN AND MUST BE STATED WHEREVER THIS
+ *    APPEARS ────────────────────────────────────────────────────────────────
+ *
+ *   1. **The installation's CATALOG** — what lives this station has. Global.
+ *   2. **The template's ASSIGNMENT** — which catalog entry each plate uses by
+ *      default. TEMPLATE-LEVEL: shared by every row carrying that template.
+ *   3. **THIS override** — one row's substitution, on top of both.
+ *
+ * 🔴 **IT DOES NOT WRITE BACK, and that is a safety property rather than a
+ * simplification.** Editing the assignment would change every other row carrying
+ * that template; editing the catalog would change the whole installation. Both
+ * persist. An EMERGENCY SUBSTITUTION must never silently become the permanent
+ * configuration — the operator who patched around a dead feed at 20:59 is not
+ * making a decision about tomorrow's rundown.
+ *
+ * Keyed by PLATE ID — the scene's own handle for a hole (`guest-1`) — because the
+ * override is about one hole in one row. The value is a catalog entry's
+ * INSTALLATION-GENERATED id; its authority is `SourceDefinitionIdSchema` in
+ * `@cg/shared-ipc`, which this package cannot import (the dependency runs the
+ * other way). An id naming an entry the catalog does not have is refused at the
+ * moment of the swap, where the catalog is in hand and the operator is watching —
+ * not here, where the only available answer would be to drop it silently.
+ */
+export const LiveSourceOverrideSchema = z.record(LiveSourceIdSchema, z.string().min(1).max(64));
+export type LiveSourceOverride = z.infer<typeof LiveSourceOverrideSchema>;

@@ -22,6 +22,7 @@ import {
 import type {
   AuditEntry,
   FieldValues,
+  LiveSourceOverride,
   Position,
   RetainedStackItem,
   StackItemState,
@@ -502,6 +503,22 @@ export class CasparRuntime {
    * knows explicit operator overrides.
    */
   readonly #positions = new Map<string, Position>();
+  /**
+   * R-048 / C-015 phase 6 (6.9) — itemId → plateId → catalog source id: this
+   * ROW's live-source substitutions.
+   *
+   * The `#positions` precedent EXACTLY, and deliberately: process memory, keyed by
+   * itemId, deleted at remove, survives a setConfig, and carried across a bridge
+   * restart by the browser's retention rather than by a file (6.9d). It is an
+   * OPERATOR PLACEMENT-shaped fact, not server knowledge.
+   *
+   * 🔴 **IT NEVER WRITES BACK to the template's assignment or the installation's
+   * catalog.** An emergency substitution must not silently become the permanent
+   * configuration — the operator patching around a dead feed at 20:59 is not
+   * making a decision about tomorrow's rundown, and the assignment is shared by
+   * every other row carrying that template.
+   */
+  readonly #sourceOverrides = new Map<string, LiveSourceOverride>();
   /**
    * B-092 — restored items awaiting their adopt-vs-re-ADD decision.
    *
@@ -1050,7 +1067,19 @@ export class CasparRuntime {
   #published(): readonly StackItemState[] {
     return this.#reconciler.snapshot().map((item) => {
       const position = this.#positions.get(item.itemId);
-      return position === undefined ? item : { ...item, position };
+      // R-048 (6.9 / 6.9d) — the source override joins the snapshot at the same
+      // point and for the same reasons: the row must be able to SAY that a plate
+      // is not on its configured source, and the browser's retention mirrors what
+      // it is published (`StackRetentionStore.toRetained`), which is what carries
+      // it across a bridge restart. Both are spread conditionally so an item with
+      // neither is the identical object it was before either field existed.
+      const sourceOverride = this.#sourceOverrides.get(item.itemId);
+      if (position === undefined && sourceOverride === undefined) return item;
+      return {
+        ...item,
+        ...(position !== undefined && { position }),
+        ...(sourceOverride !== undefined && { sourceOverride }),
+      };
     });
   }
 
@@ -1431,11 +1460,17 @@ export class CasparRuntime {
       // R-011 — the operator's placement is intent too, and #sendAdd reads it
       // off #positions, so it must be back BEFORE any re-ADD decision runs.
       //
-      // ⭐ This is also the line task 6.9d's per-plate SOURCE override attaches
-      // beside: an OPEN-axis optional field on `RetainedStackItem`, re-applied here,
-      // before any decision, so a re-issued producer carries it. See
-      // `RetainedStackItemSchema`'s two-axes note.
+      // ⭐ R-048 (6.9d) — the per-plate SOURCE override attaches HERE, beside it and
+      // for the identical reason: an OPEN-axis optional field on `RetainedStackItem`,
+      // re-applied BEFORE any adopt-vs-re-ADD decision runs, so whatever this restore
+      // goes on to seat carries it. Dropping it would silently revert the plate to
+      // the DEAD source the operator patched around — the B-107 / B-109 class,
+      // retention losing state it did not model. See `RetainedStackItemSchema`'s
+      // two-axes note.
       if (item.position !== undefined) this.#positions.set(item.itemId, item.position);
+      if (item.sourceOverride !== undefined) {
+        this.#sourceOverrides.set(item.itemId, item.sourceOverride);
+      }
       /*
        * 🔴 B-109 / B-107 — THE PENDING RESTORE IS THE LICENCE TO TOUCH THE LAYER, and
        * only a restorable state gets one.
@@ -2851,6 +2886,10 @@ export class CasparRuntime {
       declarations: carrier.sources,
       assignments: this.#sourceAssignments,
       catalog: this.#sourceCatalog,
+      // R-048 (6.9) — this ROW's substitutions outrank the template assignment.
+      // Passed INTO the one resolver rather than applied after it, so a swapped
+      // plate and an assigned plate cannot be resolved by two different rules.
+      overrides: this.#sourceOverrides.get(itemId),
     });
     if (!assignment.ok)
       return { ok: false, errorCode: assignment.errorCode, message: assignment.message };
@@ -3003,6 +3042,10 @@ export class CasparRuntime {
     const previous = this.#liveLayers.get(itemId) ?? [];
     if (placements.length === 0 && previous.length === 0) return { ok: true };
 
+    // 6.9c — the plate's audio intent belongs to the PLATE, so a re-seat carries
+    // it. A plate the operator deliberately raised must not go silent because its
+    // item was re-taken; a plate nobody raised is born muted, which is the rule.
+    const heldVolume = new Map(previous.map((r) => [r.sourceId, r.intendedVolume] as const));
     const touched: LiveLayerRecord[] = [];
     let failure: string | undefined;
 
@@ -3017,10 +3060,18 @@ export class CasparRuntime {
         producer: this.#builder.sourceArgument(placement.producer),
         fill: placement.fit.fill,
         clip: placement.fit.clip,
+        intendedVolume: heldVolume.get(placement.plateId) ?? CREATED_MUTED_VOLUME,
       });
       const lines = [
         this.#builder.playSource(placement.slot, placement.producer),
-        this.#builder.mixerVolume(placement.slot, CREATED_MUTED_VOLUME),
+        this.#builder.mixerVolume(
+          placement.slot,
+          // `??`, never `||`: a plate whose recorded intent IS 0 must resolve to 0
+          // rather than falling through to the default that happens to equal it —
+          // the two agree today, and a future non-zero default would make the bug
+          // appear in a line nobody edited.
+          heldVolume.get(placement.plateId) ?? CREATED_MUTED_VOLUME,
+        ),
         ...this.#builder.mixerFit(placement.slot, placement.fit),
       ];
       for (const line of lines) {
@@ -3063,6 +3114,257 @@ export class CasparRuntime {
       await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
       await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
     }
+    return { ok: true };
+  }
+
+  /**
+   * R-048 / C-015 phase 6 (6.9 / 6.9a / 6.9b / 6.9c) — **POINT ONE PLATE AT A
+   * DIFFERENT SOURCE, WHILE THE TEMPLATE IS ON AIR.**
+   *
+   * The case is a client requirement: a three-plate template is on air, one input
+   * drops, and that plate goes black while the other two are fine. The operator
+   * repoints the dead one without taking the graphic off air and without
+   * disturbing its neighbours.
+   *
+   * `sourceId === null` clears the override and puts the plate back on the
+   * template's assignment — the same path, run with one fewer substitution. An
+   * emergency patch the operator cannot undo is its own trap.
+   *
+   * ── WHAT IT IS NOT ─────────────────────────────────────────────────────────
+   *
+   * 🔴 **A PER-ITEM OVERRIDE. The template's ASSIGNMENT and the installation's
+   * CATALOG are both untouched** — the same shape as the position override, and
+   * for a sharper reason: the assignment is shared by every row carrying that
+   * template and the catalog is installation-wide, so writing back would make one
+   * operator's 20:59 emergency into tomorrow's configuration.
+   *
+   * 🔴 **A REPLACE, NEVER A CLEAR-THEN-ADD.** `PLAY` on the occupied layer
+   * substitutes the producer in place. A `CLEAR` followed by a `PLAY` that fails
+   * is the `B-126` window arriving during an emergency: a destructive step
+   * committed before the constructive one was known to succeed, leaving the
+   * operator with a BLACK plate where they had a merely-dead one. On failure the
+   * previous producer stays, the ledger is unchanged, the override is NOT
+   * recorded, and the row is told — a state that claimed the new source while the
+   * layer carried the old would be worse than the failure.
+   *
+   * ⚠ **THAT SUBSTITUTION IS UNVERIFIED ON THE PLANT'S 2.3.2 (task 6.9a).** The
+   * mock models `PLAY` on an occupied layer as a replace, so the tests prove this
+   * code is self-consistent and prove NOTHING about the server. It rides with
+   * §3b's `DEFER`/`COMMIT` question and 6.3a's `CLIP` probe — all AMCP probes on
+   * the same build.
+   *
+   * ── THE THREE THINGS THAT TRAVEL WITH IT ───────────────────────────────────
+   *
+   * 1. **The FIT (6.9b), in the same action.** The new source may carry a different
+   *    format, so crop-to-fill re-derives through §3a's chain — including its
+   *    refusal, so a substitution the author's `expectedAspect` contradicts is
+   *    refused rather than silently cropping a face. Not a second operator step:
+   *    under pressure a second step is a step that does not happen.
+   * 2. **The AUDIO INTENT (6.9c).** Every bridge-created producer is born muted,
+   *    so a deliberately-raised plate would go SILENT at the moment the operator
+   *    was fixing it. The intent belongs to the PLATE (`LiveLayerRecord.intendedVolume`),
+   *    not to the producer instance, and the swap re-asserts it.
+   * 3. **The OVERRIDE ITSELF, across a bridge restart (6.9d)** — carried by the
+   *    published state into the browser's retention, which is where `#positions`
+   *    already goes.
+   *
+   * An item with no live layers seated yet is a legal target: the override is
+   * recorded, nothing is sent, and the next take resolves through it.
+   */
+  async swapLiveSource(
+    itemId: string,
+    plateId: string,
+    sourceId: string | null,
+  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    if (templateId === undefined || this.#slots.get(itemId) === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    const template = this.#templates.get(templateId);
+    const declaration = template?.liveSources?.sources.find((s) => s.sourceId === plateId);
+    if (declaration === undefined) {
+      return {
+        ok: false,
+        reason: 'unknown-plate',
+        message: `This template has no live plate called "${plateId}".`,
+      };
+    }
+    const source =
+      sourceId === null
+        ? null
+        : (this.#sourceCatalog.sources.find((s) => s.id === sourceId) ?? null);
+    if (sourceId !== null && source === null) {
+      return {
+        ok: false,
+        reason: 'unknown-source',
+        message: `This installation has no live source with the id "${sourceId}".`,
+      };
+    }
+
+    const current = this.#sourceOverrides.get(itemId) ?? {};
+    const next: Record<string, string> = { ...current };
+    if (sourceId === null) delete next[plateId];
+    else next[plateId] = sourceId;
+
+    const record = (this.#liveLayers.get(itemId) ?? []).find((r) => r.sourceId === plateId);
+    if (record === undefined) {
+      // Nothing seated for this plate — the item is not on air, or its hole is
+      // off-frame. Recording the override IS the whole action; the next take
+      // resolves through it. Deliberately not gated on reachability: this is a
+      // list edit, exactly like setting a position on an idle row.
+      this.#applySourceOverride(itemId, next);
+      return { ok: true };
+    }
+
+    if (this.#noServerReachable()) {
+      return {
+        ok: false,
+        reason: 'disconnected',
+        message:
+          'Not connected to CasparCG — the swap was refused, not queued. Reissue it once the ' +
+          'server is back.',
+      };
+    }
+
+    // Resolve the plate exactly as a take would, through the ONE resolver, with
+    // the prospective override applied. A swap that resolved plates its own way
+    // would be a second spelling of "which producer is behind this hole".
+    const resolved = resolvePlateAssignments({
+      templateId,
+      declarations: [declaration],
+      assignments: this.#sourceAssignments,
+      catalog: this.#sourceCatalog,
+      overrides: next,
+    });
+    if (!resolved.ok) {
+      return { ok: false, reason: resolved.errorCode, message: resolved.message };
+    }
+    const plate = resolved.plates[0];
+    if (plate === undefined) return { ok: false, reason: 'unknown-plate' };
+
+    // 6.9b — the fit re-derives, refusal included: a substitution the author's
+    // `expectedAspect` contradicts is refused rather than silently cropping.
+    const aspect = resolvePlateAspect({
+      plateId,
+      source: plate.source,
+      expectedAspect: declaration.expectedAspect,
+    });
+    if (!aspect.ok) return { ok: false, reason: aspect.errorCode, message: aspect.message };
+    const fit = this.liveSourceFitFor({
+      channel: record.slot.channel,
+      itemId,
+      rect: declaration.rect,
+      sceneResolution: template?.liveSources?.resolution ?? { width: 1920, height: 1080 },
+      carriedDefaultPosition: template?.liveSources?.defaultPosition,
+      sourceAspect: aspect.aspect,
+    });
+    const clip = fit.clip;
+    if (clip === null) {
+      return {
+        ok: false,
+        reason: 'off-frame',
+        message: `Plate "${plateId}" is outside the frame, so there is nothing to swap.`,
+      };
+    }
+
+    // THE REPLACE. No CLEAR precedes it — see the note above.
+    const played = await this.#send(
+      this.#builder.playSource(record.slot, plate.source.producer),
+      this.#nextSeq(),
+      'urgent',
+    );
+    if (!played.ok) {
+      // The previous producer is still on the layer and the ledger still names it.
+      // Nothing about this row changed, which is what makes the refusal honest.
+      return {
+        ok: false,
+        reason: played.errorCode ?? 'amcp-error',
+        message:
+          `CasparCG refused the substitution, so plate "${plateId}" is still on its previous ` +
+          `source. Nothing was cleared.`,
+      };
+    }
+    // 6.9c — the plate's intent, re-asserted onto the NEW producer, which was born
+    // muted like every other. Best effort, exactly as `take()`'s re-assert is: a
+    // volume refusal must not undo a substitution that already landed.
+    await this.#send(
+      this.#builder.mixerVolume(record.slot, record.intendedVolume),
+      this.#nextSeq(),
+      'urgent',
+    );
+    for (const line of this.#builder.mixerFit(record.slot, { fill: fit.fill, clip })) {
+      await this.#send(line, this.#nextSeq(), 'urgent');
+    }
+
+    // The ledger records what was SENT, on the SAME slot — one record replaced in
+    // place, its neighbours untouched.
+    this.registerLiveLayers(
+      itemId,
+      (this.#liveLayers.get(itemId) ?? []).map((r) =>
+        r.sourceId === plateId
+          ? {
+              ...r,
+              producer: this.#builder.sourceArgument(plate.source.producer),
+              fill: fit.fill,
+              clip,
+            }
+          : r,
+      ),
+    );
+    this.#applySourceOverride(itemId, next);
+    return { ok: true };
+  }
+
+  /** Store (or drop) an item's override map and publish the change. */
+  #applySourceOverride(itemId: string, next: Record<string, string>): void {
+    // An EMPTY map is no override at all, not an override of nothing: keeping one
+    // would publish `sourceOverride: {}` and make a row that is back on its
+    // template assignment look substituted.
+    if (Object.keys(next).length === 0) this.#sourceOverrides.delete(itemId);
+    else this.#sourceOverrides.set(itemId, next);
+    this.#markDirty(itemId);
+  }
+
+  /**
+   * C-015 phase 6 (6.5 / 6.9c) — **the EXPLICIT RECORDED INTENT that raises a
+   * plate's audio, and the only thing that may.**
+   *
+   * The rule is that every producer the bridge creates is created muted and audio
+   * is raised only by an explicit intent NAMING THE LAYER. This is that intent for
+   * a Live Source plate: it is recorded against the PLATE in the ledger, so it
+   * survives a swap (6.9c) and a re-seat, and it is asserted on the wire
+   * immediately so the operator hears the result of their own action.
+   *
+   * ⚠ **NO OPERATOR CONTROL REACHES THIS YET, and that is a filed gap rather than
+   * an oversight** — see task 6.5f. Phase 6 enumerated the mute half of the rule
+   * at four sub-tasks and never enumerated the raise half, which is the same shape
+   * of hole task 6.0 was. The mechanism is here and tested; the surface is not
+   * built, and 6.5f says so instead of leaving the next reader to discover it.
+   */
+  async setLivePlateVolume(
+    itemId: string,
+    plateId: string,
+    volume: number,
+  ): Promise<{ ok: boolean; reason?: string }> {
+    const records = this.#liveLayers.get(itemId);
+    const record = records?.find((r) => r.sourceId === plateId);
+    if (records === undefined || record === undefined)
+      return { ok: false, reason: 'unknown-plate' };
+    if (!Number.isFinite(volume) || volume < 0) return { ok: false, reason: 'invalid-volume' };
+    if (this.#noServerReachable()) return { ok: false, reason: 'disconnected' };
+    const sent = await this.#send(
+      this.#builder.mixerVolume(record.slot, volume),
+      this.#nextSeq(),
+      'urgent',
+    );
+    if (!sent.ok) return { ok: false, reason: sent.errorCode ?? 'amcp-error' };
+    // Recorded only after it LANDED: a ledger that claimed an intent the layer
+    // never received would be re-asserted onto every future swap, spreading one
+    // failed command into a standing lie about what is audible.
+    this.registerLiveLayers(
+      itemId,
+      records.map((r) => (r.sourceId === plateId ? { ...r, intendedVolume: volume } : r)),
+    );
     return { ok: true };
   }
 
@@ -3884,6 +4186,9 @@ export class CasparRuntime {
     this.#loaded.delete(itemId);
     // R-011 — the override dies with the ITEM (a re-used itemId starts clean).
     this.#positions.delete(itemId);
+    // R-048 (6.9) — and so does the live-source override, by the same rule: a
+    // re-used itemId must not inherit somebody else's emergency substitution.
+    this.#sourceOverrides.delete(itemId);
     // B-092 — a restore awaiting its occupancy decision dies with the item too:
     // the operator removed it, so there is nothing left to adopt or re-ADD (the
     // urgent CLEAR below is the removal's own, and it is unconditional).

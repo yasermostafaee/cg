@@ -101,6 +101,11 @@ const BRIDGE_SURFACE: {
       'out',
       'remove',
       'setPosition',
+      // R-048 — the per-plate live-source swap. The mock has no producers, so it
+      // models the OVERRIDE half only (record + publish) and answers the same
+      // contract; the wire half is integration-tested bridge-side, which is the
+      // only place a REPLACE on an occupied layer can be observed at all.
+      'swapLiveSource',
       'removeAll',
       'clearAll',
       'stopAll',

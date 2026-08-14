@@ -1947,10 +1947,27 @@ that a Designer-splash change dir does not exist at all (`DEBT.md:1975`) — tha
 separate, larger, and is not folded in here. Source: `DEBT-SWEEP.md:665-672`, recorded as owed by
 the sweep's closing session and left unfiled.
 
-## [ ] R-048 — swap a plate's input WHILE the template is ON AIR ⟨priority: high⟩ — ⭐ CLIENT REQUIREMENT, implemented in [[C-015]] phase 6
+## [~] R-048 — swap a plate's input WHILE the template is ON AIR ⟨priority: high⟩ — ⭐ CLIENT REQUIREMENT — BUILT 2026-08-14 in [[C-015]] phase 6 (tasks 6.9–6.9f); `[~]` for ONE reason only, the unmeasured 2.3.2 substitution (6.9a), see below
 
 🔴 **This is a CLIENT REQUIREMENT, not a preference.** Recorded as such 2026-08-10 (owner) so a
 later prioritisation pass cannot read it as a nice-to-have and defer it.
+
+**BUILT 2026-08-14 (session AG).** A PER-ITEM override — the template's assignment and the
+installation's catalog are both untouched, and it never writes back. A REPLACE, never a
+clear-then-add: on failure the previous producer stays, the override is not recorded, and the row is
+told. The fit re-derives in the same action, the plate's audio intent survives the swap, the override
+survives a bridge restart through retention, and it is reachable in two actions from the row.
+
+⭐ **AND IT IS NOT ONLY AN EMERGENCY AFFORDANCE.** The owner's 2026-08-14 answer to the studio-plate
+question (`live-source-multibox` design.md §12.6) is that the studio's address is chosen AT THE
+MOMENT OF USE — so this swap is also the ONLY mechanism by which a moment-chosen source is
+addressable at all on this installation. Reading it as "nice to have in a failure" under-weights it.
+
+🔴 **WHY IT STAYS `[~]`, and it is one thing:** whether `PLAY` on an OCCUPIED layer SUBSTITUTES the
+producer rather than requiring a prior clear is **unmeasured on the plant's 2.3.2**. The AMCP mock
+models it as a replace, so the offline tests prove the code is self-consistent and prove nothing
+about the server. Task 6.9a carries the probe; ride it with design.md §3b's `DEFER`/`COMMIT` question
+and 6.3a's `CLIP` intersection probe, which are AMCP probes on the same build.
 
 **What:** a three-plate template is on air, one input drops and its plate goes black. The operator
 must be able to point **that ONE plate** at a different source, **fast**, **without taking the

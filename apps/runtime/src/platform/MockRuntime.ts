@@ -173,6 +173,8 @@ export class MockRuntime {
   #ownedOccupancy: OwnedOccupancyWarning[] = seedOwnedOccupancy();
   // R-011 — per-item operator position overrides (bridge parity).
   readonly #positions = new Map<string, Position>();
+  // R-048 — per-item, per-plate live-source overrides (bridge parity).
+  readonly #sourceOverrides = new Map<string, Record<string, string>>();
   // B-070 — producer-existence bookkeeping (bridge parity: the bridge's
   // `#loaded`). A producer lives from load/take until out/remove destroys it.
   // A seeded item that is not idle already has one.
@@ -198,7 +200,12 @@ export class MockRuntime {
   stackSnapshot(): StackItemState[] {
     return this.#stack.map((i) => {
       const position = this.#positions.get(i.itemId);
-      return position === undefined ? { ...i } : { ...i, position };
+      const sourceOverride = this.#sourceOverrides.get(i.itemId);
+      return {
+        ...i,
+        ...(position !== undefined && { position }),
+        ...(sourceOverride !== undefined && { sourceOverride }),
+      };
     });
   }
 
@@ -420,6 +427,43 @@ export class MockRuntime {
   /** R-011 — the stored override for an item (test/diagnostic surface). */
   positionOf(itemId: string): Position | undefined {
     return this.#positions.get(itemId);
+  }
+
+  /**
+   * R-048 parity — the bridge's swap contract, minus the wire.
+   *
+   * The offline mock has no producers, so recording the override IS the whole
+   * effect here; the on-air behaviour (a REPLACE with no preceding CLEAR, the
+   * refit, the audio intent) is integration-tested bridge-side against the AMCP
+   * mock, which is the only place it can be observed at all.
+   *
+   * ⚠ **It deliberately does NOT refuse an on-air item, and that is the contract
+   * rather than an omission** — `setPosition` above refuses one because moving a
+   * live graphic mid-shot is a different act. Patching around a dead feed is the
+   * ENTIRE use of this verb, so refusing on air would refuse it in the only
+   * situation it exists for.
+   */
+  swapLiveSource(
+    itemId: string,
+    plateId: string,
+    sourceId: string | null,
+  ): { ok: boolean; reason?: string; message?: string } {
+    const item = this.#find(itemId);
+    if (item === null) return { ok: false, reason: 'unknown-item' };
+    const next: Record<string, string> = { ...this.#sourceOverrides.get(itemId) };
+    if (sourceId === null) delete next[plateId];
+    else next[plateId] = sourceId;
+    // An EMPTY map is no override at all: keeping one would publish
+    // `sourceOverride: {}` and make a row back on its assignment look substituted.
+    if (Object.keys(next).length === 0) this.#sourceOverrides.delete(itemId);
+    else this.#sourceOverrides.set(itemId, next);
+    this.#emitStack();
+    return { ok: true };
+  }
+
+  /** R-048 — the stored override for an item (test/diagnostic surface). */
+  sourceOverrideOf(itemId: string): Readonly<Record<string, string>> | undefined {
+    return this.#sourceOverrides.get(itemId);
   }
 
   /** R-010 — OUT + REMOVE everything: clears (simulated) air, empties the list. */

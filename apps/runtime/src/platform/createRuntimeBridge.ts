@@ -129,6 +129,9 @@ export function createMockBridge(): RuntimeBridge {
       out: (req) => Promise.resolve(mock.out(req.itemId)),
       remove: (req) => Promise.resolve(mock.remove(req.itemId)),
       setPosition: (req) => Promise.resolve(mock.setPosition(req.itemId, req.position)),
+      // R-048 — the per-plate live-source swap.
+      swapLiveSource: (req) =>
+        Promise.resolve(mock.swapLiveSource(req.itemId, req.plateId, req.sourceId)),
       removeAll: () => Promise.resolve(mock.removeAll()),
       clearAll: () => Promise.resolve(mock.clearAll()),
       stopAll: () => Promise.resolve(mock.stopAll()),

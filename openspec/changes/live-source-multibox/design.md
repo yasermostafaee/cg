@@ -2267,7 +2267,7 @@ Adding a channel means editing that file and restarting CasparCG — **which is 
 integration boundary C-020 is deferred on, which makes "who changes it" a real question rather than a
 formality.
 
-### 12.6 ⭐ THE STUDIO PLATE (§9a.2) — TWO RECON QUESTIONS AND ONE OWNER QUESTION, ALL OPEN
+### 12.6 ⭐ THE STUDIO PLATE (§9a.2) — TWO RECON QUESTIONS OPEN; THE OWNER QUESTION IS ANSWERED
 
 **Added 2026-08-10 (A3).** §9a.2 chose the ROUTE mechanism for the owner's three-box layout and named
 `route://<channel>-<layer>` as the form that avoids the feedback trap. **Neither of the two facts that
@@ -2315,22 +2315,43 @@ and fast motion shows it as a visible lag between two views of the same studio.
 Record the consequence **with the measured figure beside it**, not as a general caution: "N frames"
 is a number an author can design around; "there may be some latency" is not.
 
-#### The OWNER QUESTION — which layer does CIAB put the studio picture on?
+#### ⭐ THE OWNER QUESTION — ANSWERED 2026-08-14, AND IT DISSOLVES THE TASK
 
-**This is not a recon item; no measurement in this repo can answer it and no code can discover it.**
-The route address in §9a.2 is `route://<channel>-<layer>`, and **`<layer>` is an installation fact
-owned by the playout system**: it is the layer CIAB — the plant's playout application — puts the main
-studio picture on.
+**The question was: which layer does CIAB put the studio picture on?** It was filed as `tasks.md`
+6.8c, as an installation fact only the plant could supply. **The owner's answer (2026-08-14) is
+that the question is malformed, in two independent ways — and the task is therefore DELETED rather
+than left open.** Both halves are recorded, because either one alone would have been enough and a
+later reader is likely to re-derive only the weaker of them.
 
-Without it:
+**1. THE STUDIO IS NOT SPECIAL.** A live source, to this system, is an ADDRESS mapped to a symbolic
+name. A `DECKLINK DEVICE 1`, an `NDI NAME "Baku"` and a `route://1-2` carrying the studio are the
+same KIND of thing to every part of this design: the catalog defines them the same way, the
+assignment picker lists them the same way, `playSource` spells them from one union, and the fit
+chain reads a format off whichever it is. So 6.8c was asking the GENERAL question — _what addresses
+do this installation's sources have?_ — in a costume that made it look like a studio-specific
+installation fact needing its own answer. **That general question already has a home: `C-022`, the
+named live-source list.** It does not need a second one, and a second one is how a special case
+gets built for something that is not special.
 
-- the catalog entry for the studio plate **cannot be configured on this installation**. The schema
-  accepts the address (`SourceProducerSchema`'s `route` arm already carries `layer`), and the
-  SourcesModal already renders it, so nothing is BLOCKED in code — but the value the operator must
-  type is unknown, and a guess puts an arbitrary layer's picture inside a guest frame on air.
-- §9a.2's reserved-range paragraph cannot be checked against reality. It argues that reading a
-  reserved layer is not writing to it, which stands on its own; but whether the studio picture is
-  even IN the reserved 60–69 range, or somewhere else entirely, is part of the same unknown.
+**2. THE ADDRESS IS NOT FIXED.** The studio may arrive on 1-1, on 1-2, or on another layer
+altogether, CHOSEN AT THE MOMENT OF USE. There is no single value to write into a catalog entry,
+so even a perfect answer from CIAB would have been correct only until the next gallery decision.
+What a moment-chosen address needs is not a configured constant but a way to pick between
+candidates while on air — **which is exactly `R-048` / task 6.9**. The installation declares the
+candidate addresses as separate NAMED sources ("Studio A — 1-1", "Studio A — 1-2"), and the
+operator picks between them at take time, or swaps between them mid-show.
 
-**It is a question for the owner, to be put to CIAB.** Recorded here rather than resolved, because
-resolving it by assumption is precisely the failure mode this section exists to prevent.
+🔴 **THE CONSEQUENCE WORTH CARRYING: R-048 IS NOT A CONVENIENCE.** It reads like an emergency
+affordance — one input drops, patch around it — and it is also the ONLY mechanism by which a
+moment-chosen source is addressable at all on this installation. A reading of 6.9 as "nice to have
+in a failure" would under-weight it.
+
+🔴 **ADD NO STUDIO-SPECIFIC BEHAVIOUR ANYWHERE IN THE CODE.** No studio flag on a catalog entry, no
+studio branch in the fit chain, no studio arm in the producer union. A special case built now is
+one that has to be dug out later, and the whole force of the answer above is that there is nothing
+to special-case.
+
+**What is NOT dissolved:** §9a.2’s reserved-range paragraph still stands on its own (reading a
+reserved layer is not writing to it), and A3-R1 above is still open — whether a layer-scoped route
+delivers the producer’s own output or something already composited is a MEASUREMENT, and nothing
+here answers it.
