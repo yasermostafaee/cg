@@ -2844,7 +2844,7 @@ already committed the slot in their head. This is a take-time failure on an on-a
 
 Source: `DEBT.md:1092` (the residual, inside the CLEARed-row sweep entry at `DEBT.md:1064`).
 
-## [~] B-121 — `CG ADD` site 2, the reconnect reconciliation, is not rehearse-guarded, so a bridge blip re-ADDs an UNMUTED producer under a rehearsing row ⟨priority: high — reaches air⟩ — in progress: `openspec/changes/live-source-multibox/` (task 6.5c, and 6.5d pins all four sites)
+## [x] B-121 — `CG ADD` site 2, the reconnect reconciliation, is not rehearse-guarded, so a bridge blip re-ADDs an UNMUTED producer under a rehearsing row ⟨priority: high — reaches air⟩ — FIXED 2026-08-14, `openspec/changes/live-source-multibox/` (tasks 6.5c / 6.5d)
 
 **What:** a sweep of every `CG ADD` call site in `caspar-runtime.ts` found four, and asked of each
 whether the rehearse guard covers it:
@@ -2879,6 +2879,20 @@ not ADD** — asserted on the wire, since a renderer-only guard is the shape sit
 rejected. Task **6.5d** additionally pins **all four** sites with one test, so site 3's "unchanged
 and safe" stops being a claim in a table and becomes an assertion — a table that is not pinned is
 re-derived by the next sweep.
+
+**FIXED 2026-08-14 — at the chokepoint, not at the site.** The mute lives in `#sendAdd`, which is the
+single emit point every one of the four callers goes through, so site 2 is closed together with the
+other three rather than by a guard of its own. `live-add-mute.integration.test.ts` drives each site
+through its REAL entry point — site 2 through `restore()`, the way a reconnect reaches it — and
+asserts the `MIXER … VOLUME 0` index precedes the `CG ADD` index in the AMCP trace. Verified by
+MUTATION: with the mute removed, five of the six tests go red.
+
+⚠ **THE TABLE ABOVE IS STALE IN ONE ROW, and it is left standing with this correction rather than
+quietly edited.** Site 1 is listed as rehearse-guarded; it is not. The guard was removed when LOAD
+became LIST-ONLY (`loadFixed` emits no AMCP at all) — the stronger form, and the code says so. What
+the row misses is that `#loadOnto` has a SECOND caller, the dynamic `load()`, which is not list-only
+and never had a guard at all. The mute covers it now. The same stale row appears in [[R-042]] and in
+the design; all three are corrected there too.
 
 **Notes:** related to [[R-022]] (the rehearse feature) and to the deferred `mute-before-ADD`
 upgrade, which would change the ordering constraint here — on 2.5.0 the volume must land BEFORE

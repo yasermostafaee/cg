@@ -56,6 +56,12 @@ const MESSAGES: Readonly<Record<string, string>> = {
   // rehearse no longer needs the layer, so taking the row off PVW costs nothing.
   'mute-failed':
     'CasparCG refused to mute the layer, so PVW was not started. PVW is only claimed once the graphic genuinely cannot reach air.',
+  // C-015 phase 6 (6.5b) — the LOAD's mute, which is a different consequence from
+  // the PVW one above and therefore a different sentence: the mute is not a step
+  // around the load, it is the condition under which loading is safe (a bare
+  // `CG ADD` puts the template's audio on air on 2.5.0 — R-029).
+  'add-mute-failed':
+    'CasparCG refused to mute the layer, so the graphic was NOT loaded — loading it would have put its audio on air. Try again; if it keeps failing, check the channel on the playout server.',
   rehearsing:
     'That row is on PVW. Take it off PVW first — loading would put an unmuted graphic on the layer.',
   // The BANK-SCOPED clear's two structural refusals. Both are guard verdicts rather

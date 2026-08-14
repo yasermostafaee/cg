@@ -1130,7 +1130,20 @@ beforehand: 85/85, `0 cached`.
       is `null` rather than a zero-width box.
       Original: Clamp the FILL to the scene rect (`.cg-stage` has `overflow:hidden`; the live source
       behind the hole does not).
-- [ ] 6.5 **The audio rule — WIDENED 2026-08-08 (owner, `design.md` §12.4). It is not a Live
+- [x] 6.5 **DONE 2026-08-14.** The mute is emitted in `#sendAdd` — the SINGLE `CG ADD`
+      emit chokepoint — and in `#seatLiveLayers` for `playSource`, so BOTH producer-creating
+      verbs are covered by two lines rather than by guards at seven call sites. The two
+      ORDERS differ, and the difference is the measured one: the mute FOLLOWS `playSource`
+      in the same batch (the producer does not exist before the `PLAY`) and PRECEDES the
+      `CG ADD` on the wire (a bare ADD is already audible at 0.24 s on 2.5.0). The unmute
+      half is NOT rebuilt: `take()`’s unconditional `INTENDED_VOLUME` re-assert IS the
+      explicit intent, and `live-add-mute`’s SITE 4 pins that it still lands after the
+      pre-roll and before the `CG PLAY` — a mute-before-ADD that stranded the mute would
+      put a graphic ON AIR SILENT, which R-022 calls the worse of the two failures.
+      `CREATED_MUTED_VOLUME = 0` is NAMED rather than a literal: zero is falsy, and a bare
+      `0` invites a `?? INTENDED_VOLUME` downstream to read a deliberate mute as “no volume
+      requested”.
+      Original: **The audio rule — WIDENED 2026-08-08 (owner, `design.md` §12.4). It is not a Live
       Source rule; it is THE rule, and it discharges the whole cluster in this wave.** Every
       bridge-created producer is created muted; audio is raised only by explicit recorded intent.
       It covers **both** producer-creating verbs, and the two orders differ for a measured reason
@@ -1141,24 +1154,61 @@ beforehand: 85/85, `0 cached`.
       unconditionally on every take (`caspar-runtime.ts:1597-1601`) and that re-assert IS the
       explicit intent — a second unmute path would be the `B-100` / `P-012` one-rule-two-spellings
       failure.
-- [ ] 6.5a **R-029** (`docs/prd/runtime.md`, high): the rule covers the **`CG ADD` path**, not only
+- [x] 6.5a **DONE 2026-08-14 — R-029’s CONTAINMENT, and R-029 stays `[~]` (see 6.5e).**
+      Mechanism recorded in the item: option 2, bridge-side. What it does NOT cover, in
+      words: the company’s PLAYOUT system sends `CG ADD` / `PLAY` to CasparCG directly,
+      on layers this bridge never touches — nothing bridge-side can mute those, and no
+      template-side convention binds a template we did not author. That is option 3’s gap
+      and it remains open BY CONSTRUCTION rather than by omission.
+      Original: **R-029** (`docs/prd/runtime.md`, high): the rule covers the **`CG ADD` path**, not only
       `playSource`, so cueing no longer puts a template's audio on air before the take. Records
       WHICH containment mechanism was chosen (option 2, bridge-side) and, in words, which command
       sources it does **not** cover — the playout system's own `CG ADD` is outside it.
-- [ ] 6.5b **R-042** (`docs/prd/runtime.md`): **mute-before-ADD**, so LOAD is permitted on a
+- [x] 6.5b **DONE 2026-08-14 — and ONE PREMISE OF THE ITEM WAS ALREADY STALE.** All three
+      acceptance bullets hold: the `MIXER … VOLUME` precedes the `CG ADD` on the AMCP
+      trace at every site, and a mute that FAILS refuses the load with `add-mute-failed`
+      instead of proceeding.
+      ⚠ **“LOAD is permitted on a rehearsing row instead of refused” was already true**, by
+      a different route: LOAD became LIST-ONLY (`loadFixed` emits no AMCP at all) and the
+      guard was removed then — _“a path that cannot exist beats a guard that has to be
+      remembered”_. What the mute actually closes is the caller that survived: the DYNAMIC
+      `load()`, which still emits and never had a guard. Said out loud because R-042,
+      B-121 and `design.md` §7 all name `loadFixed` as the guarded site, and all three
+      were wrong about it; all three are corrected.
+      Original: **R-042** (`docs/prd/runtime.md`): **mute-before-ADD**, so LOAD is permitted on a
       rehearsing row instead of refused, with no audible leak. **The `MIXER … VOLUME` lands BEFORE
       the `CG ADD` on the wire, asserted on the AMCP trace** — not by the absence of an error — and
       a mute that fails does not proceed to the ADD.
-- [ ] 6.5c **B-121** (`docs/prd/bugs-runtime.md`): `CG ADD` **call site 2**, the reconnect
+- [x] 6.5c **DONE 2026-08-14 — at the CHOKEPOINT, not at the site.** Site 2 is closed by
+      the same `#sendAdd` mute as the other three, so there is no site-2 guard to drift.
+      Asserted ON THE WIRE and driven through `restore()` — the real entry point a
+      reconnect uses — never by calling the private decider.
+      Original: **B-121** (`docs/prd/bugs-runtime.md`): `CG ADD` **call site 2**, the reconnect
       reconciliation (`#decidePendingRestores`, `caspar-runtime.ts:1394`), is not rehearse-guarded,
       so a bridge blip re-ADDs an UNMUTED producer under a rehearsing row. Fix it under the same
       rule — mute before the re-ADD, or do not ADD — and assert it **on the wire**, since a
       renderer-only guard is the shape site 1's fix explicitly rejected.
-- [ ] 6.5d **Pin all four `CG ADD` sites with one test** (`design.md` §7's table): site 1
+- [x] 6.5d **DONE 2026-08-14** — `live-add-mute.integration.test.ts`, six tests, each
+      site through its real entry point, each asserting the mute’s trace INDEX against the
+      ADD’s. ✅ **Verified by MUTATION:** with the mute removed from `#sendAdd`, five of
+      the six go red (the sixth is `loadFixed`, which correctly still emits nothing).
+      ⚠ **Site 3 “unchanged” means the GUARD, not the mute.** The table’s column is about
+      whether each site needs a rehearse guard of its own; the mute is implemented once at
+      the chokepoint and therefore covers site 3 too. What is pinned unchanged is that a
+      position edit still works on a row that is not on air, including a rehearsing one.
+      Original: **Pin all four `CG ADD` sites with one test** (`design.md` §7's table): site 1
       `#loadOnto` guarded, site 2 fixed by 6.5c, **site 3 `setPosition` unchanged and pinned so it
       STAYS unchanged**, site 4 `take()`'s pre-roll unchanged. A per-site table that is not pinned
       is a comment, and the next sweep re-derives it.
-- [ ] 6.5e ⚠ **Do NOT close R-029's head bullet here, and say so in the item.** _"audible … from
+- [x] 6.5e **DONE 2026-08-14 — R-029 IS LEFT `[~]`, carrying its head bullet, and the
+      item says so in its own words.** A bridge-side mute cannot deliver _“audible from
+      the start of the audio”_: on 2.5.0 the audio is ALREADY RUNNING at `CG ADD`, so the
+      take unmutes mid-stream and the head is eaten by however long the operator cued
+      ahead. Closing it needs R-029’s option 1 — gating audio on the template’s own
+      `play()` lifecycle, enforced at export/validate time — which is a
+      `@cg/template-runtime` + exporter change and out of this design’s scope. Read the
+      `[~]` as “the leak is contained”, never as “the audio question is answered”.
+      Original: ⚠ **Do NOT close R-029's head bullet here, and say so in the item.** _"audible … from
       the start of the audio — containment must not eat the head"_ is **not** dischargeable by a
       bridge-side mute: the audio is already running at `CG ADD` on 2.5.0, so the take unmutes
       mid-stream. Preserving the head needs R-029's option 1 — gating audio on the template's own

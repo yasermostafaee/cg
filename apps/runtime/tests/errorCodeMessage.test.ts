@@ -91,3 +91,21 @@ describe('errorCodeMessage — C-015 live plate refusals', () => {
     expect(none).not.toBe(full);
   });
 });
+
+/**
+ * C-015 phase 6 (6.5b) — the LOAD's mute failure is a different CONSEQUENCE from
+ * the PVW one, so §8's rule makes it a different code and a different sentence.
+ */
+describe('errorCodeMessage — the two mute failures are not one', () => {
+  it('add-mute-failed says the GRAPHIC was not loaded, and why muting was the condition', () => {
+    const msg = errorCodeMessage('add-mute-failed') ?? '';
+    expect(msg).toContain('NOT loaded');
+    expect(msg).toContain('audio on air');
+  });
+
+  it('mute-failed still says PVW was not started — the two do not share a sentence', () => {
+    const pvw = errorCodeMessage('mute-failed') ?? '';
+    expect(pvw).toContain('PVW');
+    expect(pvw).not.toBe(errorCodeMessage('add-mute-failed'));
+  });
+});

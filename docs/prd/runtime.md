@@ -1253,7 +1253,7 @@ candidate ceiling is currently four layers (70–73) while R-028's design record
 available — if the demo needs more than four simultaneous rows that is a config decision to take
 before the demo. Filed from `dev-r028-b2`; see `openspec/changes/runtime-unified-layer-rows/DEBT.md`.
 
-## [~] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (task 6.5a; CONTAINMENT only — the head bullet is NOT discharged, see below)
+## [~] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩ — CONTAINMENT LANDED 2026-08-14 in `openspec/changes/live-source-multibox/` (task 6.5a); the HEAD bullet is NOT discharged and this item stays `[~]` for it alone, see below
 
 **What:** Make template audio start at the **take**, not at the **cue**. Today `CG ADD` with no
 `PLAY` already produces audio on the channel, so an operator preparing a graphic is heard on air
@@ -1281,6 +1281,12 @@ Confirmed by ear at the box on **2026-07-28** during the same owner checklist th
 audible audio and working `MIXER VOLUME` (see [[C-018]]'s owner-checklist results). This is
 2.5.0 behaviour and it is a direct consequence of the fix C-018 wants: on 2.3.x template audio
 never reached the channel at all, so the defect could not exist there.
+
+**LANDED 2026-08-14 (task 6.5/6.5a).** The mute is emitted in `#sendAdd` — the SINGLE `CG ADD` emit
+chokepoint — so all four of its callers are covered by one implementation rather than by three
+remembered guards, and `live-add-mute.integration.test.ts` pins each site individually **on the AMCP
+trace**. A mute that FAILS does not proceed to the ADD (`add-mute-failed`): the mute is not a
+courtesy step around the load, it is the condition under which loading is safe.
 
 **MECHANISM CHOSEN 2026-08-08 — option 2, bridge-side, inside `live-source-multibox`.** The owner
 folded this item, [[R-042]] and [[B-121]] into one wave (`live-source-multibox` design.md §7 and
@@ -1716,7 +1722,7 @@ merely written.
 **Notes:** related to [[R-033]] (the Layers table this lives in). Source: `DEBT.md:2621` (current
 model, authoritative) and `DEBT.md:1606` (superseded reading — do NOT specify from it).
 
-## [~] R-042 — mute-before-ADD, so LOAD can run during rehearse without a brief audible leak ⟨priority: medium — reaches air⟩ — in progress: `openspec/changes/live-source-multibox/` (task 6.5b)
+## [x] R-042 — mute-before-ADD, so LOAD can run during rehearse without a brief audible leak ⟨priority: medium — reaches air⟩ — DONE 2026-08-14, `openspec/changes/live-source-multibox/` (task 6.5b)
 
 **What:** rehearse currently REFUSES LOAD on a rehearsing row (fail closed), because LOAD on a
 cleared row is the one path that can put an UNMUTED producer under a row the UI shows as
@@ -1747,6 +1753,17 @@ every bridge-created producer is created muted, audio raised only by explicit re
 ordering constraint above is carried verbatim into 6.5b, including the requirement that the
 `MIXER … VOLUME` be asserted **on the AMCP trace** rather than by the absence of an error. Nothing
 about this item's substance changed — only its home.
+
+**DONE 2026-08-14, and one premise of this item was already STALE when it landed.** All three
+acceptance bullets hold — the `MIXER … VOLUME` precedes the `CG ADD` on the trace at every one of
+the four call sites, and a failed mute refuses the load with `add-mute-failed` rather than
+proceeding. But the FIRST bullet was already satisfied by a different route: **LOAD stopped
+refusing a rehearsing row when it became LIST-ONLY** (`loadFixed` emits no AMCP at all), and the
+guard this item describes was removed then — _"a path that cannot exist beats a guard that has to
+be remembered"_. What the mute actually closes is the caller that survived: the DYNAMIC `load()`,
+which still emits and never had a guard, plus `setPosition`’s re-ADD and [[B-121]]’s reconnect
+re-ADD. Recorded here because the per-site tables in this item, in [[B-121]] and in the design all
+name `loadFixed` as the guarded site, and all three are now wrong about it.
 
 **DESIGN-FIRST — implementation needs an OpenSpec change before code.** The command ORDER is a
 contract between the bridge and the template runtime, and it is version-dependent (2.5.0), so it

@@ -195,6 +195,18 @@ const INTENDED_VOLUME = 1;
 const CREATED_MUTED_VOLUME = 0;
 
 /**
+ * C-015 phase 6 (6.5b) — the load was refused because the layer could not be
+ * MUTED, so the `CG ADD` was never sent.
+ *
+ * A code of its own rather than the rehearse path's `mute-failed`, because §8's
+ * rule applies to consequences as much as to mechanisms: both say "CasparCG
+ * refused the mute", but one means PVW was not started and the other means the
+ * graphic was not loaded. One sentence covering both would be right about the
+ * cause and wrong about what just happened to the operator.
+ */
+const ADD_MUTE_FAILED = 'add-mute-failed';
+
+/**
  * THE on-air predicate for a stack item — the ONE definition of "on air or
  * unsettled", read by R-010's `setConfig` gate, R-030's raster gate, the
  * rehearse-entry guard and the rehearse abort.
@@ -4878,6 +4890,58 @@ export class CasparRuntime {
       const raster = this.#channelSettings.rasterFor(slot.channel);
       params.push(`cw=${String(raster.width)}`, `ch=${String(raster.height)}`);
       templateArg += `?${params.join('&')}`;
+    }
+    /*
+      C-015 phase 6 (6.5 / 6.5a / 6.5b / 6.5c) — MUTE BEFORE THE ADD, ON THE WIRE.
+
+      THE RULE: every producer the bridge creates is created MUTED, and audio is
+      raised only by an explicit recorded intent naming the layer (design.md §7,
+      widened by the owner in §12.4 from a Live Source rule to THE rule). This is
+      the `CG ADD` half; `#seatLiveLayers` is the `playSource` half.
+
+      🔴 **THE ORDER IS THE WHOLE THING, AND IT IS THE OPPOSITE OF `playSource`'s.**
+      A bare `CG ADD` puts the template's audio on the channel on 2.5.0 — measured
+      at 0.24 s (R-029) — so ADD-then-mute is the same leak, merely shorter: _"an
+      implementation that gets the order wrong looks correct in every test that does
+      not listen"_ (R-042). For `playSource` the mute cannot precede the command
+      because the producer does not exist until the `PLAY`; here it can, and MIXER
+      state is CHANNEL state that survives `CLEAR` and `CG REMOVE`
+      (`command-builder.ts`, measured), which is what makes muting a layer before
+      anything is on it legal at all.
+
+      A FAILED MUTE DOES NOT PROCEED TO THE ADD. That is R-042's own acceptance and
+      it is the honest reading: the mute is not a courtesy step around the load, it
+      is the condition under which loading is safe. Failing closed costs the
+      operator a load; failing open costs a station audio on air that nobody asked
+      for and no UI shows.
+
+      ⭐ **ONE PLACE, FOUR SITES.** This is the single emit chokepoint for `CG ADD`
+      and it has exactly four callers — `#loadOnto` (the dynamic `load()`; the fixed
+      `loadFixed` is LIST-ONLY and emits nothing), `#decidePendingRestores` (B-121's
+      uncovered reconnect path), `setPosition`'s re-ADD, and `take()`'s B-039
+      pre-roll. Muting here closes all four by construction, which is why the rule
+      needed one implementation and not three guards. `live-add-mute.integration.test.ts`
+      pins each site individually on the wire, because a chokepoint that acquires a
+      caller who bypasses it is exactly how this class comes back.
+
+      ⚠ **IT RIDES ITS OWN SEQ.** The `seq` argument belongs to the LOAD intent; a
+      `MIXER` ack settling it would report the load complete before the ADD had even
+      been sent.
+
+      ⚠ **THE UNMUTE HALF IS NOT REBUILT HERE.** `take()` re-asserts
+      `INTENDED_VOLUME` unconditionally on every take, and that re-assert IS the
+      "explicit recorded intent" this rule names. A second unmute path would be the
+      `B-100` / `P-012` one-rule-two-spellings failure this project has now paid for
+      five times.
+    */
+    const muted = await this.#send(
+      this.#builder.mixerVolume(slot, CREATED_MUTED_VOLUME),
+      this.#nextSeq(),
+      'normal',
+    );
+    if (!muted.ok) {
+      this.#reconciler.applyAck(seq, false, ADD_MUTE_FAILED);
+      return { ok: false, errorCode: ADD_MUTE_FAILED };
     }
     const { ok, errorCode } = await this.#send(
       this.#builder.load(slot, templateArg, fields),

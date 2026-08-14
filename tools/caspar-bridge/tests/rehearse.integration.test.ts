@@ -78,7 +78,19 @@ function volume(): number | undefined {
 it('mutes on enter and RESTORES on exit — the producer stays resident throughout', async () => {
   await boot();
   expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
-  expect(volume()).toBe(1);
+  // C-015 phase 6 (6.5) — A LOAD NOW LEAVES THE LAYER MUTED, and that is the rule
+  // rather than an accident of this test: every producer the bridge creates is
+  // created muted, because a bare `CG ADD` puts the template's audio on air on
+  // 2.5.0 (R-029). This assertion used to read `toBe(1)`; it is UPDATED, not
+  // relaxed, and the property it pins is stronger than the one it replaced.
+  expect(volume()).toBe(0);
+
+  // Put the layer back at full volume, which is where a take leaves it
+  // (`INTENDED_VOLUME`, re-asserted unconditionally on the way to air). Done
+  // through the mock rather than through a take because a taken item is ON AIR
+  // and `enterRehearse` refuses one — and the point of this test is the
+  // mute→restore CYCLE, which needs a full-volume layer to be visible at all.
+  mock!.setLayerVolume(SLOT, 1);
 
   expect(await runtime!.enterRehearse('item1')).toEqual({ ok: true });
   expect(volume()).toBe(0);

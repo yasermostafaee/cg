@@ -1331,6 +1331,18 @@ at all: the volume can be set on a layer before anything is on it.
 (`caspar-runtime.ts:3644`) is the single emit chokepoint, which is why the rule is implementable at
 one place; the guard question is nonetheless per-site and is pinned per-site by test:
 
+⚠ **ROW 1 WAS STALE WHEN THIS LANDED, 2026-08-14, and the correction is kept beside it rather than
+silently applied.** `#loadOnto` via `loadFixed` is **NOT** rehearse-guarded: the guard was REMOVED
+when LOAD became LIST-ONLY, which emits no AMCP at all — the stronger form, and `caspar-runtime.ts`
+argues it in place. What the row misses is the SECOND caller: the dynamic `load()` is not
+list-only, still emits, and never had a guard of its own. That is the site the mute actually
+closes. The same stale row is corrected in R-042 and B-121.
+
+⭐ **AND THE MUTE ITSELF IS AT ONE PLACE, WHICH IS WHY THE COLUMN IS ABOUT GUARDS.** `#sendAdd` is
+the single emit chokepoint, so "under this rule" below answers only the per-site GUARD question;
+every site inherits the mute whether or not it needs a guard. Site 3 is therefore "unchanged" in
+the sense that it still takes no guard, not in the sense that its wire traffic is unchanged.
+
 | #   | site                                         | today                                    | under this rule                                                     |
 | --- | -------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
 | 1   | `#loadOnto` (via `loadFixed`) `:1121`        | rehearse-guarded                         | guard stays; the mute makes the guard's job survivable (R-042)      |
