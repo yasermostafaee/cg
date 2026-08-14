@@ -5,6 +5,7 @@ import {
   MonitorPlay,
   Play,
   Radio,
+  Volume2,
   RefreshCw,
   Trash2,
   XSquare,
@@ -240,6 +241,18 @@ export interface LayerRowActionDeps {
    * is what 6.9e asks for.
    */
   swapSource: () => Promise<AsyncResult>;
+  /**
+   * C-015 phase 6 (6.5f) — open this row's per-plate AUDIO panel.
+   *
+   * Beside {@link swapSource} by owner decision: under pressure, on air, "which
+   * source" and "how loud" are one decision made in one place, and 6.9c already
+   * settled that the audio intent belongs to the PLATE rather than to the producer
+   * instance — so it belongs where the plate's other per-run property is.
+   *
+   * Gated on `hasLivePlates` for the same reason SOURCE is, and on the SAME
+   * reachability, because raising a plate emits a `MIXER … VOLUME` on a live layer.
+   */
+  plateAudio: () => Promise<AsyncResult>;
   onError: (message: string) => void;
 }
 
@@ -647,6 +660,28 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
             empty || blocked || needsCaspar,
             () => deps.swapSource(),
             Radio,
+            'menu',
+            blocked ? RESTORE_BLOCKED_REASON : undefined,
+          ),
+        ]
+      : []),
+    /*
+      C-015 (6.5f) — AUDIO: raise or mute this row's plates.
+
+      Beside SOURCE, and offered under the same condition. Every live plate starts
+      SILENT — the audio rule creates every producer muted — so without this verb
+      the raise half of that rule has no surface at all and a guest can never be
+      heard. NOT gated on `onAir`: arming a plate's audio BEFORE the take is the
+      point, since the alternative is chasing it once the graphic is already up.
+    */
+    ...(deps.hasLivePlates
+      ? [
+          act(
+            'plate-audio',
+            'AUDIO',
+            empty || blocked || needsCaspar,
+            () => deps.plateAudio(),
+            Volume2,
             'menu',
             blocked ? RESTORE_BLOCKED_REASON : undefined,
           ),

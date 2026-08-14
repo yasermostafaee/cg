@@ -123,3 +123,35 @@ export type LiveSourceDeclaration = z.infer<typeof LiveSourceDeclarationSchema>;
  */
 export const LiveSourceOverrideSchema = z.record(LiveSourceIdSchema, z.string().min(1).max(64));
 export type LiveSourceOverride = z.infer<typeof LiveSourceOverrideSchema>;
+
+/**
+ * C-015 phase 6 (6.5f) — **HOW LOUD EACH PLATE IS INTENDED TO BE, for this run.**
+ *
+ * ── WHY THIS EXISTS AS RETAINED STATE AND NOT ONLY IN THE BRIDGE'S LEDGER ───
+ *
+ * The audio rule is that every producer the bridge creates is created MUTED, and
+ * audio is raised only by an EXPLICIT RECORDED INTENT naming the layer. The mute
+ * half needs no memory — silence is the default. **The raise half is nothing BUT
+ * memory**, and the bridge's `#liveLayers` ledger is process memory that dies with
+ * the bridge.
+ *
+ * 🔴 So without this field a bridge blip would silently RE-MUTE a plate the
+ * operator had deliberately raised: the layer comes back, the picture returns, and
+ * the guest is inaudible with every console showing the row as normal. That is the
+ * `B-107` / `B-109` class exactly — retention dropping state it did not model — and
+ * it is the same argument that put `sourceOverride` on the OPEN axis one task ago.
+ *
+ * Keyed by PLATE ID, because 6.9c settled that the intent belongs to the PLATE and
+ * not to the producer instance: that is precisely what lets a raised plate stay
+ * audible across an on-air source swap.
+ *
+ * ⚠ **A value of `0` is a REAL, AUTHORED intent — "the operator muted this plate" —
+ * and is NOT the same as the key being absent, which means "nobody has said".** The
+ * two are indistinguishable in what they emit today and will not stay that way: the
+ * absent case is what a fresh plate inherits, and a consumer that folds them
+ * together loses the ability to say whether silence was chosen. Every read of this
+ * map tests `=== undefined`, never truthiness — zero is falsy, and this repo has
+ * paid for that three times.
+ */
+export const LivePlateVolumesSchema = z.record(LiveSourceIdSchema, z.number().min(0).max(1));
+export type LivePlateVolumes = z.infer<typeof LivePlateVolumesSchema>;

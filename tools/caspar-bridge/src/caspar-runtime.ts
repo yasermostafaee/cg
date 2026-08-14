@@ -22,6 +22,7 @@ import {
 import type {
   AuditEntry,
   FieldValues,
+  LivePlateVolumes,
   LiveSourceOverride,
   Position,
   RetainedStackItem,
@@ -519,6 +520,23 @@ export class CasparRuntime {
    * every other row carrying that template.
    */
   readonly #sourceOverrides = new Map<string, LiveSourceOverride>();
+  /**
+   * C-015 phase 6 (6.5f) — itemId → plateId → the volume that PLATE is intended to
+   * have. **THE single source of the audio intent.**
+   *
+   * 🔴 **IT IS NOT `LiveLayerRecord.intendedVolume`, AND THE SPLIT IS THE POINT.**
+   * This map is the INTENT — what the operator asked for, which outlives any
+   * producer and any layer. The ledger's field is what was SENT, exactly as its
+   * `producer` is _"recorded as SENT rather than as configured"_. Reading the
+   * intent from the ledger, as the first cut did, ties it to a record that is
+   * rebuilt on every seat and destroyed on every teardown — so a raised plate went
+   * silent the moment its item was cleared and re-taken, and nothing said so.
+   *
+   * The `#positions` / `#sourceOverrides` precedent in every other respect:
+   * process memory, keyed by itemId, dropped at remove, carried across a bridge
+   * restart by the browser's retention rather than by a file (6.5f / 6.9d).
+   */
+  readonly #plateVolumes = new Map<string, LivePlateVolumes>();
   /**
    * B-092 — restored items awaiting their adopt-vs-re-ADD decision.
    *
@@ -1074,11 +1092,17 @@ export class CasparRuntime {
       // it across a bridge restart. Both are spread conditionally so an item with
       // neither is the identical object it was before either field existed.
       const sourceOverride = this.#sourceOverrides.get(item.itemId);
-      if (position === undefined && sourceOverride === undefined) return item;
+      // 6.5f — the audio intent joins them, and it matters MORE than either: audio
+      // is the one property of a graphic an operator cannot see, so a console that
+      // cannot read this back cannot tell a live guest from a silent one.
+      const plateVolumes = this.#plateVolumes.get(item.itemId);
+      if (position === undefined && sourceOverride === undefined && plateVolumes === undefined)
+        return item;
       return {
         ...item,
         ...(position !== undefined && { position }),
         ...(sourceOverride !== undefined && { sourceOverride }),
+        ...(plateVolumes !== undefined && { plateVolumes }),
       };
     });
   }
@@ -1470,6 +1494,12 @@ export class CasparRuntime {
       if (item.position !== undefined) this.#positions.set(item.itemId, item.position);
       if (item.sourceOverride !== undefined) {
         this.#sourceOverrides.set(item.itemId, item.sourceOverride);
+      }
+      // 6.5f — and the audio intent, for the same reason and with a failure that is
+      // HARDER to notice: a dropped source override shows the wrong picture, which
+      // somebody sees; a dropped volume shows the right picture in silence.
+      if (item.plateVolumes !== undefined) {
+        this.#plateVolumes.set(item.itemId, item.plateVolumes);
       }
       /*
        * 🔴 B-109 / B-107 — THE PENDING RESTORE IS THE LICENCE TO TOUCH THE LAYER, and
@@ -3042,10 +3072,21 @@ export class CasparRuntime {
     const previous = this.#liveLayers.get(itemId) ?? [];
     if (placements.length === 0 && previous.length === 0) return { ok: true };
 
-    // 6.9c — the plate's audio intent belongs to the PLATE, so a re-seat carries
-    // it. A plate the operator deliberately raised must not go silent because its
-    // item was re-taken; a plate nobody raised is born muted, which is the rule.
-    const heldVolume = new Map(previous.map((r) => [r.sourceId, r.intendedVolume] as const));
+    /*
+      6.5f / 6.9c — THE PLATE'S AUDIO INTENT, READ FROM `#plateVolumes` AND NOT FROM
+      THE PREVIOUS LEDGER.
+
+      The intent belongs to the PLATE, so a re-seat carries it: a plate the operator
+      deliberately raised must not go silent because its item was re-taken, and a
+      plate nobody raised is born muted, which is the rule.
+
+      🔴 It used to be read off `previous` — the ledger records for this item — and
+      that was wrong in exactly the case the rule exists for. The ledger is
+      destroyed by teardown, so a CLEAR followed by a re-take dropped the intent
+      and re-muted the plate with nothing anywhere saying it had happened. The
+      intent map outlives both, which is also what lets retention carry it.
+    */
+    const intent = this.#plateVolumes.get(itemId) ?? {};
     const touched: LiveLayerRecord[] = [];
     let failure: string | undefined;
 
@@ -3060,7 +3101,7 @@ export class CasparRuntime {
         producer: this.#builder.sourceArgument(placement.producer),
         fill: placement.fit.fill,
         clip: placement.fit.clip,
-        intendedVolume: heldVolume.get(placement.plateId) ?? CREATED_MUTED_VOLUME,
+        intendedVolume: intent[placement.plateId] ?? CREATED_MUTED_VOLUME,
       });
       const lines = [
         this.#builder.playSource(placement.slot, placement.producer),
@@ -3070,7 +3111,7 @@ export class CasparRuntime {
           // rather than falling through to the default that happens to equal it —
           // the two agree today, and a future non-zero default would make the bug
           // appear in a line nobody edited.
-          heldVolume.get(placement.plateId) ?? CREATED_MUTED_VOLUME,
+          intent[placement.plateId] ?? CREATED_MUTED_VOLUME,
         ),
         ...this.#builder.mixerFit(placement.slot, placement.fit),
       ];
@@ -3288,7 +3329,14 @@ export class CasparRuntime {
     // muted like every other. Best effort, exactly as `take()`'s re-assert is: a
     // volume refusal must not undo a substitution that already landed.
     await this.#send(
-      this.#builder.mixerVolume(record.slot, record.intendedVolume),
+      // 6.5f — from the INTENT map, not from the ledger's as-sent copy. They agree
+      // whenever the last assertion landed; where they differ, the intent is what
+      // the operator asked for and the ledger is what a failed command left behind.
+      // Re-asserting the ledger would make one failed send permanent.
+      this.#builder.mixerVolume(
+        record.slot,
+        this.#plateVolumes.get(itemId)?.[plateId] ?? record.intendedVolume,
+      ),
       this.#nextSeq(),
       'urgent',
     );
@@ -3335,37 +3383,77 @@ export class CasparRuntime {
    * survives a swap (6.9c) and a re-seat, and it is asserted on the wire
    * immediately so the operator hears the result of their own action.
    *
-   * ⚠ **NO OPERATOR CONTROL REACHES THIS YET, and that is a filed gap rather than
-   * an oversight** — see task 6.5f. Phase 6 enumerated the mute half of the rule
-   * at four sub-tasks and never enumerated the raise half, which is the same shape
-   * of hole task 6.0 was. The mechanism is here and tested; the surface is not
-   * built, and 6.5f says so instead of leaving the next reader to discover it.
+   * ── 6.5f — WHAT THIS RECORDS, AND WHY THERE IS ONLY ONE OF IT ─────────────
+   *
+   * It writes `#plateVolumes` — the INTENT — and, when a producer is already
+   * seated, asserts it on the wire immediately so the operator hears the result of
+   * their own action rather than discovering it at the next take.
+   *
+   * 🔴 **IT DOES NOT ADD AN UNMUTE PATH.** The seating path already asserts each
+   * plate's intent on every take, unconditionally, from this same map — that is
+   * the plate's exact analogue of `take()`'s unconditional `INTENDED_VOLUME`
+   * re-assert, and it is the mechanism the mute half defers to. This method feeds
+   * that mechanism; it does not duplicate it. A second spelling of "what volume
+   * should this layer have" is the `B-100` / `P-012` failure this project has now
+   * paid for five times.
+   *
+   * ⚠ **A VOLUME OF `0` IS A LEGITIMATE AUTHORED VALUE** — "the operator muted this
+   * plate" — and is recorded exactly like any other. It is NOT the absent case,
+   * which means "nobody has said" and is what a fresh plate inherits. Every read
+   * tests `=== undefined`, never truthiness.
+   *
+   * IT WORKS ON A ROW THAT IS NOT ON AIR. There is no producer to command, so
+   * nothing is sent and the intent simply stands — the next take carries it. That
+   * is what makes it possible to arm a plate's audio BEFORE the take instead of
+   * having to catch it afterwards, which is the whole operator complaint the mute
+   * rule creates.
    */
   async setLivePlateVolume(
     itemId: string,
     plateId: string,
     volume: number,
   ): Promise<{ ok: boolean; reason?: string }> {
-    const records = this.#liveLayers.get(itemId);
-    const record = records?.find((r) => r.sourceId === plateId);
-    if (records === undefined || record === undefined)
-      return { ok: false, reason: 'unknown-plate' };
-    if (!Number.isFinite(volume) || volume < 0) return { ok: false, reason: 'invalid-volume' };
-    if (this.#noServerReachable()) return { ok: false, reason: 'disconnected' };
-    const sent = await this.#send(
-      this.#builder.mixerVolume(record.slot, volume),
-      this.#nextSeq(),
-      'urgent',
-    );
-    if (!sent.ok) return { ok: false, reason: sent.errorCode ?? 'amcp-error' };
-    // Recorded only after it LANDED: a ledger that claimed an intent the layer
-    // never received would be re-asserted onto every future swap, spreading one
-    // failed command into a standing lie about what is audible.
-    this.registerLiveLayers(
-      itemId,
-      records.map((r) => (r.sourceId === plateId ? { ...r, intendedVolume: volume } : r)),
-    );
+    // The PLATE must be one this item's template actually declares. Checked
+    // against the declaration rather than against the ledger, so the intent can be
+    // armed before anything is seated — the ledger is empty until the take.
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    const declared = templateId === undefined ? undefined : this.#templates.get(templateId);
+    const plate = declared?.liveSources?.sources.find((x) => x.sourceId === plateId);
+    if (plate === undefined) return { ok: false, reason: 'unknown-plate' };
+    // `Number.isFinite` first: `NaN >= 0` is false, so a NaN would otherwise fall
+    // through the range test and be recorded as an intent nothing can assert.
+    if (!Number.isFinite(volume) || volume < 0 || volume > 1)
+      return { ok: false, reason: 'invalid-volume' };
+
+    const record = (this.#liveLayers.get(itemId) ?? []).find((r) => r.sourceId === plateId);
+    if (record !== undefined) {
+      if (this.#noServerReachable()) return { ok: false, reason: 'disconnected' };
+      const sent = await this.#send(
+        this.#builder.mixerVolume(record.slot, volume),
+        this.#nextSeq(),
+        'urgent',
+      );
+      if (!sent.ok) return { ok: false, reason: sent.errorCode ?? 'amcp-error' };
+      // The ledger's copy is what was SENT, so it is updated only after the send
+      // LANDED. A ledger claiming a volume the layer never received would be
+      // re-asserted onto every future swap, spreading one failed command into a
+      // standing lie about what is audible.
+      this.registerLiveLayers(
+        itemId,
+        (this.#liveLayers.get(itemId) ?? []).map((r) =>
+          r.sourceId === plateId ? { ...r, intendedVolume: volume } : r,
+        ),
+      );
+    }
+
+    this.#plateVolumes.set(itemId, { ...this.#plateVolumes.get(itemId), [plateId]: volume });
+    this.#markDirty(itemId);
     return { ok: true };
+  }
+
+  /** The audio intent for one item's plates, or `undefined` when none is recorded. */
+  livePlateVolumes(itemId: string): LivePlateVolumes | undefined {
+    return this.#plateVolumes.get(itemId);
   }
 
   /** Is this exact coordinate a bridge-owned Live Source layer? */
@@ -3440,7 +3528,17 @@ export class CasparRuntime {
     this.#liveLayers.set(itemId, [...records]);
   }
 
-  /** Forget an item's Live Source layers (teardown). Bookkeeping only. */
+  /**
+   * Forget an item's Live Source layers (teardown). Bookkeeping only.
+   *
+   * ⚠ **THE ONE SPELLING OF “forget this item's live layers”, and every site now
+   * goes through it.** It had three inline copies of its own body
+   * (`#liveLayers.delete(itemId)`) beside it and no production caller at all, so it
+   * was a named rule with four implementations — found by the standing
+   * extend-the-list-forget-the-mutator sweep in session AH, which is exactly the
+   * drift that rule predicts. A future release that has to do more than delete (an
+   * audit line, a publish) would otherwise have been added to one of the four.
+   */
   releaseLiveLayers(itemId: string): void {
     this.#liveLayers.delete(itemId);
   }
@@ -3479,14 +3577,14 @@ export class CasparRuntime {
     const records = this.#liveLayers.get(itemId);
     if (records === undefined || records.length === 0) {
       // Still release: an empty entry is bookkeeping to drop, not a no-op to skip.
-      this.#liveLayers.delete(itemId);
+      this.releaseLiveLayers(itemId);
       return;
     }
     for (const record of records) {
       await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
       await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
     }
-    this.#liveLayers.delete(itemId);
+    this.releaseLiveLayers(itemId);
   }
 
   /** The ledger, for tests and for phase 6's re-emission of `FILL`/`CLIP`. */
@@ -4189,6 +4287,9 @@ export class CasparRuntime {
     // R-048 (6.9) — and so does the live-source override, by the same rule: a
     // re-used itemId must not inherit somebody else's emergency substitution.
     this.#sourceOverrides.delete(itemId);
+    // 6.5f — and the audio intent. A re-used itemId inheriting a RAISED plate is
+    // the worst of the three: it puts a microphone on air that nobody asked for.
+    this.#plateVolumes.delete(itemId);
     // B-092 — a restore awaiting its occupancy decision dies with the item too:
     // the operator removed it, so there is nothing left to adopt or re-ADD (the
     // urgent CLEAR below is the removal's own, and it is unconditional).

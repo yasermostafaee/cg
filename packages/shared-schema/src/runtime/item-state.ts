@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { IdSchema, ISODateSchema } from '../primitives.js';
 import { FieldValuesSchema } from '../fields.js';
 import { PositionSchema } from '../scene.js';
-import { LiveSourceOverrideSchema } from '../live-source.js';
+import { LivePlateVolumesSchema, LiveSourceOverrideSchema } from '../live-source.js';
 
 /** A CasparCG (channel, layer) coordinate plus which server it lives on. */
 export const LayerSlotSchema = z.object({
@@ -61,6 +61,22 @@ export const StackItemStateSchema = z.object({
    * never writes back. ABSENT means every plate is on its template assignment.
    */
   sourceOverride: LiveSourceOverrideSchema.optional(),
+  /**
+   * C-015 phase 6 (6.5f) — how loud each plate is INTENDED to be on this row,
+   * published so the console can show it and so the browser's retention can carry
+   * it (`StackRetentionStore`).
+   *
+   * Published for a sharper reason than `position` is: audio is the one property
+   * of a graphic an operator CANNOT see. A row whose plate is live-and-audible
+   * looks identical to one whose plate is silent, so if the console cannot read
+   * this back it cannot tell them apart — and neither can the operator.
+   *
+   * ABSENT means no plate has been raised, which is every row's starting state:
+   * every producer the bridge creates is created muted. See
+   * {@link LivePlateVolumesSchema} for why an explicit `0` is NOT the same as a
+   * missing key.
+   */
+  plateVolumes: LivePlateVolumesSchema.optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;
 
@@ -220,8 +236,9 @@ export function isRestorable(state: RetainedAirState): boolean {
  *   - **CLOSED — `state`.** Four values answering one question: may this row's
  *     producer be re-seated? Adding a fifth is a MODEL change and needs the same
  *     care B-107/B-109 did.
- *   - **OPEN — the operator's per-item OVERRIDES** (`slot`, `position`, and next
- *     Live Source phase 6's per-plate source override, task 6.9d). Each is an
+ *   - **OPEN — the operator's per-item OVERRIDES** (`slot`, `position`, Live
+ *     Source phase 6's per-plate source override (6.9d) and its per-plate audio
+ *     intent (6.5f) — both landed). Each is an
  *     independent optional field that `restore()` re-applies BEFORE it decides
  *     anything, so a re-issued producer carries it. Adding one is additive: no
  *     existing field changes meaning and the restore decision is not consulted.
@@ -263,5 +280,18 @@ export const RetainedStackItemSchema = z.object({
    * the CLOSED `state` axis changes and no consumer branches differently.
    */
   sourceOverride: LiveSourceOverrideSchema.optional(),
+  /**
+   * C-015 phase 6 (6.5f) — the per-plate audio intent, on the OPEN axis beside
+   * `sourceOverride` and for the identical reason.
+   *
+   * 🔴 **THE RAISE HALF OF THE AUDIO RULE IS NOTHING BUT MEMORY.** The mute half
+   * needs none — silence is what every producer is created with — but "this plate
+   * was deliberately raised" exists only where somebody wrote it down. The
+   * bridge's own ledger is PROCESS memory and dies with the bridge, so without
+   * this a blip re-mutes a raised plate: the picture comes back, the guest does
+   * not, and every console shows the row as normal. `B-107` / `B-109`, applied to
+   * the one property of a graphic nobody can see.
+   */
+  plateVolumes: LivePlateVolumesSchema.optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;

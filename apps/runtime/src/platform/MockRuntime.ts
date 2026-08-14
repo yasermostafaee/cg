@@ -175,6 +175,8 @@ export class MockRuntime {
   readonly #positions = new Map<string, Position>();
   // R-048 — per-item, per-plate live-source overrides (bridge parity).
   readonly #sourceOverrides = new Map<string, Record<string, string>>();
+  // C-015 (6.5f) — per-item, per-plate AUDIO INTENT (bridge parity).
+  readonly #plateVolumes = new Map<string, Record<string, number>>();
   // B-070 — producer-existence bookkeeping (bridge parity: the bridge's
   // `#loaded`). A producer lives from load/take until out/remove destroys it.
   // A seeded item that is not idle already has one.
@@ -201,10 +203,12 @@ export class MockRuntime {
     return this.#stack.map((i) => {
       const position = this.#positions.get(i.itemId);
       const sourceOverride = this.#sourceOverrides.get(i.itemId);
+      const plateVolumes = this.#plateVolumes.get(i.itemId);
       return {
         ...i,
         ...(position !== undefined && { position }),
         ...(sourceOverride !== undefined && { sourceOverride }),
+        ...(plateVolumes !== undefined && { plateVolumes }),
       };
     });
   }
@@ -464,6 +468,36 @@ export class MockRuntime {
   /** R-048 — the stored override for an item (test/diagnostic surface). */
   sourceOverrideOf(itemId: string): Readonly<Record<string, string>> | undefined {
     return this.#sourceOverrides.get(itemId);
+  }
+
+  /**
+   * C-015 (6.5f) parity — record a plate's AUDIO INTENT.
+   *
+   * The offline mock has no producers, so recording the intent IS the whole effect;
+   * the wire assertion (`MIXER … VOLUME`) is integration-tested bridge-side.
+   *
+   * ⚠ **A volume of `0` is RECORDED, not treated as a delete.** It is the operator
+   * saying "mute this plate", which is a different state from never having said
+   * anything — and folding them together here would make the mock teach the UI a
+   * model the bridge does not have, which is exactly what this parity guard exists
+   * to prevent (B-070 / B-072).
+   */
+  setPlateVolume(
+    itemId: string,
+    plateId: string,
+    volume: number,
+  ): { ok: boolean; reason?: string } {
+    if (this.#find(itemId) === null) return { ok: false, reason: 'unknown-item' };
+    if (!Number.isFinite(volume) || volume < 0 || volume > 1)
+      return { ok: false, reason: 'invalid-volume' };
+    this.#plateVolumes.set(itemId, { ...this.#plateVolumes.get(itemId), [plateId]: volume });
+    this.#emitStack();
+    return { ok: true };
+  }
+
+  /** C-015 (6.5f) — the stored audio intent for an item (test/diagnostic surface). */
+  plateVolumesOf(itemId: string): Readonly<Record<string, number>> | undefined {
+    return this.#plateVolumes.get(itemId);
   }
 
   /** R-010 — OUT + REMOVE everything: clears (simulated) air, empties the list. */

@@ -36,6 +36,7 @@ import type {
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackSetPlateVolumeChannel,
   StackSetPositionChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
@@ -156,6 +157,15 @@ export interface RuntimeBridge {
     swapLiveSource(
       req: ChannelRequest<typeof StackSwapLiveSourceChannel>,
     ): Promise<ChannelResponse<typeof StackSwapLiveSourceChannel>>;
+    /**
+     * C-015 phase 6 (6.5f) — raise or mute ONE plate's audio. The EXPLICIT
+     * RECORDED INTENT the mute rule defers to, and the only thing that may make a
+     * Live Source plate audible. Works on a row that is not yet on air: the intent
+     * stands and the next take carries it.
+     */
+    setPlateVolume(
+      req: ChannelRequest<typeof StackSetPlateVolumeChannel>,
+    ): Promise<ChannelResponse<typeof StackSetPlateVolumeChannel>>;
     /**
      * R-010 — OUT + REMOVE every stack item (clears air, empties the list).
      * The sanctioned path to unblock a server reconfiguration.

@@ -1223,23 +1223,53 @@ beforehand: 85/85, `0 cached`.
       `play()` lifecycle, enforced at export/validate time — which is a `@cg/template-runtime` +
       exporter change and is OUT of this design's scope (`design.md` §7, _"What this rule does NOT
       close"_). R-029 stays `[~]` carrying exactly that residual.
-- [ ] 6.5f ⭐ **FILED 2026-08-14 (session AG) — THE RAISE HALF OF THE AUDIO RULE HAS NO
-      OPERATOR SURFACE, AND NO TASK EVER ASKED FOR ONE.**
-      6.5–6.5e enumerate the MUTE half at five sub-items. The rule's other half is
-      _"audio is raised only by an EXPLICIT RECORDED INTENT naming the layer"_, and
-      nothing in this phase enumerates the surface that records it. So today every
-      Live Source plate is permanently silent: the bridge holds the mechanism
-      (`LiveLayerRecord.intendedVolume` + `CasparRuntime.setLivePlateVolume`, which
-      survives a swap and a re-seat and is tested), and no operator control reaches it.
-      🔴 **This is task 6.0's hole a second time, found by looking for it.** The
-      standing rule after 6.0 was to check whether any other phase-6 cluster had the
-      same shape of gap — a list that enumerates one side of a rule and forgets the
-      mutator for the other. The audio cluster does. FILED rather than quietly built,
-      because deciding WHERE a per-plate volume lives (the row? the swap dialog? a
-      plate strip?) is a product decision, not a wiring one.
-      What it needs: an IPC channel over `setLivePlateVolume`, a control that names
-      the PLATE (never the layer number), and a published read-back so every console
-      shows the same state. 6.9c already depends on the value being real.
+- [x] 6.5f ⭐ **DONE 2026-08-14 (session AH) — THE RAISE HALF OF THE AUDIO RULE NOW
+      HAS AN OPERATOR SURFACE.** Filed by session AG, which found it by applying the
+      standing "check whether another cluster has the same hole" rule after task 6.0.
+      Until this landed, every Live Source plate was PERMANENTLY SILENT: 6.5–6.5e
+      enumerate the MUTE half at five sub-items, and nothing enumerated the surface
+      that records the explicit intent the rule defers to.
+      ⭐ **THE OWNER'S PLACEMENT (2026-08-14): ON THE ROW, BESIDE THE SOURCE SWAP.**
+      Two reasons, both recorded: under pressure, on air, "which source" and "how
+      loud" are ONE DECISION made in one place — 6.9e already requires the swap to be
+      one or two actions from the row and explicitly not behind a modal chain, and the
+      volume has the same emergency character; and 6.9c already settled that the
+      audio intent belongs to the PLATE rather than to the producer instance, so a
+      control expressing a plate-level property belongs where the plate's other
+      per-run property already is.
+      **REJECTED, recorded so neither is re-proposed:** inside the SWAP DIALOG (it
+      turns a two-second adjustment into opening the swap flow, and couples two
+      independent acts), and the PLAYOUT TAB (further from the operator's flow than
+      the row they are already looking at).
+      ⚠ **It is a dialog rather than an INLINE row control, and the row forces that**
+      — a row carries a VARIABLE number of plates while the verb block is a fixed
+      six-column grid whose sticky header prints a word above each glyph
+      (`layerTable.ts`: `VERB_COUNT = 6`). A conditional inline control would
+      misalign every header word from its button, which that file names as the
+      DANGEROUS failure because this product's STOP and CLEAR are the inverse of the
+      reference product's. So `AUDIO` sits beside `SOURCE` in the row's own action
+      set — as close to the row as a per-plate control can get — and a test asserts
+      the two are ADJACENT rather than merely both present.
+      🔴 **RETENTION WAS REQUIRED, NOT OPTIONAL — the session verified rather than
+      assumed.** AG's `intendedVolume` lived ONLY in the bridge's in-process ledger,
+      which teardown destroys and a restart discards, so a CLEAR-then-retake or a
+      bridge blip silently re-muted a raised plate. The intent now lives in
+      `#plateVolumes` and rides `RetainedStackItem.plateVolumes` on the OPEN axis
+      beside `sourceOverride` (6.9d). The ledger keeps a copy of what was SENT, the
+      same relationship its `producer` field already has to the catalog.
+      **NO SECOND UNMUTE PATH.** The seating path already asserts every plate's
+      intent on every take, unconditionally — the plate's exact analogue of
+      `take()`'s `INTENDED_VOLUME` re-assert. `setLivePlateVolume` feeds that
+      mechanism; it does not duplicate it.
+      **ZERO IS A REAL VALUE.** An explicit `0` ("the operator muted this plate") is
+      recorded and published, and is distinguishable from an ABSENT key ("nobody has
+      said"). A plate deliberately set to 0 is NOT re-raised by a swap.
+      ✅ **VERIFIED BY MUTATION, three times.** Reading the intent off the ledger
+      again turns 3 tests red; dropping the retention re-apply turns the round-trip
+      red; treating a volume of 0 as falsy turns both zero tests red. The UI's
+      commit-on-release is pinned the same way.
+      Tests: `live-plate-audio.integration.test.ts` (10, wire-asserted) +
+      `livePlateAudio.dom.test.ts` (12, the row verb and the panel's claims).
 - [x] 6.6 **DONE 2026-08-14** — `CasparRuntime.teardownLiveLayers` sends the producer
       `CLEAR` and `MIXER … CLEAR` per layer, asserted ON THE WIRE (the mock models
       mixer state surviving a `CLEAR`, which is what makes the omission catchable

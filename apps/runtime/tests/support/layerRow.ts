@@ -108,6 +108,7 @@ export function rowDeps(over: Partial<LayerRowActionDeps> = {}): LayerRowActionD
     // the ordinary case; a spec about the swap says so explicitly.
     hasLivePlates: false,
     swapSource: () => Promise.resolve({ accepted: true }),
+    plateAudio: () => Promise.resolve({ accepted: true }),
     onError: () => undefined,
     ...over,
   };

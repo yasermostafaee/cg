@@ -22,6 +22,7 @@ import {
 import { useTemplatePicker } from '../fixedLayers/useTemplatePicker.js';
 import { layerRowActions, MISSING_TEMPLATE_REASON } from './layerRowActions.js';
 import { LiveSourceSwapDialog } from './LiveSourceSwapDialog.js';
+import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import { rowState, type RowBinding } from './rowState.js';
 import {
   ROW_GEOMETRY,
@@ -314,6 +315,8 @@ export function LayerRow({
   // R-048 (6.9e) — the per-plate source picker for THIS row. Local state, because
   // it is one row opening its own dialog and nothing outside the row needs to know.
   const [swapOpen, setSwapOpen] = useState(false);
+  // C-015 (6.5f) — and this row's per-plate audio panel, beside it.
+  const [audioOpen, setAudioOpen] = useState(false);
 
   const coord = { channel: slot.channel, layer: slot.layer };
   const actions = layerRowActions({
@@ -402,6 +405,10 @@ export function LayerRow({
     hasLivePlates: (template?.liveSources?.sources.length ?? 0) > 0,
     swapSource: () => {
       setSwapOpen(true);
+      return Promise.resolve({ accepted: true });
+    },
+    plateAudio: () => {
+      setAudioOpen(true);
       return Promise.resolve({ accepted: true });
     },
     onError: reportCommandError,
@@ -780,6 +787,18 @@ export function LayerRow({
       )}
       {confirmDialog}
       {pickerDialog}
+      {audioOpen && item !== null && template !== null && (
+        <LivePlateAudioDialog
+          item={item}
+          template={template}
+          onSetVolume={(plateId, volume) =>
+            window.cg.stack.setPlateVolume({ itemId: item.itemId, plateId, volume })
+          }
+          onClose={() => {
+            setAudioOpen(false);
+          }}
+        />
+      )}
       {swapOpen && item !== null && template !== null && (
         <LiveSourceSwapDialog
           item={item}

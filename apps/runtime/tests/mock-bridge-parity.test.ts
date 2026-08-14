@@ -106,6 +106,10 @@ const BRIDGE_SURFACE: {
       // contract; the wire half is integration-tested bridge-side, which is the
       // only place a REPLACE on an occupied layer can be observed at all.
       'swapLiveSource',
+      // C-015 (6.5f) — the per-plate audio intent. The mock has no producers, so it
+      // models the INTENT half only (record + publish) and answers the same
+      // contract; the wire assertion is integration-tested bridge-side.
+      'setPlateVolume',
       'removeAll',
       'clearAll',
       'stopAll',

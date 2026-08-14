@@ -117,5 +117,12 @@ function toRetained(item: StackItemState): RetainedStackItem {
     // showing the substitution. That is the B-107 / B-109 class exactly —
     // retention dropping state it did not model.
     ...(item.sourceOverride !== undefined && { sourceOverride: item.sourceOverride }),
+    // C-015 phase 6 (6.5f) — and the per-plate AUDIO INTENT, which needs this more
+    // than either neighbour. A dropped position or source override shows the wrong
+    // PICTURE, and somebody sees it; a dropped volume shows the RIGHT picture in
+    // silence, with every console reporting the row as normal. The raise half of
+    // the audio rule is nothing but memory, so losing the memory IS losing the
+    // feature (B-107 / B-109).
+    ...(item.plateVolumes !== undefined && { plateVolumes: item.plateVolumes }),
   };
 }

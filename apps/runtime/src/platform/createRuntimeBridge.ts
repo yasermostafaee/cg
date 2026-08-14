@@ -129,6 +129,9 @@ export function createMockBridge(): RuntimeBridge {
       out: (req) => Promise.resolve(mock.out(req.itemId)),
       remove: (req) => Promise.resolve(mock.remove(req.itemId)),
       setPosition: (req) => Promise.resolve(mock.setPosition(req.itemId, req.position)),
+      // C-015 (6.5f) — the per-plate audio intent.
+      setPlateVolume: (req) =>
+        Promise.resolve(mock.setPlateVolume(req.itemId, req.plateId, req.volume)),
       // R-048 — the per-plate live-source swap.
       swapLiveSource: (req) =>
         Promise.resolve(mock.swapLiveSource(req.itemId, req.plateId, req.sourceId)),

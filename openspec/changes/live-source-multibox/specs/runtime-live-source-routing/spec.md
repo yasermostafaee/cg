@@ -473,6 +473,30 @@ rather than a follow-up step that can fail independently.
 The bridge SHALL record an intended volume per owned layer, rather than relying on a single global
 constant, so a Live Source layer can be muted and restored without depending on an operator row.
 
+**The RAISE half SHALL have an operator surface, ON THE ROW.** Audio raised only by an explicit
+recorded intent is a rule with two halves, and a rule whose second half nothing can express leaves
+every live plate permanently silent. The control SHALL be reachable from the row itself, beside the
+plate's source affordance, and SHALL be usable on a row that is not yet on air — arming a plate's
+audio before the take is what stops the operator chasing a silent guest afterwards.
+
+**The intent SHALL be per PLATE and SHALL SURVIVE what the producer does not.** It SHALL outlive a
+teardown, a re-take, an on-air source swap and a bridge restart, which means it SHALL NOT be stored
+only in the bridge's in-process ledger. An explicit volume of ZERO SHALL be recorded as a chosen
+value and SHALL NOT be treated as "no intent recorded": the two states are different, only one was
+chosen, and a plate deliberately silenced SHALL NOT be re-raised by a swap.
+
+#### Scenario: A guest can be made audible, and stays audible
+
+- **WHEN** the operator raises a plate's audio from the row **THEN** that layer's volume is set on
+  the wire and no other plate is affected
+- **WHEN** the item is cleared and taken again **THEN** the plate is still audible
+- **WHEN** the bridge restarts and the row is restored **THEN** the plate is still audible
+
+#### Scenario: A deliberately silenced plate stays silent
+
+- **WHEN** the operator mutes a plate and then swaps its source **THEN** the new producer is silent,
+  because the recorded intent is zero rather than absent
+
 #### Scenario: A pre-rolled live box is silent
 
 - **WHEN** Live Source producers are started ahead of the template's take **THEN** none of them is

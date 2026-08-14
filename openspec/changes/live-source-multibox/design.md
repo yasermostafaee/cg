@@ -1356,6 +1356,46 @@ arguing at length why it is in the play path rather than in a rehearse-exit step
 **is** the "explicit recorded intent" this rule names. Adding a second unmute path would be the
 `B-100`/`P-012` failure — one rule, two spellings.
 
+### ⭐ 7a. DECIDED 2026-08-14 — WHERE THE RAISE HALF LIVES (owner)
+
+The table above says audio is raised only by an **explicit recorded intent naming the layer**, and
+for a long time this design said nothing about where that intent is RECORDED. That silence was not
+neutral: it meant five sub-tasks enumerated the mute and none enumerated the raise, so every Live
+Source plate was permanently silent while the rule read as fully implemented.
+
+**DECISION — the control lives ON THE ROW, beside the source swap.**
+
+- Under pressure, on air, _"which source"_ and _"how loud"_ are one decision made in one place.
+  §9's 6.9e already requires the swap to be reachable in one or two actions from the row and
+  explicitly NOT behind a modal chain; the volume has the same emergency character and the same
+  argument applies unchanged.
+- 6.9c already establishes that the audio intent belongs to the **PLATE**, not to the producer
+  instance — which is precisely why it survives an on-air swap. A control expressing a plate-level
+  property belongs where the plate's other per-run property already is.
+
+**REJECTED, recorded so neither is re-proposed:**
+
+| placement              | why not                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| inside the SWAP dialog | turns a two-second adjustment into opening the swap flow, and couples two independent acts |
+| the PLAYOUT tab        | further from the operator's flow than the row they are already looking at                  |
+
+⚠ **The affordance is a dialog rather than an inline row control, and that is forced by the row
+rather than chosen.** A row carries a VARIABLE number of plates; the verb block is a fixed
+six-column grid whose sticky header prints a word above each glyph (`layerTable.ts`). A conditional
+inline control would misalign every header word from its button — which that file names as the
+DANGEROUS failure, because this product's STOP and CLEAR mean the opposite of the reference
+product's and the header word is what retires the misread. So `AUDIO` sits beside `SOURCE` in the
+row's own action set, which is as close to the row as a per-plate control can get.
+
+🔴 **THE INTENT IS RETAINED STATE, and this is the half that is easy to miss.** The mute half needs
+no memory — silence is what every producer is created with. The raise half is nothing BUT memory,
+and the bridge's ledger is process memory: it is destroyed by teardown and discarded on restart. So
+the intent lives in `#plateVolumes` and rides `RetainedStackItem.plateVolumes` on the OPEN axis
+beside `sourceOverride`. Without that, a CLEAR-then-retake or a momentary blip re-mutes a
+deliberately raised plate — the picture returns, the guest does not, and every console shows the row
+as normal.
+
 ### ⚠ What this rule does NOT close — stated, not silently widened
 
 **R-029's second acceptance bullet is NOT discharged by a bridge-side mute, and this design does not

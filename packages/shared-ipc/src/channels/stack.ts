@@ -187,6 +187,40 @@ export const StackSwapLiveSourceChannel = defineChannel(
 );
 
 /**
+ * C-015 phase 6 (6.5f) — **RAISE (or mute) ONE PLATE's audio: the EXPLICIT
+ * RECORDED INTENT the mute rule defers to.**
+ *
+ * Every producer the bridge creates is created MUTED, and audio is raised only by
+ * an explicit intent NAMING THE LAYER. This is that intent, and it is the only
+ * thing that may raise a Live Source plate.
+ *
+ * ⚠ **`volume: 0` IS A REAL REQUEST — "mute this plate" — and is recorded like any
+ * other.** It is NOT the same as never having called this, which is what every
+ * plate starts as. The distinction is the whole reason the bridge stores a map
+ * rather than a set of raised plates: only one of the two states was CHOSEN, and a
+ * console that folds them together cannot tell the operator which.
+ *
+ * Bounded to `[0, 1]` at the boundary rather than at the wire: AMCP takes a
+ * gain, and a mistyped 100 would be a request to amplify a guest's microphone by
+ * forty decibels. A parse error here beats an AMCP the server accepts.
+ *
+ * It is usable on a row that is NOT on air — nothing is sent, the intent stands,
+ * and the next take carries it. That is what lets an operator ARM a plate's audio
+ * ahead of the take instead of chasing it afterwards.
+ */
+export const StackSetPlateVolumeChannel = defineChannel(
+  'stack.set-plate-volume',
+  z.object({
+    itemId: IdSchema,
+    /** The SCENE's handle for the hole (`guest-1`), never a catalog id. */
+    plateId: z.string().min(1),
+    /** `0` = silent, `1` = the layer's full gain. */
+    volume: z.number().min(0).max(1),
+  }),
+  z.object({ ok: z.boolean(), reason: z.string().optional() }),
+);
+
+/**
  * R-010 — clear EVERYTHING in one operation: every stack item is OUTed and
  * REMOVEd (per-item CLEAR-destroys semantics, in sequence), clearing air and
  * emptying the list. The sanctioned path to unblock a server reconfiguration.

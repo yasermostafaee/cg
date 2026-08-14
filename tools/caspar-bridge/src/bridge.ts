@@ -41,6 +41,7 @@ import {
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackSetPlateVolumeChannel,
   StackSetPositionChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
@@ -705,6 +706,10 @@ export function buildRoutes(
       StackSwapLiveSourceChannel,
       (r: { itemId: string; plateId: string; sourceId: string | null }) =>
         b.swapLiveSource(r.itemId, r.plateId, r.sourceId),
+    ),
+    // C-015 (6.5f) — the explicit recorded intent that raises a plate's audio.
+    route(StackSetPlateVolumeChannel, (r: { itemId: string; plateId: string; volume: number }) =>
+      b.setLivePlateVolume(r.itemId, r.plateId, r.volume),
     ),
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
     route(StackRemoveAllChannel, () => b.removeAll()),
