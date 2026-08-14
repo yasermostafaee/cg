@@ -65,6 +65,26 @@ const MESSAGES: Readonly<Record<string, string>> = {
     'That layer is not part of the declared operator bank — this clear is scoped to the bank and can address nothing else.',
   reserved:
     'That layer is inside the reserved playout range — the company’s playout system owns it, and it can never be cleared from this console.',
+  /*
+    C-015 phase 6 — THE FOUR WAYS A LIVE PLATE REFUSES A TAKE.
+
+    These are FALLBACKS. The bridge sends its own sentence with each of them
+    (`StackTakeChannel.message`), which names the plate, the source and the
+    numbers that disagree — and `asyncResultMessage` prefers that. What is here
+    is what an operator sees if the message is ever absent, so each still has to
+    name the remedy rather than restate the rule.
+
+    Four codes rather than one, because the four remedies are in four different
+    places: assign a source, correct a format, declare a band, free a layer.
+  */
+  'live-source-unassigned':
+    'This template has a live plate with no source assigned, so it would go to air empty. Assign it in CG Control → Sources, then take again.',
+  'live-source-aspect-mismatch':
+    'A live plate is designed for a different picture shape than the source assigned to it — cropping it would cut part of the picture the author never saw. Re-assign the plate, or correct the source’s format.',
+  'live-source-no-layer-range':
+    'No Live Source layer band is declared on this installation, so there is nowhere to put the live picture. Declare the band in CG Control’s source settings.',
+  'live-source-no-layer':
+    'The Live Source layer band has no room left for this template’s plates. Clear a graphic that is holding live layers, or widen the band in CG Control’s source settings.',
 };
 
 /** A human message for a refusal, or `null` when there is no code to explain. */

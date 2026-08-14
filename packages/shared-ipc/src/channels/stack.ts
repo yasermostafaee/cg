@@ -43,7 +43,26 @@ export const StackTakeChannel = defineChannel(
     itemId: IdSchema,
     mode: z.enum(['direct', 'pvw-pgm']).optional(),
   }),
-  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
+  z.object({
+    accepted: z.boolean(),
+    errorCode: z.string().optional(),
+    /**
+     * C-015 phase 6 (6.0) — the refusal's OWN sentence, when it has one that a
+     * code cannot carry.
+     *
+     * A take can now be refused by a Live Source plate, and those refusals are
+     * required to NAME THE PLATE (`live-plate-assignment.ts`, `live-plate-fit.ts`):
+     * _"plates "guest-1" and "guest-3" have no live source assigned"_ is what
+     * makes the refusal actionable, and a code is a fixed string that cannot say
+     * which of a template's plates is the problem. Without this the operator got
+     * a generic sentence and the specific one stopped at the bridge's stderr.
+     *
+     * OPTIONAL and ADDITIVE: every existing refusal keeps answering with its code
+     * alone, and `errorCodeMessage` keeps supplying the wording for those. When
+     * both are present the message wins — it is the more specific of the two.
+     */
+    message: z.string().optional(),
+  }),
 );
 
 /**

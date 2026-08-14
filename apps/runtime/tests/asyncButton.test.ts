@@ -260,4 +260,38 @@ describe('asyncResultMessage — the shared button/menu wording', () => {
   it('still explains a genuine refusal', () => {
     expect(asyncResultMessage({ accepted: false })).toBe('Not accepted.');
   });
+
+  /*
+    C-015 phase 6 (6.0) — the bridge's OWN sentence beats the code's.
+
+    A Live Source refusal names WHICH plate is unassigned, and a code is a fixed
+    string that cannot. Preferring the code here would have thrown away the only
+    part of the refusal an operator can act on, while still looking correct.
+  */
+  it('prefers the refusal’s own message over the code’s generic wording', () => {
+    const specific = 'plate "guest-3" has no live source assigned, so it would go to air empty.';
+    expect(
+      asyncResultMessage({
+        accepted: false,
+        errorCode: 'live-source-unassigned',
+        message: specific,
+      }),
+    ).toBe(specific);
+  });
+
+  it('falls back to the code when no message rides with it', () => {
+    const byCode = asyncResultMessage({ accepted: false, errorCode: 'live-source-unassigned' });
+    expect(byCode).toContain('Sources');
+  });
+
+  it('an EMPTY message is not a message — the code still explains the refusal', () => {
+    // A blank string is the shape a stripped/serialised field arrives in, and
+    // surfacing it would replace a real explanation with nothing at all.
+    const msg = asyncResultMessage({ accepted: false, errorCode: 'no-layer', message: '' });
+    expect(msg).toContain('No free layer');
+  });
+
+  it('a message on an ACCEPTED result is not surfaced', () => {
+    expect(asyncResultMessage({ accepted: true, message: 'ignored' })).toBeNull();
+  });
 });

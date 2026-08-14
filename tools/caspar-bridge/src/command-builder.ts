@@ -185,7 +185,25 @@ export class CommandBuilder {
    * put a key signal on the fill layer.
    */
   playSource(slot: CommandSlot, producer: SourceProducer): string {
-    return `PLAY ${target(slot)} ${producerArgument(producer)}`;
+    return `PLAY ${target(slot)} ${this.sourceArgument(producer)}`;
+  }
+
+  /**
+   * C-015 phase 6 (task 6.0) — the producer ARGUMENT alone, without the `PLAY`.
+   *
+   * Exposed for exactly one caller: the ledger records _"the concrete producer
+   * argument actually SENT"_ (`live-layers.ts`), and the only way to record that
+   * honestly is to ask the same function {@link playSource} asks. Formatting the
+   * argument a second time at the ledger's call site would be a second spelling
+   * of the wire text — and the failure it produces is a ledger that CLAIMS a
+   * layer carries `route://1-2` while the layer carries something else, which no
+   * test comparing the ledger against itself can see.
+   *
+   * It is deliberately NOT a way to hand-build a `PLAY`: every seating path goes
+   * through {@link playSource}, so the layer-scoped `target()` cannot be skipped.
+   */
+  sourceArgument(producer: SourceProducer): string {
+    return producerArgument(producer);
   }
 
   /**

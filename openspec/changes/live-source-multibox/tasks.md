@@ -881,24 +881,20 @@ way to populate it those doors could not be regression-tested before a verb exis
 That testability is what let ownership land first and be self-proving. A second write path here
 would give the ledger two owners and the doors two truths.
 
-🔴 **PART 1 LANDED 2026-08-14 — AND THE PIECES ARE NOT YET ASSEMBLED. READ THIS
-BEFORE TICKING ANYTHING ELSE.**
+✅ **PART 2 LANDED 2026-08-14 — THE PIECES ARE NOW ASSEMBLED. A DECLARED PLATE PUTS
+A PICTURE ON AIR.**
 
-Every COMPONENT a plate needs to reach air now exists and is tested: the commands
-(6.1), the geometry (6.2/6.2a/6.2b/6.4), the fit-aspect policy and its refusal (6.3),
-the unassigned refusal (6.7) and teardown (6.6). **What does NOT exist is the CALL
-SITE that strings them together** — the take path that resolves a template's plates,
-allocates layers from `layerRange`, sends `playSource` + `mixerFit`, and calls
-`registerLiveLayers` with what it actually sent.
+Part 1 built every COMPONENT and tested each one green — the commands (6.1), the
+geometry (6.2/6.2a/6.2b/6.4), the fit-aspect policy and its refusal (6.3), the
+unassigned refusal (6.7), teardown (6.6) — and **nothing called them**, so a plate
+still showed nothing. That was a hole in THIS LIST rather than an omission by a
+session: no item said "call them". It is now **task 6.0**, filed and built, and it
+is left in the list permanently so the phase cannot lose it again.
 
-⚠ **THAT ASSEMBLY IS NOT AN ENUMERATED TASK ANYWHERE IN THIS PHASE, AND THAT IS A
-GAP IN THE TASK LIST RATHER THAN AN OMISSION BY THE SESSION.** 6.1 builds the verbs,
-6.2 the arithmetic, 6.3 the policy — and nothing says "call them". The closest is
-6.8's two-box demo, which cannot run without it. **So a declared plate still does
-NOT put a picture on air**, and no ticked box below should be read as saying it does.
-Whoever takes part 2 should file the assembly as its own task and do it FIRST; the
-audio cluster (6.5) and the swap cluster (6.9) both hang off a seating path that
-does not exist yet.
+⚠ **THE HISTORY IS KEPT ON PURPOSE.** Every component test passed while the feature
+did nothing at all, which is the exact reading a green task list can give when the
+list is missing its integration step. `extend the list, forget the mutator` — one
+level up, in the plan instead of the code.
 
 ✅ **Part 1's Linux `gate:e2e` is DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31787014201
 (run 31787014201, `headSha b1e017ba`): `completed` + `success`, with the
@@ -908,6 +904,59 @@ a skipped `e2e` proves nothing about the suite, P-029). It was owed because
 `UI_RENDER_PATTERNS`' render-dependency closure. `pnpm gate` was green uncached
 beforehand: 85/85, `0 cached`.
 
+- [x] 6.0 ⭐ **THE ASSEMBLY — the call site that seats a plate. FILED 2026-08-14
+      (session AG), and it is a NEW item: this phase never enumerated it.**
+      🔴 **The gap was in the TASK LIST, not in a session's work.** 6.1 says build
+      the verbs, 6.2 the arithmetic, 6.3 the policy, 6.6 teardown, 6.7 the
+      refusal — and no item said "call them", so part 1 landed every component
+      green and a declared plate still put NOTHING on air. Session AF found it
+      and reported it rather than quietly widening its own scope; it is written
+      down here so the phase cannot lose it a second time. It is this project's
+      catalogued **extend-the-list-forget-the-mutator** failure arriving one
+      level up, in the plan instead of the code.
+      **DONE 2026-08-14 (session AG).** `#planLiveSeating` + `#seatLiveLayers`
+      (`caspar-runtime.ts`), called from `take()`, with teardown called from
+      `out()`, `stopItem()` and `remove()`.
+      **DECIDE, THEN ACT — the split is the design.** The plan resolves every
+      plate to a catalog entry (6.7), validates the author's aspect against it
+      and derives the fit (6.3), computes the geometry (6.2/6.4) and picks the
+      layers — and sends NOTHING. So all four refusals (`live-source-unassigned`,
+      `live-source-aspect-mismatch`, `live-source-no-layer-range`,
+      `live-source-no-layer`) are reachable with the wire, the Reconciler and the
+      ledger untouched, exactly like the `rehearsing` / `unknown-item` /
+      `disconnected` refusals they sit beside. The SEATING is deliberately the
+      last thing before the `CG PLAY`.
+      **BOTH ends of that ordering are on-air decisions.** LAST, because a live
+      producer renders the instant it is played — there is no loaded-but-not-
+      playing state for a route or a card — so seating at load time would put a
+      guest's picture on the programme channel, framed by nothing, for as long as
+      the operator cued ahead. BEFORE the take, because the alternative is the
+      template landing with its holes still empty, which is precisely what 6.7's
+      refusal exists to prevent; arriving there by an ordering choice is no
+      better than arriving there by a missing assignment.
+      🔴 **ANY seating failure rolls back EVERY layer the action touched and
+      REFUSES the take.** Not "keep what worked": the two failure shapes are a
+      producer with no geometry (a guest blown up across the whole programme,
+      unmasked) and a `FILL` without its `CLIP` (§3 — renders nothing at all),
+      both worse on air than a black box. The record is pushed BEFORE its send is
+      awaited, because from the moment a `PLAY` leaves this process a producer may
+      be on that layer, and a rollback walking only the ACKED sends would leave a
+      live picture nobody owns.
+      **A RE-TAKE LANDS ON THE SAME LAYERS**, and that is not an optimisation:
+      moving a plate would leave the old layer's producer running with nobody's
+      name on it, since the ledger teardown walks would name the new one.
+      **TEARDOWN GOES FIRST, THE GRAPHIC SECOND.** The template sits ABOVE its
+      plates and covers the frame with a hole punched in it — clearing it first
+      strips that covering off and leaves bare guest rectangles keyed over
+      programme for the length of the teardown.
+      **The refusal's own SENTENCE now reaches the operator** (`StackTakeChannel`
+      gained an optional `message`, `asyncResultMessage` prefers it over the
+      code's generic wording): 6.7 requires the refusal to NAME THE PLATE, and a
+      fixed code cannot say which of three plates is unassigned. Before this it
+      stopped at the bridge's stderr.
+      Tests: `live-seating.integration.test.ts` (16, wire-asserted from the
+      NDJSON trace — the failure this unit fixes was invisible to state-only
+      assertions) + `live-plate-seating.test.ts` (10, the pure allocation).
 - [x] 6.1 **DONE 2026-08-14.** `playSource` / `mixerFit` / `mixerClear` on
       `command-builder.ts`, all layer-scoped through `target()` — the channel-scoped
       form stays impossible by construction. `mixerFit` returns BOTH commands from one
@@ -1127,8 +1176,10 @@ beforehand: 85/85, `0 cached`.
       flashing the un-masked oversized crop across the frame), and the ledger is
       released LAST (releasing first hands the layer to the R-009 sweep while our
       producer is still on it — DOOR 1's boundary case would surface it as an orphan).
-      ⚠ Not yet CALLED from `remove`/`out` — see the part-1 banner: the seating path
-      that would create the layers does not exist yet either.
+      ✅ **CALLED 2026-08-14 (6.0)** from `out()`, `stopItem()` and `remove()` — and
+      BEFORE the graphic’s own CLEAR in each, because the template covers the frame
+      with a hole in it: stripping that covering off first would leave bare guest
+      rectangles keyed over programme for the length of the teardown.
       Original: `mixerClear` on teardown — mixer state survives `CLEAR`
       (`command-builder.ts:128-130`, measured on hardware), so omitting it leaves a `FILL` a later
       graphic inherits.
@@ -1144,7 +1195,11 @@ beforehand: 85/85, `0 cached`.
       one hole in it reaches the silent-empty-hole outcome by a different road. The
       refusal names EVERY unresolved plate, so one attempt gives the whole list.
       Every assertion is on the CLAIM, not on the presence of a refusal.
-      ⚠ Not yet CALLED from `take()` — see the part-1 banner.
+      ✅ **CALLED 2026-08-14 (6.0)** from `take()`, in the plan half — before any
+      command leaves the process, so the refusal mutates nothing. Its MESSAGE now
+      reaches the operator too (`StackTakeChannel.message`); it previously stopped
+      at the bridge’s stderr, which meant the plate-naming the task asks for was
+      real in the code and invisible on the console.
       Original: The take refuses legibly with a distinct `errorCode` when a declared plate has **no
       ASSIGNMENT** — never a silent empty hole on air (`docs/prd/caspar.md:396-397`).
       ⚠ **EXTENDED 2026-08-10 by the §2z reshape.** The wording assumed a missing MAPPING, which was

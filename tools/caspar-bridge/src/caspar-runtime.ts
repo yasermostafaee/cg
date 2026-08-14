@@ -57,9 +57,11 @@ import {
   EMPTY_SOURCE_CATALOG,
   checkSourceAssignments,
   checkSourceCatalog,
+  liveSourceCarrierState,
   pruneAssignmentsForCatalog,
   type SourceAssignments,
   type SourceCatalog,
+  type SourceProducer,
   type SourcesSetAssignmentsReason,
   type SourcesSetConfigReason,
   type TemplateSourceAssignment,
@@ -78,7 +80,14 @@ import {
 } from './fixed-layers-store.js';
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
-import type { LiveLayerLedger, LiveLayerRecord } from './live-layers.js';
+import type { LiveLayerLedger, LiveLayerRecord, NormalizedRect } from './live-layers.js';
+import { resolvePlateAssignments } from './live-plate-assignment.js';
+import { resolvePlateAspect } from './live-plate-fit.js';
+import {
+  allocateLiveLayers,
+  LIVE_PLATE_NO_LAYER,
+  LIVE_PLATE_NO_RANGE,
+} from './live-plate-seating.js';
 import { TemplateRegistry } from './template-registry.js';
 import { DelimiterStore } from './delimiter-store.js';
 import {
@@ -101,6 +110,31 @@ type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
  * places, and only one of them can be fixed by removing something.
  */
 type RestorePlacement = { slot: CommandSlot } | { skip: RestoreSkipReason };
+
+/**
+ * C-015 phase 6 (task 6.0) — ONE plate, fully resolved and ready to seat.
+ *
+ * Every term is DECIDED before a single command leaves this process: which
+ * catalog entry the plate resolved to, which layer it goes on, and the exact
+ * geometry. That split is the point of the type — a refusal (unassigned plate,
+ * contradicted aspect, no room in the band) must be reachable while the wire is
+ * still untouched, so a refused take mutates nothing at all.
+ */
+interface LivePlatePlacement {
+  /** The layer this plate's producer goes on — inside the declared band. */
+  readonly slot: CommandSlot;
+  /** The SCENE's handle for the hole (`guest-1`), which the ledger records. */
+  readonly plateId: string;
+  /** The assigned catalog entry's producer, still as a parsed union. */
+  readonly producer: SourceProducer;
+  /** `FILL` and `CLIP`, from ONE computation — never assembled separately. */
+  readonly fit: { readonly fill: NormalizedRect; readonly clip: NormalizedRect };
+}
+
+/** The decision half of the assembly: what to seat, or why the take is refused. */
+type LiveSeatingPlan =
+  | { readonly ok: true; readonly placements: readonly LivePlatePlacement[] }
+  | { readonly ok: false; readonly errorCode: string; readonly message: string };
 
 /** R-028 part B — a refused deliberate playout clear. */
 type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
@@ -145,6 +179,20 @@ const BUSY_MESSAGE =
  * intent rather than an "un-mute" that has to remember what it clobbered.
  */
 const INTENDED_VOLUME = 1;
+
+/**
+ * C-015 phase 6 (6.5) — **the volume every producer the bridge creates is born
+ * with: silent.**
+ *
+ * Named rather than a bare `0` for the reason `INTENDED_VOLUME` is named, plus
+ * one this project has now been bitten by three times: **zero is falsy.** A bare
+ * literal here invites a `volume && …` or a `?? INTENDED_VOLUME` somewhere
+ * downstream to read a deliberate mute as "no volume requested" and blanket the
+ * layer back to full — which is a guest's live microphone on air with nothing in
+ * any log saying it happened. A named constant makes the intent unmistakable at
+ * every site that touches it.
+ */
+const CREATED_MUTED_VOLUME = 0;
 
 /**
  * THE on-air predicate for a stack item — the ONE definition of "on air or
@@ -1788,7 +1836,7 @@ export class CasparRuntime {
     }
   }
 
-  async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+  async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
     /**
      * R-022 — THE INTERLOCK. A rehearsing item cannot be taken to air, and the
      * refusal lives HERE rather than only in a disabled button.
@@ -1815,6 +1863,34 @@ export class CasparRuntime {
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+
+    /*
+      C-015 phase 6 (6.0) — DECIDE THE LIVE PLATES HERE, WHERE A REFUSAL COSTS
+      NOTHING.
+
+      `#planLiveSeating` resolves every plate to a catalog entry, validates the
+      author's aspect assertion, computes the geometry and picks the layers —
+      and sends nothing. So an unassigned plate, a contradicted aspect or a band
+      with no room refuses the take with the wire, the Reconciler and the ledger
+      all untouched, exactly like the three refusals above it. Deciding it later
+      would mean refusing after the pre-roll `CG ADD` had already replaced the
+      stage, which is a mutation on a take the operator was told did not happen.
+
+      The SEATING is deliberately far from here — one command before the `CG
+      PLAY` — because a live producer starts rendering the instant it is played:
+      there is no loaded-but-not-playing state for a route or a card the way
+      there is for an html producer. Every frame between seating and the take is
+      a frame with a guest's picture on air and no graphic around it.
+    */
+    const plan = this.#planLiveSeating(itemId, slot);
+    if (!plan.ok) {
+      process.stderr.write(`[caspar-bridge] take refused for ${itemId}: ${plan.message}\n`);
+      // The MESSAGE rides out with the code. Which PLATE is unassigned, and which
+      // two aspects disagree, are the facts that make these refusals actionable,
+      // and no fixed code can carry them — see `StackTakeChannel`.
+      return { accepted: false, errorCode: plan.errorCode, message: plan.message };
+    }
+
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'take', itemId }, seq);
 
@@ -1901,6 +1977,36 @@ export class CasparRuntime {
           `before taking ${itemId} to air (${volumeOk.errorCode ?? 'unknown'}). If this layer was ` +
           `left muted by a rehearsal, the graphic may be ON AIR SILENT — check the output audio.\n`,
       );
+    }
+
+    /*
+      C-015 phase 6 (6.0) — SEAT THE PLATES, one command before the graphic they
+      belong to.
+
+      LAST, and BEFORE the `CG PLAY`. Both halves of that are on-air decisions:
+
+      - LAST, because a live producer renders the moment it is played. Seating at
+        load time — the obvious "pre-roll it like the template" — would put a
+        guest's picture on the programme channel for as long as the operator
+        cued ahead, framed by nothing.
+      - BEFORE the take, because the alternative is the template landing with its
+        holes still empty. That is the outcome 6.7's whole refusal exists to
+        prevent, and arriving at it by an ordering choice would be no better than
+        arriving at it by a missing assignment. The cost is the mirror window —
+        pictures with no frame around them for one command — which is bounded by
+        the very next line on the same connection.
+
+      A seating failure REFUSES THE TAKE and the graphic never plays: the plates
+      have already been rolled back, so refusing leaves nothing half-placed
+      anywhere. An item that was already on air keeps its template layer and
+      loses its boxes, and the row is told why — which is honest, and is the
+      whole reason this returns a code rather than a boolean.
+    */
+    const seated = await this.#seatLiveLayers(itemId, plan.placements);
+    if (!seated.ok) {
+      const code = seated.errorCode ?? 'amcp-error';
+      this.#reconciler.applyAck(seq, false, code);
+      return { accepted: false, errorCode: code };
     }
 
     // B-079 — bounded completion for a take, which it never had: #armExpiry was called for
@@ -2244,6 +2350,11 @@ export class CasparRuntime {
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'stop', itemId }, seq);
     this.#armExpiry(seq);
+    // C-015 phase 6 (6.0/6.6) — the plates come down WITH the graphic. STOP takes
+    // the template off air but leaves its producer resident, so without this the
+    // guest pictures would still be on the channel with nothing around them. See
+    // `out()` for why the live layers go FIRST.
+    await this.teardownLiveLayers(itemId);
     // Urgent lane, like out(): an air-affecting verb does not queue behind loads.
     // §8 — and the code comes with it. A refused STOP used to answer a bare
     // `{ accepted: false }`, which the toast could only render as "Not accepted."
@@ -2294,6 +2405,23 @@ export class CasparRuntime {
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'out', itemId }, seq);
     this.#armExpiry(seq);
+    /*
+      C-015 phase 6 (6.0/6.6) — THE LIVE LAYERS COME DOWN FIRST, THEN THE GRAPHIC.
+
+      The order is an on-air decision, not a tidy-up. The template sits ABOVE its
+      plates (70–99 over the declared 10–59 band) and covers the frame with a hole
+      punched in it. Clearing the template first would strip that covering off and
+      leave bare guest rectangles keyed over programme for the duration of the
+      teardown round-trips — which reads on air as the wrong source having been
+      taken. Clearing the plates first leaves the designed frames standing with
+      programme showing through them for the same moment: still wrong, but it is a
+      graphic the audience has already been looking at.
+
+      The cost is that the operator's Out waits for the plates. Best-effort per
+      layer (`teardownLiveLayers`), so one stuck send cannot strand the graphic
+      behind it.
+    */
+    await this.teardownLiveLayers(itemId);
     const { ok, onPrimary, errorCode } = await this.#send(this.#builder.out(slot), seq, 'urgent');
     // B-039 — `CLEAR` DESTROYS the producer: record that no producer exists on the
     // slot so a subsequent take re-ADDs (instead of `CG PLAY`-ing an empty layer).
@@ -2652,6 +2780,278 @@ export class CasparRuntime {
       position: this.#effectivePosition(input.itemId, input.carriedDefaultPosition),
       sourceAspect: input.sourceAspect,
     });
+  }
+
+  /**
+   * C-015 phase 6 (task 6.0) — **THE ASSEMBLY, HALF ONE: decide everything this
+   * item's plates need, and touch NOTHING.**
+   *
+   * ── WHY THIS TASK EXISTS AT ALL ────────────────────────────────────────────
+   *
+   * Phase 6 part 1 built every COMPONENT — the verbs (6.1), the arithmetic
+   * (6.2/6.2a/6.2b/6.4), the fit policy and its refusal (6.3), the unassigned
+   * refusal (6.7), teardown (6.6) — and **nothing enumerated the call site that
+   * strings them together**, so a declared plate put no picture on air. That was a
+   * gap in the TASK LIST rather than an omission by a session: 6.1 says "build the
+   * verbs", 6.2 "build the arithmetic", and no item said "call them". This method
+   * and {@link #seatLiveLayers} are that call site.
+   *
+   * ── THE SPLIT: DECIDE, THEN ACT ────────────────────────────────────────────
+   *
+   * Every refusal is reachable from here, where the wire has not been touched:
+   *
+   *   - a plate with no assignment          → `live-source-unassigned` (6.7)
+   *   - an `expectedAspect` the source contradicts → `live-source-aspect-mismatch` (6.3)
+   *   - no declared Live Source band        → `live-source-no-layer-range`
+   *   - a band with no room                 → `live-source-no-layer`
+   *
+   * A refused take must mutate nothing, which is why this runs BEFORE the take
+   * applies its intent — the same shape as the `rehearsing` / `unknown-item` /
+   * `disconnected` refusals it sits beside.
+   *
+   * ── WHAT AN ABSENT CARRIER DOES, AND WHY IT IS NOT A REFUSAL ───────────────
+   *
+   * `liveSourceCarrierState` has three answers and only `'declared'` seats
+   * anything. `'none'` is a template with no plates. `'unknown'` is a template
+   * imported before the carrier existed — and it is deliberately NOT a take
+   * refusal: nothing here can tell whether such a template has holes, the great
+   * majority have none, and refusing every pre-carrier template's take would take
+   * a station's whole existing rundown off air on upgrade. The operator is warned
+   * where the warning can be acted on (the template picker marks the row as
+   * needing a re-import), which is the same place the spec puts it.
+   */
+  #planLiveSeating(itemId: string, slot: CommandSlot): LiveSeatingPlan {
+    const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
+    const template = this.#templates.get(templateId);
+    const carrier = template === null ? undefined : template.liveSources;
+    if (
+      template === null ||
+      carrier === undefined ||
+      liveSourceCarrierState(template) !== 'declared'
+    )
+      return { ok: true, placements: [] };
+
+    // 6.7 — ALL-OR-NOTHING, and it refuses before any geometry is computed: a
+    // layout with one unfilled hole is the silent-empty-hole outcome reached by a
+    // different road.
+    const assignment = resolvePlateAssignments({
+      templateId,
+      declarations: carrier.sources,
+      assignments: this.#sourceAssignments,
+      catalog: this.#sourceCatalog,
+    });
+    if (!assignment.ok)
+      return { ok: false, errorCode: assignment.errorCode, message: assignment.message };
+
+    const fitted: { plateId: string; producer: SourceProducer; fit: LivePlatePlacement['fit'] }[] =
+      [];
+    for (const plate of assignment.plates) {
+      // 6.3 — the fit aspect through §3a's chain, which is also where the author's
+      // assertion is VALIDATED against the assigned source.
+      const aspect = resolvePlateAspect({
+        plateId: plate.declaration.sourceId,
+        source: plate.source,
+        expectedAspect: plate.declaration.expectedAspect,
+      });
+      if (!aspect.ok) return { ok: false, errorCode: aspect.errorCode, message: aspect.message };
+      const fit = this.liveSourceFitFor({
+        channel: slot.channel,
+        itemId,
+        rect: plate.declaration.rect,
+        sceneResolution: carrier.resolution,
+        carriedDefaultPosition: carrier.defaultPosition,
+        sourceAspect: aspect.aspect,
+      });
+      // 6.4 — a hole ENTIRELY outside the scene rect has an empty mask, and the
+      // correct behaviour there is to seat NO PRODUCER AT ALL rather than to emit a
+      // zero-area rect. It costs the plate its layer too: allocating one for a
+      // producer that will never be sent would burn a layer out of a band that
+      // has to hold every other box. Not a refusal — nothing about it is visible
+      // on air, so refusing the take would be refusing over an invisible detail.
+      if (fit.clip === null) continue;
+      fitted.push({
+        plateId: plate.declaration.sourceId,
+        producer: plate.source.producer,
+        fit: { fill: fit.fill, clip: fit.clip },
+      });
+    }
+    if (fitted.length === 0) return { ok: true, placements: [] };
+
+    const range = this.#sourceCatalog.layerRange;
+    if (range === undefined) {
+      return {
+        ok: false,
+        errorCode: LIVE_PLATE_NO_RANGE,
+        message:
+          `this template has ${String(fitted.length)} live plate(s), but no Live Source layer ` +
+          `band is declared on this installation — there is nowhere to put a producer. ` +
+          `Declare the band in CG Control's source settings, then take again.`,
+      };
+    }
+
+    /*
+      RE-USE THE LAYER A PLATE IS ALREADY ON, and this is not an optimisation.
+
+      A re-take of an item that still owns its layers must land on the SAME
+      coordinates. Moving a plate would leave the old layer's producer running
+      with nobody's name on it — the ledger (which teardown walks) would now name
+      the new layer, so the old picture would sit on air until somebody noticed
+      it by eye. The ledger is keyed by itemId, so "already on" is a question this
+      method can answer exactly.
+    */
+    const held = new Map<string, number>();
+    for (const record of this.#liveLayers.get(itemId) ?? []) {
+      if (record.slot.channel === slot.channel) held.set(record.sourceId, record.slot.layer);
+    }
+    const ours = new Set(held.values());
+    // A layer carrying a bound template is not free either. `#slots` is that fact's
+    // single source, exactly as `#declaredLayerClass` is the single source for the
+    // three DECLARED classes — this is the one class it does not cover, because a
+    // bound dynamic slot is a runtime allocation rather than a declaration.
+    const bound = new Set<number>();
+    for (const s of this.#slots.values()) if (s.channel === slot.channel) bound.add(s.layer);
+
+    const layers = allocateLiveLayers({
+      range,
+      preferred: fitted.map((f) => held.get(f.plateId)),
+      // ⚠ OUR OWN ledgered layers count as AVAILABLE — for this item, and only
+      // through `preferred`. `#declaredLayerClass` calls them `'live-source'`,
+      // which is correct for every other caller and would here forbid an item
+      // from re-seating onto the layer it is already using.
+      isAvailable: (layer) =>
+        ours.has(layer) ||
+        (this.#declaredLayerClass(slot.channel, layer) === null && !bound.has(layer)),
+    });
+    if (layers === null) {
+      return {
+        ok: false,
+        errorCode: LIVE_PLATE_NO_LAYER,
+        message:
+          `the Live Source layer band ${String(range.start)}-${String(range.end)} has no room ` +
+          `for this template's ${String(fitted.length)} live plate(s) on channel ` +
+          `${String(slot.channel)}. Clear a graphic that is holding live layers, or widen the ` +
+          `band in CG Control's source settings.`,
+      };
+    }
+
+    return {
+      ok: true,
+      placements: fitted.map((f, i) => ({
+        slot: { channel: slot.channel, layer: layers[i] as number },
+        plateId: f.plateId,
+        producer: f.producer,
+        fit: f.fit,
+      })),
+    };
+  }
+
+  /**
+   * C-015 phase 6 (task 6.0) — **THE ASSEMBLY, HALF TWO: put the pictures on the
+   * layers, and record what was actually sent.**
+   *
+   * Per plate, in one batch on one connection:
+   *
+   *   1. `PLAY <ch>-<layer> <producer>` — {@link CommandBuilder.playSource};
+   *   2. `MIXER <ch>-<layer> VOLUME 0` — **6.5, immediately after and before the
+   *      layer can be composited.** The producer does not exist before the `PLAY`,
+   *      so "same batch" is the strongest guarantee available here; this is the
+   *      half of the audio rule that belongs to creation itself rather than to a
+   *      later step (design.md §7);
+   *   3. `MIXER … FILL` + `MIXER … CLIP` — {@link CommandBuilder.mixerFit}, which
+   *      emits both from one geometry so they can never be set apart.
+   *
+   * The ledger is written with `sourceArgument` — the SAME function `playSource`
+   * uses — so `producer` records what went on the wire rather than a second
+   * formatting of the same config.
+   *
+   * ── THE FAILURE PATH, WHICH IS THE PART WORTH READING ──────────────────────
+   *
+   * 🔴 **Any failure rolls back EVERY layer this action touched, including one the
+   * item already owned.** The instinct is to keep a previously-on-air box up, and
+   * it is wrong here: the failure modes are a producer with NO geometry (a
+   * guest's picture blown up across the entire programme, unmasked) and a fill
+   * without its clip (design.md §3 — renders nothing at all). A layer left in
+   * either state is worse on air than a layer left black, so the half-placed layer
+   * comes down and the take is refused.
+   *
+   * The record is pushed BEFORE its send is awaited, deliberately: from the moment
+   * a `PLAY` leaves this process a producer may be on that layer, so a rollback
+   * that walked only the ACKED sends would leave a live picture nobody owns and
+   * nothing would ever clear it.
+   *
+   * On refusal the ledger is restored to the layers this action never reached, so
+   * it keeps naming exactly the coordinates that still carry a producer of
+   * ours — which is what the R-009 sweep, the quarantine and the clear refusal all
+   * read.
+   */
+  async #seatLiveLayers(
+    itemId: string,
+    placements: readonly LivePlatePlacement[],
+  ): Promise<{ ok: boolean; errorCode?: string }> {
+    const previous = this.#liveLayers.get(itemId) ?? [];
+    if (placements.length === 0 && previous.length === 0) return { ok: true };
+
+    const touched: LiveLayerRecord[] = [];
+    let failure: string | undefined;
+
+    for (const placement of placements) {
+      touched.push({
+        slot: placement.slot,
+        sourceId: placement.plateId,
+        // `'fill'` for every producer form this change can seat. A fill+key PAIR is
+        // two layers and is C-021's, blocked on hardware — the role is recorded
+        // rather than assumed so the ledger is already shaped for it.
+        role: 'fill',
+        producer: this.#builder.sourceArgument(placement.producer),
+        fill: placement.fit.fill,
+        clip: placement.fit.clip,
+      });
+      const lines = [
+        this.#builder.playSource(placement.slot, placement.producer),
+        this.#builder.mixerVolume(placement.slot, CREATED_MUTED_VOLUME),
+        ...this.#builder.mixerFit(placement.slot, placement.fit),
+      ];
+      for (const line of lines) {
+        // Urgent lane: seating runs inside a take, and a take does not queue
+        // behind a load.
+        const sent = await this.#send(line, this.#nextSeq(), 'urgent');
+        if (sent.ok) continue;
+        failure = sent.errorCode ?? 'amcp-error';
+        break;
+      }
+      if (failure !== undefined) break;
+    }
+
+    const key = (record: LiveLayerRecord): string => adoptionKey(record.slot);
+
+    if (failure !== undefined) {
+      for (const record of touched) {
+        await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
+        await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
+      }
+      const rolledBack = new Set(touched.map(key));
+      this.registerLiveLayers(
+        itemId,
+        previous.filter((record) => !rolledBack.has(key(record))),
+      );
+      return { ok: false, errorCode: failure };
+    }
+
+    this.registerLiveLayers(itemId, touched);
+
+    // A layer this item owned and no longer does — its template was re-imported
+    // with fewer plates, or a plate's hole moved off-frame. It is ours, it still
+    // has our producer on it, and nothing else will ever come for it: the ledger
+    // no longer names it, so teardown will not reach it and the R-009 sweep will
+    // not reclaim it (it is not an orphan; it is ours). Cleared LAST, after the
+    // ledger already names the layers that must survive.
+    const seated = new Set(touched.map(key));
+    for (const record of previous) {
+      if (seated.has(key(record))) continue;
+      await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
+      await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
+    }
+    return { ok: true };
   }
 
   /** Is this exact coordinate a bridge-owned Live Source layer? */
@@ -3479,6 +3879,11 @@ export class CasparRuntime {
     // publish a block for an item that no longer exists.
     this.#pendingRestore.delete(itemId);
     this.#restoreBlocked.delete(itemId);
+    // C-015 phase 6 (6.0/6.6) — the plates die with the item, and BEFORE its own
+    // CLEAR for `out()`'s reason. Unconditional on `slot`: the ledger is keyed by
+    // itemId, so an item whose slot was already released can still own live
+    // layers, and those are precisely the ones nothing else would ever reach.
+    await this.teardownLiveLayers(itemId);
     if (slot !== undefined) {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);

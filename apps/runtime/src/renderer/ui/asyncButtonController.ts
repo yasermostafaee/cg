@@ -27,6 +27,14 @@ export interface AsyncResult {
   accepted: boolean;
   errorCode?: string | undefined;
   /**
+   * C-015 phase 6 (6.0) — the refusal's OWN sentence, when the bridge supplied
+   * one. Preferred over `errorCodeMessage(errorCode)` because it is the more
+   * SPECIFIC of the two: a Live Source refusal names which plate is unassigned,
+   * and a code is a fixed string that cannot. Absent for every refusal that has
+   * only a code, which is all of them except the take's plate refusals.
+   */
+  message?: string | undefined;
+  /**
    * True when the action's own confirm gate was CANCELLED (see `withConfirm` in
    * `rowAction.ts`). A cancel is neither a success nor an error: the operator
    * said "no" before anything ran, so the button settles straight back to idle
@@ -71,7 +79,13 @@ export function asyncResultMessage(res: AsyncResult, notAccepted = 'Not accepted
   // carries `accepted: false`, and the fallback message would turn it into a
   // phantom refusal toast).
   if (res.cancelled === true) return null;
-  return res.accepted ? null : (errorCodeMessage(res.errorCode) ?? notAccepted);
+  if (res.accepted) return null;
+  // The bridge's OWN sentence first — it names the plate, the source or the two
+  // numbers that disagree, which is the difference between a refusal an operator
+  // can act on and one they have to investigate. `errorCodeMessage` remains the
+  // wording for every refusal that carries a code alone.
+  if (res.message !== undefined && res.message !== '') return res.message;
+  return errorCodeMessage(res.errorCode) ?? notAccepted;
 }
 
 /** The message for a REJECTED action (e.g. the link is down). Shared, see above. */

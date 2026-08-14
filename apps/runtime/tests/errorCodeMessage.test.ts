@@ -57,3 +57,37 @@ describe('errorCodeMessage — §8, the codes that used to name the wrong machin
     expect(errorCodeMessage('amcp-404')).toContain('CasparCG refused the command');
   });
 });
+
+/**
+ * C-015 phase 6 (task 6.0) — the four ways a LIVE PLATE refuses a take.
+ *
+ * Four codes rather than one, and the test is on the CLAIM each makes: the four
+ * remedies live in four different places, so a shared sentence would send three
+ * operators out of four to the wrong screen.
+ */
+describe('errorCodeMessage — C-015 live plate refusals', () => {
+  it('an unassigned plate says the hole would be EMPTY and where to assign it', () => {
+    const msg = errorCodeMessage('live-source-unassigned') ?? '';
+    expect(msg).toContain('empty');
+    expect(msg).toContain('Sources');
+    expect(msg).not.toBe('Not accepted (live-source-unassigned).');
+  });
+
+  it('an aspect mismatch says picture would be CUT, and names both sides as fixable', () => {
+    const msg = errorCodeMessage('live-source-aspect-mismatch') ?? '';
+    expect(msg).toMatch(/cut/i);
+    expect(msg).toContain('Re-assign');
+    expect(msg).toContain('format');
+  });
+
+  it('the two BAND refusals are told apart — nowhere to put it vs. no room left', () => {
+    const none = errorCodeMessage('live-source-no-layer-range') ?? '';
+    const full = errorCodeMessage('live-source-no-layer') ?? '';
+    // Declare a band…
+    expect(none).toContain('Declare the band');
+    // …versus free or widen one that already exists. Same screen, different act.
+    expect(full).toContain('no room');
+    expect(full).toContain('widen');
+    expect(none).not.toBe(full);
+  });
+});
