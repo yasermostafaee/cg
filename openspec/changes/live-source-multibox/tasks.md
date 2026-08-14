@@ -1270,6 +1270,12 @@ beforehand: 85/85, `0 cached`.
       commit-on-release is pinned the same way.
       Tests: `live-plate-audio.integration.test.ts` (10, wire-asserted) +
       `livePlateAudio.dom.test.ts` (12, the row verb and the panel's claims).
+      ✅ **Linux `gate:e2e` DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31805968504
+      (run 31805968504, `headSha eb53df68`): `completed` + `success`, with the **E2E
+      (Playwright) job itself having RUN** (its own `conclusion: success`, not a SKIP —
+      a skipped `e2e` proves nothing about the suite, P-029). Owed because this adds a
+      row control and a new dialog under `apps/runtime/src/renderer/**`. `pnpm gate`
+      was green uncached beforehand: 85/85, `0 cached`.
 - [x] 6.6 **DONE 2026-08-14** — `CasparRuntime.teardownLiveLayers` sends the producer
       `CLEAR` and `MIXER … CLEAR` per layer, asserted ON THE WIRE (the mock models
       mixer state surviving a `CLEAR`, which is what makes the omission catchable

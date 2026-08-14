@@ -113,11 +113,16 @@ duplicating it.
 `openspec validate --all --strict` 50/50 plus
 `openspec validate live-source-multibox --strict`.
 
-🔴 **A Linux `gate:e2e` IS OWED.** The rule that applied: this adds a row control and
-a new dialog under `apps/runtime/src/renderer/**`, so the diff is classified as able
-to affect what renders with no argument needed about closures. Discharge requires a
-COMPLETED, GREEN `e2e` job that actually RAN, cited by run URL — a SKIPPED `e2e` is a
-statement about the diff and no evidence about the suite (P-029).
+✅ **THE LINUX `gate:e2e` IS DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31805968504
+(run 31805968504, `push` on `dev`, `headSha eb53df68` — this session's own tip).
+`conclusion: success`, `status: completed`, and the **E2E (Playwright) job RAN** —
+verified as that job's OWN `conclusion: success` rather than as "a green run exists",
+because a SKIPPED `e2e` is a statement about the DIFF and no evidence whatsoever about
+the suite (P-029).
+
+The rule that made it owed: this adds a row control and a new dialog under
+`apps/runtime/src/renderer/**`, so the diff is classified as able to affect what
+renders with no argument needed about dependency closures.
 
 ## P-014 flag
 
