@@ -881,43 +881,166 @@ way to populate it those doors could not be regression-tested before a verb exis
 That testability is what let ownership land first and be self-proving. A second write path here
 would give the ledger two owners and the doors two truths.
 
-- [ ] 6.1 `playSource` / `mixerFit` / `mixerClear` on `command-builder.ts`, all layer-scoped
+🔴 **PART 1 LANDED 2026-08-14 — AND THE PIECES ARE NOT YET ASSEMBLED. READ THIS
+BEFORE TICKING ANYTHING ELSE.**
+
+Every COMPONENT a plate needs to reach air now exists and is tested: the commands
+(6.1), the geometry (6.2/6.2a/6.2b/6.4), the fit-aspect policy and its refusal (6.3),
+the unassigned refusal (6.7) and teardown (6.6). **What does NOT exist is the CALL
+SITE that strings them together** — the take path that resolves a template's plates,
+allocates layers from `layerRange`, sends `playSource` + `mixerFit`, and calls
+`registerLiveLayers` with what it actually sent.
+
+⚠ **THAT ASSEMBLY IS NOT AN ENUMERATED TASK ANYWHERE IN THIS PHASE, AND THAT IS A
+GAP IN THE TASK LIST RATHER THAN AN OMISSION BY THE SESSION.** 6.1 builds the verbs,
+6.2 the arithmetic, 6.3 the policy — and nothing says "call them". The closest is
+6.8's two-box demo, which cannot run without it. **So a declared plate still does
+NOT put a picture on air**, and no ticked box below should be read as saying it does.
+Whoever takes part 2 should file the assembly as its own task and do it FIRST; the
+audio cluster (6.5) and the swap cluster (6.9) both hang off a seating path that
+does not exist yet.
+
+- [x] 6.1 **DONE 2026-08-14.** `playSource` / `mixerFit` / `mixerClear` on
+      `command-builder.ts`, all layer-scoped through `target()` — the channel-scoped
+      form stays impossible by construction. `mixerFit` returns BOTH commands from one
+      call and there is deliberately no `mixerFill`/`mixerClip` pair; a test asserts
+      their ABSENCE from the prototype, so the coupling is a property of the API
+      rather than of one output. `playSource` takes the discriminated union, never a
+      string. Zero-is-falsy caught a third time: `route.layer` is `nonnegative()`, so a
+      truthiness check would have emitted `route://1` — the WHOLE CHANNEL — which on a
+      single-channel install is exactly §9a.2's feedback loop.
+      ⚠ **DECKLINK and NDI argument spellings are PARSE-VERIFIED ONLY** (no capture
+      card, no NDI source on this plant) — C-021's hardware debt, said in the
+      method's own docstring rather than left to be discovered.
+      Original: `playSource` / `mixerFit` / `mixerClear` on `command-builder.ts`, all layer-scoped
       through `target()`. Channel-scoped forms stay forbidden (`caspar-runtime.ts:2718-2724`).
       **`mixerFit` emits the `FILL` and the `CLIP` as a PAIR from one computation** — NOT two
       independent methods a caller could get half-right. Measured: `CLIP` masks in channel space and
       does not travel with `FILL`, so a fill box that moves out from under its clip window renders
       **nothing at all** — a black hole where a guest should be (`design.md` §3).
-- [ ] 6.2 The scene-px → `FILL` chain from `design.md` §6, with the per-axis normalization measured
+- [x] 6.2 **DONE 2026-08-14.** `liveSourceFit` (`@cg/shared-schema/live-geometry.ts`)
+      implements §6's chain; `CasparRuntime.liveSourceFitFor` runs it bridge-side,
+      resolving the channel raster from `ChannelSettingsStore.rasterFor` and the
+      position through `#effectivePosition` — the SAME three-step chain the page runs
+      (`override ?? carried defaultPosition ?? centred`), with the middle step
+      load-bearing: the bridge appends `pos` only when an override exists, so without
+      the carried default a bridge assuming `centred` places the box where the hole is
+      not, on every template whose author set a position.
+      The naive `rect.x / scene.resolution.width` form is pinned as WRONG by its own
+      test using §6's worked example (0.302083 vs 0.104167 — a fifth of the frame).
+      ⚠ **WHERE IT LIVES:** the pure arithmetic is in `@cg/shared-schema`, not in the
+      bridge, and deliberately — 6.2b's contract test has to import both sides, and a
+      bridge-local function would have forced it to re-implement one of them, which is
+      the second spelling both guards exist to prevent. The derivation still RUNS
+      bridge-side, which is what §6 actually decided.
+      Original: The scene-px → `FILL` chain from `design.md` §6, with the per-axis normalization measured
       on hardware, and the bridge resolving the SAME three-step position chain the page does
       (override ?? carried `defaultPosition` ?? centred). **Do not use the naive
       `rect.x / scene.resolution.width` form** — it is wrong by a fifth of the frame on a 4:3
       raster.
-- [ ] 6.2a **Duplication guard 1 — ONE implementation.** Move the DOM-free half of `position.ts`
+- [x] 6.2a **DONE 2026-08-14.** `REFERENCE_FRAME`, `ANCHOR_FRACTIONS`,
+      `outputTranslate`, `outputScale` and `outputLetterbox` now live in
+      `@cg/shared-schema`'s `scene.ts` beside `positionQuery`;
+      `@cg/template-runtime/position.ts` re-exports every name, so **no page import
+      churned** — 899 template-runtime tests and both app typechecks unchanged.
+      `ANCHOR_FRACTIONS` was module-private and is now exported: nine literals are
+      nine chances to transpose one. `applyOutputPosition` and `resolveChannelRaster`
+      stayed behind — they touch `document` and `window`.
+      Original: **Duplication guard 1 — ONE implementation.** Move the DOM-free half of `position.ts`
       (`REFERENCE_FRAME`, `ANCHOR_FRACTIONS`, `outputTranslate`, `outputScale`, `outputLetterbox`)
       into `@cg/shared-schema` beside `positionQuery` (`packages/shared-schema/src/scene.ts:260`);
       re-export from `@cg/template-runtime` so no page import churns. The bridge already depends on
       `@cg/shared-schema`, so this adds no dependency. Follows the precedent the code itself argues
       at `caspar-runtime.ts:3681-3684` — _"never a local spelling … two spellings of one override is
       how a preview comes to place a graphic differently from air."_
-- [ ] 6.2b **Duplication guard 2 — a CONTRACT TEST** pinning the bridge's normalized FILL to the
+- [x] 6.2b **DONE 2026-08-14** —
+      `packages/template-runtime/tests/live-source-fill-contract.test.ts`, 4 rasters ×
+      4 positions × 3 scenes, comparing the bridge's FILL against the transform
+      `applyOutputPosition` ACTUALLY WROTE (parsed off the element's style), never
+      against a re-derivation in the test.
+      ✅ **THE TEETH WERE VERIFIED BY MUTATION, NOT ASSUMED.** With `pad` removed from
+      the chain, ONLY the 1440×1080 and 720×576 rows fail — every 16:9 row still
+      passes. That is the "test that passes for the wrong reason" class demonstrated
+      rather than argued, and it is why the non-16:9 requirement was written.
+      Its tolerance is stated in raster PIXELS and derived: the page rounds CSS to 6
+      decimals, so `s = 2/3` arrives as `0.666667` and a coordinate of ~1920 inherits
+      ~0.002 px. A hundredth of a pixel is the tightest honest bound — four orders of
+      magnitude below the failure the file exists to catch.
+      Original: **Duplication guard 2 — a CONTRACT TEST** pinning the bridge's normalized FILL to the
       page's composed transform over a fixed table of `(scene.resolution, raster, rect, position)`
       triples. **MUST include at least one non-16:9 raster** — on 16:9 every term collapses
       (`s = 1`, `pad = (0,0)`) and the test would pass against a wrong implementation. Use
       `1440×1080` (already pinned page-side at `output-position.test.ts:162,169`) and `720×576`,
       which pads on the other axis.
-- [ ] 6.3 ⚠ **Define the case where NEITHER side states an aspect (D-147, 2026-08-08).** §3's fit
+- [x] 6.3 ⭐ **DECIDED 2026-08-14 — ASSUME THE HOLE'S OWN ASPECT (no crop), and mark
+      the result `assumed`. NOT a refusal.** `resolvePlateAspect`
+      (`tools/caspar-bridge/src/live-plate-fit.ts`).
+      🔴 **The argument that settled it comes from the CODE, not from taste, and is on
+      its own sufficient: refusing would OUTLAW `AUTO`.** `LIVE_SOURCE_FORMATS`
+      includes `AUTO`; `aspectForFormat` returns `null` for it and for nothing else,
+      and its own docstring calls it _"a request to the hardware, not a statement
+      about the picture"_. An operator who picks it has configured the system
+      CORRECTLY — a refusal would make a supported catalog value unusable with
+      nothing in the UI saying why.
+      Three supporting reasons: this design's refusals are for CONFLICT (no
+      assignment; disagreeing aspects), not for the absence of a cosmetic detail on
+      an otherwise-configured plate; the harms are not comparable (a possibly
+      stretched picture — today's behaviour for every source — versus a BLACK BOX
+      where a guest should be); and §3's ladder is written as DEGRADATION, with D-147
+      having made `expectedAspect` optional precisely so nobody is forced into a guess
+      that can refuse a take on air — refusing here would reintroduce that forced
+      guess at the installation end.
+      ⚠ **FLAGGED FOR THE OWNER as reversible.** It is a judgement about which on-air
+      failure is worse. `assumed` is the seam: it already carries the fact as its own
+      field (not `aspect === null` — they answer different questions), so switching to
+      a refusal is a change at this function and its callers, not a redesign.
+      Original: ⚠ **Define the case where NEITHER side states an aspect (D-147, 2026-08-08).** §3's fit
       input is the MAPPING's `aspect`, falling back to `expectedAspect`. D-147 made
       `expectedAspect` OPTIONAL — an author who cannot see the feed may now decline to assert — so a
       source with no `aspect` and an element with no `expectedAspect` leaves the chain with no
       terminal value. Pick and record the behaviour (assume the hole's own aspect ⇒ no crop; or
       refuse the take with a distinct errorCode). Not solved in phase 1 and not silently folded into
       §3.
-- [ ] 6.3 The aspect fit: **crop-to-fill** — scale to cover the hole preserving proportions, clip
+- [x] 6.3 **DONE 2026-08-14 (the POLICY and the ARITHMETIC; see the part-1 banner —
+      nothing calls them yet).** Crop-to-fill in `liveSourceFit`: cover the hole with
+      proportions intact, sized by `max` of the two required ratios, centred so the
+      crop takes evenly from both edges. `min` would be pillarbox, and a test asserts
+      across six aspects that the fill is never SMALLER than the hole on either axis —
+      the rejected option pinned as unreachable rather than argued in a comment.
+      The chain (§3a) is `resolvePlateAspect`: format → explicit `aspect` →
+      `expectedAspect`, with `expectedAspect` keeping its OTHER role as the author's
+      assertion the bridge VALIDATES against — refusing `live-source-aspect-mismatch`,
+      naming the plate, the source and BOTH numbers, and saying what to do.
+      The 1% tolerance is DERIVED and the derivation is executable: it must absorb an
+      author's rounded decimal (4:3 vs `1.33` is 0.25% off) and catch the closest real
+      difference in the vocabulary (16:9 vs DCI 1080, 6.6% apart). A test asserts the
+      band sits between the two, so widening it past usefulness goes red.
+      Original: The aspect fit: **crop-to-fill** — scale to cover the hole preserving proportions, clip
       the overflow — driven by the ASSIGNED SOURCE's `aspect`, falling back to `expectedAspect` only
       where that source states none. Refuse the take with a distinct errorCode when the two disagree
       (`design.md` §3). Pillarbox was weighed and **rejected**: bars inside a designed frame read as
       a fault on air.
-- [ ] 6.3a **NARROWED 2026-08-03 — coordinate space and composition order are SETTLED by
+- [ ] 6.3a **STILL OPEN, and 2026-08-14 says WHICH HALF and WHY — neither half was
+      guessed at.**
+      **(a) Is `CLIP` purely an INTERSECTION mask under PARTIAL overlap?** The design's
+      own measurement covers DISJOINT (renders nothing) and, implicitly, CONTAINMENT.
+      Crop-to-fill is neither: the fill rect is LARGER than the clip rect on one axis.
+      🔴 **The code now DEPENDS on the intersection reading** — `liveSourceFit` emits
+      exactly that geometry on every cropped plate — so this is no longer a
+      nice-to-know. The MOCK models it as an intersection (phase 3.3) and the offline
+      tests pass against that model, which proves the code is self-consistent and
+      proves NOTHING about the server. **Settleable with two `route://` producers and
+      no capture card; DELIBERATELY NOT REASONED OUT HERE.**
+      **(b) What rounding/precision does the server accept for the four arguments?**
+      `CommandBuilder` now emits at most **6 decimals** and never exponential notation
+      (`String(1e-7)` would produce `1e-7`, which no AMCP parser is known to accept).
+      ⚠ **6 was chosen to match the page's `css()` so the two sides round identically —
+      NOT because the server is known to want it.** No recorded precision exists.
+      `numberArg` in `command-builder.ts` is the single place to change if a probe
+      shows otherwise.
+      Both are AMCP probes on the plant's 2.3.2, and both should ride the SAME session
+      as §3b's `DEFER`/`COMMIT` question and 6.9a's replace measurement.
+      Original: **NARROWED 2026-08-03 — coordinate space and composition order are SETTLED by
       measurement** (`design.md` §3: `CLIP`'s rect is channel-normalized like `FILL`'s, and it MASKS
       rather than travelling with it; a disjoint clip window renders nothing). `MIXER CROP` is no
       longer the fallback for either question. Two things remain, neither needing a capture card:
@@ -937,7 +1060,18 @@ would give the ledger two owners and the doors two truths.
       design depends on it having been: §6 needs the basis and the semantics, both confirmed, not
       the pixel figure, whose job was to falsify the competing basis hypothesis. This task no
       longer rides with §12.1, which remains open on its own terms (DECKLINK and fill+key).
-- [ ] 6.4 Clamp the FILL to the scene rect (`.cg-stage` has `overflow:hidden`; the live source
+- [x] 6.4 **DONE 2026-08-14, and the clamp lands on the CLIP — that split is its
+      correctness.** The clip is the MASK, so intersecting it with the scene rect is
+      what actually stops the picture spilling past the stage; shrinking the FILL
+      would re-scale the picture into a box the author never drew, squashing a face
+      into the visible sliver. The task name says "clamp the FILL" and means "clamp
+      what the fill SHOWS" — the template's own frame graphic behaves identically
+      (drawn full size, clipped by `.cg-stage`).
+      A hole ENTIRELY outside the scene yields `clip: null` — a first-class answer,
+      because a zero-area rect reads as "very small" to a naive consumer and would be
+      emitted. The intersection uses strict `>` on both axes, so an edge-touching hole
+      is `null` rather than a zero-width box.
+      Original: Clamp the FILL to the scene rect (`.cg-stage` has `overflow:hidden`; the live source
       behind the hole does not).
 - [ ] 6.5 **The audio rule — WIDENED 2026-08-08 (owner, `design.md` §12.4). It is not a Live
       Source rule; it is THE rule, and it discharges the whole cluster in this wave.** Every
@@ -974,10 +1108,36 @@ would give the ledger two owners and the doors two truths.
       `play()` lifecycle, enforced at export/validate time — which is a `@cg/template-runtime` +
       exporter change and is OUT of this design's scope (`design.md` §7, _"What this rule does NOT
       close"_). R-029 stays `[~]` carrying exactly that residual.
-- [ ] 6.6 `mixerClear` on teardown — mixer state survives `CLEAR`
+- [x] 6.6 **DONE 2026-08-14** — `CasparRuntime.teardownLiveLayers` sends the producer
+      `CLEAR` and `MIXER … CLEAR` per layer, asserted ON THE WIRE (the mock models
+      mixer state surviving a `CLEAR`, which is what makes the omission catchable
+      offline) and on the resulting layer state — which resets to the IDENTITY rect,
+      the right thing to assert, since a mixer's default is the full frame unmasked
+      and that is what the next graphic must inherit.
+      Two orderings are load-bearing and tested: the producer goes BEFORE its geometry
+      (otherwise a live picture sits on the layer with its mask already reset,
+      flashing the un-masked oversized crop across the frame), and the ledger is
+      released LAST (releasing first hands the layer to the R-009 sweep while our
+      producer is still on it — DOOR 1's boundary case would surface it as an orphan).
+      ⚠ Not yet CALLED from `remove`/`out` — see the part-1 banner: the seating path
+      that would create the layers does not exist yet either.
+      Original: `mixerClear` on teardown — mixer state survives `CLEAR`
       (`command-builder.ts:128-130`, measured on hardware), so omitting it leaves a `FILL` a later
       graphic inherits.
-- [ ] 6.7 The take refuses legibly with a distinct `errorCode` when a declared plate has **no
+- [x] 6.7 **DONE 2026-08-14** — `resolvePlateAssignments`
+      (`tools/caspar-bridge/src/live-plate-assignment.ts`) refuses with
+      `live-source-unassigned` and NAMES THE PLATE in both of §2z's ways (never
+      assigned; the cascade removed it), which resolve to ONE state as the task
+      requires. A third route — an assignment naming a source the catalog no longer
+      has — keeps the same CODE (the operator's next action is identical) and changes
+      only the WORDING, since "unassigned" would send them looking for an assignment
+      they will find already made.
+      ALL-OR-NOTHING: a partly-assigned template seats nothing, because a layout with
+      one hole in it reaches the silent-empty-hole outcome by a different road. The
+      refusal names EVERY unresolved plate, so one attempt gives the whole list.
+      Every assertion is on the CLAIM, not on the presence of a refusal.
+      ⚠ Not yet CALLED from `take()` — see the part-1 banner.
+      Original: The take refuses legibly with a distinct `errorCode` when a declared plate has **no
       ASSIGNMENT** — never a silent empty hole on air (`docs/prd/caspar.md:396-397`).
       ⚠ **EXTENDED 2026-08-10 by the §2z reshape.** The wording assumed a missing MAPPING, which was
       the only way to fail before. There are now TWO ways and the refusal must NAME THE PLATE in

@@ -756,7 +756,48 @@ refuses the take before any of this (§2c, `tasks.md` 6.7).
 2. **the assigned source's explicit `aspect`** — the fallback where the format yields none, i.e.
    `AUTO` or a format outside the list above;
 3. **the element's `expectedAspect`** — the author's best guess, last;
-4. **neither side states anything** → still open, and still `tasks.md` 6.3's to settle.
+4. **neither side states anything** → ⭐ **DECIDED 2026-08-14: ASSUME THE HOLE'S OWN
+   ASPECT (no crop), and mark the result `assumed`. Not a refusal.** See below.
+
+### ⭐ 3a-i. DECIDED 2026-08-14 — step 4, the case where NEITHER side states an aspect
+
+The two candidates D-147 left open were: **assume the hole's own aspect (⇒ no crop)**, or
+**refuse the take with a distinct errorCode**. Adopted: **assume, and say that we assumed.**
+
+🔴 **THE ARGUMENT FROM THE CODE, WHICH IS ON ITS OWN SUFFICIENT: REFUSING WOULD OUTLAW
+`AUTO`.** `LIVE_SOURCE_FORMATS` includes `AUTO`, and `aspectForFormat` returns `null`
+for it **and for nothing else** — its own docstring calls it _"a request to the hardware, not
+a statement about the picture"_. An operator who selects `AUTO`, because the card negotiates
+or because the feed varies, has configured this system **correctly**. A refusal would make a
+first-class catalog value unusable, with nothing in the UI able to explain why. That is not a
+safety property; it is a bug wearing one.
+
+Three supporting reasons, in the order they weighed:
+
+1. **This design's refusals are for CONFLICT, not for ABSENCE.** The other two are a plate
+   with NO ASSIGNMENT (nothing to show at all) and an `expectedAspect` that DISAGREES with
+   the assigned source (two facts that contradict). Both are positive knowledge of a problem.
+   This is the absence of a cosmetic detail on a plate that is otherwise fully configured.
+2. **The harms are not comparable.** Assuming yields a picture that may be stretched — which
+   is exactly today's behaviour for every source, and what this whole feature improves on.
+   Refusing yields a **black box where a guest should be**, on a plate the operator correctly
+   assigned. Refusing a remedy because a detail is unknown is fail-STUCK, not fail-safe.
+3. **§3's ladder is written as DEGRADATION, not as a gate** — the fallback exists so the
+   feature is _"usable before every source is fully described"_, and D-147 made
+   `expectedAspect` optional precisely so an author who cannot see the feed _"is not forced
+   into a guess that can refuse a take on air"_. Refusing here would reintroduce that forced
+   guess at the installation end, one step further out.
+
+**THE HONESTY HALF, which is what makes assuming acceptable rather than merely convenient.**
+`resolvePlateAspect` returns `assumed: true` as its **own field**, not as `aspect === null`:
+the two answer different questions — `aspect` says what the geometry does, `assumed` says how
+much we KNOW — and a consumer needs both to say "fitted, unverified" rather than claiming a
+verified fit.
+
+⚠ **FLAGGED FOR THE OWNER, and cheap to reverse.** This is a judgement about which on-air
+failure is worse, and the owner may weigh a stretched face against a black box differently.
+`assumed` is the seam: it already carries the fact, so switching to a refusal is a change at
+`resolvePlateAspect` and its callers — not a redesign.
 
 🔴 **`expectedAspect` IS UNCHANGED BY THIS, and this sentence exists so a later reader does not
 collapse the two.** It remains the AUTHOR'S ASSERTION that the bridge VALIDATES the assigned source
