@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>mask-mode diagnostic — why mechanism B did nothing</title>
+    <!--
+      1.5b FOLLOW-UP #2 — the HYPOTHESIS that explains mechanism B's null result.
+
+      `punch-probe.html` builds mechanism B's mask as an SVG data URI whose comment reads
+      "white keeps, black punches": a white full-frame rect with BLACK rects where the
+      plates are. That is LUMINANCE masking.
+
+      🔴 CSS `mask-image` masks by ALPHA by default, not luminance. Under alpha masking,
+      `#fff` and `#000` are BOTH fully opaque — so that SVG is a uniformly opaque mask,
+      which keeps everything and punches nothing. A mask that applies perfectly and does
+      NOTHING VISIBLE is exactly the signature the owner recorded: "no visible effect at
+      all", indistinguishable from a mask that never applied.
+
+      This page decides it, entirely inside the page — no CasparCG alpha involved. A RED
+      sheet is masked over a GREEN sheet; green showing through the plate rects means the
+      mask punched, red everywhere means it did not.
+
+        1  AS-SHIPPED   the probe's exact SVG (white bg, black holes), default mask-mode.
+                        Predicts: NO holes — red everywhere.
+        2  LUMINANCE    the same SVG, with mask-mode / -webkit-mask-source-type luminance.
+                        Predicts: holes — green through the plate rects.
+        3  ALPHA-HOLES  the SVG rewritten so the holes are TRANSPARENT (fill-opacity 0)
+                        instead of black, under the default alpha masking.
+                        Predicts: holes — green through the plate rects.
+
+      If 1 shows no holes while 2 or 3 show them, mechanism B was never tested: it failed
+      on a mask-mode mistake in the probe, not on a CEF limitation. That flips 1.5b's
+      conclusion from "neither mechanism passes" to "one mechanism is still untested".
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #101820;
+        font-family: Consolas, monospace;
+      }
+      .sheet {
+        position: absolute;
+        inset: 0;
+      }
+      #under {
+        background: #00c000;
+      }
+      #over {
+        background: #d00000;
+      }
+      #tag {
+        position: absolute;
+        left: 24px;
+        bottom: 18px;
+        color: #ffd166;
+        font-size: 26px;
+        z-index: 10;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet" id="under"></div>
+    <div class="sheet" id="over"></div>
+    <div id="tag"></div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        /* The SAME two plate rects punch-probe.html uses, so this measures the same
+           geometry the original probe did. */
+        var PLATES = [
+          { x: 240, y: 300, w: 560, h: 320 },
+          { x: 1120, y: 300, w: 560, h: 320 },
+        ];
+
+        /* Verbatim in shape from punch-probe.html's `maskUri()` — white keeps, black
+           punches — because reproducing the DEFECT exactly is the point of mode 1. */
+        function svgLuminance() {
+          var w = window.innerWidth;
+          var h = window.innerHeight;
+          var svg =
+            "<svg xmlns='http://www.w3.org/2000/svg' width='" +
+            w +
+            "' height='" +
+            h +
+            "'><rect width='100%' height='100%' fill='#fff'/>";
+          for (var j = 0; j < PLATES.length; j++) {
+            var p = PLATES[j];
+            svg +=
+              "<rect x='" +
+              p.x +
+              "' y='" +
+              p.y +
+              "' width='" +
+              p.w +
+              "' height='" +
+              p.h +
+              "' fill='#000'/>";
+          }
+          svg += '</svg>';
+          return 'url("data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '")';
+        }
+
+        /* The same mask expressed in ALPHA: the holes are transparent, not black. */
+        function svgAlpha() {
+          var w = window.innerWidth;
+          var h = window.innerHeight;
+          var svg =
+            "<svg xmlns='http://www.w3.org/2000/svg' width='" +
+            w +
+            "' height='" +
+            h +
+            "'><rect width='100%' height='100%' fill='#fff'/>";
+          for (var j = 0; j < PLATES.length; j++) {
+            var p = PLATES[j];
+            svg +=
+              "<rect x='" +
+              p.x +
+              "' y='" +
+              p.y +
+              "' width='" +
+              p.w +
+              "' height='" +
+              p.h +
+              "' fill='#000' fill-opacity='0'/>";
+          }
+          svg += '</svg>';
+          return 'url("data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '")';
+        }
+
+        function setMode(m) {
+          var over = document.getElementById('over');
+          var under = document.getElementById('under');
+          over.style.cssText = '';
+          over.className = 'sheet';
+
+          /* MODE 4 — THE ONE THAT MATTERS. Everything above is decided inside the page:
+             it proves the mask punches to the element BENEATH IT. Mode 4 asks the only
+             question the feature actually needs — does the punch reach the page's ROOT
+             ALPHA, so CasparCG composites the layer below through it?
+
+             So the green under-sheet is REMOVED and the page is made transparent. The
+             red sheet is the "designed opaque backdrop" a real multi-box layout carries,
+             masked with luminance holes. Put a video on a lower CasparCG layer: video in
+             the plate rects means mechanism B WORKS and 1.5b's verdict is overturned;
+             black or red means the punch stops at the page boundary exactly as mechanism
+             A's did, and B is dead for the same reason A is. */
+          var pageAlpha = m === 4;
+          document.documentElement.style.background = pageAlpha ? 'transparent' : '#101820';
+          document.body.style.background = pageAlpha ? 'transparent' : '#101820';
+          under.style.display = pageAlpha ? 'none' : 'block';
+
+          var size = window.innerWidth + 'px ' + window.innerHeight + 'px';
+          var uri = m === 3 ? svgAlpha() : svgLuminance();
+
+          over.style.webkitMaskImage = uri;
+          over.style.maskImage = uri;
+          over.style.webkitMaskSize = size;
+          over.style.maskSize = size;
+          over.style.webkitMaskRepeat = 'no-repeat';
+          over.style.maskRepeat = 'no-repeat';
+
+          if (m === 2 || m === 4) {
+            over.style.maskMode = 'luminance';
+            over.style.webkitMaskSourceType = 'luminance';
+            /* Some engines only honour the shorthand-adjacent form; set both. */
+            over.style.setProperty('mask-mode', 'luminance');
+            over.style.setProperty('-webkit-mask-source-type', 'luminance');
+          }
+
+          var names = {
+            1: 'AS-SHIPPED (default mask-mode)',
+            2: 'LUMINANCE',
+            3: 'ALPHA-HOLES',
+            4: 'LUMINANCE + TRANSPARENT PAGE (does the punch reach ROOT ALPHA?)',
+          };
+          var cs = window.getComputedStyle(over);
+          document.getElementById('tag').textContent =
+            'MODE ' +
+            m +
+            ' ' +
+            names[m] +
+            '  ·  mask-mode=' +
+            String(cs.getPropertyValue('mask-mode') || '(empty)') +
+            (m === 4
+              ? '  ·  LOWER CASPARCG LAYER visible in the plate rects = mechanism B WORKS'
+              : '  ·  green in the plate rects = the mask PUNCHED');
+          window.__mode = m;
+        }
+
+        var q = /[?&]m=(\d)/.exec(window.location.search);
+        setMode(q ? Number(q[1]) : 1);
+
+        document.addEventListener('click', function () {
+          setMode((window.__mode % 4) + 1);
+        });
+        document.addEventListener('keydown', function (e) {
+          if (['1', '2', '3', '4'].indexOf(e.key) >= 0) setMode(Number(e.key));
+        });
+        window.next = function () {
+          setMode((window.__mode % 4) + 1);
+        };
+        window.update = function (payload) {
+          try {
+            var d = typeof payload === 'string' ? JSON.parse(payload) : payload;
+            if (d && d.m) setMode(Number(d.m));
+          } catch (err) {
+            /* a bad payload must not blank the page mid-measurement */
+          }
+        };
+        window.play = function () {};
+        window.stop = function () {};
+      })();
+    </script>
+  </body>
+</html>

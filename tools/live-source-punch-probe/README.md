@@ -1,22 +1,41 @@
 # Live Source backdrop-punch probe — task 1.5b
 
-**Status: RUN 2026-08-15 at the plant. BOTH MECHANISMS FAILED criterion 1.** The filled result
-form is at the bottom of this file and it is the record; this paragraph is a summary of it.
+**Status: RUN 2026-08-15 at the plant, then RE-MEASURED the same day — and the re-measurement
+CONTRADICTED the hand-run verdict for mechanism B.**
 
-> **Neither `mix-blend-mode: destination-out` nor masking the backdrop produced real transparency
-> on the plant's CEF.** Per this kit's own rule, that means **the punch is not a CSS problem**, and
-> `design.md` §9b — the multi-box on a channel of its own — becomes the **live option rather than
-> the fallback**. 1.5c, 1.5f and 1.5h are re-scoped around §9b; see `tasks.md`.
+> 🔴 **MECHANISM A FAILS. MECHANISM B WORKS.** The hand-run recorded "no visible effect at all" for
+> B, which was read as a failure. It was not: **this kit's own mask was a no-op.** `maskUri()`
+> encodes its holes in LUMINANCE ("white keeps, black punches") while CSS `mask-image` masks by
+> ALPHA, where `#fff` and `#000` are both fully opaque. A mask that applies and punches nothing has
+> the same signature as a mask that never applied — which is exactly the ambiguity the result form
+> below flags and could not resolve.
+>
+> Scripted re-run on the same build with `mask-mode-diagnostic.html`: the SAME SVG plus
+> `mask-mode: luminance` punches both plate rects, and over a transparent page **CasparCG
+> composites the lower layer through the holes** (`#00ffff` in both plates, backdrop `#d00000`
+> intact between them). **The punch IS a CSS problem and it is solved**; `design.md` §9b is not
+> forced. `punch-probe.html` is FIXED so the kit no longer carries the defect.
 
-**One positive finding survives for whatever §9b becomes:** §9a.1's SCOPING works. Mechanism A's
-erase was confined to an inner fill node and it did **not** eat the outer frame or the shadow —
-criterion 2 passed. That was worth measuring independently of the outcome.
+The filled result form is at the bottom of this file and it is the record of the hand-run; the
+paragraphs below summarise it. **Read the correction above first** — the form's conclusion for B is
+superseded, and it is kept unedited because a measurement record that has been tidied is not a
+record.
 
-🔴 **The build was NOT what this kit assumed.** The plant runs **CasparCG 2.5.0 (`69e8ad5` Stable)
-with Chromium 142**, not 2.3.2 with CEF 71. The failure conclusion is nevertheless **robust
-downward** — a modern Chromium failing means CEF 71 certainly fails — so 1.5b does **not** need a
-second run. Findings that depend on a NEWER engine do not survive downward; see the border-radius
-note under "What happens next".
+> ⚠ **SUPERSEDED — this was the hand-run's conclusion and it is half wrong.** It read: neither
+> mechanism produced real transparency, so the punch is not a CSS problem and §9b becomes the live
+> option. **Mechanism A's half stands. Mechanism B's does not** — see the correction at the top.
+> Kept because the reversal is only legible beside what it reversed.
+
+**A second positive finding, from the hand-run and still standing:** §9a.1's SCOPING works.
+Mechanism A's erase was confined to an inner fill node and it did **not** eat the outer frame or
+the shadow — criterion 2 passed. A is dead on criterion 1, but the scoping question it answered
+transfers, and mechanism B satisfies criterion 2 for free: it never erases the plate's own paint.
+
+🔴 **The build was NOT what this kit assumed** — and the owner has since settled it. Production is
+**CasparCG 2.5.0 (`69e8ad5` Stable) with Chromium 142**; **2.3.2 is RETIRED**. So every reading here
+is a production reading, and the "measure on 2.3.2 / CEF 71" instruction below — this file's own —
+is stale text. A retired 2.3.2 install still sits at `D:\programs\CasparCG`; never point a probe at
+it. Record the build string beside every result: the next upgrade makes today's answers historical.
 
 - The task: `openspec/changes/live-source-multibox/tasks.md` §1.5b (extended by §1.5f)
 - The design: `openspec/changes/live-source-multibox/design.md` §9a and §9a.1
@@ -37,8 +56,10 @@ mistake this task exists to prevent.** They behave differently on a Chromium-71-
 are not predictable from a modern browser — `B-066` was exactly that: a `tsconfig` setting that
 passed every local check and `SyntaxError`d on CEF 71, on air.
 
-> **Measure on the CEF inside the plant's CasparCG 2.3.2. A desktop-Chrome result answers a
-> different question and does not count.**
+> ⚠ **STALE — superseded 2026-08-15.** This said "measure on the CEF inside the plant's CasparCG
+> 2.3.2". Production is **2.5.0 / Chromium 142** and 2.3.2 is retired. The instruction's INTENT
+> stands and is the reason this kit exists: **a desktop-Chrome result answers a different question
+> and does not count.** Only the version is wrong.
 
 ---
 

@@ -82,8 +82,12 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       browser answered. `apps/designer/tests/live-source-punch-probe.test.ts` holds the probe to the
       repo's own `CEF_BANNED_BUILTINS` list and to being self-contained, because a probe that fails
       to BOOT on that CEF does not return a null result — it returns a wasted trip.
-      ⭐ **RUN AT THE PLANT 2026-08-15 BY THE OWNER — AND BOTH MECHANISMS FAILED CRITERION 1. The
-      filled form is `tools/live-source-punch-probe/README.md`; this is its reading.**
+      🔴 **RE-MEASURED THE SAME DAY, SCRIPTED AND PIXEL-ASSERTED — AND THE HAND-RUN VERDICT FOR
+      MECHANISM B IS CONTRADICTED. B WORKS. See `design.md` §9a-R; the summary is below the
+      original reading, which is kept because the correction is only legible beside it.**
+
+      ⭐ **RUN AT THE PLANT 2026-08-15 BY THE OWNER — BOTH MECHANISMS APPEARED TO FAIL CRITERION 1.
+      The filled form is `tools/live-source-punch-probe/README.md`; this is its reading.**
 
       | mechanism                                | criterion 1 (real transparency) | criterion 2 (frame + shadow) |
       | ---------------------------------------- | ------------------------------- | ---------------------------- |
@@ -139,7 +143,62 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       Same class as §9.3's unrunnable instruction: **an instruction nobody has run is an instruction
       nobody has checked**, and the cost lands on someone standing at a rack.
 
-- [ ] 1.5c ⛔ **SUPERSEDED BY 1.5b'S RESULT — there is no mechanism to implement.** This task read
+      ---
+
+      🔴 **THE CORRECTION — MECHANISM B WAS NEVER TESTED, AND IT PASSES.** Re-run scripted on the
+      same build (`2.5.0 69e8ad5 Stable`, Chromium 142) with
+      `tools/caspar-amcp-probe/bin/live-probe-lib.mjs` and
+      `tools/live-source-punch-probe/mask-mode-diagnostic.html`, sampling AMCP `PRINT` captures as
+      median patches rather than reading a screen.
+
+      **The defect was in the probe.** `punch-probe.html`'s `maskUri()` writes _"white keeps, black
+      punches"_ — LUMINANCE holes — while CSS `mask-image` masks by ALPHA, where `#fff` and `#000`
+      are both fully opaque. The mask applied and punched **nothing**. A no-op mask and a mask that
+      never applied have the SAME signature, which is exactly why the hand-run could not separate
+      them and why this task's own note recorded the ambiguity rather than resolving it.
+
+      | measurement (in-page: red sheet masked over green sheet)        | left plate | right plate | outside |
+      | ---------------------------------------------------------------- | ---------- | ----------- | ------- |
+      | the probe's exact SVG, default mask-mode (**as shipped**)        | `#d00000`  | `#d00000`   | `#d00000` |
+      | the SAME SVG + `mask-mode: luminance`                            | `#00c000`  | `#00c000`   | `#d00000` |
+
+      **And it reaches ROOT ALPHA** — the property mechanism A could not deliver. Transparent page,
+      masked backdrop, flat colour producer on a lower CasparCG layer: both plate rects read
+      `#00ffff` (the lower layer, composited through) with the backdrop `#d00000` intact between
+      them. A validity gate asserted the lower layer visible BEFORE the reading, and **voided a
+      first attempt** whose still image turned out black at the plate position.
+
+      **CONSEQUENCES.** "Neither mechanism passes" is WITHDRAWN. **A fails; B passes**, and passes
+      criterion 2 by construction (it erases nothing of the plate's own paint). The punch IS a CSS
+      problem and it is solved; §9b is **not forced** and reverts to a gated fallback. 1.5c is
+      unblocked **with its mechanism chosen by measurement**, and 1.5h is alive again.
+      `punch-probe.html` is FIXED (the two `luminance` lines) so the kit no longer carries the
+      defect that produced the wrong answer.
+
+      ⚠ **What is NOT claimed:** this measured the MECHANISM, not the product — `buildLiveSource`
+      still emits no mask — and the diagnostic used one full-frame sheet, not a nested scene. 1.5c's
+      assertion against the EXPORTED artifact stands exactly as written.
+
+- [ ] 1.5c ⭐ **UNBLOCKED 2026-08-15, WITH ITS MECHANISM CHOSEN BY MEASUREMENT: mask the backdrop,
+      `mask-mode: luminance`.** The re-measurement (`design.md` §9a-R) shows mechanism B punches and
+      that the punch reaches the page's root alpha, so this task reads as originally written —
+      implement the mechanism 1.5b selects, and assert the EXPORTED page's alpha is CLEAR over the
+      plate's rect with an opaque backdrop present.
+      🔴 **`mask-mode: luminance` (plus `-webkit-mask-source-type: luminance`) is NOT an optional
+      detail of the implementation — it IS the mechanism.** Without it the identical SVG is a no-op,
+      and a no-op mask looks exactly like a working one in every test that does not put something
+      visible underneath. **Assert the punched pixel, never the presence of a `mask-image` style.**
+      ⚠ **The cost §9a recorded against B is now the cost this task pays:** masking the backdrop
+      COUPLES it to the plates — the backdrop must know where every plate is, recomputed whenever
+      one moves. That was the recorded argument against B and it stands; it is simply outweighed by
+      B being the one that works.
+      ⚠ Scope still not proven for a REAL scene: the diagnostic used one full-frame sheet, while
+      `buildLiveSource` may nest a backdrop inside transforms and stacking contexts — which is where
+      mechanism A's failure lived. That is why the assertion must be against the exported artifact
+      and not the builder.
+
+      Superseded reading, kept so the reversal is legible — for a few hours on 2026-08-15 this task
+      was marked **SUPERSEDED, no mechanism to implement**: This task read
       "implement the mechanism 1.5b selects", and 1.5b selected none: both candidates failed
       criterion 1 on 2026-08-15. **It is NOT ticked and NOT deleted** — the requirement it served is
       untouched (§9a still says the page must be transparent over the plate's rect); what died is
@@ -156,6 +215,7 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       Original text, kept so the re-scope is legible: _"Implement the mechanism 1.5b selects, and
       test that the EXPORTED page's alpha is CLEAR over the plate's rect with an opaque backdrop
       present."_
+
 - [ ] 1.5e ⭐ **THE PLATE GAINS A STROKE (owner, 2026-08-10; `design.md` §9a.1).** Colour + width,
       same class as the box-shadow already allowed: paint on the TEMPLATE layer, OUTSIDE the hole,
       live picture untouched. A coloured frame around each guest box is what a multi-box design
@@ -284,10 +344,16 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       new engine implies nothing about an old one. **Which way a measurement generalises depends on
       whether it is a pass or a fail**, and both arrived in the same run. What retires the caveat
       here is not logic but the owner's decision that there is only one build.
-      ⚠ **The task's own blocker has also changed shape:** it said "revisit AFTER 1.5c", and 1.5c is
-      superseded. Rounding is still meaningful only where there is a hole to round, so this now
-      waits on §9b rather than on a CSS punch.
-- [ ] 1.5h ⛔ **AT RISK — ITS DEFINITION DEPENDED ON THE PUNCH, AND THE PUNCH FAILED (2026-08-15).**
+      ⚠ **Its blocker reverts to what the task originally said.** For a few hours on 2026-08-15 this
+      read "1.5c is superseded, so this waits on §9b"; 1.5c is unblocked again (§9a-R), so this
+      waits on **1.5c**, as written. Rounding is meaningful only where there is a hole to round, and
+      there is now going to be one.
+- [ ] 1.5h ⭐ **NO LONGER AT RISK — the punch exists after all (2026-08-15, `design.md` §9a-R).**
+      This task is "the punch with nothing put beneath it", and mechanism B delivers the punch, so
+      its premise is restored intact and it is gated on 1.5c exactly as it always was.
+
+      Superseded reading, kept so the reversal is legible — for a few hours on 2026-08-15 this task
+      was marked **AT RISK, its definition removed by the punch's failure**:
       This task is "the punch with nothing put beneath it", so 1.5b's result does not merely block
       it, it **removes the thing it was made of**. It is NOT ticked and NOT deleted; it must be
       **re-derived from §9b or dropped**, and that is an owner call rather than a re-scope CC can
@@ -318,6 +384,7 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       Scope when it is taken: how an author DECLARES a plate as passthrough (it has no `sourceId` to
       assign, so the preflight and the Inspector's unassigned-plate warnings must not read it as a
       fault), and a test that a passthrough plate allocates **no layer and no producer**.
+
 - [x] 1.7 Exempt a Live Source from `dropFullyOffFrameForExport`
       (`apps/designer/src/renderer/state/off-frame.ts:186-197`) and make out-of-frame a preflight
       **error** instead (C8). An element that is a contract must not be silently deleted.

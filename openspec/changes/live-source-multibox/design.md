@@ -1598,7 +1598,15 @@ single-file page**, under that CEF, with the live layer visible behind it. **Rec
 not the expectation.** Until it is run, no mechanism is chosen — that is the whole point of listing
 two.
 
-### 🔴 THE RECON RAN 2026-08-15. BOTH MECHANISMS FAILED. THE PUNCH IS NOT A CSS PROBLEM.
+### 🔴 SUPERSEDED WITHIN THE DAY — READ §9a-R BELOW FIRST
+
+The section immediately following recorded the owner's hand-run result of 2026-08-15 and drew the
+conclusion "the punch is not a CSS problem". **A scripted, pixel-asserted re-run the same day
+CONTRADICTED half of it: mechanism B was never actually tested, and once its defect is fixed it
+WORKS.** The original reading is kept in full because the correction is only legible beside it —
+and because mechanism A's half of it stands. Jump to **§9a-R** for the measured outcome.
+
+### THE RECON RAN 2026-08-15 (hand-run). BOTH MECHANISMS APPEARED TO FAIL.
 
 Run by the owner at the plant with `tools/live-source-punch-probe/`; the filled form is that kit's
 README and is the record. **The section above is left standing rather than rewritten**, because it
@@ -1646,6 +1654,75 @@ rather than the fallback**; see §9b.5, which is amended accordingly. Adoption r
 **One positive result survives and belongs to §9a.1, not here:** the erase was correctly SCOPED —
 an inner fill node erasing, an outer node carrying the frame and shadow — and criterion 2 passed.
 The frame was not eaten. Recorded on §9a.1.
+
+---
+
+### §9a-R ⭐ RE-MEASURED 2026-08-15, SCRIPTED AND PIXEL-ASSERTED — **MECHANISM B WORKS**
+
+Build `2.5.0 69e8ad5 Stable`, Chromium 142 — the production build. Harness:
+`tools/caspar-amcp-probe/bin/live-probe-lib.mjs` (one AMCP command at a time, every response code
+captured, AMCP `PRINT` read back and sampled as median patches at normalised coordinates).
+Diagnostics: `tools/live-source-punch-probe/mask-mode-diagnostic.html`.
+
+**THE PRIOR WAS WRONG ABOUT B, AND THE REASON IS A DEFECT IN THE PROBE, NOT IN THE BROWSER.**
+
+`punch-probe.html`'s `maskUri()` builds mechanism B's mask as an SVG whose own comment reads
+_"white keeps, black punches"_ — a white full-frame rect with BLACK rects at the plates. **That is
+LUMINANCE masking. CSS `mask-image` masks by ALPHA by default, and `#fff` and `#000` are both
+fully opaque.** So the mask applied perfectly and punched nothing: a no-op whose signature is
+indistinguishable from a mask that never applied — which is exactly what "no visible effect at
+all" recorded.
+
+Measured, entirely inside the page (a red sheet masked over a green sheet, so CasparCG's compositor
+is not involved and cannot confound the reading):
+
+| mode                                             | left plate | right plate | outside plates |
+| ------------------------------------------------ | ---------- | ----------- | -------------- |
+| **1** the probe's exact SVG, default mask-mode   | `#d00000`  | `#d00000`   | `#d00000`      |
+| **2** the SAME SVG + `mask-mode: luminance`      | `#00c000`  | `#00c000`   | `#d00000`      |
+| **3** holes as `fill-opacity="0"`, alpha masking | `#d00000`  | `#d00000`   | `#d00000`      |
+
+Mode 1 reproduces the null result exactly. Mode 2 punches both plate rects and leaves the backdrop
+intact between them. (Mode 3 also fails, and correctly so: the SVG composites internally, so a
+transparent rect over an opaque white rect is still opaque — the fix is the mask MODE, not the
+hole's colour.)
+
+**AND THE PUNCH REACHES THE PAGE'S ROOT ALPHA**, which is the property the feature actually needs
+and the one mechanism A could not deliver. With the page transparent, the masked backdrop over a
+flat colour producer on a lower CasparCG layer:
+
+| sample         | measured  | meaning                                          |
+| -------------- | --------- | ------------------------------------------------ |
+| left plate     | `#00ffff` | **the lower CasparCG layer, composited through** |
+| right plate    | `#00ffff` | same                                             |
+| outside plates | `#d00000` | the backdrop, intact                             |
+
+Validity gate: the lower layer was asserted visible BEFORE the reading. A first attempt used a
+still PNG that turned out black at the plate position; the gate VOIDED it rather than letting a
+black plate be read as a failed punch — which is precisely the failure mode this project has paid
+for twice.
+
+#### What this changes
+
+- 🔴 **"Neither mechanism passes" is WITHDRAWN.** Mechanism A fails, decisively and for the reason
+  §9a predicted. **Mechanism B PASSES criterion 1**, and passes criterion 2 by construction — it
+  erases nothing of the plate's own paint, so there is no stroke or shadow for it to eat (§9a.1's
+  asymmetry, now the deciding property rather than a footnote).
+- **The punch IS a CSS problem, and it is solved.** `design.md` §9b is **NOT forced**. It reverts
+  to what §9b always was on its merits: evaluated, recommended in principle, not adopted, gated on
+  §12.5. See §9b.5, whose promotion is withdrawn.
+- **1.5c is UNBLOCKED with a mechanism chosen by measurement** — masking the backdrop, with
+  `mask-mode: luminance` (and `-webkit-mask-source-type: luminance`) as a non-optional part of it.
+- **1.5h (passthrough) is alive again**, since it was only ever "the punch with nothing beneath it".
+- **§9a's table of trade-offs stands unchanged and is now load-bearing**: B's recorded cost is that
+  it COUPLES the backdrop to the plates — the backdrop must know where every plate is, recomputed
+  whenever one moves. That is the price of the mechanism that works, and 1.5c pays it.
+
+⚠ **What is NOT claimed.** This measured the mechanism, not the product: `buildLiveSource` emits no
+mask today (§9a's own DOM dump). And the diagnostic used ONE full-frame masked sheet; a real scene
+may nest the backdrop inside transforms and stacking contexts, which is where mechanism A's scope
+problem lived. **1.5c's assertion must still be taken against the EXPORTED artifact**, exactly as
+that task specifies.
 
 ### 9a.1 ⭐ AMENDED 2026-08-10 — the plate gains a STROKE, and it CONSTRAINS the punch
 
@@ -2139,12 +2216,25 @@ that is a real gap, and this closes it. It is **not** a reason to defer, narrow 
 measurement or the punch work: the single-channel installation has no dedicated channel to fall back
 to, and the mechanism choice is owed either way.
 
-⭐ **THE CONDITION IN THAT PARAGRAPH FIRED, 2026-08-15. THIS IS NO LONGER A FALLBACK.** The §9a
-measurement ran and **both** mechanisms failed criterion 1 — not only `destination-out`, and not
-only under CEF 71 but on Chromium 142, which makes the failure robust downward. So §9b moves from
-insurance to **the live option**, on the trigger this paragraph itself specified. The paragraph is
-kept rather than rewritten because the condition it names is precisely what happened, and a
-prediction that came true is worth more standing than tidied away.
+⚠ **THE CONDITION LOOKED LIKE IT FIRED ON 2026-08-15, AND THEN DID NOT — PROMOTION WITHDRAWN THE
+SAME DAY.** The hand-run §9a measurement reported both mechanisms failing, and this section was
+briefly amended to make §9b the live option. **A scripted, pixel-asserted re-run showed mechanism B
+had never actually been tested** — its mask encoded holes in luminance while CSS masks by alpha, so
+it was a no-op — and once fixed, **B punches and the punch reaches root alpha** (§9a-R).
+
+**So this stays a FALLBACK, exactly as written above.** §9b is back to what it was on its merits:
+evaluated, recommended in principle, **not adopted**, gated on §12.5's four measurements and one
+owner question. Nothing about its content changed in either direction; what changed is that the
+trigger did not fire after all.
+
+🔴 **The near-miss is worth keeping, because the cost of getting it wrong was asymmetric and large.**
+For a few hours the design had adopted a whole second-channel architecture — with its two-artifact
+coupling, its export-format consequence and its "a single-channel plant has no answer at all" gap —
+on the strength of a null reading that was actually a bug in the measuring instrument. **A null
+result is the one kind of result that looks the same whether the mechanism failed or the probe
+did**, and this section's own trigger language ("IF the CEF measurement shows that…") is what made
+it so easy to fire. When a fallback's trigger is a NEGATIVE observation, the observation needs a
+positive control before it counts.
 
 **Three things this promotion does NOT do, each because the sentence above was careful:**
 

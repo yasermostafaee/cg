@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>mask diagnostic — 1.5b follow-up</title>
+    <!--
+      1.5b FOLLOW-UP — the one ambiguity the first probe could not resolve.
+
+      Mechanism B (mask the backdrop) produced NO VISIBLE EFFECT AT ALL on 2026-08-15.
+      That signature cannot distinguish two very different worlds:
+
+        (i)  the mask APPLIED, and its transparency does not reach the page's root alpha
+             — the same wall mechanism A hit, so B is genuinely tested and genuinely dead;
+        (ii) the mask NEVER APPLIED on this CEF — in which case B was never tested at all,
+             and "neither mechanism passes" is NOT yet established.
+
+      That is a design-level fork: it decides whether design.md §9b is FORCED or merely
+      FAVOURED. This page settles it WITHOUT involving CasparCG's compositor, which is the
+      whole trick — every mode below is decided entirely inside the page.
+
+      MODES (?m=, or click, or 1/2/3):
+        1  MASK-APPLIES   red covers the frame, GREEN sits beneath it IN THE PAGE, and the
+                          red is masked with a hole. Green through the hole ⇒ the mask
+                          applies. All red ⇒ it never applied. No page alpha involved.
+        2  PAGE-ALPHA     a transparent page with ONE opaque white square. Whatever is on a
+                          LOWER CasparCG layer shows around it ⇒ this html producer can
+                          deliver alpha that CasparCG composites through at all. Separates
+                          "cannot erase what it painted" from "cannot be transparent".
+        3  READOUT        the computed mask/-webkit-mask values, printed large enough for a
+                          PRINT capture to read, plus the user agent.
+
+      Self-contained, no network, no build step — same rules as the probe beside it.
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        font-family: Consolas, monospace;
+      }
+      /* MODE 1 and 3 paint their own ground. MODE 2 must leave the page transparent. */
+      body.m1,
+      body.m3 {
+        background: #101820;
+      }
+      body.m2 {
+        background: transparent;
+      }
+      .layer {
+        position: absolute;
+        inset: 0;
+      }
+      /* The thing UNDER the masked element, in the page. Loud and unmistakable. */
+      #under {
+        background: #00c000;
+      }
+      /* The thing being masked: an opaque red sheet over the whole frame. */
+      #over {
+        background: #d00000;
+      }
+      /* One opaque square for the page-alpha test. */
+      #square {
+        position: absolute;
+        left: 660px;
+        top: 340px;
+        width: 600px;
+        height: 400px;
+        background: #ffffff;
+      }
+      #readout {
+        position: absolute;
+        left: 40px;
+        top: 40px;
+        color: #e8f0ff;
+        font-size: 30px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        width: 1840px;
+      }
+      #tag {
+        position: absolute;
+        left: 24px;
+        bottom: 18px;
+        color: #ffd166;
+        font-size: 26px;
+      }
+    </style>
+  </head>
+  <body class="m1">
+    <div class="layer" id="under"></div>
+    <div class="layer" id="over"></div>
+    <div id="square" style="display: none"></div>
+    <div id="readout" style="display: none"></div>
+    <div id="tag"></div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        // The hole, in page pixels — the SAME rect the probe's left plate uses, so the
+        // two measurements are about the same region of the frame.
+        var HOLE = { x: 240, y: 300, w: 560, h: 320 };
+
+        function holeMask() {
+          // A gradient stop pair is the most widely supported way to express a hard-edged
+          // rect mask; `linear-gradient(#000,#000)` is an opaque box, sized and positioned
+          // by mask-size / mask-position, over a transparent remainder.
+          return {
+            image: 'linear-gradient(#000, #000)',
+            size: HOLE.w + 'px ' + HOLE.h + 'px',
+            position: HOLE.x + 'px ' + HOLE.y + 'px',
+            repeat: 'no-repeat',
+          };
+        }
+
+        function applyMask(el) {
+          var m = holeMask();
+          // EXCLUDE so the box is the HOLE rather than the kept region: the red sheet
+          // survives everywhere the mask is empty and is removed where the box is.
+          el.style.webkitMaskImage = m.image;
+          el.style.webkitMaskSize = m.size;
+          el.style.webkitMaskPosition = m.position;
+          el.style.webkitMaskRepeat = m.repeat;
+          el.style.webkitMaskComposite = 'xor';
+          el.style.maskImage = m.image;
+          el.style.maskSize = m.size;
+          el.style.maskPosition = m.position;
+          el.style.maskRepeat = m.repeat;
+          el.style.maskComposite = 'exclude';
+        }
+
+        function readout() {
+          var over = document.getElementById('over');
+          applyMask(over);
+          var cs = window.getComputedStyle(over);
+          var props = [
+            'mask-image',
+            'mask-size',
+            'mask-position',
+            'mask-composite',
+            '-webkit-mask-image',
+            '-webkit-mask-size',
+            '-webkit-mask-position',
+            '-webkit-mask-composite',
+          ];
+          var out = [];
+          for (var i = 0; i < props.length; i++) {
+            out.push(props[i] + ': ' + String(cs.getPropertyValue(props[i]) || '(empty)'));
+          }
+          out.push('');
+          out.push(
+            'CSS.supports(mask-image, linear-gradient(#000,#000)): ' +
+              String(
+                window.CSS && window.CSS.supports
+                  ? window.CSS.supports('mask-image', 'linear-gradient(#000,#000)')
+                  : 'no CSS.supports',
+              ),
+          );
+          out.push(
+            'CSS.supports(mask-composite, exclude): ' +
+              String(
+                window.CSS && window.CSS.supports
+                  ? window.CSS.supports('mask-composite', 'exclude')
+                  : 'no CSS.supports',
+              ),
+          );
+          out.push('');
+          out.push('UA: ' + navigator.userAgent);
+          return out.join('\n');
+        }
+
+        function setMode(m) {
+          var body = document.body;
+          body.className = 'm' + m;
+          var under = document.getElementById('under');
+          var over = document.getElementById('over');
+          var square = document.getElementById('square');
+          var ro = document.getElementById('readout');
+
+          under.style.display = m === 1 ? 'block' : 'none';
+          over.style.display = m === 1 ? 'block' : 'none';
+          square.style.display = m === 2 ? 'block' : 'none';
+          ro.style.display = m === 3 ? 'block' : 'none';
+
+          if (m === 1) {
+            // Reset, then apply — so a re-entry cannot leave a half-set mask behind.
+            over.style.cssText = '';
+            over.className = 'layer';
+            applyMask(over);
+            document.getElementById('tag').textContent =
+              'MODE 1 MASK-APPLIES  ·  green through the hole = mask applies  ·  all red = it never applied';
+          } else if (m === 2) {
+            document.getElementById('tag').textContent =
+              'MODE 2 PAGE-ALPHA  ·  lower CasparCG layer visible around the white square = html alpha composites';
+          } else {
+            ro.textContent = readout();
+            document.getElementById('tag').textContent = 'MODE 3 READOUT';
+          }
+          window.__mode = m;
+        }
+
+        var q = /[?&]m=(\d)/.exec(window.location.search);
+        setMode(q ? Number(q[1]) : 1);
+
+        document.addEventListener('click', function () {
+          setMode((window.__mode % 3) + 1);
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === '1' || e.key === '2' || e.key === '3') setMode(Number(e.key));
+        });
+
+        // CasparCG's own cycling hook, so `CG 1-30 NEXT 1` steps the modes.
+        window.next = function () {
+          setMode((window.__mode % 3) + 1);
+        };
+        window.update = function (payload) {
+          try {
+            var d = typeof payload === 'string' ? JSON.parse(payload) : payload;
+            if (d && d.m) setMode(Number(d.m));
+          } catch (err) {
+            /* a malformed payload must not blank the page mid-measurement */
+          }
+        };
+        window.play = function () {};
+        window.stop = function () {};
+      })();
+    </script>
+  </body>
+</html>

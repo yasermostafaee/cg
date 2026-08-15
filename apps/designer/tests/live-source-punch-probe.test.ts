@@ -132,8 +132,18 @@ describe(`1.5b punch probe — bootable on Chromium ${String(CEF_CHROMIUM_BASELI
     );
     expect(readme).toContain('LIVE SOURCE PUNCH PROBE — RESULT');
     expect(readme, 'the run date is what makes the record citable').toContain('2026-08-15');
-    // The verdict, in words, so a later edit cannot soften it into "inconclusive".
-    expect(readme).toMatch(/BOTH MECHANISMS FAILED/);
+    // The SETTLED verdict, in words, so a later edit cannot soften it into "inconclusive".
+    //
+    // ⚠ This assertion has now been rewritten TWICE in one day, and that is the point
+    // rather than an embarrassment: it first required `NOT YET RUN`, then `BOTH
+    // MECHANISMS FAILED` (the hand-run's reading), and now the measured outcome — A
+    // fails, B works. Each rewrite happened because the file's claim genuinely changed,
+    // and a test that pins a claim is SUPPOSED to fail when the claim moves. It caught
+    // this edit.
+    expect(readme).toMatch(/MECHANISM A FAILS\. MECHANISM B WORKS/);
+    // …and the superseded reading is still present, because a measurement record that
+    // has been tidied is not a record.
+    expect(readme, 'the hand-run reading must survive its own correction').toMatch(/SUPERSEDED/);
     // The two-criteria card survives the run: it is what any re-read must be judged
     // against, and criterion 2's PASS outlives the mechanism it was measured on.
     expect(readme).toMatch(/Criterion 1/);
@@ -183,5 +193,36 @@ describe(`1.5b punch probe — bootable on Chromium ${String(CEF_CHROMIUM_BASELI
     // …and the working form is present, so the file still tells someone what to type.
     expect(recipe).toMatch(/CG\s+1-10\s+ADD\s+1\s+"punch-probe"/);
     expect(recipe).toMatch(/CG\s+1-10\s+NEXT\s+1/);
+  });
+
+  it("mechanism B's mask declares LUMINANCE, because its holes are black", () => {
+    // 🔴 THE DEFECT THAT COST A WHOLE CONCLUSION, pinned so it cannot come back.
+    //
+    // `maskUri()` builds mechanism B's mask as an SVG whose own comment says "white
+    // keeps, black punches" — that is LUMINANCE masking. CSS `mask-image` masks by
+    // ALPHA by default, where `#fff` and `#000` are BOTH fully opaque. So the mask
+    // applied perfectly and punched NOTHING.
+    //
+    // A no-op mask and a mask that never applied have the SAME signature — "no visible
+    // effect at all" — which is why the 2026-08-15 hand-run could not tell them apart,
+    // scored B as a failure, and very nearly forced a whole second-channel architecture
+    // (design.md §9b) on the strength of it. Measured on 2.5.0 / Chromium 142: the same
+    // SVG with `mask-mode: luminance` punches both plate rects and the punch reaches the
+    // page's root alpha.
+    //
+    // Assert the PAIRING, not the presence of a line: a luminance-encoded mask without a
+    // luminance mask-mode is the bug, and either half alone is meaningless.
+    const html = read(PROBE);
+    const usesBlackHoles = /fill='#000'/.test(html) || /fill="#000"/.test(html);
+    expect(usesBlackHoles, 'mechanism B is expected to encode its holes as black rects').toBe(true);
+    expect(
+      html,
+      'the mask encodes holes in LUMINANCE (black rects) but does not declare mask-mode: ' +
+        'luminance — under the default ALPHA masking that mask is a NO-OP, which is ' +
+        'indistinguishable from a mask that never applied. See design.md §9a-R.',
+    ).toMatch(/maskMode\s*=\s*[^;]*luminance/);
+    expect(html, 'the prefixed spelling carries the same rule').toMatch(
+      /webkitMaskSourceType\s*=\s*[^;]*luminance/,
+    );
   });
 });

@@ -56,7 +56,7 @@
         /* MANDATORY. CasparCG composites this page over the layers below it; an
            opaque page root would make every mechanism below untestable. */
         background: transparent;
-        font-family: Consolas, "Courier New", monospace;
+        font-family: Consolas, 'Courier New', monospace;
       }
 
       /* The designed OPAQUE backdrop — what a multi-box layout actually carries and
@@ -140,8 +140,7 @@
       <div class="m" id="hud-mode">…</div>
       <div id="hud-what">…</div>
       <div class="hint">
-        CG NEXT · click · keys 0 / A / B — 1: hole transparent? 2: frame + shadow
-        intact?
+        CG NEXT · click · keys 0 / A / B — 1: hole transparent? 2: frame + shadow intact?
       </div>
       <div class="ua" id="hud-ua">…</div>
     </div>
@@ -162,14 +161,14 @@
         */
         var PLATES = [
           { x: 240, y: 260, w: 900, h: 506 },
-          { x: 1240, y: 400, w: 520, h: 292 }
+          { x: 1240, y: 400, w: 520, h: 292 },
         ];
 
         var MODES = ['none', 'a', 'b'];
         var LABEL = {
           none: '0 — NONE (control: no punch)',
           a: 'A — mix-blend-mode: destination-out',
-          b: 'B — mask the backdrop'
+          b: 'B — mask the backdrop',
         };
         var WHAT = {
           none:
@@ -180,7 +179,7 @@
             'Watch whether the erase reaches the PAGE alpha, and whether it eats the frame.',
           b:
             'The backdrop is masked with the plate rects. The plates never erase ' +
-            'anything, so the frame cannot be eaten — but the mask itself may not work.'
+            'anything, so the frame cannot be eaten — but the mask itself may not work.',
         };
 
         var body = document.body;
@@ -245,6 +244,17 @@
           backdrop.style.maskSize = size;
           backdrop.style.webkitMaskRepeat = 'no-repeat';
           backdrop.style.maskRepeat = 'no-repeat';
+          /* 🔴 CORRECTED 2026-08-15 — THE LINE WHOSE ABSENCE MADE MECHANISM B UNTESTABLE.
+             `maskUri()` above encodes its holes in LUMINANCE ("white keeps, black
+             punches"), but CSS `mask-image` masks by ALPHA by default, and `#fff` and
+             `#000` are BOTH fully opaque. So the mask applied perfectly and punched
+             nothing — a no-op that looks exactly like a mask that never applied, which is
+             what the 2026-08-15 run recorded as "no visible effect at all".
+             Measured on 2.5.0 / Chromium 142 with `mask-mode-diagnostic.html`: the SAME
+             SVG with these two lines present punches both plate rects, and over a
+             transparent page CasparCG composites the lower layer through them. */
+          backdrop.style.maskMode = mode === 'b' ? 'luminance' : '';
+          backdrop.style.webkitMaskSourceType = mode === 'b' ? 'luminance' : '';
 
           document.getElementById('hud-mode').textContent = LABEL[mode];
           document.getElementById('hud-what').textContent = WHAT[mode];
