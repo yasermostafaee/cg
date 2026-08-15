@@ -12,6 +12,7 @@ export * from './bindings.js';
 export * from './live-source.js';
 export * from './live-geometry.js';
 export * from './scene.js';
+export * from './scene-flatten.js';
 export * from './composition-fields.js';
 export * from './path-migration.js';
 export * from './manifest.js';

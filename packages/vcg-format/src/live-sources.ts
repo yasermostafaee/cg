@@ -1,12 +1,5 @@
-import type {
-  Composition,
-  Element,
-  FieldBinding,
-  LiveSourceDeclaration,
-  LiveSourceRect,
-  Scene,
-  Transform,
-} from '@cg/shared-schema';
+import { flattenElements } from '@cg/shared-schema';
+import type { FieldBinding, LiveSourceDeclaration, Scene } from '@cg/shared-schema';
 
 /**
  * D-137 / C-015 — derive the runtime's Live Source DECLARATIONS from a scene.
@@ -45,85 +38,20 @@ import type {
  */
 
 /**
- * `frameAabb`'s per-level kernel (`off-frame.ts:50-60`), LIFTED — map an
- * element-local point (relative to the unscaled box top-left) through
- * `Scale·Rotate-about-anchor` + translate into the element's PARENT coordinate
- * system.
- */
-function localToParent(t: Transform, lx: number, ly: number): { x: number; y: number } {
-  const rad = (t.rotation * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const ox = lx - t.anchor.x * t.size.w;
-  const oy = ly - t.anchor.y * t.size.h;
-  return {
-    x: t.position.x + t.anchor.x * t.size.w + t.scale.x * (ox * cos - oy * sin),
-    y: t.position.y + t.anchor.y * t.size.h + t.scale.y * (ox * sin + oy * cos),
-  };
-}
-
-/**
- * One level of the ancestor chain.
+ * ⭐ **The flattener now lives in `@cg/shared-schema` (`scene-flatten.ts`), and this
+ * module CONSUMES it rather than owning it.**
  *
- * `preScale` is what `frameAabb` has no concept of and what makes this correct
- * for a nested Live Source: a COMPOSITION INSTANCE renders its referenced
- * composition into a `cg-comp-inner` div at `left/top: 0` with
- * `transform-origin: 0 0` and `scale(size.w / comp.resolution.width, size.h /
- * comp.resolution.height)` (`scene-builder.ts:258-260`). So a point in the
- * composition's own pixels is first multiplied by that scale to become a point
- * in the instance's element-local box, and only THEN goes through the instance's
- * own transform. A container level carries `preScale` (1, 1).
- */
-interface AncestorLevel {
-  transform: Transform;
-  preScale: { x: number; y: number };
-}
-
-/** Map a point up ONE level: the level's own inner scale, then its transform. */
-function levelToParent(level: AncestorLevel, lx: number, ly: number): { x: number; y: number } {
-  return localToParent(level.transform, lx * level.preScale.x, ly * level.preScale.y);
-}
-
-/**
- * The scene-px AABB of an element's own box, folded outward through
- * `ancestors` (outermost → innermost).
+ * It was module-private here, which was correct while `collectLiveSources` was its
+ * only caller. 1.5c gave it a second one: the RENDER side punches the same holes
+ * this side declares, and `@cg/template-runtime` cannot see this package. The hole
+ * the page punches and the hole the bridge fills have to be ONE computation —
+ * otherwise the backdrop's own colour lands where the guest should be and nothing
+ * on air says which of the two was wrong.
  *
- * All four corners are mapped, not two, because a level may ROTATE: the AABB of
- * a rotated box is not the mapping of its top-left and bottom-right.
+ * What is preserved exactly: `'document'` sibling order, so the declaration array
+ * stays stable across exports of an unchanged scene; the un-walked `repeater`
+ * subtree; and the three composition guards.
  */
-function sceneRect(el: Element, ancestors: readonly AncestorLevel[]): LiveSourceRect {
-  const { w, h } = el.transform.size;
-  const corners: readonly [number, number][] = [
-    [0, 0],
-    [w, 0],
-    [0, h],
-    [w, h],
-  ];
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  // `ancestors` is outermost → innermost; a point travels the other way.
-  const chain = [...ancestors].reverse();
-  for (const [lx, ly] of corners) {
-    let p = localToParent(el.transform, lx, ly);
-    for (const level of chain) {
-      p = levelToParent(level, p.x, p.y);
-    }
-    minX = Math.min(minX, p.x);
-    minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x);
-    maxY = Math.max(maxY, p.y);
-  }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-}
-
-/**
- * Bounds the composition recursion exactly as `scene-builder.ts:87` does, so a
- * declaration is derived from the same subtree the page actually renders. A
- * cyclic reference is blocked at author time and again here, by the visited set.
- */
-const MAX_COMPOSITION_DEPTH = 8;
 
 /**
  * Every `live-source-id` binding in the project, as `elementId → roles`.
@@ -159,67 +87,27 @@ function dynamicRoleIndex(scene: Scene): Map<string, Set<'fill' | 'key'>> {
  */
 export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
   const dynamicRoles = dynamicRoleIndex(scene);
-  const byId = new Map<string, Composition>();
-  for (const c of scene.compositions ?? []) byId.set(c.id, c);
 
   const out: LiveSourceDeclaration[] = [];
-  const walk = (
-    children: readonly Element[],
-    ancestors: readonly AncestorLevel[],
-    visited: ReadonlySet<string>,
-    depth: number,
-  ): void => {
-    for (const el of children) {
-      if (el.type === 'video-placeholder') {
-        const roles = dynamicRoles.get(el.id);
-        // ⚠ `keySourceId` / `keyDynamic` are DELIBERATELY NOT EMITTED (owner,
-        // 2026-08-10; design.md §1a). A template declares ONE symbolic id, and
-        // whether it resolves to a single device or to a fill/key DEVICE PAIR is
-        // a property of the installation's MAPPING. Both fields survive on the
-        // schemas so stored scenes and persisted `TemplateInfo` records keep
-        // parsing; emitting them here would carry a scene's guess about a plant
-        // it cannot see all the way to the bridge, where it would compete with
-        // the mapping that actually knows.
-        out.push({
-          elementId: el.id,
-          sourceId: el.routeKey,
-          rect: sceneRect(el, ancestors),
-          ...(el.expectedAspect !== undefined ? { expectedAspect: el.expectedAspect } : {}),
-          dynamic: roles?.has('fill') ?? false,
-        });
-        continue;
-      }
-      if (el.type === 'container') {
-        walk(
-          el.children,
-          [...ancestors, { transform: el.transform, preScale: { x: 1, y: 1 } }],
-          visited,
-          depth,
-        );
-        continue;
-      }
-      if (el.type === 'composition') {
-        const comp = byId.get(el.compositionId);
-        // Same three guards the builder applies before rendering an instance
-        // (`scene-builder.ts:259-265`): a missing reference, an over-deep chain
-        // and a cycle all render the empty box, so they declare nothing either.
-        if (comp === undefined || depth >= MAX_COMPOSITION_DEPTH || visited.has(el.compositionId)) {
-          continue;
-        }
-        const preScale = {
-          x: comp.resolution.width === 0 ? 1 : el.transform.size.w / comp.resolution.width,
-          y: comp.resolution.height === 0 ? 1 : el.transform.size.h / comp.resolution.height,
-        };
-        const level: AncestorLevel = { transform: el.transform, preScale };
-        const nextVisited = new Set(visited).add(el.compositionId);
-        for (const layer of comp.layers) {
-          walk(layer.children, [...ancestors, level], nextVisited, depth + 1);
-        }
-      }
-      // A `repeater` is deliberately NOT walked — see the module docstring.
-    }
-  };
-
-  for (const layer of scene.layers) walk(layer.children, [], new Set<string>(), 0);
+  for (const flat of flattenElements(scene, 'document')) {
+    const el = flat.element;
+    if (el.type !== 'video-placeholder') continue;
+    const roles = dynamicRoles.get(el.id);
+    // ⚠ `keySourceId` / `keyDynamic` are DELIBERATELY NOT EMITTED (owner,
+    // 2026-08-10; design.md §1a). A template declares ONE symbolic id, and
+    // whether it resolves to a single device or to a fill/key DEVICE PAIR is
+    // a property of the installation's MAPPING. Both fields survive on the
+    // schemas so stored scenes and persisted `TemplateInfo` records keep
+    // parsing; emitting them here would carry a scene's guess about a plant
+    // it cannot see all the way to the bridge, where it would compete with
+    // the mapping that actually knows.
+    out.push({
+      elementId: el.id,
+      sourceId: el.routeKey,
+      rect: flat.rect,
+      ...(el.expectedAspect !== undefined ? { expectedAspect: el.expectedAspect } : {}),
+      dynamic: roles?.has('fill') ?? false,
+    });
+  }
   return out;
 }
