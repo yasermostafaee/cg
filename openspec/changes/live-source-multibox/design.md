@@ -2600,3 +2600,33 @@ to special-case.
 reserved layer is not writing to it), and A3-R1 above is still open — whether a layer-scoped route
 delivers the producer’s own output or something already composited is a MEASUREMENT, and nothing
 here answers it.
+
+---
+
+### 9a-Z ⭐ WHICH ELEMENT CARRIES THE HOLES — settled by the owner, 2026-08-15
+
+§9a's mechanism B says "mask the backdrop". **The scene model has no `backdrop` concept**, and the
+question of which element carries the holes was open until the owner settled it:
+
+> **Mask by Z-ORDER, not by a declared role.** Each element is masked with the union of the rects of
+> the plates that sit **above it** in the scene's existing element order. Elements above all plates
+> are not masked at all. Elements whose rect intersects no plate above them need no mask. **Only
+> plates that actually have a live source punch** — an unassigned plate punches nothing, which
+> composes with 6.7's named refusal instead of putting black on air.
+
+**Why this rather than the two alternatives that were offered** (owner's reasoning, recorded as the
+specification):
+
+- **Nothing to forget.** It needs no new schema concept and no Designer control. _"A
+  declared-backdrop flag that someone forgets to set is a silent black plate on air — this project's
+  standing objection to guards that fail quietly."_
+- **It fixes the correctness bug in "mask everything below the plate".** A caption authored ABOVE a
+  guest box survives, because it is above the plate in z-order. _"Name supers over a live guest are
+  ordinary broadcast, not an edge case."_
+- **It degenerates correctly.** One backdrop under one plate is exactly the expected behaviour
+  today, with no special case.
+- **The information it needs already exists.** Z-order is in the scene; nothing new is modelled.
+
+⚠ **Two things to check when it is BUILT, deliberately not answered now:** whether the stage's own
+background — if that is a stage property rather than an element — falls inside or outside this rule;
+and whether N per-element masks cost anything measurable against one.

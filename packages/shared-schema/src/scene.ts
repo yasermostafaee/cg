@@ -709,3 +709,100 @@ export function hasNextStep(
     });
   return root.layers.some((l) => walk(l.children));
 }
+
+/**
+ * ⭐ **C-015 / 1.5c — THE BACKDROP-PUNCH MASK, BUILT IN EXACTLY ONE PLACE.**
+ *
+ * A multi-box layout carries a designed OPAQUE backdrop behind its plates. The whole
+ * HTML page is ONE CasparCG layer, so painting nothing at a plate is necessary and not
+ * sufficient — the backdrop survives at the plate's rect and the live picture on the
+ * layer BELOW is never seen. The plate's rect has to become a real hole in the page.
+ *
+ * 🔴 **`mask-mode: luminance` IS THE MECHANISM, not a detail of it.** The mask below
+ * says "white keeps, black punches", which is LUMINANCE semantics — and CSS
+ * `mask-image` defaults to `mask-mode: alpha`, where `#fff` and `#000` are **both
+ * fully opaque**. Under the default this mask applies perfectly and punches NOTHING.
+ * That no-op is not hypothetical: it is what shipped in the 1.5b probe, it produced
+ * "no visible effect at all" at the plant on 2026-08-15, and because a no-op mask and
+ * a mask that never applied have the IDENTICAL signature it was recorded as "mechanism
+ * B fails" — briefly promoting an entire second-channel architecture (design.md §9b)
+ * on the strength of it. Measured on CasparCG 2.5.0 `69e8ad5` / Chromium 142: the same
+ * SVG with `mask-mode: luminance` punches both plate rects and the punch reaches the
+ * page's ROOT ALPHA, so CasparCG composites the layer below through it.
+ *
+ * **Never return the image without the mode. They are one value and they ship together.**
+ *
+ * WHY HERE. Same reason {@link positionQuery} and {@link resolveDefaultPosition} live
+ * here: `@cg/shared-schema` is the only package every side already depends on. The
+ * product's renderer builds the mask from this; the 1.5b probe is a static, no-build
+ * file that cannot import at runtime, so `live-source-mask.test.ts` asserts the
+ * probe's hand-written `maskUri()` output is BYTE-IDENTICAL to what this produces for
+ * the probe's own plate table. **If the two ever diverge the probe stops testing the
+ * product — and the probe is the only thing standing between us and a silent no-op
+ * mask on air.**
+ *
+ * ⚠ **An ALPHA-hole form would remove the footgun** (holes at alpha 0 work under the
+ * default mode). It is a reasonable preference and it is **UNMEASURED**. Measuring it
+ * costs one probe run; substituting it for the measured mechanism on reasoning is
+ * exactly the error this project spent a day undoing, running the other way.
+ */
+export interface MaskHole {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /**
+   * 1.5d's SEAM, deliberately built and deliberately not exposed.
+   *
+   * A rounded frame with a square hole disagrees at the corners — the backdrop shows
+   * inside the frame's curve — so the hole has to round WITH the frame or not at all.
+   * Chromium honours `border-radius` on an `outline` only from ~94 and production is
+   * 142, so the obstacle 1.5d recorded is gone; what remains is the coupling. Carrying
+   * the parameter now makes 1.5d a value change rather than a redesign.
+   *
+   * ⚠ Zero is falsy: this is read with an explicit `> 0` test, never `radius ||`.
+   */
+  cornerRadius?: number | undefined;
+}
+
+export interface LiveSourceMask {
+  /** The `mask-image` / `-webkit-mask-image` value. */
+  image: string;
+  /** The `mask-size` value — the mask covers the whole element. */
+  size: string;
+  /** `mask-repeat`. */
+  repeat: string;
+  /** 🔴 `mask-mode` / `-webkit-mask-source-type`. Never omit this. */
+  mode: string;
+}
+
+/**
+ * Build the punch mask for one masked element.
+ *
+ * **Returns `null` when there are no holes**, and that is the honest answer rather
+ * than an all-keep mask: an element nothing punches should carry no mask property at
+ * all, so nothing has to reason about whether a full-white mask is equivalent to
+ * absence (it is, but only until someone adds a second mask layer).
+ */
+export function liveSourceMask(
+  holes: readonly MaskHole[],
+  sceneSize: { width: number; height: number },
+): LiveSourceMask | null {
+  if (holes.length === 0) return null;
+  const rects = holes
+    .map((h) => {
+      const r = h.cornerRadius !== undefined && h.cornerRadius > 0 ? h.cornerRadius : 0;
+      const radius = r > 0 ? `' rx='${String(r)}' ry='${String(r)}` : '';
+      return `<rect x='${String(h.x)}' y='${String(h.y)}' width='${String(h.width)}' height='${String(h.height)}${radius}' fill='#000'/>`;
+    })
+    .join('');
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='${String(sceneSize.width)}' height='${String(sceneSize.height)}'>` +
+    `<rect width='100%' height='100%' fill='#fff'/>${rects}</svg>`;
+  return {
+    image: `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`,
+    size: '100% 100%',
+    repeat: 'no-repeat',
+    mode: 'luminance',
+  };
+}

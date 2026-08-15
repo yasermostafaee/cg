@@ -210,6 +210,15 @@ describe(`1.5b punch probe — bootable on Chromium ${String(CEF_CHROMIUM_BASELI
     // SVG with `mask-mode: luminance` punches both plate rects and the punch reaches the
     // page's root alpha.
     //
+    // ⭐ SUPERSEDED AS THE PRIMARY GUARD, and kept deliberately. The mask now has ONE
+    // spelling — `liveSourceMask` in `@cg/shared-schema` — and
+    // `packages/shared-schema/tests/live-source-mask.test.ts` asserts this probe's
+    // `maskUri()` is byte-identical to it AND that the shared builder declares
+    // luminance. That test guards the SHIPPING builder, which is what the brief asked
+    // for; this one guards the artifact the owner physically carries to the plant.
+    // Both are wanted: the probe is a static file that cannot import the builder, so
+    // nothing but a test keeps them in step.
+    //
     // Assert the PAIRING, not the presence of a line: a luminance-encoded mask without a
     // luminance mask-mode is the bug, and either half alone is meaningless.
     const html = read(PROBE);
