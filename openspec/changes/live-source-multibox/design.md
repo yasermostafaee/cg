@@ -2630,3 +2630,49 @@ specification):
 ⚠ **Two things to check when it is BUILT, deliberately not answered now:** whether the stage's own
 background — if that is a stage property rather than an element — falls inside or outside this rule;
 and whether N per-element masks cost anything measurable against one.
+
+#### 🔴 CORRECTED 2026-08-15 (owner) — the punch is UNCONDITIONAL, and the withdrawn clause
+
+§9a-Z as first written said _"only a plate that actually has a live source punches"_. **That clause
+is WITHDRAWN as unimplementable-in-place and redundant.**
+
+**The page punches for EVERY declared plate, unconditionally. The mask is a PURE FUNCTION OF THE
+SCENE.**
+
+**Why it could not stand.** Assignment is an INSTALLATION fact. The scene element carries only a
+symbolic `routeKey` (`LiveSourceIdSchema`) — there is no assignment field on it — and §2z states the
+split directly: the author names plates for the LAYOUT, the installation names the sources. The mask
+is baked into the exported single-file HTML at export time, before any installation is known. **The
+exported artifact cannot know the assignment and must not learn it.**
+
+**What prevents a sourceless hole is upstream, and it is a SINGLE authority: 6.7's take refusal**,
+which already covers both ways to be unassigned — never assigned, and an assignment the delete
+CASCADE removed (§2c). A hole therefore never reaches air unassigned, which is what makes the clause
+redundant as well as unimplementable.
+
+**Why runtime resolution was REJECTED — three costs, any one disqualifying:**
+
+1. it breaks the export's SELF-DESCRIPTION, which `D-150` deliberately built;
+2. it adds a mask MUTATOR, and UNIT B′ exists precisely because mutators get forgotten;
+3. it puts a SECOND AUTHORITY on "is this plate sourced" alongside 6.7 — one rule, derived twice, in
+   its purest form.
+
+⭐ **THE RULE THIS GENERALISES TO, and the one to apply when the next such clause is written: a
+condition belongs in the mask ONLY IF it can be evaluated from the SCENE ALONE.** Visibility,
+lifecycle range, geometry and z-order qualify. Assignment does not. **So the punch follows the
+plate's own VISIBILITY, not its assignment** — an element not currently rendered punches nothing,
+and that is a fact the page has.
+
+**The Designer preview needs NO special case, and adding one is a defect.** §9a-Z masks elements
+BELOW the plate; the plate itself is never masked, so it paints a placeholder in the Designer and
+paints nothing on air, and the placeholder sits over its own hole. **Do not add a "don't punch in
+preview" branch** — that is preview/air divergence by construction, which is the thing this whole
+section exists to prevent.
+
+⚠ **NAMED RESIDUAL — written down rather than left looking handled.** A plate whose source DIES, or
+whose assignment the delete CASCADE removes, **while it is already on air**, keeps its punched hole
+and shows whatever the layer then delivers. **6.7 does not cover that window and neither does the
+mask**: 6.7 gates the TAKE, and the mask is a function of the scene, so neither is watching a source
+that fails mid-run. It belongs to `R-048`'s operator swap (the remedy — repoint the plate on air)
+and to 6.9f's recorded out-of-scope (no automatic dead-input detection; `C-023`'s thumbnails give
+the operator eyes instead). It is a real gap, it is accepted, and it is not this section's to close.
