@@ -151,6 +151,18 @@ describe('1.5c — POSITIVE CONTROL: the mask punches at all', () => {
     expect(style.getPropertyValue('-webkit-mask-image')).toBe(style.getPropertyValue('mask-image'));
   });
 
+  it('🔴 sizes the mask in EXPLICIT PIXELS of the DECLARED box, never a percentage', () => {
+    // A percentage resolves against the RENDERED box, and `applyBaseStyles` skips
+    // `width`/`height` for an auto-sized text element (D-060) — so `100% 100%` on one of
+    // those is the INTRINSIC size, and holes authored in the declared box's units get
+    // silently rescaled. The flattener measures `transform.size`, `collectLiveSources`
+    // declares `transform.size`, so the mask is pinned to `transform.size` too.
+    const style = node(render(sceneWith([backdrop, guest])), 'backdrop').style;
+    expect(style.getPropertyValue('mask-size')).toBe('1920px 1080px');
+    expect(style.getPropertyValue('mask-size')).not.toContain('%');
+    expect(style.getPropertyValue('-webkit-mask-size')).toBe('1920px 1080px');
+  });
+
   it('punches on air AND while authoring — there is no preview special case', () => {
     // §9a-Z: the plate is never masked, so it paints its own placeholder over its own
     // hole and preview looks right WITHOUT a branch. A "don't punch in preview" branch

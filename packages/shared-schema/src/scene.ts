@@ -801,7 +801,14 @@ export function liveSourceMask(
     `<rect width='100%' height='100%' fill='#fff'/>${rects}</svg>`;
   return {
     image: `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`,
-    size: '100% 100%',
+    // 🔴 EXPLICIT PIXELS, never `100% 100%`. A percentage resolves against the
+    // element's RENDERED box, and `applyBaseStyles` deliberately does NOT write
+    // `width`/`height` for an auto-sized text element (D-060) — so `100%` there is the
+    // INTRINSIC content size, and the mask, whose holes are authored in the DECLARED
+    // box's units, would be silently rescaled to a box of a different size. Pinning the
+    // mask to `sceneSize` makes it agree with the box the flattener measured, which is
+    // the same box `collectLiveSources` declares to the bridge.
+    size: `${String(sceneSize.width)}px ${String(sceneSize.height)}px`,
     repeat: 'no-repeat',
     mode: 'luminance',
   };

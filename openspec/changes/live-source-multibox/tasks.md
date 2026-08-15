@@ -196,6 +196,18 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       `buildLiveSource` may nest a backdrop inside transforms and stacking contexts — which is where
       mechanism A's failure lived. That is why the assertion must be against the exported artifact
       and not the builder.
+      ⭐ **UNIT B LANDED 2026-08-15 (`efe13f6`) — the mechanism is in the render path, and this box is
+      STILL NOT TICKED.** `§9a-Z`'s z-order rule is built as a pure `scene → key → MaskHole[]`
+      pre-pass (`@cg/shared-schema`'s `sceneMaskHoles`), consumed via `BuildCtx` at the one funnel
+      every element passes through, with `mask-mode: luminance` travelling INSIDE the mask value. The
+      flattener moved out of `@cg/vcg-format` into `@cg/shared-schema` so the hole the page PUNCHES
+      and the hole the bridge FILLS are one computation. **What is missing is exactly this task's own
+      acceptance**: the punched PIXEL, asserted against the EXPORTED artifact. The tests that shipped
+      assert the built DOM — which the paragraph above explicitly says is not enough — so the box
+      stays open until UNIT C does it. Also still open from `§9a-Z`: the mask is computed ONCE at
+      build and nothing recomputes it, so a plate that MOVES (take, teardown, position override,
+      resize, lifecycle range, retention restore, z-order reorder) leaves every hole where it was.
+      That enumeration is UNIT B′.
 
       Superseded reading, kept so the reversal is legible — for a few hours on 2026-08-15 this task
       was marked **SUPERSEDED, no mechanism to implement**: This task read
