@@ -208,6 +208,9 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       build and nothing recomputes it, so a plate that MOVES (take, teardown, position override,
       resize, lifecycle range, retention restore, z-order reorder) leaves every hole where it was.
       That enumeration is UNIT B′.
+      **Linux `e2e` for UNIT B — DISCHARGED, both commits, `e2e` job RAN (not skipped) in each:**
+      `efe13f6` → https://github.com/yasermostafaee/cg/actions/runs/31892929482 (`success`);
+      `181359a` → https://github.com/yasermostafaee/cg/actions/runs/31893523020 (`success`).
 
       Superseded reading, kept so the reversal is legible — for a few hours on 2026-08-15 this task
       was marked **SUPERSEDED, no mechanism to implement**: This task read

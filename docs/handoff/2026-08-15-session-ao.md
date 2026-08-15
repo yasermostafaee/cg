@@ -61,6 +61,12 @@ assertions are the strongest check available short of the plant. The exported-ar
   today only static `visible` does.
 - **UNIT C** — the export assertion; `mask-mode` surviving `@cg/single-file-export` is the highest
   single risk in the feature and is untested.
+- ⚠ **Found, deliberately not changed: an INVISIBLE ANCESTOR does not suppress a punch.** The walk
+  tests `visible` on the PLATE, not on its container or its layer — so a plate inside a hidden
+  container still punches. That is exactly what `collectLiveSources` has always done, so the page
+  and the bridge still AGREE (both act on the hidden plate), which is the property that matters
+  most and the reason I left it alone. But "declared while hidden" is a real question the mutator
+  enumeration should answer deliberately rather than inherit.
 - **UNIT D** — 1.5f / 1.5h: state whether B already discharges them.
 - `§9a-Z`'s two open checks (stage background element-or-property; N-masks cost), 1.5d's radius
   control (the seam is built, unexposed), the extended 6.2b contract test.
@@ -70,5 +76,17 @@ assertions are the strongest check available short of the plant. The exported-ar
 ## Gate
 
 `pnpm gate` green, uncached — **85 successful / 85 total, 0 cached**; `openspec validate --all
---strict` 51/51. A Linux `gate:e2e` **is owed** (this changes a render path); its run URL is
-recorded beside the ticked item in `tasks.md`.
+--strict` 51/51.
+
+**Linux `gate:e2e` — OWED (this changes a render path) and DISCHARGED.** Both commits have a
+COMPLETED, `success` GitHub Actions run in which the `e2e` job actually **RAN** rather than being
+skipped:
+
+| Commit    | What it carries                       | Run                                                           |
+| --------- | ------------------------------------- | ------------------------------------------------------------- |
+| `efe13f6` | UNIT B — the punch in the render path | https://github.com/yasermostafaee/cg/actions/runs/31892929482 |
+| `181359a` | the `mask-size` px fix + these docs   | https://github.com/yasermostafaee/cg/actions/runs/31893523020 |
+
+`181359a` is the one that matters — it is HEAD and carries both changes — but `efe13f6` is recorded
+too, since it is the commit that actually introduced the render-path change and a reader checking
+that commit should not have to infer its coverage from a later one.
