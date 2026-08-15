@@ -1460,6 +1460,18 @@ beforehand: 85/85, `0 cached`.
       entry in thirty row menus is furniture that teaches the operator to stop reading
       the menu — and NOT gated on `onAir`, because patching around a dead feed on a live
       graphic is the entire use of it.
+      ⭐ **CROSS-REFERENCED 2026-08-15 — `openspec/changes/operator-surface/` `§4`.** The placement
+      above is now the WORKED EXAMPLE of a rule that was never written down: the row's verb block
+      is a rigid six-column grid whose sticky header prints a word above each glyph, so a control
+      whose PRESENCE varies by row cannot go in it — it would shift every head to its right onto
+      the wrong glyph, and this product's STOP (graceful) and CLEAR (hard kill) are the INVERSE of
+      the reference product's. Session AH measured that wall on the audio control; this task and
+      6.5f each rediscovered it independently and both landed on the menu, correctly.
+      `VERB_COUNT` is still 6 and `LayerTableHeader`'s `VERB_HEADS` still has six entries —
+      verified byte-identical at `ec65480`. **Do not "improve" SOURCE or AUDIO back into the verb
+      block**, and do not add a seventh button without adding its head in the same change. The
+      conditional-presence reasoning quoted above is `§4.2`'s answer and belongs beside the C6
+      boundary in `PlayoutPanel.tsx`, not restated a fourth time.
       Original: **Reachable in one or two actions from the row.** Used under pressure, on air: not in
       settings, not behind a modal chain, not anywhere the operator must first find the item.
 - [x] 6.9f **RECORDED 2026-08-14 — both remain out of scope, and the reasons are the

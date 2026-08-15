@@ -758,6 +758,59 @@ week — before [[C-012]] there was no non-destructive way off air, so "clear it
   three places (`StackRow.tsx:128`, `:216`, its docstring) and `rowAction.ts:16-17` still lists
   PLAY/UPDATE/CLEAR/REMOVE — [[C-012]]'s STOP made it five.
 
+⭐ **DESIGNED 2026-08-15 alongside [[R-021]] / [[R-028]] / [[R-031]] / [[R-032]] / [[R-033]] as ONE
+surface — `openspec/changes/operator-surface/`. DESIGN ONLY; no code changed. Re-verified against
+`ec65480`** (an earlier pass measured a tree 68 commits stale and was discarded — see the change's
+`design.md` `§0.2a`).
+
+**THE FINDING IS CONFIRMED, and every file reference above is STALE**: `StackRow.tsx` no longer
+exists (R-028 part B deleted it with `StackPanel`, `LibraryPanel`, `FixedLayersPanel` and
+`FixedRow`). Re-measured at `ec65480`, locating by symbol rather than by line:
+
+- **the row** is `features/layers/layerRowActions.ts`, where the REMOVE half of the LOAD/REMOVE
+  toggle is `act('load-remove', 'REMOVE', false, …)` — its only gates are the ones `act` ORs in
+  centrally, `linkDown || awaiting`.
+- **the bulk** is `features/layers/LayersPanel.tsx` — `disabled={linkDown || items.length === 0}`,
+  with no `onAirCount` term although `onAirCount` is computed a few lines above and already gates
+  STOP ALL.
+- **the bridge** is unchanged: `stack.remove` answers `{ accepted }` and `stack.remove-all`
+  answers `{ ok, removed }` — neither response shape has anywhere to put a reason.
+
+🔴 **AND THE GAP HAS WIDENED SINCE THIS ITEM WAS FILED.** [[R-021]] stage 4 added a FIFTH verb
+gate — `blocked` (`restoreBlocked`: the row's layer is held by a producer that is not ours) — and
+wired it into PLAY, NEXT, SOURCE and AUDIO. **REMOVE did not get that one either.** Re-counted at
+`ec65480`: PLAY gates on `empty || playing || rehearsing || blocked || needsCaspar`; NEXT on
+`empty || !onAir || !hasNext || blocked || needsCaspar`; STOP and UPDATE on `!onAir || …`; CLEAR
+on `needsCaspar || awaiting`; SOURCE and AUDIO on `empty || blocked || needsCaspar`. **REMOVE is
+the only verb on the row with no state condition whatsoever** — and the only irreversible one.
+
+🔴 **THE ONE-AUTHORITY NOTE ABOVE NEEDS RE-DECIDING, and the design says so rather than quietly
+following it.** This item directs "read the EXISTING shared `isOnAir`". Since it was filed,
+**`B-122` rewrote that predicate's CONTRACT** — `onAir.ts` now says in its own text _"THIS IS NO
+LONGER CLEAR-ALL'S PREDICATE, AND MUST NOT BE MADE ONE AGAIN … it gated the EMERGENCY control on
+the believed status — precisely the value that may be wrong in the emergency … ⚠ It must never
+gate a clear path again, on either side of the bridge seam."_ In the same span the bridge grew
+its own canonical `isOnAirStatus(status, pending)` (`caspar-runtime.ts`), extracted under
+CLAUDE.md golden rule 6 with four consumers, whose doc states the principle this item needs:
+_"Unknown must count as on air in every one of these gates, because each one's failure mode is
+acting on a live graphic."_ **Neither predicate is a superset of the other** — the renderer's
+never reads `pending`; the bridge's omits `unverified` / `error` / `disconnected`. `design.md`
+`§5` sets out four candidates with their costs and recommends promoting `isOnAirStatus` into a
+shared package so BOTH sides import ONE predicate. The item's ONE-AUTHORITY _principle_ survives
+intact; its named answer does not.
+
+**One question this item asked is already ANSWERED and needs no work:** how a disabled REMOVE
+composes with [[R-033]] point 10's neutral buttons. `controls.css` already splits the two disabled
+treatments deliberately — `.cg-btn--verb:disabled` drops the fill AND the border (the row's
+icon-only verbs, so disabled reads as disabled by SHAPE, without colour), while `--neutral` /
+`--icon` KEEP their boundary at 0.45 opacity because they stand alone rather than in a column of
+peers. The row REMOVE inherits the first, REMOVE ALL the second.
+
+**R-017 is SEPARABLE and is wave 1 of that design's landing order** — it touches nothing in the
+column grid, the sticky header, the channel/tab axes or the PLAYOUT tab, and changes neither
+`VERB_COUNT` nor `VERB_HEADS` (both verified unmoved). It is also the only on-air-safety item
+among the six.
+
 ## [x] R-018 — feed field values from a text file (whole-text default, OPTIONAL split; manual reload) ⟨priority: medium⟩ — manual-reload half SHIPPED and archived: `openspec/changes/archive/2026-08-11-runtime-field-from-file/` (living spec `runtime-ui`); local gate green; no CasparCG hardware pass owed (renderer-only over the EXISTING field-update path — same `stack.update` wire and value shapes as hand edits, no new AMCP verbs, `@cg/template-runtime` untouched); OWES one Linux `pnpm gate:e2e` (FULL suite — a Linux run is owed for any UI/layout/rendering change, not only spec edits: the new FromFileControl mounts inside the Inspector and changes its content height, and nine existing specs interact with the Inspector plus the content-height-sensitive `panel-scroll.spec.ts`; DISCHARGED 2026-08-08 by a COMPLETED, GREEN `e2e` job on `ubuntu-latest` for commit `a344cd2`, which carries the change: <https://github.com/yasermostafaee/cg/actions/runs/31252541925> — run `conclusion: success`, `E2E (Playwright)` job conclusion `success`, runtime 62 passed / designer 237 passed, including the named-risk `panel-scroll.spec.ts` and `inspector-open-close.spec.ts`); the Windows `gate:e2e` 22/22 (0 cached) pass is recorded as non-authoritative EVIDENCE, not discharge (~19px render-geometry delta); the WATCH half remains OPEN as [[R-026]] (recon-first) and is NOT part of this closure
 
 **What:** At playout, a text-carrying field takes its value from a chosen text file: whole-file
@@ -851,7 +904,18 @@ text-verbatim, the B-077 interaction); implement the input half ONCE, under this
 R-014's input-side acceptance reads as satisfied by this item, and R-014 keeps the DISPLAY
 half and its open questions.
 
-## [~] R-021 — fixed operator layers: aliased pre-defined slots with on-row import+load and layer-level control ⟨priority: high⟩ — STAGES 1 + 2a landed (`openspec/changes/runtime-fixed-layers/`, see its STAGE MAP). Stage 1: install config + the LayerManager fixed mechanism + the R-009 orphan-sweep exclusion. Stage 2a (wire contract): the five `fixedLayers.*` channels (config read/update with the validator's own reason codes, single-sourced; per-slot state as FACTS — observed occupancy per the D3 honesty rules + a stage-3 `binding` field), bridge routes + publish-on-change from the existing sweep tick, LIVE bank changes via `LayerManager.applyFixed`, persistence on applied change, the typed `RuntimeBridge.fixedLayers` seam + `WebSocketRuntime` impl + `MockRuntime` parity (offline occupancy honestly UNKNOWN). Still no renderer/UI, still no on-air behaviour change (no bank ⇒ config null / state [] / zero publishes, test-pinned), R-015's clear refusal untouched. No CasparCG hardware pass and no Linux `gate:e2e` owed for the 2a slice — every touched path checked against `UI_RENDER_PATTERNS` in `tools/gate-hook/src/gate-decision.mjs`, none matches (packages/shared-ipc, packages/caspar-client, tools/caspar-bridge, apps/runtime src/shared + src/platform + non-e2e tests, docs, openspec). **Stage 2b (renderer) landed:** the fixed-bank panel above the stack (idle-quiet — no bank, no panel, byte-identical column), permanent rows with alias + layer number and honest occupancy (explicit UNKNOWN never shown as empty, B-094; a dead SPA↔bridge link masks EVERY row to unknown over the frozen snapshot, the B-087 class), verb derivation as the ONE pure `fixedRowActions` declaration point — stage 2b's ONLY verb is a confirm-gated layer CLEAR on an OBSERVED `html` producer (the b1 blind-Clear-under-silence and the non-html carve-out are DELIBERATELY stage 4/task 4.3: today's bridge refuses both and an enabled control must never invite a click that only rejects), the declaration-time confirm gate (`withConfirm` + the `cancelled` async path — cancel is no success flash and no toast) shared by buttons and context menu, the bank config modal (count/aliases live; channel/start read-only; refusals surface the validator's mapped reason + its message), the b′ same-bank invariant documented (operator guide + `fixed-layers-store.ts` header; the divergence HINT is deferred to stage 3 — with `binding` null, every html producer is indistinguishably foreign and the hint would carry no information), and the `CG_E2E_FIXED_BANK` mock seed + unit/DOM/E2E coverage (the "import+load lands on the exact slot" E2E moved to stage 3 beside 5.3). **Stage 2b OWES, recorded as OWED not done:** (1) a Linux `gate:e2e` run — this slice touches `apps/runtime/src/renderer/**` + `tests/e2e/**`, which match `UI_RENDER_PATTERNS`; the Windows `gate:e2e` result is a Windows signal only, NON-authoritative for render geometry (~19px delta class); (2) a real-hardware pass on CasparCG 2.3.2 for the one on-air path this stage adds — with a bank declared and a foreign html graphic on a bank layer, the fixed row's Clear takes it off air, the row settles to empty on the next sweep, and nothing else on the channel is disturbed. **Stage 3 (the exact-slot import+load chain) landed** — see the change's STAGE MAP. **Stage 4 (the restore branch) landed 2026-08-14:** `#slotForRestore` now BRANCHES — a declared row is bound exactly or the item is skipped (`fixed-slot-taken`), and `#allocate()` is unreachable for one, so a bridge restart can no longer bring an operator's row back on some dynamic layer (D11's warning, and under R-028's declared model it would have misplaced EVERY row rather than an unlucky one — which is why R-028 §1.1 named this Blocking); a declared row observed holding a NON-html producer parks in the named `restore-blocked` state with ZERO wire traffic (no adopt — that is B-092's misadoption lie; no auto-CLEAR — automatic paths never destroy), exiting only by the operator's explicit Clear-then-take or by the foreign producer vacating; the row shows BOTH facts and BLOCKED outranks the item's retained (usually `on-air`) status, and every verb that would COMMAND that layer is held while CLEAR/REMOVE stay live; task 4.3's dialog now branches on what the wire actually said (unknown → says it cannot tell · producer → names the kind · empty → says so), every branch naming the layer number. **Found and fixed in passing (D12):** B-114 had replaced `reserve()` with `bindFixed()` instead of branching, so every DYNAMIC retained coordinate had silently lost its exact-slot restore — pinned now by design §d test 5, verified failing first. **Stage 4's Linux `gate:e2e` is DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31760214543 (run 31760214543, `dev` HEAD `6ee4c5d4` which contains `e326a962`; completed + success, with the `e2e` job itself having RUN rather than skipped). **Stage 4 still OWES:** the real-hardware pass (7.3), which also still carries 4.3's UNRUN RECON (`CG STOP` on a non-html layer on real 2.3.2 — nothing shipped depends on its answer, since STOP is withheld for any non-html observation). Remaining: 7.3 (hardware) and the archive
+## [~] R-021 — fixed operator layers: aliased pre-defined slots with on-row import+load and layer-level control ⟨priority: high⟩ — STAGES 1 + 2a landed (`openspec/changes/runtime-fixed-layers/`, see its STAGE MAP). Stage 1: install config + the LayerManager fixed mechanism + the R-009 orphan-sweep exclusion. Stage 2a (wire contract): the five `fixedLayers.*` channels (config read/update with the validator's own reason codes, single-sourced; per-slot state as FACTS — observed occupancy per the D3 honesty rules + a stage-3 `binding` field), bridge routes + publish-on-change from the existing sweep tick, LIVE bank changes via `LayerManager.applyFixed`, persistence on applied change, the typed `RuntimeBridge.fixedLayers` seam + `WebSocketRuntime` impl + `MockRuntime` parity (offline occupancy honestly UNKNOWN). Still no renderer/UI, still no on-air behaviour change (no bank ⇒ config null / state [] / zero publishes, test-pinned), R-015's clear refusal untouched. No CasparCG hardware pass and no Linux `gate:e2e` owed for the 2a slice — every touched path checked against `UI_RENDER_PATTERNS` in `tools/gate-hook/src/gate-decision.mjs`, none matches (packages/shared-ipc, packages/caspar-client, tools/caspar-bridge, apps/runtime src/shared + src/platform + non-e2e tests, docs, openspec). **Stage 2b (renderer) landed:** the fixed-bank panel above the stack (idle-quiet — no bank, no panel, byte-identical column), permanent rows with alias + layer number and honest occupancy (explicit UNKNOWN never shown as empty, B-094; a dead SPA↔bridge link masks EVERY row to unknown over the frozen snapshot, the B-087 class), verb derivation as the ONE pure `fixedRowActions` declaration point — stage 2b's ONLY verb is a confirm-gated layer CLEAR on an OBSERVED `html` producer (the b1 blind-Clear-under-silence and the non-html carve-out are DELIBERATELY stage 4/task 4.3: today's bridge refuses both and an enabled control must never invite a click that only rejects), the declaration-time confirm gate (`withConfirm` + the `cancelled` async path — cancel is no success flash and no toast) shared by buttons and context menu, the bank config modal (count/aliases live; channel/start read-only; refusals surface the validator's mapped reason + its message), the b′ same-bank invariant documented (operator guide + `fixed-layers-store.ts` header; the divergence HINT is deferred to stage 3 — with `binding` null, every html producer is indistinguishably foreign and the hint would carry no information), and the `CG_E2E_FIXED_BANK` mock seed + unit/DOM/E2E coverage (the "import+load lands on the exact slot" E2E moved to stage 3 beside 5.3). **Stage 2b OWES, recorded as OWED not done:** (1) a Linux `gate:e2e` run — this slice touches `apps/runtime/src/renderer/**` + `tests/e2e/**`, which match `UI_RENDER_PATTERNS`; the Windows `gate:e2e` result is a Windows signal only, NON-authoritative for render geometry (~19px delta class); (2) a real-hardware pass on CasparCG 2.3.2 for the one on-air path this stage adds — with a bank declared and a foreign html graphic on a bank layer, the fixed row's Clear takes it off air, the row settles to empty on the next sweep, and nothing else on the channel is disturbed. **Stage 3 (the exact-slot import+load chain) landed** — see the change's STAGE MAP. **Stage 4 (the restore branch) landed 2026-08-14:** `#slotForRestore` now BRANCHES — a declared row is bound exactly or the item is skipped (`fixed-slot-taken`), and `#allocate()` is unreachable for one, so a bridge restart can no longer bring an operator's row back on some dynamic layer (D11's warning, and under R-028's declared model it would have misplaced EVERY row rather than an unlucky one — which is why R-028 §1.1 named this Blocking); a declared row observed holding a NON-html producer parks in the named `restore-blocked` state with ZERO wire traffic (no adopt — that is B-092's misadoption lie; no auto-CLEAR — automatic paths never destroy), exiting only by the operator's explicit Clear-then-take or by the foreign producer vacating; the row shows BOTH facts and BLOCKED outranks the item's retained (usually `on-air`) status, and every verb that would COMMAND that layer is held while CLEAR/REMOVE stay live; task 4.3's dialog now branches on what the wire actually said (unknown → says it cannot tell · producer → names the kind · empty → says so), every branch naming the layer number. **Found and fixed in passing (D12):** B-114 had replaced `reserve()` with `bindFixed()` instead of branching, so every DYNAMIC retained coordinate had silently lost its exact-slot restore — pinned now by design §d test 5, verified failing first. **Stage 4's Linux `gate:e2e` is DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31760214543 (run 31760214543, `dev` HEAD `6ee4c5d4` which contains `e326a962`; completed + success, with the `e2e` job itself having RUN rather than skipped). **Stage 4 still OWES:** the real-hardware pass (7.3), which also still carries 4.3's UNRUN RECON (`CG STOP` on a non-html layer on real 2.3.2 — nothing shipped depends on its answer, since STOP is withheld for any non-html observation). Remaining: 7.3 (hardware) and the archive.
+
+⭐ **Cross-referenced 2026-08-15 into `openspec/changes/operator-surface/` (design ONLY, no code),
+which designs this surface as ONE surface with [[R-017]] / [[R-028]] / [[R-031]] / [[R-032]] /
+[[R-033]]. Verified at `ec65480`: every stage of this item has landed, stage 4 included, with all
+task boxes ticked** — recorded because an earlier pass of that design read a 68-commit-stale tree
+and reported stage 4 as outstanding; that finding was discarded, not softened.
+
+**One consequence of stage 4 belongs to [[R-017]] and is easy to miss:** stage 4 added a FIFTH
+verb gate, `blocked` (`restoreBlocked`), and wired it into PLAY, NEXT, SOURCE and AUDIO — but not
+into REMOVE. So the one verb this project has never gated on air state is now also the only verb
+on the row with no state condition of ANY kind. See R-017's own note.
 
 **What:** A Cinegy-parity operating model IN PARALLEL with the dynamic stack: a fixed set of
 pre-defined CasparCG layers (default TEN at 70–79 — chosen because the default policy's dynamic
@@ -1121,6 +1185,29 @@ producer KIND, not identity — without declaration R-009 flags healthy playout 
 **C-015 stops being distant** — it is a prerequisite. One RECON owed: whether CasparCG 2.3.2
 exposes template identity beyond producer kind, via `tools/caspar-amcp-probe` on real hardware.
 
+⭐ **RE-MEASURED 2026-08-15 at `ec65480` (`openspec/changes/operator-surface/design.md` `§0`),
+designed as ONE surface with [[R-017]] / [[R-021]] / [[R-031]] / [[R-032]] / [[R-033]].** Parts A
+and B shipped and `§§6–7` landed (`25c2142`), so the surface half of this item is complete.
+
+🔴 **ONE ACCEPTANCE BULLET OF THIS ITEM IS CURRENTLY NOT MET, and it is not an oversight — it was
+superseded by a later owner decision that never came back here.** _"WHEN any row is displayed
+THEN its REAL CasparCG layer number is visible (a display index may sit beside it, never instead
+of it) — an operator may need it to clear that layer by hand."_ `layerTable.ts` removed the LAYER
+column altogether; the number now lives in the row's `title` and `aria-label`, and in the
+Inspector. The argument for the removal is sound as far as it goes (the fact moved somewhere
+always reachable rather than being deleted) — but "visible" and "reachable by hovering" are
+different claims, and this bullet names the exact scenario that separates them: an operator
+reaching for the number in order to clear that layer BY HAND, which is done when the console is
+NOT helping. Resolved either way by `design.md` `§2`; whichever candidate the owner picks, **this
+bullet's text must move**, because shipping against an unmet criterion is worse than either
+answer.
+
+**Also confirmed here rather than assumed:** the PLAYOUT tab does not leak ownership class three.
+It reads `playoutLayers.state` — the declared RESERVED set only — and there is no `liveLayers()`
+accessor in the tree. `design.md` `§0.8` names the mechanism that WOULD create the leak, as a
+standing constraint: declaring Live Source layers by adding them to `reservedLayers`, the only
+existing "layers we do not allocate" list.
+
 ## [~] R-031 — the operator surface, as the owner described it: one Layers section, no Library, verbs on the row ⟨priority: high⟩
 
 **What:** The concrete UI shape [[R-028]] resolves to, stated by the owner in review and filed
@@ -1157,6 +1244,32 @@ once the Library panel went, and losing a shipped capability (R-005) silently wo
 worse. Settings-side candidate-layer editing is the existing bank config modal, reached from the
 Layers header. See `openspec/changes/runtime-unified-layer-rows/DEBT.md` for what part B left
 owed (E2E suite, hardware pass).
+
+⭐ **ALL EIGHT POINTS VERIFIED TRUE AT `ec65480`, point by point, in
+`openspec/changes/operator-surface/design.md` `§0.3`** — designed 2026-08-15 alongside
+[[R-017]] / [[R-021]] / [[R-028]] / [[R-032]] / [[R-033]] as ONE surface. Seven of the eight rest
+on files with ZERO commits since `2a44247`; the eighth (point 7, verbs on the row) rests on
+`layerRowActions.ts`, which changed three times, so it was re-read rather than assumed — the
+verb declaration's SHAPE rule is intact, with two conditional MENU entries added beside it and
+the six-button block untouched.
+
+Point 8 is not merely satisfied but ARGUED in code, at the exact place a later reader would undo
+it (`layerRowActions.ts`, "THE SHAPE NEVER CHANGES"), including the NEXT case the owner caught in
+review — a verb that vanished when a single-step template landed and shifted its neighbours under
+the operator's finger.
+
+**Point 2's cost is PAID, not pending** — this was the open worry, and the recon closes it. What
+was deleted is the PANEL. The template REGISTRY survives with six working consumers, enumerated
+in `§0.3`: `useTemplatePicker` (list / remove / import), the Inspector (`templates.get` for the
+field schema), `useTemplateIndex` → the row's template label, `PreviewPanel` and `RehearsalStage`
+(`templates.html`), `SourcesModal` (Live Source plate assignments) and `fixedSlotLoad`. R-005's
+remove-a-template — which had no other surface once the panel went — was re-homed into the picker
+rather than lost. **The one residual question is `design.md` `§1`:** whether "the Library is
+DELETED" extends to the template PICKER dialog, the last surface still showing a LIST of
+templates. Recommended answer is that it stays (a list reached inside one action is a step, not a
+panel), and the cost of the alternative is spelled out there.
+
+This item is a candidate for `[x]` on the recon alone, once `§1` resolves.
 
 ## [~] R-032 — a PLAYOUT tab: see and clear what the playout system has on the reserved layers ⟨priority: high⟩
 
@@ -1199,6 +1312,36 @@ for layers this bridge did not create — four foreign `html` producers observed
 tap and AMCP `INFO` — and the occupancy tap stores the kind verbatim with no defaulting, so a
 non-html producer cannot be misread as html. Still owed: observing the NEGATIVE case (a video on a
 reserved layer) on hardware. Implemented in R-028 part B.
+
+⭐ **EVERY ACCEPTANCE BULLET VERIFIED TRUE AT `ec65480`, bullet by bullet, in
+`openspec/changes/operator-surface/design.md` `§0.4`** — designed 2026-08-15 alongside
+[[R-017]] / [[R-021]] / [[R-028]] / [[R-031]] / [[R-033]] as ONE surface. `PlayoutPanel.tsx`,
+`playoutOccupancy.ts` and `shared-ipc/channels/playoutLayers.ts` are all byte-identical since
+`2a44247`, so this section was confirmed by tree hash plus a re-read of the badge condition in
+`LayersPanel.tsx` (which did change, for an unrelated reason).
+
+The yellow indicator is a `badge: { tone: 'warn' }` on the PLAYOUT tab, and it is correct on the
+hard case: it fires on `kind === 'producer'` ONLY, so an `unknown` never raises it — the absence
+of a claim is not a claim — and `linkDown` masks it, because a frozen snapshot cannot back a
+warning. **The R-028 `§5.3` reversal is quoted VERBATIM in two places in the tree**
+(`PlayoutPanel.tsx`'s module doc and `packages/shared-ipc/src/channels/playoutLayers.ts`), the
+owner's reasoning intact, with the honest limit beside it in both — `html` means "not a video
+feed", never "unimportant".
+
+**ONE GAP, and it is a collision with [[R-033]] rather than a defect in this item
+(`design.md` `§0.9` C5 → `§3`):** the PLAYOUT tab's rows are laid out with
+`gridTemplateColumns: 'auto 1fr auto'`, the exact `auto`-sizing pattern `layerTable.ts` exists to
+replace, and they have no sticky header and no density ladder. R-033's rigid-grid rule governs
+the LAYERS tab and never reached the tab one click away — the tab an operator opens when ANOTHER
+system's graphic is on air, which is where a surprise is least welcome. One rule, applied to one
+of two surfaces.
+
+**Checked and clean:** the tab does NOT list Live Source layers. It reads `playoutLayers.state`,
+which is the declared RESERVED set only; there is no `liveLayers()` accessor in the tree. The
+exposure is FUTURE and its mechanism is named in `§0.8` — declaring Live Source layers by adding
+them to `reservedLayers` would put ownership class three into class two's surface.
+
+This item is a candidate for `[x]` once `§3` resolves.
 
 ## [ ] R-033 — the Layers surface as a table: neutral controls, state carried by icon, channel as the outer axis ⟨priority: high⟩
 
@@ -1252,6 +1395,45 @@ label; do not ship one without the other. **Open config question for the owner, 
 candidate ceiling is currently four layers (70–73) while R-028's design records 70–99 as
 available — if the demo needs more than four simultaneous rows that is a config decision to take
 before the demo. Filed from `dev-r028-b2`; see `openspec/changes/runtime-unified-layer-rows/DEBT.md`.
+
+⭐ **TEN OF TWELVE POINTS ARE ALREADY TRUE AT `ec65480`; TWO WERE SUPERSEDED; TWO REAL GAPS
+REMAIN.** Point-by-point citations in `openspec/changes/operator-surface/design.md` `§0.5` —
+designed 2026-08-15 alongside [[R-017]] / [[R-021]] / [[R-028]] / [[R-031]] / [[R-032]] as ONE
+surface. **This item reads as unbuilt and is mostly built**, which is exactly what filing a
+visual review from chat produces.
+
+**TRUE:** 3 (`layerTable.ts` — every column a fixed px width or an explicit `minmax(floor, Nfr)`,
+never `auto`), 4 (`ChannelScope` wraps the whole workspace; LAYERS/PLAYOUT nest inside), 5
+(`resolveDensity` / `minWidthFor`, three densities, the verb block never drops), 6
+(`ui/Tooltip.tsx` — delegated off any `title`, ported from the Designer's `InputTooltip`), 7
+(`MonitorStrip`, resizable, fullscreen-able), 8 (88vh, scrolling body), 9 (`role="button"` on the
+row, controls excluded via `closest(...)`, keyboard parity), 10 (`--r-verb-*` hover fills; **and
+its hardest half — disabled vs enabled legible without colour — is done by SHAPE**:
+`.cg-btn--verb:disabled` drops fill AND border, so enabled is a raised chip and disabled a bare
+dimmed glyph), 11's icon-only verbs under a sticky header that names each, and 12
+(`ui/Panel.tsx` — which is how the Inspector finally got one). Every one of those files has ZERO
+commits since `2a44247`, so the confirmation is a tree-hash comparison plus a read, not a
+re-assertion.
+
+**SUPERSEDED by a later owner decision recorded in `layerTable.ts` — now `design.md` `§2`:**
+point 1's real-layer-number secondary and point 2's description were removed as COLUMNS; both
+facts moved to tooltips (the row's own `title`/`aria-label`, and the state cell's tooltip) and to
+the Inspector. 🔴 **Point 1's supersession collides with a SHIPPED [[R-028]] acceptance bullet** —
+_"WHEN any row is displayed THEN its REAL CasparCG layer number is visible … an operator may need
+it to clear that layer by hand"_ — and "visible" is not "reachable by hovering", in precisely the
+scenario that bullet names. Three sources, two answers: whichever way `§2` resolves, R-028's
+acceptance text must move, because shipping against an unmet criterion is worse than either
+answer.
+
+**GAPS:** (a) point 11's "a real table" is true visually and FALSE semantically —
+`LayerTableHeader.tsx` carries `role="row"` with **no table-role ancestor** (an orphan role) and
+the body rows carry `role="button"`, so no table structure reaches assistive technology and the
+header words are announced as loose text rather than as the column headers of the glyphs beneath
+them. That matters more here than on an ordinary table: the header word is the third channel that
+retires the icon-only misread, and this product's STOP and CLEAR are inverted from the reference
+product's. (b) point 3's rigid grid never reached the PLAYOUT tab (see [[R-032]]). **Both land in
+ONE commit** — the only hard coupling in that design's landing order — because doing either first
+means the ARIA roles get written twice or written for one table and immediately extended.
 
 ## [~] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩ — CONTAINMENT LANDED 2026-08-14 in `openspec/changes/live-source-multibox/` (task 6.5a); the HEAD bullet is NOT discharged and this item stays `[~]` for it alone, see below
 
