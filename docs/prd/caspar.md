@@ -502,6 +502,48 @@ tracked `.vcg` archives were byte-scanned; none contains it). The conclusion sti
 scene-builder plus union membership (`packages/shared-schema/src/elements.ts:1121, 1142, 1188`) —
 only its evidence needed correcting.
 
+🔴 **THE BACKDROP PUNCH FAILED ON HARDWARE, 2026-08-15 — and this changes HOW the multi-box gets
+built, not whether.** Run by the owner at the plant with `tools/live-source-punch-probe/`; the
+filled form is that kit's README, the reading is `live-source-multibox` task 1.5b, and the design
+consequence is its `design.md` §9a.
+
+**What was measured.** A multi-box layout normally carries a designed OPAQUE BACKDROP behind its
+boxes, and the whole HTML page is ONE CasparCG layer — so a plate must ERASE what the template
+painted beneath it, not merely paint nothing. Two CSS mechanisms were carried to the plant and
+**both failed**: `mix-blend-mode: destination-out` erased inside the page but produced **opaque
+black rather than alpha 0**, which CasparCG composited over the live layer; masking the backdrop had
+**no visible effect at all** (recorded as an AMBIGUOUS failure — that signature cannot distinguish
+"the mask does not reach page alpha" from "the mask never applied"). Both alternative explanations
+for the first were eliminated rather than assumed.
+
+**The consequence, stated at the level this item cares about: `design.md` §9b — the multi-box on a
+CHANNEL OF ITS OWN — moves from fallback to the LIVE OPTION.** It is **not adopted**; adoption stays
+gated on §12.5's four measurements plus one owner question, which have now moved onto the critical
+path. Deferring them now defers the feature rather than a contingency.
+
+⚠ **ONE GAP THIS OPENS AND DOES NOT CLOSE, recorded here because it is a client-facing limit rather
+than a design detail: a SINGLE-CHANNEL installation has no dedicated channel to fall back to.** The
+punch was the answer for that case and there is now no answer for it at all. §9b serves a plant that
+can spare a channel; if this plant cannot, the multi-box story needs a different one.
+
+**Two findings from the same run that are worth keeping:**
+
+- ⭐ **The scoping WORKS.** An erase confined to an inner fill node did NOT eat the outer frame or
+  shadow (criterion 2 passed). Whatever replaces the punch, paint beside an erase can survive it.
+- 🔴 **PRODUCTION IS CasparCG 2.5.0 (`69e8ad5`, Chromium 142). 2.3.2 IS RETIRED — owner's decision,
+  2026-08-15.** So the punch answer above is a PRODUCTION answer, not one taken elsewhere that
+  happens to generalise. **Every "measure on 2.3.2 / CEF 71" instruction in `live-source-multibox`
+  (~two dozen of them) is now stale text to correct** — a warning that has outlived its truth. A
+  stale 2.3.2 install still sits at `D:\programs\CasparCG`; no probe may be pointed at it, or CEF-71
+  answers get recorded as production. Not new to the repo: `docs/prd/bugs-runtime.md` records the
+  same build from 2026-07-07 onward. **Record the build string beside every hardware answer** — the
+  next upgrade makes today's answers historical.
+- ⭐ **A consequence that reaches beyond this item: the project's CEF 71 / Chromium 71 BASELINE may
+  now be false**, and `B-066` (a `tsconfig` setting that passed every local check and threw
+  `SyntaxError` on CEF 71, on air) is its standing citation. Enumerating where that baseline is
+  encoded — build targets, polyfills, design-doc refusals — is recon owed; raising it is a
+  behaviour change that ships silently and belongs on its own session with its own `gate:e2e`.
+
 ## [ ] C-016 — operator PGM confidence view: periodic program-channel grabs served over the bridge's HTTP server ⟨priority: medium⟩
 
 **What:** Operators need to SEE the on-air output inside the Runtime (Cinegy parity). CasparCG

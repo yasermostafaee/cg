@@ -1598,6 +1598,55 @@ single-file page**, under that CEF, with the live layer visible behind it. **Rec
 not the expectation.** Until it is run, no mechanism is chosen — that is the whole point of listing
 two.
 
+### 🔴 THE RECON RAN 2026-08-15. BOTH MECHANISMS FAILED. THE PUNCH IS NOT A CSS PROBLEM.
+
+Run by the owner at the plant with `tools/live-source-punch-probe/`; the filled form is that kit's
+README and is the record. **The section above is left standing rather than rewritten**, because it
+is the reasoning that produced a correct measurement, and the value of "record the measurement, not
+the expectation" is only visible with the expectation still on the page.
+
+| mechanism                                 | criterion 1 — real transparency | criterion 2 — frame + shadow survive |
+| ----------------------------------------- | ------------------------------- | ------------------------------------ |
+| **A** — `mix-blend-mode: destination-out` | **FAIL**                        | **PASS**                             |
+| **B** — mask the backdrop                 | **FAIL** — ambiguous            | PASS (trivially — B erases nothing)  |
+
+**A failed decisively, and the cause is the exact risk this section named.** The erase HAPPENED
+inside the page — the backdrop's stripes vanished from both plate rects — but produced **opaque
+black, not alpha 0**, and CasparCG composited that black over the live layer. The table above says
+of this candidate: _"it erases within its stacking / isolation group, and what reaches the PAGE's
+root alpha depends on the isolation above it. That interaction is precisely the thing to measure,
+not to reason about."_ **That is what was measured, and it is what killed it.** Both alternative
+explanations were eliminated rather than assumed: `CLEAR 1-10` showed the video live and running,
+and the clip's letterboxing was computed against the plate rects and rejected.
+
+**B failed ambiguously and is recorded as ambiguous.** No visible effect at all — a signature that
+**cannot** distinguish "the mask applied and does not reach page alpha" from "the mask never applied
+at all". It is FAIL on the criterion; it is **not** evidence about masking as a technique. The
+overall conclusion does not lean on it: the rule was that both must fail, and A's failure is
+decisive on a modern engine.
+
+⭐ **The measurement was taken on Chromium 142 (CasparCG 2.5.0, `69e8ad5`), and the OWNER HAS SINCE
+SETTLED (2026-08-15) THAT THIS IS PRODUCTION: 2.3.2 is retired.** So this is not a result taken on
+the wrong machine that happens to generalise — **it is a production answer**, and the
+robust-downward argument, while true, is no longer needed to carry it.
+
+🔴 **Which makes every "measure on CasparCG 2.3.2 / CEF 71" instruction in this change STALE TEXT,
+not a fork to navigate** — this section's own heading above is one of them, and there are roughly
+two dozen. They are a warning that has outlived its truth, which is the defect class this project
+has been bitten by twice. A stale 2.3.2 install still exists at `D:\programs\CasparCG`; **no probe
+may be pointed at it**, or CEF-71 answers get recorded as production. Record the build string beside
+every result regardless: the next upgrade makes today's answers historical.
+
+**The requirement in "The requirement, stated plainly" above is UNCHANGED and still unmet.** What
+the measurement retires is the assumption that CSS can satisfy it **inside one CasparCG layer**.
+Per this kit's own rule, **§9b — the multi-box on a channel of its own — becomes the LIVE OPTION
+rather than the fallback**; see §9b.5, which is amended accordingly. Adoption remains gated on
+§12.5's four measurements and one owner question, and this run does not make that call.
+
+**One positive result survives and belongs to §9a.1, not here:** the erase was correctly SCOPED —
+an inner fill node erasing, an outer node carrying the frame and shadow — and criterion 2 passed.
+The frame was not eaten. Recorded on §9a.1.
+
 ### 9a.1 ⭐ AMENDED 2026-08-10 — the plate gains a STROKE, and it CONSTRAINS the punch
 
 **DECIDED 2026-08-10 (owner).** A Live Source may carry a **stroke (colour + width)**. It is the same
@@ -1712,6 +1761,30 @@ feature.** Criterion 2 is not a refinement of criterion 1 — it is a second, in
 **The measurement has NOT been run and NO mechanism has been chosen** (§9a records both candidates
 precisely because the choice waits on it), so there is no settled decision to re-open here. This
 constraint arrives BEFORE the choice, which is the order that costs nothing.
+
+⭐ **MEASURED 2026-08-15 — CRITERION 2 PASSED, AND THIS IS THE ONE POSITIVE RESULT THE RUN
+PRODUCED.** The probe implemented exactly the scoping this section prescribes — the erase on an
+**inner fill node**, the frame and shadow on the **outer** node — and on the plant's CEF the frame
+came back **full width, unbroken, all the way around both plates, with the drop shadow intact**.
+The mechanism carrying it (`destination-out`) failed criterion 1 and is dead; **this finding is
+not**.
+
+**Why it outlives the mechanism, stated so it is not discarded with it.** Criterion 2 is about
+SCOPING an erase so that paint beside it survives — not about whether an erase reaches the page's
+root alpha. Those are different properties of different parts of the pipeline, which is exactly why
+this section insisted they were independent ways to fail. So the conclusion transfers: **whatever
+§9b turns into, the constraint this section places on a mechanism is satisfiable**, and no future
+design has to re-litigate whether a frame can survive an erase beside it.
+
+**The independence was also what made the run readable.** Mechanism A failed one criterion and
+passed the other, so the measurement says two distinct things rather than one muddled "it did not
+work". Had the two been collapsed into a single verdict, the surviving finding would have been lost
+inside the failure.
+
+⚠ **The SHADOW half is weaker evidence than the stroke half**, and the difference is worth keeping:
+the probe's shadow was its own CSS `box-shadow`, while the PRODUCT still has no shadow field at any
+of the three layers (schema, renderer, Inspector — see task 1.5e's scope note). This is evidence
+about the technique, not about a shipped feature.
 
 #### Two consequences, recorded where they will be looked for
 
@@ -2066,6 +2139,31 @@ that is a real gap, and this closes it. It is **not** a reason to defer, narrow 
 measurement or the punch work: the single-channel installation has no dedicated channel to fall back
 to, and the mechanism choice is owed either way.
 
+⭐ **THE CONDITION IN THAT PARAGRAPH FIRED, 2026-08-15. THIS IS NO LONGER A FALLBACK.** The §9a
+measurement ran and **both** mechanisms failed criterion 1 — not only `destination-out`, and not
+only under CEF 71 but on Chromium 142, which makes the failure robust downward. So §9b moves from
+insurance to **the live option**, on the trigger this paragraph itself specified. The paragraph is
+kept rather than rewritten because the condition it names is precisely what happened, and a
+prediction that came true is worth more standing than tidied away.
+
+**Three things this promotion does NOT do, each because the sentence above was careful:**
+
+- **It does not adopt §9b.** Adoption is still gated on §12.5's four measurements and one owner
+  question, all open. "Live option" means it is the candidate to evaluate, not the decision.
+- **It does not dissolve the single-channel problem.** The last sentence above is now the load-bearing
+  one: **a single-channel installation has no dedicated channel to fall back to.** §9b answers the
+  multi-box for a plant that can spare a channel. For one that cannot, the punch was the answer and
+  there is now no answer at all — that gap is REAL, is not closed by this promotion, and must not be
+  hidden by it.
+- **It does not make the two-artifact objection go away.** The owner's own objection above — two
+  geometries that can drift, and an export that must emit a backdrop artifact CasparCG can play,
+  which `proposal.md` currently rules out — is unchanged and is now on the critical path rather than
+  on a contingency branch.
+
+⚠ **What DID change about §9a's tasks:** 1.5c has no mechanism to implement and is re-scoped onto
+§9b; 1.5h's definition ("the punch with nothing beneath it") loses the thing it was made of and must
+be re-derived or dropped; 1.5d's blocker moves from 1.5c to §9b. See `tasks.md`.
+
 ### 9b.6 What this model does NOT change — so nobody reads it as a redesign
 
 | Unaffected                                                                 | Why                                                                                                                                                                  |
@@ -2235,6 +2333,23 @@ one residual the rule does **not** close — see §7's _"What this rule does NOT
 CasparCG **2.3.2** with `node tools/spikes/amcp-poke/amcp-poke.mjs`, none needs a capture card, and
 together they are one session's work — pair them, exactly as §3b pairs its own question with R-048's
 replace measurement.
+
+🔴 **PROMOTED TO THE CRITICAL PATH 2026-08-15, and NOT adopted — the two are different things.**
+§9a's punch measurement ran and both mechanisms failed, so §9b stopped being the contingency branch
+and became the live option (§9a's result section; §9b.5's amendment). **These four measurements and
+the owner question are what now stand between the change and its multi-box story** — they were
+optional-until-needed and they are needed. Nothing about their content changes; what changes is that
+deferring them defers the feature rather than a fallback.
+
+⚠ **Two corrections to this paragraph's own instructions, both from the 2026-08-15 run:**
+
+1. **The plant is on CasparCG 2.5.0 (`69e8ad5`, Chromium 142), not 2.3.2.** Confirm which server you
+   will be standing in front of before running M1–M4; several of these questions (M1's headroom in
+   particular) are version- and build-sensitive in a way §9a's punch failure was not.
+2. **Check any AMCP form in this document before typing it.** The punch probe's README shipped
+   `CG ADD 1-10 …` — verb before channel-layer — and every example returned `#400 ERROR` at the rack.
+   AMCP is `CG <ch>-<layer> <VERB> <flash> …`. That defect was in a doc, not in the product, and a
+   doc is exactly what M1–M4 are.
 
 #### M1 — does the machine have HEADROOM for a second channel?
 

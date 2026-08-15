@@ -60,7 +60,7 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       Consistent with the box-shadow amendment: the HOLE is transparent; the element may still paint
       OUTSIDE its rect. Same family as 1.6's `zone-css` hazard (a background reaching the hole),
       different cause — that one is an authored zone colour, this one is a sibling element beneath.
-- [ ] 1.5b ⚠ **RECON FIRST, ON THE RIGHT BROWSER — do not choose a mechanism on reasoning.** Two
+- [x] 1.5b ⚠ **RECON FIRST, ON THE RIGHT BROWSER — do not choose a mechanism on reasoning.** Two
       candidates, both recorded in `design.md` §9a with their trade-offs:
       **(a) `mix-blend-mode: destination-out` on the plate** — element-local, no coupling to the
       backdrop, and the erase follows the element's own box so a `border-radius` gives a ROUNDED hole
@@ -82,13 +82,80 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       browser answered. `apps/designer/tests/live-source-punch-probe.test.ts` holds the probe to the
       repo's own `CEF_BANNED_BUILTINS` list and to being self-contained, because a probe that fails
       to BOOT on that CEF does not return a null result — it returns a wasted trip.
-      🔴 **STILL OPEN, and only the owner can close it.** No mechanism is chosen here and none may
-      be: the kit deliberately ships both plus the control. The task is discharged by the filled-in
-      form, not by the kit existing.
-- [ ] 1.5c Implement the mechanism 1.5b selects, and **test that the EXPORTED page's alpha is CLEAR
-      over the plate's rect with an opaque backdrop present** — the assertion must be about the
-      exported artifact, since that is what CEF loads, and a builder-level assertion would pass on a
-      page whose root alpha is still opaque.
+      ⭐ **RUN AT THE PLANT 2026-08-15 BY THE OWNER — AND BOTH MECHANISMS FAILED CRITERION 1. The
+      filled form is `tools/live-source-punch-probe/README.md`; this is its reading.**
+
+      | mechanism                                | criterion 1 (real transparency) | criterion 2 (frame + shadow) |
+      | ---------------------------------------- | ------------------------------- | ---------------------------- |
+      | **A** — `mix-blend-mode: destination-out` | **FAIL**                        | **PASS**                     |
+      | **B** — mask the backdrop                 | **FAIL** (ambiguous, see below) | PASS (trivially — B erases nothing) |
+
+      **A failed DECISIVELY, with a diagnosed cause.** The erase happened inside the page — the
+      backdrop's stripes vanished from both plate rects — but the result was **OPAQUE BLACK, not
+      alpha 0**, and CasparCG composited that black over the live layer. That is not "the mechanism
+      did nothing": it is the mechanism working locally and never reaching the page's ROOT alpha,
+      which is **precisely the SCOPE risk §9a listed against this candidate and refused to settle by
+      reasoning**. The owner ruled out both alternative explanations rather than assuming: `CLEAR
+      1-10` removed the probe and the video was visible and running (so the black is the punch's own
+      output, not a dead source), and the clip's letterboxing was computed and rejected (both plate
+      rects fall inside the active picture area).
+      **B failed AMBIGUOUSLY, and it is recorded as ambiguous rather than resolved.** State B was
+      indistinguishable from the control — no visible effect at all — and that signature **cannot
+      distinguish "the mask applied and does not reach page alpha" from "the mask never applied at
+      all"**. It is scored FAIL because it did not deliver transparency, which is what the criterion
+      asks; it is **not** evidence about masking as a technique. If B is ever revisited, the first
+      job is to prove the mask applies at all, and nothing in this run may be cited as having tested
+      that.
+      ⚠ **The overall conclusion does not rest on B's ambiguity.** The kit's rule is that both must
+      fail for the punch to be a non-CSS problem, and **A's failure is decisive on a modern engine**.
+      B being ambiguous makes B's own verdict weaker; it does not make the punch more available.
+
+      🔴 **THE BUILD WAS NOT THE ONE THIS TASK NAMES.** The plant runs **CasparCG 2.5.0 (`69e8ad5`
+      Stable) with Chromium 142**, not 2.3.2 with CEF 71 — so this task's own "measure on the CEF
+      inside the plant's CasparCG 2.3.2" instruction described a machine that was not there.
+      **The result is nevertheless ROBUST DOWNWARD and needs no second run: a modern Chromium
+      failing means CEF 71 certainly fails.** (Findings that depend on a NEWER engine do not
+      inherit that property — see 1.5d.) The version discrepancy is not new to the repo:
+      `docs/prd/bugs-runtime.md` records the same `69e8ad5` in live sessions from 2026-07-07, and
+      one note there says a finding was "confirmed on BOTH server generations". **Flagged, not
+      swept: roughly two dozen places in this change still name 2.3.2 as the thing to measure on.**
+      ⭐ **SETTLED BY THE OWNER, 2026-08-15: playout runs 2.5.0 and 2.3.2 is RETIRED.** So this run
+      was taken on the production build, every answer from it is a production answer, and no result
+      here needs hedging across builds or a second run. A stale 2.3.2 install still sits at
+      `D:\programs\CasparCG` — **never point a probe at it**, or CEF-71 answers get labelled
+      production. Every "measure on 2.3.2" instruction left in this change is now WRONG rather than
+      merely uncertain; they are stale text to correct, not a fork to navigate. Record the build
+      string beside every result all the same: the next upgrade makes today's answers historical,
+      and a result without its build is a result that will outlive its truth.
+
+      ⚠ **THE KIT'S OWN AMCP EXAMPLES DID NOT RUN**, and every one returned `#400 ERROR`: the README
+      put the verb before the channel-layer (`CG ADD 1-10 …`) where AMCP takes
+      `CG <ch>-<layer> <VERB> <flash> …`. The owner worked the right form out at the rack, so the
+      trip survived it. **FIXED 2026-08-15** in the README, moved into its own titled section so it
+      is read before the recipe, and **pinned by a test** — `live-source-punch-probe.test.ts` now
+      asserts the "Running it" recipe contains no verb-first form. **The PRODUCT was never wrong**:
+      `command-builder.ts` emits `CG ${target(slot)} ADD …`, hardware-validated under ADR 0006. The
+      defect was in the doc alone, which is the surface a human retypes.
+      Same class as §9.3's unrunnable instruction: **an instruction nobody has run is an instruction
+      nobody has checked**, and the cost lands on someone standing at a rack.
+
+- [ ] 1.5c ⛔ **SUPERSEDED BY 1.5b'S RESULT — there is no mechanism to implement.** This task read
+      "implement the mechanism 1.5b selects", and 1.5b selected none: both candidates failed
+      criterion 1 on 2026-08-15. **It is NOT ticked and NOT deleted** — the requirement it served is
+      untouched (§9a still says the page must be transparent over the plate's rect); what died is
+      the assumption that CSS can deliver it inside one CasparCG layer.
+      **RE-SCOPED: 1.5c becomes §9b's task.** Whatever the dedicated-channel model turns out to be,
+      it must still make the guest picture appear inside the plate's rect with the backdrop absent
+      there — and the assertion this task specified stays exactly as valuable, in a different place:
+      **assert against the EXPORTED artifact, not the builder**, because the exported page is what
+      CEF loads and a builder-level check passes on a page whose root alpha is still opaque.
+      🔴 **It is BLOCKED on an owner decision, not on more work.** §9b is "evaluated, recommended in
+      principle, NOT adopted", gated on §12.5's four measurements plus one owner question. Nothing
+      may be built here until that gate moves. **Do not re-open the CSS punch on a new idea without
+      a new measurement** — that is the thing 1.5b exists to have settled.
+      Original text, kept so the re-scope is legible: _"Implement the mechanism 1.5b selects, and
+      test that the EXPORTED page's alpha is CLEAR over the plate's rect with an opaque backdrop
+      present."_
 - [ ] 1.5e ⭐ **THE PLATE GAINS A STROKE (owner, 2026-08-10; `design.md` §9a.1).** Colour + width,
       same class as the box-shadow already allowed: paint on the TEMPLATE layer, OUTSIDE the hole,
       live picture untouched. A coloured frame around each guest box is what a multi-box design
@@ -156,6 +223,20 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       hole AND an intact stroke and shadow around it.** A mechanism that punches correctly and eats
       its own stroke passes the old criterion and fails the feature — criterion 2 is an independent
       way to fail, not a refinement of criterion 1.
+      ⭐ **MEASURED 2026-08-15 — AND THIS IS THE ONE POSITIVE FINDING THE RUN PRODUCED. Criterion 2
+      PASSED.** §9a.1's scoping — the erase on an INNER FILL NODE, the frame and shadow on the OUTER
+      node — **held**: the orange frame came back full width, unbroken, all the way around both
+      plates, with the drop shadow intact. The independence this task insisted on is what makes the
+      result readable at all: mechanism A failed criterion 1 and passed criterion 2, so the run says
+      two different things rather than one muddled one.
+      **Why it survives the mechanism that carried it.** The finding is about SCOPING an erase, not
+      about `destination-out` reaching root alpha — so it transfers to any future compositing
+      approach that needs paint to survive an erase beside it. Whatever §9b becomes, **the constraint
+      this task placed on the mechanism is satisfiable**, and that is worth knowing independently of
+      the outcome.
+      ⚠ **What it does NOT show:** the shadow half was exercised only as the probe's own CSS
+      `box-shadow`. The PRODUCT still has no shadow field at any of the three layers (see 1.5e's
+      scope note), so this is evidence about the technique, not about a shipped feature.
 - [x] 1.5g **Neither stroke nor shadow enters the hole rect**, so neither touches
       `collectLiveSources`' geometry nor 1.8's OVERLAP check — pin that: **two plates whose strokes or
       shadows overlap is NOT a fault; two plates whose HOLES overlap is.** The overlap check reads the
@@ -189,8 +270,37 @@ blocks 4 and 5, the source stores block 6, and phase 7 is C-021's (`design.md` �
       `MIXER FILL`/`CLIP` are rectangular — **that case stays unachievable in v1 either way.**
       ⚠ When it lands, **the HOLE and the STROKE (1.5e) must round TOGETHER**: a rounded hole inside a
       square frame is worse than either alone, because the frame stops following the picture.
-- [ ] 1.5h ⭐ **PASSTHROUGH — a SECOND source kind that needs NO catalog entry at all (owner,
-      2026-08-10, A3; `design.md` §9a.2).** GATED ON 1.5c: passthrough cannot be demonstrated, or
+      ⭐ **MEASURED 2026-08-15 — the stated obstacle DOES NOT EXIST on the plant's actual build.**
+      `border-radius` on an `outline` needs Chromium ~94, and the plant runs **Chromium 142**, which
+      honours it. The "rounding the frame will need its own answer" caveat is therefore not binding
+      on a 2.5.0 install.
+      ⭐ **RECORD IT AS: THE CEF OBSTACLE IS REMOVED BY MEASUREMENT.** The owner settled on
+      2026-08-15 that 2.5.0 IS production and 2.3.2 is retired, so there is no older engine this
+      has to hold for. This task's remaining dependency is on 1.5c / §9b — whether there is a hole
+      to round at all — **not on the browser**.
+      ⚠ **The reasoning that nearly got recorded instead is worth keeping, because it is right in
+      general and would matter again the day a second build appears:** a FAILURE on a new engine
+      implies failure on an old one (which is why 1.5b needs no second run), whereas a SUCCESS on a
+      new engine implies nothing about an old one. **Which way a measurement generalises depends on
+      whether it is a pass or a fail**, and both arrived in the same run. What retires the caveat
+      here is not logic but the owner's decision that there is only one build.
+      ⚠ **The task's own blocker has also changed shape:** it said "revisit AFTER 1.5c", and 1.5c is
+      superseded. Rounding is still meaningful only where there is a hole to round, so this now
+      waits on §9b rather than on a CSS punch.
+- [ ] 1.5h ⛔ **AT RISK — ITS DEFINITION DEPENDED ON THE PUNCH, AND THE PUNCH FAILED (2026-08-15).**
+      This task is "the punch with nothing put beneath it", so 1.5b's result does not merely block
+      it, it **removes the thing it was made of**. It is NOT ticked and NOT deleted; it must be
+      **re-derived from §9b or dropped**, and that is an owner call rather than a re-scope CC can
+      perform.
+      ⚠ **The re-derivation is not obvious, and the difficulty should be recorded now rather than
+      discovered later.** Passthrough's whole point was that the CG layer composites over the
+      programme, so a hole in the page reveals the programme **at 1:1, in place**. On a DEDICATED
+      channel (§9b) the multi-box is not over the programme any more — it reaches air by whatever
+      §9b.4 decides — so "the corresponding region of the programme" may not be behind the plate at
+      all. **The distinction this task exists to protect — a WINDOW onto the programme is
+      passthrough, a SCALED COPY is a route — is exactly what a dedicated channel puts at risk.**
+      Original gating and definition follow, kept so the re-derivation has its premise in view.
+      GATED ON 1.5c: passthrough cannot be demonstrated, or
       even defined, until the punch is real, because passthrough IS the punch with nothing put
       beneath it.
       **What it is.** A plate whose hole has **no producer under it** shows the programme directly —
