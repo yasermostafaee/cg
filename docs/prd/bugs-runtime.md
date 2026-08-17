@@ -3617,3 +3617,61 @@ update-deferred update-installed`. `ACTION_OPTIONS` in
   behind it must not be invented to fill the list; name any that cannot be wired and why.
 - **Cross-refs:** [[B-142]] (the panel's raw `<select>`, which this item must not touch),
   [[B-143]] (the same class — the system knows something and does not say it).
+
+## [ ] B-142 — four Runtime dialogs render raw `<select>`s that sit OUTSIDE `Modal`'s focus trap ⟨priority: medium⟩
+
+**What:** `Modal`'s focus trap enumerates focusable children with a selector that **omits `select`,
+`textarea` and `a[href]`** (`apps/runtime/src/renderer/ui/Modal.tsx:48`), and four dialogs render raw
+`<select>`s. A control inside a modal that the trap does not know about lets keyboard focus escape
+to the page behind the scrim.
+
+**Repro:**
+
+1. Open Live sources (status bar → `SOURCES`).
+2. Tab forward from the last trapped control.
+
+**Expected:** focus wraps within the dialog — the trap wraps at both ends specifically so focus can
+never reach an on-air control behind the scrim (`Modal.tsx:316-330`).
+**Actual:** the `<select>`s are not in the trap's set, so the wrap is computed over the wrong
+boundary.
+**Env:** Runtime SPA, any build. Read from the code at `be2e390`.
+
+**Why:** this is a keyboard-reachability defect on a broadcast console, where an operator may be
+driving from a keyboard in a gallery — not a style nit. The four sites:
+
+| dialog                | file:line                                          |
+| --------------------- | -------------------------------------------------- |
+| Live sources          | `features/sources/SourcesModal.tsx:389` and `:411` |
+| Server connection     | `features/connections/ServerSettingsPanel.tsx:368` |
+| Audit log             | `features/audit/AuditPanel.tsx:136`                |
+| Live source for a row | `features/layers/LiveSourceSwapDialog.tsx:130`     |
+
+🔴 **And nothing prevents the next one.** Unlike the Designer, `apps/runtime` has **no
+raw-`<button>`/`<select>` lint ban and no shared `Select` primitive**, so the rule `CLAUDE.md`
+states for the Designer's renderer is simply not enforced here. Every new dialog is free to add a
+fifth.
+
+**Acceptance:**
+
+- WHEN a dialog containing a `<select>` is open and the operator tabs to the end THEN focus wraps
+  inside the dialog and never reaches a control behind the scrim
+- WHEN a control type is focusable THEN the trap's selector includes it, so the trap's set and the
+  browser's agree
+- WHEN a new dialog adds a native form control THEN the enforcement catches it ⟨subject to the owner
+  question below⟩
+
+**Notes:**
+
+- **The fix belongs with [[R-054]]'s shell work**, which already requires bringing these dialogs onto
+  shared primitives and introducing a shared `Select`. Cross-referenced rather than duplicated: this
+  item exists so the KEYBOARD defect is filed as a defect and does not ride invisibly on a restyle.
+- ⚠ Two fixes are possible and they are not the same: widening `Modal.tsx:48`'s `FOCUSABLE` selector
+  (immediate, fixes today's four), and replacing the raw controls with a shared `Select` (structural,
+  prevents the fifth). The first is a one-line correctness fix and should not wait on the second.
+- 🔴 **Owner question:** should `apps/runtime` gain the Designer's lint ban and a shared `Select`?
+  **Cost:** a new primitive plus a migration of at least four call sites, and an eslint rule that
+  will fail existing code until they are all moved. **Benefit:** the rule stops being true of one app
+  and false of the other, which is currently a difference nobody can see from either side. Posed,
+  not resolved.
+- **Cross-refs:** [[R-054]] (the shell work this fix belongs to), [[R-052]] (the message-region
+  contract, the other half of `Modal`'s shared behaviour).
