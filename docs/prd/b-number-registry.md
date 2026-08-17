@@ -841,3 +841,38 @@ the check above is stated plainly: it swept the WORKING TREE's `docs/`, not all 
 keeps one folder on `dev` (CLAUDE.md, "Repo layout"), and the CI audit
 (`tools/soak-runner/tests/bug-number-audit.test.ts`) remains the backstop that makes a collision
 unmergeable.
+
+## 2026-08-17 — six numbers claimed in one filing session (`R-053`…`R-056`, `B-139`, `B-140`)
+
+| Prefix | Claimed | Item                                                                                         | File                               |
+| ------ | ------- | -------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `R-`   | `R-053` | an aspect-mismatched plate must be TAKEABLE, with operator-confirmed CENTRE CROP             | [runtime.md](runtime.md)           |
+| `B-`   | `B-139` | the row's DRAFT chip and the Inspector disagree about a staged plate, in opposite directions | [bugs-runtime.md](bugs-runtime.md) |
+| `R-`   | `R-054` | one SETTINGS shell for CG Control, and one layout for its panes                              | [runtime.md](runtime.md)           |
+| `R-`   | `R-055` | three CG Control chrome corrections                                                          | [runtime.md](runtime.md)           |
+| `R-`   | `R-056` | the position section: PVW follows the number as it changes, and the section collapses        | [runtime.md](runtime.md)           |
+| `B-`   | `B-140` | a shell-divider drag dies when the pointer crosses the PVW iframe                            | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the heading sweep immediately before the headings were written.** The documented
+command was run for **every** prefix, over `docs/prd/*.md` excluding `README.md` and this file:
+highest `R-` was `R-052`, highest `B-` was `B-138`, and `git grep -nE "B-14[01]" -- docs/` returned
+no match at all. `R-` stays contiguous `R-001` … `R-056` and `B-` stays contiguous `B-001` … `B-140`,
+**no gaps**. **Next free: `R-057`, `B-141`.**
+
+🔴 **A reservation was proposed and REJECTED, and the reason is the registry's own doctrine.** The
+filing prompt derived `B-141` for the divider bug from an item 6 that had not been written, which
+would have left `B-140` held for an item that might never arrive. The owner declined it: the rule
+here is the **heading sweep**, and a reservation is a SECOND mechanism for deriving a number — plus
+an entry whose truth expires if the item is never filed. The divider bug therefore took `B-140`, the
+number the sweep actually returned, and the next item filed takes `B-141` by sweeping again. This is
+the same lesson as the "next free pointer" hazard recorded above, reached from the other direction:
+a number is free because the sweep says so, never because a document says it is.
+
+⚠ **Two PRE-EXISTING collisions were found by the audit and deliberately NOT touched.** `B-056` and
+`B-080` are each claimed **twice** — once in [bugs-designer.md](bugs-designer.md) and once in
+[bugs-runtime.md](bugs-runtime.md); all four items are closed `[x]`. `B-056`'s designer entry
+already records a renumber from `B-054`, so the space has been repaired by hand here before.
+Renumbering an existing ID is forbidden (`docs/prd/README.md`: _"Never delete or renumber existing
+IDs"_), so they are reported rather than resolved. They do not affect the numbers claimed above.
+⟨Owner: leave as historical, or annotate both pairs so a reader of either file knows the other
+exists?⟩
