@@ -38,7 +38,6 @@ export function isLoopbackHost(host: string): boolean {
  * template. Falls back to loopback. Mirrors the C-001 probe's `guessLanHost()`.
  */
 export function guessLanHost(): string {
-  return '192.168.21.93';
   for (const addrs of Object.values(os.networkInterfaces())) {
     for (const a of addrs ?? []) {
       if (a.family === 'IPv4' && !a.internal) return a.address;
