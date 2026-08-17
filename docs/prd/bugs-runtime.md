@@ -3554,7 +3554,7 @@ that is the failure this item exists to close. A cross-reference is filed in `bu
 - **Cross-refs:** the Designer half of this one root cause is cross-referenced from
   `bugs-designer.md`; it is deliberately NOT a second item.
 
-## [ ] B-141 — the audit log records almost ONE action, and its empty state claims otherwise ⟨priority: high⟩
+## [~] B-141 — the audit log records almost ONE action, and its empty state claims otherwise ⟨priority: high⟩ — PARTIAL: `openspec/changes/audit-writer-forensic-lite/` — the writer is wired and is the source of truth; 7 append sites and the panel's three empty states remain, see its tasks.md 5
 
 **What:** the Audit log modal is empty after a whole session of imports, takes and commands. It is
 not a display bug: the bridge's audit is an **in-memory array with exactly ONE append site**, and

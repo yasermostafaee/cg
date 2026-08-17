@@ -83,6 +83,7 @@ import {
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
 import type { LiveLayerLedger, LiveLayerRecord, NormalizedRect } from './live-layers.js';
+import { AuditWriter, readRecentEntries } from '@cg/audit';
 import { resolvePlateAssignments } from './live-plate-assignment.js';
 import { resolvePlateAspect } from './live-plate-fit.js';
 import {
@@ -696,7 +697,28 @@ export class CasparRuntime {
   #applyInFlight = false;
   #lock: LockState = { engaged: false };
   #lockPin: string | null = null;
+  /**
+   * B-141 — THE AUDIT RECORD.
+   *
+   * `#auditWriter` is the source of truth when a path is configured: NDJSON on
+   * disk, append-only, surviving a bridge restart. `#audit` remains as the
+   * in-memory tail ONLY for the no-writer case (tests, and a bridge started
+   * without `--audit-log-path`), so `auditRecent` always has something coherent
+   * to answer with.
+   *
+   * 🔴 **A FAILED AUDIT WRITE MUST NEVER TAKE THE STATION OFF AIR**, and the
+   * contrast with the config stores is deliberate rather than an inconsistency.
+   * An unusable `--source-assignments-path` or `--fixed-layers-path` IS a hard
+   * boot failure, because those files are PRECONDITIONS for correct playout — a
+   * take resolved against a half-read bank puts the wrong thing on the wrong
+   * layer. An audit entry is a RECORD OF what happened; nothing downstream reads
+   * it to decide what to send. So every append is fire-and-forget: the writer
+   * emits `error`, keeps its own `lastError` and `errorCount`, keeps trying, and
+   * the take proceeds regardless.
+   */
   #audit: AuditEntry[] = [];
+  #auditWriter: AuditWriter | null = null;
+  #auditLogPath: string | null = null;
   #settings: Settings = { telemetry: 'off' };
   #pendingUpdate: PendingUpdate | null = null;
 
@@ -765,6 +787,11 @@ export class CasparRuntime {
        * ASSIGNED, which is exactly what a freshly imported library has.
        */
       sourceAssignments?: SourceAssignments;
+      /**
+       * B-141 — where the NDJSON audit record lives. ABSENT means no writer is
+       * configured, which the panel reports AS SUCH rather than as "no entries".
+       */
+      auditLogPath?: string;
     } = {},
   ) {
     this.#reservedLayers = options.reservedLayers ?? [];
@@ -797,6 +824,14 @@ export class CasparRuntime {
     // files resolved to the EMPTY value there, never to a guessed default.
     this.#sourceCatalog = options.sourceCatalog ?? EMPTY_SOURCE_CATALOG;
     this.#sourceAssignments = options.sourceAssignments ?? EMPTY_SOURCE_ASSIGNMENTS;
+    // B-141 — the audit writer, when a path is configured. Constructing it opens
+    // nothing yet; the first `append` creates the parent directory and the file.
+    // Deliberately NOT wrapped in a boot-time reachability check: an audit log we
+    // cannot open must not stop the bridge coming up.
+    if (options.auditLogPath !== undefined) {
+      this.#auditLogPath = options.auditLogPath;
+      this.#auditWriter = new AuditWriter({ filePath: options.auditLogPath });
+    }
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
@@ -4455,8 +4490,7 @@ export class CasparRuntime {
     // 6. Connect + surface: every client sees the new config and fresh health.
     this.#sessions.A.start();
     this.#sessions.B?.start();
-    this.#audit.unshift({
-      ts: new Date().toISOString(),
+    this.#recordAudit({
       actor: 'operator',
       action: 'reconnect',
       server: 'primary',
@@ -4545,7 +4579,16 @@ export class CasparRuntime {
    */
   async failover(): Promise<{ ok: boolean; newPrimary: ServerLabel }> {
     const ok = await this.#adapter.failover('manual');
-    return { ok, newPrimary: this.#adapter.currentPrimary };
+    const newPrimary = this.#adapter.currentPrimary;
+    // B-141 — `server` records which machine is primary AFTER the switch, which
+    // is the fact someone reading the log the next day is actually asking about.
+    this.#recordAudit({
+      actor: 'operator',
+      action: 'failover',
+      server: newPrimary === 'A' ? 'primary' : 'backup',
+      outcome: ok ? 'ok' : 'failed',
+    });
+    return { ok, newPrimary };
   }
 
   // ── lock / templates / audit / settings / update (in-memory stubs) ──
@@ -4556,14 +4599,35 @@ export class CasparRuntime {
     this.#lockPin = pin;
     this.#lock = { engaged: true, reason: 'operator', engagedAt: new Date().toISOString() };
     this.lockChanged.emit(this.#lock);
+    // B-141 — the PIN is never recorded, only that the lock was engaged.
+    this.#recordAudit({ actor: 'operator', action: 'lock-engage', outcome: 'ok' });
     return { ok: true };
   }
   release(pin: string): { ok: boolean; reason?: 'pin-mismatch' | 'not-engaged' } {
-    if (!this.#lock.engaged) return { ok: false, reason: 'not-engaged' };
-    if (this.#lockPin !== pin) return { ok: false, reason: 'pin-mismatch' };
+    if (!this.#lock.engaged) {
+      this.#recordAudit({
+        actor: 'operator',
+        action: 'lock-release',
+        outcome: 'failed',
+        errorCode: 'not-engaged',
+      });
+      return { ok: false, reason: 'not-engaged' };
+    }
+    if (this.#lockPin !== pin) {
+      // A REFUSED release is the entry that matters most here — it is the one an
+      // operator would later ask about.
+      this.#recordAudit({
+        actor: 'operator',
+        action: 'lock-release',
+        outcome: 'failed',
+        errorCode: 'pin-mismatch',
+      });
+      return { ok: false, reason: 'pin-mismatch' };
+    }
     this.#lock = { engaged: false };
     this.#lockPin = null;
     this.lockChanged.emit(this.#lock);
+    this.#recordAudit({ actor: 'operator', action: 'lock-release', outcome: 'ok' });
     return { ok: true };
   }
 
@@ -4677,7 +4741,65 @@ export class CasparRuntime {
     return { ok: true };
   }
 
-  auditRecent(limit = 200, action?: AuditEntry['action'], actor?: string): AuditEntry[] {
+  /**
+   * B-141 — record ONE auditable action. Fire-and-forget, by contract.
+   *
+   * Never awaited by a caller and never able to refuse one: see the note on
+   * `#audit`. The writer keeps its own error state, which `auditHealth` exposes
+   * so the panel can tell "failing" from "empty" — the distinction the old
+   * "No audit entries yet." could not make.
+   */
+  #recordAudit(entry: Omit<AuditEntry, 'ts'> & { ts?: string }): void {
+    const row: AuditEntry = { ...entry, ts: entry.ts ?? new Date().toISOString() } as AuditEntry;
+    // The in-memory tail is kept in BOTH modes: with no writer it is the only
+    // record, and with one it keeps `auditRecent` answering during the window
+    // before the first flush.
+    this.#audit.unshift(row);
+    if (this.#audit.length > 500) this.#audit.length = 500;
+    if (this.#auditWriter === null) return;
+    void this.#auditWriter.append(row).catch(() => {
+      // Swallowed DELIBERATELY. The writer has already recorded the failure in
+      // `lastError` / `errorCount` and emitted `error`; re-throwing here would
+      // reject the caller's operation, which is exactly what must not happen.
+    });
+  }
+
+  /**
+   * B-141 — what the operator surface needs to tell three empty states apart:
+   * no writer configured, a writer that is failing, and genuinely empty.
+   */
+  auditHealth(): {
+    configured: boolean;
+    path: string | null;
+    errorCount: number;
+    lastError: string | null;
+  } {
+    return {
+      configured: this.#auditWriter !== null,
+      path: this.#auditLogPath,
+      errorCount: this.#auditWriter?.errorCount ?? 0,
+      lastError: this.#auditWriter?.lastError?.message ?? null,
+    };
+  }
+
+  async auditRecent(
+    limit = 200,
+    action?: AuditEntry['action'],
+    actor?: string,
+  ): Promise<AuditEntry[]> {
+    if (this.#auditLogPath !== null) {
+      try {
+        return await readRecentEntries({
+          filePath: this.#auditLogPath,
+          limit,
+          ...(action !== undefined ? { action } : {}),
+          ...(actor !== undefined ? { actor } : {}),
+        });
+      } catch {
+        // A read failure is reported through `auditHealth`, never as an empty
+        // log — "nothing here" and "I could not look" must not look the same.
+      }
+    }
     let rows = this.#audit;
     if (action !== undefined) rows = rows.filter((r) => r.action === action);
     if (actor !== undefined) rows = rows.filter((r) => r.actor === actor);

@@ -726,6 +726,9 @@ importers:
 
   tools/caspar-bridge:
     dependencies:
+      '@cg/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
       '@cg/caspar-client':
         specifier: workspace:*
         version: link:../../packages/caspar-client

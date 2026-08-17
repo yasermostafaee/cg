@@ -28,6 +28,7 @@
     "start": "node ./bin/caspar-bridge.mjs"
   },
   "dependencies": {
+    "@cg/audit": "workspace:*",
     "@cg/caspar-client": "workspace:*",
     "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*",

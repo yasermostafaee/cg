@@ -207,6 +207,12 @@ export interface BridgeOptions {
    */
   sourceAssignmentsPath?: string;
   /**
+   * B-141 — the NDJSON audit record. ABSENT = no writer configured, which the
+   * operator surface reports AS SUCH rather than as an empty log. Unlike the
+   * stores above, an unusable audit file is NEVER a boot failure.
+   */
+  auditLogPath?: string;
+  /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
    */
@@ -448,6 +454,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(options.templatesDir !== undefined ? { templatesDir: options.templatesDir } : {}),
     sourceCatalog: sourceCatalog.value,
     sourceAssignments: prunedAssignments.value,
+    ...(options.auditLogPath !== undefined ? { auditLogPath: options.auditLogPath } : {}),
     ...(options.runtimeTuning ?? {}),
   });
   const routes = buildRoutes(runtime, {

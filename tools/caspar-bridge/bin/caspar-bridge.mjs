@@ -119,6 +119,18 @@ const sourceAssignmentsPath =
     ? args['source-assignments-path']
     : path.join(os.homedir(), '.cg-runtime', 'bridge-source-assignments.json');
 
+// B-141 — the AUDIT LOG, NDJSON, append-only. Same shape as the stores above and
+// for the same reason: its own flag, its own default, and NEVER inside
+// templatesDir, where `TemplateRegistry` reads every *.json as a template (B-116).
+//
+// ⚠ Unlike those stores, an unusable audit file is NOT a boot failure. They are
+// preconditions for correct playout; this is a RECORD OF what happened. See
+// `CasparRuntime`'s audit section.
+const auditLogPath =
+  typeof args['audit-log-path'] === 'string'
+    ? args['audit-log-path']
+    : path.join(os.homedir(), '.cg-runtime', 'bridge-audit.ndjson');
+
 // Build the CasparCG connection from flags, falling back to defaults.
 // B-046 — server B exists ONLY when a --backup-* flag declares it; the
 // default is single-server (a phantom backup diverges every send, replays
@@ -171,6 +183,7 @@ const handle = await createBridge({
   templatesDir,
   sourceCatalogPath,
   sourceAssignmentsPath,
+  auditLogPath,
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);

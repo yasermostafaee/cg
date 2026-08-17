@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AuditEntry } from '@cg/shared-schema';
+import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
@@ -9,20 +9,20 @@ interface Props {
   onClose: () => void;
 }
 
-const ACTION_OPTIONS = [
-  'all',
-  'load',
-  'take',
-  'update',
-  'out',
-  'remove',
-  'failover',
-  'reconnect',
-  'import',
-  'export',
-  'lock-engage',
-  'lock-release',
-] as const;
+/**
+ * B-141 — the filter options are DERIVED from the one schema action set, never
+ * hand-kept.
+ *
+ * They used to be a literal of eleven, and it had silently drifted: the schema
+ * enumerates FIFTEEN, so `stop`, `next`, `update-deferred` and `update-installed`
+ * could never be isolated by the filter even once they were written. One rule,
+ * two spellings, with nothing catching the disagreement — and the schema is the
+ * one that is right, because it is what the entries are parsed against.
+ *
+ * Deriving it means a new action becomes filterable the moment it becomes
+ * writable, which is the only way the two can stay in step.
+ */
+const ACTION_OPTIONS = ['all', ...AuditEntrySchema.shape.action.options] as const;
 
 type ActionFilter = (typeof ACTION_OPTIONS)[number];
 
