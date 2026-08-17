@@ -3247,3 +3247,121 @@ prevent. A silent memory fallback turns a working safety net into one that is on
 - **Not verified against a real degraded install.** This is filed from a code read of
   `initRuntimeWorkspace()` and its two call sites in `createRuntimeBridge.ts`; the insecure-context
   leg in particular has not been reproduced on a station box.
+
+## [ ] B-139 — the row's DRAFT chip and the Inspector disagree about a staged plate, in OPPOSITE directions, and the row's UPDATE verb is disabled off the same wrong boolean ⟨priority: medium⟩
+
+**What:** `isItemDirty` takes `appliedPlates` as an OPTIONAL third argument. The Inspector passes
+it; **the stack row does not** — so for the row every staged plate is compared against a fabricated
+`''` baseline instead of the assignment actually in force. Re-picking the value that is already
+saved reads as dirty, and picking _not assigned_ reads as clean. Both surfaces are reporting on the
+SAME staged edit and disagreeing about whether it is dirty.
+
+**Repro:** a plate has source **A** assigned and saved. Then, in any order:
+
+1. set the plate to **B**
+2. set it back to **A** (the saved value)
+3. set it to **not assigned**
+
+**Expected:** (1) draft on the row and in the Inspector · (2) draft in NEITHER · (3) draft in BOTH.
+
+**Actual:**
+
+| action                | Inspector    | row / layer     | correct?      |
+| --------------------- | ------------ | --------------- | ------------- |
+| set to **B**          | draft        | draft           | ✅ both right |
+| set back to **A**     | **no draft** | **draft** ❌    | row is wrong  |
+| set to _not assigned_ | draft        | **no draft** ❌ | row is wrong  |
+
+Order-independent, because the comparison depends only on the staged value and never on history.
+
+**Env:** Runtime SPA, any build carrying the LIVE PLATES section. Read from the code at `3d25585`;
+the reproduction is the owner's, on the running app.
+
+**Why:** the arithmetic is one line, and the contract it breaks is written directly above it.
+
+- `isItemDirty` compares each staged plate as
+  `if (value !== (appliedPlates?.get(plateId) ?? '')) return true;`
+  (`apps/runtime/src/renderer/features/inspector/draftStore.ts:270-274`). With `appliedPlates`
+  omitted the right-hand side is always `''`, which is why a staged `'A'` against an applied `'A'`
+  reads dirty and a staged `''` against an applied `'A'` reads clean. Both observed rows fall out
+  of that single expression.
+- **The Inspector passes the map; the row does not.** `Inspector.tsx:400-404` calls it as
+  `isItemDirty(itemId, item.fields, appliedPlateSources(item.templateId, info?.liveSources?.sources ?? []))`.
+  `LayersPanel.tsx:760` calls it as `isItemDirty(item.itemId, item.fields)`.
+- 🔴 **The docstring states a contract the code does not implement**, and it names the very call
+  site that suffers: _"`appliedPlates` is optional because most callers hold no assignment map (the
+  stack row's dirty dot, for one) … **Omitting it means 'I am not asking about plates'** — never
+  'this item has none'"_ (`draftStore.ts:248-257`). Omitting it does not skip plates; it compares
+  them against a value nobody supplied. This is `CLAUDE.md` golden rule 6 one level out — the
+  contract is asserted in prose and not tested by the implementation.
+- 🔴 **It is not only cosmetic.** The row's **UPDATE verb is disabled on `!deps.dirty`**
+  (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:713`), fed by the same boolean. So
+  setting a plate to _not assigned_ both hides the chip and **disables the row's UPDATE**, on a row
+  that genuinely has an unapplied edit — the exact failure the Inspector's own comment warns about
+  one level in: _"an Update the operator cannot press … would be the panel disagreeing with its own
+  controls about whether there is an unapplied edit."_
+- **The canonical join already exists.** `appliedPlateSources(templateId, sources)`
+  (`features/inspector/livePlates.ts`) is already the one join, read by the Inspector's LIVE PLATES
+  section, by `isItemDirty`'s Inspector call, and by `PreviewPanel`. The row needs to call the same
+  thing, not a new one.
+
+**Two misdiagnoses ruled out, recorded so the next reader does not chase them:**
+
+- **NOT "one rule derived twice."** There is ONE predicate and it does compare values correctly.
+  The defect is an optional parameter whose absence silently means "everything is unassigned". The
+  fix is to supply the argument (or to make omission genuinely skip plates), not to delete a second
+  implementation.
+- **NOT the assignment-vs-override confusion** (the template-scoped assignment vs [[R-048]]'s
+  per-row override). Both surfaces read the same staged plate draft; the reproduction rules it out.
+
+**Acceptance:**
+
+- WHEN a plate is set to a different source THEN the row and the Inspector BOTH show a draft
+- WHEN a plate is set back to its saved source THEN NEITHER shows a draft
+- WHEN a plate is set to _not assigned_ and the saved value was a source THEN BOTH show a draft
+- WHEN those three actions are performed in any order THEN the outcome is the same, because the
+  answer is a value comparison and not a function of history
+- WHEN a plate has a real unapplied edit THEN the row's UPDATE verb is ENABLED, including when the
+  staged value is _not assigned_
+- WHEN any surface reports plate draft/dirty state THEN it resolves through the one predicate given
+  its applied-plate map, and no caller can get a plate answer without supplying one
+
+**Notes:**
+
+- **Every draft/dirty reader found**, so the fix cannot miss one:
+
+  | reader                                       | how it asks                                              | correct today? |
+  | -------------------------------------------- | -------------------------------------------------------- | -------------- |
+  | Inspector commit bar — Apply disabled + chip | `Inspector.tsx:401,588,593` — `isItemDirty` WITH the map | ✅             |
+  | Inspector LIVE PLATES — per-plate marker     | `LivePlatesSection.tsx:115,143` — `isPlateDirty`         | ✅             |
+  | Inspector per-field dot                      | `Inspector.tsx:666` — `isFieldDirty` (fields only)       | ✅ n/a         |
+  | **stack row — `DraftChip`**                  | `LayersPanel.tsx:760` → `LayerRow.tsx:708`               | 🔴 no map      |
+  | **row verb block — UPDATE enabled state**    | `layerRowActions.ts:713`, same boolean                   | 🔴 no map      |
+  | `PositionPicker`'s own dot                   | `PositionPicker.tsx:128,137` — local value compare       | ✅ separate    |
+  | `PreviewPanel`                               | reads `appliedPlateSources`, deliberately NOT drafts     | ✅ n/a         |
+
+- **`isPlateDirty` (`draftStore.ts:187-191`) is the correct shape** and is the natural surviving
+  home for the per-plate answer — it is already a value comparison that treats _not assigned_
+  (`''`) as a value.
+- **Owner question:** the two fixes differ in what the row's chip MEANS.
+  **(a)** pass `appliedPlates` at the row call site — the chip then covers fields AND plates, which
+  is what an operator most likely reads it as; the row must obtain the assignment map, which the
+  canonical join already provides. **(b)** make omission genuinely skip plates, honouring the
+  existing docstring — the row's chip then means "fields only", and plates need their own row-level
+  tell or the operator has none. ⟨Owner to choose; the item does not pick.⟩
+- 🔴 **Whichever is chosen, REMOVE THE LANDMINE rather than fixing the one line — and this file
+  already carries the pattern.** `StackPruneInput` (`draftStore.ts:360-372`) makes the unsafe call
+  shape unrepresentable, for exactly this reason: _"That is the difference between fixing this line
+  and removing the landmine — a plain `(ids, ready)` pair would let the next caller pass `true` by
+  habit."_ An optional `appliedPlates` is the same landmine: the next caller omits it by habit.
+  The equivalent here is a parameter that forces the caller to SAY which answer it wants — plates
+  included with their map, or plates explicitly skipped — so that no caller can get a plate answer
+  without supplying a baseline. Filing the one-line argument fix alone leaves the trap armed.
+- **Regression test:** pin all three transitions in the table above — including the two that are
+  wrong today — plus the order-independence and the UPDATE-enabled case. `livePlateDraft.test.ts`
+  already covers the THREE-argument call (`:122-126`); what is missing is the TWO-argument call with
+  staged plates, which is the defect. A test that only exercises the three-argument form passes
+  today and would have passed before this bug existed.
+- **Cross-refs:** [[R-048]] (the per-row source override, a different axis), [[R-053]] (the
+  aspect-crop consent, which will add a fourth per-plate row indicator and must read the same
+  predicate rather than adding a third spelling).
