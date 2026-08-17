@@ -1764,3 +1764,120 @@ policy above governs it: while nothing has shipped, removal is cheap and the def
 first client delivery it becomes a breaking change with its own migration story. **The cost of
 deferring is that the window closes**, which is the whole argument for deciding now rather than
 later. Related: [[P-031]] (the policy and the enumerated removals).
+
+## [ ] P-033 — `typecheck` covers `src/**` only, so 557 test files are OUTSIDE the compile guarantee ⟨priority: medium⟩
+
+**What:** no workspace typechecks its tests. Every app's `tsconfig.json` includes `src/**/*` only,
+and every package's explicitly EXCLUDES its tests. So a test can call a function with the wrong
+arguments and nothing objects until it happens to throw at runtime — or never, if the wrong argument
+is only dereferenced on some paths.
+
+**Why this is worth a number rather than a shrug:** it **narrows a guarantee this repo has just
+relied on**. [[B-139]]'s fix was chosen precisely because a **required parameter is a type error** —
+an API that cannot be called wrong, rather than a corrected call site one edit away from regressing.
+That argument is sound for `src`, and **not true of tests**. When B-139 made `isItemDirty`'s plate
+baseline required, three test call sites kept passing two arguments:
+
+- they did not fail `typecheck`, because tests are not in it;
+- they did not fail at runtime either, because `appliedPlates` is only dereferenced when the item has
+  staged plates and those cases stage fields only.
+
+They were fixed by hand, having been found by reading. **The next one will not be**, and the reasoning
+that justified the API shape will still be quoted in the docstring. That is the exact shape of _a
+warning that outlives its truth_.
+
+**Measured, at `1577c4b9`:**
+
+| scope                 | `tsconfig` says                                                           | tests typechecked?        |
+| --------------------- | ------------------------------------------------------------------------- | ------------------------- |
+| `apps/runtime`        | `include: ["src/**/*", "vite.config.ts"]`                                 | **no**                    |
+| `apps/designer`       | `include: ["src/**/*", "vite.config.ts"]`                                 | **no**                    |
+| `packages/*`          | e.g. `include: ["src/**/*"], exclude: ["src/**/*.test.ts", "tests/**/*"]` | **no** — excluded by name |
+| `tools/caspar-bridge` | same exclusion                                                            | **no**                    |
+
+**557 test/spec files** are outside it: 113 in `apps/runtime`, 203 in `apps/designer`, 241 across
+`packages/` and `tools/`. ⚠ **The Designer does NOT differ** — it was checked specifically, and its
+only extra exclusion is `src/generated`, unrelated.
+
+**Acceptance:**
+
+- WHEN a test calls a typed function with arguments its signature forbids THEN the gate fails, rather
+  than the mistake surviving to a runtime that may never exercise it
+- WHEN the coverage is deliberately left as it is THEN the claims that depend on it say so, so that
+  "a required parameter is a compile error" is not quoted more widely than it is true
+
+**Notes:**
+
+- **Nothing is changed by this filing** — no `tsconfig` is touched. The item records the gap and asks
+  the question.
+- 🔴 **Owner question, with the cost of each:**
+  1. **Extend coverage to tests.** Honest, and it makes the B-139 argument true everywhere. Costs:
+     typecheck time across 557 more files on every gate run; and an unknown number of EXISTING type
+     errors in tests would surface at once — tests legitimately use loose stubs and `as never` casts,
+     so this is very unlikely to be a clean flip. It would want its own change and probably a
+     per-workspace rollout rather than a big-bang.
+  2. **Narrow the claims instead.** Cheaper and immediately honest: where a docstring justifies an API
+     shape by "this is a compile error", say _in `src`_. Costs: the guarantee stays half-true, and the
+     next person to rely on it has to read the caveat.
+  3. **A middle path** — typecheck tests in the workspaces where the argument is actually load-bearing
+     (`apps/runtime` first, since B-139 lives there), and leave the rest. Costs: the rule then differs
+     per workspace, which is its own kind of thing nobody can see from either side.
+- **Cross-refs:** [[B-139]] (whose fix rests on the guarantee), [[B-142]] (the same shape one level
+  out — a rule the Designer enforces and the Runtime does not).
+
+## [ ] P-034 — a Designer E2E failed once, unreproducibly, and the record exists so a SECOND one is legible ⟨priority: low⟩
+
+**What:** on 2026-08-17 the Designer Playwright suite failed one test out of 268, in the middle of
+three consecutive runs that otherwise passed, with **zero Designer source changed** in the session.
+It did not reproduce.
+
+**Repro:** none. That is the point of the item.
+
+**Expected:** 268 passed.
+**Actual:** run 1 — 268 passed. Run 2 — **267 passed, 1 failed**. Run 3 (isolated re-run of the
+Designer suite alone) — 268 passed.
+
+**Env:** Windows, local `pnpm gate:e2e` and `pnpm --filter @cg/designer test:e2e`, 2026-08-17, on a
+machine that had just run a full `pnpm gate` and the Runtime E2E suite back to back — i.e. **under
+load**. Session A's changes were confined to `apps/runtime` and `docs/`; the Designer's source was
+untouched, which is why the failure is not attributed to them.
+
+**Why file something that is not actionable:** because **one unreproducible flake is not actionable
+and a second one is** — and without a written first, nobody can tell that the next failure is a
+pattern. A suite that fails occasionally and is always re-run quietly stops meaning anything, and
+the day it fails for a real reason it gets re-run too. The record is the instrument that makes the
+second occurrence legible.
+
+**What was captured, and what was NOT:**
+
+- **Captured:** the assertion form — `expect(locator).not.toHaveText(expected) failed` — the counts,
+  the date, and the load conditions.
+- 🔴 **NOT captured: the spec file and test name.** The console filter used at the time dropped the
+  failing test's title, and the run is gone. **Naming a specific test here would be a guess**, and a
+  flake record naming the wrong test is worse than none — it sends the next reader to the wrong
+  place and makes a real pattern invisible.
+- **Narrowed, without asserting:** exactly TWO Designer E2E assertions use that form.
+  `tests/e2e/clock.spec.ts:35` — `await expect(time).not.toHaveText(before, { timeout: 3000 }); // ticked within ~1.5s`
+  — is **time-dependent with a 3 s budget**, which is the shape that fails under load; and
+  `tests/e2e/fit-on-open.spec.ts:26` — `await expect(readout).not.toHaveText('100%')` — is
+  deterministic. The first is the plausible candidate on its shape alone. **It is recorded as a
+  candidate, not as the cause.**
+
+**Acceptance:**
+
+- WHEN a Designer E2E fails again with `not.toHaveText` THEN this item is the prior occurrence to
+  attach it to, and the pair is a pattern rather than two separate shrugs
+- WHEN a second occurrence IS recorded THEN the failing test is captured by NAME, with the run's
+  output retained, so the third conversation is about a fix and not about what failed
+
+**Notes:**
+
+- **Do not "fix" `clock.spec.ts` on the strength of this item.** Widening a timeout on an unconfirmed
+  candidate is how a real defect gets a longer rope — the pattern this repo already names in the
+  gate's own bound (a contention red answered by a longer timeout is `B-073`, and `B-098` is that
+  bound blown in turn).
+- **If it recurs:** capture the full Playwright output including the test title and any trace, and
+  note whether the machine was under concurrent load. Both runs that showed it were preceded by other
+  suites on the same host.
+- **Cross-refs:** `B-098` / `B-073` (the load-contention flake class and why a longer timeout is the
+  wrong answer).
