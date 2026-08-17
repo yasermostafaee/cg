@@ -390,6 +390,13 @@ the id is DYNAMIC/field-bound). When an item whose template declares Live Source
 BRIDGE places each plate's ASSIGNED source on its own CasparCG layer BELOW the template's layer,
 geometrically behind the hole.
 
+> **Pointer — the aspect-mismatch consent is [[R-053]], in `runtime.md`.** The refusal
+> (`live-source-aspect-mismatch`), the `ASPECT_MATCH_TOLERANCE` and the whole fit chain live here,
+> in `tools/caspar-bridge/src/live-plate-fit.ts` — but the WORK is Runtime: the consent affordance
+> on the row, the persistent "cropped by consent" indicator, and the retention behaviour on
+> `RetainedStackItem`. Filed under `R-` for the same reason [[R-048]] is, whose mechanism is
+> likewise `swapLiveSource` in this bridge. Do not file a second item here.
+
 ⭐ **RESHAPED 2026-08-10 (owner, `live-source-multibox` design.md §2z / §2d).** The installation
 builds its list of lives **INDEPENDENTLY**, with no reference to any template: each entry carries a
 human NAME ("Studio A", "Baku", "Skype 1") beside its producer — a DECKLINK input, another

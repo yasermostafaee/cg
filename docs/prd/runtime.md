@@ -2462,3 +2462,159 @@ measures 7.38:1, not 2.13:1), which is why D-148 is `low` and this was not. D-14
 explicitly that its roles must be DERIVED from the Designer's own existing treatments, not
 copied from this item's two: the Runtime's `refusal`/`notice` were an EXTRACTION of treatments
 that already existed in that app.
+
+## [ ] R-053 — an aspect-mismatched plate must be TAKEABLE, with operator-confirmed CENTRE CROP ⟨priority: high⟩
+
+**What:** when a live plate's `expectedAspect` disagrees with the assigned source's shape, the take
+is refused. Keep the refusal — but let the operator **consent to a centre crop from the row** and
+take again. The consent is **per-item, per-run**: it never edits the template's assignment nor the
+plate's `expectedAspect`. While a consented plate is on air, the row says **persistently** that it
+is cropped by consent.
+
+**Why:** the refusal is correct in principle and unsurvivable in practice, for two measured reasons.
+
+1. 🔴 **Seating is ALL-OR-NOTHING, so ONE mismatched plate refuses the ENTIRE take.** A three-box
+   graphic does not reach air because one guest's feed is a different shape than the author
+   guessed. The all-or-nothing rule is deliberate and right — _"a layout with one unfilled hole is
+   the silent-empty-hole outcome reached by a different road"_
+   (`tools/caspar-bridge/src/caspar-runtime.ts:2913-2915`) — which is exactly why the per-plate
+   remedy has to exist.
+2. 🔴 **The operator has no on-air remedy at all.** The message names two fixes and both live in CG
+   Control; a third exists and is unmentioned (clearing `expectedAspect`) and is an author-side,
+   template-wide edit in the Designer. None of the three is available to an operator with a guest
+   waiting.
+
+**This is a SMALL addition, not new geometry — the mechanism is already built and already centred.**
+
+- **Crop-to-fill is already CENTRED**, and the code says why:
+  _"Centred on the hole, so the crop takes evenly from both edges. An off-centre crop would cut one
+  side of a face and not the other"_ — `x: hole.x + (hole.width - width) / 2`
+  (`packages/shared-schema/src/live-geometry.ts:186-189`), pinned by a unit test. It lives in
+  `@cg/shared-schema`, so the page and the bridge share ONE computation. ⚠ The one case that is not
+  centred is a hole partly off-frame, because the CLIP is intersected with the stage while the FILL
+  is not (`live-geometry.ts:153-166`) — that is the existing clamp and is out of scope here.
+- **`expectedAspect` is a VALIDATION, not a fit input.** The source's own aspect is genuinely first
+  in the chain; the author's number is consulted as a fit input only where the source states
+  nothing (`tools/caspar-bridge/src/live-plate-fit.ts:135-170`).
+
+⇒ **"Proceed with centre crop" is, mechanically, "skip this one validation and fit from the source's
+real aspect."** The branch is `if (stated !== null && expected !== undefined)` at
+`live-plate-fit.ts:148`. No new arithmetic and no new AMCP commands. What must be BUILT is the
+**consent**: how it is expressed, where it is carried, how it is shown, and how it is cleared.
+
+**The precedent to reuse — do NOT build a second mechanism.** [[R-048]]'s `#sourceOverrides` is the
+shape: a per-item, per-plate map in the bridge, resolved inside the ONE resolver, which explicitly
+does not write back _"because an emergency substitution must never silently become the permanent
+configuration."_ It rides the OPEN retention axis as `RetainedStackItem.sourceOverride` and is
+re-applied by `restore()`.
+
+🔴 **But its clear-set is far thinner than it looks, and a consent must not inherit it unexamined.**
+Measured: `#sourceOverrides` is cleared by exactly **two** events — `remove()`, and a swap that
+empties the map — plus bridge-process death, repaired by `restore()`. It is **NOT** cleared by a new
+assignment, a re-take, a template re-import, `stopItem`, `out`, teardown, a catalog change, or
+disconnect. For an override that is tolerable: it names a source the operator chose. **For a
+consent it is not** — a consent is permission to crop THIS mismatch, and a consent that outlives the
+mismatch is a silent crop on a plate that no longer needs one. Enumerating the inverse is part of
+this item, not a detail: for every place the consent is set, name what clears it.
+
+**It must be VISIBLE that a plate is running cropped**, and the obvious precedent is not usable as
+one. `resolvePlateAspect`'s `assumed` flag was built for exactly this honesty role — _"what lets a
+row or a log say 'fitted unverified' instead of claiming a verified fit"_ — but ⚠ **`assumed` has
+ZERO readers outside its own unit test**: it reaches no UI, no IPC channel and no log. So the
+principle is sound and the surface does not exist; this item builds the first one, and should carry
+`assumed` with it rather than leaving a second unread flag behind.
+
+**Where the control lives** — two measured constraints, both binding: the row's verb block is a
+**fixed six-column grid** with a sticky header printing a word above each glyph, which is why AUDIO
+and SOURCE became `surface: 'menu'` actions (`features/layers/layerRowActions.ts:655-668`); and
+[[R-048]]'s 6.9e requires the source swap to be reachable in **one or two actions from the row** and
+explicitly not behind a modal chain. A refused take with a guest waiting has the same emergency
+character and the same argument.
+
+**Acceptance:**
+
+- WHEN a take includes a plate whose `expectedAspect` disagrees with its assigned source THEN the
+  take is still REFUSED first, and the operator sees the warning naming the plate and both numbers
+  before anything reaches air
+- WHEN the operator consents to the crop from the row, in one or two actions, and takes again THEN
+  the take succeeds and the plate shows the CENTRE of the source, cropped to fill the hole
+- WHEN a consent is given THEN it applies to that row's run only, and neither the template's
+  assignment nor the plate's `expectedAspect` is modified
+- WHEN two plates mismatch and only one has been consented THEN the take is STILL refused, naming
+  the plate that still lacks consent
+- WHEN a consented plate is on air THEN the row shows persistently that it is cropped by consent,
+  not only as a toast at the moment of confirming
+- WHEN ⟨the named clearing events⟩ occur THEN the consent is cleared, and WHEN the row is retained
+  and restored THEN it survives, so a reconnect does not silently drop it
+- WHEN a plate carries no `expectedAspect` THEN nothing is refused, unchanged
+- WHEN the two aspects differ by no more than `ASPECT_MATCH_TOLERANCE` (1%) THEN the take passes
+  silently, unchanged
+- WHEN the refusal is shown THEN it names all four remedies in order, on-air one first, each with
+  where it lives
+- WHEN the refusal sentence is rendered anywhere THEN it has exactly ONE spelling in the repo
+
+**Notes:**
+
+- **Scope decided by the owner: OPERATOR CONSENT ONLY.** An author-side `allowCrop` field on the
+  plate was considered and NOT taken: the author cannot see the feed, so a pre-authorised crop is a
+  crop nobody has looked at — the same argument the code already makes for why the SOURCE outranks
+  the AUTHOR (_"Crop-to-fill DISCARDS PICTURE… the author cannot see the feed, so their guess is
+  about what they DESIGNED FOR, not about what arrives"_). It stays available as a later item if
+  operating experience asks for it.
+- **Fit-inside (letterbox / pillarbox) is rejected, for TWO independent reasons — record both.**
+  The code's own reason is aesthetic: _"a multi-box guest window is a designed graphic element, not
+  a video player viewport, and black bars inside a frame the designer drew do not read as 'the
+  source is 4:3', they read as a fault on air"_ (`live-geometry.ts:144-152`). The **structural**
+  reason is additional and is not written down anywhere: the plate is a **transparent hole punched
+  in the backdrop**, so an under-filled hole does not show black bars at all — it shows whatever is
+  on the layer beneath it. Making letterboxing safe means painting bars or shrinking the hole, i.e.
+  touching the punch geometry.
+- **Out of scope for v1:** a pan / offset control choosing which part survives the crop. Centre
+  only; an offset control is a separate later item ⟨MINT: live plate crop offset control⟩.
+- 🔴 **The refusal message is INCOMPLETE and already has TWO SPELLINGS.** Every site, measured:
+
+  | site                                                     | what it carries                                        |
+  | -------------------------------------------------------- | ------------------------------------------------------ |
+  | `tools/caspar-bridge/src/live-plate-fit.ts:156-160`      | **source of truth** — names the plate and BOTH numbers |
+  | `apps/runtime/src/renderer/ui/errorCodeMessage.ts:88-89` | a generic paraphrase — **no plate, no numbers**        |
+  | `tools/caspar-bridge/tests/live-plate-fit.test.ts:99`    | asserts `/re-assign\|correct the source/i`             |
+  | `apps/runtime/tests/errorCodeMessage.test.ts:76-81`      | asserts `/cut/i`, `Re-assign`, `format`                |
+
+  The two prose sites already differ three ways — "cut **a** part" vs "cut part", an em-dash vs a
+  full stop, and an ASCII `'` vs a curly `’` in "source's format". There is **no** e2e assertion, no
+  operator doc and no archived spec carrying it (SEARCH over `docs/`, `apps/*/tests/e2e`,
+  `openspec/specs` for "designed for" / "cut a part of the picture" / "re-assign the plate" → no
+  further hits). `asyncResultMessage` prefers the bridge's own sentence over the catalogue's, so the
+  operator normally reads the bridge's — but the catalogue's is what shows when only a code
+  survives.
+
+- **DRAFT of the corrected message — AWAITING OWNER APPROVAL, not to be applied in this item:**
+
+  > plate "live-1" is designed for a 0.9 feed, but the assigned source "Studio 1" delivers 16:9.
+  > Cropping it would cut a part of the picture the author never saw.
+  > **To go to air now:** confirm the centre crop on the row — it applies to this run only.
+  > **To fix it properly, in CG Control ▸ Sources:** re-assign the plate to a 0.9 source, or correct
+  > "Studio 1"'s format if 16:9 is wrong.
+  > **If this plate should not assert a shape at all:** clear its expected aspect in the Designer —
+  > that is permanent and applies to every future take of this template.
+
+  ⚠ The four remedies are **not interchangeable** and the message must not present them as if they
+  were: clearing `expectedAspect` is PERMANENT and TEMPLATE-WIDE (it removes the check for every
+  future mismatch on that plate, including a genuinely wrong assignment the check would have
+  caught), and it is an AUTHOR action in the Designer, so it is not reachable by the operator
+  reading the message — naming it without saying where it lives would be a fourth dead end.
+
+- **Owner questions, deliberately not resolved here:**
+  1. **What clears the consent?** The minimum defensible set is a change to the plate's assignment
+     or override, and a new mismatch with different numbers. Should a re-take also clear it — safer,
+     but it makes the operator re-consent on every take of a permanently-mismatched feed?
+  2. **Does the consent survive retention/restore?** [[R-048]]'s override does. A consent that
+     survives a reconnect keeps the graphic on air; a consent that does not means a reconnect
+     silently drops a plate. Recommendation: survive, on the same OPEN axis — but it is the owner's
+     call because it is the difference between two on-air failure modes.
+  3. **Exact wording of the message above.**
+- **Cross-refs:** [[R-048]] (the per-run override this reuses, and whose clear-set must NOT be
+  inherited unexamined), [[B-139]] (the row's draft/dirty predicate — this item adds a fourth
+  per-plate row indicator and must read the existing predicate rather than adding a third
+  spelling). The refusal and the fit chain live in `tools/caspar-bridge/src/live-plate-fit.ts`; see
+  the pointer beside [[C-015]] in `caspar.md`.
