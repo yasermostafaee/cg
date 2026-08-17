@@ -3530,3 +3530,90 @@ that is the failure this item exists to close. A cross-reference is filed in `bu
 
 - **Cross-refs:** the Designer half of this one root cause is cross-referenced from
   `bugs-designer.md`; it is deliberately NOT a second item.
+
+## [ ] B-141 — the audit log records almost ONE action, and its empty state claims otherwise ⟨priority: high⟩
+
+**What:** the Audit log modal is empty after a whole session of imports, takes and commands. It is
+not a display bug: the bridge's audit is an **in-memory array with exactly ONE append site**, and
+the `@cg/audit` package that was built to make it a real forensic record **is not imported by
+anything**. The empty state then asserts a fact it cannot know.
+
+**Repro:**
+
+1. Start the bridge and the Runtime; import several templates; load, take and update rows.
+2. Open the status bar's `LOG` button (Audit log).
+
+**Expected:** a row per auditable action — who did what, to which template, and whether the server
+accepted it.
+**Actual:** the list is empty and says _"No audit entries yet."_ The only action that can ever
+appear is a `reconnect`. Restarting the bridge erases even that.
+**Env:** Runtime SPA + bridge, any build. Read from the code at `be2e390`.
+
+**Why — five facts, each verified:**
+
+1. **The store is an in-memory stub.** `#audit: AuditEntry[] = []`
+   (`tools/caspar-bridge/src/caspar-runtime.ts:699`), under a section header that says so out loud:
+   _"lock / templates / audit / settings / update (in-memory stubs)"_ (`:4551`). **A forensic record
+   a process restart erases is not one.**
+2. 🔴 **Exactly ONE append site exists in the entire bridge** — `caspar-runtime.ts:4458`, inside the
+   connection-apply path, writing `action: 'reconnect'`. That is the whole of what the log can ever
+   contain. The READ path is fine (`auditRecent`, `:4680`, routed from `bridge.ts:800`) — there is
+   simply nothing in it.
+3. **`@cg/audit` is dead code.** It ships an `AuditWriter` with `lastError` (`writer.ts:40`, `:92`)
+   and a `readRecentEntries` tail reader (`reader.ts:35`), and its docstring describes the
+   capability the product is supposed to have. SEARCH: `git grep -rn "@cg/audit" -- apps packages
+tools` → the ONLY hit outside the package itself is
+   `packages/eslint-config/src/rules/forbidden.ts:57`, which lists it in `MAIN_ONLY_PACKAGES` — a
+   rule forbidding browser code from importing it. **Nothing imports it.** A package that reads as
+   shipped, describing behaviour that exists nowhere, is a warning that outlives its truth.
+4. 🔴 **The panel's action list and the schema's action set DISAGREE, and the panel is the wrong
+   one.** `AuditEntrySchema.action` enumerates **fifteen** (`packages/shared-schema/src/runtime/audit.ts:11-28`):
+   `load take update out remove failover reconnect import export stop next lock-engage lock-release
+update-deferred update-installed`. `ACTION_OPTIONS` in
+   `apps/runtime/src/renderer/features/audit/AuditPanel.tsx:12-25` is a hand-kept literal of eleven
+   plus `all`, **missing `stop`, `next`, `update-deferred` and `update-installed`**. So four real
+   actions could never be isolated by the filter even once they are written. One rule, two
+   spellings, and nothing catching the disagreement.
+5. 🔴 **The empty state asserts a fact it cannot know.** _"No audit entries yet."_
+   (`AuditPanel.tsx:169`) cannot distinguish _nothing happened_ from _nothing is recorded_ from
+   _this build has no writer_. It is **this project's own recurring error written into the
+   product**: a negative observation is not a result until a positive control proves the instrument
+   is live. The operator reading it concludes the session was quiet.
+
+**Acceptance:**
+
+- WHEN an auditable action occurs THEN a row is appended to a record ON DISK, and it is still there
+  after the bridge restarts
+- WHEN the Audit log is opened THEN it shows the recent tail of that record, newest first
+- WHEN the panel offers its action filter THEN the options are DERIVED from the one schema action
+  set, so a new action cannot be filterable in one place and invisible in the other
+- WHEN no writer is configured THEN the panel says THAT, and does not say "no entries yet"
+- WHEN the writer is configured but failing THEN the panel surfaces the failure (its `lastError` /
+  error count), and does not say "no entries yet"
+- WHEN the record is readable and genuinely empty THEN — and only then — the panel says "No audit
+  entries yet."
+- WHEN an audit write fails THEN the take, the update and every other on-air operation still
+  proceed; the writer keeps trying and reports, and nothing goes off air
+
+**Notes:**
+
+- **Owner decision, recorded as DECIDED: FORENSIC-LITE.** Wire `@cg/audit` so the record is on disk
+  and survives a restart. **File rotation, the UNC fallback and any retention policy are
+  DEFERRED** — and the writer's docstring must be corrected where it still promises them, or it
+  stays a warning that outlives its truth.
+- **Rejected, with its reason:** keep it in-memory and delete the package. The station then loses
+  the ability to answer _"who put what on air, and did the server accept it"_ the next day, which is
+  the only reason an audit log exists.
+- 🔴 **A failed audit write must NEVER take the station off air**, and the contrast with the config
+  stores is deliberate: there an unusable file IS a hard boot failure, because the file is a
+  precondition for correct playout. An audit write is not a precondition for anything — it is a
+  record OF what happened, so its failure must degrade to "reported and retried", never to a refused
+  take.
+- **Where the file lives follows the existing store precedent** — a CLI flag with a default under
+  `~/.cg-runtime/`, exactly as `tools/caspar-bridge/src/source-assignments-store.ts` documents
+  `--source-assignments-path` → `~/.cg-runtime/bridge-source-assignments.json`. ⚠ **Not in
+  `templatesDir`**: `TemplateRegistry` reads every `*.json` there as a template ([[B-116]]).
+- ⚠ **Wire only actions that are real operations today.** An action in the enum with no operation
+  behind it must not be invented to fill the list; name any that cannot be wired and why.
+- **Cross-refs:** [[B-142]] (the panel's raw `<select>`, which this item must not touch),
+  [[B-143]] (the same class — the system knows something and does not say it).
