@@ -1,0 +1,698 @@
+# Design — the multi-box layout switch
+
+**Evidence gathered 2026-08-17 against `dev` @ `f6c7329`** (`git pull --ff-only` first;
+`HEAD == origin/dev`). Every `file:line` is as the file reads on that commit.
+
+**Hardware readings were taken against the plant at `192.168.21.50:5250`, build
+`2.5.0 69e8ad5 Stable`, channel 1 `1080i5000`** — asserted by a validity gate before every reading,
+never assumed. 🔴 The retired 2.3.2 install at `D:\programs\CasparCG` was never contacted.
+Instrument, controls and raw numbers are in §9.
+
+**A convention used throughout.** Wherever this document asserts something **does not exist**, the
+assertion carries a `SEARCH:` line giving the command and result.
+
+**Status: RECON + DESIGN. §0 is the only settled section.** Every implementation task in `tasks.md`
+carries a `⟨GATE: §x⟩` naming the owner question that must be answered before it starts. Two things
+here are **this design's own decisions with their reasoning**, not owner gates: §0.5 (the plate
+identity model) and §2b (the v1 animation refusal).
+
+---
+
+## 0. Already settled — do not relitigate
+
+### 0.1 The client's requirement (owner, 2026-08-17)
+
+> The operator is on a 3-box layout and must be able to switch to 2-box or 1-box, and back. There
+> must be **a switch between the multi-box layouts, with exactly ONE active at a time, so the
+> operator cannot make a mistake.**
+
+### 0.2 ⭐ FAMILY 1 IS THE ARCHITECTURE (owner, 2026-08-17). The family question is CLOSED.
+
+Asked whether the transition is a cut or animated, the owner answered:
+
+> "Definitely — if it is optional and changeable, that is the best case."
+
+**Family 1** — one template, the layouts as states of a single scene — **is the architecture.**
+Family 2 (three templates in an exclusive group) is withdrawn.
+
+- **A cut is a transition of duration zero.** Family 1 delivers both halves; Family 2 delivers only
+  the cut and would then require Family 1 anyway — two implementations of one capability.
+- **Exclusivity is structural in Family 1.** §8 shows the tree has NO mutual-exclusion primitive to
+  build Family 2's rule out of, and that two multi-box templates on air together is reachable today.
+- **Assignment survival is FREE in Family 1 and IMPOSSIBLE in Family 2** — an independent, code-level
+  argument (§3).
+
+**The fair counter-case, recorded with why it fails.** Family 2 _can_ produce a crude animated switch:
+`CG STOP` on the outgoing template runs its outro while `CG PLAY` on the incoming one runs its intro.
+It fails twice over: during the overlap **both templates are on air**, which is exactly the crosstalk
+condition of §1; and **it cannot rearrange** — a box travelling from its 3-box position to its 2-box
+position is not expressible across two independent pages.
+
+### 0.3 Source assignment must survive the switch
+
+Answered from the code in §3.
+
+### 0.4 What is NOT decided here
+
+No behaviour change ships. The crosstalk (§1) is recorded as measured evidence of a state the switch
+makes unreachable, **not** as a bug to fix here.
+
+### 0.5 ⭐ THE PLATE IDENTITY MODEL — this design's decision, with the evidence
+
+> **A layout is a set of GEOMETRIES and VISIBILITIES over the SAME plate set.**
+> 3-box declares `guest-1..3`; 2-box is `guest-1..2` at new rects with `guest-3` hidden; 1-box is
+> `guest-1` at full frame.
+
+**Not** three sets of plate elements, one per layout. That alternative is refused, and the reason is
+not a preference:
+
+1. 🔴 **`live-source-overlap` is a SHIPPED, EXPORT-BLOCKING preflight error.**
+   `apps/designer/src/renderer/state/live-source-preflight.ts:293-312`, `severity: 'error'`, reported
+   against both elements: _"overlapping holes put two live sources over the same pixels and which one
+   shows is a z-order accident."_ Two layouts of the same screen area necessarily overlap.
+   ⚠ **Precisely:** the overlap loop sits inside the per-document loop, so plates in _different
+   compositions_ are not compared — a three-composition model would slip past the check on a
+   technicality. **But its reason applies with full force at runtime**, and combined with fact 2
+   below, that model reproduces §1's crosstalk _inside a single template_. Evading a check by scoping
+   is not the same as satisfying it.
+2. **Every declared plate is seated at take** (§4), so three layouts' worth of plates would all go
+   live at once — N producers for one source. A `route://` tolerates that; a **physical DeckLink
+   cannot be opened three times**. §12.4.
+3. **It cannot reach the animated case at all.** You cannot tween a box from one element to a
+   different element. Building the separate-sets model for the cut and then needing this model for
+   the animation is the same "two implementations of one capability" failure that closed §0.2.
+
+**Three independent ways this model fits the tree** (each verified, not asserted):
+
+- **Assignments are keyed by plate id**, so assignment survives the switch for free — §3.
+- **Plates keep their layers**, so `live-source-multibox` `tasks.md` 6.0's _"A RE-TAKE LANDS ON THE
+  SAME LAYERS"_ stays true and the ledger stays coherent. `#planLiveSeating`'s own comment
+  (`caspar-runtime.ts:2971-2979`) says moving a plate "would leave the old layer's producer running
+  with nobody's name on it".
+- **`§9a-Z` already says the punch follows the plate's own VISIBILITY**, not its assignment — _"a
+  condition belongs in the mask ONLY IF it can be evaluated from the SCENE ALONE: visibility,
+  lifecycle range, geometry and z-order qualify"_ (`packages/shared-schema/src/scene-flatten.ts:326-330`).
+
+🔴 **The cost this model carries, stated plainly:** the switch **IS a plate move**, so per-layout
+geometry must reach both the page and the bridge. Nothing today can express it — see §7 and §2.3.
+
+### 0.6 The plate-identity fact, read from the code
+
+Asked directly: **what does `collectLiveSources` emit for two elements sharing a `routeKey`, and what
+does the preflight say?**
+
+- `collectLiveSources` emits **one declaration per ELEMENT**
+  (`packages/vcg-format/src/live-sources.ts:96-110`), each carrying its own `elementId` and `rect`
+  and the _same_ `sourceId: el.routeKey`. Nothing dedupes.
+- **The preflight says NOTHING.** `liveSourceIssues` has exactly four checks — device-shaped id,
+  off-frame, geometry-keyframe/rotation, overlap (`live-source-preflight.ts:159-317`). None is a
+  duplicate-id check. `SEARCH:` `git grep -rni "duplicate" -- apps/designer/src/renderer/state/live-source-preflight.ts packages/vcg-format/src`
+  → 0 hits in the preflight (the only hits are `.vcg`/`.cgproj` path checks in `pack.ts`).
+- `LiveSourceIdSchema` (`packages/shared-schema/src/elements.ts:1083-1092`) carries **no uniqueness
+  refinement** — it is a format regex only.
+- Downstream, `resolvePlateAssignments` resolves **per declaration** through a `Map` keyed by plate id
+  (`live-plate-assignment.ts:96-129`), so duplicates all resolve to the same source **and all are
+  seated**; `#planLiveSeating`'s `held` map is keyed by `record.sourceId`
+  (`caspar-runtime.ts:2982`), so duplicates collapse and `preferred` names one layer N times.
+
+**Under §0.5's model this is all moot** — one element per id at a time. It is recorded because it is
+exactly why the separate-sets model's identity story is fragile, and because the Designer explicitly
+_permits_ duplicates (`CanvasOverlay.tsx:105-107`: _"nothing forbids a deliberate duplicate"_), so
+nothing would have warned an author who tried it.
+
+---
+
+## 1. The measured crosstalk — evidence, not a defect to fix here
+
+The owner played all three layouts at once and stopped the top one to reveal the next. Measured on
+the plant, 2026-08-17: `INFO 1` showed live sources on layers **10–14** and templates on
+**93, 94, 95, 97**; layer 95's template took plates 10/11/12 while 13/14 belonged to a second
+template.
+
+**There is no layer collision — allocation works correctly.** Live sources sit in a declared band,
+suggested `10–59` (`packages/shared-ipc/src/channels/sources.ts:295`), below the operator's template
+rows. A hole punched by the template on 95 opens onto **the whole stack beneath it** and reveals
+whatever live layer is topmost at that pixel — which may belong to a **different** template. Both
+reported symptoms follow at once: one layout appearing under another, and boxes that look cropped
+because you are seeing another template's plate through this template's window.
+
+⚠ The band's bounds are only `0..MAX` with `end >= start` (`sources.ts:286-292`); **nothing forces
+the band below the template rows.** The z-order that produces the crosstalk is a convention of the
+suggested band, not an invariant.
+
+---
+
+## 2. 🔴 The feasibility verdict
+
+### 2.1 What already exists — no new machinery
+
+| Capability                                                       | Where                                                                                                                                                                                               |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Toggling an element's visibility from template data              | a `boolean` field → a `visible` target (`apps/designer/src/renderer/features/fields/bind-resolver.ts:100`); the runtime writes `el.style.display` (`packages/template-runtime/src/bindings.ts:184`) |
+| Re-applying every binding on a `CG UPDATE`                       | `update()` re-runs the binding walk (`packages/template-runtime/src/runtime.ts:2177`)                                                                                                               |
+| One assignment shared across layouts                             | assignment is keyed `(templateId, plateId)` — §3                                                                                                                                                    |
+| Substituting a live source on a RUNNING row, with the fit redone | `swapLiveSource` (`tools/caspar-bridge/src/caspar-runtime.ts:3200+`) — shipped and working                                                                                                          |
+| The punch following a plate's own visibility                     | `§9a-Z` already specifies it; `sceneMaskHoles` already filters on `visible`                                                                                                                         |
+| A server-side tween on `MIXER FILL`                              | measured accepted on 2.5.0, 20 easings — §9.3                                                                                                                                                       |
+
+### 2.2 What is a SMALL addition
+
+- **Seat only the ACTIVE layout's plates** and release the rest — §4's one mechanism.
+- **A refusal (or confirmation) on the Inspector's assignment edit while a row is on air** — §5.
+- **Telling the operator which layout is active** — §10.
+
+### 2.3 🔴 What is a GENUINE ARCHITECTURAL CHANGE
+
+1. **Per-layout geometry has no carrier and no authoring surface.** The declaration the bridge fits
+   from is a single static rect per plate, computed at export from the authored rect
+   (`collectLiveSources` → `flat.rect`). For a plate to sit at a different rect per layout, the
+   declaration must carry **per-layout geometry**, and the Designer must be able to author it.
+   Neither exists. `SEARCH:` `git grep -n "z.literal('transform')" -A3 -- packages/shared-schema/src/bindings.ts`
+   → the bindable property enum is exactly `['opacity','x','y','scale','rotation']`
+   (`bindings.ts:40`); **`width`/`height` are not binding targets at any level of the schema**, and
+   the only production `transform` constructor hardcodes `'opacity'` (`bind-resolver.ts:105`).
+   ⇒ A 2-box layout whose boxes are _larger_ than the 3-box ones cannot be expressed by any existing
+   mechanism.
+
+2. **The punch mask is computed once and never recomputed** — one production call site, inside
+   `buildScene` (`packages/template-runtime/src/scene-builder.ts:172`).
+   `SEARCH:` `git grep -n "sceneMaskHoles" -- packages apps tools` → one production call site, one
+   definition, the rest tests. **This is UNIT B′, and under this design it is a PREREQUISITE rather
+   than latent cleanup** — §6b.
+
+3. **The mask reads the SCENE's authored `visible`, not resolved visibility.** `sceneMaskHoles`
+   filters `f.element.type === 'video-placeholder' && f.element.visible`
+   (`packages/shared-schema/src/scene-flatten.ts:352-354`); a `visible` **binding** writes
+   `style.display` and never touches that field. So re-running the function unchanged would not help —
+   its input must change shape.
+
+4. **The hole and the FILL must agree while moving** — extended in §3b, not re-derived.
+
+### 2.4 The honest one-line verdict
+
+> **Neither the cut nor the animation is free, and the difference between them is smaller than it
+> looks.** Under §0.5's model even a CUT moves plates, so both need per-layout geometry (a new
+> carrier and a new authoring concept) and a mask that recomputes (UNIT B′). What the animation adds
+> on top is only the _tween_ and its curve contract — which §9.3 measured and which is satisfiable,
+> with `linear`, exactly.
+
+**The good news, and it is substantial:** the two facts that could have killed the feature did not.
+The cut's command sequence completes in **0.20 frames** (§9.4), so the absence of an atomic
+multi-plate `COMMIT` costs nothing visible; and a CasparCG tween **can** be matched to a CSS curve
+exactly, provided both sides use `linear` (§9.3).
+
+---
+
+## 2b. ⭐ THE v1 ANIMATION REFUSAL — this design's decision, not an owner gate
+
+`live-source-multibox` `design.md` §6 _"Animation — refused in v1, with the reason"_ makes **any
+geometry keyframe on a Live Source — or anywhere in its ANCESTOR CHAIN — a preflight `error` that
+blocks export**, because _"a static `FILL` behind an animated hole desyncs, and the hole is
+transparent, so the failure mode is a live face sliding out from behind its frame on air."_
+Verified shipped: `hasGeometryKeyframe` + `animatedAncestor` at `live-source-preflight.ts:225-256`.
+
+**DECISION: (a) — the transition is a RUNTIME STATE CHANGE, not an authored animation. v1's refusal
+stands untouched.**
+
+**The reasoning, which is the distinction that matters.** The refusal exists because an authored
+keyframe moves the hole **with nothing telling the bridge**: the page animates on its own clock and
+the declared rect the bridge fitted from never changes. A layout switch is the opposite by
+construction — **it is the mechanism that moves the FILL.** The same reconcile (§4) that repositions
+the hole issues the `MIXER FILL`/`CLIP` for the new geometry. Hole and picture move because one
+authority moved both, which is precisely what the refused case lacks.
+
+**What stops an author ALSO keyframing a plate and re-entering the refused case: nothing changes,
+and that is the point.** The preflight reads `el.animation?.tracks`
+(`live-source-preflight.ts:147-153`) — **authored keyframes in the scene.** A runtime layout state is
+not in `animation.tracks` and is invisible to it. So the two are distinguishable **by construction,
+not by a new rule**: authored keyframes remain refused; the layout switch is not one. An author who
+keyframes a plate still gets the blocking error, correctly, because that case still has no
+bridge-side counterpart.
+
+⚠ **The one thing this decision does NOT buy.** It removes the _refusal_ as an obstacle; it does not
+remove the _risk the refusal was pointing at_. A moving hole still needs the FILL to move with it in
+time — which is §3b's sync problem, now owned by the switch rather than by the author. `tasks.md` 7.4
+is therefore withdrawn as written (there is nothing to relax) and replaced by a task to keep the
+refusal and pin it with a test that a runtime layout change does **not** trip it.
+
+---
+
+## 3. 🔴 Assignment survival — answered from the code
+
+Assignment is keyed **`(templateId, plateId)`**:
+
+```
+export const TemplateSourceAssignmentSchema = z.object({
+  templateId: IdSchema,
+  plateId: LiveSourceIdSchema,
+  sourceId: SourceDefinitionIdSchema,
+});
+```
+
+`packages/shared-ipc/src/channels/sources.ts:322-326`. The element's field is
+`routeKey: LiveSourceIdSchema` (`elements.ts:1129`) and `collectLiveSources` emits it verbatim as
+`sourceId` (`live-sources.ts:106`). **No element id, no plate index, nothing layout-local.**
+
+⇒ **Under §0.5's model a plate keeps its identity across layouts, so the tuple never changes and the
+assignment never changes. Nothing needs building.** In Family 2, three `.vcg` files are three
+`templateId`s and share nothing — an independent proof that Family 2 could not have met the
+requirement.
+
+⇒ **And §0.6's duplicate-id collisions never arise**, because there is one element per id. That is a
+real simplification the model buys, and it is why §0.5 is worth its cost.
+
+---
+
+## 3b. The hole and the FILL over time — EXTENDING `live-source-multibox` §6, not re-deriving it
+
+`live-source-multibox` `design.md` §6 _"The v2 path, recorded as a SHAPE rather than as a plan"_
+already records the whole sync problem and is the authority: the CEF `requestAnimationFrame` clock
+against the server's `MIXER` tween clock — _"Two independent timelines, no shared origin, no shared
+tick, and no feedback from either to the other"_ — per-frame `MIXER FILL` named as the brute-force
+alternative with its cost, and the 44-easing `Tween` vocabulary from
+`docs/recon/ciab-client-tools.json` flagged as _"a lead to verify on the server, not a settled server
+capability."_ **This section adds only what is new. Read §6 first.**
+
+**NEW 1 — the vocabulary is now VERIFIED on the server, and it is narrower than the lead.** §9.3:
+20 Penner names accepted on 2.5.0; **`ease`, `ease-in-out` and `cubic-bezier` rejected `403`.** The
+two vocabularies share no name, and only `linear` is exactly matchable (0.0 px).
+
+**NEW 2 — `DEFER`/`COMMIT` is unusable, and it costs less than feared.** `MIXER <ch> COMMIT` is
+**CHANNEL-scoped** (`live-source-multibox` §3b:825-833), so on this shared plant a `COMMIT` we send
+could apply **another controller's** deferred changes. It was therefore deliberately **not
+exercised** in §9.4. ⇒ **A switch that moves N plates cannot commit atomically; its N `MIXER FILL`
+commands land one at a time.**
+**Is that visible? Measured: no.** A full 3-box → 2-box cut — one `CG STOP` plus two
+`MIXER FILL`+`CLIP` pairs — spans **6.9–17.9 ms, median 8.2 ms = 0.20 frames** at 25 fps (§9.4).
+**What bounds it:** the command span is a fifth of a frame, so at most it can straddle **one** frame
+boundary; the worst case is a single frame showing a partially-applied geometry, and the probability
+is bounded by span ÷ frame ≈ 20 %. That is the bound — not a proof of zero, and §9.5 records what
+would prove it.
+
+**NEW 3 — a 1-box layout changes each box's ASPECT, so the fit must be re-derived per layout.**
+`MIXER FILL` **survives a producer swap** (session AK), so a fit that is not re-derived yields a
+**wrong crop rather than an obvious break** — the failure mode that does not announce itself.
+⚠ Related observation from the plant trace, recorded as a lead rather than a finding: `FILL` and
+`CLIP` are identical for a 1280×536 `AMB.mkv`, i.e. crop-to-fill is not being applied. Whether a
+single-box layout would therefore **letterbox** is `tasks.md` 9.2 — unmeasured here.
+
+---
+
+## 4. 🔴 The layout switch and the live-source change are ONE mechanism
+
+- A **layout switch** changes _which plates are visible and where_.
+- A **source change** changes _what one plate shows_.
+
+Both are: **reconcile the seated live-plate set of a RUNNING row against a freshly-resolved desired
+set.** The desired set is a function of (declarations × active layout × assignments × overrides).
+
+The tree holds **two halves of this one function**, and neither is the whole:
+
+| Existing path                                | Desired set from            | Re-issues live? | Scope       |
+| -------------------------------------------- | --------------------------- | --------------- | ----------- |
+| `#seatLiveLayers` (`caspar-runtime.ts:3068`) | ALL declarations            | take only       | every plate |
+| `swapLiveSource` (`caspar-runtime.ts:3200+`) | one plate, via THE resolver | **yes**         | one plate   |
+
+`swapLiveSource` already argues its own case: resolving "through the ONE resolver … A swap that
+resolved plates its own way would be a second spelling of 'which producer is behind this hole'"
+(`caspar-runtime.ts:3272-3275`). **The same argument, one level up, says the switch must not be a
+third path.**
+
+⇒ **ONE `reconcileLivePlates(itemId, desired)`**, called by the take, by the layout switch, and by
+`swapLiveSource` — which becomes a _caller_, not a peer. 🔴 **Do not build a second mechanism beside
+R-048's swap.**
+
+**Extend the list, forget the mutator — the inverse audit:**
+
+| Mutated              | Forward                            | Inverse                                                                    |
+| -------------------- | ---------------------------------- | -------------------------------------------------------------------------- |
+| the plate SET        | seat (take only)                   | release on `stopItem` / `out` / `remove` only — **not** per-plate          |
+| the MASK             | built once in `buildScene`         | **no inverse at all** — nothing un-punches a hole (§6, UNIT B′)            |
+| the FIT              | `mixerFit` at seat and in the swap | `MIXER … CLEAR` exists as a verb; not driven by a visibility change        |
+| the LAYER allocation | `allocateLiveLayers`               | freed only via the three teardown paths; **none on disconnect or restart** |
+
+---
+
+## 5. The Inspector defect — a MISSING REFUSAL ⟨MINT⟩
+
+**Established, not investigated.** R-048 is implemented and shipped: `swapLiveSource` re-issues live
+as a producer **replace**, resolving through the same resolver a take uses and re-deriving the fit
+(`caspar-runtime.ts:3286-3320`). The row's SOURCE swap already does the live thing.
+
+The owner used the **Inspector**, which writes the **template-scoped** assignment. That path is
+specified to reach nothing on air, and three independent sources say so:
+
+- `specs/runtime-live-source-routing/spec.md`: _"an assignment is read at the TAKE and never
+  re-composites the graphic already on the channel."_
+- `apps/runtime/src/renderer/features/inspector/applyDraft.ts:36-38`: _"the assignment reaches
+  NOTHING on air (it is read at the next take)"_, and `:51`: _"⚠ TEMPLATE-LEVEL"_.
+- `setSourceAssignments` (`caspar-runtime.ts:4776-4785`) validates, assigns, emits, returns — and
+  🔴 **is not `async`**, so it is structurally incapable of sending an AMCP command.
+
+`resolvePlateAssignments` filters `a.templateId === input.templateId` (`live-plate-assignment.ts:95`)
+with no item id anywhere, so **the assignment is shared by every row carrying that template.**
+
+⇒ **The defect is a MISSING REFUSAL, not a missing mutator.** Silently re-issuing would repoint every
+other row carrying that template, on air, with nobody told. The Inspector should **refuse — or
+require explicit confirmation — while any row carrying that template is on air, and name the row's
+SOURCE swap as the live path.** **A control that silently does nothing is the worst of the three
+outcomes, and it is what ships today.**
+
+⟨MINT⟩ **a bug item for this**, gated on §12.5. No number is minted here.
+
+⚠ **A second, related defect found during verification.** The Inspector's picker is
+**override-blind**: `appliedPlateSources` (`features/inspector/livePlates.ts:19-29`) resolves via the
+TEMPLATE assignment and `effectivePlateSource` (`features/inspector/draftStore.ts:177-184`) returns
+`staged ?? applied ?? ''`. Neither consults `item.sourceOverride`.
+`SEARCH:` `git grep -rn "sourceOverride" -- apps/runtime/src/renderer` → **exactly one hit**,
+`features/layers/LiveSourceSwapDialog.tsx:80`. So an active override is invisible everywhere except
+the dialog that set it, and the Inspector confidently shows a source that is not on air. Same
+confusion, other side. ⟨MINT⟩ with the above.
+
+---
+
+## 6. The mask — the core blocker
+
+**Nothing recomputes the mask after build** (§2.3.2). Two corrections to session AO's framing, both
+of which make the job _easier_:
+
+- **Not a baked string** — the mask is inline CSS on a live DOM node, and both exporters ship the
+  scene plus the runtime and compute the mask at boot. A re-punch is a **reassignment**, not a
+  re-export. **No `.vcg` change is implied.**
+- **A runtime mask path already exists** — `STAMPED_SCOPE_MASKS` is spread inside `buildRepeaterRows`
+  (`scene-builder.ts:1164`) and `buildSequenceCompositionItem` (`:1017`), both invoked from
+  `runtime.ts` (`:1622`, `:749`) long after `buildScene` returns.
+
+**What it takes:** give `sceneMaskHoles` **resolved** visibility and **current** geometry instead of
+the scene's authored values; re-punch after each `update()`; and for the animated case only, track
+per frame.
+
+⚠ **A trap that rules out the obvious alternative carrier.** `flattenElements` descends into exactly
+two kinds — `container` (`scene-flatten.ts:264`) and `composition` (`:274`) — and **never into a
+`sequence`**. `SEARCH:` grep for `sequence` over `packages/shared-schema/src/scene-flatten.ts` → the
+word does not appear. So a Live Source plate inside a sequence composition item is invisible to
+**both** `collectLiveSources` and `sceneMaskHoles`: it would declare nothing and punch nothing,
+silently. **This rules out "a sequence of composition items" as the layout carrier** — otherwise the
+tree's only exactly-one-of-N primitive.
+
+⚠ **`ContainerElement` is inert**, not merely unauthorable: the runtime renders it via
+`buildPlaceholder` and **discards its children** (`scene-builder.ts:297`). Session AC's finding holds
+and is stronger than stated.
+
+---
+
+## 6b. ⭐ UNIT B′ is this feature's PREREQUISITE — filed, with its enumeration
+
+Session AO left UNIT B′ owed as _"the mutator enumeration, derived mechanically: the mask is computed
+once at build and nothing recomputes it."_ Under §0.5 the layout switch **is** a plate move, so this
+stops being latent cleanup and **becomes the feature's prerequisite.** Filed here; **not implemented
+in this change.**
+
+**The enumeration** (AO's list, plus what this design adds). For each: does it move or remove a
+plate, and does the mask follow today?
+
+| Mutator                         | Moves/removes a plate? | Mask follows today? |
+| ------------------------------- | ---------------------- | ------------------- |
+| take                            | yes                    | 🔴 no               |
+| teardown                        | yes                    | 🔴 no               |
+| position override               | yes                    | 🔴 no               |
+| resize                          | yes                    | 🔴 no               |
+| lifecycle range                 | yes                    | 🔴 no               |
+| retention restore               | yes                    | 🔴 no               |
+| z-order reorder                 | changes WHO is masked  | 🔴 no               |
+| **layout switch** (new)         | **yes — both**         | 🔴 no               |
+| **a `visible` binding** (new)   | **removes**            | 🔴 no               |
+| **a `transform` binding** (new) | **moves**              | 🔴 no               |
+
+**Two open questions AO flagged that this design must answer rather than inherit:**
+
+- **An INVISIBLE ANCESTOR does not suppress a punch** — the walk tests `visible` on the PLATE, not on
+  its container or layer. AO left it alone deliberately because the page and the bridge still AGREE
+  (both act on the hidden plate). Under a layout switch that hides a _group_, this becomes load-bearing.
+- **"Declared while hidden"** — whether a hidden plate should still be declared to the bridge. §0.5's
+  model makes this the central question: a hidden plate must stop punching **and** stop being seated.
+
+---
+
+## 7. What a scene can express today — and the gap
+
+- **Compositions are the working nesting mechanism** (`buildComposition`, `scene-builder.ts:339`);
+  `addComposition` / `addCompositionInstance` exist and are wired to UI (`App.tsx:77`,
+  `CompositionsPanel.tsx:67`). Useful for grouping, **but not as three alternative plate sets** (§0.5).
+- **`visible` is authorable** — a `boolean` field → a `visible` target (`bind-resolver.ts:100`).
+- 🔴 **Geometry is NOT authorable.** The one production `transform` constructor hardcodes
+  `'opacity'` (`bind-resolver.ts:105`); there is no `updateBinding` anywhere. And **`width`/`height`
+  are not binding targets at any level** (`bindings.ts:40`).
+
+⇒ **The gap is exactly per-layout geometry**, and it is the largest single piece of work. The carrier
+shape that follows from `live-source-multibox` §1 (no `.vcg` reaches the bridge; the declaration
+block on `TemplateInfo` is derived once at import, on the shipped `hasNext` precedent) is
+**per-layout rects on the declaration**. Proposed as the shape; the authoring half is §12.9.
+
+---
+
+## 8. Can two multi-box templates still be on air together? — YES, by two doors
+
+| Path to air                   | Second multi-box template possible?                                                                            |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Operator take, `take()`       | 🔴 **YES** — `#planLiveSeating` allocates a second template's plates _around_ the first's rather than refusing |
+| `restore()` on reconnect      | 🔴 **YES** — adopts every retained on-air item with no cap, and never re-registers their plates                |
+| Fixed-layer load / bulk verbs | reuse the same take/out paths                                                                                  |
+| Per-layer occupancy           | refuses two items on ONE layer — says nothing about two items on two layers                                    |
+
+**No mutual-exclusion concept exists anywhere.** `SEARCH:`
+`git grep -rni "exclusiv|mutually|onlyOne|singleActive|radio" -- apps/runtime/src tools/caspar-bridge/src packages/shared-ipc/src`
+→ the only hits are the lucide `Radio` **icon** for the SOURCE verb (`layerRowActions.ts:662`).
+
+⇒ A refusal, if wanted, must live **in `take()` AND in `restore()`/`#decidePendingRestores`** —
+restore never passes through `take()`. Two sites, ONE canonical predicate. The tree already has
+`deps.hasLivePlates` (`layerRowActions.ts:655`). §12.6.
+
+---
+
+## 9. Measurements
+
+### 9.1 The instrument and its controls
+
+A throwaway HTTP+beacon harness on `192.168.21.93:7911` (what `guessLanHost()` resolves to and what
+the plant can reach), serving an instrumented page that beacons at script-eval, `DOMContentLoaded`,
+first-committed-frame (double-`requestAnimationFrame`), FCP, `load`, and each CG callback. Layer 150
+(free; `INFO 1` showed 10, 11, 92–95, 97 occupied), page painting essentially nothing so it could not
+disturb output. Layers cleared afterwards.
+
+**A negative observation is not a result, so both controls ran before every measurement:**
+
+- **Positive** — the beacon endpoint records a local self-test; the harness refuses to measure
+  otherwise. For §9.4, each of the three layers' `MIXER FILL` readback was asserted LIVE first.
+- **Negative** — a `CG ADD` at a URL the server 404s: command **accepted (`202 CG OK`)**, the plant
+  **did fetch the bad URL from us**, and **no beacon fired**. Both halves matter; without the 202 and
+  the fetch, "no beacon" would have been explained by the command failing.
+
+⚠ **Two instrument faults were found and fixed before any number below was recorded**, both of which
+produced plausible-looking wrong data:
+
+1. **The AMCP reader desynchronised on `400 ERROR`**, which is followed by an echoed command line.
+   Leaving it in the buffer attributed each reply to the next command — the first syntax sweep
+   reported `NaN` codes and three bogus failures.
+2. **CasparCG calls `window.update()` at ADD time.** An ungated match attributed that load-time call
+   to a later `CG UPDATE`, yielding a **negative** latency (−450 ms). Fixed with a `since` gate.
+
+### 9.2 🔴 PRIORITY 1 — `MIXER FILL … <duration> <tween>` on 2.5.0: ACCEPTED, and which names
+
+Wire-level accept/refuse, one command per name, layer 150:
+
+**ACCEPTED (20):** `linear`, `easenone`, `easeinquad`, `easeoutquad`, `easeinoutquad`,
+`easeincubic`, `easeoutcubic`, `easeinoutcubic`, `easeinsine`, `easeoutsine`, `easeinoutsine`,
+`easeinexpo`, `easeinoutexpo`, `easeincirc`, `easeinoutcirc`, `easeinback`, `easeoutback`,
+`easeinoutback`, `easeoutbounce`, `easeinelastic`.
+
+**REJECTED `403` (3):** `cubic-bezier`, `ease-in-out`, `ease`.
+
+⇒ **`live-source-multibox` §6's 44-easing lead from `ciab-client-tools.json` is now a verified
+server fact** — the form `MIXER <ch>-<layer> FILL x y sx sy <frames> <tween>` is accepted, `Linear`
+included. **The vocabularies are disjoint: CasparCG has no CSS name and CSS has no Penner name.**
+
+**And the curves themselves were sampled, not assumed.** `MIXER <ch>-<layer> FILL` with no arguments
+**reads the current value back** (`201 MIXER OK` + `0.000000 0.000000 1.000000 1.000000`), so a
+running tween can be polled. Each sampled curve's own Penner formula came out as its best fit — the
+positive control that the instrument discriminates curves at all. Measured duration ≈ 2000 ms for 50
+frames confirms **25 fps** (frames, not fields).
+
+Exact formula-to-formula deviation, as **pixels of hole-vs-picture separation on a 1920 raster**:
+
+| CasparCG tween   | vs CSS `linear` | vs `ease-in-out` | vs `ease` | vs a fitted `cubic-bezier`    |
+| ---------------- | --------------- | ---------------- | --------- | ----------------------------- |
+| `linear`         | **0.0 px** ✅   | 232.8 px         | 580.6 px  | —                             |
+| `easeinoutsine`  | 202.1 px        | **35.9 px**      | 647.8 px  | **3.8 px** @ `(.37,0,.63,1)`  |
+| `easeinoutquad`  | 240.0 px        | **22.8 px**      | 699.3 px  | **10.1 px** @ `(.45,0,.55,1)` |
+| `easeinoutcubic` | 369.5 px        | 161.3 px         | 835.2 px  | 142.0 px                      |
+
+1. **`linear` is the only exactly-matchable pair.** The fallback named in the addendum is not a
+   compromise — it is the one curve with a proof.
+2. Naming "ease-in-out" on both sides separates hole from picture by **~36 px** at peak.
+3. 🔴 **The trap is CSS's default.** `transition: left 2s` with no timing function gets **`ease`**,
+   which is **580–835 px** from every CasparCG tween — over a third of the frame width, and exactly
+   what a developer writes by accident.
+
+### 9.3 🔴 PRIORITY 2 — what a CUT costs the live sources
+
+The re-fit a 3-box → 2-box cut performs — one `CG STOP` plus two `MIXER FILL`+`CLIP` pairs, five
+commands — over 8 runs, all three layers asserted live first:
+
+|                    | min     | median      | max      |
+| ------------------ | ------- | ----------- | -------- |
+| command-side span  | 6.86 ms | **8.16 ms** | 17.93 ms |
+| in frames @ 25 fps | 0.17    | **0.20**    | 0.45     |
+
+> 🔴 **A cut's command sequence completes in ~0.20 frames — a fifth of a frame.**
+
+⇒ **`DEFER`/`COMMIT` being unusable (§3b NEW 2) costs nothing visible.** The span can straddle at
+most **one** frame boundary, so the worst case is a single frame showing partially-applied geometry,
+with probability bounded by span ÷ frame ≈ 20 %.
+
+🔴 **`MIXER DEFER` / `MIXER <ch> COMMIT` was deliberately NOT exercised.** `COMMIT` is channel-scoped,
+so on this shared plant it could apply another controller's deferred changes. Recorded as a refusal
+to measure, not as an absence of data.
+
+### 9.4 Demoted to optional — `CG ADD` → first painted frame
+
+Family 2 is eliminated, so this decides nothing. Recorded because it was taken: **median 70.2 ms,
+range 33.7–157.3 ms** over 10 runs. Also `CG UPDATE` → `window.update` **2.2–8.3 ms (median ≈5 ms,
+sub-frame)**, and pre-warmed `CG PLAY` → `play()` **6.0 / 6.9 / 6.8 ms**.
+
+### 9.5 What was NOT measured
+
+- **The VISUAL seam of a cut.** §9.3 bounds it command-side; confirming what reaches SDI needs a
+  channel-side capture, and `PRINT` writes to the plant's own disk, to which this session had no
+  access. `tasks.md` 9.1.
+- **Whether a 1-box layout letterboxes** (§3b NEW 3's `FILL`≡`CLIP` lead). `tasks.md` 9.2.
+- AK's six unrun measurements and R-048's 6.9a tick — explicitly out of scope.
+
+---
+
+## 10. Where the switch control would live
+
+Session AH's wall is confirmed at `f6c7329`: the row's verb block is a **fixed six-column grid**
+whose sticky header prints a word above each glyph — stated in the code at
+`apps/runtime/src/renderer/features/layers/LivePlateAudioDialog.tsx:36`, laid out by the one shared
+`gridTemplateColumns(density)`. That closed grid, plus an admission rule forbidding a control whose
+presence varies by row, is why AUDIO and SOURCE became **conditionally-present `RowAction`s with
+`surface: 'menu'`** (`layerRowActions.ts:655-668`, gated on `deps.hasLivePlates`).
+
+R-048's 6.9e requires the source swap to be reachable **in one or two actions from the row** and not
+behind a modal chain; a layout switch has the same emergency character. The SOURCE/AUDIO menu is the
+precedent and the obvious host — but a switch the operator makes _live_ deserves the owner's
+judgement rather than an inherited default. §12.8.
+
+---
+
+## 10b. §9b — the multi-box on a channel of its own — does NOT compete
+
+`live-source-multibox` `design.md` §9b proposes putting the multi-box on a dedicated channel; its
+status is **`EVALUATED AND RECOMMENDED IN PRINCIPLE; NOT ADOPTED`**, owner-gated on its §12.5.
+**It is orthogonal to this design and does not deliver a layout switch.** It moves _where the layers
+live_; it does not change _what the bridge sends_. Adopting it later would **not** change this
+design's cost: the reconcile (§4), the mask recompute (§6b), the per-layout geometry carrier (§7) and
+the curve contract (§9.2) are all expressed in channel-relative terms and would follow the plates to
+a new channel unchanged. Its one real interaction is that §9b's isolation would make §8's
+two-templates-on-air crosstalk structurally impossible for plates on the dedicated channel — which
+weakens the case for §12.6's refusal but does not remove it, since restore adopts items on any
+channel.
+
+⚠ Noted in passing, **not acted on**: §9b's four §12.5 measurements are written against CasparCG
+**2.3.2, which is retired**, and need re-basing on 2.5.0 before anyone runs them — an owner decision.
+Also `live-source-multibox` `tasks.md` has **two items numbered 6.3**.
+
+---
+
+## 11. Impact if this proceeds
+
+| Area                   | Effect                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `@cg/shared-schema`    | resolved visibility + current geometry into `sceneMaskHoles`; per-layout geometry on the element |
+| `@cg/shared-ipc`       | per-layout rects on the `liveSources` declaration block                                          |
+| `@cg/template-runtime` | a re-punch pass after `update()` (UNIT B′)                                                       |
+| `tools/caspar-bridge`  | ONE `reconcileLivePlates`; `swapLiveSource` becomes a caller; per-layout fit                     |
+| `apps/runtime`         | the layout control; the Inspector refusal and override visibility                                |
+| `apps/designer`        | authoring per-layout geometry; the `live-source-animated` refusal is KEPT (§2b)                  |
+| `@cg/vcg-format`       | `collectLiveSources` emits per-layout rects; no format change (the mask is computed at boot)     |
+
+---
+
+## 12. 🔴 OWNER GATES — nothing is implemented until these are answered
+
+### §12.1 — Ship the cut first, or hold for the animated switch?
+
+| Candidate                           | Cost                                                                                                                                                     |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A — cut first, animation second** | Client gets exclusivity + assignment survival early. Under §0.5 both phases share the carrier and the mask work, so the second phase adds only the tween |
+| **B — one release, animated**       | No intermediate behaviour. Everything in §2.3 lands at once, including §9.2's curve contract                                                             |
+
+Recommendation, not a decision: **A** — "optional and changeable" implies the cut must exist as a
+first-class option anyway, and §2.4 shows the phases are not far apart.
+
+### §12.2 — The transition curve
+
+| Candidate                                                        | Cost                                                                                             |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **A — `linear` on both sides**                                   | **0.0 px separation, provable.** Costs polish: a linear move looks mechanical                    |
+| **B — a pinned `cubic-bezier` per tween, with a deviation test** | ~4–10 px worst case for sine/quad. Costs a contract test and a fragile table                     |
+| **C — plates FADE rather than travel**                           | Sidesteps hole/fill agreement entirely (opacity needs no `FILL` tween). Costs the rearrange look |
+
+⚠ Whichever is chosen, a CSS transition that **omits** its timing function must be forbidden by lint
+or test: the default `ease` is 580–835 px out.
+
+### §12.3 — Withdrawn (measured)
+
+The cut's cost to the live sources is measured: **0.20 frames** (§9.3). What remains is the visual
+confirmation, which is `tasks.md` 9.1 rather than a gate.
+
+### §12.4 — 🔴 What happens to a source with no box in the target layout
+
+| Candidate                                                | Cost                                                          |
+| -------------------------------------------------------- | ------------------------------------------------------------- |
+| **A — torn down**                                        | Frees a band layer immediately; switching back pays a re-seat |
+| **B — held muted and idle so switching back is instant** | Costs a band layer for as long as the row is up               |
+
+🔴 **Carries the hardware question:** if the id maps to a **physical DeckLink**, can it be held open
+for a hidden layout at all? The answer may be per-source-kind rather than global.
+
+### §12.5 — The Inspector's assignment edit while a row is on air ⟨MINT⟩
+
+| Candidate                                                                     | Cost                                                                             |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **A — refuse while any row carrying it is on air**                            | Safest. Costs the operator a second control for a thing they thought was one     |
+| **B — allow with explicit confirmation** naming how many live rows it affects | Keeps one control. Costs a dialog on a config edit, and it still cannot re-issue |
+| **C — surface only** ("takes effect at the next take")                        | Cheapest and honest. Leaves the operator to do the right thing                   |
+
+Must be decided together with §5's override-blindness — both are "the Inspector is showing you
+something that is not on air".
+
+### §12.6 — Should two multi-box templates on air together be REFUSED?
+
+| Candidate                                   | Cost                                                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **A — refuse, in `take()` AND `restore()`** | Closes the crosstalk class. Costs a refusal on a legitimate-looking action, two sites for one predicate |
+| **B — do not refuse**                       | Costs leaving a measured on-air failure mode reachable                                                  |
+
+### §12.7 — The un-persisted live-layer ledger
+
+`#liveLayers` is process memory with no release on disconnect or bridge restart, so a restart strands
+seated producers unreachable by any code path. **Pre-existing.** The gate is whether this work must
+fix it, given it will make the ledger busier.
+
+### §12.8 — Where the switch control lives, and how many actions
+
+§10 gives the wall and the precedent. May a live layout switch sit behind the same menu as
+SOURCE/AUDIO, or does it earn a place in the closed six-column verb block — which means re-opening
+that grid?
+
+### §12.9 — 🔴 How is per-layout geometry AUTHORED?
+
+The largest piece of work (§7), and it has no precedent in the tree.
+
+| Candidate                                                                                        | Cost                                                                                                                          |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| **A — the author defines layouts and positions each plate per layout**                           | Maximum flexibility. Costs a new per-state geometry concept in the schema, the Designer, the carrier and the exporter         |
+| **B — the system ships a fixed 1/2/3-box family** with computed geometry                         | Far less Designer work; the switch is a closed enum the operator cannot misuse. Costs every future layout being a code change |
+| **C — layouts are authored as compositions, geometry derived from the instance's own transform** | Reuses shipped machinery. Costs the §0.5 analysis being partly re-opened, and needs the overlap check made layout-aware       |
