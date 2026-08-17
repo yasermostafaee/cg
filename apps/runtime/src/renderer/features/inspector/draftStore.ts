@@ -170,6 +170,26 @@ export function stagePlateSource(itemId: string, plateId: string, sourceId: stri
 }
 
 /**
+ * B-139 — THE ONE SPELLING of "this plate has no source".
+ *
+ * The two sides of every plate comparison arrive in different shapes: a STAGED
+ * value is `''` (`stagePlateSource`'s docstring: "`''` stages 'not assigned',
+ * which is a real edit and not an absence"), while an APPLIED value is `null`
+ * (`appliedPlateSources`). Reconciling them with an inline `?? ''` at each
+ * comparison is how the two came to disagree — so the reconciliation is named
+ * once and every comparison below goes through it.
+ *
+ * "An absent value is falsy" is on this repo's recurring-error list, and this is
+ * that error's home in this feature: `''` is a VALUE here, never an absence.
+ */
+export const PLATE_UNASSIGNED = '';
+
+/** Either representation of a plate's source, in the one canonical spelling. */
+function plateValue(v: string | null | undefined): string {
+  return v ?? PLATE_UNASSIGNED;
+}
+
+/**
  * The plate value to render: the draft when staged, else the APPLIED assignment.
  * The same rule the fields follow, so a push from another console can never
  * clobber an in-progress draft.
@@ -180,13 +200,13 @@ export function effectivePlateSource(
   applied: string | null,
 ): string {
   const staged = plateDrafts.get(itemId)?.get(plateId);
-  return staged ?? applied ?? '';
+  return staged ?? plateValue(applied);
 }
 
 /** True iff the plate is staged AND different from the applied assignment. */
 export function isPlateDirty(itemId: string, plateId: string, applied: string | null): boolean {
   const staged = plateDrafts.get(itemId)?.get(plateId);
-  return staged !== undefined && staged !== (applied ?? '');
+  return staged !== undefined && staged !== plateValue(applied);
 }
 
 /** A copy of the item's staged plate assignments (what an apply will write). */
@@ -250,16 +270,28 @@ export function isFieldDirty(
  * True iff any staged edit of the item differs from its applied value — FIELDS
  * and PLATES alike.
  *
- * `appliedPlates` is optional because most callers hold no assignment map (the
- * stack row's dirty dot, for one) and MUST still answer correctly for the fields.
- * Omitting it means "I am not asking about plates" — never "this item has none",
- * which is why an absent map does not read a staged plate as clean by accident:
- * a staged plate with no applied value to compare against is dirty on its own.
+ * 🔴 **`appliedPlates` is REQUIRED, and that is the whole of B-139's fix.**
+ *
+ * It used to be optional, with a docstring promising that omitting it meant "I am
+ * not asking about plates". The code never implemented that promise: an omitted
+ * map still iterated every staged plate and compared it against `''`, so the
+ * comparison degenerated to `staged !== ''` — string truthiness. The stack row
+ * omitted it (and the old docstring named the row as a caller that legitimately
+ * could), so re-picking the SAVED source read as dirty while staging
+ * _not assigned_ read as clean. Both faces, one missing argument.
+ *
+ * Requiring it is deliberate and is not the same fix as correcting the call site:
+ * a corrected call site is one edit away from regressing, while a required
+ * parameter makes the wrong question a COMPILE ERROR. Do not restore the default
+ * — `appliedPlateSources` is the canonical join and every caller can reach it.
+ *
+ * Pass an EMPTY map only for an item that genuinely declares no plates; that is a
+ * statement ("this template has none"), not an omission.
  */
 export function isItemDirty(
   itemId: string,
   applied: FieldValues,
-  appliedPlates?: ReadonlyMap<string, string | null>,
+  appliedPlates: ReadonlyMap<string, string | null>,
 ): boolean {
   const item = drafts.get(itemId);
   if (item !== undefined) {
@@ -270,7 +302,7 @@ export function isItemDirty(
   const plates = plateDrafts.get(itemId);
   if (plates !== undefined) {
     for (const [plateId, value] of plates) {
-      if (value !== (appliedPlates?.get(plateId) ?? '')) return true;
+      if (value !== plateValue(appliedPlates.get(plateId))) return true;
     }
   }
   return false;

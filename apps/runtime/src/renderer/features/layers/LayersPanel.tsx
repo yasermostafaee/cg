@@ -30,6 +30,7 @@ import { bankPosition, isLayerVisible, isRehearsing } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import { isOnAir } from '../stack/onAir.js';
 import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
+import { appliedPlateSources } from '../inspector/livePlates.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { LayerRow } from './LayerRow.js';
 import { resolveRowBinding } from './rowState.js';
@@ -757,7 +758,26 @@ export function LayersPanel({
                       bankPosition={bankPosition(bank, slot.layer)}
                       density={density}
                       selected={item !== null && item.itemId === selectedId}
-                      dirty={item !== null && isItemDirty(item.itemId, item.fields)}
+                      /*
+                        B-139 — the applied-plate baseline is SUPPLIED, through the
+                        canonical `appliedPlateSources` the Inspector already uses.
+                        Omitting it used to collapse every plate's baseline to `''`,
+                        so this chip disagreed with the Inspector's in both
+                        directions — and the UPDATE verb, which reads this same
+                        boolean, refused an un-assignment the operator had staged.
+                        The chip and the verb answer ONE question and take ONE value.
+                      */
+                      dirty={
+                        item !== null &&
+                        isItemDirty(
+                          item.itemId,
+                          item.fields,
+                          appliedPlateSources(
+                            item.templateId,
+                            template?.liveSources?.sources ?? [],
+                          ),
+                        )
+                      }
                       // R-022 — read through the canonical `isRehearsing`, never a
                       // local `.some()`: the bridge refuses PLAY on the same
                       // predicate, and if the two ever disagreed the UI would offer a

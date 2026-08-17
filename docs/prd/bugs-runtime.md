@@ -3248,7 +3248,7 @@ prevent. A silent memory fallback turns a working safety net into one that is on
   `initRuntimeWorkspace()` and its two call sites in `createRuntimeBridge.ts`; the insecure-context
   leg in particular has not been reproduced on a station box.
 
-## [ ] B-139 — the row's DRAFT chip and the Inspector disagree about a staged plate, in OPPOSITE directions, and the row's UPDATE verb is disabled off the same wrong boolean ⟨priority: medium⟩
+## [~] B-139 — the row's DRAFT chip and the Inspector disagree about a staged plate, in OPPOSITE directions, and the row's UPDATE verb is disabled off the same wrong boolean ⟨priority: medium⟩ — implemented: `openspec/changes/fix-plate-dirty-baseline/`
 
 **What:** `isItemDirty` takes `appliedPlates` as an OPTIONAL third argument. The Inspector passes
 it; **the stack row does not** — so for the row every staged plate is compared against a fabricated

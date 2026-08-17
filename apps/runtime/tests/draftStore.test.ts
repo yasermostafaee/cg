@@ -16,6 +16,17 @@ import {
 } from '../src/renderer/features/inspector/draftStore.js';
 
 /**
+ * B-139 — an item that declares NO plates, said explicitly.
+ *
+ * `isItemDirty`'s plate baseline is required precisely so a caller cannot omit it
+ * and get a different question answered. These field-only cases must therefore
+ * STATE that there are no plates rather than leave it out — which is the whole
+ * distinction the fix draws, and a test that omitted it would document a call
+ * shape the API no longer allows.
+ */
+const NO_PLATES: ReadonlyMap<string, string | null> = new Map();
+
+/**
  * R-003 — the per-item draft overlay. These prove the staging contract: edits
  * stay local, an incoming push never clobbers a draft, dirty is honest, and one
  * apply builds the complete field-set. Nothing here touches the bridge.
@@ -55,13 +66,13 @@ describe('dirty is honest (staged AND different from applied)', () => {
   it('a draft equal to the applied value is NOT dirty', () => {
     stageField(A, ['title'], 'same');
     expect(isFieldDirty(A, ['title'], 'same')).toBe(false);
-    expect(isItemDirty(A, { title: 'same' })).toBe(false);
+    expect(isItemDirty(A, { title: 'same' }, NO_PLATES)).toBe(false);
   });
 
   it('a draft differing from applied is dirty', () => {
     stageField(A, ['title'], 'new');
     expect(isFieldDirty(A, ['title'], 'old')).toBe(true);
-    expect(isItemDirty(A, { title: 'old' })).toBe(true);
+    expect(isItemDirty(A, { title: 'old' }, NO_PLATES)).toBe(true);
   });
 
   it('compares structured list values by structure, not identity', () => {
@@ -172,7 +183,7 @@ describe('drafts are per item', () => {
   it('staging on one item never affects another', () => {
     stageField(A, ['title'], 'a-draft');
     expect(hasStaged(B, ['title'])).toBe(false);
-    expect(isItemDirty(B, { title: 'anything' })).toBe(false);
+    expect(isItemDirty(B, { title: 'anything' }, NO_PLATES)).toBe(false);
   });
 });
 
