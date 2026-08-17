@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
+import { useDragGesture } from '@cg/gesture';
 
 interface Props {
   /** Which way the divider runs, and therefore which dimension it resizes. */
@@ -25,7 +26,7 @@ interface Props {
  * Keyboard-operable on purpose: it carries `role="separator"` with
  * `aria-valuenow`, and arrow keys nudge it. A drag-only divider is unusable
  * without a mouse, and this is a broadcast console — an operator may well be
- * driving it from a keyboard in a gallery.
+ * driving it from a keyboard in a gallery. **That path is unchanged by B-140.**
  *
  * SIZE COMES FROM A DELTA, not from an absolute viewport computation. The first
  * version read `innerWidth - clientX`, which silently assumed the resized panel
@@ -34,6 +35,21 @@ interface Props {
  * Anchoring on where the drag STARTED works for any panel at any inset, and it
  * also means the pointer stays glued to the handle instead of jumping to it on
  * the first move.
+ *
+ * ── B-140 — THE GESTURE IS NOT OWNED HERE ANY MORE ─────────────────────────
+ *
+ * This component used to register `mousemove` / `mouseup` on `globalThis` and
+ * write `cursor` / `user-select` onto `document.body`, clearing both in exactly
+ * one handler. PVW is a same-origin `<iframe srcdoc>` — one per rehearsal
+ * subject — so with the pointer over one, the parent got no moves and never got
+ * the `mouseup`: the drag never ended, the divider stayed blue, and the whole
+ * application kept a resize cursor with text selection dead.
+ *
+ * `@cg/gesture`'s `useDragGesture` now owns all of it — Pointer Events (so touch
+ * and pen work too), a full-window shield above every iframe, and ONE teardown
+ * fed by an exhaustive terminator set. **No `document.body` writes remain**: the
+ * shield carries the cursor and disappears with the gesture, so the stuck global
+ * state has no home rather than a fifth place that clears it.
  */
 export function ShellDivider({
   orientation,
@@ -43,48 +59,20 @@ export function ShellDivider({
   invert = false,
 }: Props): JSX.Element {
   const vertical = orientation === 'vertical';
-  // Where the drag began, and the size it began from — the delta's origin.
-  const drag = useRef<{ client: number; from: number } | null>(null);
-  /*
-   * The drag position itself stays in a REF (a re-render per mousemove would be
-   * wasteful and would fight the drag), but whether a drag is IN PROGRESS has to be
-   * state: it is the one thing that must reach the DOM as a class so CSS can paint
-   * the captured divider. The two are not redundant — one is per-pixel data, the
-   * other is a single boolean that changes twice per gesture.
-   */
-  const [dragging, setDragging] = useState(false);
-
-  const applyFromClient = useCallback(
-    (client: number) => {
-      const start = drag.current;
-      if (start === null) return;
-      const delta = client - start.client;
-      onResize(start.from + (invert ? -delta : delta));
-    },
-    [onResize, invert],
-  );
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent): void => {
-      if (drag.current === null) return;
-      e.preventDefault();
-      applyFromClient(vertical ? e.clientX : e.clientY);
-    };
-    const onUp = (): void => {
-      drag.current = null;
-      setDragging(false);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    globalThis.addEventListener?.('mousemove', onMove);
-    globalThis.addEventListener?.('mouseup', onUp);
-    return () => {
-      globalThis.removeEventListener?.('mousemove', onMove);
-      globalThis.removeEventListener?.('mouseup', onUp);
-    };
-  }, [applyFromClient, vertical]);
-
   const cursor = vertical ? 'col-resize' : 'row-resize';
+  /** The size the drag started from — the delta's origin, captured once. */
+  const from = useRef(value);
+
+  const { dragging, handleProps } = useDragGesture({
+    axis: vertical ? 'x' : 'y',
+    cursor,
+    onStart: () => {
+      from.current = value;
+    },
+    onMove: (delta) => {
+      onResize(from.current + (invert ? -delta : delta));
+    },
+  });
 
   return (
     <div
@@ -98,6 +86,10 @@ export function ShellDivider({
        * dragging state cannot be expressed as inline styles, and those two states are
        * the whole reason this was mistaken for a scrollbar. Only the geometry and the
        * cursor stay inline, because they depend on the orientation prop.
+       *
+       * B-140 — the TOUCH hit area is `.cg-divider::before` (24px across the axis),
+       * so the visible 6px below is unchanged. Do not widen these numbers to make the
+       * divider easier to grab; that is what the pseudo-element is for.
        */
       className={[
         'cg-divider',
@@ -111,17 +103,11 @@ export function ShellDivider({
           ? { width: '6px', alignSelf: 'stretch' }
           : { height: '6px', alignSelf: 'stretch', width: '100%' }),
         cursor,
+        // `touchAction: 'none'` arrives with the gesture's own props, so the browser
+        // cannot steal the drag for scroll or pinch-zoom.
+        ...handleProps.style,
       }}
-      onMouseDown={(e) => {
-        e.preventDefault();
-        drag.current = { client: vertical ? e.clientX : e.clientY, from: value };
-        setDragging(true);
-        // Held on the BODY for the duration: without this the cursor flickers
-        // back to default the moment the pointer leaves the 6px handle, which
-        // during a drag is immediately.
-        document.body.style.cursor = cursor;
-        document.body.style.userSelect = 'none';
-      }}
+      onPointerDown={handleProps.onPointerDown}
       onKeyDown={(e) => {
         const step = e.shiftKey ? 48 : 16;
         // The arrow that GROWS the panel points AWAY from it: the Inspector is

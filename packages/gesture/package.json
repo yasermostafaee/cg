@@ -1,0 +1,42 @@
+{
+  "name": "@cg/gesture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "B-140 — headless pointer-drag gesture: one hook, one teardown, and a full-window shield so a drag survives crossing an iframe. No styles, no tokens, no markup: @cg/ui stays tokens-only and components stay app-local.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf --glob dist *.tsbuildinfo",
+    "typecheck": "tsc --noEmit -p tsconfig.json --tsBuildInfoFile typecheck.tsbuildinfo",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run --coverage"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@cg/eslint-config": "workspace:*",
+    "@types/react": "^18.3.17",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.17.0",
+    "jsdom": "^25.0.1",
+    "react": "^18.3.1",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8",
+    "react-dom": "^18.3.1",
+    "@types/react-dom": "^18.3.5"
+  }
+}

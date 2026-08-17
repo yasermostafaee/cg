@@ -1894,6 +1894,23 @@ input[type='checkbox']:disabled:checked {
     opacity var(--r-dur-fast) ease;
 }
 
+/* B-140 — THE TOUCH HIT AREA, which is deliberately NOT the visual.
+   The divider has been mistaken for a scrollbar once, so it must not get thicker
+   to fix a different problem: the visible track stays 6px and the visible grip
+   stays 2px, while a transparent `::before` extends the TARGET to 24px across the
+   drag axis (6 + 9 + 9). It is absolutely positioned with negative insets, so it
+   costs no layout — nothing moves, only the hit test changes. */
+.cg-divider::before {
+  content: '';
+  position: absolute;
+}
+.cg-divider--vertical::before {
+  inset: 0 -9px;
+}
+.cg-divider--horizontal::before {
+  inset: -9px 0;
+}
+
 /* The GRIP: short, centred, and the only thing visible at rest. */
 .cg-divider::after {
   content: '';

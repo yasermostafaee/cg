@@ -3377,7 +3377,7 @@ the reproduction is the owner's, on the running app.
   aspect-crop consent, which will add a fourth per-plate row indicator and must read the same
   predicate rather than adding a third spelling).
 
-## [ ] B-140 — a shell-divider drag DIES when the pointer crosses the PVW iframe and leaves global state stuck; the Designer's splitter is the same bug, worse ⟨priority: medium⟩
+## [~] B-140 — a shell-divider drag DIES when the pointer crosses the PVW iframe and leaves global state stuck; the Designer's splitter is the same bug, worse ⟨priority: medium⟩ — implemented (INCOMPLETE): openspec/changes/shared-drag-gesture/ — see its tasks.md section 6, TWO open items
 
 **What:** `ShellDivider` listens for `mousemove` / `mouseup` on the PARENT window, and the PVW
 preview is a same-origin `<iframe>`. While the pointer is over that frame the events are dispatched

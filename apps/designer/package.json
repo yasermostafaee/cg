@@ -15,6 +15,7 @@
     "clean": "rimraf --glob dist .vite coverage playwright-report test-results *.tsbuildinfo"
   },
   "dependencies": {
+    "@cg/gesture": "workspace:*",
     "@cg/lottie-bridge": "workspace:*",
     "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*",

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDragGesture } from '@cg/gesture';
 import { colors } from '../../theme.js';
 import * as s from './Splitter.css.js';
 
@@ -22,47 +23,71 @@ const LINE_ACTIVE = 4;
  *
  *   axis="x"  →  vertical bar, drag left/right, delta = +right / -left
  *   axis="y"  →  horizontal bar, drag up/down,  delta = +down  / -up
+ *
+ * ── B-140 — THE GESTURE IS NOT OWNED HERE ANY MORE, AND THIS WAS THE WORSE ONE ─
+ *
+ * This component already used Pointer Events, which made it look the healthier of
+ * the two dividers. It was not. It added `pointermove` / `pointerup` listeners
+ * INSIDE `onPointerDown` and removed them only in its own `onUp`, so a release the
+ * parent never saw left them attached **permanently** — and `onMove` then resized
+ * the panel on every later pointer move, with no button held. The Runtime's
+ * version leaked a stuck cursor; this one leaked a panel that followed the mouse.
+ *
+ * A release the parent never sees is the ordinary case here, not an edge: the
+ * Designer renders the live preview in a same-origin `<iframe>`
+ * (`features/canvas/CanvasArea.tsx`), and `PreviewModal` renders another.
+ *
+ * `@cg/gesture`'s `useDragGesture` now owns the whole gesture — a full-window
+ * shield above every iframe, capture, and ONE teardown fed by an exhaustive
+ * terminator set, installed once rather than per gesture. It also no longer
+ * writes `user-select` onto `document.body`; the shield carries that itself and
+ * disappears with the drag.
+ *
+ * ⚠ **The hit/visual split here is the PRECEDENT the Runtime adopted**, not an
+ * accident: `HIT` is the touch target and `LINE` is what the operator sees. Keep
+ * them separate.
  */
 export function Splitter({ axis, onResize, ariaLabel }: Props): JSX.Element {
   const [hovered, setHovered] = useState(false);
-  const [dragging, setDragging] = useState(false);
   const vertical = axis === 'x';
+
+  /*
+    The Designer's `onResize` takes an INCREMENTAL delta ("move by this much"),
+    while the gesture reports a delta from the drag's ORIGIN. Converting here
+    rather than changing either contract: the shared hook must not learn one app's
+    accumulation convention, and the panels' reducer must not be rewritten for a
+    gesture change.
+  */
+  const [last, setLast] = useState(0);
+
+  const { dragging, handleProps } = useDragGesture({
+    axis,
+    cursor: vertical ? 'col-resize' : 'row-resize',
+    onStart: () => setLast(0),
+    onMove: (fromOrigin) => {
+      const step = fromOrigin - last;
+      if (step === 0) return;
+      setLast(fromOrigin);
+      onResize(step);
+    },
+  });
+
   const active = hovered || dragging;
   const thickness = active ? LINE_ACTIVE : LINE;
-
-  function onPointerDown(e: React.PointerEvent<HTMLDivElement>): void {
-    e.preventDefault();
-    setDragging(true);
-    let last = vertical ? e.clientX : e.clientY;
-    const onMove = (ev: PointerEvent): void => {
-      const cur = vertical ? ev.clientX : ev.clientY;
-      const delta = cur - last;
-      if (delta === 0) return;
-      onResize(delta);
-      last = cur;
-    };
-    const onUp = (): void => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      document.body.style.userSelect = '';
-      setDragging(false);
-    };
-    document.body.style.userSelect = 'none';
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  }
 
   return (
     <div
       role="separator"
       aria-orientation={vertical ? 'vertical' : 'horizontal'}
       aria-label={ariaLabel ?? 'Resize'}
-      onPointerDown={onPointerDown}
+      onPointerDown={handleProps.onPointerDown}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       className={s.handle}
       style={
-        vertical ? { width: HIT, cursor: 'col-resize' } : { height: HIT, cursor: 'row-resize' }
+        vertical
+          ? { width: HIT, cursor: 'col-resize', ...handleProps.style }
+          : { height: HIT, cursor: 'row-resize', ...handleProps.style }
       }
     >
       <div

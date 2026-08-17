@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@cg/caspar-client": "workspace:*",
+    "@cg/gesture": "workspace:*",
     "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*",
     "@cg/single-file-export": "workspace:*",

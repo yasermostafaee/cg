@@ -50,6 +50,9 @@ importers:
 
   apps/designer:
     dependencies:
+      '@cg/gesture':
+        specifier: workspace:*
+        version: link:../../packages/gesture
       '@cg/lottie-bridge':
         specifier: workspace:*
         version: link:../../packages/lottie-bridge
@@ -153,6 +156,9 @@ importers:
       '@cg/caspar-client':
         specifier: workspace:*
         version: link:../../packages/caspar-client
+      '@cg/gesture':
+        specifier: workspace:*
+        version: link:../../packages/gesture
       '@cg/shared-ipc':
         specifier: workspace:*
         version: link:../../packages/shared-ipc
@@ -337,6 +343,42 @@ importers:
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
+
+  packages/gesture:
+    devDependencies:
+      '@cg/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@types/react':
+        specifier: ^18.3.17
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.5
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitest/coverage-v8':
+        specifier: ^2.1.8
+        version: 2.1.9(vitest@2.1.9(@types/node@22.19.19)(happy-dom@15.11.7)(jsdom@25.0.1)(lightningcss@1.32.0))
+      eslint:
+        specifier: ^9.17.0
+        version: 9.39.4
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.19)(happy-dom@15.11.7)(jsdom@25.0.1)(lightningcss@1.32.0)
 
   packages/lottie-bridge:
     dependencies:
