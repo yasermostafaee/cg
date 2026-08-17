@@ -76,7 +76,7 @@ test('the PLAYOUT tab is bounded too: switching tabs never scrolls the page', as
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 
   // …and back, with the layers list still owning its own scrolling.
-  await page.getByRole('tab', { name: /LAYERS/ }).click();
+  await page.getByRole('tab', { name: /^LAYERS/ }).click();
   await expect(app.layers).toBeVisible();
   const back = await page.evaluate(() => ({
     scrollHeight: document.documentElement.scrollHeight,

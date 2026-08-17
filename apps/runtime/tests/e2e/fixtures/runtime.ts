@@ -87,7 +87,7 @@ export class RuntimeApp {
   }
   /** The playout tab's panel (the reserved layers another system owns). */
   get playoutTab(): Locator {
-    return this.page.getByRole('tab', { name: /STATION LAYERS/ });
+    return this.page.getByRole('tab', { name: /^STATION LAYERS/ });
   }
   get inspector(): Locator {
     return this.page.getByRole('complementary', { name: 'Inspector' });
