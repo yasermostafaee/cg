@@ -893,3 +893,17 @@ reason the rule is "highest HEADING", not "any occurrence". The space stays cont
 `B-001` … `B-143`, **no gaps. Next free: `B-144`.**
 
 The owner supplied all three numbers and the sweep agreed with them, so nothing was minted here.
+
+## 2026-08-17 — two platform items from the implementation batch (`P-033`, `P-034`)
+
+| Prefix | Claimed | Item                                                                            | File                       |
+| ------ | ------- | ------------------------------------------------------------------------------- | -------------------------- |
+| `P-`   | `P-033` | `typecheck` covers `src/**` only, so 557 test files are outside the guarantee   | [platform.md](platform.md) |
+| `P-`   | `P-034` | a Designer E2E failed once, unreproducibly — the record for a second occurrence | [platform.md](platform.md) |
+
+**Verified free by the heading sweep immediately before the headings were written.** Highest `P-`
+heading was `P-032`; `git grep -nE "P-03[34]" -- docs/` returned **no occurrence anywhere in
+`docs/`**, not even a forward reference. The space stays contiguous `P-001` … `P-034`, **no gaps.
+Next free: `P-035`.**
+
+The owner supplied both numbers and the sweep agreed, so nothing was minted here.
