@@ -3377,7 +3377,30 @@ the reproduction is the owner's, on the running app.
   aspect-crop consent, which will add a fourth per-plate row indicator and must read the same
   predicate rather than adding a third spelling).
 
-## [~] B-140 — a shell-divider drag DIES when the pointer crosses the PVW iframe and leaves global state stuck; the Designer's splitter is the same bug, worse ⟨priority: medium⟩ — implemented (INCOMPLETE): openspec/changes/shared-drag-gesture/ — see its tasks.md section 6, TWO open items
+## [~] B-140 — a shell-divider drag that ends by anything other than a mouseup never ends: the divider stays blue and the resize cursor and dead text selection persist application-wide; the Designer's splitter is the same bug, worse ⟨priority: medium⟩ — implemented: `openspec/changes/shared-drag-gesture/` (new `@cg/gesture` package, both apps migrated)
+
+> 🔴 **CORRECTION, 2026-08-17 — the original cause recorded below is DISPROVEN, and the title above
+> has been re-anchored on the one that reproduces.**
+>
+> This item was filed as "the pointer crosses the PVW iframe, so the parent never gets the
+> `mouseup`". **Measured against the pre-fix code, with a positive control asserting the release
+> point hit-tests to an `IFRAME` and with a rebuild between runs, that drag ENDED CORRECTLY.** The
+> lead: the rehearsal frame carries no `sandbox` attribute, so it is same-origin, and Chromium's
+> implicit mouse capture already keeps `mousemove` / `mouseup` with the document where the
+> `mousedown` happened.
+>
+> **What reproduces is an ending that is not a `mouseup` at all** — the window losing focus
+> (alt-tab, a dialog, the OS taking the pointer). The old divider listened for `mouseup` and nothing
+> else, so such a drag never ended. That is the same reported symptom, through the door that is
+> actually open, and the E2E now pins it red-then-green.
+>
+> ⚠ **The Designer half is unchanged in substance and re-anchored in cause**: its listeners really
+> are added inside `onPointerDown` and removed only in its own `onUp`, so a missed `onUp` strands
+> them permanently and the panel then follows the mouse with no button held. But the reachable path
+> to that missed `onUp` is blur / `pointercancel`, not the canvas iframe.
+>
+> The iframe text is left below rather than deleted so the correction is legible against what it
+> corrects — but **it is wrong, and nothing should be built on it.**
 
 **What:** `ShellDivider` listens for `mousemove` / `mouseup` on the PARENT window, and the PVW
 preview is a same-origin `<iframe>`. While the pointer is over that frame the events are dispatched

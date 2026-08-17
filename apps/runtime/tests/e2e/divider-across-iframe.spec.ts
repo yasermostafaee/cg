@@ -165,6 +165,66 @@ test('a drag released over the PVW frame ends completely and leaves no global st
   ).toHaveCount(0);
 });
 
+/**
+ * 🔴 THE TERMINATOR THAT IS ACTUALLY RED BEFORE THE FIX — and the one that most
+ * likely IS the reported symptom.
+ *
+ * The mouse-over-iframe case above passes against the OLD code too, which is a
+ * finding rather than a disappointment: the rehearsal frame carries no `sandbox`
+ * attribute, so it is same-origin, and Chromium's implicit mouse capture already
+ * keeps `mousemove`/`mouseup` with the document where the `mousedown` happened.
+ * Its positive control proves the release point hit-tests to an `IFRAME`, so that
+ * case is a GUARD, not a reproduction.
+ *
+ * What the old divider genuinely could not survive is an ending that is not a
+ * `mouseup` at all. It listened for `mouseup` and nothing else, so a drag
+ * interrupted by the window losing focus — alt-tab, a dialog, the OS taking the
+ * pointer, a CEF preview grabbing it — never ended: `is-dragging` stayed on and
+ * `document.body` kept the resize cursor and `user-select: none`
+ * **application-wide**. That is the reported symptom's shape ("the drag releases
+ * but the line stays blue") reached by the door that is actually open.
+ */
+test('a drag interrupted by the window losing focus ends completely — the terminator the old divider lacked', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+
+  const divider = page.getByRole('separator', { name: /^Resize the monitor strip/ });
+  await expect(divider).toBeVisible();
+  const box = await divider.boundingBox();
+  expect(box).not.toBeNull();
+  if (box === null) return;
+
+  const before = await bodyState(page);
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, Math.max(4, box.y - 40), { steps: 8 });
+
+  // POSITIVE CONTROL: the drag really is in progress before it is interrupted, so
+  // a clean "after" cannot be the result of never having started.
+  // The control is the DRAG's own state, never the shield: a shield assertion here
+  // would be asserting the FIX's implementation, so the test could only ever fail
+  // against code that lacks it — which is not the same thing as failing on the bug.
+  await expect(divider, 'the drag must be in progress').toHaveClass(/is-dragging/);
+
+  // The interruption. No `mouseup` ever arrives — the window simply loses focus.
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('blur'));
+  });
+
+  await expect(divider, 'the drag must have ended').not.toHaveClass(/is-dragging/);
+  const after = await bodyState(page);
+  expect(after.cursor, 'body must not keep the resize cursor').toBe(before.cursor);
+  expect(after.userSelect, 'text selection must not be left dead').toBe(before.userSelect);
+  await expect(page.locator('[data-cg-drag-shield]')).toHaveCount(0);
+
+  // Release the held button so the run does not leave a pressed mouse behind for
+  // whatever test the worker picks up next.
+  await page.mouse.up();
+});
+
 test('the same drag by TOUCH ends completely — one code path for mouse, touch and pen', async ({
   app,
 }) => {

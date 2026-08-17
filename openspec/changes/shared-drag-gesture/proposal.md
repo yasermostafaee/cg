@@ -38,17 +38,26 @@ application-wide stuck state at its root.
 - The divider's VISUAL width. The touch hit area grows via a transparent pseudo-element; the visible
   6px is untouched, because the divider has been mistaken for a scrollbar once already.
 
-## 🔴 Status: NOT DONE
+## 🔴 The reported cause was WRONG, and the Why above is re-anchored on the one that reproduces
 
-Two things are recorded in `tasks.md` §6 rather than hidden:
+The brief's account — a same-origin PVW `<iframe>` swallowing the `mouseup` — **does not reproduce.**
+Measured with a positive control asserting the release point hit-tests to an `IFRAME`, and with a
+rebuild between runs: the pre-fix divider ended that drag correctly. The lead: the rehearsal frame
+carries no `sandbox` attribute, so it is same-origin, and Chromium's implicit mouse capture already
+keeps `mouseup` with the originating document.
 
-1. **The reported mouse-over-iframe symptom does not reproduce**, measured with a positive control
-   proving the release point hit-tests to an `IFRAME`. The pre-fix code still ended that drag. The
-   brief's diagnosis is therefore **not confirmed**.
-2. **A defect in this fix**, found by its own E2E: after a drag interrupted by window blur, the one
-   teardown runs (the shield is removed) but the divider still carries `is-dragging`. The failing
-   case was removed from the spec rather than left red, and §6b says so explicitly so it is restored
-   with the fix rather than forgotten.
+**What reproduces is an ending that is not a `mouseup` at all** — the window losing focus. The old
+divider listened for `mouseup` and nothing else, so such a drag never ended, and `is-dragging` plus
+the body's cursor and `user-select` persisted application-wide. That is the reported symptom's shape
+("the drag releases but the line stays blue"), and the E2E pins it **red-then-green**.
+
+⚠ The Designer's permanently-attached listeners are real, but reached the same way — via blur or
+`pointercancel`, not via its canvas iframe. `tasks.md` §6a states both corrections so the disproven
+story does not outlive its truth.
+
+⚠ `tasks.md` §6b retracts an earlier claim in this change that the fix itself was defective. That was
+a **stale build**: `test:e2e` serves `dist/` and the filtered script does not rebuild, so two runs
+compared the same bundle. The general lesson is recorded there.
 
 ## Impact
 

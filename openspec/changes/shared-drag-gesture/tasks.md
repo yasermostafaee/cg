@@ -1,8 +1,8 @@
 # Tasks — B-140, the shared drag gesture
 
-> 🔴 **THIS CHANGE IS NOT DONE. See §6 — an unresolved defect in the fix itself was found by its own
-> E2E and is recorded rather than hidden.** Everything below it is complete and green; §6 is the
-> reason the change should not be read as finished.
+> ⚠ **An earlier revision of this file reported an unresolved defect in the fix. That report was
+> WRONG and is retracted — see §6b.** It was an instrument error, not a defect. The change is
+> complete; §6a records a disproven diagnosis that must not be carried forward.
 
 ## 1. The package
 
@@ -68,56 +68,64 @@
 - [x] 5.4 E2E: a divider drag crossing the PVW frame, by MOUSE and by TOUCH, asserting the COMPUTED
       `body` cursor and `user-select` and the divider's class — what the browser shows, never what
       the component thinks.
+- [x] 5.6 🔴 **E2E VERIFIED RED-THEN-GREEN, with a rebuild between the runs.** The window-`blur`
+      case fails against the pre-fix divider on
+      `the drag must have ended … not.toHaveClass(/is-dragging/)` and passes after. Its positive
+      control is the DRAG's own state, never the shield — a shield assertion would be asserting the
+      fix's implementation, so it could only fail against code lacking it, which is not the same as
+      failing on the bug. See §6b for why the rebuild is load-bearing.
 - [x] 5.5 🔴 **A POSITIVE CONTROL on the crossing**, and it is not decoration: the FIRST version of
       that spec passed against the pre-fix code and was worthless, because PVW renders a frame only
       for a REHEARSING row and nothing was rehearsing — the drag crossed nothing. The spec now
       rehearses a row, asserts the frame is visible, and asserts
       `document.elementFromPoint(releasePoint).tagName === 'IFRAME'` before relying on the release.
 
-## 6. 🔴 UNRESOLVED — read this before treating the change as done
+## 6. Two findings about the DIAGNOSIS — read before repeating either
 
-### 6a. The reported mouse-over-iframe symptom DOES NOT REPRODUCE, and that is measured
+### 6a. 🔴 The iframe diagnosis is DISPROVEN. Do not carry it forward.
 
 With the positive control of 5.5 in place — the release point proven to hit-test to an `IFRAME` —
-**the PRE-FIX divider still ended the drag correctly.** Repeated with the fix stashed out and back.
+**the PRE-FIX divider still ended the drag correctly.**
 
 The likely reason, offered as a lead and not as a finding: the rehearsal frame carries **no
 `sandbox` attribute**, so it is same-origin, and Chromium's implicit mouse capture already keeps
 `mousemove` / `mouseup` with the document where the `mousedown` happened.
 
-⚠ **So there is no red-then-green E2E for the reported symptom, and this change does not claim one.**
-The owner observed the symptom on the real app; something about that path is not modelled here
-(a different frame, a different browser, or a cause other than the iframe). **The diagnosis in the
-brief is not confirmed.**
+Re-measured with an explicit `build` before each run (see §6b for why that matters), and the result
+is unchanged: **the crossing cases pass against the pre-fix divider.** The diagnosis is disproven,
+not merely unconfirmed — do not carry it forward.
 
-### 6b. 🔴 A DEFECT IN THIS FIX, found by its own E2E and NOT yet fixed
+**What DOES reproduce is a terminator that is not a `mouseup` at all.** The old divider listened for
+`mouseup` and nothing else, so a drag interrupted by the window losing focus never ended:
+`is-dragging` stayed on and `document.body` kept the resize cursor and `user-select: none`
+application-wide. That is the reported symptom's shape — "the drag releases but the line stays blue"
+— reached by the door that is actually open, and it is what the E2E now pins red-then-green.
 
-A third E2E case was written for the terminator that IS unhandled pre-fix — a drag interrupted by
-the window losing focus. It went red against the old code as expected, **and also red against the
-new code.** A diagnostic run measured the state immediately after the `blur`:
+⚠ **The Designer half, re-examined on the same basis.** Its permanently-attached listeners are a
+code-reading fact and are real: added inside `onPointerDown`, removed only in its own `onUp`. But the
+reachable path to a missed `onUp` is **not** the canvas iframe, for the same same-origin reason — it
+is window blur, `pointercancel`, or the OS taking the pointer. The consequence is unchanged and worse
+than the Runtime's (the panel then follows the mouse with no button held); only the door differs from
+the one the brief named.
 
-```
-DIAG after blur: {"shields":0,"cls":"cg-divider cg-divider--horizontal is-dragging"}
-```
+### 6b. ⚠ RETRACTED — the "defect in the fix" was a STALE BUILD, and that is the lesson
 
-**The shield was removed — so the one teardown DID run — but the divider still carried
-`is-dragging`.** `end()` removes the shield and calls `setDragging(false)` in the same function, so
-the React state update is not reaching the DOM in the built app. The unit tests cover this path and
-pass (jsdom), which is exactly why it needed an E2E.
+An earlier revision of this file reported that the fix left the divider painted as dragging after a
+blur — `{"shields":0,"cls":"… is-dragging"}` — and recorded it as an open defect.
 
-**Consequence for an operator:** after a drag interrupted by focus loss, the divider may still be
-painted as dragging. That is strictly better than before (the body cursor and `user-select` no
-longer leak application-wide, and the shield is gone), but it is not correct.
+**That was wrong.** `test:e2e` serves the built `dist/`, and `pnpm --filter @cg/runtime test:e2e`
+does **not** rebuild. Every comparison run that way after the first build was measuring a **stale
+bundle**, so the "pre-fix" and "post-fix" runs executed the same code. `CLAUDE.md` warns about
+exactly this: _"the suite runs against the built `dist/`, so invoking Playwright directly against a
+stale build gives false results."_
 
-**The failing case was REMOVED from the spec rather than left failing**, and that decision is
-recorded here rather than buried: shipping a red suite hides everything else in it, and shipping a
-quietly deleted test is worse. It must be restored with the fix.
+With an explicit `build` before each run the picture is consistent: the blur case is **RED pre-fix**
+(`the drag must have ended … not.toHaveClass(/is-dragging/)`) and **GREEN after**. There is no
+defect, and the removed test has been restored.
 
-- [ ] 6.1 Diagnose why `setDragging(false)` does not reach the DOM in the production build while the
-      shield removal in the same function does.
-- [ ] 6.2 Restore the window-`blur` E2E case and confirm it is red before the fix and green after.
-- [ ] 6.3 Re-check whether the same staleness affects the other terminators in a real browser —
-      the unit tests prove the hook, not the integration.
+🔴 **The general lesson, which outlives this item:** a red/green comparison is evidence only if the
+artifact under test was REBUILT between the two runs. Two runs of a stale bundle agree perfectly and
+prove nothing — the same failure shape as a probe whose instrument was never live.
 
 ## 7. Gate
 
@@ -126,5 +134,5 @@ quietly deleted test is worse. It must be restored with the fix.
       and test green — Runtime 759, Designer 1220.
 - [ ] 7.3 Full green gate — at the end of the session.
 - [x] 7.4 PRD item `[~]` with this change dir.
-- [ ] 7.5 **Linux `e2e` owed.** And note it would NOT discharge §6b, which is a known-open defect
-      rather than an unverified one.
+- [ ] 7.5 **Linux `e2e` still owed — no run URL.** A ticked box with no URL is a claim, not a
+      discharge.
