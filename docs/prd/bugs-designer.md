@@ -2280,3 +2280,22 @@ mutations). An E2E asserting the marker appears on a video whose assetId resolve
 
 **Related:** [[B-136]] (the identical symptom from a different cause, and the item that surfaced
 this), [[B-137]] (the once-per-element logging precedent).
+
+<!--
+  CROSS-REFERENCE, deliberately NOT a second item.
+
+  `apps/designer/src/renderer/features/shell/Splitter.tsx` carries the SAME defect as the Runtime's
+  `ShellDivider`, and it is filed ONCE, as [[B-140]] in `bugs-runtime.md`. One root cause with two
+  spellings must not get two fixes — that is the failure the item exists to close.
+
+  The Designer half is the MORE SEVERE of the two: its `pointermove` / `pointerup` listeners are
+  added inside `onPointerDown` (`Splitter.tsx:51-52`) and removed only in `onUp` (`:45-46`), so a
+  release that lands inside the canvas preview iframe (`features/canvas/CanvasArea.tsx:937`, and
+  `features/fields/PreviewModal.tsx:405`) leaves them attached PERMANENTLY — the panel then follows
+  every later pointer move with no button held. The Runtime's version leaks a stuck highlight and a
+  stuck body cursor; this one leaks a panel that never stops moving.
+
+  It is also AHEAD in two ways worth keeping when the fix lands: it is already on Pointer Events,
+  and it already separates the hit area from the visible line (`HIT = 10` around `LINE = 2`,
+  `Splitter.tsx:13-16`) — which is the pattern B-140 asks the Runtime to adopt.
+-->

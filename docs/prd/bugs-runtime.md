@@ -3365,3 +3365,157 @@ the reproduction is the owner's, on the running app.
 - **Cross-refs:** [[R-048]] (the per-row source override, a different axis), [[R-053]] (the
   aspect-crop consent, which will add a fourth per-plate row indicator and must read the same
   predicate rather than adding a third spelling).
+
+## [ ] B-140 — a shell-divider drag DIES when the pointer crosses the PVW iframe and leaves global state stuck; the Designer's splitter is the same bug, worse ⟨priority: medium⟩
+
+**What:** `ShellDivider` listens for `mousemove` / `mouseup` on the PARENT window, and the PVW
+preview is a same-origin `<iframe>`. While the pointer is over that frame the events are dispatched
+in the IFRAME's document, so resizing stops — **and the `mouseup` lands inside the iframe too, so
+the parent's `onUp` never runs.** The drag appears released while the component still believes it is
+dragging.
+
+**Repro:**
+
+1. Grab the horizontal divider between the top and bottom panels and start dragging.
+2. Move the pointer over the PVW canvas.
+3. Release the mouse there.
+
+**Expected:** the drag keeps resizing across the PVW frame, and releasing anywhere ends it
+completely.
+**Actual:** resizing stops as soon as the pointer is over PVW; the divider **stays blue**; and the
+drag never ends.
+**Env:** Runtime SPA, any build. Read from the code at `3d25585`; the report is the owner's, on the
+running app.
+
+**Why — the visible blue line is the symptom of stuck GLOBAL state, not a cosmetic glitch.**
+
+`onUp` is the ONLY place that undoes the gesture's side effects
+(`apps/runtime/src/renderer/ui/ShellDivider.tsx:73-78`):
+
+```
+drag.current = null; setDragging(false);
+document.body.style.cursor = ''; document.body.style.userSelect = '';
+```
+
+🔴 **All FOUR survive a missed `onUp`**, not some: the drag ref stays non-null, `is-dragging` keeps
+the divider blue, and `document.body` keeps **`cursor: row-resize`** and **`user-select: none`** —
+so the whole application wears the resize cursor and **text selection is dead app-wide** until some
+later drag happens to end cleanly. Both body properties are written on `mousedown`
+(`ShellDivider.tsx:118-119`), with a comment explaining why the cursor is held on the body at all.
+
+**Why per-iframe listener registration is not the answer — the frames are plural and dynamic.**
+PVW is not one iframe. `features/monitors/rehearsalFrames.ts` stacks **one frame per rehearsal
+subject** — `stackedByLayer(subjects)` (`:96`), `frameZIndex(index)` (`:112`),
+`overlayZIndex(frameCount)` (`:132`) — created and destroyed as subjects change. Registering on each
+iframe's document works (they are same-origin) but needs one registration per frame, for a set that
+changes at runtime: _extend the list, forget the mutator_. And `setPointerCapture` alone fixes
+crossing any element in the SAME document but is **not dependable across a browsing-context
+boundary**, so it is insufficient on its own rather than the fix.
+
+**🔴 The SAME rule exists twice, and the second spelling fails WORSE.**
+
+`apps/designer/src/renderer/features/shell/Splitter.tsx` is a second, independent derivation of one
+gesture. It is ahead in one way and behind in another:
+
+|                      | Runtime `ShellDivider`                                      | Designer `Splitter`                                                            |
+| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| events               | `mousedown` + window `mousemove`/`mouseup` — **mouse only** | `pointerdown` + window `pointermove`/`pointerup` — mouse/touch/pen             |
+| pointer capture      | none                                                        | none — **same crossing defect**                                                |
+| `pointercancel`      | n/a                                                         | **not handled**                                                                |
+| listener lifetime    | `useEffect`, torn down on unmount                           | **added inside `onPointerDown` (`:51-52`), removed only in `onUp` (`:45-46`)** |
+| leaks on a missed up | drag ref, `is-dragging`, body `cursor`, body `user-select`  | `dragging`, body `user-select`, **and the listeners themselves**               |
+| hit area vs visual   | 6px, the same                                               | `HIT = 10`, `LINE = 2` / `LINE_ACTIVE = 4` — **separated**                     |
+
+🔴 **The Designer's failure is the more severe of the two.** Because its listeners are attached
+per-gesture and removed only in `onUp`, a missed `onUp` leaves them attached **permanently**: every
+later pointer move over the parent document keeps calling `onResize`, so **the panel follows the
+mouse with no button held**. The Runtime's bug is a stuck highlight and a stuck cursor; the
+Designer's is a panel that never stops moving. And the Designer has iframes to lose the release into
+— the canvas preview (`features/canvas/CanvasArea.tsx:937`) and `PreviewModal.tsx:405`.
+
+⚠ **Filed as ONE item deliberately.** One root cause with two spellings must not get two fixes —
+that is the failure this item exists to close. A cross-reference is filed in `bugs-designer.md`.
+
+**Acceptance:**
+
+- WHEN a divider drag passes over the PVW preview THEN it keeps resizing, and keeps resizing after
+  the pointer comes back out
+- WHEN the pointer is released anywhere — over a panel, over the PVW frame, or outside the window —
+  THEN the drag ends once and completely
+- WHEN any drag ends by any route THEN `document.body` carries no leftover cursor and no leftover
+  `user-select`, and no divider carries `is-dragging`
+- WHEN `Escape` is pressed during a drag THEN the drag ends, and the panel keeps the size it had at
+  that moment ⟨or reverts — state which and why⟩
+- WHEN the vertical (Inspector) divider is dragged THEN all of the above holds for it too
+- WHEN the divider is dragged with a mouse, with touch, or with a pen THEN it works, through ONE
+  code path
+- WHEN a `pointercancel` arrives mid-drag THEN the drag ends completely, with no leftover global
+  state
+- WHEN a second finger is placed during a drag THEN the divider does not move
+- WHEN the handle is grabbed by finger THEN it can be hit without catching the panels on either
+  side, and its VISIBLE width is unchanged
+- WHEN any drag path runs THEN it writes neither `cursor` nor `user-select` onto `document.body`
+- WHEN the Designer's splitter is dragged across the canvas preview THEN it behaves identically, or
+  the item explicitly names it as separate work
+
+**Notes:**
+
+- **Both fixes are in scope — owner decision, and they are complementary, not alternatives:**
+  - **A full-window DRAG SHIELD fixes CROSSING** — an overlay above every panel and iframe for the
+    duration of the gesture, carrying the resize cursor. Pointer capture does not dependably cross a
+    browsing-context boundary, so this half cannot be replaced by capture. (`pointer-events: none`
+    on the frames while dragging is the alternative shape of the same idea.)
+  - **POINTER EVENTS fix WHO CAN DRAG** — mouse, touch and pen through one path. This half cannot be
+    replaced by the shield. `pointerdown` / `pointermove` / `pointerup` / `pointercancel`, with
+    `setPointerCapture` / `releasePointerCapture` on the divider and `touch-action: none` on the
+    handle so the browser cannot steal the gesture for scroll or zoom.
+- 🔴 **The fix must DELETE the mechanism that gets stuck, not add a fifth place that clears it.**
+  With capture plus the shield there is no longer any reason to write `cursor` or `user-select` onto
+  `document.body` at all — the shield carries the cursor for the duration and disappears with the
+  gesture. The outcome should be **one less piece of global state**, not more cleanup paths. That is
+  what closes the app-wide stuck state at the root.
+- 🔴 **ONE lifecycle with an EXHAUSTIVE terminator set**, all calling the SAME teardown — not a copy
+  per path, which is how this class returns: `pointerup`, `pointercancel`, `lostpointercapture`,
+  window `blur`, `Escape`, and the pointer leaving the window. ⚠ With Pointer Events,
+  `pointercancel` and `lostpointercapture` stop being defensive extras and become **events that
+  actually fire** — the OS takes a touch gesture away when it becomes a scroll, a call arrives, or a
+  palm is rejected.
+- **The visual state and the drag state must not be separately terminable** — `is-dragging` and the
+  drag ref end together, by construction, because they end in the same place.
+- **Only the captured `pointerId` drives the drag.** A second pointer must be ignored, never read as
+  a move. Multi-touch is a new bug class the mouse model could not have, and this is where it enters.
+- **A 6px handle is not a touch target.** The HIT area grows via a padded transparent region; the
+  VISIBLE width stays 6px — otherwise the divider that was already mistaken for a scrollbar gets
+  thicker to fix a different problem. ⚠ The Designer's splitter is the precedent and already does
+  this: `HIT = 10` around a `LINE = 2` (`Splitter.tsx:13-16`).
+- **The keyboard path is unaffected and must stay as it is** — `role="separator"` +
+  `aria-valuenow` + arrow keys with a Shift coarse step (`ShellDivider.tsx:126-152`) already works.
+- **One divider component serves both axes**, so the Runtime fix lands once: `ShellDivider` is used
+  for the Inspector (vertical) and the monitor strip (horizontal).
+- **Tests:**
+  - A test that reads **what the browser shows, not what the component thinks** — assert the
+    computed `body` cursor and `user-select`, and the divider's class, after a drag that crosses the
+    PVW frame. Never internal state.
+  - **E2E:** a Playwright drag whose path crosses the PVW iframe, verified RED before the fix, plus
+    a **touch** drag doing the same. Implementing this owes a **completed green Linux `e2e`** cited
+    by run URL (a UI/render change) — not owed by this filing session.
+- 🔴 **Owner question — if both apps must be fixed, does the gesture live in ONE place?** `CLAUDE.md`
+  says components are app-local and `@cg/ui` is **tokens-only**, so a shared styled splitter is
+  forbidden. But a **headless drag-gesture hook** is neither a token nor a component, and the rule
+  was not written with one in mind. Candidates:
+  1. **Allow headless hooks in `@cg/ui`** — smallest change, one implementation, no styling crosses
+     the boundary. Cost: it widens a rule that has been valuable precisely because it is absolute,
+     and the next thing to ask for an exception will cite this one.
+  2. **A new small package** (e.g. `@cg/gesture`) — keeps `@cg/ui`'s rule intact and states the new
+     concept honestly. Cost: a package for one hook, and another workspace in the gate.
+  3. **Two implementations kept honest by ONE shared test suite** — respects app-locality exactly as
+     written. Cost: the duplication survives; only its behaviour is pinned, and the two can still
+     drift in everything the suite does not assert.
+
+  **I would pick (2)**, because the thing being shared is behaviour with no styling and no tokens,
+  which is a real third category rather than an exception to either rule — and because a package
+  boundary makes the sharing visible where an `@cg/ui` hook would quietly erode "tokens-only".
+  ⟨Owner to choose; the item does not decide.⟩
+
+- **Cross-refs:** the Designer half of this one root cause is cross-referenced from
+  `bugs-designer.md`; it is deliberately NOT a second item.
