@@ -50,7 +50,8 @@
 ## 5. Gate
 
 - [x] 5.1 `pnpm openspec validate fix-plate-dirty-baseline --strict` — green.
-- [ ] 5.2 Full green gate — run once at the end of the session, covering all items.
+- [x] 5.2 Full green gate — GREEN: 85/85 tasks, `0 cached, 85 total`, prettier clean, openspec
+      54/54.
 - [x] 5.3 PRD item `[~]` with this change dir.
-- [ ] 5.4 **Linux `e2e` still owed — no run URL.** This changes what the row renders, so it is
-      classified as owing one. A ticked box with no URL is a claim, not a discharge.
+- [ ] 5.4 This changes what the row renders, so it is classified as owing a Linux `e2e`.
+      **Linux `e2e` still owed — NO RUN URL. Not pushed: the push was HELD on 2026-08-17 by owner decision, to spend one CI run on the complete four-item set rather than two runs on halves.** Local Windows runs are non-authoritative and discharge nothing: for the record they were green (full `pnpm gate` 85/85 `0 cached`; runtime E2E 78/78). A ticked box with no run URL is a claim, not a discharge.

@@ -47,8 +47,9 @@
 
 - [x] 4.1 `pnpm openspec validate cg-control-chrome-corrections --strict`.
 - [x] 4.2 `@cg/runtime` typecheck clean; 758 tests pass across 87 files after the rename.
-- [ ] 4.3 Full green gate — run once at the end of the session.
+- [x] 4.3 Full green gate — GREEN: 85/85 tasks, `0 cached, 85 total`, prettier clean, openspec
+      54/54.
 - [x] 4.4 PRD item `[~]` with this change dir.
-- [ ] 4.5 **Linux `e2e` still owed — no run URL.** This changes what renders (a hover colour, a
-      button variant, a tab label the E2E fixture selects on). A ticked box with no URL is a claim,
-      not a discharge.
+- [ ] 4.5 This changes what renders (a hover colour, a button variant, a tab label the E2E fixture
+      selects on), so it is classified as owing a Linux `e2e`.
+      **Linux `e2e` still owed — NO RUN URL. Not pushed: the push was HELD on 2026-08-17 by owner decision, to spend one CI run on the complete four-item set rather than two runs on halves.** Local Windows runs are non-authoritative and discharge nothing: for the record they were green (full `pnpm gate` 85/85 `0 cached`; runtime E2E 78/78). A ticked box with no run URL is a claim, not a discharge.
