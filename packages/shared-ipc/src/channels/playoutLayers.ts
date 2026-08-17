@@ -60,9 +60,25 @@ export const PlayoutLayerStateSchema = z.object({
    */
   observed: FixedSlotObservationSchema,
 });
+/**
+ * ⚠ R-055 — THE OPERATOR-FACING NAME OF THIS CONCEPT IS **STATION LAYERS**.
+ *
+ * The tab was renamed because `PLAYOUT` read as *this console's* playout, while a
+ * row here is one layer the STATION'S OWN playout system owns. These wire names
+ * were deliberately left alone: renaming an IPC surface touches both sides, the
+ * mock and every test, for zero operator benefit. The boundary and its reasoning
+ * are recorded in `openspec/changes/cg-control-chrome-corrections/tasks.md` 3.3,
+ * and R-054's Settings-shell work reopens these files and carries the rename as a
+ * follow-on. Until then: `playout*` on the wire, STATION LAYERS on screen.
+ */
 export type PlayoutLayerState = z.infer<typeof PlayoutLayerStateSchema>;
 
-/** Pull every declared reserved layer's state ([] when nothing is reserved). */
+/**
+ * Pull every declared reserved layer's state ([] when nothing is reserved).
+ *
+ * ⚠ The channel STRING is deliberately still `playoutLayers.*` — see the note on
+ * {@link PlayoutLayerState}. The operator sees STATION LAYERS.
+ */
 export const PlayoutLayersStateChannel = defineChannel(
   'playoutLayers.state',
   z.void(),

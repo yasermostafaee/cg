@@ -2807,9 +2807,24 @@ validationError` with both reasons spelled out in the pinned region
      there.
   4. Which of the eleven dialogs are in scope? Audit log, the template picker, the row's SOURCE /
      AUDIO dialogs and the shared confirm/prompt are all `Modal`s but are not settings.
+- 🔴 **FOLLOW-ON CARRIED HERE FROM [[R-055]] — rename the `playout*` wire names when this work
+  reopens these files.** R-055 renamed the tab to **STATION LAYERS** and every renderer-local
+  identifier with it, but deliberately left the IPC surface alone: the channel strings
+  `playoutLayers.state` / `.state-changed` / `.clear`, the `PlayoutLayers*Channel` constants, the
+  `PlayoutLayerState` contract type, the `PlayoutLayersClearReason` union and the
+  `window.cg.playoutLayers` bridge surface. Renaming an IPC surface touches both sides, the mock and
+  every test, and R-055 was a `low`-priority cosmetic item landing in a batch that had to fit one CI
+  run.
+  **It belongs here rather than in a new item** because this work reopens the same files anyway, so
+  doing it here is one coherent change instead of a second pass. Pointer comments now sit at the
+  channel definition and the exported type so the mismatch is not silent in the meantime — "one
+  concept, two spellings" is this repo's most frequent failure, and an undocumented one is how it
+  survives. ⟨Owner: confirm the rename rides with R-054, or say it should stay as-is permanently.⟩
 - **Cross-refs:** [[R-052]] (the message region contract every pane inherits), [[R-055]] (the red
-  budget and the FAILOVER miscolour), [[R-056]] (the same space discipline, applied to the position
-  section), [[B-139]] (the dirty predicate a tab switch will need).
+  budget, the FAILOVER miscolour, and the wire-name follow-on above), [[R-056]] (the same space
+  discipline, applied to the position section), [[B-139]] (the dirty predicate a tab switch will
+  need), [[B-142]] (the raw `<select>`s outside `Modal`'s focus trap, whose fix belongs to this
+  shell work).
 
 ## [~] R-055 — three CG Control chrome corrections: a PVW-coloured hover, a coloured FAILOVER, and a tab whose name is not what it lists ⟨priority: low⟩ — implemented: openspec/changes/cg-control-chrome-corrections/; tab named STATION LAYERS
 
