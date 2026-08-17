@@ -3294,12 +3294,23 @@ the reproduction is the owner's, on the running app.
   'this item has none'"_ (`draftStore.ts:248-257`). Omitting it does not skip plates; it compares
   them against a value nobody supplied. This is `CLAUDE.md` golden rule 6 one level out — the
   contract is asserted in prose and not tested by the implementation.
+- 🔴 **It BREAKS A LIVING SPEC, not merely an internal consistency.**
+  `openspec/specs/runtime-ui/spec.md:87-90`, _"Scenario: Dirty state is visible"_: **WHEN** an item
+  has staged-but-unapplied edits (R-003) **THEN** a dirty-dot on the field and a `● draft` chip on
+  **the row + Inspector** are shown in the dirty hue. The requirement names BOTH surfaces, so a row
+  that disagrees with the Inspector is a shipped requirement violated, and the regression test has a
+  spec scenario to map onto.
 - 🔴 **It is not only cosmetic.** The row's **UPDATE verb is disabled on `!deps.dirty`**
   (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:713`), fed by the same boolean. So
-  setting a plate to _not assigned_ both hides the chip and **disables the row's UPDATE**, on a row
+  setting a plate to _not assigned_ both hides the chip and **disables the row's UPDATE** on a row
   that genuinely has an unapplied edit — the exact failure the Inspector's own comment warns about
   one level in: _"an Update the operator cannot press … would be the panel disagreeing with its own
   controls about whether there is an unapplied edit."_
+  ⚠ **Scope it precisely:** the same expression gates on air-state FIRST —
+  `empty || !onAir || !deps.dirty || blocked || needsCaspar` (`:713`), with
+  `const onAir = item !== null && isOnAir(item);` (`:363`). So the disabled-UPDATE consequence
+  applies only to a row that is **already on air** — which makes it narrower than "any row" and
+  **worse where it lands**, because that is precisely where an unapplied edit matters.
 - **The canonical join already exists.** `appliedPlateSources(templateId, sources)`
   (`features/inspector/livePlates.ts`) is already the one join, read by the Inspector's LIVE PLATES
   section, by `isItemDirty`'s Inspector call, and by `PreviewPanel`. The row needs to call the same

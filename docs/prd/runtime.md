@@ -2580,13 +2580,23 @@ character and the same argument.
   | `tools/caspar-bridge/tests/live-plate-fit.test.ts:99`    | asserts `/re-assign\|correct the source/i`             |
   | `apps/runtime/tests/errorCodeMessage.test.ts:76-81`      | asserts `/cut/i`, `Re-assign`, `format`                |
 
+  🔴 **A THIRD DELIVERY PATH, and it is the one this item cares about most.** `swapLiveSource` calls
+  `resolvePlateAspect` itself and returns the SAME composed sentence on its own result shape —
+  `tools/caspar-bridge/src/caspar-runtime.ts:3288-3293`,
+  `if (!aspect.ok) return { ok: false, reason: aspect.errorCode, message: aspect.message };`. So the
+  refusal already reaches the operator through the **row's SOURCE swap**, which is exactly the
+  control the corrected message will point them to. Any rewrite must cover this path, and the
+  wording must still make sense when the operator is already IN the swap dialog rather than reading
+  a refused take.
+
   The two prose sites already differ three ways — "cut **a** part" vs "cut part", an em-dash vs a
   full stop, and an ASCII `'` vs a curly `’` in "source's format". There is **no** e2e assertion, no
   operator doc and no archived spec carrying it (SEARCH over `docs/`, `apps/*/tests/e2e`,
   `openspec/specs` for "designed for" / "cut a part of the picture" / "re-assign the plate" → no
-  further hits). `asyncResultMessage` prefers the bridge's own sentence over the catalogue's, so the
-  operator normally reads the bridge's — but the catalogue's is what shows when only a code
-  survives.
+  further hits). ⚠ **Three different selectors decide which spelling the operator sees**, each with
+  its own preference rule — `ui/asyncButtonController.ts:87-88` prefers the bridge's sentence and
+  falls back to the catalogue, and the Inspector and swap paths differ again — so "one sentence, one
+  spelling" has to be settled at the SOURCE, not per selector.
 
 - **DRAFT of the corrected message — AWAITING OWNER APPROVAL, not to be applied in this item:**
 
@@ -2608,10 +2618,19 @@ character and the same argument.
   1. **What clears the consent?** The minimum defensible set is a change to the plate's assignment
      or override, and a new mismatch with different numbers. Should a re-take also clear it — safer,
      but it makes the operator re-consent on every take of a permanently-mismatched feed?
-  2. **Does the consent survive retention/restore?** [[R-048]]'s override does. A consent that
-     survives a reconnect keeps the graphic on air; a consent that does not means a reconnect
-     silently drops a plate. Recommendation: survive, on the same OPEN axis — but it is the owner's
-     call because it is the difference between two on-air failure modes.
+  2. **Does the consent survive retention/restore?** [[R-048]]'s override does — it is persisted
+     beside `position` (`apps/runtime/src/platform/stack/StackRetentionStore.ts:112-116`, whose
+     comment says the override travels "for the same reason `position` does"). A consent that
+     survives a reconnect keeps the graphic on air; one that does not means a reconnect silently
+     drops a plate. Recommendation: survive, on the same OPEN axis — but it is the owner's call,
+     because it is the difference between two on-air failure modes.
+     ⚠ **And whichever way it goes, note the hole the override already has:** `restore()` can SKIP
+     an item (four wire reasons — `already-held`, `unknown-template`, `no-layer`,
+     `fixed-slot-taken`), and a PARTIAL restore still counts as success —
+     `apps/runtime/src/platform/WebSocketRuntime.ts:463` sets `restoreOk = true` and only the
+     `catch` at `:483-484` clears it. So a skipped item's per-run state is not merely absent for
+     that connect; the retention is then overwritten and it is gone for good. A consent inheriting
+     this axis inherits that too.
   3. **Exact wording of the message above.**
 - **Cross-refs:** [[R-048]] (the per-run override this reuses, and whose clear-set must NOT be
   inherited unexamined), [[B-139]] (the row's draft/dirty predicate — this item adds a fourth
@@ -2691,6 +2710,12 @@ existed"_. The same argument applies to the sources themselves.
 - **Red is a budget.** State the rule the panes follow. Today `danger` is worn by `Remove…`
   (Candidate layers), `Delete from station` (picker), and two icon trashes; `caution` by the orphan
   banner and Playout's clear. See [[R-055]] for the adjacent FAILOVER miscolour.
+  🔴 **That is the RESTING budget only, and the loudest red in the product is a HOVER.**
+  `--r-verb-remove: #ff0000` (`ui/controls.css:54`) — pure, fully saturated red — is painted as a
+  hover fill by `.cg-btn[data-verb-tone='remove']:hover:not(:disabled)` (`:571-574`), reachable on a
+  button inside a dialog. Any "red is a budget" rule that counts only resting variants misses it, so
+  the rule must be stated over **every interactive state**, which is also the reason it belongs in
+  the shared primitive rather than per pane.
 - 🔴 **Destructive-verb vocabulary today — four spellings for one family, and the confirm rule is
   inconsistent:**
 
@@ -2965,6 +2990,11 @@ Number.isFinite(n) ? n : 0; }` (`PositionPicker.tsx:106-109`). An emptied or hal
   position" is exactly "an override is present". This is the same honesty-half principle as
   `resolvePlateAspect`'s `assumed` flag and [[R-053]]'s consent indicator — cite it rather than
   re-deriving it.
+  ⚠ **The override PERSISTS across a restart**, so the marker is not a within-session concern:
+  `apps/runtime/src/platform/stack/StackRetentionStore.ts:112` writes
+  `...(item.position !== undefined && { position: item.position })`. An operator can therefore
+  arrive at a console where a row is already off the template's position, with a collapsed section
+  as the only place that could say so.
 - **A "collapsed by default" precedent exists in-app**, with the same reasoning:
   `RehearsalStage.tsx:295` — _"Collapsed by default: the caveats are a thing to CONSULT, not a thing
   to read"_ — with `aria-expanded={showCaveats}` at `:478`; `LayersPanel.tsx:566` has another. ⚠ But
@@ -2976,7 +3006,11 @@ Number.isFinite(n) ? n : 0; }` (`PositionPicker.tsx:106-109`). An emptied or hal
     at `:25`, `:26`, `:130`, `:131`, `:141`, `:150`, `:151`
   - `apps/runtime/tests/e2e/fixtures/runtime.ts` — the shared `picker` locator every one of those
     goes through, so the fixture is the single place to teach it to open the section
-  - `apps/runtime/tests/positionPicker.dom.test.ts` — the component's own DOM test
+  - `apps/runtime/tests/positionPicker.dom.test.ts` — the component's own DOM test. ⚠ It is worse
+    than "one assertion moves": `:108-113` queries **every** `button` in the section and asserts a
+    uniform enabled/disabled state across all of them. A collapse toggle is a new button that must
+    stay ENABLED even when the picker is locked, so it breaks that loop by construction rather than
+    by a locator miss
   - also touching the picker: `apps/runtime/tests/e2e/import-vcg-template.spec.ts`,
     `apps/runtime/tests/e2e/rehearse-composite.spec.ts`,
     `apps/runtime/tests/inspectorToast.dom.test.ts`, `apps/runtime/tests/numericInput.dom.test.ts`
