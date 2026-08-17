@@ -2885,3 +2885,108 @@ apps/runtime/src apps/runtime/tests docs` → 0 hits), so it is not an existing 
   ⚠ The code IDENTIFIERS (`PlayoutPanel`, `usePlayoutLayers`, `playoutLayers`, `playoutOccupancy`)
   are a separate question: renaming the LABEL does not require renaming them, and the item does not
   ask for it. ⟨Owner: rename identifiers too, or label only?⟩
+
+## [ ] R-056 — the position section: PVW follows the number as it changes, and the section collapses ⟨priority: medium⟩
+
+**What:** two changes to the on-air position section. (1) While the operator changes a position
+number, **PVW follows live** — before the field is committed — with **nothing extra going to the
+bridge or to AMCP**. (2) The section becomes **collapsible and is collapsed by default**, with the
+collapsed header carrying the fact when the row is not at the template's position.
+
+**Why:** position is set by eye. Typing a number, committing, looking, and typing again is a loop
+the preview can close instantly — and it can do so for free, because **PVW is already a local
+render**. Meanwhile the section is set once per template and then left alone, so it should not hold
+a block of the panel open for the whole session.
+
+**🔴 The distinction that must not be lost: PVW is a LOCAL preview; PGM is a shared server.**
+
+- **PVW is local, measured.** `RehearsalFrame` renders `srcDoc={html}` where `html` is _"The
+  retained self-contained HTML — byte-identical to what the bridge serves"_
+  (`features/monitors/RehearsalFrame.tsx:105-106`, `:234`), a same-origin `srcdoc` driven from
+  retained browser state. **Re-rendering it costs one local reflow and no wire traffic.**
+- **The on-air apply is a single explicit command.** `PositionPicker` sends ONE
+  `stack.set-position` on Apply (`features/inspector/PositionPicker.tsx:78-79`). Today **nothing at
+  all** reaches the bridge before that press.
+
+⇒ **The preview may follow every input change, ideally on the browser's own animation frame. Nothing
+extra may go to the bridge or to AMCP per keystroke, and the on-air apply stays on commit.** This is
+a requirement, not advice — it is the same class as the finding that per-frame `MIXER FILL` emission
+is not viable: a command per keystroke on a socket shared with other stations.
+
+**Which inputs are in scope — reported rather than assumed.** The section is **position only**: a
+**3×3 anchor grid** of nine buttons and **two pixel-offset nudge inputs** (`Position offset X` /
+`Position offset Y`). There is **no size, scale, rotation or opacity control** here
+(`PositionPicker.tsx:96-175`). ⟨Owner: confirm position-only is the intended scope, or widen it.⟩
+
+**🔴 One constraint the section already carries, which changes what "realtime" means here.** The
+picker is **LOCKED while the item is on air or unsettled** — _"position is fixed once taken —
+Option A cannot reposition on air without a re-serve flash"_ — and is editable only while
+loaded-not-taken and idle (`PositionPicker.tsx:79-83`, `isPositionLocked`). So the realtime preview
+applies exactly where it is safe: to a row that is being set up, not one on air. That is a reason to
+do it, not an obstacle.
+
+**Acceptance:**
+
+- WHEN the operator changes a position number or picks an anchor THEN the PVW render moves before
+  the field is committed
+- WHEN those uncommitted changes are made THEN no `stack.set-position`, no other bridge call and no
+  AMCP command is produced; the on-air value changes only on Apply
+- WHEN the field is empty or partially typed (`-`, `.`, `+`) THEN the preview stays at the last
+  valid position and does NOT jump to the origin
+- WHEN the value is `0` THEN it is applied as `0`, distinctly from empty
+- WHEN the value is changed by typing, by the spinner, by arrow keys or by the scrub gesture THEN
+  all four behave identically, through one path
+- WHEN the position section renders on load THEN it is COLLAPSED, and it can be opened and closed
+- WHEN the section is collapsed and the row is NOT at the template's position THEN the header shows
+  that fact, so an operator cannot miss a placement difference that is live
+- WHEN the section is collapsed and re-opened THEN every value is unchanged — collapsing is not
+  resetting
+- WHEN the disclosure is rendered THEN it is a real control through the shared primitives, carrying
+  `aria-expanded`, with its icon from the shared `Icon` component
+
+**Notes:**
+
+- 🔴 **Zero is a valid position and an empty field is not zero — and TODAY IT IS READ AS ZERO.**
+  `const offset = (raw: string): number => { const n = Number(raw); return raw.trim() !== '' &&
+Number.isFinite(n) ? n : 0; }` (`PositionPicker.tsx:106-109`). An emptied or half-typed field
+  becomes `0`, and that value feeds the dirty comparison at `:127-128`, so clearing the field reads
+  as "offset 0" and can mark the picker dirty against a non-zero applied value. **This is a
+  pre-existing defect the realtime preview would make continuously visible** — with live preview it
+  would yank the graphic to the anchor on every backspace. Fixing the parse is part of this item.
+- 🔴 **There is NO undo/history in the Runtime at all**, so the "undo granularity" requirement is
+  moot rather than unmet. SEARCH: `grep -rn "undo|history" apps/runtime/src/renderer` → only prose,
+  and two comments state the fact outright — _"there is no undo"_ (`draftStore.ts:32`, `:379`). ⇒
+  The item requires only that live preview **introduce** no history mechanism; if undo is ever added
+  to the Runtime, its granularity is that item's problem, not this one's.
+- **The collapsed-header marker has a precedent in this very component.** A `cg-dirty-dot` labelled
+  _"Position has unapplied changes"_ already exists (`PositionPicker.tsx:137`), and the "differs
+  from the template" condition is already computed: the seed precedence is **applied override →
+  manifest default → centred** ([[B-072]], `PositionPicker.tsx:99-103`), so "not at the template's
+  position" is exactly "an override is present". This is the same honesty-half principle as
+  `resolvePlateAspect`'s `assumed` flag and [[R-053]]'s consent indicator — cite it rather than
+  re-deriving it.
+- **A "collapsed by default" precedent exists in-app**, with the same reasoning:
+  `RehearsalStage.tsx:295` — _"Collapsed by default: the caveats are a thing to CONSULT, not a thing
+  to read"_ — with `aria-expanded={showCaveats}` at `:478`; `LayersPanel.tsx:566` has another. ⚠ But
+  there is **no shared `Disclosure` primitive** — both are hand-rolled. Whether this item adds one
+  is a scope decision; adding a third hand-rolled disclosure would be the second-spelling failure.
+- 🔴 **Tests that assume the position inputs are visible on load** — a default-collapsed section
+  breaks these silently unless the fixture opens the section first:
+  - `apps/runtime/tests/e2e/onair-position.spec.ts` — `picker.getByLabel('Position offset X'|'…Y')`
+    at `:25`, `:26`, `:130`, `:131`, `:141`, `:150`, `:151`
+  - `apps/runtime/tests/e2e/fixtures/runtime.ts` — the shared `picker` locator every one of those
+    goes through, so the fixture is the single place to teach it to open the section
+  - `apps/runtime/tests/positionPicker.dom.test.ts` — the component's own DOM test
+  - also touching the picker: `apps/runtime/tests/e2e/import-vcg-template.spec.ts`,
+    `apps/runtime/tests/e2e/rehearse-composite.spec.ts`,
+    `apps/runtime/tests/inspectorToast.dom.test.ts`, `apps/runtime/tests/numericInput.dom.test.ts`
+- **Owner questions, not resolved here:**
+  1. **Does the open/closed state persist, and at what scope** — per row, per template, per session,
+     or global? Recommendation: **per session, global** (one preference, not one per row), because
+     the section is a workflow mode rather than a property of a row; but it is the owner's call.
+  2. **If an override IS active, does the section auto-open?** Both are defensible: stay closed with
+     a marked header (space wins), or auto-open (visibility wins). Posed, not picked.
+  3. Is position-only the intended scope (see above)?
+- **Cross-refs:** [[R-054]] (the same space discipline, argued once there — this item does not
+  re-argue it), [[B-072]] (the seed precedence the marker depends on), [[R-011]] (the position
+  override itself).
