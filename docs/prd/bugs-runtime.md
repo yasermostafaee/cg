@@ -3675,3 +3675,54 @@ fifth.
   not resolved.
 - **Cross-refs:** [[R-054]] (the shell work this fix belongs to), [[R-052]] (the message-region
   contract, the other half of `Modal`'s shared behaviour).
+
+## [ ] B-143 — `resolvePlateAspect`'s `assumed` flag has no readers: the honesty half was never built ⟨priority: medium⟩
+
+**What:** when neither the source nor the author states an aspect, `resolvePlateAspect` deliberately
+does NOT refuse — it fits without cropping and returns `assumed: true`
+(`tools/caspar-bridge/src/live-plate-fit.ts:169`). Its docstring says exactly what that flag is for:
+_"what lets a row or a log say 'fitted unverified' instead of claiming a verified fit — the honesty
+half of a decision that deliberately does not refuse."_ **That half was never built.** The flag is
+set and read by nothing.
+
+**Repro:**
+
+1. Define a live source whose format is `AUTO` (or which states no aspect), and assign it to a plate
+   whose element carries no `expectedAspect`.
+2. Take the row.
+
+**Expected:** the graphic goes to air — that is the deliberate, correct decision — **and the row or
+the log says the fit is unverified.**
+**Actual:** the graphic goes to air and nothing anywhere says the fit was assumed.
+**Env:** Runtime + bridge, any build. Read from the code at `be2e390`.
+
+**Why:** the non-refusal is right and well argued — refusing would outlaw `AUTO`, which is _"a
+request to the hardware, not a statement about the picture"_, and would give a black box where a
+guest should be. But the argument for not refusing **rests on the operator being told**, and the
+telling does not exist. SEARCH: `git grep -rn "assumed" -- tools/caspar-bridge/src packages apps` →
+the flag is set in `live-plate-fit.ts`, carried on `PlateAspectOutcome`, and asserted in
+`tools/caspar-bridge/tests/live-plate-fit.test.ts` — **no UI, no IPC channel, no log line**. So a
+plate is on air with an unverified fit and nobody is told.
+
+**Acceptance:**
+
+- WHEN a plate is seated with `assumed: true` THEN the row says the fit is unverified, persistently
+  while it is on air — not as a toast
+- WHEN a plate is seated with a verified aspect THEN nothing extra is shown, so the marker means
+  something
+- WHEN an operator asks why a picture looks wrong THEN the unverified fit is discoverable from the
+  surface rather than only from the bridge's internals
+
+**Notes:**
+
+- **Same class as [[B-141]]:** the system knows something and does not say it. Both are the honesty
+  half of a decision that was otherwise made correctly.
+- **Distinct from [[R-053]], and the distinction is the whole point.** R-053 is the **mismatch**
+  case — two facts contradict, and the take is refused. This is the **nothing-stated** case (the
+  D-147 decision) — no facts contradict, nothing is refused, and the cost is a silent assumption.
+  Fixing one does not fix the other, and they should share a surface rather than invent two.
+- ⚠ **Whatever surface this uses, [[R-053]] will need the same one** for its "cropped by operator
+  consent" indicator, and [[B-139]] governs the row's existing per-plate indicators. Three per-plate
+  facts want a row-level home; the first of the three to be implemented should build it deliberately
+  rather than adding a private badge.
+- **Cross-refs:** [[R-053]], [[B-141]], [[B-139]].
