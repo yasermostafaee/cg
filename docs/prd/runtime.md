@@ -2618,3 +2618,170 @@ character and the same argument.
   per-plate row indicator and must read the existing predicate rather than adding a third
   spelling). The refusal and the fit chain live in `tools/caspar-bridge/src/live-plate-fit.ts`; see
   the pointer beside [[C-015]] in `caspar.md`.
+
+## [ ] R-054 — one SETTINGS shell for CG Control, and one layout for its panes ⟨priority: medium⟩
+
+**What:** one gear/settings entry point in CG Control opening ONE modal with tabs — at least
+**Configure** (candidate layers), **Sources** (live sources) and **Servers** (connections) — so
+adding a future settings area is adding a tab entry rather than building a new dialog. The panes
+share one frame: title + one-line description, a scrollable body, ONE footer. Sources becomes a
+**table**, one row per source, instead of a stack of tall cards.
+
+**Why:** configuration is scattered across separate dialogs reached from three different places,
+with no shared shape, so each new setting invents a new dialog. The contents also waste space: each
+live source is a tall card (Name, Kind, Format, Media file, trash, derived-aspect note), so two
+sources fill the dialog and a real installation scrolls. **This cost is already recorded** —
+`live-source-multibox` design.md §2d moved plate binding OUT of that modal for exactly this reason,
+_"with two templates imported it already listed six plates and scrolled before a single source
+existed"_. The same argument applies to the sources themselves.
+
+**What the recon found, and two of it corrects this item's own premises.**
+
+- **ELEVEN dialogs, all already on ONE primitive.** `ui/Modal` owns the chrome (title, ✕, scrolling
+  body, pinned message region, right-aligned footer), the focus trap, Escape/backdrop cancel and a
+  three-role action table. So the shell is **not** a rescue from chaos — it is a grouping layer on
+  top of a primitive that is already doing its job.
+- **There is NO tabbed modal and NO settings-shell abstraction anywhere.** `ui/Tabs.tsx` exists but
+  is used only by `ChannelScope` and `LayersPanel`, never inside a `<Modal>`. A tabbed shell is new
+  construction.
+- 🔴 **CORRECTION 1 — the footer divergence is DELIBERATE, not drift, and "pick one contract" would
+  overturn reasoned decisions.** Server connection and Candidate layers use an explicit **Apply**;
+  Live sources, Delimiters, Live source swap and Live plate audio **commit on change** — and each
+  carries a written justification at its call site. The split tracks a real distinction: a dialog
+  that edits a DRAFT of connected state applies atomically, while a dialog that edits a LIST of
+  independent records commits per record. ⇒ **The item should NOT mandate one footer.** It should
+  require that the frame make which contract is in force **legible** — a pane that commits on change
+  must say so, and must never show an Apply that does nothing.
+- 🔴 **CORRECTION 2 — `apps/runtime` does NOT have the Designer's lint ban, and has no shared
+  `Select`.** Four dialogs render raw `<select>`s (`SourcesModal.tsx:389,411`,
+  `ServerSettingsPanel.tsx:368`, `AuditPanel.tsx:136`, `LiveSourceSwapDialog.tsx:130`). So "lint
+  enforces this" is true of the Designer and **not** of the Runtime. That makes the primitive work
+  part of this item rather than a given — and it is load-bearing, because ⚠ **`Modal`'s focus-trap
+  selector omits `select`, `textarea` and `a[href]`** (`Modal.tsx:48`), so those raw `<select>`s are
+  currently **outside the tab trap**.
+
+**Acceptance:**
+
+- WHEN the operator opens CG Control settings THEN there is ONE entry point and ONE modal, with
+  Configure / Sources / Servers as tabs
+- WHEN a new settings area is added THEN it is a tab entry, and no new dialog shell is written
+- WHEN any pane renders THEN it uses the shared frame — title, one-line description, scrolling body,
+  one footer — and its commit contract is stated where the operator can see it
+- WHEN the Sources pane renders THEN each source is ONE table row (Name · Kind · Format ·
+  media/address · derived aspect · actions), not a card
+- WHEN the operator adds a source THEN an _Add source_ action appends an editable row, rather than a
+  permanent empty form sitting at the bottom of the list
+- WHEN the Sources pane renders THEN the LAYER BAND is outside the source scroll region, because it
+  is a setting ABOUT sources and not a source
+- WHEN a destructive act is offered anywhere in the shell THEN it uses the one agreed verb and the
+  one agreed confirm rule
+- WHEN a pane renders in Persian THEN mixed RTL/LTR content (Persian names beside Latin ids and
+  numbers) reads correctly in the table layout, verified rather than assumed
+- WHEN every behavioural affordance listed in the Notes is exercised after the restyle THEN it still
+  behaves as it did before
+
+**Notes:**
+
+- **Non-negotiables:** all controls through the shared primitives in
+  `apps/runtime/src/renderer/ui/` (`Button` / `Control`), styled from `renderer/theme.ts` +
+  vanilla-extract; all icons through the shared `Icon` component (lucide) — no new Unicode glyphs,
+  no ad-hoc inline `<svg>`; `@cg/ui` stays **tokens-only** (no components, no palette change).
+  ⚠ Per CORRECTION 2 this includes **introducing a shared `Select`** and bringing the four raw
+  `<select>`s onto it — which also closes the focus-trap gap.
+- **Red is a budget.** State the rule the panes follow. Today `danger` is worn by `Remove…`
+  (Candidate layers), `Delete from station` (picker), and two icon trashes; `caution` by the orphan
+  banner and Playout's clear. See [[R-055]] for the adjacent FAILOVER miscolour.
+- 🔴 **Destructive-verb vocabulary today — four spellings for one family, and the confirm rule is
+  inconsistent:**
+
+  | spelling                          | where                              | confirms?                                                                |
+  | --------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
+  | `Remove…` (danger)                | `FixedBankConfigModal.tsx:478-485` | ✅ three-branch                                                          |
+  | `Delete from station` (danger)    | `useTemplatePicker.tsx:343-349`    | ✅                                                                       |
+  | red trash icon, no text           | `SourcesModal.tsx:372-383`         | 🔴 **no** — and it cascades, reporting orphaned bindings only afterwards |
+  | red trash icon, no text           | `DelimitersModal.tsx:109-115`      | 🔴 **no**                                                                |
+  | `Reset to defaults` (destructive) | `DelimitersModal.tsx:90-95`        | 🔴 **no**                                                                |
+  | `Remove backup` (default variant) | `ServerSettingsPanel.tsx:344-346`  | n/a — draft-only until APPLY                                             |
+
+  ⇒ The vocabulary decision is not cosmetic: **two acts that destroy shared configuration do not
+  confirm today**, and the Sources one cascades.
+
+- 🔴 **BEHAVIOURAL AFFORDANCES A RESTYLE MUST NOT DROP** — the complete measured list:
+  - **Focus:** opens onto the ✕ as the SAFE control (`Modal.tsx:306`, rationale `:358-369`);
+    previously focused element restored on close (`:336`); Tab trapped and WRAPPING at both ends so
+    focus cannot reach an on-air control behind the scrim (`:316-330`).
+    ⚠ **Gap to fix, not preserve:** the `FOCUSABLE` selector omits `select` / `textarea` /
+    `a[href]` (`:48`).
+  - **Keyboard:** Escape cancels on the CAPTURE phase with `stopPropagation`, so it belongs to the
+    top-most dialog (`Modal.tsx:309-313`); Enter submits the prompt but never past `minLength`
+    (`useDialog.tsx:173-177`); the audio slider commits on `onKeyUp` as well as `onPointerUp`
+    (`LivePlateAudioDialog.tsx:189-191`); `NumericInput` normalises Persian/Arabic-Indic digits
+    before any parse (`ui/NumericInput.tsx:29-32`).
+  - **Dismissal:** backdrop click cancels, inside-click does not (`Modal.tsx:344`, `:354`);
+    right-click on the scrim suppressed (`:345`); every route funnels to the one `onClose`, which is
+    by contract the SAFE path (`Modal.tsx:23`).
+  - **Layout:** capped at 88vh, only the BODY scrolls (`Modal.tsx:77`, `:90-103`); the message region
+    is pinned OUTSIDE the body above the footer with its own `maxHeight: 30vh` and does not move the
+    body's scroll (`:104-134`) — this is [[R-052]]'s contract and must survive; footer buttons share
+    a 36px/110px floor so Cancel and commit read as peers (`controls.css:759-772`).
+  - **Disabled states, each with a stated reason:** Server APPLY on `onAirCount > 0 ||
+validationError` with both reasons spelled out in the pinned region
+    (`ServerSettingsPanel.tsx:312`, `:252-260`); Candidate layers' Apply while the round-trip is in
+    flight (`FixedBankConfigModal.tsx:385`); the prompt's submit until `minLength`
+    (`useDialog.tsx:158`); audio MUTE when `!audible` (`LivePlateAudioDialog.tsx:163`).
+  - **Masked-not-disabled:** Candidate layers HIDES both the bound-template cell and `Remove…` when
+    the link is down (`FixedBankConfigModal.tsx:419`, `:461-488`).
+  - 🔴 **The on-air safety rule:** _"an occupied (or unverifiable) row cannot be unticked until its
+    template is removed"_ is stated verbatim in the body (`FixedBankConfigModal.tsx:396-398`) but is
+    enforced **bridge-side only** — the checkbox is never disabled (`:430-440`) and the refusal
+    arrives on Apply. **A restyle must keep the wording AND must not "helpfully" disable the
+    checkbox**, which would change the contract.
+  - **Refusal wording is keyed off the wire union** so a new code cannot ship wordless —
+    `ui/fixedLayersReasonMessage.ts:32-35` (incl. `untick-occupied` / `untick-unknown`) and
+    `ui/sourcesReasonMessage.ts:32-48`; unknown codes surface verbatim as `Not accepted (<code>).`
+    rather than being swallowed. A refused Apply keeps the dialog OPEN and shows rule + specifics as
+    `text` + `detail` (`FixedBankConfigModal.tsx:275-278`).
+  - **Validation messages:** Server host/AMCP port/OSC port, each prefixed `Primary:` / `Backup:`
+    (`ServerSettingsPanel.tsx:99-105`); Sources' name and band messages (`SourcesModal.tsx:302`,
+    `:323`, `:327`); Delimiters' three add-time refusals plus the last-one-standing guard
+    (`delimiterStore.ts:107-121`); `RequiredText` snaps an empty field back to the stored value on
+    blur (`SourcesModal.tsx:194-230`).
+  - **Empty states, all distinct and all worded:** Sources (`:355-359`, `role="status"`), Audit
+    (`AuditPanel.tsx:169`), picker (`useTemplatePicker.tsx:320-323`), Server backup
+    (`ServerSettingsPanel.tsx:356-358`), and the whole `NoBankModal` as the candidate-layer empty
+    state with a monospace JSON sample (`FixedBankConfigModal.tsx:156-200`).
+  - **Orphan / cascade reporting:** Sources names every orphaned `template / plate` pair AFTER a
+    delete, falling back to ids (`SourcesModal.tsx:245-287`); the picker names the binding count in
+    ADVANCE (`useTemplatePicker.tsx:230-236`) and gives a partial failure its own notice (`:258-262`);
+    picker rows carry `Re-import required` and `Needs a source: <plateIds>` (`:357-381`).
+  - **State honesty:** no optimistic local update anywhere — the sources store adopts a value only
+    once the bridge accepts (`sourceStore.ts:141-177`).
+  - **Announcement roles:** `refusal` → `role="alert"`, `notice` → `role="status"`, `note` for a
+    standing fact (`Notice.tsx:124`).
+  - **RTL:** message text and detail are `dir="auto"` (`Notice.tsx:126-131`); the candidate-layer
+    alias input and bound-template cell are `dir="auto"` (`FixedBankConfigModal.tsx:453`, `:463`).
+  - **Test hooks a restyle must keep:** `data-modal-role` (`Modal.tsx:210`), `data-modal-body`
+    (`:382`), `data-modal-message` (`:396`), `data-notice` (`Notice.tsx:123`), `data-source-id`
+    (`SourcesModal.tsx:363`), `data-template-id` / `data-live-sources` / `data-plates-unassigned`
+    (`useTemplatePicker.tsx:333`, `:360`, `:376`), `data-verb-tone` (`useDialog.tsx:93`).
+  - **State persistence:** `AuditPanel` and `ServerSettingsPanel` are always mounted and return null
+    when closed, so filters and the last message survive close/reopen; the others are conditionally
+    mounted and reset. **A tab switch must decide which behaviour it inherits.**
+- ⚠ **Surfaces that are deliberately NOT dialogs and must NOT be absorbed:** `LockOverlay`
+  (hand-rolled scrim — `Modal.tsx:41-45` states it must NEVER move onto the primitive, _"a lock with
+  a way out is not a lock"_), `ContextMenu`, `CommandToast` (zIndex 50, i.e. UNDER a modal backdrop —
+  which is why in-dialog refusals must use the message region), `FailoverBanner`, the narrow-screen
+  Inspector overlay, and the native file chooser.
+- **Owner questions, not resolved here:**
+  1. Is the tab set FIXED, or does it grow from a registry?
+  2. Does the modal keep per-tab dirty state, and what happens on tab switch with an unapplied edit?
+     ⚠ This is the same predicate problem as [[B-139]] — reuse that answer, do not re-derive it.
+  3. Does the shell REPLACE the per-dialog entry points entirely, or keep deep links to a tab? Note
+     that Delimiters is opened from a gear beside a field in the Inspector
+     (`FromFileControl.tsx:261`), not from the status bar, so "replace entirely" has a real cost
+     there.
+  4. Which of the eleven dialogs are in scope? Audit log, the template picker, the row's SOURCE /
+     AUDIO dialogs and the shared confirm/prompt are all `Modal`s but are not settings.
+- **Cross-refs:** [[R-052]] (the message region contract every pane inherits), [[R-055]] (the red
+  budget and the FAILOVER miscolour), [[R-056]] (the same space discipline, applied to the position
+  section), [[B-139]] (the dirty predicate a tab switch will need).
