@@ -42,10 +42,33 @@
       (`value !== ''`), `tests/livePlateDraft.test.ts` fails **7 of 22**: the false positive, the
       false negative, all four order permutations, and the pre-existing
       "counts toward the ITEM being dirty" case. Restored, all 22 pass.
-- [ ] 4.6 A DOM-level assertion that the row's chip and the Inspector's agree per transition.
-      **NOT DONE** — the predicate-level tests cover the defect and its inverse, and both surfaces
-      now provably take the same value from the same call. A DOM test would assert the wiring rather
-      than the rule. Left open deliberately rather than silently skipped.
+- [x] 4.6 **ONE DOM test, narrowed on purpose** —
+      `apps/runtime/tests/layersPanel.plateDirty.dom.test.ts`.
+
+      **The broader "both surfaces agree" matrix is still NOT built, and that argument stands:** the
+      row and the Inspector take the same value from the same call, so asserting they agree would
+      assert the framework rather than the rule.
+
+      🔴 **What that argument does NOT cover is the verb, and that is the half that hurt.** A
+      predicate returning `true` does not prove a button is enabled. With a plate staged to _not
+      assigned_ the row's UPDATE was DISABLED, so the operator could not apply the edit at all —
+      and whether a control is enabled is a DOM fact, which this repo's rule says a boundary test
+      must read from the browser rather than from the code.
+
+      So the test drives the real `LayersPanel` with a real saved assignment and a real staged
+      un-assignment, and asserts two things: the draft chip renders, and the UPDATE menu item is
+      enabled. Both assertions are `expect.soft` for the first two facts, because a hard failure on
+      the chip would short-circuit before the verb was examined — the red run would then only ever
+      prove half of what the test is for.
+
+      **VERIFIED RED ON BOTH HALVES.** Against the pre-fix collapsed baseline:
+      `the row should show a draft chip: expected null not to be null` AND
+      `UPDATE must be ENABLED ...: expected true to be false`. Green after.
+
+      ⚠ Two instrument notes worth keeping: UPDATE is a `surface: 'menu'` action, so it is not in
+      the DOM until the row's context menu is opened, and the menu is PORTALLED to `document.body`;
+      and a menu item is a `role="menuitem"` div, so "disabled" is `aria-disabled` — reading
+      `.disabled` on it would be `undefined` and would assert nothing.
 
 ## 5. Gate
 
