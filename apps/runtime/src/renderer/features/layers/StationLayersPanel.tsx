@@ -8,9 +8,9 @@ import { casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import {
   playoutClearRefusal,
-  playoutOccupancy,
-  clearablePlayoutLayers,
-} from './playoutOccupancy.js';
+  stationLayerOccupancy,
+  clearableStationLayers,
+} from './stationLayerOccupancy.js';
 
 interface Props {
   layers: readonly PlayoutLayerState[];
@@ -80,12 +80,12 @@ const styles = {
  * it takes real graphics off air. That is the accepted, intended power of this
  * tab; the operator is told whose layer it is and confirms.
  */
-export function PlayoutPanel({ layers }: Props): JSX.Element {
+export function StationLayersPanel({ layers }: Props): JSX.Element {
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
 
-  const clearable = clearablePlayoutLayers(layers, linkDown);
+  const clearable = clearableStationLayers(layers, linkDown);
 
   /**
    * ── REACHABILITY IS NOT WHAT THE "DELIBERATELY NOT A DISABLED BUTTON" COMMENT
@@ -105,7 +105,7 @@ export function PlayoutPanel({ layers }: Props): JSX.Element {
    * appearance of one, and it costs the operator the seconds in which he believes
    * another system's graphic is coming off air.
    *
-   * The layer-state gate is untouched: a control that `playoutOccupancy` refuses
+   * The layer-state gate is untouched: a control that `stationLayerOccupancy` refuses
    * to offer is still ABSENT, not disabled, whatever this says.
    */
   const clearRefusal = casparRefusalReason(linkDown, casparReach);
@@ -230,7 +230,7 @@ export function PlayoutPanel({ layers }: Props): JSX.Element {
       </div>
       <div style={styles.list}>
         {layers.map((layer) => {
-          const state = playoutOccupancy(layer, linkDown);
+          const state = stationLayerOccupancy(layer, linkDown);
           return (
             <div key={layer.layer} style={styles.row} data-playout-layer={String(layer.layer)}>
               <span style={styles.layerNumber}>{String(layer.layer)}</span>

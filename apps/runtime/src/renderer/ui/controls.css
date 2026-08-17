@@ -21,6 +21,11 @@
   --r-text-muted: #9ca3af;
   --r-accent: #38bdf8;
   --r-accent-strong: #0ea5e9;
+  /* R-055 — the sky's HOVER weight, lighter than `--r-accent` so an engaged
+     toggle LIFTS under the pointer instead of looking switched off. One more
+     weight of the same hue, exactly like the `--r-accent-fill` family below; it
+     is not a state colour and must not become one. */
+  --r-accent-lift: #7dd3fc;
   /* The ACCENTED ACTION's weights — the same sky as `--r-accent`, in the dark
      fill / line / light ink a FILLED control needs. Three controls wear it, all
      in the Inspector. See `theme.ts` and `.cg-btn--accent` below. */
@@ -50,6 +55,11 @@
   --r-offline: #94a3b8;
   --r-rehearsing: #a78bfa;
   --r-rehearsing-strong: #7c3aed;
+  /* R-055 — the REHEARSING toggle's hover and press weights. They were three
+     literals inside the `.is-on` rules; naming them is what makes it visible that
+     a sky toggle reaching those rules is wearing the PVW hue. */
+  --r-rehearsing-mid: #8b5cf6;
+  --r-rehearsing-deep: #6d28d9;
   --r-verb-load: #1aacd8;
   --r-verb-remove: #ff0000;
   --r-verb-play: #22dd7a;
@@ -679,15 +689,39 @@
 .cg-btn--neutral.is-on:hover:not(:disabled),
 .cg-btn--icon.is-on:hover:not(:disabled) {
   /* Lift the fill rather than swapping to the neutral hover, which would make an
-     engaged toggle look like it had switched off under the pointer. */
-  background: #8b5cf6;
-  border-color: #a78bfa;
+     engaged toggle look like it had switched off under the pointer.
+
+     🔴 R-055 — THESE ARE THE REHEARSING WEIGHTS, and they belong ONLY to a toggle
+     whose base fill is `--r-rehearsing-strong`. They are written as tokens now
+     rather than as the three literals `#8b5cf6` / `#a78bfa` / `#6d28d9` that used
+     to sit here, because the middle one IS `--r-rehearsing` and nothing said so:
+     the maximised panel's sky toggle inherited this rule at higher specificity
+     and wore the PVW hue on hover, in a place where "this row is on PVW" cannot
+     be true — the exact claim the `.cg-panel-actions` block above spends ten
+     lines forbidding. The panel's own hover is scoped below. */
+  background: var(--r-rehearsing-mid);
+  border-color: var(--r-rehearsing);
   box-shadow: var(--r-shadow-1);
 }
 .cg-btn--verb.is-on:active:not(:disabled),
 .cg-btn--neutral.is-on:active:not(:disabled),
 .cg-btn--icon.is-on:active:not(:disabled) {
-  background: #6d28d9;
+  background: var(--r-rehearsing-deep);
+  box-shadow: none;
+}
+/* R-055 — the maximised-panel toggle's OWN hover and active, in its own hue.
+   Scoped exactly like its base fill above, and at a higher specificity than the
+   unscoped `.is-on` rules, so the sky toggle can never inherit the violet again.
+   It LIFTS on hover (`--r-accent-lift`) and DEEPENS on press
+   (`--r-accent-strong`), which is the same direction the violet family uses. */
+.cg-panel-actions .cg-btn.is-on:hover:not(:disabled) {
+  background: var(--r-accent-lift);
+  border-color: var(--r-accent-lift);
+  box-shadow: var(--r-shadow-1);
+}
+.cg-panel-actions .cg-btn.is-on:active:not(:disabled) {
+  background: var(--r-accent-strong);
+  border-color: var(--r-accent-strong);
   box-shadow: none;
 }
 

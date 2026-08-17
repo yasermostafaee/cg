@@ -4,12 +4,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlayoutLayerState } from '@cg/shared-ipc';
-import { PlayoutPanel } from '../src/renderer/features/layers/PlayoutPanel.js';
+import { StationLayersPanel } from '../src/renderer/features/layers/StationLayersPanel.js';
 import {
-  clearablePlayoutLayers,
-  hasPlayoutOccupant,
-  playoutOccupancy,
-} from '../src/renderer/features/layers/playoutOccupancy.js';
+  clearableStationLayers,
+  hasStationLayerOccupant,
+  stationLayerOccupancy,
+} from '../src/renderer/features/layers/stationLayerOccupancy.js';
 import { onCommandError } from '../src/renderer/features/status/commandFeedback.js';
 import { clearPortals, openDialog } from './support/dialog.js';
 import { connectionsStub, type Reachability } from './support/reachability.js';
@@ -90,7 +90,7 @@ async function render(
   root = createRoot(container);
   const r = root;
   await act(async () => {
-    r.render(createElement(StrictMode, null, createElement(PlayoutPanel, { layers })));
+    r.render(createElement(StrictMode, null, createElement(StationLayersPanel, { layers })));
   });
   return { el: container, clear };
 }
@@ -149,7 +149,7 @@ describe('the playout tab offers CLEAR for exactly one occupant kind', () => {
  * §1 — THE OTHER CLEAR THE GATE MISSED, and the comment that had to be read
  * before touching it.
  *
- * `PlayoutPanel` carries an explicit "deliberately NOT a disabled button". It
+ * `StationLayersPanel` carries an explicit "deliberately NOT a disabled button". It
  * governs the LAYER-STATE gate — a video occupant, an unverifiable occupancy, an
  * empty layer — where the reason is permanent, printed in the row, and a disabled
  * control would invite the operator to keep trying. That decision is UNCHANGED and
@@ -291,14 +291,14 @@ describe('a bridge-side refusal is surfaced with the rule that fired', () => {
   });
 });
 
-describe('the pure gate (playoutOccupancy) — the safety boundary, without a DOM', () => {
+describe('the pure gate (stationLayerOccupancy) — the safety boundary, without a DOM', () => {
   it('clearable ONLY for html on a live link', () => {
-    expect(playoutOccupancy(HTML_LAYER, false).clearable).toBe(true);
-    expect(playoutOccupancy(VIDEO_LAYER, false).clearable).toBe(false);
-    expect(playoutOccupancy(UNKNOWN_LAYER, false).clearable).toBe(false);
-    expect(playoutOccupancy(EMPTY_LAYER, false).clearable).toBe(false);
+    expect(stationLayerOccupancy(HTML_LAYER, false).clearable).toBe(true);
+    expect(stationLayerOccupancy(VIDEO_LAYER, false).clearable).toBe(false);
+    expect(stationLayerOccupancy(UNKNOWN_LAYER, false).clearable).toBe(false);
+    expect(stationLayerOccupancy(EMPTY_LAYER, false).clearable).toBe(false);
     // Link down masks everything, including the html case.
-    expect(playoutOccupancy(HTML_LAYER, true).clearable).toBe(false);
+    expect(stationLayerOccupancy(HTML_LAYER, true).clearable).toBe(false);
   });
 
   it('any producer kind other than exactly "html" fails safe', () => {
@@ -308,22 +308,22 @@ describe('the pure gate (playoutOccupancy) — the safety boundary, without a DO
         layer: 60,
         observed: { kind: 'producer', producer },
       };
-      expect(playoutOccupancy(layer, false).clearable, producer).toBe(false);
+      expect(stationLayerOccupancy(layer, false).clearable, producer).toBe(false);
     }
   });
 
   it('the bulk subset is exactly the union of the individually-clearable rows', () => {
     const layers = [HTML_LAYER, VIDEO_LAYER, UNKNOWN_LAYER, EMPTY_LAYER];
-    const bulk = clearablePlayoutLayers(layers, false);
-    const individually = layers.filter((l) => playoutOccupancy(l, false).clearable);
+    const bulk = clearableStationLayers(layers, false);
+    const individually = layers.filter((l) => stationLayerOccupancy(l, false).clearable);
     expect(bulk).toEqual(individually);
     expect(bulk).toEqual([HTML_LAYER]);
   });
 
   it('the tab badge means "something IS here" — an unknown never raises it', () => {
-    expect(hasPlayoutOccupant([HTML_LAYER])).toBe(true);
-    expect(hasPlayoutOccupant([VIDEO_LAYER])).toBe(true);
+    expect(hasStationLayerOccupant([HTML_LAYER])).toBe(true);
+    expect(hasStationLayerOccupant([VIDEO_LAYER])).toBe(true);
     // Unknown is the ABSENCE of a claim, not a claim that something is there.
-    expect(hasPlayoutOccupant([UNKNOWN_LAYER, EMPTY_LAYER])).toBe(false);
+    expect(hasStationLayerOccupant([UNKNOWN_LAYER, EMPTY_LAYER])).toBe(false);
   });
 });

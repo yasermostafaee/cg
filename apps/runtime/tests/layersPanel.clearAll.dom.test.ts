@@ -256,7 +256,7 @@ describe('StackPanel Clear-All', () => {
 
     it('a PARTIAL clear is an error — those graphics may still be on air', async () => {
       // Not a quieter success. A green "cleared 1" would overwrite the one fact the
-      // operator needs: something did not come off. PlayoutPanel's bulk clear already
+      // operator needs: something did not come off. StationLayersPanel's bulk clear already
       // follows this rule; this is the same rule, one panel over.
       const { errors, successes } = await pressClearAll({
         ok: false,

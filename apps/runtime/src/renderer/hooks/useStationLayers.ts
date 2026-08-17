@@ -18,6 +18,6 @@ const subscribePlayout = (handler: (next: PlayoutLayerState[]) => void): Unsubsc
  * A frozen "something is on layer 61" is not a claim the wire can back, and the
  * clear gate must never act on one.
  */
-export function usePlayoutLayers(): PlayoutLayerState[] {
+export function useStationLayers(): PlayoutLayerState[] {
   return useBridgeSnapshot(fetchPlayout, subscribePlayout, EMPTY);
 }

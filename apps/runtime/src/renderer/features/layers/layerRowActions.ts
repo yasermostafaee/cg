@@ -60,7 +60,7 @@ import type { RowBinding } from './rowState.js';
  * control that can only reject — because a disabled control invites nothing.
  *
  * (The playout rows are the one place this rule does NOT apply: they carry no
- * verbs at all, not disabled ones. See `PlayoutPanel` — that is a safety
+ * verbs at all, not disabled ones. See `StationLayersPanel` — that is a safety
  * decision, not a layout one.)
  *
  * The list is pure and React-free so the verb split is unit-testable without a

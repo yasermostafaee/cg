@@ -377,7 +377,18 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
       )}
       <span style={styles.spacer} />
       <AsyncButton
-        variant="caution"
+        /*
+          R-055 — the DEFAULT variant, not `caution`.
+
+          `--r-caution` is a FAULT role in this bar — the header above says "amber
+          for a configuration problem, red for down" — and the `⚠ NO OSC` alarm two
+          elements to the left wears the same hex. FAILOVER is a manual ACTION, not
+          a fault, so colouring it spent the alarm colour on something that is not
+          alarming and made the real alarm quieter. Its three neighbours (SERVERS /
+          SOURCES / LOG) are already bare `Button`s; this now reads as one of them.
+          It keeps its disabled state and its `title`, which is where "why can I not
+          press this" actually belongs.
+        */
         aria-label="Manual failover"
         disabled={health.backup === undefined}
         title={

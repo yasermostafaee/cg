@@ -120,6 +120,16 @@ export const cssVars = {
   '--r-accent': '#38BDF8', // sky — interactive / secondary
   '--r-accent-strong': '#0EA5E9',
   /**
+   * R-055 — the sky's HOVER weight, LIGHTER than `--r-accent`.
+   *
+   * A lit toggle must lift under the pointer rather than darken, or it reads as
+   * having switched off. The violet `.is-on` family already worked that way; the
+   * sky one had no lighter weight to lift to, which is why the maximised panel's
+   * hover borrowed the violet and with it the PVW meaning. One more weight of the
+   * same hue — NOT a state colour, and it must not become one.
+   */
+  '--r-accent-lift': '#7DD3FC',
+  /**
    * THE ACCENTED ACTION — the same sky, in the weights a FILLED control needs.
    *
    * Owner: «فقط از ایده تفاوت رنگ بین دکمه هاش استفاده کن. رنگ apply/update/add
@@ -184,6 +194,17 @@ export const cssVars = {
    */
   '--r-rehearsing': colors.rehearsing,
   '--r-rehearsing-strong': '#7C3AED',
+  /**
+   * R-055 — the REHEARSING toggle's HOVER and PRESS weights.
+   *
+   * They lived as three bare literals inside `controls.css`'s `.is-on` rules, and
+   * that is precisely how the defect hid: the hover's border was `#A78BFA`, which
+   * IS `--r-rehearsing`, and nothing on the page said so. A sky-based toggle that
+   * inherited those rules wore the PVW hue while claiming to be about the chrome.
+   * Named here so the next reader can see whose colour they are.
+   */
+  '--r-rehearsing-mid': '#8B5CF6',
+  '--r-rehearsing-deep': '#6D28D9',
   /**
    * PER-VERB HOVER FILLS (owner-specified) — used on HOVER AND NOWHERE ELSE.
    *

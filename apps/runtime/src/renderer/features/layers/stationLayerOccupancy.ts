@@ -21,7 +21,7 @@ import { colors } from '../../theme.js';
  * button that always fails.
  */
 
-export interface PlayoutOccupancyView {
+export interface StationLayerOccupancyView {
   /** What is on the layer, in the operator's words. */
   occupant: string;
   /** Why it is (or is not) actionable. */
@@ -39,10 +39,10 @@ export interface PlayoutOccupancyView {
  * frozen snapshot the wire can no longer back (B-087), so it reads unknown and
  * offers nothing — the same mask the layer rows apply.
  */
-export function playoutOccupancy(
+export function stationLayerOccupancy(
   layer: PlayoutLayerState,
   linkDown: boolean,
-): PlayoutOccupancyView {
+): StationLayerOccupancyView {
   if (linkDown) {
     return {
       occupant: 'Unknown',
@@ -92,15 +92,15 @@ export function playoutOccupancy(
 /**
  * The subset a bulk clear may touch: html occupants only, on a live link.
  *
- * Derived from the SAME `playoutOccupancy` the rows render from, so "clear all"
+ * Derived from the SAME `stationLayerOccupancy` the rows render from, so "clear all"
  * can never include a layer whose own row shows no clear control — the bulk
  * action is exactly the union of the individual ones.
  */
-export function clearablePlayoutLayers(
+export function clearableStationLayers(
   layers: readonly PlayoutLayerState[],
   linkDown: boolean,
 ): PlayoutLayerState[] {
-  return layers.filter((l) => playoutOccupancy(l, linkDown).clearable);
+  return layers.filter((l) => stationLayerOccupancy(l, linkDown).clearable);
 }
 
 /**
@@ -112,7 +112,7 @@ export function clearablePlayoutLayers(
  * here", and unknown is not that claim — it is the absence of a claim. The tab
  * itself states unknown honestly per layer.
  */
-export function hasPlayoutOccupant(layers: readonly PlayoutLayerState[]): boolean {
+export function hasStationLayerOccupant(layers: readonly PlayoutLayerState[]): boolean {
   return layers.some((l) => l.observed.kind === 'producer');
 }
 

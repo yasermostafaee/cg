@@ -2811,7 +2811,7 @@ validationError` with both reasons spelled out in the pinned region
   budget and the FAILOVER miscolour), [[R-056]] (the same space discipline, applied to the position
   section), [[B-139]] (the dirty predicate a tab switch will need).
 
-## [ ] R-055 — three CG Control chrome corrections: a PVW-coloured hover, a coloured FAILOVER, and a tab whose name is not what it lists ⟨priority: low⟩
+## [~] R-055 — three CG Control chrome corrections: a PVW-coloured hover, a coloured FAILOVER, and a tab whose name is not what it lists ⟨priority: low⟩ — implemented: openspec/changes/cg-control-chrome-corrections/; tab named STATION LAYERS
 
 **What:** three independent, behaviour-free corrections to CG Control's chrome. (1) The maximised
 panel's hover borrows the PVW violet. (2) The FAILOVER button is coloured when it should not be.

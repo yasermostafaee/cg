@@ -24,7 +24,7 @@ import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.j
 import { useStackSnapshot } from '../../hooks/useStack.js';
 import { restoreSkipReason, useRestoreSkips } from '../../hooks/useRestoreSkips.js';
 import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
-import { usePlayoutLayers } from '../../hooks/usePlayoutLayers.js';
+import { useStationLayers } from '../../hooks/useStationLayers.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { bankPosition, isLayerVisible, isRehearsing } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
@@ -36,8 +36,8 @@ import { LayerRow } from './LayerRow.js';
 import { resolveRowBinding } from './rowState.js';
 import { LayerTableHeader } from './LayerTableHeader.js';
 import { resolveDensity } from './layerTable.js';
-import { PlayoutPanel } from './PlayoutPanel.js';
-import { hasPlayoutOccupant } from './playoutOccupancy.js';
+import { StationLayersPanel } from './StationLayersPanel.js';
+import { hasStationLayerOccupant } from './stationLayerOccupancy.js';
 import { FixedBankConfigModal } from '../fixedLayers/FixedBankConfigModal.js';
 
 interface Props {
@@ -175,7 +175,7 @@ export function LayersPanel({
   const listReady = bankReady && slotsReady;
   // R-022 — ONE rehearse snapshot for the whole table, from the bridge.
   const rehearsals = useRehearse();
-  const playout = usePlayoutLayers();
+  const playout = useStationLayers();
   /**
    * THE STACK, WITH ITS READINESS — and this is the THIRD snapshot, which is the
    * bug the `listReady` guard above did not reach.
@@ -423,12 +423,12 @@ export function LayersPanel({
     }
   }, [confirm, items.length]);
 
-  const playoutOccupied = hasPlayoutOccupant(playout);
+  const playoutOccupied = hasStationLayerOccupant(playout);
   const tabs: TabSpec[] = [
     { id: 'layers', label: 'LAYERS' },
     {
-      id: 'playout',
-      label: 'PLAYOUT',
+      id: 'station-layers',
+      label: 'STATION LAYERS',
       // The dot means "something IS on a playout layer" — never raised for an
       // unknown, which is the absence of a claim rather than a claim. It is
       // scoped to the channel whose tab is open, which is why the channel axis
@@ -596,7 +596,7 @@ export function LayersPanel({
         (`ChannelScope` in `App`), because the channel owns PGM and PVW as well as
         this list: a strip scoped to the layer panel would have left the monitors
         showing channel 1 while the tab said channel 2. The two axes still never
-        share a strip — a single "Channel 1 | Channel 2 | Playout" row could not
+        share a strip — a single "Channel 1 | Channel 2 | STATION LAYERS" row could not
         say whose playout it meant — they are simply nested at the right levels.
       */}
       <Tabs tabs={tabs} activeId={activeTab} onSelect={setActiveTab} ariaLabel="Layer surfaces">
@@ -793,7 +793,7 @@ export function LayersPanel({
             </>
           )
         ) : (
-          <PlayoutPanel layers={playout} />
+          <StationLayersPanel layers={playout} />
         )}
       </Tabs>
       {configOpen && (

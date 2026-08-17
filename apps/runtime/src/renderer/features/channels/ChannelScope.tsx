@@ -14,7 +14,7 @@ import { useFixedBank } from '../../hooks/useFixedLayers.js';
  * correctly now than to unpick later.
  *
  * CHANNEL and LAYERS-vs-PLAYOUT are two different axes and must never share one
- * strip: a single "Channel 1 | Channel 2 | Playout" row cannot say WHOSE playout it
+ * strip: a single "Channel 1 | Channel 2 | STATION LAYERS" row cannot say WHOSE playout it
  * means. They are nested instead — channel outside, surfaces inside.
  *
  * ONE CHANNEL FOR NOW. The bank declares exactly one, and no channel discovery is
