@@ -2785,3 +2785,103 @@ validationError` with both reasons spelled out in the pinned region
 - **Cross-refs:** [[R-052]] (the message region contract every pane inherits), [[R-055]] (the red
   budget and the FAILOVER miscolour), [[R-056]] (the same space discipline, applied to the position
   section), [[B-139]] (the dirty predicate a tab switch will need).
+
+## [ ] R-055 — three CG Control chrome corrections: a PVW-coloured hover, a coloured FAILOVER, and a tab whose name is not what it lists ⟨priority: low⟩
+
+**What:** three independent, behaviour-free corrections to CG Control's chrome. (1) The maximised
+panel's hover borrows the PVW violet. (2) The FAILOVER button is coloured when it should not be.
+(3) The `PLAYOUT` tab's name does not describe what the tab lists.
+
+**Why:** each is a case of a signal saying something it does not mean, on a surface whose whole
+premise is that colour and naming carry state.
+
+**1 — the maximised-panel hover paints the PVW hue, and the file forbids it six lines above.**
+
+The base is correct and deliberately argued: `.cg-panel-actions .cg-btn.is-on` uses `--r-accent`
+(sky) at `apps/runtime/src/renderer/ui/controls.css:671-676`, under a comment that spends ten lines
+on why — _"IT MAY NOT BE THE VIOLET. `.is-on`'s base fill is `--r-rehearsing-strong`, and that hue
+is R-022's REHEARSING state: it means 'this row is on PVW and cannot reach air'. A violet chip in a
+panel header would be that claim in a place it cannot be true, which is precisely the
+one-hue-one-meaning rule the rest of this file is built on"_ (`:660-669`).
+
+🔴 **Then the rule is defeated by the rules immediately below it.**
+`.cg-btn--verb.is-on:hover / .cg-btn--neutral.is-on:hover / .cg-btn--icon.is-on:hover`
+(`controls.css:678-685`) and the matching `:active` (`:687-692`) are **unscoped** and paint
+hard-coded `#8b5cf6`, border `#a78bfa` and `#6d28d9`. **`--r-rehearsing` is `#a78bfa`**
+(`controls.css:51`) — so on hover the panel header wears the PVW border colour literally, at higher
+specificity (`0,4,0` vs `0,3,0`) and later source order than the rule that forbids it.
+
+The fix is a **theme / variant** concern — the scoped `.cg-panel-actions` treatment needs its own
+hover and active, tuned to sky, so the shared primitive bakes them in per variant. Never a one-off
+override on the panel.
+
+⚠ **The sweep for other borrowers was run, and it matters that it came back nearly empty.** The
+only other rule that could reach those violets is `[data-verb-tone='play'].is-on`, and it is
+**latent but unreachable** — PLAY is disabled whenever it is `active`, and the rules carry
+`:not(:disabled)`. So the maximised toggle is the one reachable non-PVW borrower today, and the
+fix should close the unscoped rule rather than only re-colour the one caller.
+
+**2 — FAILOVER wears the fault colour, in a bar whose doctrine forbids it.**
+
+`⇄ FAILOVER` is `variant="caution"` (`features/status/StatusBar.tsx:379-392`). `--r-caution` is
+`#f59e0b` (`controls.css:43`) — the SAME hex as the `⚠ NO OSC FROM …` alarm two elements to its
+left (`StatusBar.tsx:371`). The bar's own doctrine says those are **fault** tones: _"amber for a
+configuration problem, red for down. Those are role colours (`--r-caution`, `--r-danger`)"_
+(`StatusBar.tsx:59-61`). FAILOVER is a manual ACTION, not a fault, and it is not the loudest thing
+on the panel. Its three neighbours — SERVERS, SOURCES and LOG — are bare `<Button>`s at the default
+variant (`StatusBar.tsx:393-402`), which is the honest choice here too.
+
+**3 — the `PLAYOUT` tab lists the layers the station's playout system OWNS, not layers this console
+plays out.**
+
+Established before proposing any name. The label is literally `'PLAYOUT'` (uppercase) at
+`features/layers/LayersPanel.tsx:430`. A row in it is **one declared reserved layer number plus the
+producer observed on it** — the `reservedLayers` fence, described in the bridge as _"a fence AWAY
+from a foreign owner"_. `PlayoutPanel`'s own docstring says so: _"the PLAYOUT tab: the declared
+reserved layers (C-015), what is on them, and a deliberate clear"_
+(`features/layers/PlayoutPanel.tsx:52-54`). So the tab is about **someone else's** layers, and the
+current name reads as the opposite — the operator's own playout.
+
+⚠ **"Other layers" appears nowhere in the repo** (SEARCH: `grep -rn "Other layers\|other layers"
+apps/runtime/src apps/runtime/tests docs` → 0 hits), so it is not an existing name being replaced.
+
+**Acceptance:**
+
+- WHEN the maximised-panel toggle is hovered or pressed THEN it stays on the sky accent and never
+  paints the PVW violet, and the unscoped `.is-on` hover/active rules no longer hand those hues to
+  any control that has not asked for them
+- WHEN the FAILOVER button is at rest THEN it carries no role colour, matching its SERVERS /
+  SOURCES / LOG neighbours, and the amber in that bar means only a fault
+- WHEN the reserved-layers tab is labelled THEN its name says whose layers it lists, and every site
+  carrying the old label is updated with it
+
+**Notes:**
+
+- **Nothing here changes behaviour** — all three are colour or naming.
+- All three go through `renderer/theme.ts` + the shared primitives in `renderer/ui/`
+  (`Button` / `Control` bake hover / active / focus-visible / disabled per variant); no raw
+  `<button>`, no ad-hoc override, and `@cg/ui` stays tokens-only.
+- 🔴 **Owner question — the tab's name.** Report and candidates, choice left to the owner:
+  - **`STATION LAYERS`** — says whose they are in the operator's own vocabulary; reads well beside
+    `LAYERS`, and does not require the operator to know what "reserved" means internally.
+  - **`RESERVED`** / **`RESERVED LAYERS`** — matches the code, the bridge store
+    (`reserved-layers-store.ts`) and the C-015 vocabulary exactly, so the surface and the
+    configuration agree; slightly more jargon.
+  - **`FOREIGN LAYERS`** — most literal about the fence, but "foreign" is engineering language and
+    would read oddly to an operator.
+
+  Recommendation if one is wanted: `STATION LAYERS`, because the tab's whole purpose is to say
+  these belong to someone else and can be cleared deliberately.
+
+- **What must change with the name** (complete, measured):
+  - the label — `features/layers/LayersPanel.tsx:430`
+  - the E2E selector — `apps/runtime/tests/e2e/fixtures/runtime.ts:90`,
+    `getByRole('tab', { name: /PLAYOUT/ })`
+  - two prose comments describing the strip — `features/channels/ChannelScope.tsx:17` and
+    `features/layers/LayersPanel.tsx:598`, both _"Channel 1 | Channel 2 | Playout"_
+
+  SEARCH: `grep -rn "'PLAYOUT'\|\"PLAYOUT\"\|/PLAYOUT/" apps/runtime/src apps/runtime/tests` → the
+  label and the one selector; no other test string, no aria-label, no doc reference.
+  ⚠ The code IDENTIFIERS (`PlayoutPanel`, `usePlayoutLayers`, `playoutLayers`, `playoutOccupancy`)
+  are a separate question: renaming the LABEL does not require renaming them, and the item does not
+  ask for it. ⟨Owner: rename identifiers too, or label only?⟩
