@@ -876,3 +876,20 @@ Renumbering an existing ID is forbidden (`docs/prd/README.md`: _"Never delete or
 IDs"_), so they are reported rather than resolved. They do not affect the numbers claimed above.
 ⟨Owner: leave as historical, or annotate both pairs so a reader of either file knows the other
 exists?⟩
+
+## 2026-08-17 — three more claimed at the head of the implementation session (`B-141`…`B-143`)
+
+| Prefix | Claimed | Item                                                                          | File                               |
+| ------ | ------- | ----------------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-141` | the audit log records almost ONE action, and its empty state claims otherwise | [bugs-runtime.md](bugs-runtime.md) |
+| `B-`   | `B-142` | four Runtime dialogs render raw `<select>`s outside `Modal`'s focus trap      | [bugs-runtime.md](bugs-runtime.md) |
+| `B-`   | `B-143` | `resolvePlateAspect`'s `assumed` flag has no readers                          | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the heading sweep immediately before the headings were written.** Highest `B-`
+heading was `B-140`; `git grep -nE "B-14[123]" -- docs/` returned hits ONLY in this file's own prose
+— the "next free" line and the reservation discussion recorded above — and none as a heading. That
+is the same forward-reference false positive this file has now recorded three times, and it is the
+reason the rule is "highest HEADING", not "any occurrence". The space stays contiguous
+`B-001` … `B-143`, **no gaps. Next free: `B-144`.**
+
+The owner supplied all three numbers and the sweep agreed with them, so nothing was minted here.
