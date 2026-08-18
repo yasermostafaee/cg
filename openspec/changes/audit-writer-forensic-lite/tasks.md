@@ -174,7 +174,20 @@ almost nothing. Posed, not chosen.
 - [x] 6.1 `pnpm openspec validate audit-writer-forensic-lite --strict`.
 - [x] 6.2 `@cg/caspar-bridge` typecheck / lint / test green (68 files, 446 tests);
       `@cg/runtime` typecheck + 769 tests green.
-- [x] 6.3 Full green gate — see the session's commit.
+- [x] 6.3 Full green gate — see the session's commits.
+- [x] 6.6 **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32130531609>,
+      commit `4e876d7a`, run `conclusion: success`, and the **`E2E (Playwright)` job RAN**
+      (`conclusion: success`, not skipped — P-029). Counts read from the job log, not inferred from
+      the conclusion: Runtime **81 run, 81 passed, 0 flaky**; Designer **268 run, 268 passed, 0
+      flaky**. No retry markers anywhere in the log.
+      `4e876d7a` carries this change and everything above it, and the `e2e` job is whole-tree
+      (`pnpm test:e2e`, no filter), so a green run there verifies the tree that carries it.
+      ⚠ **The PREVIOUS tip `63d42eae` discharged NOTHING** and is recorded here so the distinction
+      is not lost: its `e2e` job was green (81 + 268, 0 flaky) but the RUN concluded `failure`
+      because `ci` reddened on this change's own `@cg/caspar-bridge` tests
+      (<https://github.com/yasermostafaee/cg/actions/runs/32126244485>). A green job inside a red run
+      is not a discharge — the rule reads the RUN's conclusion, and that is exactly the case it
+      exists for.
 - [x] 6.4 PRD item `[~]` with this change dir.
 - [x] 6.5 **Linux `e2e` DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/32054398518, commit `56c0799f`, `conclusion: success`, and the **`E2E (Playwright)` job RAN** (`conclusion: success`, not skipped — P-029). Runtime **81 passed**, Designer **267 passed, 1 flaky**.
       `56c0799f` is the batch tip and a descendant of every commit in it, and the `e2e` job is
