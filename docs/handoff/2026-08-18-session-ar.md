@@ -14,14 +14,25 @@ directory.
 `D:\programs\CasparCG` was never contacted. Channel 1 was read EMPTY before the session and verified
 EMPTY after; layers 150–152 were used and cleared.
 
-**RECON AND DESIGN ONLY. No product code, no behaviour change. Nothing visual — no UI, no layout, no
-rendering was touched**, so no Linux `gate:e2e` is owed.
+**RECON AND DESIGN, plus the measurement harness. No product code, no behaviour change. Nothing
+visual — no UI, no layout, no rendering was touched**, so no Linux `gate:e2e` is owed. ⚠ The last
+commit adds instrument code under `tools/caspar-amcp-probe/`, so the diff as a whole is **not**
+docs-only and takes the full gate.
 
 ---
 
 ## What changed
 
-Three commits on `dev`, docs-only:
+Seven commits on `dev`. The first four were the recon and design; the owner then closed §12.9,
+minted the numbers and asked for the harness to be committed.
+
+| Commit     | What                                                                                                |
+| ---------- | --------------------------------------------------------------------------------------------------- |
+| `6183600b` | **`B-145`, `B-146`, `B-147`, `R-057`, `D-152` minted**, sweeps before and after                     |
+| `b45c7482` | **§12.9 CLOSED — A′ adopted**; the fade lead measured; the "backgrounds are free" wording corrected |
+| `f9b5ffe8` | the **beacon harness and the arrangement probes committed** to `tools/caspar-amcp-probe/bin/`       |
+
+The first four, docs-only:
 
 | Commit     | What                                                                                              |
 | ---------- | ------------------------------------------------------------------------------------------------- |
@@ -157,7 +168,7 @@ Latin and fails for shaped Persian.
 
 ---
 
-## 6. 🔴 THE NUMBERS YOU ASKED FOR — reported, not minted
+## 6. The numbers as REPORTED (superseded by §10.5 — they were minted later the same day)
 
 Derived immediately before the commits by `docs/prd/b-number-registry.md`'s only supported method:
 the local sweep **and** the all-refs widening sweep agree, `git stash list` is empty, and the
@@ -237,10 +248,10 @@ red, exactly as session AQ left it.
 
 ---
 
-## 9. What is still open
+## 9. What was still open at that point — ⚠ SUPERSEDED by §10, read that
 
-- 🔴 **§12.9 — the one remaining gate.** A′ is recommended with its evidence; `tasks.md` section 3,
-  2.2, 2.6, 5.1, 7.8, 7.9 and 7.10 stay `⟨GATE: §12.9⟩`.
+- 🔴 **§12.9 — the one remaining gate.** ✅ **CLOSED later the same day: A′ adopted (§10.1).**
+  Nothing is gate-blocked now.
 - **§13.6's two posed questions**: may the operator pick a mode per switch, and is the mode
   per-composition, per-layout or **per-PAIR**? ⚠ The owner's own example ("1-box→2-box move but
   3-box→1-box cut") is a per-pair statement — a third scope neither option named, costing **N² − N**
@@ -250,3 +261,144 @@ red, exactly as session AQ left it.
   noting it would be a **third** per-element visibility notion, so resolved visibility must come from
   ONE function.
 - **Four ⟨MINT⟩ items** await numbers (§6 above).
+
+---
+
+## 10. ⭐ THE SECOND HALF OF THE SESSION — §12.9 closed, numbers minted, harness committed
+
+The owner closed the last gate, minted the five numbers, and set three further tasks. What follows
+is what changed after §9 above.
+
+### 10.1 §12.9 is CLOSED — A′ adopted, and §12 now holds no open question
+
+> **A′ — candidate A's identity model, with a box authored as a NESTED COMPOSITION and
+> per-arrangement geometry on the INSTANCE.**
+
+§12.9 was restructured so the **decision leads and the evidence follows** (subsections renumbered),
+and the block that was "THE RECOMMENDATION" is now "ADOPTED". **No task in `tasks.md` is
+gate-blocked any more.**
+
+⚠ **A terminology change came with it, and it is not cosmetic.** The owner's answers introduce a
+two-level model this document did not have:
+
+| Term            | Meaning                                                             |
+| --------------- | ------------------------------------------------------------------- |
+| **COUNT**       | how many boxes — **what the operator picks**                        |
+| **ARRANGEMENT** | a named geometry for a count; one per count is the authored default |
+
+⇒ **§12.8's segmented control shows COUNTS, not arrangements** — a small bounded authored set — which
+materially eases (without removing) its fixed-width collision with the verb grid.
+
+**The four questions the owner posed AND answered** are recorded in §12.9.1 with each question
+reconstructed beside its answer, since they arrived with their answers rather than from §13.6's posed
+list: a default arrangement per count with the pick as **one action**; **declared cell order** in v1;
+a **legible refusal** for more sources than the largest arrangement holds; and the same for a count
+with no arrangement. The last two are written as **ONE refusal family with two triggers**, not two
+refusals that happen to look alike.
+
+### 10.2 🔴 ONE SHARED BACKGROUND — and the honest consequence for candidate B
+
+The owner settled that **a single fixed background is enough**; per-arrangement backgrounds stay
+supported but are not required. That takes the measured **−10 %** crossfade **off the default path**
+and demotes §13.3's "both backdrops carry the mask" to a **conditional** requirement — kept in full,
+not deleted, because the capability survives the decision. The −10 % and its 120 ms worst gap are
+recorded **beside the optional capability**, so the next author reaching for it finds out from the
+design rather than from a stuttering transition.
+
+⚠ **And it weakens one of candidate B's two death reasons**, which the design now says out loud
+rather than leaving to be noticed:
+
+| B's death reason                                                                        | After this decision                                                                       |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| computed geometry cannot carry a background                                             | **WEAKENED** — if one background serves every arrangement, B no longer has to compute one |
+| a layout is a designed SCENE — cell placement is a design decision, not a computed grid | **STANDS**, and it was always the stronger half                                           |
+
+**A′ stands, on the surviving reason.** Per-box titles are a second independent answer to the same
+question: a computed grid has nowhere to put an authored title, its colour and its font.
+
+### 10.3 🔴 THE FADE LEAD — it works, and NOT by the obvious spelling
+
+The owner's lead: fade the **mask's luminance** rather than the producer's opacity, so a grey hole is
+a half-open hole and the backdrop progressively re-covers the picture. Probed on the plant (§9.6h):
+
+| Reading                                                    | Result                                                                 |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `transition: mask-image` between two gradients             | 🔴 **DOES NOT INTERPOLATE** — 0 intermediates                          |
+| an `@property`-registered `<color>` feeding that gradient  | ✅ **9 intermediates** — this is the mechanism                         |
+| grey → openness (SVG-mask → canvas **proxy**, same engine) | **α ≈ grey ÷ 255** — mid-grey IS a half-open hole                      |
+| frame cost                                                 | **−3.4 %**, worst gap 60 ms — the **cheapest animated thing measured** |
+
+**The negative is recorded beside the positive on purpose:** anyone who tries the obvious spelling
+first would conclude the lead is dead.
+
+⇒ 🔴 **The fade moves to the FREE side of the boundary** — no `MIXER`, no server half, no second
+clock — so **`linear` now binds exactly ONE mode: move.** And it animates **inside** the shipped
+`mask-mode: luminance` path, so unlike §13.4's `clip-path` route it needs **no second mask mechanism
+at all**.
+
+⚠ **Two things it does not settle**, and they are why this is a lead answered rather than a mechanism
+finished: the transfer curve is a **proxy** (the CSS path over a live plate is `tasks.md` 8.5), and
+α ≈ grey/255 is an **engine** property a CEF bump could change — SVG 1.1 specifies linearRGB, which
+would have made 50 % grey ≈ 21 % open and the fade visibly front-loaded. It wants a pinning test, not
+a comment.
+
+### 10.4 The wording corrected
+
+§13.2 now carries **both halves together, so neither can travel alone**:
+
+> A background transition is **FREE OF THE SYNC PROBLEM** — no `MIXER`, no second clock. It is **NOT
+> free of COST**: measured, the full-frame backdrop crossfade is the **expensive** half (−10 %) and
+> the interpolating holes the **cheap** one (−4 %) — the inverse of the intuition.
+
+### 10.5 The numbers — minted, with the sweep on both sides
+
+**Confirmed free by heading sweep BEFORE writing**, per the registry's only supported method: the
+exact-number sweep and the all-refs widening sweep both returned **0 headings** for all five, the
+maxima were `B-144` / `D-151` / `R-056`, and `git stash list` was empty. **`D-152` was free, so the
+stop condition did not fire.** Re-audited after writing: the duplicate sweep still prints exactly
+`B-056` and `B-080`, and `C`/`D`/`P`/`R` print nothing.
+
+| Item                                                 | Number      | File                                                       |
+| ---------------------------------------------------- | ----------- | ---------------------------------------------------------- |
+| the un-persisted live-layer ledger                   | **`B-145`** | `bugs-runtime.md` — and marked **blocking `R-057`**        |
+| the Inspector's missing refusal / surfacing          | **`B-146`** | `bugs-runtime.md`                                          |
+| three spellings of "make text fit", none implemented | **`B-147`** | `bugs-designer.md`, cross-referenced from the runtime side |
+| the arrangement switch — OPERATOR half               | **`R-057`** | `runtime.md`                                               |
+| the arrangement switch — DESIGNER half               | **`D-152`** | `designer.md`                                              |
+
+**Two parent items, each naming the other** in its opening lines and again in its cross-refs, on the
+`D-137` / `C-015` precedent. `B-147`'s runtime-side cross-reference is a deliberate
+**NOT-a-second-item** note, mirroring the `B-140` / Splitter note that already runs the other way: a
+runtime reader meets it as an on-air defect (a long Persian name overflowing a narrow 4-box cell)
+whose cause and fix are both in the Designer.
+
+### 10.6 The harness is in the repo
+
+`tools/caspar-amcp-probe/bin/beacon-probe-lib.mjs` (the page half) and `arrangement-probes.mjs` (the
+eight §9.6 readings, runnable by name), with a README section. The control discipline is **in the
+code**: `assertAlive()` throws VOID rather than returning false, and `negativeControl()` checks three
+things — the command was accepted, the plant **did fetch** the bad URL, and no beacon fired.
+
+🔴 **Verified by RUNNING it, not by reading it.** `cg-layer` reproduced _REPLACE — the cg-layer
+argument is INERT_ with both controls holding and the channel clean afterwards; `mask-luminance`
+reproduced the transfer curve, the `mask-image` negative and the `@property` positive **to the
+digit**.
+
+---
+
+## 11. ⚠ Flags for the next session
+
+- **This diff is no longer docs-only** — `tools/caspar-amcp-probe/` carries instrument code, so the
+  full `pnpm gate` applies rather than the docs carve-out. Nothing visual was touched, so **no Linux
+  `gate:e2e` is owed.**
+- **The owner's uncommitted `template-http-server.ts` hack is still in the tree, untouched.** ⚠ Worth
+  correcting session AQ's note about it: it is **NOT** keeping the gate red. `@cg/caspar-bridge`
+  lints clean and its 451 tests pass with the hack in place — it only leaves lines 42–48 of that file
+  uncovered.
+- **`B-145` blocks `R-057`.** The switch must not ship before the ledger survives a bridge restart.
+- **Still owed as measurements:** `tasks.md` 8.3 (does a hidden `<video>` keep decoding?), 8.4 (is a
+  `LOADBG` background composited? — cannot change D's verdict), and **8.5 (the CSS-path confirmation
+  of the luminance transfer, plus a pinning test for α ≈ grey/255)**.
+- **Still POSED, not decided:** §13.6's two — may the operator pick a mode per switch, and is the
+  mode per-template, per-arrangement or **per-PAIR**; and §13.7.2's — where the per-element
+  "hide during a transition" option lives.
