@@ -66,10 +66,27 @@ tasks x 2 playwright workers = 8 max e2e workers`, then
       run that failed them. Wall clock 4m28s vs 4m06s unbounded — the cost of the fix.
 - [x] 4.3 ⚠ Both runs REBUILT between them (`pnpm test:e2e` goes through turbo, whose
       `test:e2e` `dependsOn: ['build']`), so the comparison is not the P-036 vacuous kind.
-      The staleness guard was in force for both and refused neither.
-- [ ] 4.4 🔴 **A Linux CI `e2e` run for the commit that carries this change** — owed, and
-      this is the first real test of the bound on CI. Record run URL + `N run / N passed /
-N flaky` here.
+      The staleness guard was in force for both and refused neither — and that "no refusal"
+      was confirmed against a POSITIVE CONTROL rather than read off silence: handed a
+      planted source newer than the build, the same guard refused, so the instrument is
+      demonstrably live (29 bundle input dirs resolved from the dependency graph).
+- [x] 4.4 🔴 **Linux CI `e2e` DISCHARGED** —
+      <https://github.com/yasermostafaee/cg/actions/runs/32136025181>, commit `b658a033`,
+      `conclusion: success`, and the `e2e` job **RAN** (not skipped). Counts read from the
+      job log: **runtime 81 run / 81 passed / 0 flaky**, **designer 268 run / 268 passed /
+      0 flaky** — **349 / 349 / 0 flaky** in total. The bound printed itself there too:
+      `gate bound (P-034): 2 cores -> 1 concurrent tasks x 1 playwright workers = 1 max e2e
+workers`. ⚠ The runner is **2 cores**, not the 4 this change's proposal guessed —
+      corrected here rather than left standing.
+- [x] 4.5 🔴 **THAT ZERO IS NOT EVIDENCE THIS FIX WORKED ON CI, and recording it as such
+      would re-commit the exact error P-034 already retracted once.** Measured, not
+      assumed: the run on this change's BASE commit `4e876d7a`
+      (<https://github.com/yasermostafaee/cg/actions/runs/32130531609>) also read
+      **81 passed / 268 passed / 0 flaky** — before any of this landed. CI was already at
+      zero because CI never ran the unbounded shape: one worker per suite, suites
+      serialised. The honest reading of this run is **"the fix broke nothing on CI"**,
+      which is exactly what a local-only fix should show. The evidence that it WORKS is the
+      Windows before/after in §1.3 and §4.2, and that evidence is local by construction.
 
 ## 5. Not done, deliberately
 

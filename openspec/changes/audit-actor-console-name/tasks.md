@@ -73,7 +73,13 @@ route.handle(...))`. Normalised on entry — the bridge does not trust the wire.
       request around them, so `unattributed` is now the honest expectation — updated with
       the reason, not just the value.
 
-## 7. Owed
+## 7. Owed — DISCHARGED
 
-- [ ] 7.1 🔴 A completed, green Linux CI `e2e` run for the commit carrying this change, with
-      `N run / N passed / N flaky` read from the log. Record the run URL here.
+- [x] 7.1 🔴 **Linux CI `e2e` DISCHARGED** —
+      <https://github.com/yasermostafaee/cg/actions/runs/32136025181>, commit `b658a033`
+      (the branch tip containing this change), `conclusion: success`, and the `e2e` job
+      **RAN** rather than being skipped. Counts read from the job log, not inferred from the
+      conclusion: **runtime 81 run / 81 passed / 0 flaky**, **designer 268 run / 268 passed
+      / 0 flaky** — **349 / 349 / 0 flaky**. The `ci` job (format / typecheck / lint / test /
+      build) is green on the same run, which is where this change's 5 new bridge tests and
+      the repaired mock↔bridge parity guard actually execute.

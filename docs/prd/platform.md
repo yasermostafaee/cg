@@ -2099,8 +2099,17 @@ local, and no evidence connects them. It is recorded here so the next occurrence
 land; a warning that outlives its truth and an EXPLANATION that outlives its truth are the same
 rule running in opposite directions, and both must leave the record honest rather than empty.
 
-⚠ **Owed:** a completed, green Linux CI `e2e` run for the commit carrying the fix, with its flaky
-count read from the log. It is recorded in the change's `tasks.md` §4.4.
+✅ **Linux CI `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32136025181>,
+commit `b658a033`, `conclusion: success`, `e2e` job **RAN**,
+**349 run / 349 passed / 0 flaky** (runtime 81, designer 268). The bound printed itself in that log
+too, on a **2-core** runner: `1 concurrent task x 1 playwright worker`.
+
+🔴 **And that zero is NOT evidence the fix worked on CI.** The run on the fix's BASE commit
+`4e876d7a` (<https://github.com/yasermostafaee/cg/actions/runs/32130531609>) already read
+**0 flaky** as well, before any of this landed — because CI never ran the unbounded shape. The
+honest reading is "the fix broke nothing on CI", which is what a local-only fix should show.
+Reading it as CI evidence would be the SAME inference this item already retracted once, and it is
+called out here because that is precisely where someone will reach for it.
 
 ## [~] P-035 — a NEVER-STAGE guard, because `git add <directory>` swept the owner's uncommitted hack onto `dev` ⟨priority: high⟩ — implemented: the guard, its list and its tests ship with this item
 
