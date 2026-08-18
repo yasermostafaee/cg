@@ -41,6 +41,10 @@ test-results/
 .claude/*
 !.claude/settings.json
 !.claude/hooks/
+# P-035 — the never-stage list. It MUST be tracked: an untracked list is a guard
+# that silently does nothing on any other checkout, which is the failure mode the
+# guard itself exists to prevent.
+!.claude/never-stage
 # No slash command is tracked any more: `/ship` automated the retired per-change
 # branch + PR ship sequence and was deleted with that model (see `P-026`). The
 # GENERATED OpenSpec slash commands stay ignored, so `.claude/commands/` needs no

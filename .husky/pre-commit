@@ -1,1 +1,9 @@
+# P-035 — the never-stage guard runs FIRST, before lint-staged.
+#
+# Order matters and is not cosmetic: `lint-staged` REWRITES staged files
+# (prettier --write). If the guard ran second, a commit that is about to be
+# refused would already have reformatted the owner's uncommitted file on its way
+# there — touching the very file the guard exists to keep untouched.
+node tools/gate-hook/src/never-stage-cli.mjs || exit 1
+
 pnpm exec lint-staged

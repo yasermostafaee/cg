@@ -1911,3 +1911,60 @@ timeout or loosening a pixel threshold on this evidence is the longer-rope failu
   suites on the same host.
 - **Cross-refs:** `B-098` / `B-073` (the load-contention flake class and why a longer timeout is the
   wrong answer).
+
+## [~] P-035 — a NEVER-STAGE guard, because `git add <directory>` swept the owner's uncommitted hack onto `dev` ⟨priority: high⟩ — implemented: the guard, its list and its tests ship with this item
+
+**What:** a pre-commit guard that **refuses** the commit when a listed path is staged, driven by a
+committed list (`.claude/never-stage`) with a documented, loud escape.
+
+**Why:** on 2026-08-17 a `git add tools/caspar-bridge` — staging a DIRECTORY to pick up bridge work —
+also staged the owner's uncommitted plant-testing hack. `dev` then briefly carried
+`return '192.168.21.93';` at the top of `guessLanHost()`, so **every install would have advertised
+one machine's LAN address** instead of its own, and the served template URL would have been wrong
+everywhere except that box. It was caught in post-push verification and corrected in `56c0799f`, at
+the cost of a second push on a day the owner was near their CI minute limit.
+
+🔴 **The instruction to never stage that file existed, was repeated three times in one brief, and was
+followed until it wasn't.** This repo is ONE folder on ONE branch that permanently contains the
+owner's uncommitted work, so the hazard is structural rather than occasional: `git add <path>` cannot
+distinguish that work from the work being committed, and a directory-level add reaches it silently.
+**A rule that depends on remembering is the one that already failed** — hence a guard with an exit
+code behind it, which is the same shape as this repo's other enforced rules (the gate lock, the
+pre-push decision, the message-region lint).
+
+**Acceptance:**
+
+- WHEN a never-stage path is staged THEN `git commit` is REFUSED, and the message names **which**
+  path tripped it, why the list exists, and the exact `git restore --staged` to undo it
+- WHEN an unrelated path in the SAME directory is staged THEN the commit proceeds — the guard forbids
+  a file, not the directory the accident happened in
+- WHEN the escape `CG_ALLOW_NEVER_STAGE=1` is set THEN the commit proceeds AND the guard prints every
+  path it let through, so a deliberate override is visible rather than silent
+- WHEN the list file is absent or empty THEN nothing is guarded and no commit is blocked
+- WHEN a listed file is DELETED in a commit THEN it is not refused, so the eventual cleanup is not
+  blocked by the guard protecting it
+
+**Notes:**
+
+- **Shipped with the item:** `.claude/never-stage` (the list, with the reason per entry),
+  `tools/gate-hook/src/never-stage-decision.mjs` (the pure decision) and `never-stage-cli.mjs` (the
+  CLI), wired into `.husky/pre-commit`, with 10 unit tests in
+  `tools/gate-hook/tests/never-stage-decision.test.ts`.
+- ⚠ **The guard runs BEFORE `lint-staged`, and the order is not cosmetic.** `lint-staged` runs
+  `prettier --write` over staged files. If the guard ran second, a commit about to be refused would
+  already have reformatted the owner's uncommitted file on the way there — touching the very file the
+  guard exists to leave alone.
+- ⚠ **`.gitignore` needed a negation.** `.claude/*` is ignored, so the list would have been
+  untracked — **a guard that silently does nothing on every other checkout**, which is the failure
+  mode the guard itself exists to prevent. `!.claude/never-stage` joins the two existing exceptions.
+- **PROVEN TO FIRE, end to end**, not only in unit tests: a real `git commit` with the hack staged was
+  refused (`husky - pre-commit script failed (code 1)`) with the path named; the escape let the same
+  staged state through and printed the override; and an ordinary commit in the same session passed
+  untouched.
+- 🔴 **THIS IS A NET, NOT A CURE.** The cure is the **bridge advertise-host refactor** — the hack
+  exists only because `guessLanHost()` cannot be told what to advertise. That hack cost **two
+  incidents in one day**: it blocked a push by failing `format:check`, and then it leaked to `dev`.
+  ⚠ **That refactor is NOT a filed item.** SEARCH: `grep -rniE "advertise.?host|LAN host|guessLanHost|serve-host" docs/prd/`
+  → no hits. **It needs a number and I do not mint one** — flagged for the owner.
+- **Cross-refs:** `P-009` (the Stop-hook gate, the same "enforce rather than remember" shape),
+  `P-013` (the host gate lock).

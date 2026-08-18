@@ -1,0 +1,31 @@
+# never-stage — paths that must NEVER be committed from this checkout (P-035).
+#
+# One path or glob per line; `#` starts a comment. Matched against the STAGED
+# path list, repo-relative, with forward slashes. Globs: `*` within a segment,
+# `**` across segments.
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# This repo is ONE folder on ONE branch, and it permanently contains the owner's
+# uncommitted local work. `git add <directory>` cannot tell that work from the
+# work being committed. On 2026-08-17 a `git add tools/caspar-bridge` swept up
+# the owner's plant-testing hack, and `dev` briefly shipped a hardcoded
+# `return '192.168.21.93'` in `guessLanHost()` — every install would have
+# advertised one machine's LAN address. It was caught in post-push verification
+# and cost a second push to correct.
+#
+# ⚠ THIS IS A NET, NOT A CURE. The cure is the bridge advertise-host refactor,
+# which removes the reason the hack exists at all. Until that lands, this file
+# stops the same accident recurring.
+#
+# THE ESCAPE, when a listed file genuinely must be committed:
+#
+#     CG_ALLOW_NEVER_STAGE=1 git commit ...
+#
+# It is deliberately loud — the guard prints what it let through, so an
+# intentional override is visible in the terminal rather than silent.
+
+# The owner's plant-testing advertise-host hack. See tools/caspar-bridge/src/
+# template-http-server.ts `guessLanHost()`. Remove this line when the
+# advertise-host refactor lands and the hack is gone.
+tools/caspar-bridge/src/template-http-server.ts
