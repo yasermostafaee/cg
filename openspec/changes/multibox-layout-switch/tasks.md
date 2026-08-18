@@ -1,14 +1,19 @@
 # Tasks — the multi-box layout switch
 
-> **STATUS 2026-08-18 — ✅ ALL EIGHT owner gates are ANSWERED. Nothing in this file is gate-blocked.**
-> `design.md` §12 records every decision with its reasoning; §12.9 closed last, with **A′ adopted**.
+> **STATUS 2026-08-18 — ✅ EVERY owner gate is answered, and this file is now a PLAN rather than a
+> gate tracker.** `design.md` §12 and §13 hold no open question.
 >
-> - `⟨READY — §x decided⟩` marks a task whose gate is answered. **Ready is not started and not done.**
->   Every task in this file now carries one.
-> - The work is carried by two PRD items minted 2026-08-18 on the D-137/C-015 precedent —
->   **`R-057`** (operator half) and **`D-152`** (arrangements authoring) — plus **`B-145`**, which
->   must land FIRST, and **`B-146`** / **`B-147`**.
-> - Sections 0 and 0b are complete; 0b records the 2026-08-18 plant recon.
+> - **Sections 0 and 0b are the recon record and the evidence trail — do not edit them.** Everything
+>   from section 1 down is the implementable plan.
+> - **Section 1 states the ORDER**, taken from `design.md`'s own ordering statements rather than from
+>   section numbering, with the one place they differ called out.
+> - Every task names **the files it touches**, **what exists when it is done**, and **whether it is
+>   visually checkable**.
+> - The work is carried by **`R-057`** (operator) and **`D-152`** (authoring), plus **`B-145`** —
+>   which is stage A and blocks the rest — and **`B-146`** / **`B-147`**.
+> - ⚠ Vocabulary: an **ARRANGEMENT** is a named geometry for a **COUNT**; the count is **DERIVED**
+>   from how many source toggles are lit (§12.8, D1). Where older text says "layout", read
+>   "arrangement".
 
 ## 0. Recon and design — COMPLETE
 
@@ -130,171 +135,278 @@
       confirmation is owed (8.5). ⇒ the FADE mode leaves the `linear` rule's scope entirely.
       (`design.md` §9.6h, §13.5a)
 
-## 1. Owner decisions — SEVEN ANSWERED 2026-08-18, ONE OPEN
+## 1. THE ORDER — read this before picking anything up
 
-- [x] 1.1 §12.1 — cut first, or one animated release. **ANSWERED: CUT FIRST, animation second** —
-      the cut must exist as a first-class option anyway, both phases share the carrier and the mask
-      work, and shipping the cut kills both measured crosstalk symptoms sooner. (`design.md` §12.1)
-- [x] 1.2 §12.2 — the transition curve. **ANSWERED: `linear` on BOTH sides**, the only provable
-      option (0.0 px); a pinned cubic-bezier table is both a 4–10 px separation and a second
-      spelling of one rule. A CSS transition omitting its timing function must be forbidden by lint
-      or test. (`design.md` §12.2)
-- [x] 1.3 §12.4 — the dropped box. **ANSWERED: HELD muted and idle** so switching back is instant
-      (the band is 50 layers); **a source kind that cannot be held falls back to teardown as a NAMED
-      behaviour, never a surprise.** The DeckLink question becomes an implementation input rather
-      than a blocking gate. (`design.md` §12.4)
-- [x] 1.4 §12.5 — the Inspector's assignment edit while a row is on air. **ANSWERED: SURFACE ONLY** —
-      the edit saves, the surface says "takes effect at the next take" and names the live path (the
-      row's SOURCE swap). Refusing or confirming is friction without capability. Decided together
-      with §5's override-blindness. (`design.md` §12.5)
-- [x] 1.5 §12.6 — two multi-box templates on air together. **ANSWERED: REFUSE**, in `take()` AND
-      `restore()`, through ONE predicate CALLED from both. (`design.md` §12.6)
-- [x] 1.6 §12.7 — the un-persisted live-layer ledger. **ANSWERED: it must survive a bridge restart**
-      — after a restart the seated layers still appear in the list and are controllable, by
-      persistence or by reconciling against the server's `INFO` at boot. **Filed as a SEPARATE item
-      that must land BEFORE the switch ships** (1.11). (`design.md` §12.7)
-- [x] 1.7 §12.8 — where the switch control lives. **ANSWERED: an always-visible SEGMENTED CONTROL on
-      the row** showing which layout is live; a menu is disqualified because it hides the current
-      state. 🔴 Re-opens the six-column verb grid — see §12.8's two collisions. (`design.md` §12.8)
-- [x] 1.8 §12.9 — **how per-arrangement GEOMETRY and per-arrangement DESIGN are authored.**
-      **ANSWERED: A′ IS ADOPTED** — candidate A's identity model with a box authored as a NESTED
-      COMPOSITION and per-arrangement geometry on the INSTANCE. Candidate B stays withdrawn;
-      the owner's candidate D was investigated and **refused on the premise, not on preference**
-      (0b.3–0b.8). Four further questions were posed and answered with it (§12.9.1), and a single
-      shared background was settled as enough (§12.9.2). (`design.md` §12.9)
-- [x] 1.9 ⟨MINT⟩ the Inspector's silent no-op assignment edit and its override-blindness.
-      **MINTED `B-146`**, `docs/prd/bugs-runtime.md`. (`design.md` §5, §12.5)
-- [x] 1.10 ⟨MINT⟩ a PRD item for the feature itself. **MINTED AS TWO, on the D-137/C-015 precedent:
-      `R-057`** (the operator half — the switch control, the reconcile, the refusals) in
-      `docs/prd/runtime.md`, and **`D-152`** (the arrangements authoring) in `docs/prd/designer.md`.
-      Each names the other as half the feature, in its opening and in its cross-refs.
-- [x] 1.11 ⟨MINT⟩ the live-layer ledger item. **MINTED `B-145`**, `docs/prd/bugs-runtime.md`, and
-      recorded there as **blocking `R-057`**. (`design.md` §12.7)
-- [x] 1.12 ⟨MINT⟩ the text-fit item. **MINTED `B-147`**, `docs/prd/bugs-designer.md` (the field, the
-      control and the renderer that ignores it are all Designer-side), cross-referenced from
-      `bugs-runtime.md` by a deliberate NOT-a-second-item note. (`design.md` §13.7.4)
+**Every owner gate is answered.** This file is no longer gate-tracking; it is the plan. The order
+below is **taken from `design.md`'s own ordering statements**, not from section numbering, and where
+the design says something different from the obvious reading it is called out.
 
-> **The sweep, for the record.** All five numbers were confirmed free by heading sweep BEFORE
-> writing — the exact-number sweep and the all-refs widening sweep both returned 0, maxima were
-> `B-144` / `D-151` / `R-056`, `git stash list` empty — and re-audited after: the duplicate sweep
-> still prints exactly `B-056` and `B-080`, and `C`/`D`/`P`/`R` print nothing.
+| #     | Stage                                                  | Why it is here, in the design's own words                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A** | **`B-145` — the ledger survives a bridge restart**     | §12.7: filed as a SEPARATE item that **must land BEFORE the switch ships**. It is also what makes stage D's reconcile trustworthy — a reconcile against a ledger that a restart silently emptied is a reconcile against a lie                                                                                                                                                                                                                                                                                                      |
+| **B** | **§12.6's exclusivity refusal**                        | ⚠ **NOT where the obvious reading puts it.** §12.1 says the two measured crosstalk symptoms are closed by exclusivity, but that §8's two doors — `take()` and `restore()` seating a SECOND multi-box template — _"are a different reachability and are closed by §12.6's refusal, **not by this phasing**"_. **It depends on nothing else in this file**: it is a predicate in two call sites. It is the cheapest closure of a measured on-air failure mode in the whole plan, so it goes early rather than waiting for the switch |
+| **C** | **UNIT B′ + the per-arrangement carrier, INTERLEAVED** | §6b: UNIT B′ is _"this feature's PREREQUISITE, not latent cleanup"_. §12.1: phase one _"must already build the per-arrangement geometry carrier (§7) and the mask recompute (UNIT B′, §6b)"_. ⚠ **They are one stage, not two:** 2.1 (resolved visibility) needs no carrier, while 2.2 (current geometry) cannot be written until the carrier exists to be read                                                                                                                                                                    |
+| **D** | **The reconcile (§4)**                                 | §4: ONE `reconcileLivePlates`, with `swapLiveSource` becoming a **caller** rather than a peer. Needs C's carrier to compute a desired set                                                                                                                                                                                                                                                                                                                                                                                          |
+| **E** | **The operator surface (§12.8)**                       | The toggles are what drives D. Needs D to have something to call                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **F** | ⭐ **THE CUT SHIPS**                                   | §12.1: cut first, animation second. A–E is the whole of phase one                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **G** | **The transition modes (§13.5)**                       | Phase two. §12.1: _"phase two then adds only the tween and its curve contract"_                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
-## 2. UNIT B′ — the mask mutator enumeration (PREREQUISITE, not cleanup)
+🔴 **The one correction to make out loud:** a reading that puts exclusivity after the reconcile is
+following section numbering, not the design. §12.1 explicitly says the phasing does **not** close
+§8's doors. Stage **B** can land the day stage A does.
 
-- [ ] 2.1 Give `sceneMaskHoles` **resolved** visibility instead of the scene's authored `visible`
-      (`packages/shared-schema/src/scene-flatten.ts:352-354`). ⟨READY — §12.1 decided⟩
-- [ ] 2.2 Give it **current** geometry, so a moved plate takes its hole with it. ⟨READY — §12.9 decided⟩
-- [ ] 2.3 A re-punch pass after `update()` in `@cg/template-runtime`, reassigning the mask
-      properties on the existing nodes. ⟨READY — §12.1 decided⟩
-- [ ] 2.4 Cover every mutator in `design.md` §6b's table with a test: take, teardown, position
-      override, resize, lifecycle range, retention restore, z-order reorder, layout switch, a
-      `visible` binding, a `transform` binding. ⟨READY — §12.1 decided⟩
-- [ ] 2.5 Answer AO's two inherited questions deliberately: whether an **invisible ancestor**
-      suppresses a punch, and whether a hidden plate is **declared while hidden**. Under §0.5 a
-      hidden plate must stop punching AND stop being seated. ⟨READY — §12.4 decided⟩
-- [ ] 2.6 Refuse a Live Source plate inside a `sequence` — `flattenElements` never descends into
-      one, so such a plate declares nothing and punches nothing, silently. ⟨READY — §12.9 decided⟩
+⚠ **`B-145` is stage A, and it is the only stage this change may not defer.** `R-057` records it as
+BLOCKING.
 
-## 3. Per-layout geometry — the carrier and the authoring surface
+---
 
-- [ ] 3.1 Per-layout geometry on the element, in `@cg/shared-schema`. ⟨READY — §12.9 decided⟩
-- [ ] 3.2 `collectLiveSources` emits per-layout rects onto the declaration block, following
-      `live-source-multibox` §1's carrier (derived once at import, the `hasNext` precedent). No
-      `.vcg` format change. ⟨READY — §12.9 decided⟩
-- [ ] 3.3 The Designer surface for authoring it. ⟨READY — §12.9 decided⟩
-- [ ] 3.4 Preflight: exactly one layout active at author time; **the overlap check applies WITHIN a
-      layout, not across layouts** — today it is per-document and would not fire across them.
-      ⟨READY — §12.9 decided⟩
+## 2. STAGE A — `B-145`, the ledger survives a bridge restart
 
-## 4. The one mechanism — reconcile a running row's live plates
+Full item: `docs/prd/bugs-runtime.md` → `B-145`. It carries the acceptance criteria and the two
+candidate shapes.
 
-- [ ] 4.1 `reconcileLivePlates(itemId, desired)` in `tools/caspar-bridge/src/caspar-runtime.ts`:
-      seat / re-fit / release as a DELTA against `#liveLayers`, reusing `resolvePlateAssignments` as
-      the ONE resolver. ⟨READY — §12.1 decided⟩
-- [ ] 4.2 Route the take's `#seatLiveLayers` through it, preserving the all-or-nothing rollback and
-      the "record before the send is awaited" rule. ⟨READY — §12.1 decided⟩
-- [ ] 4.3 Make `swapLiveSource` a CALLER of it. 🔴 **Do not build a second mechanism beside R-048's
-      swap.** ⟨READY — §12.1 decided⟩
-- [ ] 4.4 Re-derive the fit **per layout** — a 1-box layout changes each box's aspect, and because
-      `MIXER FILL` survives a producer swap, getting this wrong is a wrong crop rather than an
-      obvious break. ⟨READY — §12.1 decided⟩
-- [ ] 4.5 Implement the release policy for a plate with no box in the target layout. ⟨READY — §12.4 decided⟩
-- [ ] 4.6 A test per inverse in `design.md` §4's audit table. ⟨READY — §12.1 decided⟩
-- [ ] 4.7 🔴 **The switch does not ship until 1.11's ledger item has landed** — §12.7's decision is
-      "separate item, BEFORE the switch". The switch seats and releases plates continuously rather
-      than once per take, so a stranded producer under this feature is a live face on air that no
-      code path can reach. ⟨READY — §12.7 decided⟩
+- [ ] 2.1 **Recon: what does the server's `INFO` actually expose?** Enough to re-derive the
+      plate ↔ layer ↔ item mapping, or not?
+      **Files:** none — a plant/mock reading.
+      **Done when:** the finding is written into `B-145` and into the handoff, naming exactly what
+      `INFO` carries and what it lacks.
+      **Visual:** nothing visual — verify by reading the recorded `INFO` output.
+- [ ] 2.2 **Choose the shape from 2.1, not from preference.** `INFO` sufficient ⇒ **shape B**
+      (reconcile against the server at boot, self-correcting in both directions, the shape the item
+      recommends). `INFO` insufficient ⇒ the named fallback: **persist (shape A) PLUS a boot
+      reconcile** for whatever `INFO` can confirm, **stating exactly what `INFO` lacked**.
+      🔴 **Either way there is ONE AUTHORITY for "what is seated"**; the other is an input to it,
+      never a second answer.
+      **Files:** `tools/caspar-bridge/src/caspar-runtime.ts` (`#liveLayers`),
+      `tools/caspar-bridge/src/live-layers.ts`.
+      **Done when:** the chosen shape is implemented and the reason is in the code, not only in a
+      commit message.
+      **Visual:** nothing visual at this step.
+- [ ] 2.3 **Test: a restart with seated plates leaves them listed and controllable.** (`B-145`
+      acceptance 1.)
+      **Files:** `tools/caspar-bridge/tests/`.
+      **Done when:** a test fails before the change and passes after — **rebuilt between the runs,
+      and the report says it was.**
+- [ ] 2.4 **Test: the rebuilt ledger comes from ONE authority.** (`B-145` acceptance 2.)
+- [ ] 2.5 **Test: a producer that vanished server-side while the bridge was down is NOT asserted as
+      seated.** (`B-145` acceptance 3 — the self-correcting direction, and the one a
+      persist-only shape gets wrong.)
+- [ ] 2.6 **Tick `B-145`'s checkbox**, and update the cross-references that point at it — 8.2 below
+      and `R-057`'s **BLOCKED ON** line.
+      **Visual:** 🔴 **this is the one visually checkable step of stage A.** Take a row whose
+      template declares Live Source plates, restart the bridge, and open the **layer list**: the
+      seated layers must still be listed and still be controllable (clear / repoint) instead of
+      vanishing while the producers stay lit on air.
 
-## 5. Exclusivity
+---
 
-- [ ] 5.1 ONE authority for the layout state, read by the switch, the mask and the reconcile.
-      ⟨READY — §12.9 decided⟩
-- [ ] 5.2 (If §12.6 is A) one canonical predicate refusing a second multi-box template, enforced in
-      BOTH `take()` and `restore()`/`#decidePendingRestores` — restore never passes through
-      `take()`. ⟨READY — §12.6 decided⟩
+## 3. STAGE B — exclusivity (§12.6), which depends on nothing above
 
-## 6. The operator surface
+- [ ] 3.1 **ONE canonical predicate** answering "is another item carrying a multi-box template
+      already on air on this channel?"
+      ⚠ **It is NOT `deps.hasLivePlates`** (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:655`)
+      — that is a renderer fact about one row's template declaring plates. §12.6 offers it as the
+      tree's nearest existing shape, not as the predicate. Reusing the name for a different condition
+      is what golden rule 6 forbids.
+      **Files:** `tools/caspar-bridge/src/caspar-runtime.ts`.
+      **Done when:** the predicate exists once, and its name states the condition it tests.
+- [ ] 3.2 **CALL it from `take()` AND from `restore()` / `#decidePendingRestores`** — restore never
+      passes through `take()` (§8), so there are two sites by necessity and **one predicate by rule**.
+      **Done when:** both call sites call it; neither re-derives the condition locally.
+- [ ] 3.3 **A test per door**, including the restore door, which is the one that has no other cover.
+      **Visual:** nothing visual — verify by attempting a second multi-box take and reading the
+      refusal.
 
-- [ ] 6.1 The layout switch control, showing which layout is active. ⟨READY — §12.8 decided⟩
-- [ ] 6.2 The Inspector's on-air behaviour for an assignment edit, per §12.5. ⟨READY — §12.5 decided⟩
-- [ ] 6.3 Make an active `sourceOverride` VISIBLE outside the swap dialog — today it appears nowhere
-      else, so the Inspector confidently shows a source that is not on air. ⟨READY — §12.5 decided⟩
+---
 
-## 7. The transition
+## 4. STAGE C — UNIT B′ and the per-arrangement carrier (ONE stage, interleaved)
 
-- [ ] 7.1 Implement the chosen curve on both sides, per §12.2. ⟨READY — §12.2 decided⟩
-- [ ] 7.2 A contract test computing the MAX DEVIATION between the page's curve and the server's
-      tween, in pixels on the target raster — asserting the CLAIM, not the presence of a name.
-      ⟨READY — §12.2 decided⟩
-- [ ] 7.3 Forbid a CSS transition that omits its timing function: the default `ease` is 580–835 px
-      from every CasparCG tween. ⟨READY — §12.2 decided⟩
-- [ ] 7.4 **KEEP the v1 `live-source-animated` refusal** and pin with a test that a runtime layout
-      change does NOT trip it, while an authored keyframe still does. (Replaces the earlier "relax
-      the refusal" item, withdrawn by `design.md` §2b.) ⟨READY — §12.1 decided⟩
-- [ ] 7.5 The MODE SET per `design.md` §13.5 — cut / fade / move, the author's default mode and
-      duration in the same `Layouts` section as the layout list, and an immediate cut always
-      reachable by the operator as an escape. ⟨READY — §12.2 decided⟩
-- [ ] 7.6 The BACKGROUND transition (§13.1, §13.2) — shared vs per-layout backgrounds need no new
-      concept, and a background takes ANY easing and duration. 🔴 Scope 7.3's guard to the
-      boundary: it must catch a PLATE transition with no timing function without forbidding a
-      designed ease on a backdrop. ⟨READY — §12.2 decided⟩
-- [ ] 7.7 ⚠ §13.3 — BOTH backdrops carry the current mask through a crossfade, and the outgoing
-      one's participation OUTLIVES the fade. The existing per-element z-order rule already gives
-      both of them holes; what must be built is that the layout state distinguishes **leaving** from
-      **hidden**, or UNIT B′'s resolved visibility strips the outgoing backdrop's holes mid-fade.
-      ⟨READY — §12.2 decided⟩
-- [ ] 7.8 §13.4 — the ANIMATED mask. `clip-path` interpolation is VERIFIED on the plant's CEF
-      (§9.6e) at −4 % of the frame budget (§9.6f). 🔴 **A plate hidden in the target layout must
-      contribute a DEGENERATE (zero-area) hole, not NO hole**, so the point count is invariant and
-      the browser can interpolate. ⚠ It is a SECOND mask mechanism beside the settled
-      `mask-mode: luminance`; do NOT re-open the static choice on the strength of it. ⟨READY — §12.9 decided⟩
-- [ ] 7.9 §13.7.2 — hiding an element during a transition is an authored PER-ELEMENT option, not a
-      blanket rule (a box title leaves; a logo must not blink). 🔴 Resolved visibility must come
-      from ONE function — the same one 2.1 gives `sceneMaskHoles` — rather than a third independent
-      boolean. ⟨READY — §12.9 decided⟩
-- [ ] 7.10 §13.7.4 — the text FIT. Build the rule that makes one title fit a wide 1-box cell and a
-      narrow 4-box cell. ⚠ It MUST measure the RENDERED box after shaping, never the string:
-      `@cg/text-shaping`'s `truncate()` is code-unit based and is a length cap, not a width fit, so
-      a count-based rule works for Latin and fails for Persian. ⟨READY — §12.9 decided⟩
+### 4a. UNIT B′ — the mask must follow
 
-## 8. Still owed — measurements
+- [ ] 4.1 🔴 **ONE resolved-visibility function**, and give `sceneMaskHoles` its result instead of
+      the scene's authored `visible` (`packages/shared-schema/src/scene-flatten.ts:354`).
+      ⚠ **THIS IS THE D4 CONSTRAINT'S HOME (§13.7.2).** The function has **three inputs**: the
+      authored `visible`, per-arrangement visibility, and the per-element
+      **hide-while-transitioning** flag. **The flag is the third INPUT — never a fourth boolean read
+      somewhere else.** A local `if (el.hideDuringTransition)` at the point of use is smaller and
+      looks obviously correct in isolation; it is exactly the breach this task exists to prevent.
+      **Files:** `packages/shared-schema/src/scene-flatten.ts`, `packages/template-runtime/src/`.
+      **Done when:** one exported function, three inputs, and every consumer calls it.
+      **Visual:** nothing visual — verify by the 4.4 test matrix.
+- [ ] 4.2 **Give `sceneMaskHoles` CURRENT geometry**, so a moved plate takes its hole with it.
+      ⚠ **Blocked on 5.1's carrier** — there is no per-arrangement geometry to read until it exists.
+- [ ] 4.3 **A re-punch pass after `update()`** in `@cg/template-runtime`, reassigning the mask
+      properties on the existing nodes. Not a re-export: the mask is inline CSS on a live node
+      (§6), and a runtime mask path already exists for stamped scopes.
+      **Files:** `packages/template-runtime/src/runtime.ts`, `.../live-source-punch.ts`.
+- [ ] 4.4 **Cover every mutator in §6b's table with a test:** take, teardown, position override,
+      resize, lifecycle range, retention restore, z-order reorder, arrangement switch, a `visible`
+      binding, a `transform` binding, **and a background crossfade** (§13.3, conditional — only if a
+      per-arrangement background is authored).
+      **Done when:** eleven rows, eleven tests.
+- [ ] 4.5 **Answer AO's two inherited questions deliberately:** whether an **invisible ancestor**
+      suppresses a punch, and whether a hidden plate is **declared while hidden**.
+      🔴 **The tree's current answer to the second is an ACCIDENT, and 12.9.7 says so:**
+      `collectLiveSources` has **no** visibility filter while `sceneMaskHoles` does, so today a
+      hidden plate is **DECLARED but does not PUNCH**. Under §12.4 that is nearly the wanted
+      behaviour — but keyed off the AUTHORED `visible`, not the arrangement state. **Make it a
+      mechanism or change it; do not leave it a coincidence.**
+- [ ] 4.6 **Refuse a Live Source plate inside a `sequence`** — `flattenElements` never descends into
+      one (`scene-flatten.ts:264,274`), so such a plate declares nothing and punches nothing,
+      silently.
+      **Done when:** a preflight error exists with a test.
 
-- [ ] 8.1 The VISUAL seam of a cut. §9.3 bounds it command-side at 0.20 frames; confirming what
+### 4b. The carrier and the authoring surface
+
+- [ ] 5.1 **Per-arrangement geometry in `@cg/shared-schema`** — an arrangement is an ordered list of
+      cell rects for a count, and geometry lives on the box **INSTANCE** (A′, §12.9.10).
+      ⚠ Note before scoping: `x`, `y` and `scale` are ALREADY bindable transform properties
+      (`packages/shared-schema/src/bindings.ts:40`); it is `width`/`height` that are not. A
+      per-arrangement **override table** read by the arrangement state is cleaner than widening
+      bindings, and need not be a binding at all.
+- [ ] 5.2 **`collectLiveSources` emits ONE RECT PER ARRANGEMENT per plate** onto the declaration
+      block on `TemplateInfo`, following `live-source-multibox` §1's carrier (derived once at import,
+      the shipped `hasNext` precedent). **No `.vcg` format change** — the mask is computed at boot.
+      **Files:** `packages/vcg-format/src/live-sources.ts`.
+- [ ] 5.3 **The Designer surface for authoring arrangements** — the list, the default per count, and
+      the per-arrangement geometry. See the `designer-multibox-arrangements` spec.
+      **Visual:** ⭐ **this one IS visual** — open the Designer, add a box composition, author a
+      2-box and a 3-box arrangement, and switch between them in the preview.
+- [ ] 5.4 **D2's per-arrangement MODE + DURATION field**, in the same section as the arrangement list
+      (§13.6.2). Per-arrangement is a **strict subset** of the deferred per-pair form, so the
+      authored format does not have to change if per-pair is taken up later.
+- [ ] 5.5 **D4's per-element hide-while-transitioning flag** — authored beside the element, and wired
+      as **4.1's third input**.
+- [ ] 5.6 **Preflight:** exactly one arrangement active at author time, and the `live-source-overlap`
+      check applied **WITHIN** an arrangement, not across arrangements — today the loop is
+      per-document (`apps/designer/src/renderer/state/live-source-preflight.ts:178`) and would not
+      fire across them. ⚠ **The rule does not change; only its input does.**
+
+---
+
+## 5. STAGE D — the ONE reconcile (§4)
+
+- [ ] 6.1 **`reconcileLivePlates(itemId, desired)`** in `tools/caspar-bridge/src/caspar-runtime.ts`:
+      seat / re-fit / release as a **DELTA** against `#liveLayers`, resolving through
+      `resolvePlateAssignments` as the ONE resolver.
+      **Done when:** one function, and the take path no longer seats plates its own way.
+- [ ] 6.2 **Route the take's `#seatLiveLayers` through it**, preserving the all-or-nothing rollback
+      and the "record before the send is awaited" rule.
+- [ ] 6.3 **Make `swapLiveSource` a CALLER of it.** 🔴 **Do not build a second mechanism beside
+      R-048's swap** — `swapLiveSource` already argues this case for itself one level down.
+- [ ] 6.4 **Re-derive the fit PER ARRANGEMENT.** A 1-box arrangement changes each box's aspect, and
+      because `MIXER FILL` **survives a producer swap**, getting this wrong is a **wrong crop rather
+      than an obvious break** — the failure mode that does not announce itself.
+- [ ] 6.5 **The release policy for a plate with no cell in the target arrangement (§12.4):** HELD
+      muted and idle by default; a source kind that cannot be held falls back to teardown as a
+      **NAMED, observable** behaviour.
+      ⚠ **Punch and seat are separate mutations here** — a held plate stops punching (or §1's
+      crosstalk returns inside one template) while its producer stays seated on its band layer.
+- [ ] 6.6 **A test per inverse in §4's audit table** — plate set, mask, fit, layer allocation.
+
+---
+
+## 6. STAGE E — the operator surface (§12.8, as rewritten by D1)
+
+- [ ] 7.1 🔴 **ONE TOGGLE PER DECLARED SOURCE on the row, always visible.** Which toggles are lit
+      **is** what is on air; the COUNT is **derived**. Not a menu.
+      **Files:** `apps/runtime/src/renderer/features/layers/` — and see §12.8 for the two verb-grid
+      collisions this re-opens.
+      **Done when:** a row with N declared plates shows N toggles, and flipping one changes what is
+      on air through stage D's reconcile.
+      **Visual:** ⭐ **the primary visual check of the whole feature** — open the Runtime layer list
+      on a multi-box row.
+- [ ] 7.2 **Placement (ii): a second line on the row, outside the verb block.** It leaves
+      `VERB_COUNT = 6` (`apps/runtime/src/renderer/features/layers/layerTable.ts:75`) and the header
+      word alignment untouched — the invariant with the recorded on-air failure behind it.
+      ⚠ **Must survive density** (`gridTemplateColumns(density)`, `layerTable.ts:225`): a row with
+      eight declared plates has eight toggles at every density.
+- [ ] 7.3 **The derived-count resolution:** on any toggle change, resolve the count, activate that
+      count's **authored default arrangement**, and seat the lit sources into its cells in
+      **declared order**.
+- [ ] 7.4 **The non-default arrangement chooser** — an explicit secondary action, never in the way of
+      the common case.
+- [ ] 7.5 🔴 **THE REFUSAL FAMILY — ONE family, THREE triggers** (§12.9.1, §12.9.1a):
+      more toggles lit than the largest arrangement holds (**name the number lit and the largest
+      available**); a derived count with no authored arrangement (**name the count and the counts
+      authored**); and **ALL TOGGLES OFF**.
+      🔴 **All-off is an ordinary count:** the authored 0-cell arrangement if there is one, else the
+      same refusal. **It is NEVER an implicit STOP** — the row has a STOP verb, and a second implicit
+      route to off-air would be the quietest possible one.
+      **Done when:** one refusal function, three triggers, three tests.
+- [ ] 7.6 **D3's immediate-CUT escape** — one action, not a mode picker, designed **with** the toggle
+      set rather than after it (§13.6.1) because they share one surface and one collision.
+- [ ] 7.7 **The Inspector's on-air behaviour (§12.5, `B-146`):** surface only — the edit saves, the
+      surface says "takes effect at the next take" and **names the row's SOURCE swap as the live
+      path**.
+- [ ] 7.8 **Make an active `sourceOverride` VISIBLE outside the swap dialog** — today it appears in
+      exactly one place (`apps/runtime/src/renderer/features/layers/LiveSourceSwapDialog.tsx:80`), so
+      the Inspector confidently shows a source that is not on air. **Ships WITH 7.7 or the repair is
+      a half-repair.**
+
+---
+
+## 7. STAGE F — the CUT ships. STAGE G — the transition modes (§13.5)
+
+- [ ] 8.1 **KEEP the v1 `live-source-animated` refusal** and pin it with a test that a runtime
+      arrangement change does **NOT** trip it while an authored keyframe still does (§2b).
+- [ ] 8.2 **Implement the chosen curve on both sides (§12.2): `linear`.**
+      🔴 **Scope: PLATES only** (§13.2). Backgrounds, titles and any other page-only content take any
+      easing and any duration — they have no server counterpart and therefore no second clock.
+- [ ] 8.3 **A contract test computing the MAX DEVIATION** between the page's curve and the server's
+      tween, **in pixels on the target raster** — asserting the CLAIM, not the presence of a name.
+- [ ] 8.4 **Forbid a CSS transition on a PLATE that omits its timing function** — the default `ease`
+      measured **580–835 px** out (§9.2). ⚠ **Scope the guard to §13.2's boundary**: it must catch a
+      bare plate transition **without** forbidding a designed ease on a backdrop.
+- [ ] 8.5 **The MODE SET (§13.5):** cut / fade / move, with D2's per-arrangement mode and duration
+      and D3's operator cut escape.
+- [ ] 8.6 🔴 **FADE = fade the MASK'S LUMINANCE, not the producer's opacity** (§13.5a). Measured
+      **−3.4 %** frame cost, no `MIXER`, no second clock — so the fade sits on the FREE side of
+      §13.2's boundary and `linear` binds only **move**.
+      ⚠ **The mechanism is an `@property`-registered `<color>` feeding the mask gradient.** Animating
+      `mask-image` directly **does not interpolate** (§9.6h) — anyone who tries the obvious spelling
+      first will conclude the lead is dead.
+- [ ] 8.7 **MOVE = interpolated `clip-path`** (§13.4), verified on the plant's CEF at **−4 %**.
+      🔴 **A plate hidden in the target arrangement must contribute a DEGENERATE (zero-area) hole,
+      not NO hole**, so the point count is invariant and the browser can interpolate. That is also
+      exactly §12.4's "a hidden plate stops punching" — one rule serves both.
+      ⚠ It is a **SECOND mask mechanism** beside the measured `mask-mode: luminance`. **Do not
+      re-open the static choice on the strength of it.**
+- [ ] 8.8 **The BACKGROUND transition (§13.1, §13.2):** one shared background is the default and is
+      enough; a per-arrangement background is optional. ⚠ **Record the measured −10 % / 120 ms cost
+      beside the capability**, so an author finds out from the design and not from a stuttering
+      transition.
+- [ ] 8.9 ⚠ **§13.3 — CONDITIONAL:** if a per-arrangement background IS authored, **both** backdrops
+      carry the current mask through the crossfade, and the outgoing one's participation
+      **OUTLIVES** the fade. The existing per-element z-order rule already gives both of them holes;
+      what must be built is that the arrangement state distinguishes **LEAVING** from **HIDDEN**, or
+      4.1's resolved visibility strips the outgoing backdrop's holes mid-fade — the failure
+      introduced by the fix.
+- [ ] 8.10 **The text FIT rule (`B-147`)** — it must measure the **RENDERED box after shaping**,
+      never the string. `@cg/text-shaping`'s `truncate()` is code-unit based and is a length cap, not
+      a width fit, so a count-based rule works for Latin and fails for shaped Persian.
+
+---
+
+## 8. Still owed — MEASUREMENTS (not blocking any stage above)
+
+- [ ] 9.1 The **VISUAL seam of a cut**. §9.3 bounds it command-side at 0.20 frames; confirming what
       reaches SDI needs a channel-side capture, and `PRINT` writes to the plant's own disk.
-      ⟨READY — §12.3 decided⟩
-- [ ] 8.2 Whether a 1-box layout LETTERBOXES — the plant trace shows `FILL` ≡ `CLIP` for a 1280×536
-      `AMB.mkv`, i.e. crop-to-fill is not being applied. ⟨READY — §12.1 decided⟩
-- [ ] 8.3 🔴 Whether a hidden `<video>` keeps DECODING in CEF. Nothing in the tree pauses one — a
-      `visible` binding writes `style.display` and the video driver is lifecycle-driven — so under
-      candidate A every layout's background video may decode for as long as the row is up. §9.6f
-      shows the frame budget is already the tight resource. ⟨READY — §12.9 decided⟩
-- [ ] 8.4 The pixel confirmation that a `LOADBG` background producer is NOT composited. Not
-      measurable this session (no plant disk for `PRINT`; §9.6). ⚠ **It cannot change §12.9.6's
-      verdict on D** — D loses under both branches — so this is completeness, not a blocker.
-      ⟨READY — §12.1 decided⟩
-- [ ] 8.5 🔴 The CSS-path confirmation of §9.6h's luminance transfer: a **channel-side capture** of a
-      half-luminance mask over a real live plate. §9.6h read α ≈ grey ÷ 255 through an SVG-mask →
-      canvas **proxy** in the same engine, not through `mask-mode: luminance` compositing over SDI.
-      ⚠ Also pin α ≈ grey/255 with a test — it is an ENGINE property a CEF bump could change, not a
-      spec guarantee (SVG 1.1 specifies linearRGB, which would make 50 % grey ≈ 21 % open).
-      ⟨READY — §12.2 decided⟩
+- [ ] 9.2 Whether a **1-box arrangement LETTERBOXES** — the plant trace shows `FILL` ≡ `CLIP` for a
+      1280×536 `AMB.mkv`, i.e. crop-to-fill is not being applied.
+- [ ] 9.3 🔴 Whether a **hidden `<video>` keeps DECODING** in CEF. Nothing in the tree pauses one — a
+      `visible` binding writes `style.display` and the video driver is lifecycle-driven — so under A′
+      every arrangement's background video may decode for as long as the row is up. §9.6f shows the
+      frame budget is already the tight resource.
+- [ ] 9.4 The pixel confirmation that a **`LOADBG` background producer is NOT composited**. ⚠ It
+      **cannot change §12.9.6's verdict on D** — D loses under both branches — so this is
+      completeness, not a blocker.
+- [ ] 9.5 🔴 The **CSS-path confirmation of §9.6h's luminance transfer**: a channel-side capture of a
+      half-luminance mask over a real live plate. §9.6h read α ≈ grey ÷ 255 through an
+      SVG-mask → canvas **PROXY**, not through `mask-mode: luminance` compositing over SDI.
+      ⚠ **AND a pinning test for α ≈ grey/255** — it is an ENGINE property a CEF bump could change,
+      not a spec guarantee: SVG 1.1 specifies linearRGB, which would make 50 % grey ≈ 21 % open and
+      the fade visibly front-loaded.
+
+**Re-run any of these with the committed harness:**
+`node tools/caspar-amcp-probe/bin/arrangement-probes.mjs <probe>`.

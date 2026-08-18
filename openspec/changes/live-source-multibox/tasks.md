@@ -1229,7 +1229,7 @@ beforehand: 85/85, `0 cached`.
       (`s = 1`, `pad = (0,0)`) and the test would pass against a wrong implementation. Use
       `1440×1080` (already pinned page-side at `output-position.test.ts:162,169`) and `720×576`,
       which pads on the other axis.
-- [x] 6.3 ⭐ **DECIDED 2026-08-14 — ASSUME THE HOLE'S OWN ASPECT (no crop), and mark
+- [x] 6.2c ⭐ **DECIDED 2026-08-14 — ASSUME THE HOLE'S OWN ASPECT (no crop), and mark
       the result `assumed`. NOT a refusal.** `resolvePlateAspect`
       (`tools/caspar-bridge/src/live-plate-fit.ts`).
       🔴 **The argument that settled it comes from the CODE, not from taste, and is on
