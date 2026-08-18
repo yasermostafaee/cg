@@ -28,9 +28,9 @@ list builds it once.
 
 ## What this change is
 
-**RECON AND DESIGN ONLY. No behaviour changes and no product code.** The deliverable is an honest
-feasibility assessment against the real tree at `f6c7329`, plus a task list in which **every
-implementation task is gated on an owner question** (`⟨GATE: §x⟩`).
+**RECON AND DESIGN.** The deliverable is an honest feasibility assessment against the real tree, the
+plant measurements behind it, and — since every gate is now answered — **`tasks.md` as an ordered,
+executable plan** rather than a gate tracker. The measurement harness is committed with it.
 
 ## What the recon established
 
@@ -70,7 +70,7 @@ Documentation, plus the measurement harness (no product code):
 
 | Path                                            | Effect                                                       |
 | ----------------------------------------------- | ------------------------------------------------------------ |
-| `openspec/changes/multibox-layout-switch/`      | this change — proposal, design, tasks, one capability spec   |
+| `openspec/changes/multibox-layout-switch/`      | this change — proposal, design, tasks, TWO capability specs  |
 | `docs/handoff/2026-08-17-session-aq.md`         | the first session's handoff, opening with the SHA read       |
 | `docs/handoff/2026-08-18-session-ar.md`         | the second session's handoff (the gates + §12.9 + §13)       |
 | `docs/prd/runtime.md` · `designer.md`           | `R-057` and `D-152` — the two parent items                   |
@@ -79,15 +79,15 @@ Documentation, plus the measurement harness (no product code):
 
 ## Impact if it proceeds
 
-| Area                   | Effect                                                                                           |
-| ---------------------- | ------------------------------------------------------------------------------------------------ |
-| `@cg/shared-schema`    | resolved visibility + current geometry into `sceneMaskHoles`; per-layout geometry on the element |
-| `@cg/shared-ipc`       | per-layout rects on the `liveSources` declaration block                                          |
-| `@cg/template-runtime` | a re-punch pass after `update()` (UNIT B′)                                                       |
-| `tools/caspar-bridge`  | ONE `reconcileLivePlates`; `swapLiveSource` becomes a caller; per-layout fit                     |
-| `apps/runtime`         | the layout control; the Inspector refusal and override visibility                                |
-| `apps/designer`        | authoring per-layout geometry; the `live-source-animated` refusal is KEPT                        |
-| `@cg/vcg-format`       | `collectLiveSources` emits per-layout rects; no format change                                    |
+| Area                   | Effect                                                                                                                |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `@cg/shared-schema`    | resolved visibility + current geometry into `sceneMaskHoles`; per-layout geometry on the element                      |
+| `@cg/shared-ipc`       | per-layout rects on the `liveSources` declaration block                                                               |
+| `@cg/template-runtime` | a re-punch pass after `update()` (UNIT B′)                                                                            |
+| `tools/caspar-bridge`  | ONE `reconcileLivePlates`; `swapLiveSource` becomes a caller; per-layout fit                                          |
+| `apps/runtime`         | the per-source TOGGLES (D1) + the cut escape; the Inspector surfacing and override visibility                         |
+| `apps/designer`        | authoring ARRANGEMENTS + per-arrangement geometry, mode and the hide flag; the `live-source-animated` refusal is KEPT |
+| `@cg/vcg-format`       | `collectLiveSources` emits per-layout rects; no format change                                                         |
 
 ## Status — ✅ ALL EIGHT GATES ANSWERED (2026-08-18)
 
@@ -97,7 +97,7 @@ reasoning rather than deferred: the plate identity model (§0.5) and the v1 anim
 **Every owner gate in `design.md` §12 is now answered** — §12.1 (cut first), §12.2 (`linear` both
 sides, PLATES only), §12.4 (the dropped box is held), §12.5 (the Inspector is surface-only), §12.6
 (refuse two multi-box templates, one predicate called from two sites), §12.7 (the ledger survives a
-restart, filed separately), §12.8 (a segmented control on the row), and **§12.9 last: A′ ADOPTED**.
+restart, filed separately), §12.8 (an always-visible control on the row — ⚠ **its shape was later superseded by D1 below**), and **§12.9 last: A′ ADOPTED**.
 
 🔴 **§12.9 — A′.** A box is authored as a **nested composition**; an **arrangement** positions the box
 **instances**; per-arrangement geometry lives on the instance. Candidate B (a fixed computed
@@ -118,11 +118,27 @@ A′ is cheap because the punch was **verified, not assumed**: a plate inside a 
 punches correctly at any depth, because the flattener's instance path and the builder's
 `maskKeyPrefix` are composed from the same parts.
 
-**Also settled 2026-08-18:** a default arrangement per count with the operator's pick as ONE action;
-declared cell order in v1; legible refusals (never truncation) for "more sources than the largest
-arrangement holds" and "a count with no arrangement"; and **one shared background is enough** — the
-per-arrangement capability stays, but it carries a measured **−10 %** frame cost that the default
-path no longer pays.
+**Also settled 2026-08-18:** a default arrangement per count; declared cell order in v1; legible
+refusals (never truncation); and **one shared background is enough** — the per-arrangement capability
+stays, but it carries a measured **−10 %** frame cost that the default path no longer pays.
+
+## 🔴 Four later decisions (D1–D4) — one of them SUPERSEDES what landed at `056ffdd5`
+
+|           | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D1** 🔴 | **The operator's primitive is ONE TOGGLE PER DECLARED SOURCE, not a segmented control over counts.** Which toggles are lit **is** what is on air; the COUNT is **derived**. A control over counts cannot express _which_ two of four, and the owner's answer to "solo, or any combination?" was **any combination, any count**. ⚠ The segmented-control DESCRIPTION is withdrawn; the decision it implemented — always-visible, state-carrying, no menu — is not |
+| **D2**    | The transition mode and duration are **PER-ARRANGEMENT** — the arrangement being ENTERED. Per-template is **refused** (it cannot express the difference between arrangements); per-pair is **deferred, not refused**, because per-arrangement is a strict subset of it and no authored format breaks on the upgrade                                                                                                                                              |
+| **D3**    | The operator does **NOT** pick a mode per switch in v1. The author's per-arrangement mode runs; the operator's escape is an **immediate CUT — one action, not a mode picker.** A second new control on a row already re-opening the verb grid would compound a collision with a recorded on-air failure behind it                                                                                                                                                |
+| **D4**    | "Hide while the arrangement is changing" is a **PER-ELEMENT** flag. 🔴 It is a THIRD per-element visibility notion, so **resolved visibility must come from ONE function** and this flag is its third INPUT — never a fourth boolean read somewhere else                                                                                                                                                                                                         |
+
+🔴 **D1 introduces a state the count primitive could not reach — ALL TOGGLES OFF — and it is decided
+rather than left undefined.** Count 0 is an ordinary count: the authored 0-cell arrangement if there
+is one (background alone), else the same refusal as any other absent count. **It is never an implicit
+STOP** — the row already has a STOP verb, and a second implicit route to off-air would be the
+quietest possible one, reached by unlighting the last box under time pressure. The refusal family is
+still ONE family, now with three triggers.
+
+⇒ **`design.md` §13.6 and §13.7.2 now hold no open question**, and §12 has none either.
 
 **The transition modes are measured, not estimated.** Cut 0.20 frames; **move** −4 % via verified
 `clip-path` interpolation on the plant's CEF; **fade** −3.4 % via the owner's fade-the-mask's-
@@ -132,13 +148,23 @@ luminance lead, which leaves the `linear` rule's scope entirely because it has n
 
 Five PRD items were minted 2026-08-18, numbers confirmed by heading sweep before writing:
 
-| Item                             | Half                                                                       |
-| -------------------------------- | -------------------------------------------------------------------------- |
-| **`R-057`** (`runtime.md`)       | the OPERATOR half — the switch control, the one reconcile, the refusals    |
-| **`D-152`** (`designer.md`)      | the DESIGNER half — arrangements authoring, geometry, titles, the exporter |
-| **`B-145`** (`bugs-runtime.md`)  | the live-layer ledger surviving a restart — **must land before `R-057`**   |
-| **`B-146`** (`bugs-runtime.md`)  | the Inspector's silent no-op edit and its override-blindness               |
-| **`B-147`** (`bugs-designer.md`) | three spellings of "make the text fit", none implemented                   |
+| Item                             | Half                                                                                                               |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **`R-057`** (`runtime.md`)       | the OPERATOR half — the source toggles, the one reconcile, the refusals. Spec: `runtime-multibox-layout`           |
+| **`D-152`** (`designer.md`)      | the DESIGNER half — arrangements authoring, geometry, titles, the exporter. Spec: `designer-multibox-arrangements` |
+| **`B-145`** (`bugs-runtime.md`)  | the live-layer ledger surviving a restart — **must land before `R-057`**                                           |
+| **`B-146`** (`bugs-runtime.md`)  | the Inspector's silent no-op edit and its override-blindness                                                       |
+| **`B-147`** (`bugs-designer.md`) | three spellings of "make the text fit", none implemented                                                           |
 
 `R-057` and `D-152` are two items for one capability, on this repo's own `D-137`/`C-015` precedent,
 and each names the other.
+
+## Ordering — from `design.md`'s own statements
+
+`tasks.md` §1 carries the plan. The order is **`B-145` → exclusivity → UNIT B′ + the carrier → the
+reconcile → the operator surface → THE CUT SHIPS → the transition modes.**
+
+🔴 **Two corrections to the reading that follows section numbering**, both recorded in `tasks.md` §1:
+**exclusivity (§12.6) depends on nothing else** — §12.1 says §8's two doors _"are closed by §12.6's
+refusal, **not by this phasing**"_ — so it can land the day `B-145` does; and **UNIT B′ and the
+carrier are ONE stage**, because 2.1 needs no carrier while 2.2 cannot be written without it.
