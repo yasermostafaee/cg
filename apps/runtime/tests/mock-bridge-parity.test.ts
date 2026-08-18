@@ -160,7 +160,12 @@ const BRIDGE_SURFACE: {
     // mock with `null` (it retains no rendered page, so the rehearsal panel shows
     // its honest "unavailable in this browser" state).
     templates: ['get', 'list', 'import', 'remove', 'onChanged', 'html'],
-    audit: ['recent', 'health'],
+    // B-141 follow-up — `operatorName` / `setOperatorName` are the per-console
+    // operator name recorded as the audit `actor`. Browser-local in BOTH backends
+    // (same storage, same module), which is precisely why they belong here: the
+    // mock's own audit rows carry the same actor, so test mode is not the one place
+    // where the column disagrees with every other build.
+    audit: ['recent', 'health', 'operatorName', 'setOperatorName'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
     settings: ['get', 'set', 'onChanged'],
     /**

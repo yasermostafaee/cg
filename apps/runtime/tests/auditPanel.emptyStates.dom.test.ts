@@ -62,10 +62,22 @@ const HEALTHY: Health = {
 };
 
 function stubBridge(health: Health, entries: AuditEntry[] = []): void {
+  /*
+    B-141 follow-up — the per-console operator name is part of the audit surface the
+    panel reads on open, so the stub answers it too. A fixed empty name keeps these
+    tests about what they are about (the three empty states); the name's own
+    behaviour is covered end to end against a real bridge in
+    `tools/caspar-bridge/tests/audit-actor.integration.test.ts`.
+  */
+  let operatorName = '';
   const stub = {
     audit: {
       recent: () => Promise.resolve(entries),
       health: () => Promise.resolve(health),
+      operatorName: () => operatorName,
+      setOperatorName: (name: string) => {
+        operatorName = name;
+      },
     },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;

@@ -25,4 +25,16 @@ declare module '*test-concurrency.mjs' {
   export function resolveTestBound(cores: unknown, overrides?: TestBoundOverrides): TestBound;
   export function applyConcurrencyFlag(args: readonly string[], concurrency: number): string[];
   export function testWorkerEnv(forksPerTask: number): Record<string, string>;
+
+  // P-034 — the Playwright half of the same bound. Kept in this one declaration
+  // because it lives in that one module; a second .d.ts would be the second
+  // spelling this change exists to remove.
+  export function readConcurrencyFlag(args: readonly string[]): number | null;
+  export function defaultPlaywrightWorkers(cores: unknown): number;
+  export function resolveE2eWorkers(
+    cores: unknown,
+    taskConcurrency: unknown,
+    override?: unknown,
+  ): number;
+  export function e2eWorkerEnv(workersPerTask: number): Record<string, string>;
 }

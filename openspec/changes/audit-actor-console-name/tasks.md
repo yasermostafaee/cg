@@ -18,7 +18,7 @@
       so two browsers' requests interleave and a mutable "current actor" would be
       overwritten mid-flight. ALS is the primitive without that bug.
 - [x] 2.3 `bridge.ts` wraps its ONE dispatch site: `runAsActor(frame.actor, () =>
-  route.handle(...))`. Normalised on entry — the bridge does not trust the wire.
+route.handle(...))`. Normalised on entry — the bridge does not trust the wire.
 - [x] 2.4 `caspar-runtime.ts`: the `OPERATOR_ACTOR` constant is gone; all 7 `actor:` sites
       read `operatorActor()`. A signpost comment stays where the constant was, so the next
       reader finds where the answer moved.
@@ -66,7 +66,7 @@
       build whose writes never land). - a configured name reaches the NDJSON row; - an unconfigured console records `unattributed`, and explicitly not `operator`; - blank and empty strings are unattributed, not an actor naming nobody; - two consoles on one bridge are told apart.
 - [x] 6.2 🔴 RED-THEN-GREEN, proven rather than assumed: with the `runAsActor` wrap removed,
       **2 of the 5 fail** (`expected [ 'unattributed', 'unattributed' ] to include 'Gallery
-  2'`); restored, 5 pass. The three unattributed cases pass either way, correctly — they
+2'`); restored, 5 pass. The three unattributed cases pass either way, correctly — they
       are not what the wrap decides.
 - [x] 6.3 Ripple chased: `audit-append-sites.integration.test.ts` asserted
       `actor: 'operator'`. Those verbs are driven directly against the runtime with no

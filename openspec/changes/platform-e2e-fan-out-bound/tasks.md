@@ -28,7 +28,7 @@
 - [x] 2.1 `resolveE2eWorkers(cores, taskConcurrency, override)` in the EXISTING
       `tools/gate-hook/src/test-concurrency.mjs` — same module as the vitest half, sharing
       its `CORE_UTILISATION` budget. Invariant: `taskConcurrency * workersPerTask <=
-  workerBudget`, plus a ceiling at `defaultPlaywrightWorkers(cores)` so the bound can
+workerBudget`, plus a ceiling at `defaultPlaywrightWorkers(cores)` so the bound can
       only ever tighten.
 - [x] 2.2 `defaultPlaywrightWorkers(cores)` — Playwright's own 50%-of-CPUs default,
       reproduced as a CEILING rather than a knob.
@@ -40,7 +40,7 @@
 - [x] 2.5 **82 new unit tests** in `tools/gate-hook/tests/test-concurrency.test.ts`
       (80 → 162), including the invariant across 12 core counts, the never-widen property,
       the measured 12-core case, and the serialised-`gate:e2e` case. `pnpm --filter
-  @cg/gate-hook test` → **320 passed**.
+@cg/gate-hook test` → **320 passed**.
 
 ## 3. Wiring
 
@@ -58,7 +58,7 @@
 ## 4. Proof
 
 - [x] 4.1 AFTER, same host, same command: `gate bound (P-034): 12 cores -> 4 concurrent
-  tasks x 2 playwright workers = 8 max e2e workers`, then
+tasks x 2 playwright workers = 8 max e2e workers`, then
       `Running 268 tests using 2 workers` + `Running 81 tests using 2 workers`.
       **The cap crossed turbo's strict env filter** — that is what 3.4 was for.
 - [x] 4.2 **designer 268 passed, runtime 81 passed, 0 failed, 0 flaky.** Every test named
@@ -69,7 +69,7 @@
       The staleness guard was in force for both and refused neither.
 - [ ] 4.4 🔴 **A Linux CI `e2e` run for the commit that carries this change** — owed, and
       this is the first real test of the bound on CI. Record run URL + `N run / N passed /
-  N flaky` here.
+N flaky` here.
 
 ## 5. Not done, deliberately
 

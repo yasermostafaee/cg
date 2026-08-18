@@ -1,4 +1,4 @@
-import { normalizeActor, UNATTRIBUTED_ACTOR } from '@cg/shared-ipc';
+import { normalizeActor } from '@cg/shared-ipc';
 
 /**
  * B-141 follow-up — THIS CONSOLE's operator name, held in the browser.
@@ -55,9 +55,9 @@ export function getOperatorName(): string {
 /**
  * The value to put on the wire, normalised the way the bridge will normalise it again.
  *
- * Never an empty string: an unconfigured console records {@link UNATTRIBUTED_ACTOR},
- * which reads as the state it is instead of blending in with the rows that name
- * somebody.
+ * Never an empty string: an unconfigured console records `unattributed` (the shared
+ * `UNATTRIBUTED_ACTOR`, applied by `normalizeActor`), which reads as the state it is
+ * instead of blending in with the rows that name somebody.
  */
 export function operatorActorForWire(): string {
   return normalizeActor(read());
