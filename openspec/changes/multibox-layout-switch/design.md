@@ -11,10 +11,16 @@ Instrument, controls and raw numbers are in §9.
 **A convention used throughout.** Wherever this document asserts something **does not exist**, the
 assertion carries a `SEARCH:` line giving the command and result.
 
-**Status: RECON + DESIGN. §0 is the only settled section.** Every implementation task in `tasks.md`
-carries a `⟨GATE: §x⟩` naming the owner question that must be answered before it starts. Two things
-here are **this design's own decisions with their reasoning**, not owner gates: §0.5 (the plate
-identity model) and §2b (the v1 animation refusal).
+**Status: RECON + DESIGN. Still no product code.** §0 is settled, and **as of 2026-08-18 seven of the
+eight owner gates are ANSWERED** — §12.1, §12.2, §12.4, §12.5, §12.6, §12.7 and §12.8 are recorded in
+§12 as DECIDED with their reasoning, and the `⟨GATE: §x⟩` tasks that named them are unblocked in
+`tasks.md`. **§12.9 — how per-layout geometry and per-layout DESIGN are authored — remains open** and
+was WIDENED rather than settled. Two things here are **this design's own decisions with their
+reasoning**, not owner gates: §0.5 (the plate identity model) and §2b (the v1 animation refusal).
+
+⚠ **Anchor drift.** The `file:line` anchors above were read at `f6c7329`. Anything re-cited on
+2026-08-18 was re-read at `fc663dc` and any drift is called out **at the citation** — the claim is
+re-verified, not the line number trusted.
 
 ---
 
@@ -619,73 +625,284 @@ Also `live-source-multibox` `tasks.md` has **two items numbered 6.3**.
 
 ---
 
-## 12. 🔴 OWNER GATES — nothing is implemented until these are answered
+## 12. 🔴 OWNER GATES — SEVEN OF EIGHT ARE ANSWERED (owner, 2026-08-18)
 
-### §12.1 — Ship the cut first, or hold for the animated switch?
+**Status.** The owner answered **§12.1, §12.2, §12.4, §12.5, §12.6, §12.7 and §12.8** on 2026-08-18.
+Each is recorded below as **the decision, the owner's own reasoning, and what it unblocks or costs**.
+§12.3 was already withdrawn (measured). **§12.9 is the one gate still open** — the owner's answer did
+not settle it, it **widened** it: a candidate was withdrawn and a new one added. §12.9 is rewritten
+below with the real candidate set.
 
-| Candidate                           | Cost                                                                                                                                                     |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A — cut first, animation second** | Client gets exclusivity + assignment survival early. Under §0.5 both phases share the carrier and the mask work, so the second phase adds only the tween |
-| **B — one release, animated**       | No intermediate behaviour. Everything in §2.3 lands at once, including §9.2's curve contract                                                             |
+**The candidate tables are KEPT under each decision.** They are the record of what was weighed, and a
+decision whose alternatives have been deleted cannot be re-read later to check whether it still
+holds.
 
-Recommendation, not a decision: **A** — "optional and changeable" implies the cut must exist as a
-first-class option anyway, and §2.4 shows the phases are not far apart.
+**A decision is not an implementation.** Answering a gate unblocks the `⟨GATE: §x⟩` tasks that named
+it; it does not make them done, and nothing below has been implemented.
 
-### §12.2 — The transition curve
+### §12.1 — Ship the cut first, or hold for the animated switch? — ✅ **DECIDED: A, cut first**
+
+> **DECISION (owner, 2026-08-18): CUT FIRST, ANIMATION SECOND.**
+> The cut must exist as a first-class option anyway; both phases share the carrier and the mask
+> work; shipping the cut kills both measured crosstalk symptoms sooner.
+
+| Candidate                              | Cost                                                                                                                                                     |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ⭐ **A — cut first, animation second** | Client gets exclusivity + assignment survival early. Under §0.5 both phases share the carrier and the mask work, so the second phase adds only the tween |
+| **B — one release, animated**          | No intermediate behaviour. Everything in §2.3 lands at once, including §9.2's curve contract                                                             |
+
+**Why it is the right call against this design's own evidence, not just the cheaper one.** §2.4 says
+the two phases are closer than they look **because the expensive halves are shared**: under §0.5 even
+a cut moves plates, so phase one must already build the per-layout geometry carrier (§7) and the mask
+recompute (UNIT B′, §6b). Phase two then adds _only_ the tween and its curve contract. So "cut first"
+does not defer the hard work — it defers the **only** part that is genuinely additive, and it does so
+without building anything phase two throws away. That is the opposite of §0.2's rejected shape, where
+Family 2 would have delivered the cut and then required Family 1 anyway.
+
+⚠ **What it does NOT defer.** The two measured crosstalk symptoms (§1) are closed by **exclusivity**,
+which is phase one's, so the client's reported defect is fixed by the cut. But §8's two doors —
+`take()` and `restore()` seating a _second_ multi-box template — are a different reachability and are
+closed by §12.6's refusal, not by this phasing.
+
+**Unblocks:** `tasks.md` 1.10, 2.1, 2.3, 2.4, 4.1, 4.2, 4.3, 4.4, 4.6, 7.4, 8.2.
+
+### §12.2 — The transition curve — ✅ **DECIDED: A, `linear` on both sides**
+
+> **DECISION (owner, 2026-08-18): `linear` ON BOTH SIDES** — the only provable option (**0.0 px**).
+> A pinned cubic-bezier table is both a 4–10 px separation **and a second spelling of one rule**.
+> ⚠ **A CSS transition that omits its timing function must be forbidden by lint or test** — the
+> default `ease` measured **580–835 px** out.
 
 | Candidate                                                        | Cost                                                                                             |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| **A — `linear` on both sides**                                   | **0.0 px separation, provable.** Costs polish: a linear move looks mechanical                    |
+| ⭐ **A — `linear` on both sides**                                | **0.0 px separation, provable.** Costs polish: a linear move looks mechanical                    |
 | **B — a pinned `cubic-bezier` per tween, with a deviation test** | ~4–10 px worst case for sine/quad. Costs a contract test and a fragile table                     |
 | **C — plates FADE rather than travel**                           | Sidesteps hole/fill agreement entirely (opacity needs no `FILL` tween). Costs the rearrange look |
 
-⚠ Whichever is chosen, a CSS transition that **omits** its timing function must be forbidden by lint
-or test: the default `ease` is 580–835 px out.
+**Why B is refused on a second ground, and it is this repo's own.** B's cost is not only the ~4–10 px
+residual — it is that the curve would then be **written twice**, once as a CSS `cubic-bezier(…)` and
+once as a CasparCG Penner name, with a contract test standing between them to notice when they
+disagree. `CLAUDE.md` golden rule 6 and the `B-100`/`P-012` history name that shape exactly: two
+spellings of one rule is how the rule comes to lie. A test that _detects_ the drift is strictly worse
+than a design in which the drift is unrepresentable, and **`linear` is the one name where both
+vocabularies denote the same function** (§9.2: the vocabularies are otherwise **disjoint** — CasparCG
+has no CSS name and CSS has no Penner name).
+
+🔴 **The omitted-timing-function guard is not a nicety, and it is the reason to write it as a
+mechanism rather than a convention.** §9.2 measured the CSS default `ease` at **580–835 px** from
+every CasparCG tween — over a third of the frame width — and `transition: left 2s` is exactly what a
+developer writes by accident. The rule must be enforced by lint or test (`tasks.md` 7.3) because the
+failure is invisible in the Designer, where there is no server tween to disagree with.
+
+**Unblocks:** `tasks.md` 7.1, 7.2, 7.3.
 
 ### §12.3 — Withdrawn (measured)
 
 The cut's cost to the live sources is measured: **0.20 frames** (§9.3). What remains is the visual
-confirmation, which is `tasks.md` 9.1 rather than a gate.
+confirmation, which is `tasks.md` 8.1 rather than a gate.
 
-### §12.4 — 🔴 What happens to a source with no box in the target layout
+### §12.4 — What happens to a source with no box in the target layout — ✅ **DECIDED: B, held**
 
-| Candidate                                                | Cost                                                          |
-| -------------------------------------------------------- | ------------------------------------------------------------- |
-| **A — torn down**                                        | Frees a band layer immediately; switching back pays a re-seat |
-| **B — held muted and idle so switching back is instant** | Costs a band layer for as long as the row is up               |
+> **DECISION (owner, 2026-08-18): HELD MUTED AND IDLE**, so switching back is instant; the band is
+> **50 layers** so one or two extra is cheap.
+> ⚠ **A source kind that cannot be held open falls back to teardown as a NAMED behaviour, never a
+> surprise.**
 
-🔴 **Carries the hardware question:** if the id maps to a **physical DeckLink**, can it be held open
-for a hidden layout at all? The answer may be per-source-kind rather than global.
+| Candidate                                                   | Cost                                                          |
+| ----------------------------------------------------------- | ------------------------------------------------------------- |
+| **A — torn down**                                           | Frees a band layer immediately; switching back pays a re-seat |
+| ⭐ **B — held muted and idle so switching back is instant** | Costs a band layer for as long as the row is up               |
 
-### §12.5 — The Inspector's assignment edit while a row is on air ⟨MINT⟩
+**The band arithmetic checks out.** `SUGGESTED_LIVE_SOURCE_LAYER_RANGE` is `{ start: 10, end: 59 }`
+(`packages/shared-ipc/src/channels/sources.ts:295`) — 50 layers inclusive. A 3-box template holding
+its dropped plate while a 1-box layout is live occupies 3 of 50.
+
+🔴 **How this answers the hardware question rather than dodging it.** The gate carried "if the id maps
+to a physical DeckLink, can it be held open for a hidden layout at all?" The decision does not assume
+it can. It fixes the **default** (hold) and **names the exception** (teardown), which converts an
+unmeasured hardware fact from a _blocking_ gate into an _implementation input_: the code must ask
+"can this source kind be held?" and take the named fallback when the answer is no. Two things follow
+and both belong in `tasks.md` 4.5:
+
+1. **The fallback must be NAMED, i.e. observable.** A plate that was torn down rather than held is a
+   plate whose switch-back is not instant; the operator must be able to see that this is what
+   happened, or the inconsistency reads as a bug in the switch.
+2. **"Held muted" is already this product's default posture, not a new one.** Every live plate is
+   created SILENT — the audio rule creates every producer muted
+   (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:669-676`, the AUDIO verb's own
+   comment) — so "muted and idle" is the state a seated-but-unraised plate is already in. What is new
+   is only that it is **not visible** while held.
+
+⚠ **Held is NOT declared, and this is where §12.4 meets UNIT B′.** `tasks.md` 2.5 asks whether a
+hidden plate is still declared to the bridge. The two halves must not be conflated: the plate stops
+**punching** (§0.5 — a hidden plate must stop punching, or a hole opens onto the stack below and
+§1's crosstalk returns _inside one template_), while its **producer** stays seated on its band layer.
+Punch and seat are separate mutations of the same plate, and this decision separates them.
+
+**Unblocks:** `tasks.md` 1.3, 2.5, 4.5.
+
+### §12.5 — The Inspector's assignment edit while a row is on air — ✅ **DECIDED: C, surface only** ⟨MINT⟩
+
+> **DECISION (owner, 2026-08-18): SURFACE ONLY.** The edit saves; the surface says **"takes effect at
+> the next take"** and **names the live path — the row's SOURCE swap**. Refusing or confirming is
+> friction without capability, since **neither can re-issue**. Decided together with §5's
+> override-blindness, as the gate required.
 
 | Candidate                                                                     | Cost                                                                             |
 | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | **A — refuse while any row carrying it is on air**                            | Safest. Costs the operator a second control for a thing they thought was one     |
 | **B — allow with explicit confirmation** naming how many live rows it affects | Keeps one control. Costs a dialog on a config edit, and it still cannot re-issue |
-| **C — surface only** ("takes effect at the next take")                        | Cheapest and honest. Leaves the operator to do the right thing                   |
+| ⭐ **C — surface only** ("takes effect at the next take")                     | Cheapest and honest. Leaves the operator to do the right thing                   |
 
-Must be decided together with §5's override-blindness — both are "the Inspector is showing you
-something that is not on air".
+**The reasoning is sharper than "cheapest", and it is worth writing down.** A refusal (A) and a
+confirmation (B) both spend the operator's attention at the moment of the edit, and **neither buys
+any capability**: `setSourceAssignments` is not `async` and is
+structurally incapable of sending an AMCP command (`tools/caspar-bridge/src/caspar-runtime.ts:5219-5229`
+at `fc663dc` — re-read for this commit; §5 cites `:4776-4785`, which is where it sat at `f6c7329`.
+**The anchor drifted; the claim did not** — the method is still synchronous and still returns without
+sending), so after the dialog is dismissed the outcome is
+identical in all three candidates — the assignment is saved and nothing on air moved. What the
+operator actually lacks is **knowing that**, and **knowing where the live control is**. C spends
+nothing and supplies both.
 
-### §12.6 — Should two multi-box templates on air together be REFUSED?
+🔴 **What C must NOT become.** §5's verdict was that _"a control that silently does nothing is the
+worst of the three outcomes, and it is what ships today"_. C is only a decision, not a description of
+today: today's Inspector says nothing. C is C **only if the surface is built** — the "next take"
+statement and the named live path are the entire content of the decision, and without them C is the
+shipped defect with a name.
 
-| Candidate                                   | Cost                                                                                                    |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **A — refuse, in `take()` AND `restore()`** | Closes the crosstalk class. Costs a refusal on a legitimate-looking action, two sites for one predicate |
-| **B — do not refuse**                       | Costs leaving a measured on-air failure mode reachable                                                  |
+**And it lands with §5's second defect, by the gate's own instruction.** `sourceOverride` appears in
+exactly one place in the whole renderer — `features/layers/LiveSourceSwapDialog.tsx:80` — so an
+active override is invisible everywhere else and the Inspector confidently shows a source that is not
+on air. Telling the operator "this takes effect at the next take" while _also_ showing them the wrong
+current source would be a half-repair. `tasks.md` 6.2 and 6.3 are ONE surface change.
 
-### §12.7 — The un-persisted live-layer ledger
+⟨MINT⟩ **The bug item for both halves is still unminted** — `tasks.md` 1.9. This session reports the
+next free number (see §12.7) and mints nothing.
 
-`#liveLayers` is process memory with no release on disconnect or bridge restart, so a restart strands
-seated producers unreachable by any code path. **Pre-existing.** The gate is whether this work must
-fix it, given it will make the ledger busier.
+**Unblocks:** `tasks.md` 1.9, 6.2, 6.3.
 
-### §12.8 — Where the switch control lives, and how many actions
+### §12.6 — Should two multi-box templates on air together be REFUSED? — ✅ **DECIDED: A, refuse**
 
-§10 gives the wall and the precedent. May a live layout switch sit behind the same menu as
-SOURCE/AUDIO, or does it earn a place in the closed six-column verb block — which means re-opening
-that grid?
+> **DECISION (owner, 2026-08-18): REFUSE**, in **`take()` AND `restore()`**, through **ONE predicate
+> called from both** — two spellings of one rule is this project's most frequent failure.
+
+| Candidate                                      | Cost                                                                                                    |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| ⭐ **A — refuse, in `take()` AND `restore()`** | Closes the crosstalk class. Costs a refusal on a legitimate-looking action, two sites for one predicate |
+| **B — do not refuse**                          | Costs leaving a measured on-air failure mode reachable                                                  |
+
+**The decision names the mechanism, not only the outcome, and that half is load-bearing.** §8
+established that `restore()` **never passes through `take()`** — `#decidePendingRestores` adopts every
+retained on-air item with no cap and never re-registers their plates — so the refusal has two sites by
+necessity. `CLAUDE.md` golden rule 6 is written about exactly this: the second site must **call** the
+one predicate, never re-derive the condition locally, because _"a second local copy is how a name
+comes to lie about what it tests"_. The predicate's name must state the condition it tests.
+
+⚠ **The predicate is not `hasLivePlates`.** `deps.hasLivePlates`
+(`apps/runtime/src/renderer/features/layers/layerRowActions.ts:655`) is a _renderer_ fact about one
+row's template declaring plates; the refusal is a _bridge_ fact about the on-air set — "is another
+item carrying a multi-box template already on air on this channel?". §8 offers `hasLivePlates` as the
+tree's nearest existing shape, not as the predicate. Reusing the name for a different condition is
+the failure golden rule 6 forbids.
+
+**Unblocks:** `tasks.md` 5.2.
+
+### §12.7 — The un-persisted live-layer ledger — ✅ **DECIDED: it must survive a restart; filed SEPARATELY**
+
+> **DECISION (owner, 2026-08-18): THE LEDGER MUST SURVIVE A BRIDGE RESTART.** After a restart the
+> seated layers still appear in the list and are controllable, **by whatever mechanism is needed** —
+> persisting the ledger, or reconciling against the server's `INFO` at boot.
+> ⚠ **Filed as a SEPARATE item that must land BEFORE the switch ships.** It is not part of the
+> switch's design, but the switch makes the ledger churn constantly.
+
+**Why "separate but before" is the right shape and not a fudge.** `#liveLayers` is process memory
+with release on `stopItem` / `out` / `remove` **and on no other path** — not on disconnect, not on
+restart (§4's inverse audit, `tasks.md` 0.3). That is **pre-existing** and is not caused by this
+feature, so folding it into the switch would misattribute it and make the switch's own diff harder to
+read. But the switch **seats and releases plates continuously** rather than once per take, so it
+multiplies the ledger's write rate — and a stranded producer under this feature is a _live face on
+air that no code path can reach_, which is a different severity from the same bug today.
+
+**The two named mechanisms are not equivalent, and the item should say so.** Persisting the ledger
+records what _we believe_; reconciling against `INFO` at boot reads what _the server actually has_.
+Only the second is self-correcting when the two disagree — and they will, because a producer can also
+disappear from the server's side (a channel reset, a hand-issued `CLEAR`) with our persisted ledger
+none the wiser. This design's own §12.6 predicate is a second consumer of the same truth: it must
+know what is on air after a restore. **Recommendation, for the item to weigh rather than a decision
+taken here: reconcile against `INFO`, and persist only if `INFO` proves insufficient to re-derive the
+plate↔layer mapping.**
+
+🔴 **THE NUMBER — reported, NOT minted.** Derived immediately before this commit, by
+`docs/prd/b-number-registry.md`'s only supported method (the local sweep **and** the all-refs widening
+sweep; `git stash list` is empty; the duplicate audit prints exactly `B-056` and `B-080` as it must):
+
+| Prefix | Highest claimed (local **and** across every ref) | **Next free** |
+| ------ | ------------------------------------------------ | ------------- |
+| `B-`   | 144                                              | **`B-145`**   |
+| `C-`   | 024                                              | `C-025`       |
+| `D-`   | 151                                              | `D-152`       |
+| `P-`   | 036                                              | `P-037`       |
+| `R-`   | 056                                              | `R-057`       |
+
+⇒ **Recommended: `B-145`, filed in `docs/prd/bugs-runtime.md`.** It is a defect in shipped behaviour
+— a restart strands seated producers unreachable by any code path — not a new capability, and
+`bugs-runtime.md` is where the bridge's defects live (`B-144` is its immediate neighbour and is the
+same shape: a graphic on air that the row can no longer reach). If the owner reads it instead as new
+machinery rather than a defect, the runtime space's next free is **`R-057`**. **Nothing is minted in
+this change.**
+
+**Unblocks:** `tasks.md` 1.6, and adds 1.11 (file the item) and 4.7 (the switch must not ship before
+it lands).
+
+### §12.8 — Where the switch control lives, and how many actions — ✅ **DECIDED: a segmented control on the row**
+
+> **DECISION (owner, 2026-08-18): AN ALWAYS-VISIBLE SEGMENTED CONTROL ON THE ROW**, showing which
+> layout is live. **A menu is disqualified** — the client's requirement is _"exactly one active so
+> the operator cannot make a mistake"_, and **a menu hides the current state**.
+
+**The reasoning is a direct consequence of §0.1 and it overturns §10's inherited default.** §10
+proposed the SOURCE/AUDIO menu as "the precedent and the obvious host". The client's requirement is
+not _reachability_, it is _unambiguity_: the operator must not be able to make a mistake, and a
+control that must be opened to reveal which layout is live gives the operator no way to be sure
+without opening it. A segmented control **is the state readout and the switch in one object**.
+
+🔴 **THE COST, STATED PLAINLY: this re-opens the closed six-column verb grid, and it collides with it
+twice — not once.** §10 recorded the grid as a wall; the decision goes through it, so the design must
+say what breaks.
+
+1. **The SHAPE rule.** _"Every row declares the same verbs in the same order, always"_
+   (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:407-409`) is why conditionally-
+   present controls were pushed to `surface: 'menu'` in the first place — SOURCE and AUDIO are both
+   `...(deps.hasLivePlates ? [act(…, 'menu')] : [])` (`:655-688`). A control present only on
+   multi-box rows is exactly the shape that rule refuses.
+2. 🔴 **The FIXED-WIDTH rule, which is the sharper collision and is NOT the same objection.** The
+   whole column model is fixed px — _"Every column here is a FIXED px width (or the single flexible
+   `1fr` that absorbs the slack), so a longer alias, a longer template name or a longer state word
+   changes nothing but its own ellipsis"_ (`layerTable.ts:1-22`), with
+   `VERB_COUNT = 6` (`:75`) driving **both** the header's word row and the row's button row from one
+   `gridTemplateColumns(density)` call (`:225`, used at `LayerRow.tsx:605` and
+   `LayerTableHeader.tsx:164`). A segmented control has **one segment per authored layout**, and the
+   layout count is authored per template — so its width varies by row _and is unknown at design
+   time_. That is not a seventh fixed column; it is a variable-width control in a model built to
+   forbid exactly that. And `VERB_COUNT`'s own comment records what happened last time a button was
+   added without updating it: the sixth button wrapped and **every header word from NEXT rightward
+   sat above the wrong glyph** — in a product where STOP and CLEAR are inverted relative to the
+   reference product.
+
+⇒ **The gate is answered; the placement is now an implementation question with three shapes**, posed
+here and not decided: **(i)** a seventh verb column (refused by both rules above as written);
+**(ii)** the segmented control on a **second line of the row**, outside the verb grid, present only
+on multi-box rows — the shape rule governs the verb block, and a second line is not in it;
+**(iii)** a dedicated region outside the table entirely. **(ii) is the one to design first**: it
+satisfies the decision (always visible, state-carrying), and it leaves `VERB_COUNT` and the header
+word alignment untouched, which is the invariant with the recorded on-air failure behind it.
+
+⚠ **And it must survive density.** `gridTemplateColumns(density)` exists because the table is
+density-adaptive; a control whose segment count is authored must have a defined behaviour at the
+tightest density, or it will be the thing that reintroduces wrapping.
+
+**Unblocks:** `tasks.md` 6.1.
 
 ### §12.9 — 🔴 How is per-layout geometry AUTHORED?
 
