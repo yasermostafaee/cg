@@ -1078,3 +1078,74 @@ completely different things: R-049 needs no frame grabs, no consumer-less channe
 it reads the assignment the Runtime already holds — while this item needs all three. A thumbnail that
 does not say which plate it belongs to, and a plate label that does not say whether the feed arrived,
 are each half an answer.
+
+## [ ] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS
+
+**What:** the template HTTP server's advertised host must be resolvable from CONFIGURATION, with a
+documented default — so that no machine-specific address appears in the source and the owner no
+longer needs an uncommitted local edit to test against the plant.
+
+**Why:** `guessLanHost()` (`tools/caspar-bridge/src/template-http-server.ts`) picks the first
+non-internal IPv4 it finds, and on the owner's machine that is not the interface the plant can reach.
+The working fix has therefore been an uncommitted early `return '192.168.21.93';` at the top of the
+function. **It must not survive to a release: every install would advertise ONE machine's address,
+so the `CG ADD` URL would be wrong everywhere except that box** — and the failure is a template that
+never loads, on air, with CasparCG reporting nothing wrong.
+
+🔴 **It has already cost two incidents IN ONE DAY (2026-08-17), and they are different failures:**
+
+1. **It blocked a push** — `pnpm gate`'s `format:check` failed on a file the session had not
+   touched, so a green gate could not be reported at all (recorded in
+   `docs/handoff/2026-08-17-session-aq.md`, "The gate").
+2. **It reached `dev`** — a `git add tools/caspar-bridge`, staging a DIRECTORY to pick up bridge
+   work, swept the hack along with it. `dev` briefly carried the hardcoded IP; caught in
+   post-push verification and corrected in `56c0799f`, at the cost of a second push on a day the
+   owner was near their CI minute limit.
+
+⚠ **[[P-035]] is a NET, not the cure — and the distinction is the whole reason this item exists.**
+The never-stage guard stops the hack REACHING `dev`; it does nothing about the hack having to exist.
+Every day the seam is missing is another day of an uncommitted edit in a permanently-dirty checkout,
+which is a hazard P-035 can only ever catch, never remove. **P-035's own notes say this in as many
+words and flag that the refactor has no ID** — this item is that ID, and the cross-reference runs
+both ways.
+
+**The seam ALREADY EXISTS in the library, and that is why this is small:**
+`deriveServeOptions(casparHost, override)` already honours `override.serveHost`
+(`template-http-server.ts`), and `BridgeOptions.templateServe` already carries a
+`TemplateServeOverride`. **What is missing is a CLI flag that sets it** — `bin/caspar-bridge.mjs`
+passes no `templateServe` at all, so the ONLY way to change the advertised host today is to edit the
+source. The hack is not a workaround for a hard problem; it is a workaround for an unwired flag.
+
+**Acceptance:**
+
+- WHEN the bridge starts THEN the advertised host is resolved from CONFIGURATION — a CLI flag, with
+  the same explicit-flag > persisted-file > derived-default precedence every other bridge store uses
+- WHEN no configuration is supplied THEN the DOCUMENTED default applies (today's derivation:
+  loopback for a local CasparCG, an auto-detected LAN IPv4 for a remote one) and the boot line SAYS
+  which host it is advertising and WHERE that came from — the same provenance rule the fixed bank
+  and the source catalog already follow, because a value alone cannot answer "why this one?"
+- WHEN the source is searched for a machine-specific address THEN there is none
+- WHEN the owner tests against the plant THEN no uncommitted edit is required, and
+  `.claude/never-stage` can drop its `template-http-server.ts` entry
+- WHEN the advertised host is wrong for the plant THEN the failure is DIAGNOSABLE from the bridge's
+  own output rather than from a template that silently never loads
+
+**Notes:**
+
+- ⚠ **Do NOT resolve this by "improving" `guessLanHost()`'s heuristic.** A better guess is still a
+  guess, and the failure it produces — a served URL the plant cannot fetch — is silent on the
+  CasparCG side. The point of the item is that the operator can SAY the answer; the derivation stays
+  as the default for the ordinary case.
+- **Where the flag's shape comes from:** `--audit-log-path`, `--source-assignments-path` and
+  `--reserved-layers` are the precedent. This item follows it rather than inventing a convention.
+- 🔴 **The prompt that filed this pointed at `cg_session_handoff.md` for existing design work; NO
+  file of that name exists in the repo** (searched at the repo root, the parent directory and across
+  the tracked tree). The design context that DOES exist is
+  `docs/handoff/2026-08-17-session-aq.md` (the hack's effect on the gate) and [[P-035]]'s notes
+  (its two incidents, and the "net, not cure" framing). Recorded rather than quietly substituted, in
+  case the owner is holding a file the repo has never seen.
+- **FILED ONLY — no implementation.** The number was verified free by a heading sweep immediately
+  before this heading was written (highest `C-` heading was `C-023`; `git grep -n "C-024"` returned
+  no occurrence anywhere in the tree).
+- **Cross-refs:** [[P-035]] (the net this is the cure for), [[B-038]] (the template HTTP server this
+  advertises for), [[C-001]] (the bridge whose probe `guessLanHost()` mirrors).

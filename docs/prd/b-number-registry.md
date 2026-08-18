@@ -923,7 +923,21 @@ contiguous `P-001` … `P-036`, **no gaps. Next free: `P-037`.**
 
 The owner supplied both numbers and the sweep agreed, so nothing was minted here.
 
-⚠ **One item is KNOWN MISSING and needs a number the owner must mint:** the **bridge advertise-host
-refactor**, which is the CURE for the hack `P-035` merely nets. SEARCH:
-`grep -rniE "advertise.?host|LAN host|guessLanHost|serve-host" docs/prd/` → **no hits**. It is
-referenced by `P-035` but has no ID of its own.
+⚠ **One item was KNOWN MISSING and needed a number the owner must mint:** the **bridge
+advertise-host refactor**, which is the CURE for the hack `P-035` merely nets. SEARCH:
+`grep -rniE "advertise.?host|LAN host|guessLanHost|serve-host" docs/prd/` → **no hits**. It was
+referenced by `P-035` but had no ID of its own. ✅ **CLOSED — the owner supplied `C-024`; see the
+next section.**
+
+## 2026-08-18 — the advertise-host refactor gets its number (`C-024`)
+
+| Prefix | Claimed | Item                                                                              | File                   |
+| ------ | ------- | --------------------------------------------------------------------------------- | ---------------------- |
+| `C-`   | `C-024` | the bridge advertises a HARDCODED LAN address; only a hack makes testing possible | [caspar.md](caspar.md) |
+
+**Verified free by the heading sweep immediately before the heading was written.** Highest `C-`
+heading was `C-023`; `git grep -n "C-024"` returned **no occurrence anywhere in the tree**, not even
+a forward reference. The space stays contiguous `C-001` … `C-024`, **no gaps. Next free: `C-025`.**
+
+The owner supplied the number and the sweep agreed, so nothing was minted here. It closes the KNOWN
+MISSING note above, which is the whole reason that note existed.

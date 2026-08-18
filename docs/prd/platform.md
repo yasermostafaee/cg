@@ -1964,8 +1964,10 @@ pre-push decision, the message-region lint).
 - 🔴 **THIS IS A NET, NOT A CURE.** The cure is the **bridge advertise-host refactor** — the hack
   exists only because `guessLanHost()` cannot be told what to advertise. That hack cost **two
   incidents in one day**: it blocked a push by failing `format:check`, and then it leaked to `dev`.
-  ⚠ **That refactor is NOT a filed item.** SEARCH: `grep -rniE "advertise.?host|LAN host|guessLanHost|serve-host" docs/prd/`
-  → no hits. **It needs a number and I do not mint one** — flagged for the owner.
+  ✅ **The refactor is now filed as [[C-024]]** (2026-08-18, owner-supplied number). This guard stops
+  the hack reaching `dev`; C-024 removes the need for the hack to exist, and until it lands every
+  day is another day of an uncommitted edit in a permanently-dirty checkout — a hazard this guard can
+  only ever catch, never remove.
 - **Cross-refs:** `P-009` (the Stop-hook gate, the same "enforce rather than remember" shape),
   `P-013` (the host gate lock).
 
