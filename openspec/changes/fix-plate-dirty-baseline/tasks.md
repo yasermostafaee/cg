@@ -76,5 +76,12 @@
 - [x] 5.2 Full green gate — GREEN: 85/85 tasks, `0 cached, 85 total`, prettier clean, openspec
       54/54.
 - [x] 5.3 PRD item `[~]` with this change dir.
-- [ ] 5.4 This changes what the row renders, so it is classified as owing a Linux `e2e`.
-      **Linux `e2e` still owed — NO RUN URL. Not pushed: the push was HELD on 2026-08-17 by owner decision, to spend one CI run on the complete four-item set rather than two runs on halves.** Local Windows runs are non-authoritative and discharge nothing: for the record they were green (full `pnpm gate` 85/85 `0 cached`; runtime E2E 78/78). A ticked box with no run URL is a claim, not a discharge.
+- [x] 5.4 This changes what the row renders, so it is classified as owing a Linux `e2e`.
+      **Linux `e2e` DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/32054398518, commit `56c0799f`, `conclusion: success`, and the **`E2E (Playwright)` job RAN** (`conclusion: success`, not skipped — P-029). Runtime **81 passed**, Designer **267 passed, 1 flaky**.
+      `56c0799f` is the batch tip and a descendant of every commit in it, and the `e2e` job is
+      whole-tree (`pnpm test:e2e`, no filter), so a green run there verifies the tree that carries
+      this change.
+      ⚠ The one flaky is `apps/designer/tests/e2e/video-import.spec.ts:291` — "a premultiplied-alpha
+      source imports WITHOUT the black fringe (D-128 un-premultiply)" — which failed on its first
+      attempt and passed on retry. It is unrelated to this change and is recorded as the SECOND
+      occurrence under [[P-034]].

@@ -1870,12 +1870,42 @@ second occurrence legible.
 - WHEN a second occurrence IS recorded THEN the failing test is captured by NAME, with the run's
   output retained, so the third conversation is about a fix and not about what failed
 
+## 🔴 SECOND OCCURRENCE — 2026-08-17, on CI, and this one IS named
+
+The item's own purpose, discharged: a second Designer E2E flake, captured with the detail the first
+one lacked.
+
+|           | first (2026-08-17, local Windows)          | **second (2026-08-17, CI Linux)**                                                                                                             |
+| --------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| run       | `pnpm gate:e2e`, no URL                    | <https://github.com/yasermostafaee/cg/actions/runs/32054398518>                                                                               |
+| commit    | —                                          | `56c0799f`                                                                                                                                    |
+| counts    | 268 → 267/1 fail → 268                     | 268 run, **267 passed, 1 flaky**                                                                                                              |
+| test      | **not captured**                           | `apps/designer/tests/e2e/video-import.spec.ts:291` — _"a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-premultiply)"_ |
+| assertion | `expect(locator).not.toHaveText(expected)` | a PIXEL assertion, ~`:368-371` (`expect(px.right[0]).toBeGreaterThan(200)` and neighbours)                                                    |
+| outcome   | failed, not retried                        | failed then **passed on retry** — which is why the job is green                                                                               |
+
+🔴 **They are NOT the same failure, and that is the finding.** Different spec, different assertion
+kind — one a text-timing assertion, one a pixel comparison. So this is **not** a recurrence of the
+first; it is a second, independent Designer E2E flake within a day. **Two unrelated flakes is a
+different and worse signal than one repeated flake**: it points at the SUITE's environment
+(single-worker CI under load, video decode timing) rather than at one brittle assertion.
+
+⚠ **The job was GREEN.** Playwright retries in CI and a flaky pass counts as success, so this would
+have gone unnoticed had the discharge not read the log rather than the conclusion. **A green
+`conclusion` does not mean every test passed first time** — worth knowing for every future
+discharge, and the reason the e2e discharge lines now record the flaky count.
+
+**Still not actionable on its own**, and deliberately not acted on: the retry passed, and widening a
+timeout or loosening a pixel threshold on this evidence is the longer-rope failure below.
+
 **Notes:**
 
-- **Do not "fix" `clock.spec.ts` on the strength of this item.** Widening a timeout on an unconfirmed
-  candidate is how a real defect gets a longer rope — the pattern this repo already names in the
-  gate's own bound (a contention red answered by a longer timeout is `B-073`, and `B-098` is that
-  bound blown in turn).
+- **Do not "fix" `clock.spec.ts` or `video-import.spec.ts` on the strength of this item.** Widening a
+  timeout or loosening a pixel threshold on an unconfirmed candidate is how a real defect gets a
+  longer rope — the pattern this repo already names in the gate's own bound (a contention red
+  answered by a longer timeout is `B-073`, and `B-098` is that bound blown in turn).
+- **A third occurrence should be treated as a pattern about the suite**, not about whichever test it
+  lands on: two independent specs in one day is already that shape.
 - **If it recurs:** capture the full Playwright output including the test title and any trace, and
   note whether the machine was under concurrent load. Both runs that showed it were preceded by other
   suites on the same host.

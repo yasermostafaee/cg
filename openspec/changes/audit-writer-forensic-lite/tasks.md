@@ -94,5 +94,11 @@ R-054.
       `@cg/runtime` typecheck + 759 tests green.
 - [ ] 6.3 Full green gate — at the end of the session.
 - [x] 6.4 PRD item `[~]` with this change dir.
-- [ ] 6.5 **Linux `e2e` still owed — no run URL.** (No UI change ships here beyond the derived
-      filter list, but the batch as a whole owes one.)
+- [x] 6.5 **Linux `e2e` DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/32054398518, commit `56c0799f`, `conclusion: success`, and the **`E2E (Playwright)` job RAN** (`conclusion: success`, not skipped — P-029). Runtime **81 passed**, Designer **267 passed, 1 flaky**.
+      `56c0799f` is the batch tip and a descendant of every commit in it, and the `e2e` job is
+      whole-tree (`pnpm test:e2e`, no filter), so a green run there verifies the tree that carries
+      this change.
+      ⚠ The one flaky is `apps/designer/tests/e2e/video-import.spec.ts:291` — "a premultiplied-alpha
+      source imports WITHOUT the black fringe (D-128 un-premultiply)" — which failed on its first
+      attempt and passed on retry. It is unrelated to this change and is recorded as the SECOND
+      occurrence under [[P-034]].
