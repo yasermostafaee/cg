@@ -3763,3 +3763,82 @@ plate is on air with an unverified fit and nobody is told.
   facts want a row-level home; the first of the three to be implemented should build it deliberately
   rather than adding a private badge.
 - **Cross-refs:** [[R-053]], [[B-141]], [[B-139]].
+
+## [ ] B-144 — a failed CLEAR leaves a graphic ON AIR while its row vanishes from every browser: `remove()` cannot report its own failure to the UI ⟨priority: high — the operator loses the handle to something that is on air⟩
+
+**What:** `CasparRuntime.remove()` answers `{ accepted: true }` **unconditionally**
+(`tools/caspar-bridge/src/caspar-runtime.ts`, `#removeImpl`). The row is dropped from the stack
+before the wire is touched, and the `CG CLEAR` that follows is best-effort. When that CLEAR fails,
+the response still says `accepted`, so **every browser removes the row while the graphic is still
+on air.**
+
+**Repro:**
+
+1. Load and take an item so a graphic is on air.
+2. Make the primary's AMCP unreachable (pull the link, or kill the server) so the urgent `CLEAR`
+   cannot land.
+3. Press REMOVE on the row.
+
+**Expected:** the graphic is off air; or, if it could not be, the row stays visible carrying its
+true state and the operator is told the CLEAR failed.
+**Actual:** the row disappears from every connected browser and the graphic stays on air. The UI
+shows a state that is not true, and the only handle to the thing on air is gone.
+**Env:** Runtime + bridge, any build. Read from the code at `50fe15be`.
+
+**Why this outranks a cosmetic defect:** the operator's remaining options are the orphan sweep
+(which only surfaces once the primary is observable again) or a hand-typed AMCP command. In the
+meantime a graphic nobody can see a row for is on air, which is the state a broadcast console exists
+to prevent.
+
+🔴 **The failure IS recorded — and a log entry is not an operator surface.** Session D routed the
+wire failure to the audit wrapper via `AuditDetail.wireFailure`, so the NDJSON row for that `remove`
+now carries the real `errorCode` instead of `ok`. That fixed the FORENSIC half: the next day, the
+question "did that CLEAR land" has an answer. It does not fix this one. **Nobody is watching the
+audit log at the moment a graphic fails to leave air** — the Audit panel is a modal opened for
+review, and the row it would explain has already vanished from the surface the operator IS watching.
+Recording a fact and surfacing it are different jobs, and this item is only the second.
+
+**⚠ THE CENTRAL COST — changing the response shape touches the SPA CONTRACT**, and that is
+precisely why session D did not do it. `remove` is consumed by `StackRemoveChannel`, the
+`RuntimeBridge` surface, `MockRuntime`, the mock↔bridge parity guard and every renderer call site.
+`{ accepted: true }` is also **right for the caller** in one real sense: the row IS off the stack
+and the layer IS deallocated whatever the wire did, so a naive `accepted: false` would be a
+different lie — it would suggest the removal did not happen.
+
+**The options, posed rather than chosen:**
+
+| shape                                                                                         | what it costs                                                                                                                                                                                                                                                          | what it leaves unsolved                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A — a response that can express failure** (e.g. `{ accepted: true, clearFailed?: string }`) | one schema change, rippling to the channel, the bridge surface, the mock, the parity guard and every call site. Additive and optional, so old readers keep working — but every reader that should react has to be found and changed, and the ones missed fail silently | nothing on RECONNECT: a browser that was not the one pressing REMOVE never sees the response at all                                                                                                            |
+| **B — a separate error channel / publish**                                                    | no change to `remove`'s response; reaches EVERY connected browser, which A does not                                                                                                                                                                                    | a second way for one action to report itself, which is the two-spellings shape this repo keeps paying for. Ordering against the stack publish must be defined or the row can vanish before the warning arrives |
+| **C — a reconciliation pass that re-derives the row from the server**                         | no contract change at all, and it fixes the whole CLASS rather than this verb — any divergence between believed and actual state is caught                                                                                                                             | the largest by far, and it only helps once the primary is observable again, which is exactly when it is NOT during this failure. Slowest to tell the operator                                                  |
+
+⚠ **B and C are not exclusive, and the honest reading is that C is the real cure while B is what
+makes the failure visible today.** Whichever is chosen, `wireFailure`'s single sanctioned use must
+stay single: it exists so the AUDIT can contradict a response, and it must not quietly become the
+general mechanism for the UI to do so.
+
+**Acceptance:**
+
+- WHEN a `remove`'s CLEAR fails THEN the row remains visible, carrying its true state — still on air
+  — rather than disappearing
+- WHEN a `remove`'s CLEAR fails THEN the operator is TOLD, on the surface they are already looking
+  at, persistently while the condition lasts; an audit row does not satisfy this
+- WHEN a `remove`'s CLEAR succeeds THEN behaviour is exactly as today — the row goes, nothing extra
+  is shown, so the warning means something
+- WHEN a second browser did not issue the `remove` THEN it sees the same truth as the one that did
+- WHEN the layer is later observed clear (by the orphan sweep or a reconnect resync) THEN the
+  warning resolves on its own rather than needing a dismissal
+
+**Notes:**
+
+- **The deallocation is correct and must not be reverted.** `#removeImpl` frees the slot and
+  resolves the owned-occupancy warning BEFORE the CLEAR deliberately (B-056): the layer is unowned
+  from that point, and whatever survives on the primary is the R-009 sweep's to surface as an
+  ordinary clearable orphan. This item is about telling the operator NOW, not about changing who
+  owns the layer.
+- **Same class as [[B-141]] and [[B-143]]:** the system knows something and does not say it. Here
+  the system now RECORDS it too, which makes the gap sharper rather than smaller.
+- **Cross-refs:** [[B-141]] (the audit wrapper that made the failure visible in the log),
+  [[B-143]] (the honesty half never built), [[B-139]] / [[R-053]] (the row-level home three
+  per-plate facts already want — a per-row warning surface should be built once, not four times).

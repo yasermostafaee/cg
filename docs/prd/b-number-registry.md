@@ -941,3 +941,18 @@ a forward reference. The space stays contiguous `C-001` … `C-024`, **no gaps. 
 
 The owner supplied the number and the sweep agreed, so nothing was minted here. It closes the KNOWN
 MISSING note above, which is the whole reason that note existed.
+
+## 2026-08-18 — the surface half of the `remove()` blind failure (`B-144`)
+
+| Prefix | Claimed | Item                                                                      | File                               |
+| ------ | ------- | ------------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-144` | a failed CLEAR leaves a graphic ON AIR while its row vanishes from the UI | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the heading sweep immediately before the heading was written.** Highest `B-`
+heading was `B-143` (`git grep -nE "^## \[[ x~]\] B-1[34][0-9]" -- docs/prd/`); `git grep -n
+"B-144"` returned exactly ONE hit anywhere in the tree — this file's own "Next free: `B-144`" line
+— and none as a heading. That is the forward-reference false positive this file has now recorded
+five times, and the reason the rule is "highest HEADING", not "any occurrence". The space stays
+contiguous `B-001` … `B-144`, **no gaps. Next free: `B-145`.**
+
+The owner supplied the number and the sweep agreed, so nothing was minted here.
