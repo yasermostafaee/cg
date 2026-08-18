@@ -1,4 +1,5 @@
 import {
+  AmcpTimeoutError,
   DEFAULT_LAYER_POLICY,
   isLiveState,
   LayerManager,
@@ -208,6 +209,85 @@ const CREATED_MUTED_VOLUME = 0;
  * cause and wrong about what just happened to the operator.
  */
 const ADD_MUTE_FAILED = 'add-mute-failed';
+
+/**
+ * §8 — A TIMEOUT IS NOT "THE COMMAND NEVER LEFT", and B-141 is where the
+ * difference stops being cosmetic.
+ *
+ * `#send`'s catch used to flatten every throw — `AmcpTimeoutError` included —
+ * into `amcp-send-failed`, whose operator sentence is "The command never reached
+ * CasparCG". On a timeout the command DID leave this process and nothing came
+ * back: a different machine to go and look at, and a different remedy. That is
+ * exactly the `mute-failed` class DEBT.md §5 records — a wrapper may add
+ * context, it may not replace the cause.
+ *
+ * ONE spelling, deliberately, and both readers use it: `#send` returns it to the
+ * caller, and `auditVerdict` maps it to the schema's `timeout` outcome. Two
+ * literals would be two rules, which is how the panel's action list drifted from
+ * the schema's in the first place (B-141 fact 4).
+ */
+const AMCP_TIMEOUT_CODE = 'amcp-timeout';
+
+/**
+ * B-141 — who the bridge records as having acted.
+ *
+ * ⚠ A PLACEHOLDER, and named as one. The control WebSocket carries no identity:
+ * it is unauthenticated loopback, every browser on it is anonymous, and nothing
+ * anywhere distinguishes two operators sharing a rundown. So the record answers
+ * "what happened" honestly and answers "who did it" with a constant — which is
+ * half of what a forensic log is for, and on a console several people drive it is
+ * the half a dispute turns on.
+ *
+ * A constant rather than N string literals so that the day an identity scheme is
+ * DECIDED (it is an owner question, not an implementation detail — see B-141)
+ * there is exactly one place that has to learn about it.
+ */
+const OPERATOR_ACTOR = 'operator';
+
+/**
+ * B-141 — the facts ONE audited action carries, filled in as they become known.
+ *
+ * Seeded from the PRE-STATE (`#itemDetail`) so that the EARLIEST refusals — the
+ * ones that return before the item is even looked up — still say which item,
+ * which template and which layer the operator was acting on. An impl that learns
+ * more on the way (a `load` allocating its slot) writes it here.
+ */
+interface AuditDetail {
+  itemId?: string;
+  templateId?: string;
+  slot?: CommandSlot;
+  /**
+   * `remove()` ONLY — the wire failure its `{ accepted: true }` response cannot
+   * express. See the note at the assignment. Nothing else may use this to
+   * contradict a result, or "the outcome is DERIVED from the result" stops being
+   * a rule and becomes a habit.
+   */
+  wireFailure?: string;
+}
+
+/**
+ * B-141 — the audit outcome of a finished operation, DERIVED from what it
+ * answered rather than from where in the method we happen to be standing.
+ *
+ * This function is the whole reason the seven verbs could not simply grow an
+ * append at the end of each: every one of them has more exits than it has happy
+ * paths, and an entry written before the answer is known records `ok` for a
+ * refusal. A forensic log that misreports an on-air action is worse than none.
+ */
+function auditVerdict(
+  detail: AuditDetail,
+  result: { accepted: boolean; errorCode?: string },
+): { outcome: AuditEntry['outcome']; errorCode?: string } {
+  const errorCode = detail.wireFailure ?? result.errorCode;
+  if (result.accepted && detail.wireFailure === undefined) return { outcome: 'ok' };
+  return {
+    // The schema's third outcome, reachable exactly because `#send` now tells a
+    // timeout apart from a send failure. "Nothing came back" and "it was refused"
+    // are the two readings a dispute has to choose between.
+    outcome: errorCode === AMCP_TIMEOUT_CODE ? 'timeout' : 'failed',
+    ...(errorCode !== undefined ? { errorCode } : {}),
+  };
+}
 
 /**
  * THE on-air predicate for a stack item — the ONE definition of "on air or
@@ -1057,6 +1137,20 @@ export class CasparRuntime {
     this.#expiryTimers.clear();
     await Promise.all([this.#sessions.A.stop(), this.#sessions.B?.stop() ?? Promise.resolve()]);
     await this.#templateServer.stop();
+    /*
+      B-141 — CLOSE THE AUDIT FILE HANDLE. `AuditWriter` holds one open for its
+      whole life and offers `close()`; nothing was calling it, so every runtime
+      leaked a descriptor that node then destroyed at GC — which since node 22 is a
+      hard `ERR_INVALID_STATE`, not a warning. Surfaced by the B-141 append-site
+      suite, where one runtime per test made it seven uncaught exceptions in a run
+      that otherwise reported all green.
+
+      LAST, and awaited: the sessions and the template server are torn down first,
+      so anything they record on the way out is still written before the handle
+      goes. Failure is swallowed for the same reason every other audit failure is —
+      a shutdown must not be blocked by the record of it.
+    */
+    await this.#auditWriter?.close().catch(() => undefined);
   }
 
   /** Which server is currently the live primary. */
@@ -1151,6 +1245,17 @@ export class CasparRuntime {
     templateId: string,
     fields: FieldValues,
   ): Promise<{ accepted: boolean; errorCode?: string }> {
+    return this.#audited('load', { itemId, templateId }, (detail) =>
+      this.#loadImpl(itemId, templateId, fields, detail),
+    );
+  }
+
+  async #loadImpl(
+    itemId: string,
+    templateId: string,
+    fields: FieldValues,
+    detail: AuditDetail,
+  ): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const seq = this.#nextSeq();
@@ -1181,6 +1286,9 @@ export class CasparRuntime {
       return { accepted: false, errorCode: code };
     }
 
+    // The layer is only known HERE, after allocation — the refusals above it
+    // genuinely have no slot to name, and inventing one would be worse than the gap.
+    detail.slot = slot;
     return this.#loadOnto(itemId, templateId, fields, slot, seq);
   }
 
@@ -1205,6 +1313,22 @@ export class CasparRuntime {
    * (`slot-bound` — rebinding is Remove-then-load, two explicit steps).
    */
   async loadFixed(
+    slot: CommandSlot,
+    itemId: string,
+    templateId: string,
+    fields: FieldValues,
+  ): Promise<{ accepted: boolean; errorCode?: string }> {
+    // B-141 — the SECOND entry point for the `load` action, audited HERE rather
+    // than in the shared `#loadOnto`: every refusal `loadFixed` owns
+    // (`unknown-template`, `not-fixed`, `slot-bound`) returns long before
+    // `#loadOnto` is reached, and those are exactly the entries worth having.
+    // Auditing the shared tail instead would have recorded nothing for any of them.
+    return this.#audited('load', { itemId, templateId, slot }, () =>
+      this.#loadFixedImpl(slot, itemId, templateId, fields),
+    );
+  }
+
+  async #loadFixedImpl(
     slot: CommandSlot,
     itemId: string,
     templateId: string,
@@ -1354,7 +1478,10 @@ export class CasparRuntime {
     // slot/interest and ADDing an ownerless producer.
     if (this.#reconciler.get(itemId) === null) {
       this.#releaseSlot(slot);
-      return { accepted: false };
+      // B-141 — the race has a NAME now. Recorded as a bare failure it was
+      // indistinguishable from an AMCP refusal, which sends whoever reads the log
+      // the next day to the playout machine for something that happened here.
+      return { accepted: false, errorCode: 'item-removed' };
     }
 
     this.#slots.set(itemId, slot);
@@ -1949,6 +2076,12 @@ export class CasparRuntime {
   }
 
   async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    return this.#audited('take', this.#itemDetail(itemId), () => this.#takeImpl(itemId));
+  }
+
+  async #takeImpl(
+    itemId: string,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
     /**
      * R-022 — THE INTERLOCK. A rehearsing item cannot be taken to air, and the
      * refusal lives HERE rather than only in a disabled button.
@@ -2388,6 +2521,16 @@ export class CasparRuntime {
     fields: FieldValues,
     mergeMode: 'merge' | 'replace',
   ): Promise<{ accepted: boolean; errorCode?: string }> {
+    return this.#audited('update', this.#itemDetail(itemId), () =>
+      this.#updateImpl(itemId, fields, mergeMode),
+    );
+  }
+
+  async #updateImpl(
+    itemId: string,
+    fields: FieldValues,
+    mergeMode: 'merge' | 'replace',
+  ): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -2451,6 +2594,13 @@ export class CasparRuntime {
   // NB `stop()` on this class is the PROCESS shutdown, so the item verb is
   // `stopItem` — the AMCP verb it sends is still `CG … STOP`.
   async stopItem(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    // The audit ACTION is `stop` — the schema's word for the verb, not this
+    // method's disambiguating name (`stop()` on this class is the process
+    // shutdown). The log speaks the operator's vocabulary, not the class's.
+    return this.#audited('stop', this.#itemDetail(itemId), () => this.#stopItemImpl(itemId));
+  }
+
+  async #stopItemImpl(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -2497,6 +2647,10 @@ export class CasparRuntime {
    * gate is the UI's to hold and this path stays a thin verb.
    */
   async nextItem(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    return this.#audited('next', this.#itemDetail(itemId), () => this.#nextItemImpl(itemId));
+  }
+
+  async #nextItemImpl(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -2507,10 +2661,18 @@ export class CasparRuntime {
   }
 
   async out(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    return this.#audited('out', this.#itemDetail(itemId), () => this.#outImpl(itemId));
+  }
+
+  async #outImpl(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
-    if (slot === undefined) return { accepted: false };
+    // B-141 — the code the other five item verbs already answer. `out` alone
+    // returned a bare `{ accepted: false }`, so its refusal reached the operator as
+    // "Not accepted." and would reach the audit log with nothing to say WHICH
+    // refusal it was — the one field a dispute turns on.
+    if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     // R-006 — see #noServerReachable(). An out cannot reach a dead server either; claiming it
     // succeeded would be the mirror-image lie (an operator believing a graphic came OFF).
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
@@ -4312,6 +4474,12 @@ export class CasparRuntime {
   }
 
   async remove(itemId: string): Promise<{ accepted: boolean }> {
+    return this.#audited('remove', this.#itemDetail(itemId), (detail) =>
+      this.#removeImpl(itemId, detail),
+    );
+  }
+
+  async #removeImpl(itemId: string, detail: AuditDetail): Promise<{ accepted: boolean }> {
     const slot = this.#slots.get(itemId);
     // Drop it from the stack immediately (UI responsiveness), then best-effort
     // clear the slot on the server.
@@ -4348,13 +4516,29 @@ export class CasparRuntime {
       // survives on the primary is the R-009 sweep's to surface (as a
       // regular, clearable orphan) once the primary is observable again.
       this.#resolveOwnedOccupancy(slot);
-      const { ok, onPrimary } = await this.#send(
+      const { ok, onPrimary, errorCode } = await this.#send(
         this.#builder.out(slot),
         this.#nextSeq(),
         'urgent',
       );
       // A CLEAR executed on the CURRENT PRIMARY counts as adoption (see out()).
       if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+      /*
+        🔴 B-141 — THE ONE VERB WHOSE RESPONSE CANNOT CARRY ITS OWN OUTCOME.
+
+        `remove` answers `{ accepted: true }` unconditionally, and that is right for
+        the CALLER: the row is off the stack whatever the wire did, and the layer is
+        deallocated either way. But this CLEAR is best-effort, and a failed one
+        leaves a graphic ON AIR with its row gone from every browser — precisely the
+        state someone asks about the next day, and the one an `ok` row would deny.
+
+        So the failure is handed to the WRAPPER rather than to the response: the
+        contract the SPA depends on is untouched, and the log still says what
+        happened. This is the only sanctioned use of `wireFailure`; anywhere else it
+        would be a way to contradict a result, which is the habit `auditVerdict`
+        exists to prevent.
+      */
+      if (!ok) detail.wireFailure = errorCode ?? 'amcp-error';
     }
     return { accepted: true };
   }
@@ -4491,7 +4675,7 @@ export class CasparRuntime {
     this.#sessions.A.start();
     this.#sessions.B?.start();
     this.#recordAudit({
-      actor: 'operator',
+      actor: OPERATOR_ACTOR,
       action: 'reconnect',
       server: 'primary',
       outcome: serveError === null ? 'ok' : 'failed',
@@ -4583,7 +4767,7 @@ export class CasparRuntime {
     // B-141 — `server` records which machine is primary AFTER the switch, which
     // is the fact someone reading the log the next day is actually asking about.
     this.#recordAudit({
-      actor: 'operator',
+      actor: OPERATOR_ACTOR,
       action: 'failover',
       server: newPrimary === 'A' ? 'primary' : 'backup',
       outcome: ok ? 'ok' : 'failed',
@@ -4600,13 +4784,13 @@ export class CasparRuntime {
     this.#lock = { engaged: true, reason: 'operator', engagedAt: new Date().toISOString() };
     this.lockChanged.emit(this.#lock);
     // B-141 — the PIN is never recorded, only that the lock was engaged.
-    this.#recordAudit({ actor: 'operator', action: 'lock-engage', outcome: 'ok' });
+    this.#recordAudit({ actor: OPERATOR_ACTOR, action: 'lock-engage', outcome: 'ok' });
     return { ok: true };
   }
   release(pin: string): { ok: boolean; reason?: 'pin-mismatch' | 'not-engaged' } {
     if (!this.#lock.engaged) {
       this.#recordAudit({
-        actor: 'operator',
+        actor: OPERATOR_ACTOR,
         action: 'lock-release',
         outcome: 'failed',
         errorCode: 'not-engaged',
@@ -4617,7 +4801,7 @@ export class CasparRuntime {
       // A REFUSED release is the entry that matters most here — it is the one an
       // operator would later ask about.
       this.#recordAudit({
-        actor: 'operator',
+        actor: OPERATOR_ACTOR,
         action: 'lock-release',
         outcome: 'failed',
         errorCode: 'pin-mismatch',
@@ -4627,7 +4811,7 @@ export class CasparRuntime {
     this.#lock = { engaged: false };
     this.#lockPin = null;
     this.lockChanged.emit(this.#lock);
-    this.#recordAudit({ actor: 'operator', action: 'lock-release', outcome: 'ok' });
+    this.#recordAudit({ actor: OPERATOR_ACTOR, action: 'lock-release', outcome: 'ok' });
     return { ok: true };
   }
 
@@ -4664,6 +4848,40 @@ export class CasparRuntime {
     template: TemplateInfo,
     html: string,
     redelivery = false,
+  ): { registered: boolean; templateId: string; skipped?: boolean } {
+    /*
+      B-141 — THE FIFTEENTH ACTION, and the one the change's own bookkeeping had
+      lost: `import` is neither in the seven playout verbs nor among the three
+      named as having no bridge operation. It HAS one, right here.
+
+      ⚠ A REDELIVERY IS NOT AN OPERATOR IMPORT and gets no line. It is the SPA
+      replaying its entire library after every reconnect (B-085) — a burst of
+      entries, on a schedule nobody chose, for something nobody did. A log that
+      has to be scrolled past is a log that stops being read, and the whole
+      complaint in B-141 is that this one is not read because it says nothing.
+
+      Recorded outside `#audited`: this method is SYNCHRONOUS and answers
+      `{ registered }` rather than `{ accepted }`, so it shares no shape with the
+      wrapper. What it does share is `#recordOutcome` — the mapping lives in one
+      place even though the call shapes are two.
+    */
+    if (redelivery) return this.#templateImportImpl(template, html, true);
+    const detail: AuditDetail = { templateId: template.templateId };
+    let result: { registered: boolean; templateId: string; skipped?: boolean };
+    try {
+      result = this.#templateImportImpl(template, html, false);
+    } catch (err) {
+      this.#recordOutcome('import', detail, { outcome: 'failed', errorCode: 'internal-error' });
+      throw err;
+    }
+    this.#recordOutcome('import', detail, { outcome: 'ok' });
+    return result;
+  }
+
+  #templateImportImpl(
+    template: TemplateInfo,
+    html: string,
+    redelivery: boolean,
   ): { registered: boolean; templateId: string; skipped?: boolean } {
     if (redelivery) {
       if (this.#removedTemplateIds.has(template.templateId)) {
@@ -4739,6 +4957,106 @@ export class CasparRuntime {
     // R-028 (o1) — every browser converges on the same catalogue.
     this.templatesChanged.emit(this.#templates.list());
     return { ok: true };
+  }
+
+  /**
+   * B-141 — the PRE-STATE of an item, as the audit record must name it.
+   *
+   * Read BEFORE the operation runs, deliberately: `remove` deletes the slot and
+   * `out` empties the layer, so reading afterwards would record the layer the item
+   * is on NOW (none) instead of the one the operator acted on.
+   */
+  #itemDetail(itemId: string): AuditDetail {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    const slot = this.#slots.get(itemId);
+    return {
+      itemId,
+      ...(templateId !== undefined ? { templateId } : {}),
+      ...(slot !== undefined ? { slot } : {}),
+    };
+  }
+
+  /**
+   * ⭐ **B-141 — RUN AN OPERATOR ACTION SO THAT IT CANNOT RETURN WITHOUT ITS AUDIT
+   * LINE.**
+   *
+   * The seven playout verbs have between three and eight exits each — every
+   * refusal is its own `return` — so "remember to append before each one" is a
+   * rule that holds until the next branch is added. This makes it structural
+   * instead: the PUBLIC method is nothing but this wrapper, the real body is a
+   * private impl it calls exactly once, and every path out of that impl —
+   * including a THROW — passes through here. The same move as B-139: an API that
+   * cannot be called wrong beats a call site that happens to be correct today.
+   *
+   * Three properties it exists to guarantee, each of which the naive
+   * append-at-the-end would have broken:
+   *
+   *   1. **The outcome is DERIVED from the answer** (`auditVerdict`), never
+   *      assumed from position. A refused take records `failed` with the code that
+   *      refused it, not `ok`.
+   *   2. **The entry is written where the outcome is KNOWN**, so `ts` — stamped by
+   *      `#recordAudit` at the moment of the append — is the outcome's time, and
+   *      file order is OUTCOME order rather than invocation order. Two concurrent
+   *      takes appear in the order they finished, which is the order air saw.
+   *   3. **It cannot fail the operation.** `#recordAudit` is fire-and-forget and
+   *      swallows the writer's rejection; a full disk surfaces through
+   *      `auditHealth().lastError` and the station stays on air. The contrast with
+   *      the config stores is deliberate and is stated at `#auditWriter`: those
+   *      files are PRECONDITIONS for correct playout, so an unusable one is a hard
+   *      boot failure. An audit entry is a RECORD OF what happened, and nothing
+   *      downstream reads it to decide what to send.
+   */
+  async #audited<T extends { accepted: boolean; errorCode?: string }>(
+    action: AuditEntry['action'],
+    detail: AuditDetail,
+    run: (detail: AuditDetail) => Promise<T>,
+  ): Promise<T> {
+    let result: T;
+    try {
+      result = await run(detail);
+    } catch (err) {
+      // A THROW IS AN OUTCOME TOO. Without this, the one exit that never reaches a
+      // `return` would be the one exit with no record — and an action that blew up
+      // mid-flight is more interesting to whoever reads the log than one that
+      // refused cleanly, not less. The error is re-thrown untouched.
+      this.#recordOutcome(action, detail, { outcome: 'failed', errorCode: 'internal-error' });
+      throw err;
+    }
+    this.#recordOutcome(action, detail, auditVerdict(detail, result));
+    return result;
+  }
+
+  /**
+   * B-141 — the ONE place a `{ detail, verdict }` pair becomes an `AuditEntry`.
+   *
+   * Shared by `#audited` and by the synchronous `templateImport`, so the two call
+   * SHAPES cannot drift into two mappings.
+   */
+  #recordOutcome(
+    action: AuditEntry['action'],
+    detail: AuditDetail,
+    verdict: { outcome: AuditEntry['outcome']; errorCode?: string },
+  ): void {
+    this.#recordAudit({
+      actor: OPERATOR_ACTOR,
+      action,
+      ...(detail.itemId !== undefined ? { itemId: detail.itemId } : {}),
+      ...(detail.templateId !== undefined ? { templateId: detail.templateId } : {}),
+      // The SAME stamping `assignSlot` uses — the coordinate is the primary's. A
+      // second convention for "which machine is this layer on" is how one rule
+      // comes to have two spellings.
+      ...(detail.slot !== undefined
+        ? {
+            slot: {
+              channel: detail.slot.channel,
+              layer: detail.slot.layer,
+              server: 'primary' as const,
+            },
+          }
+        : {}),
+      outcome: verdict.outcome,
+      ...(verdict.errorCode !== undefined ? { errorCode: verdict.errorCode } : {}),
+    });
   }
 
   /**
@@ -5342,10 +5660,15 @@ export class CasparRuntime {
         onPrimary: result.winner === this.#adapter.currentPrimary,
         ...(errorCode !== undefined && { errorCode }),
       };
-    } catch {
+    } catch (err) {
       this.#clearExpiry(seq);
-      this.#reconciler.applyAck(seq, false, 'amcp-send-failed');
-      return { ok: false, onPrimary: false, errorCode: 'amcp-send-failed' };
+      // §8 / `AMCP_TIMEOUT_CODE` — "it timed out" and "it never left" point at two
+      // different machines, so they get two codes. Every other throw keeps the old
+      // spelling: a code is worth minting only when it changes where the operator
+      // goes to look.
+      const errorCode = err instanceof AmcpTimeoutError ? AMCP_TIMEOUT_CODE : 'amcp-send-failed';
+      this.#reconciler.applyAck(seq, false, errorCode);
+      return { ok: false, onPrimary: false, errorCode };
     }
   }
 

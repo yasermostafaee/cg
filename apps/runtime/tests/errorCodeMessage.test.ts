@@ -56,6 +56,29 @@ describe('errorCodeMessage — §8, the codes that used to name the wrong machin
     expect(errorCodeMessage('amcp-send-failed')).toContain('never reached CasparCG');
     expect(errorCodeMessage('amcp-404')).toContain('CasparCG refused the command');
   });
+
+  it('B-141 — a TIMEOUT is a THIRD fact, and must not borrow either of the other two', () => {
+    /*
+      The bridge used to flatten `AmcpTimeoutError` into `amcp-send-failed`, whose
+      sentence sends the operator to check a link that is demonstrably up. A
+      timeout means the command LEFT and nothing came back — so it may or may not
+      have executed, which is the one thing the operator has to be told.
+    */
+    const msg = errorCodeMessage('amcp-timeout') ?? '';
+    expect(msg).toContain('did not answer');
+    expect(msg).toContain('may or may not');
+    // It must claim NEITHER of the two mechanisms it sits between.
+    expect(msg).not.toContain('never reached');
+    expect(msg).not.toContain('refused');
+    // …and still say what to do.
+    expect(msg).toContain('output');
+  });
+
+  it('B-141 — a load abandoned by a Remove names THIS machine, not the playout server', () => {
+    const msg = errorCodeMessage('item-removed') ?? '';
+    expect(msg).toContain('removed');
+    expect(msg).not.toContain('CasparCG');
+  });
 });
 
 /**

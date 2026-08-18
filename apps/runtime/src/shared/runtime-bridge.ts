@@ -7,6 +7,7 @@
  * the contract.
  */
 import type {
+  AuditHealthChannel,
   AuditRecentChannel,
   ChannelRequest,
   ChannelResponse,
@@ -358,6 +359,12 @@ export interface RuntimeBridge {
     recent(
       req: ChannelRequest<typeof AuditRecentChannel>,
     ): Promise<ChannelResponse<typeof AuditRecentChannel>>;
+    /**
+     * B-141 — is the instrument LIVE? Read alongside `recent` so an empty tail can
+     * be reported as "quiet" only when a configured, non-failing writer is what
+     * produced it.
+     */
+    health(): Promise<ChannelResponse<typeof AuditHealthChannel>>;
   };
 
   update: {

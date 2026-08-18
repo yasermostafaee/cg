@@ -3554,7 +3554,7 @@ that is the failure this item exists to close. A cross-reference is filed in `bu
 - **Cross-refs:** the Designer half of this one root cause is cross-referenced from
   `bugs-designer.md`; it is deliberately NOT a second item.
 
-## [~] B-141 — the audit log records almost ONE action, and its empty state claims otherwise ⟨priority: high⟩ — PARTIAL: `openspec/changes/audit-writer-forensic-lite/` — the writer is wired and is the source of truth; 7 append sites and the panel's three empty states remain, see its tasks.md 5
+## [~] B-141 — the audit log records almost ONE action, and its empty state claims otherwise ⟨priority: high⟩ — COMPLETE, awaiting archive: `openspec/changes/audit-writer-forensic-lite/` — writer wired, all append sites wired structurally (9 entry points, 8 actions), the panel's empty states distinguished. ⚠ `actor` is still the constant `'operator'` — an OWNER QUESTION, see the change's tasks.md 5e
 
 **What:** the Audit log modal is empty after a whole session of imports, takes and commands. It is
 not a display bug: the bridge's audit is an **in-memory array with exactly ONE append site**, and
@@ -3638,6 +3638,20 @@ update-deferred update-installed`. `ACTION_OPTIONS` in
   `templatesDir`**: `TemplateRegistry` reads every `*.json` there as a template ([[B-116]]).
 - ⚠ **Wire only actions that are real operations today.** An action in the enum with no operation
   behind it must not be invented to fill the list; name any that cannot be wired and why.
+  **Resolved:** wired — `load` `take` `update` `out` `stop` `next` `remove` `import`, plus the
+  pre-existing `reconnect` `failover` `lock-engage` `lock-release`. **Not wired, and why:**
+  `export` happens in the Designer, and `update-deferred` / `update-installed` have no install
+  path in this process. ⚠ `import` was the fifteenth action and the change's own bookkeeping had
+  lost it — it appeared in neither list, so it read as accounted for while being accounted for
+  nowhere.
+- 🔴 **STILL OPEN — `actor` is a placeholder, and making it meaningful is an OWNER DECISION.**
+  Every entry carries `actor: 'operator'`. The control WebSocket is unauthenticated loopback and
+  carries no identity, so nothing distinguishes two people driving the same rundown: the record
+  answers _what_ honestly and answers _who_ with a constant — on a shared console, the half a
+  dispute turns on. It is a single `OPERATOR_ACTOR` constant so exactly one place learns the
+  answer. The candidate shapes differ in what they are worth (a per-browser operator name in
+  Settings; a PIN-backed sign-in reusing the lock's PIN; a per-connection client id that identifies
+  a BROWSER rather than a person — worth almost nothing in a dispute). Posed, not chosen.
 - **Cross-refs:** [[B-142]] (the panel's raw `<select>`, which this item must not touch),
   [[B-143]] (the same class — the system knows something and does not say it).
 

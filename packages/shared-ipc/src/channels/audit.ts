@@ -10,6 +10,34 @@ import { defineChannel } from '../channel.js';
  * import/export rows, the Runtime surfaces stack + lock + failover.
  */
 
+/**
+ * B-141 — WHAT THE PANEL NEEDS TO STOP ASSERTING A FACT IT CANNOT KNOW.
+ *
+ * "No audit entries yet." cannot tell _nothing happened_ from _nothing is
+ * recorded_ from _this build has no writer_, and the operator reading it
+ * concludes the session was quiet. That is this project's own recurring error
+ * written into the product: a negative observation is not a result until a
+ * positive control proves the instrument is live.
+ *
+ * This channel IS the positive control. `configured` says whether a writer
+ * exists at all, `errorCount` / `lastError` say whether it is failing, and only
+ * a configured, non-failing, genuinely empty read may be reported as quiet.
+ */
+export const AuditHealthChannel = defineChannel(
+  'audit.health',
+  z.object({}),
+  z.object({
+    /** A writer is configured — without one, nothing was ever going to be recorded. */
+    configured: z.boolean(),
+    /** Where the NDJSON lives, so the operator can be told where to look. */
+    path: z.string().nullable(),
+    /** Failed appends since boot. Non-zero means entries are MISSING, not absent. */
+    errorCount: z.number().int().nonnegative(),
+    /** The most recent write failure's message, or null. */
+    lastError: z.string().nullable(),
+  }),
+);
+
 export const AuditRecentChannel = defineChannel(
   'audit.recent',
   z.object({

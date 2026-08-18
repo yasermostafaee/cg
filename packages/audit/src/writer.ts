@@ -13,12 +13,28 @@ import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
  * audit is a forensic record, not a queryable database. Downstream tools
  * (audit inspector UI, compliance ingest) read the NDJSON directly.
  *
- * Failure modes (Phase 5 §10 "audit log write fails" row):
- *   - Disk full / permission denied → emits `'error'` and surfaces a
- *     `lastError` field. The runtime's banner asks the operator to free
- *     space. The writer keeps trying.
- *   - UNC unreachable (M9 deployment) → fallback to a local file. M5.4
- *     ships only the local writer; the failover is M9.
+ * Failure modes:
+ *   - Disk full / permission denied → emits `'error'`, counts the failure and
+ *     surfaces it through `lastError` / `errorCount`. The writer keeps trying.
+ *     ⚠ The append NEVER rejects the operation that produced it — see B-141:
+ *     an audit entry is a RECORD OF what happened, not a precondition for it,
+ *     so a failed write must degrade to "reported and retried" and never to a
+ *     refused take. `CasparRuntime.auditHealth()` is what carries that state to
+ *     the operator, and the Audit panel renders it instead of claiming the
+ *     session was quiet.
+ *
+ * 🔴 WHAT THIS WRITER DOES NOT DO, stated because the docstring used to promise
+ * it and a warning that outlives its truth is worse than none (B-141,
+ * FORENSIC-LITE):
+ *
+ *   - **No rotation.** The file grows without bound.
+ *   - **No UNC fallback.** An unreachable network path fails every append and is
+ *     reported; nothing is written to a local file instead.
+ *   - **No retention policy.** Nothing is ever pruned or expired.
+ *
+ * All three are DEFERRED by owner decision, not overlooked. The record's job in
+ * this form is to answer, the next day, who did what, to which item, and whether
+ * the server accepted it.
  *
  * The writer also rejects entries that fail the Zod schema — it's an
  * append-only forensic record, not a place to silently swallow drift.

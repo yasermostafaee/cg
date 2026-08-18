@@ -1031,6 +1031,25 @@ export class MockRuntime {
   }
 
   // ── audit ───────────────────────────────────────────────────────────
+  /**
+   * B-141 parity — the offline mock's audit IS in memory and IS working, so it
+   * reports a configured, healthy, path-less instrument.
+   *
+   * `path: null` is the honest answer rather than a fake filename: there is no
+   * file, and the panel must never send an operator hunting for one. `configured:
+   * true` is equally honest — entries really are being recorded here, so an empty
+   * list in test mode genuinely does mean "nothing happened yet", which is exactly
+   * the distinction this method exists to let the panel draw.
+   */
+  auditHealth(): {
+    configured: boolean;
+    path: string | null;
+    errorCount: number;
+    lastError: string | null;
+  } {
+    return { configured: true, path: null, errorCount: 0, lastError: null };
+  }
+
   auditRecent(limit = 200, action?: AuditEntry['action'], actor?: string): AuditEntry[] {
     let rows = this.#audit;
     if (action !== undefined) rows = rows.filter((r) => r.action === action);

@@ -1,6 +1,7 @@
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   AppInfoChannel,
+  AuditHealthChannel,
   AuditRecentChannel,
   ConnectionsConfigChangedChannel,
   ConnectionsConfigChannel,
@@ -807,6 +808,10 @@ export function buildRoutes(
     route(AuditRecentChannel, (r: { limit?: number; action?: never; actor?: string }) =>
       b.auditRecent(r.limit, r.action, r.actor),
     ),
+    // B-141 — the POSITIVE CONTROL for the panel's empty state. Without it "no
+    // entries" and "no writer" and "the writer is failing" are one indistinguishable
+    // sentence, and the operator reads the third as the first.
+    route(AuditHealthChannel, () => b.auditHealth()),
 
     route(UpdateRequestChannel, (r: { version: string; notes?: string }) =>
       b.updateRequest(r.version, r.notes),

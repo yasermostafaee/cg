@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { Notice } from '../../ui/Notice.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 
 interface Props {
@@ -25,6 +26,9 @@ interface Props {
 const ACTION_OPTIONS = ['all', ...AuditEntrySchema.shape.action.options] as const;
 
 type ActionFilter = (typeof ACTION_OPTIONS)[number];
+
+/** B-141 — the bridge's own answer to "is this instrument live?" (`audit.health`). */
+type AuditHealth = Awaited<ReturnType<typeof window.cg.audit.health>>;
 
 const styles = {
   filters: {
@@ -68,6 +72,15 @@ const styles = {
     color: colors.textMuted,
     fontStyle: 'italic' as const,
   },
+  /*
+    B-141 — the two empty states that are NOT "quiet" are rendered through the
+    shared `Notice`, so this carries only the box they sit in. A local colour
+    treatment here is exactly what `Notice`'s header forbids: an exported style
+    object is copied, a component is consumed.
+  */
+  emptyFault: {
+    padding: '0.75rem',
+  },
   outcomeOk: { color: '#86efac' },
   outcomeFailed: { color: '#fda4af' },
   outcomeTimeout: { color: '#fcd34d' },
@@ -83,6 +96,13 @@ const styles = {
  */
 export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [entries, setEntries] = useState<readonly AuditEntry[]>([]);
+  /*
+    B-141 — THE POSITIVE CONTROL, fetched beside the tail and never inferred from
+    it. `null` means "not asked yet", which is itself distinct from every answer:
+    an empty list before the health read has landed says nothing at all, so the
+    panel says nothing at all.
+  */
+  const [health, setHealth] = useState<AuditHealth | null>(null);
   const [actionFilter, setActionFilter] = useState<ActionFilter>('all');
   const [actorFilter, setActorFilter] = useState<string>('');
 
@@ -91,8 +111,15 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     if (actionFilter !== 'all') req.action = actionFilter;
     const trimmedActor = actorFilter.trim();
     if (trimmedActor !== '') req.actor = trimmedActor;
-    const next = await window.cg.audit.recent(req);
+    // Both, together, every time: a health reading from before the entries were
+    // fetched could report a writer that has failed since, and the operator would
+    // read a failing instrument's silence as quiet.
+    const [next, nextHealth] = await Promise.all([
+      window.cg.audit.recent(req),
+      window.cg.audit.health(),
+    ]);
     setEntries(next);
+    setHealth(nextHealth);
   }
 
   useEffect(() => {
@@ -166,12 +193,89 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           <span>outcome</span>
         </div>
         {entries.length === 0 ? (
-          <p style={styles.empty}>No audit entries yet.</p>
+          <EmptyState
+            health={health}
+            filtered={actionFilter !== 'all' || actorFilter.trim() !== ''}
+          />
         ) : (
           entries.map((e, idx) => <Row key={idx} entry={e} />)
         )}
       </div>
     </Modal>
+  );
+}
+
+/**
+ * ⭐ **B-141 — THE EMPTY STATE THAT DOES NOT ASSERT A FACT IT CANNOT KNOW.**
+ *
+ * The panel used to answer every empty read with _"No audit entries yet."_, which
+ * cannot distinguish:
+ *
+ *   - **nothing happened** — a configured, healthy writer with an empty file;
+ *   - **nothing is recorded** — a writer that is failing every append;
+ *   - **there is no writer** — a build or a boot with no `--audit-log-path`.
+ *
+ * Three different situations, one sentence, and the two that mean "your record is
+ * MISSING" were being reported as the one that means "your station was quiet".
+ * This is the repo's own recurring error — a negative observation is not a result
+ * until a positive control proves the instrument is live — written into the
+ * product, and the operator is the one who acts on it.
+ *
+ * So the reassuring sentence is now the NARROWEST branch: it appears only when a
+ * writer is configured, has failed nothing, and genuinely returned no rows. Every
+ * other reading, including "the health probe itself has not answered", says
+ * something else.
+ */
+function EmptyState({
+  health,
+  filtered,
+}: {
+  health: AuditHealth | null;
+  filtered: boolean;
+}): JSX.Element {
+  // Not asked yet — say nothing rather than guess. The read is one round trip away.
+  if (health === null) return <p style={styles.empty}>Reading the audit record…</p>;
+  /*
+    `noticeRole="refusal"` is the palette's ATTENTION treatment (amber), which is
+    what these two are — not `notice`, which is the neutral statement and would
+    dress a missing record as an ordinary remark. `aria="status"` overrides the
+    role's `alert` default deliberately: an alert announces the CONSEQUENCE OF
+    SOMETHING THE OPERATOR JUST DID, and this is a standing fact about the
+    instrument that happens to be read when the dialog opens.
+  */
+  if (!health.configured) {
+    return (
+      <div style={styles.emptyFault}>
+        <Notice
+          noticeRole="refusal"
+          aria="status"
+          text="No audit record is configured on this bridge, so nothing has been written. This is NOT a quiet session — it is a session with no record."
+          detail="Start the bridge with --audit-log-path to record one."
+        />
+      </div>
+    );
+  }
+  if (health.errorCount > 0) {
+    return (
+      <div style={styles.emptyFault}>
+        <Notice
+          noticeRole="refusal"
+          aria="status"
+          text={`The audit record could not be written (${String(health.errorCount)} ${
+            health.errorCount === 1 ? 'failure' : 'failures'
+          }), so entries are MISSING rather than absent.`}
+          detail={[health.lastError, health.path].filter((d) => d !== null).join(' — ')}
+        />
+      </div>
+    );
+  }
+  // The one honest use of the reassuring sentence: a live instrument that read
+  // nothing. The filtered variant is separate because "no rows match this filter"
+  // is also not "nothing happened".
+  return (
+    <p style={styles.empty}>
+      {filtered ? 'No audit entries match this filter.' : 'No audit entries yet.'}
+    </p>
   );
 }
 

@@ -227,6 +227,7 @@ export function createMockBridge(): RuntimeBridge {
 
     audit: {
       recent: (req) => Promise.resolve(mock.auditRecent(req.limit, req.action, req.actor)),
+      health: () => Promise.resolve(mock.auditHealth()),
     },
 
     update: {

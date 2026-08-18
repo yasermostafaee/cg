@@ -15,6 +15,21 @@ const MESSAGES: Readonly<Record<string, string>> = {
   'unknown-template': 'That template is not registered with the bridge — re-import it.',
   'amcp-send-failed': 'The command never reached CasparCG — check the server link.',
   /*
+    B-141 — THE THIRD FACT, kept apart from the two above it.
+
+    `amcp-send-failed` says the command never left; an AMCP error code says
+    CasparCG refused it. A TIMEOUT is neither: it left, and nothing came back. The
+    bridge used to flatten it into "never reached CasparCG", which sends the
+    operator to check a link that is demonstrably up — the `mute-failed` mistake
+    of naming the wrong mechanism.
+  */
+  'amcp-timeout':
+    'CasparCG did not answer the command in time — it may or may not have executed. Check the layer on the output before reissuing it.',
+  // B-141 — the load lost its race with a Remove. Named because a bare failure here
+  // reads as an AMCP problem and sends the operator to the playout machine for
+  // something that happened in the bridge.
+  'item-removed': 'The row was removed while it was loading, so the load was abandoned.',
+  /*
     §8 — THE ONE CODE THAT MUST SAY "UNKNOWN", AND MUST BE SEEN RARELY.
 
     `amcp-error` is the bridge's fallback when a send failed with no code to

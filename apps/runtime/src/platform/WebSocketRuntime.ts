@@ -1,5 +1,6 @@
 import type { RetainedAirState, StackItemState } from '@cg/shared-schema';
 import {
+  AuditHealthChannel,
   AuditRecentChannel,
   ConnectionsConfigChangedChannel,
   ConnectionsConfigChannel,
@@ -934,6 +935,10 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly audit = {
     recent: (req: ChannelRequest<typeof AuditRecentChannel>) =>
       this.#invoke(AuditRecentChannel, req),
+    // B-141 — the positive control the panel reads beside the tail, so an empty
+    // list can be reported as a quiet session only when the instrument that
+    // produced it is provably live.
+    health: () => this.#invoke(AuditHealthChannel, {}),
   };
 
   readonly update = {

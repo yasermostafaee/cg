@@ -52,6 +52,7 @@ const BACKING_METHODS = [
   'templateList',
   'templateImport',
   'auditRecent',
+  'auditHealth',
   'updateRequest',
   'updateState',
   'updateCancel',
@@ -159,7 +160,7 @@ const BRIDGE_SURFACE: {
     // mock with `null` (it retains no rendered page, so the rehearsal panel shows
     // its honest "unavailable in this browser" state).
     templates: ['get', 'list', 'import', 'remove', 'onChanged', 'html'],
-    audit: ['recent'],
+    audit: ['recent', 'health'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
     settings: ['get', 'set', 'onChanged'],
     /**
