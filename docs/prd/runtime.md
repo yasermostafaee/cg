@@ -2820,11 +2820,24 @@ validationError` with both reasons spelled out in the pinned region
   channel definition and the exported type so the mismatch is not silent in the meantime — "one
   concept, two spellings" is this repo's most frequent failure, and an undocumented one is how it
   survives. ⟨Owner: confirm the rename rides with R-054, or say it should stay as-is permanently.⟩
+- 🔴 **A SETTING IS ALREADY LODGING HERE AND MUST MOVE WHEN THIS SHELL IS BUILT: the console's
+  OPERATOR NAME** (`audit-actor-console-name`, 2026-08-18). It is a per-console label sent with
+  every control request and recorded as the audit `actor`, and it is a **SETTING** — but this shell
+  did not exist, and a standalone dialog for one field would have been a twelfth dialog for R-054
+  to absorb. It therefore sits in the **Audit panel**, which is the least-bad existing home: that
+  is the only surface where `actor` appears at all (the column and the filter), so the value, its
+  caveat and its consequence are read in one glance.
+  **What must happen here:** move the control into the Settings shell — and ⚠ **the honesty caveat
+  travels with it** ("a LABEL you typed, not a verified sign-in — which console, not which
+  person"), because that caveat is a requirement of the change, not decoration. Consider leaving a
+  READ-ONLY restatement in the Audit panel: the limits of `actor` are most needed where `actor` is
+  read. It is recorded here rather than as its own item because R-054 is the work that resolves it,
+  and an unregistered "temporary" home is how a temporary home becomes permanent.
 - **Cross-refs:** [[R-052]] (the message region contract every pane inherits), [[R-055]] (the red
   budget, the FAILOVER miscolour, and the wire-name follow-on above), [[R-056]] (the same space
   discipline, applied to the position section), [[B-139]] (the dirty predicate a tab switch will
-  need), [[B-142]] (the raw `<select>`s outside `Modal`'s focus trap, whose fix belongs to this
-  shell work).
+  need), [[B-141]] (the operator-name setting lodging here, above), [[B-142]] (the raw `<select>`s
+  outside `Modal`'s focus trap, whose fix belongs to this shell work).
 
 ## [~] R-055 — three CG Control chrome corrections: a PVW-coloured hover, a coloured FAILOVER, and a tab whose name is not what it lists ⟨priority: low⟩ — implemented: openspec/changes/cg-control-chrome-corrections/; tab named STATION LAYERS
 

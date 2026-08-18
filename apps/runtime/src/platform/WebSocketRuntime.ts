@@ -102,6 +102,7 @@ import type {
   Unsubscribe,
 } from '../shared/runtime-bridge.js';
 import { LibraryStore } from './library/LibraryStore.js';
+import { getOperatorName, operatorActorForWire, setOperatorName } from './operatorName.js';
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
@@ -677,8 +678,22 @@ export class WebSocketRuntime implements RuntimeBridge {
         reject,
         timer,
       });
+      /*
+        B-141 follow-up — ONE site puts this console's name on the wire, for the same
+        reason the bridge has one site that reads it: every control request goes
+        through `#invoke`, so attribution cannot be forgotten on a new channel.
+
+        Read at SEND time, not at construction: the operator may rename the console
+        mid-session, and the next request must carry the new name.
+      */
       ws.send(
-        serializeWsFrame({ type: 'request', id, channel: channel.name, payload: validatedReq }),
+        serializeWsFrame({
+          type: 'request',
+          id,
+          channel: channel.name,
+          payload: validatedReq,
+          actor: operatorActorForWire(),
+        }),
       );
     });
   }
@@ -939,6 +954,12 @@ export class WebSocketRuntime implements RuntimeBridge {
     // list can be reported as a quiet session only when the instrument that
     // produced it is provably live.
     health: () => this.#invoke(AuditHealthChannel, {}),
+    // Browser-local, not a channel: the value's whole purpose is to differ per
+    // console. See `operatorName.ts` for what it is worth (and what it is not).
+    operatorName: () => getOperatorName(),
+    setOperatorName: (name: string) => {
+      setOperatorName(name);
+    },
   };
 
   readonly update = {

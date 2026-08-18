@@ -28,6 +28,9 @@ export {
   DEFAULT_BRIDGE_HOST,
   DEFAULT_BRIDGE_PORT,
   DEFAULT_BRIDGE_WS_URL,
+  UNATTRIBUTED_ACTOR,
+  MAX_ACTOR_LENGTH,
+  normalizeActor,
 } from './ws-frame.js';
 export type { WsFrame, WsRequestFrame, WsResponseFrame, WsPublishFrame } from './ws-frame.js';
 

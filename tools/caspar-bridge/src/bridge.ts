@@ -90,6 +90,7 @@ import {
   type WsResponseFrame,
 } from '@cg/shared-ipc';
 import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
+import { runAsActor } from './actor-context.js';
 import { CasparRuntime } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import {
@@ -568,8 +569,17 @@ async function handleMessage(
   }
 
   try {
-    // Stack ops are async (they await their AMCP ack); await every handler.
-    const result = await route.handle(parsedReq.data);
+    /*
+      Stack ops are async (they await their AMCP ack); await every handler.
+
+      B-141 follow-up — the handler runs inside the acting console's actor context,
+      so every audit append it reaches records WHO asked, at any depth and across
+      every await, without a single call site taking an actor parameter. Two browsers
+      interleaving their requests each keep their own; see `actor-context.ts` for why
+      that rules out a mutable "current actor" field, and for what the value is worth
+      (self-declared, unverified — which console, not which person).
+    */
+    const result = await runAsActor(frame.actor, () => route.handle(parsedReq.data));
     const parsedRes = route.channel.response.safeParse(result);
     if (!parsedRes.success) {
       send(socket, errorResponse(frame.id, `invalid response for ${frame.channel}`));

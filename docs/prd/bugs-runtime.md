@@ -3644,14 +3644,21 @@ update-deferred update-installed`. `ACTION_OPTIONS` in
   path in this process. ⚠ `import` was the fifteenth action and the change's own bookkeeping had
   lost it — it appeared in neither list, so it read as accounted for while being accounted for
   nowhere.
-- 🔴 **STILL OPEN — `actor` is a placeholder, and making it meaningful is an OWNER DECISION.**
-  Every entry carries `actor: 'operator'`. The control WebSocket is unauthenticated loopback and
-  carries no identity, so nothing distinguishes two people driving the same rundown: the record
-  answers _what_ honestly and answers _who_ with a constant — on a shared console, the half a
-  dispute turns on. It is a single `OPERATOR_ACTOR` constant so exactly one place learns the
-  answer. The candidate shapes differ in what they are worth (a per-browser operator name in
-  Settings; a PIN-backed sign-in reusing the lock's PIN; a per-connection client id that identifies
-  a BROWSER rather than a person — worth almost nothing in a dispute). Posed, not chosen.
+- ✅ **RESOLVED 2026-08-18 — `actor` is now a per-console OPERATOR NAME**, implemented in
+  `openspec/changes/audit-actor-console-name/`. Was: every entry carried `actor: 'operator'`, a
+  constant, because the control WebSocket is unauthenticated loopback — the record answered _what_
+  honestly and answered _who_ with one word, which on a shared gallery is the half a dispute turns
+  on. The single `OPERATOR_ACTOR` seam did its job: exactly one place had to learn the answer.
+  **Owner decision:** the name is set per console in the Runtime and sent with each control
+  request. **Rejected:** a PIN-backed sign-in (the lock's PIN is a SAFETY mechanism, not an
+  identity one, and a login in front of an emergency console is wrong) and a per-connection client
+  id (identifies a browser; nobody disputes which browser).
+  🔴 **The name is SELF-DECLARED and UNVERIFIED** — "which console, as labelled", never "which
+  person, proven" — and that caveat is on the operator-facing surface, not only in the design, for
+  the reason [[B-143]] records. An unconfigured console records `unattributed`, a word for a state,
+  never the old `operator`, which could not be told apart from a console somebody chose to name
+  that. ⚠ The control lives in the Audit panel because the Runtime has no settings shell;
+  [[R-054]] records that it must move.
 - **Cross-refs:** [[B-142]] (the panel's raw `<select>`, which this item must not touch),
   [[B-143]] (the same class — the system knows something and does not say it).
 

@@ -5,6 +5,7 @@ import { WebSocketRuntime } from './WebSocketRuntime.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import { initRuntimeWorkspace } from './library/workspace.js';
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
+import { getOperatorName, setOperatorName } from './operatorName.js';
 import { isTestMode } from './testMode.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
@@ -228,6 +229,13 @@ export function createMockBridge(): RuntimeBridge {
     audit: {
       recent: (req) => Promise.resolve(mock.auditRecent(req.limit, req.action, req.actor)),
       health: () => Promise.resolve(mock.auditHealth()),
+      // Browser-local in the mock exactly as in the real bridge — same storage, same
+      // module. The mock's own rows record it too, so the offline console shows the
+      // same attribution the live one would.
+      operatorName: () => getOperatorName(),
+      setOperatorName: (name: string) => {
+        setOperatorName(name);
+      },
     },
 
     update: {

@@ -73,6 +73,7 @@ import {
   type REHEARSE_ENTER_REASONS,
   type REHEARSE_EXIT_REASONS,
 } from '@cg/shared-ipc';
+import { operatorActor } from './actor-context.js';
 import { ChannelSettingsStore } from './channel-settings-store.js';
 import {
   validateFixedBank,
@@ -228,21 +229,18 @@ const ADD_MUTE_FAILED = 'add-mute-failed';
  */
 const AMCP_TIMEOUT_CODE = 'amcp-timeout';
 
-/**
+/*
  * B-141 — who the bridge records as having acted.
  *
- * ⚠ A PLACEHOLDER, and named as one. The control WebSocket carries no identity:
- * it is unauthenticated loopback, every browser on it is anonymous, and nothing
- * anywhere distinguishes two operators sharing a rundown. So the record answers
- * "what happened" honestly and answers "who did it" with a constant — which is
- * half of what a forensic log is for, and on a console several people drive it is
- * the half a dispute turns on.
+ * This WAS the constant `'operator'`, left as a single seam so that the day an
+ * identity scheme was decided there would be exactly one place to change. That
+ * day came: it is now `operatorActor()`, the per-console name the acting browser
+ * declared, resolved in `actor-context.ts` — which is still exactly one place.
  *
- * A constant rather than N string literals so that the day an identity scheme is
- * DECIDED (it is an owner question, not an implementation detail — see B-141)
- * there is exactly one place that has to learn about it.
+ * 🔴 Read that file before relying on the value. It is SELF-DECLARED and
+ * UNVERIFIED: it answers "which console, as labelled", never "which person,
+ * proven".
  */
-const OPERATOR_ACTOR = 'operator';
 
 /**
  * B-141 — the facts ONE audited action carries, filled in as they become known.
@@ -4675,7 +4673,7 @@ export class CasparRuntime {
     this.#sessions.A.start();
     this.#sessions.B?.start();
     this.#recordAudit({
-      actor: OPERATOR_ACTOR,
+      actor: operatorActor(),
       action: 'reconnect',
       server: 'primary',
       outcome: serveError === null ? 'ok' : 'failed',
@@ -4767,7 +4765,7 @@ export class CasparRuntime {
     // B-141 — `server` records which machine is primary AFTER the switch, which
     // is the fact someone reading the log the next day is actually asking about.
     this.#recordAudit({
-      actor: OPERATOR_ACTOR,
+      actor: operatorActor(),
       action: 'failover',
       server: newPrimary === 'A' ? 'primary' : 'backup',
       outcome: ok ? 'ok' : 'failed',
@@ -4784,13 +4782,13 @@ export class CasparRuntime {
     this.#lock = { engaged: true, reason: 'operator', engagedAt: new Date().toISOString() };
     this.lockChanged.emit(this.#lock);
     // B-141 — the PIN is never recorded, only that the lock was engaged.
-    this.#recordAudit({ actor: OPERATOR_ACTOR, action: 'lock-engage', outcome: 'ok' });
+    this.#recordAudit({ actor: operatorActor(), action: 'lock-engage', outcome: 'ok' });
     return { ok: true };
   }
   release(pin: string): { ok: boolean; reason?: 'pin-mismatch' | 'not-engaged' } {
     if (!this.#lock.engaged) {
       this.#recordAudit({
-        actor: OPERATOR_ACTOR,
+        actor: operatorActor(),
         action: 'lock-release',
         outcome: 'failed',
         errorCode: 'not-engaged',
@@ -4801,7 +4799,7 @@ export class CasparRuntime {
       // A REFUSED release is the entry that matters most here — it is the one an
       // operator would later ask about.
       this.#recordAudit({
-        actor: OPERATOR_ACTOR,
+        actor: operatorActor(),
         action: 'lock-release',
         outcome: 'failed',
         errorCode: 'pin-mismatch',
@@ -4811,7 +4809,7 @@ export class CasparRuntime {
     this.#lock = { engaged: false };
     this.#lockPin = null;
     this.lockChanged.emit(this.#lock);
-    this.#recordAudit({ actor: OPERATOR_ACTOR, action: 'lock-release', outcome: 'ok' });
+    this.#recordAudit({ actor: operatorActor(), action: 'lock-release', outcome: 'ok' });
     return { ok: true };
   }
 
@@ -5043,7 +5041,7 @@ export class CasparRuntime {
     verdict: { outcome: AuditEntry['outcome']; errorCode?: string },
   ): void {
     this.#recordAudit({
-      actor: OPERATOR_ACTOR,
+      actor: operatorActor(),
       action,
       ...(detail.itemId !== undefined ? { itemId: detail.itemId } : {}),
       ...(detail.templateId !== undefined ? { templateId: detail.templateId } : {}),

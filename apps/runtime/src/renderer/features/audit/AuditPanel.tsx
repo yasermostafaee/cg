@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
+import { MAX_ACTOR_LENGTH, UNATTRIBUTED_ACTOR } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Notice } from '../../ui/Notice.js';
@@ -38,6 +39,26 @@ const styles = {
     fontSize: '0.85rem',
   },
   actorInput: { width: 140 },
+  /*
+    B-141 follow-up — THIS CONSOLE's name, and its caveat, above the table rather than
+    tucked in a settings dialog somewhere else. It sits here because this is the only
+    surface where `actor` appears at all (the column and the filter below), so the
+    limits of the value are read in the same glance as the value itself.
+  */
+  console: {
+    display: 'flex',
+    gap: '0.5rem',
+    alignItems: 'baseline',
+    flexWrap: 'wrap' as const,
+    fontSize: '0.85rem',
+    paddingBottom: '0.5rem',
+  },
+  caveat: {
+    color: colors.textMuted,
+    fontSize: '0.75rem',
+    flex: '1 1 20rem',
+    lineHeight: 1.4,
+  },
   table: {
     flex: 1,
     overflowY: 'auto' as const,
@@ -105,6 +126,14 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [health, setHealth] = useState<AuditHealth | null>(null);
   const [actionFilter, setActionFilter] = useState<ActionFilter>('all');
   const [actorFilter, setActorFilter] = useState<string>('');
+  /*
+    B-141 follow-up — this console's own name. Browser-local, so it is read from the
+    bridge surface once per opening rather than subscribed: another TAB on the same
+    console could have changed it, and reopening the panel is when that matters. What
+    is actually SENT is re-read at every request, so a stale field here can never make
+    the record wrong — only the box.
+  */
+  const [operatorName, setOperatorNameState] = useState<string>('');
 
   async function refresh(): Promise<void> {
     const req: { limit: number; action?: AuditEntry['action']; actor?: string } = { limit: 200 };
@@ -124,6 +153,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 
   useEffect(() => {
     if (!open) return;
+    setOperatorNameState(window.cg.audit.operatorName());
     void refresh();
     // `refresh` is intentionally not in deps — recreating it on every
     // render would cause an infinite re-fetch loop. Filter state IS in
@@ -158,6 +188,40 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         </ModalAction>
       }
     >
+      {/*
+        ⭐ THE HONESTY HALF, ON THE SURFACE — not only in the design doc.
+
+        The value below is SELF-DECLARED and UNVERIFIED: the control socket is
+        unauthenticated loopback, so the record answers "which console, as labelled"
+        and never "which person, proven". Anyone can type anything, and a shared
+        console carries the last name typed straight through a shift change.
+
+        Saying that only in a design note is the exact failure `assumed` already made
+        (B-143): the system knows the limits of what it knows, and the operator — the
+        one who acts on it — is the one not told. So it is written where the log is
+        read, in the operator's words, beside the column it qualifies.
+      */}
+      <div style={styles.console}>
+        <label htmlFor="audit-operator">This console</label>
+        <input
+          id="audit-operator"
+          className="cg-field"
+          style={styles.actorInput}
+          placeholder="unattributed"
+          maxLength={MAX_ACTOR_LENGTH}
+          value={operatorName}
+          onChange={(e) => {
+            setOperatorNameState(e.target.value);
+            window.cg.audit.setOperatorName(e.target.value);
+          }}
+        />
+        <span style={styles.caveat}>
+          Recorded as the <strong>actor</strong> of everything done from this console. It is a LABEL
+          you typed, not a verified sign-in — it says which console, not which person, and it does
+          not change when somebody else takes the chair. Left empty, actions record{' '}
+          <strong>{UNATTRIBUTED_ACTOR}</strong>.
+        </span>
+      </div>
       <div style={styles.filters}>
         <label htmlFor="audit-action">Action</label>
         <select

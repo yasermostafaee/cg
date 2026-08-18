@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { AuditEntry } from '@cg/shared-schema';
-import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import { UNATTRIBUTED_ACTOR, type ConnectionConfig, type TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS } from './support/harness.js';
 
@@ -168,7 +168,14 @@ describe('B-141 — every playout verb records exactly one entry, at its real ou
         // wrapper is firing beside a hand-written append.
         expect(mine, `one ${action} row`).toHaveLength(1);
         expect(mine[0]).toMatchObject({
-          actor: 'operator',
+          /*
+            These verbs are driven DIRECTLY against the runtime, with no control
+            request around them, so there is no console to name and the honest
+            answer is `unattributed`. It was the constant `'operator'` until the
+            per-console name landed; see `actor-context.ts`, and
+            `audit-actor.integration.test.ts` for the value arriving over the wire.
+          */
+          actor: UNATTRIBUTED_ACTOR,
           outcome: 'ok',
           itemId: 'item1',
           templateId: 'lower-third',

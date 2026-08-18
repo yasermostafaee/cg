@@ -365,6 +365,26 @@ export interface RuntimeBridge {
      * produced it.
      */
     health(): Promise<ChannelResponse<typeof AuditHealthChannel>>;
+    /**
+     * B-141 follow-up — THIS CONSOLE's operator name: the value sent with every
+     * control request and recorded as the audit `actor`.
+     *
+     * Browser-local by nature and deliberately NOT an `@cg/shared-ipc` channel, the
+     * same reasoning as `templates.html` above: the whole point is that it differs
+     * PER CONSOLE. A bridge-side setting would be one value for the whole gallery,
+     * which is the question already answered by the constant it replaces.
+     *
+     * 🔴 SELF-DECLARED AND UNVERIFIED, and every surface that shows it must say so.
+     * It answers "which console, as labelled", never "which person, proven": anyone
+     * can type anything, and a shared console keeps the last name typed across a
+     * shift change. Empty (the default) records `unattributed` — a state, not a name.
+     *
+     * Synchronous on purpose: it is local storage, not a round trip, and the Audit
+     * panel renders it without a loading state.
+     */
+    operatorName(): string;
+    /** Set this console's operator name; empty clears it back to unattributed. */
+    setOperatorName(name: string): void;
   };
 
   update: {
