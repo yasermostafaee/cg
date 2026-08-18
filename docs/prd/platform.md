@@ -1912,6 +1912,79 @@ timeout or loosening a pixel threshold on this evidence is the longer-rope failu
 - **Cross-refs:** `B-098` / `B-073` (the load-contention flake class and why a longer timeout is the
   wrong answer).
 
+## 🔴🔴 THIRD OCCURRENCE — 2026-08-18 — AND IT IS REPRODUCIBLE, WITH A MECHANISM
+
+⚠ **Read this before treating P-034 as a note.** The item's own escalation rule ("a third occurrence
+should be treated as a pattern about the SUITE, not about whichever test it lands on") is now met —
+and this occurrence goes further than a pattern, because it **reproduces on demand** and points at a
+concrete cause.
+
+**What happened.** Running `pnpm test:e2e` (the root, turbo) on the session-D tip:
+
+| run | invocation                                  | Designer           | Runtime           |
+| --- | ------------------------------------------- | ------------------ | ----------------- |
+| 1   | `pnpm test:e2e` (both suites, concurrent)   | **265 / 3 failed** | 81 passed         |
+| 2   | `pnpm --filter @cg/designer test:e2e` alone | **268 passed**     | —                 |
+| 3   | `pnpm test:e2e` again (both, concurrent)    | **265 / 3 failed** | **80 / 1 failed** |
+| 4   | `pnpm --filter @cg/runtime test:e2e` alone  | —                  | **81 passed**     |
+
+**Reproducible in the concurrent shape, clean in isolation, twice each.** That is the first time this
+flake family has had a handle on it at all.
+
+**The four failing tests, all named this time** (the acceptance criterion the first occurrence could
+not meet):
+
+| spec                                               | test                                                                            | assertion                                                         |
+| -------------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `designer .../clock.spec.ts:14`                    | author a wall clock → canvas shows Persian-digit time → it ticks in the preview | `toHaveText(/[۰-۹]{2}:…/)` — **element(s) not found** within 7 s  |
+| `designer .../content-start-hold-entry.spec.ts:53` | timed / auto-out hold: the subtitle crawls from the entrance settle             | `expect.poll(style).toContain('translateX')` — **1500 ms budget** |
+| `designer .../content-start-hold-entry.spec.ts:63` | content-driven hold: the subtitle still crawls from the entrance settle         | same helper, same 1500 ms budget                                  |
+| `runtime  .../splash.spec.ts:102`                  | the phase label LEAVES on boot-done                                             | `toHaveCSS('opacity','0')` — got `"1"`, 17 polls over 7 s         |
+
+🔴 **Every one is "did this ANIMATE within N milliseconds".** Not one is a logic assertion. A clock
+that has not rendered, a crawl that has not started its transform, an opacity transition that has not
+finished — these are exactly the assertions that fail when the box cannot schedule frames, and they
+are the same shape as the first occurrence's `clock.spec.ts` candidate. **The suite is not flaky
+about WHAT it checks; it is flaky about WHEN.**
+
+## 🔴 THE MECHANISM — `test:e2e` is the ONE gate script B-098's bound was never applied to
+
+```
+"test":     "node tools/gate-hook/src/bounded-turbo-cli.mjs run test --continue=…"
+"test:e2e": "turbo run test:e2e --continue=…"          ← a BARE turbo run
+```
+
+`CLAUDE.md` states the rule and names three scripts — `gate`, `test`, `test:integration` — routed
+through `bounded-turbo-cli.mjs` so that `taskConcurrency × workersPerTask` stays ≤ cores. **`test:e2e`
+is not one of them.** So `pnpm test:e2e` runs BOTH apps' Playwright tasks concurrently, each spawning
+its own worker pool: **6 + 6 = 12 Chromium workers on an 8-core host.** That is precisely the
+compounding-multiplier shape B-098 exists to prevent, on the one script it does not cover.
+
+⚠ **AND CI HAS THE SAME SHAPE.** `.github/workflows/pr.yml`'s `e2e` job runs `pnpm test:e2e` on a
+single `ubuntu-latest` runner — the same unbounded fan-out, on a host with FEWER cores than this one.
+So the two earlier occurrences, one local and one on CI, are consistent with a single cause rather
+than with two unrelated brittle tests.
+
+**Candidate remedy, NOT applied here:** route `test:e2e` through `bounded-turbo-cli.mjs` like its
+siblings, and/or set Playwright's `workers` from the bound. It is one line, and it is deliberately
+left to the owner — this is shared config every session picks up, and this item's own rule is that a
+flake is not answered by whoever happens to be looking at it.
+
+🔴 **What must NOT be done, restated because this is exactly the moment it gets done:** no timeout is
+to be widened, no pixel threshold loosened, no retry added, and none of the four named tests is to be
+"fixed". Every one of them passes reliably when the host can schedule frames. Answering a contention
+red with a longer rope is `B-073`, and `B-098` is that bound blown in turn — the item already says
+so, and now the evidence says the same thing about this suite.
+
+**What this changes about the earlier entries:** nothing is retracted. The second occurrence's
+`video-import.spec.ts` pixel assertion is still a different spec and a different assertion kind — but
+"a pixel comparison that needs a rendered frame" fits the same WHEN-not-WHAT reading, so the three
+are now plausibly ONE finding rather than three shrugs. That is what the record was built to make
+visible.
+
+**Env:** Windows 11, 8 cores, session D tip, after a full `pnpm gate`. Full console output retained
+for this session only; the four test titles and assertion forms above are the durable part.
+
 ## [~] P-035 — a NEVER-STAGE guard, because `git add <directory>` swept the owner's uncommitted hack onto `dev` ⟨priority: high⟩ — implemented: the guard, its list and its tests ship with this item
 
 **What:** a pre-commit guard that **refuses** the commit when a listed path is staged, driven by a
