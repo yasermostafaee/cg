@@ -1919,6 +1919,10 @@ should be treated as a pattern about the SUITE, not about whichever test it land
 and this occurrence goes further than a pattern, because it **reproduces on demand** and points at a
 concrete cause.
 
+⚠ **SCOPE, corrected the same day: this is a LOCAL-ONLY finding.** It was first written as also
+explaining the CI flakes; that half is withdrawn and the retraction is at the end of this section.
+Read it before citing this occurrence for anything about CI.
+
 **What happened.** Running `pnpm test:e2e` (the root, turbo) on the session-D tip:
 
 | run | invocation                                  | Designer           | Runtime           |
@@ -1960,11 +1964,6 @@ is not one of them.** So `pnpm test:e2e` runs BOTH apps' Playwright tasks concur
 its own worker pool: **6 + 6 = 12 Chromium workers on an 8-core host.** That is precisely the
 compounding-multiplier shape B-098 exists to prevent, on the one script it does not cover.
 
-⚠ **AND CI HAS THE SAME SHAPE.** `.github/workflows/pr.yml`'s `e2e` job runs `pnpm test:e2e` on a
-single `ubuntu-latest` runner — the same unbounded fan-out, on a host with FEWER cores than this one.
-So the two earlier occurrences, one local and one on CI, are consistent with a single cause rather
-than with two unrelated brittle tests.
-
 **Candidate remedy, NOT applied here:** route `test:e2e` through `bounded-turbo-cli.mjs` like its
 siblings, and/or set Playwright's `workers` from the bound. It is one line, and it is deliberately
 left to the owner — this is shared config every session picks up, and this item's own rule is that a
@@ -1976,14 +1975,57 @@ to be widened, no pixel threshold loosened, no retry added, and none of the four
 red with a longer rope is `B-073`, and `B-098` is that bound blown in turn — the item already says
 so, and now the evidence says the same thing about this suite.
 
-**What this changes about the earlier entries:** nothing is retracted. The second occurrence's
-`video-import.spec.ts` pixel assertion is still a different spec and a different assertion kind — but
-"a pixel comparison that needs a rendered frame" fits the same WHEN-not-WHAT reading, so the three
-are now plausibly ONE finding rather than three shrugs. That is what the record was built to make
-visible.
+⚠ **What this changes about the earlier entries: NOTHING, and the first draft of this line said
+otherwise.** It read that the three occurrences were "now plausibly ONE finding rather than three
+shrugs", on the strength of a CI claim that measurement has since withdrawn — see the correction
+below. The two earlier occurrences stand exactly as they were recorded, unexplained, and this local
+finding does not reach them.
 
 **Env:** Windows 11, 8 cores, session D tip, after a full `pnpm gate`. Full console output retained
 for this session only; the four test titles and assertion forms above are the durable part.
+
+## 🔴 CORRECTION — THE CI HALF OF THAT CLAIM IS WITHDRAWN (same day, 2026-08-18)
+
+**What this section said when it was written**, and it was wrong: that
+`.github/workflows/pr.yml`'s `e2e` job runs `pnpm test:e2e` on a single `ubuntu-latest` runner with
+the same unbounded fan-out, and that the two earlier occurrences — one local, one on CI — were
+therefore "consistent with a single cause rather than with two unrelated brittle tests".
+
+**The measurement that withdraws it:** run
+<https://github.com/yasermostafaee/cg/actions/runs/32126244485> (commit `63d42eae`), whose `e2e` job
+ran and was green. Its log reads:
+
+```
+10:24:09  Running 81 tests using 1 worker      → 81 passed (2.0m)     [runtime]
+10:28:31  Running 268 tests using 1 worker     → 268 passed (6.3m)    [designer]
+```
+
+**CI runs ONE worker per suite, and the two suites did not overlap** — the runtime suite finished
+around 10:26 and the designer suite started at 10:28:31. Whatever `pnpm test:e2e`'s fan-out does on
+an 8-core Windows box, it is not what CI does. The inference from the local finding to the CI
+occurrences had no evidence under it and is retracted.
+
+🔴 **THE CONSEQUENCE, STATED PLAINLY SO THE RECORD IS HONEST RATHER THAN EMPTY.** The SECOND
+occurrence's flake — `video-import.spec.ts:291`, one flaky in run
+<https://github.com/yasermostafaee/cg/actions/runs/32054398518> on commit `56c0799f` — had been
+explained by this section as the same cause. **That explanation is withdrawn, so that flake is
+UNEXPLAINED AGAIN**, and it needs somewhere for the next occurrence to land. It is recorded here as
+open, with its run URL, deliberately: this repo's rule about a warning that outlives its truth runs
+the other way too — an EXPLANATION that outlives its truth must leave the record honest, not tidy.
+Deleting the wrong sentence would have quietly re-labelled a known-unexplained flake as one nobody
+had ever looked at.
+
+**What SURVIVES the correction, unchanged:** the local finding above. It reproduces on demand, it is
+four named tests, and every one of them is an animate-within-N-milliseconds assertion. It is a
+**LOCAL-ONLY** finding about `pnpm test:e2e` on this host, and it is stated as one from here on.
+
+**What is now OPEN, and was not before:**
+
+- the second occurrence (`video-import.spec.ts:291`, run 32054398518) — cause unknown, one green
+  retry, no pattern it belongs to;
+- whether the local concurrency finding and the CI flakes share anything at all — **no evidence
+  either way**, which is a different state from "consistent with a single cause" and must not be
+  written back as one.
 
 ## [~] P-035 — a NEVER-STAGE guard, because `git add <directory>` swept the owner's uncommitted hack onto `dev` ⟨priority: high⟩ — implemented: the guard, its list and its tests ship with this item
 
