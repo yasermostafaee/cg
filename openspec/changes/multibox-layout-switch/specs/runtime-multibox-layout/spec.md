@@ -4,9 +4,9 @@
 > no longer partial. The work is carried by two PRD items on the D-137/C-015 precedent — `R-057`
 > (operator) and `D-152` (authoring) — and is BLOCKED on `B-145`.
 >
-> ⚠ **Vocabulary.** A **COUNT** is how many boxes (1, 2, 3, 4…) and is what the operator picks. An
-> **ARRANGEMENT** is a named geometry for a count; a count may have several, one of which is the
-> authored default.
+> ⚠ **Vocabulary.** A **COUNT** is how many boxes (1, 2, 3, 4…). It is **DERIVED** from how many
+> source toggles are lit — the operator does not address it. An **ARRANGEMENT** is a named geometry
+> for a count; a count may have several, one of which is the authored default.
 
 ## ADDED Requirements
 
@@ -188,43 +188,75 @@ fault in the switch.
 - **THEN** the source is torn down and that is surfaced, rather than the switch-back silently taking
   longer than it does for every other source
 
-### Requirement: The operator picks a COUNT in one action, and gets that count's default arrangement
+### Requirement: The operator's primitive is ONE TOGGLE PER DECLARED SOURCE; the COUNT is derived
 
-Exactly one arrangement of one count SHALL be active at a time. A template MAY declare several
-**arrangements** for the same box **count**.
+The row's always-visible control SHALL be **one toggle per declared source**, and **which toggles are
+lit SHALL BE what is on air**. The operator SHALL NOT address a count directly: the count SHALL be
+**derived** from how many toggles are lit.
 
-Picking a count SHALL be **ONE operator action**, and SHALL activate that count's **authored default
-arrangement**. Choosing a non-default arrangement SHALL be possible and SHALL be an **explicit**
-additional step — the common case must not pay for the rare one.
+The control SHALL NOT be a menu. The client's requirement is that the operator cannot be mistaken,
+and a control that must be opened to reveal what is live gives no way to be sure without opening it.
 
-Sources SHALL be matched to cells in **declared order**. Per-cell assignment is deliberately not
-provided: it introduces a cell as a separately addressable identity, and the need for it is unproven.
+On any toggle change the system SHALL resolve the derived count, activate **that count's authored
+default arrangement**, and seat the lit sources into its cells in **declared order**. Exactly one
+arrangement of one count SHALL be active at a time.
 
-#### Scenario: Switching to a 2-box count takes one action
+Choosing a **non-default arrangement** for the current count SHALL be possible and SHALL be an
+**explicit** secondary action. The common case — changing which sources are on air — SHALL remain the
+toggle itself, and SHALL NOT require choosing an arrangement.
 
-- **WHEN** the operator picks the 2-box count on a running row
-- **THEN** that count's default arrangement is on air, in one action, with no arrangement chooser in
-  the way
+Per-cell assignment is deliberately not provided: it introduces a cell as a separately addressable
+identity, and the need for it is unproven.
+
+#### Scenario: The operator solos one box of three
+
+- **GIVEN** a running row with three sources lit
+- **WHEN** the operator unlights two of them
+- **THEN** the derived count is 1, that count's default arrangement is on air, and the single
+  remaining source occupies its cell — in one action, with no arrangement chooser in the way
+
+#### Scenario: Any combination is reachable, not just any count
+
+- **GIVEN** a template declaring four sources
+- **WHEN** the operator lights the first and the third only
+- **THEN** those two are on air in the 2-box arrangement's cells in declared order, and the operator
+  never had to express "two boxes" as a separate idea
+
+#### Scenario: What is lit is what is on air
+
+- **WHEN** the operator looks at the row without opening anything
+- **THEN** the lit toggles are the sources on air, because the control is the state readout and the
+  switch in one object
 
 #### Scenario: A non-default arrangement is reachable but explicit
 
 - **GIVEN** a count with more than one authored arrangement
 - **WHEN** the operator wants the non-default one
-- **THEN** they can select it explicitly, and the default is what a plain count pick still gives
+- **THEN** they can select it explicitly, and the default is what a plain toggle change still gives
 
 ### Requirement: A shape the template does not have is REFUSED legibly, never truncated
 
-Two situations SHALL be refused by ONE refusal family, with the same wording discipline: naming what
-was asked for and what exists.
+Three situations SHALL be refused by **ONE refusal family**, with the same wording discipline: naming
+what was asked for and what exists.
 
-- Selecting **more sources than the largest arrangement holds** SHALL be refused, naming the count
-  selected and the largest available.
-- Selecting a **count for which no arrangement is authored** SHALL be refused the same way.
-  Arrangements are NOT required for every count.
+- Lighting **more toggles than the largest arrangement holds** SHALL be refused, naming **the number
+  lit** and **the largest available**.
+- Reaching a **count for which no arrangement is authored** SHALL be refused the same way, naming the
+  count reached and the counts the template does author. Arrangements are NOT required for every
+  count.
+- **ALL TOGGLES OFF (count 0)** SHALL be treated as an ordinary count: if the template authors a
+  0-cell arrangement it is activated, and if it does not, all-off SHALL be refused by this same
+  family with the same wording.
 
-Neither SHALL be resolved by silently dropping sources or by silently substituting another count. A
+None SHALL be resolved by silently dropping sources or by silently substituting another count. A
 truncation would put a source off air without saying so, which is the failure the refusal exists to
 prevent.
+
+🔴 **All toggles off SHALL NOT be an implicit way to take the row off air.** The row already has a
+STOP verb. A second, implicit route to off-air would be the quietest possible one — reached by an
+operator unlighting the last box under time pressure — and STOP and CLEAR are the two verbs this
+product deliberately inverts relative to the reference product, so a third spelling of off-air is
+precisely the drift that must not be introduced.
 
 #### Scenario: More sources than any arrangement can hold
 
@@ -234,6 +266,19 @@ prevent.
 
 #### Scenario: A count with no arrangement
 
-- **WHEN** the operator picks a 3-box count on a template that authors only 1-box and 2-box
-- **THEN** the action is refused in the same family and with the same wording discipline, rather than
+- **WHEN** the operator's toggles reach a 3-box count on a template that authors only 1-box and 2-box
+- **THEN** the change is refused in the same family and with the same wording discipline, rather than
   falling back to another count
+
+#### Scenario: All toggles off, with no 0-cell arrangement authored
+
+- **GIVEN** a template that authors 1-box, 2-box and 3-box arrangements and no 0-cell one
+- **WHEN** the operator unlights the last lit source
+- **THEN** the change is refused by the same family with the same wording, the row stays as it was,
+  and the row is NOT taken off air — STOP remains the only way to do that
+
+#### Scenario: All toggles off, with a 0-cell arrangement authored
+
+- **GIVEN** a template that authors a 0-cell arrangement — the background alone
+- **WHEN** the operator unlights the last lit source
+- **THEN** that arrangement is on air, exactly as any other count's would be

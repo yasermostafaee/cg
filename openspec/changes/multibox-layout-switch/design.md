@@ -1114,54 +1114,95 @@ this change.**
 **Unblocks:** `tasks.md` 1.6, and adds 1.11 (file the item) and 4.7 (the switch must not ship before
 it lands).
 
-### §12.8 — Where the switch control lives, and how many actions — ✅ **DECIDED: a segmented control on the row**
+### §12.8 — Where the switch control lives — ✅ **DECIDED: ONE TOGGLE PER DECLARED SOURCE, on the row**
 
-> **DECISION (owner, 2026-08-18): AN ALWAYS-VISIBLE SEGMENTED CONTROL ON THE ROW**, showing which
-> layout is live. **A menu is disqualified** — the client's requirement is _"exactly one active so
-> the operator cannot make a mistake"_, and **a menu hides the current state**.
+> **DECISION (owner, 2026-08-18, SUPERSEDING the earlier segmented control): the always-visible
+> control on the row is ONE TOGGLE PER DECLARED SOURCE. Which toggles are LIT _is_ what is on air.**
+> The COUNT is **derived** from how many are lit; it is not something the operator addresses.
 
-**The reasoning is a direct consequence of §0.1 and it overturns §10's inherited default.** §10
-proposed the SOURCE/AUDIO menu as "the precedent and the obvious host". The client's requirement is
-not _reachability_, it is _unambiguity_: the operator must not be able to make a mistake, and a
-control that must be opened to reveal which layout is live gives the operator no way to be sure
-without opening it. A segmented control **is the state readout and the switch in one object**.
+⚠ **WHAT WAS WITHDRAWN, AND WHAT WAS NOT.** An earlier form of this decision — landed at `056ffdd5`
+— described **a segmented control over COUNTS**. That description is withdrawn. **The decision it
+implemented is not:** always-visible, state-carrying, **no menu** — a menu hides the current state,
+and the client's requirement (§0.1) is that the operator cannot be mistaken.
 
-🔴 **THE COST, STATED PLAINLY: this re-opens the closed six-column verb grid, and it collides with it
-twice — not once.** §10 recorded the grid as a wall; the decision goes through it, so the design must
-say what breaks.
+**Why it changed.** Asked whether the operator needs to solo a box, or any combination, the owner
+answered **any combination, any count**. A control over counts cannot express _which two of four_;
+toggles can, and they scale to any number of declared sources. The segmented control was the right
+answer to a narrower question than the one that was actually being asked.
+
+#### What follows mechanically
+
+1. On any toggle change the system resolves the **derived count**, applies **that count's authored
+   default arrangement**, and seats the lit sources into its cells in **declared order** (§12.9.1 Q2,
+   unchanged).
+2. Choosing a **non-default arrangement** for the current count remains an explicit secondary action
+   (§12.9.1 Q1, unchanged in substance). It is no longer "pick a count, then pick an arrangement" —
+   it is **"the count follows the toggles, and that count's arrangement can be overridden
+   explicitly."**
+3. ⭐ **The refusal family (§12.9.1 Q3+Q4) becomes DIRECTLY REACHABLE from the primitive, which is a
+   gain rather than a cost.** Under the count primitive a refusal answered an abstract pick; under
+   toggles it answers a concrete act — "you lit a fifth source and the largest arrangement holds
+   four". Re-expressed in §12.9.1 against toggles, **still ONE family with two triggers**, now three.
+
+#### 🔴 THE COST — it still re-opens the closed six-column verb grid, and still collides TWICE
+
+Both collisions survive the change of primitive; what changes is the SIZE of the second one.
 
 1. **The SHAPE rule.** _"Every row declares the same verbs in the same order, always"_
-   (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:407-409`) is why conditionally-
-   present controls were pushed to `surface: 'menu'` in the first place — SOURCE and AUDIO are both
-   `...(deps.hasLivePlates ? [act(…, 'menu')] : [])` (`:655-688`). A control present only on
-   multi-box rows is exactly the shape that rule refuses.
-2. 🔴 **The FIXED-WIDTH rule, which is the sharper collision and is NOT the same objection.** The
-   whole column model is fixed px — _"Every column here is a FIXED px width (or the single flexible
+   (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:407-409`) is why
+   conditionally-present controls were pushed to `surface: 'menu'` in the first place — SOURCE and
+   AUDIO are both `...(deps.hasLivePlates ? [act(…, 'menu')] : [])` (`:655-688`). A control present
+   only on multi-box rows is exactly the shape that rule refuses. **Unchanged by D1.**
+2. 🔴 **The FIXED-WIDTH rule — the sharper collision, and it is NOT the same objection.** The column
+   model is fixed px throughout — _"Every column here is a FIXED px width (or the single flexible
    `1fr` that absorbs the slack), so a longer alias, a longer template name or a longer state word
-   changes nothing but its own ellipsis"_ (`layerTable.ts:1-22`), with
-   `VERB_COUNT = 6` (`:75`) driving **both** the header's word row and the row's button row from one
+   changes nothing but its own ellipsis"_ (`layerTable.ts:1-22`) — with `VERB_COUNT = 6` (`:75`)
+   driving **both** the header's word row and the row's button row from one
    `gridTemplateColumns(density)` call (`:225`, used at `LayerRow.tsx:605` and
-   `LayerTableHeader.tsx:164`). A segmented control has **one segment per authored layout**, and the
-   layout count is authored per template — so its width varies by row _and is unknown at design
-   time_. That is not a seventh fixed column; it is a variable-width control in a model built to
-   forbid exactly that. And `VERB_COUNT`'s own comment records what happened last time a button was
-   added without updating it: the sixth button wrapped and **every header word from NEXT rightward
+   `LayerTableHeader.tsx:164`). `VERB_COUNT`'s own comment records what happened last time a button
+   was added without updating it: the sixth button wrapped and **every header word from NEXT rightward
    sat above the wrong glyph** — in a product where STOP and CLEAR are inverted relative to the
    reference product.
 
-⇒ **The gate is answered; the placement is now an implementation question with three shapes**, posed
-here and not decided: **(i)** a seventh verb column (refused by both rules above as written);
-**(ii)** the segmented control on a **second line of the row**, outside the verb grid, present only
-on multi-box rows — the shape rule governs the verb block, and a second line is not in it;
-**(iii)** a dedicated region outside the table entirely. **(ii) is the one to design first**: it
-satisfies the decision (always visible, state-carrying), and it leaves `VERB_COUNT` and the header
-word alignment untouched, which is the invariant with the recorded on-air failure behind it.
+   ⚠ **HOW D1 CHANGES THIS COLLISION — smaller, better-bounded, and still real.**
+
+   |                  | Segmented control (withdrawn)                                   | **Toggles (decided)**                                                                                                                                            |
+   | ---------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | One element per… | authored **arrangement count**                                  | **declared PLATE**                                                                                                                                               |
+   | Bounded by       | nothing in the schema — an author may declare any set of counts | the template's **plate count**, which is the same number that already drives `deps.hasLivePlates` and the whole Live Source band                                 |
+   | Known at…        | authoring time, per template                                    | authoring time, per template — but it is a number the row **already knows and already displays elsewhere** (the plate list, the AUDIO dialog, the SOURCE dialog) |
+
+   ⇒ The width still varies by row and is still unknown at design time, so **it is still a
+   variable-width control in a model built to forbid exactly that**. But it is now bounded by a
+   quantity the surface already carries, rather than by an independent authored dimension — which
+   makes it easier to reason about and easier to cap.
+
+#### ⇒ Placement: **(ii) stands, and is STRENGTHENED**
+
+The three shapes, unchanged, with the recommendation firmed up:
+
+- **(i) a seventh verb column** — refused by both rules above, as written.
+- ⭐ **(ii) a second line on the row, outside the verb block**, present only on multi-box rows. **This
+  is the one to design first.** The SHAPE rule governs the **verb block**, and a second line is not
+  in it; it satisfies the decision (always visible, state-carrying); and it leaves `VERB_COUNT` and
+  the header word alignment untouched — **the invariant with the recorded on-air failure behind it.**
+  🔴 **D1 strengthens it:** one toggle per plate is a _list_ of same-sized elements, which is exactly
+  what a free-flowing second line accommodates and exactly what a fixed-px column grid does not.
+- **(iii) a dedicated region outside the table** — still possible, still more surface than the
+  decision requires.
 
 ⚠ **And it must survive density.** `gridTemplateColumns(density)` exists because the table is
-density-adaptive; a control whose segment count is authored must have a defined behaviour at the
-tightest density, or it will be the thing that reintroduces wrapping.
+density-adaptive; a control whose element count is authored must have a defined behaviour at the
+tightest density, or it will be the thing that reintroduces wrapping. **D1 does not relax this** — a
+row with eight declared plates has eight toggles at every density.
 
-**Unblocks:** `tasks.md` 6.1.
+⚠ **The CUT escape shares this surface (§13.6 D3), and the two must be designed together.** §13.6
+closes "may the operator pick a mode per switch" as **no**, precisely because a second new control on
+this row would compound a collision that has a recorded on-air failure behind it. The escape is **one
+action, not a mode picker**, and where it sits is part of designing the toggle set — not a later
+addition to it.
+
+**Unblocks:** `tasks.md`'s operator-surface work.
 
 ### §12.9 — ✅ **CLOSED (owner, 2026-08-18): A′ IS ADOPTED.** All eight gates are now answered
 
@@ -1179,33 +1220,80 @@ minted 2026-08-18 and each names the other as half the feature.
 ⚠ **A TERMINOLOGY CHANGE THAT COMES WITH THE DECISION, and it is not cosmetic.** The owner's answers
 introduce a **two-level** model where this document had one:
 
-| Term            | Meaning                                                                                 |
-| --------------- | --------------------------------------------------------------------------------------- |
-| **COUNT**       | how many boxes — 1-box, 2-box, 3-box, 4-box. **This is what the operator picks.**       |
-| **ARRANGEMENT** | a NAMED GEOMETRY for a count. A count may have several; **one is the authored default** |
+| Term            | Meaning                                                                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **COUNT**       | how many boxes — 1-box, 2-box, 3-box, 4-box. 🔴 **DERIVED from how many source toggles are lit; NOT what the operator addresses** (§12.8) |
+| **ARRANGEMENT** | a NAMED GEOMETRY for a count. A count may have several; **one is the authored default**                                                   |
 
 Everything this document called a "layout" is an **arrangement**. The distinction is load-bearing
-rather than a rename: **§12.8's segmented control shows COUNTS, not arrangements** — a small,
-bounded, authored set — while arrangements are open-ended and are a secondary, explicit choice. That
-materially eases §12.8's fixed-width collision, though it does not remove it.
+rather than a rename: **COUNT is what SELECTS an arrangement**, and ARRANGEMENT is what carries the
+geometry.
+
+⚠ **CORRECTED by D1 (§12.8).** An earlier form of this table said COUNT is "what the operator picks",
+and §12.8 described a segmented control over counts. **The operator's primitive is a TOGGLE PER
+DECLARED SOURCE**; the count is derived from how many are lit. COUNT keeps its role — it is still the
+thing that selects an arrangement — it simply stops being the thing the operator addresses. The
+fixed-width collision §12.8 records is **changed in size, not removed**: one element per declared
+plate rather than per authored count.
 
 #### 12.9.1 The four questions the owner posed AND answered (2026-08-18)
 
 ⚠ These were **not** in §13.6's posed list — they arrive with their answers, and are recorded here
 with the question reconstructed beside each so the record stands on its own.
 
-| #   | Question                                                                  | ✅ Decision                                                                                                                                       |
-| --- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | When the operator picks a count, which arrangement do they get?           | **An authored DEFAULT arrangement per count**, with the operator able to choose another **explicitly**. 🔴 **The common case must be ONE ACTION** |
-| 2   | How is a source matched to a cell — declared order, or a per-cell choice? | **DECLARED ORDER in v1.** Side-swapping is a LATER item: it introduces per-cell assignment and **the need is unproven**                           |
-| 3   | What if more sources are selected than the largest arrangement holds?     | **REFUSED LEGIBLY, naming the count and the largest available** — the refusal doctrine, **not a silent truncation**                               |
-| 4   | Must every count have an arrangement?                                     | **NO.** Selecting a count with no arrangement is **refused in the same family, with the same wording discipline**                                 |
+| #   | Question                                                                  | ✅ Decision                                                                                                                                                                                   |
+| --- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Once a count is selected, which arrangement does it get?                  | **An authored DEFAULT arrangement per count**, with the operator able to choose another **explicitly**. 🔴 **The common case must be ONE ACTION** — under D1 that action is the toggle itself |
+| 2   | How is a source matched to a cell — declared order, or a per-cell choice? | **DECLARED ORDER in v1.** Side-swapping is a LATER item: it introduces per-cell assignment and **the need is unproven**                                                                       |
+| 3   | What if more sources are LIT than the largest arrangement holds?          | **REFUSED LEGIBLY, naming the number lit and the largest available** — the refusal doctrine, **not a silent truncation**                                                                      |
+| 4   | Must every count have an arrangement?                                     | **NO.** Reaching a count with no arrangement is **refused in the same family, with the same wording discipline**                                                                              |
 
 **Why 3 and 4 are one rule and should be built as one.** Both are "you asked for a shape this
 template does not have", both must name what was asked for and what exists, and both are the
 alternative to a silent truncation that would put a guest off air without saying so. **One refusal
-family, two triggers** — not two refusals that happen to look alike. That is the same discipline
-§12.6 applies to its predicate.
+family, now THREE triggers** — not three refusals that happen to look alike. That is the same
+discipline §12.6 applies to its predicate.
+
+⚠ **RE-EXPRESSED AGAINST TOGGLES (D1, §12.8).** The primitive changed; the family did not. Under the
+withdrawn count primitive a refusal answered an abstract pick; under toggles it answers a concrete
+act, which is strictly better wording material:
+
+| Trigger                                             | The refusal names                                                   |
+| --------------------------------------------------- | ------------------------------------------------------------------- |
+| more toggles lit than the largest arrangement holds | **the number lit** and **the largest available**                    |
+| the derived count has no authored arrangement       | **the count reached** and **which counts the template does author** |
+| 🔴 **ALL TOGGLES OFF (count 0)** — new under D1     | the same, for count 0 — see below                                   |
+
+#### 12.9.1a 🔴 THE ALL-OFF CASE (count 0) — decided, and it stays in the refusal family
+
+**D1's toggle primitive introduces a state the count primitive could not reach: every toggle off.** It
+must not be left undefined, so it is decided here.
+
+> **DECISION: count 0 is an ordinary count.** If the template authors a 0-cell arrangement, that
+> arrangement is shown — background alone, no boxes, which is a real broadcast state and is
+> expressible under A′ (an arrangement is an ordered list of cell rects, and the empty list is a
+> valid one). **If it does not, all-off is REFUSED by the same family, with the same wording**, exactly
+> like any other absent count.
+
+**Two things in the tree support this rather than an ad-hoc rule, and they were checked rather than
+assumed:**
+
+1. **The tree already distinguishes "declares nothing" from "declares something unsatisfied", and
+   refuses the second.** `resolvePlateAssignments` is deliberately ALL-OR-NOTHING — _"A template with
+   three guest boxes, two assigned, is not two-thirds of a graphic — it is a designed layout with a
+   hole in it, on air"_ — while an **empty `sources` array** is _"a real and common answer — this
+   template has none"_ and resolves to `{ ok: true, plates: [] }`
+   (`tools/caspar-bridge/src/live-plate-assignment.ts:54-72`, verified at `7ed8eb97`). **All-off is
+   the SECOND case, not the first**: the template still declares its plates; the operator has asked
+   for a shape with none of them in it. So it belongs with the refusals, not with the free pass.
+2. 🔴 **Reading all-off as "take the row off air" would be a SECOND SPELLING OF STOP.** The row
+   already has a STOP verb, and STOP and CLEAR are the two on-air verbs this product deliberately
+   inverts relative to the reference product (`layerTable.ts:62-73`). Giving the toggle set a third,
+   implicit way to reach off-air is exactly the drift this repo forbids — and it would be the
+   _quietest_ possible way to take a graphic off air, discovered by an operator unlighting the last
+   box under time pressure.
+
+⇒ **All-off is never an implicit STOP.** It is a count like any other: authored, or refused.
 
 **Why 2's deferral is the right shape and not a shortcut.** Declared order needs no new identity:
 the Nth declared plate goes in the Nth cell, and `(templateId, plateId)` already keys the assignment
@@ -1717,27 +1805,71 @@ shipped `mask-image` + `mask-mode: luminance` path rather than replacing it — 
 cheaper than §13.4's `clip-path` route in a second way the frame numbers do not show: **it needs no
 second mask mechanism at all.**
 
-### 13.6 POSED, not decided — who picks a mode, and at what scope
+### 13.6 ✅ CLOSED — who picks a mode, and at what scope. **§13.6 holds no open question**
 
-**The owner's direction, recorded as settled:** the **AUTHOR** sets the default mode and duration, in
-the same `Layouts` section as the layout list; the **OPERATOR** always has an **immediate cut
-available as an escape**, which is broadcast practice.
+**The owner's direction, already settled:** the **AUTHOR** sets the default mode and duration, in the
+same section as the arrangement list; the **OPERATOR** always has an **immediate cut available as an
+escape**, which is broadcast practice.
 
-⚠ **The owner's 2026-08-18 answers settled four questions about ARRANGEMENTS (§12.9.1) and did NOT
-reach these two.** They remain open, and the arrangement model sharpens the second of them:
+Both remaining questions were answered on 2026-08-18. They are recorded below **with their candidate
+tables kept** — a decision whose alternatives have been deleted cannot be re-read later to check
+whether it still holds.
 
-1. **May the operator also pick a mode PER SWITCH?** ⚠ Note the surface cost before answering:
-   §12.8's decision already re-opens the closed six-column verb grid for the segmented control, and a
-   per-switch mode picker is a **second** new control on the same row. If the answer is yes, the two
-   should be designed together rather than sequentially.
-2. **Is the mode per-TEMPLATE, per-ARRANGEMENT, or per-PAIR?** 🔴 The owner's own example —
-   _"a 1-box→2-box move but a 3-box→1-box cut"_ — is a statement about an ORDERED PAIR, which is a
-   third scope neither option names and which costs **N² − N** entries for N counts (12 for the
-   owner's four). Per-arrangement ("this arrangement is always entered with a fade") is N entries and
-   covers most of the intent. **This should be settled before the authoring surface is drawn**,
-   because a per-pair table and a per-arrangement field are different UIs, not different defaults.
-   ⚠ Note the model makes this cheaper to defer than it looks: the mode lives beside the arrangement
-   list either way, so the N-entry form is a strict subset of the N²-entry one.
+#### 13.6.1 ✅ **DECIDED (D3): the operator does NOT pick a mode per switch in v1**
+
+> **DECISION: the author's per-arrangement mode is what runs.** The operator always has an
+> **immediate CUT available as an escape** — broadcast practice. **That escape is ONE ACTION, not a
+> mode picker.**
+
+| Candidate                                                              | Cost                                                                                                                      |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **A — the operator picks a mode per switch**                           | Maximum live control. Costs a SECOND new control on a row that is already re-opening the verb grid                        |
+| ⭐ **B — the author's mode runs; the operator gets a CUT escape only** | The live control that matters in a gallery (get it off, now) at one action. Costs the operator any other live mode choice |
+
+**The reasoning, and it is a surface argument rather than a taste one.** §12.8's toggle set **already
+re-opens the closed six-column verb grid**, and that grid has a recorded on-air failure behind it —
+the sixth button wrapped and every header word from NEXT rightward sat above the wrong glyph, in a
+product where STOP and CLEAR are inverted (`layerTable.ts:62-73`). **A per-switch mode picker would
+be a second new control on the same row**, compounding a collision that is not yet paid for. The
+escape is not a mode picker: it is one action with one meaning.
+
+⚠ **The escape's placement is designed WITH the toggle set, not after it.** This is the surviving half
+of the note this section already carried — "if the answer is yes, the two should be designed
+together". The answer is no, and the two are still designed together, because they share one surface
+and one collision. §12.8 carries the same instruction.
+
+#### 13.6.2 ✅ **DECIDED (D2): the mode's scope is PER-ARRANGEMENT — the arrangement being ENTERED**
+
+> **DECISION: mode and duration are a property of the ARRANGEMENT BEING ENTERED** — _"this
+> arrangement is always entered with a fade"_. **N entries for N arrangements.**
+
+| Candidate                        | Cost                                                                                                                        |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **per-TEMPLATE**                 | 1 entry. 🔴 **REFUSED — it cannot express the difference between arrangements, which is the whole point of having several** |
+| ⭐ **per-ARRANGEMENT (entered)** | N entries. Covers most of the intent; one field beside each arrangement                                                     |
+| **per-PAIR (ordered)**           | **N² − N** entries — 12 for the owner's four counts. Expresses the owner's own example exactly. **DEFERRED, not refused**   |
+
+**Why per-pair is DEFERRED rather than refused, and why that is safe.** The owner's motivating
+example is a statement about an ordered pair:
+
+> _"a 1-box→2-box move but a 3-box→1-box cut"_
+
+Per-arrangement cannot express that: it can say "2-box is always entered with a move" and "1-box is
+always entered with a cut", which gives the right answer for both of those transitions but also
+fixes every _other_ transition into them. 🔴 **The reason this is a deferral and not a compromise is
+formal: per-arrangement is a STRICT SUBSET of the per-pair form.** The mode lives beside the
+arrangement either way; a later item that wants per-pair adds a _from_ dimension to entries that
+already exist, and every authored per-arrangement value is the row-default of the pair table. **No
+authored format is broken by the upgrade**, so a later item can serve the example above without a
+migration. The example is recorded here as the case that item would exist for.
+
+**Why per-template is refused rather than deferred.** It is not a smaller version of the right
+answer — it is a different answer that cannot grow into one. A template with a 1-box, a 2-box and a
+4-box arrangement wants a cut into 1-box and a move into 4-box; one field for the whole template
+cannot hold both, and no later item can widen it without discarding what was authored.
+
+**Where it is authored:** in the **same section as the arrangement list** (this section's settled
+direction), as a field on each arrangement — which is also what makes the subset property hold.
 
 ### 13.7 Per-box titles — a title is an ORDINARY TEXT ELEMENT; four things still need answers
 
@@ -1775,7 +1907,7 @@ was checked:
 ⇒ **Recommended as part of A′** (§12.9.10). It reuses shipped machinery and it is the same nesting
 that makes A′'s per-layout geometry work.
 
-#### 13.7.2 REQUIREMENT — hiding a title during a transition is page-only, and therefore free of the sync problem
+#### 13.7.2 ✅ DECIDED — hiding an element during a transition: a PER-ELEMENT flag, page-only, free of the sync problem
 
 Text needs no `MIXER` and has no server-side counterpart, so it sits on the **background** side of
 §13.2's boundary: any easing, any duration.
@@ -1784,12 +1916,26 @@ Text needs no `MIXER` and has no server-side counterpart, so it sits on the **ba
 the move; a logo inside the multi-box must not blink on every switch. A blanket "hide text during
 transitions" rule would produce the second behaviour while aiming at the first.
 
-**POSED — where the option lives.** The natural home is a per-element flag ("hide while the layout is
-changing"), beside the element rather than in the layout. ⚠ Worth saying out loud: that would be a
-**third** per-element visibility notion, alongside the authored `visible` and A's per-layout
+✅ **DECIDED (D4, owner 2026-08-18): the option lives BESIDE THE ELEMENT, not in the arrangement.**
+A per-element flag — _"hide while the arrangement is changing"_ — because the distinction being
+authored is a property of the element, not of the transition: **a box title leaves during the move; a
+logo must not blink on every switch.** Putting it on the arrangement would force one answer for
+everything the arrangement contains, which is the blanket rule this requirement exists to refuse.
+
+🔴 **THE CONSTRAINT THIS SECTION ALREADY STATED IS NOW BINDING, AND IT IS A TASK.** This flag is a
+**THIRD** per-element visibility notion, alongside the authored `visible` and A′'s per-arrangement
 visibility. Three booleans that all mean "is this on screen" is precisely the shape that produces a
-predicate whose name stops matching what it tests, so whichever way it is authored, **the resolved
-visibility must come from ONE function** — the same one UNIT B′ gives `sceneMaskHoles` (`tasks.md` 2.1).
+predicate whose name stops matching what it tests (`CLAUDE.md` golden rule 6, and the `B-100`/`P-012`
+history behind it).
+
+> **⇒ RESOLVED VISIBILITY MUST COME FROM ONE FUNCTION** — the same one UNIT B′ gives `sceneMaskHoles`
+> (`tasks.md` 2.1). If that function does not exist yet, **2.1 creates it**, and this flag is its
+> **THIRD INPUT — never a fourth boolean read somewhere else.**
+
+⚠ **This is the constraint that a well-meaning implementation will breach without noticing**, because
+adding one more `if (el.hideDuringTransition)` at the point of use is smaller, local, and obviously
+correct in isolation. It is cross-referenced from `tasks.md` 2.1 and from the surface task so it
+cannot be met that way.
 
 #### 13.7.3 ⚠ A consequence that makes the cheap fallback CHEAPER — recorded in §12.2's reasoning
 

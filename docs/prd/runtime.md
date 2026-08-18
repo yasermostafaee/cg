@@ -3080,21 +3080,21 @@ and reveals whatever live layer is topmost at that pixel, **which may belong to 
 template**. Both reported symptoms follow at once — one arrangement appearing under another, and
 boxes that look cropped. The switch makes that state unreachable.
 
-**The model (owner, 2026-08-18).** The operator picks a **COUNT**; a count may have several named
-**ARRANGEMENTS**; one arrangement per count is the authored default. **The common case is ONE
-ACTION** — pick the count, get its default arrangement — with choosing a non-default arrangement an
-explicit extra step.
+**The model (owner, 2026-08-18).** The operator toggles **SOURCES**; the **COUNT** is derived from how
+many are lit; a count may have several named **ARRANGEMENTS**, one of which is the authored default.
+**The common case is ONE ACTION** — flip a toggle, and the derived count's default arrangement
+follows — with choosing a non-default arrangement an explicit extra step.
 
 **The decisions this item implements** (all owner-answered, `design.md` §12–§13):
 
-|                                             | Decision                                                                                                                                                                                          |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Phasing**                                 | the CUT ships first; the animated switch second. Both share the carrier and the mask work                                                                                                         |
-| **The control**                             | an **always-visible segmented control on the row**, showing which count is live. A menu is disqualified — it hides the current state, and the requirement is that the operator cannot be mistaken |
-| **A dropped box**                           | its source is **HELD muted and idle**, so switching back is instant. A source kind that cannot be held falls back to teardown as a **NAMED, observable** behaviour, never a silent difference     |
-| **Two multi-box templates on air together** | **REFUSED**, in `take()` **AND** `restore()` — restore never passes through take — through **ONE predicate CALLED from both**                                                                     |
-| **The Inspector's assignment edit**         | surface only — see [[B-146]], which carries it                                                                                                                                                    |
-| **Transition modes**                        | cut / fade / move, the author setting the default and the operator always having an immediate cut as an escape                                                                                    |
+|                                             | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Phasing**                                 | the CUT ships first; the animated switch second. Both share the carrier and the mask work                                                                                                                                                                                                                                                                                                                                                                                        |
+| **The control**                             | 🔴 **ONE TOGGLE PER DECLARED SOURCE, always visible on the row — which toggles are LIT is what is on air, and the COUNT is DERIVED from how many.** A menu is disqualified: it hides the current state, and the requirement is that the operator cannot be mistaken. ⚠ Supersedes the segmented-control-over-counts wording this row carried at `056ffdd5` — a control over counts cannot express _which_ two of four, and the owner's answer was **any combination, any count** |
+| **A dropped box**                           | its source is **HELD muted and idle**, so switching back is instant. A source kind that cannot be held falls back to teardown as a **NAMED, observable** behaviour, never a silent difference                                                                                                                                                                                                                                                                                    |
+| **Two multi-box templates on air together** | **REFUSED**, in `take()` **AND** `restore()` — restore never passes through take — through **ONE predicate CALLED from both**                                                                                                                                                                                                                                                                                                                                                    |
+| **The Inspector's assignment edit**         | surface only — see [[B-146]], which carries it                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Transition modes**                        | cut / fade / move. The mode and duration are **per-ARRANGEMENT — a property of the arrangement being ENTERED** (`design.md` §13.6.2); the operator does **not** pick a mode per switch in v1, and always has an immediate cut as an escape (§13.6.1)                                                                                                                                                                                                                             |
 
 🔴 **The switch and the live-source change are ONE mechanism.** A switch changes _which plates exist
 and where_; a source change changes _what one plate shows_. Both are "reconcile the seated
@@ -3104,11 +3104,17 @@ it.**
 
 ⚠ **The control re-opens the closed six-column verb grid, and collides with it twice** — the SHAPE
 rule (`layerRowActions.ts:407-409`, why conditionally-present controls became `surface: 'menu'`) and,
-more sharply, the fixed-px column model (`layerTable.ts:1-22`, `VERB_COUNT = 6`). A segmented control
-has one segment per declared count, so its width varies by row. `design.md` §12.8 poses three
-placements and recommends a **second line on the row, outside the verb block** — it leaves
-`VERB_COUNT` and the header word alignment untouched, and that invariant has a recorded on-air
-failure behind it.
+more sharply, the fixed-px column model (`layerTable.ts:1-22`, `VERB_COUNT = 6` at `:75`). The toggle
+set has **one element per declared plate**, so its width still varies by row — bounded now by a
+quantity the surface already carries rather than by an independent authored dimension, which makes it
+smaller but not gone. `design.md` §12.8 poses three placements and recommends a **second line on the
+row, outside the verb block**; a list of same-sized toggles is exactly what a free-flowing second line
+accommodates and exactly what a fixed-px column grid does not. It leaves `VERB_COUNT` and the header
+word alignment untouched, and that invariant has a recorded on-air failure behind it.
+
+⚠ **The operator's immediate-CUT escape shares this surface and is designed WITH the toggles, not
+after them** (`design.md` §13.6.1): the operator does not pick a transition mode per switch in v1 —
+the author's per-arrangement mode runs — so the escape is one action, not a mode picker.
 
 🔴 **BLOCKED ON [[B-145]].** The live-layer ledger must survive a bridge restart before this ships:
 the switch seats and releases plates continuously rather than once per take, so a stranded producer
@@ -3116,10 +3122,13 @@ under it is a live guest on air that no code path can reach.
 
 **Refusals — legible, never silent truncation** (owner, 2026-08-18):
 
-- Selecting **more sources than the largest arrangement holds** is refused, **naming the count
-  selected and the largest available**.
-- Selecting a **count with no arrangement** is refused in the same family, with the same wording
+- Lighting **more toggles than the largest arrangement holds** is refused, **naming the number lit
+  and the largest available**.
+- Reaching a **count with no arrangement** is refused in the same family, with the same wording
   discipline — arrangements are NOT required for every count.
+- 🔴 **ALL TOGGLES OFF (count 0)** is an ordinary count: the authored 0-cell arrangement if there is
+  one, else the same refusal. It is **never** an implicit way to take the row off air — the row has a
+  STOP verb, and a second implicit route to off-air would be the quietest possible one.
 
 **Acceptance:**
 
@@ -3129,13 +3138,18 @@ under it is a live guest on air that no code path can reach.
 - WHEN the operator switches back THEN each box shows the same source it showed before, with no
   operator action, because assignment is keyed `(templateId, plateId)` and the plate keeps one
   identity
-- WHEN the operator picks a count THEN it takes ONE action and uses that count's default arrangement
+- WHEN the operator flips a source toggle THEN it takes ONE action, the derived count's default
+  arrangement follows, and the lit toggles are what is on air
+- WHEN the operator lights any COMBINATION — the first and third of four, say — THEN those two are on
+  air, because the primitive is per-source and not per-count
 - WHEN a box has no counterpart in the target count THEN its source is held (or its teardown is
   surfaced), and it is not reassigned onto a surviving box
-- WHEN the operator selects more sources than the largest arrangement holds THEN the refusal names
-  the count and the largest available, rather than truncating
-- WHEN the operator selects a count with no authored arrangement THEN it is refused in the same
-  family, with the same wording
+- WHEN the operator lights more toggles than the largest arrangement holds THEN the refusal names the
+  number lit and the largest available, rather than truncating
+- WHEN the toggles reach a count with no authored arrangement THEN it is refused in the same family,
+  with the same wording
+- WHEN the operator unlights the LAST source THEN a 0-cell arrangement is shown if the template
+  authors one, and otherwise it is refused by that same family — **all-off is never an implicit STOP**
 - WHEN a take or a restore would put a second multi-box template on air THEN it is refused by ONE
   predicate called from both paths
 - WHEN a plate's geometry or opacity is animated THEN the page and the server both use `linear`, so
