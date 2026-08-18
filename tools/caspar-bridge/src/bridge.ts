@@ -100,6 +100,7 @@ import {
   validateFixedBank,
 } from './fixed-layers-store.js';
 import { loadReservedLayers } from './reserved-layers-store.js';
+import { loadPersistedLiveLayers, savePersistedLiveLayers } from './live-layers-store.js';
 import {
   resolveSourceCatalog,
   saveSourceCatalog,
@@ -208,6 +209,17 @@ export interface BridgeOptions {
    * because this file is ABOUT templates (B-116).
    */
   sourceAssignmentsPath?: string;
+  /**
+   * B-145 — where the LIVE LAYER LEDGER persists (JSON).
+   *
+   * Omitted → no persistence, which is the pre-B-145 behaviour: a restart loses the ledger
+   * and the seated producers are stranded. Configured → the ledger is written on every
+   * change and ADOPTED at boot, corrected against what the server actually has.
+   *
+   * ⚠ Like {@link sourceAssignmentsPath}, it must NOT live inside {@link templatesDir}
+   * (B-116).
+   */
+  liveLayersPath?: string;
   /**
    * B-141 — the NDJSON audit record. ABSENT = no writer configured, which the
    * operator surface reports AS SUCH rather than as an empty log. Unlike the
@@ -459,6 +471,50 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(options.auditLogPath !== undefined ? { auditLogPath: options.auditLogPath } : {}),
     ...(options.runtimeTuning ?? {}),
   });
+  // B-145 — adopt the persisted ledger, then keep it written.
+  //
+  // 🔴 ADOPT BEFORE SUBSCRIBING TO THE CHANGES, and the order is load-bearing: subscribing
+  // first would have the adopt's own publish write the file back before it has been
+  // corrected, which for one moment persists a claim nothing had verified.
+  if (options.liveLayersPath !== undefined) {
+    const loaded = loadPersistedLiveLayers(options.liveLayersPath);
+    if (loaded.problem !== undefined) {
+      process.stderr.write(
+        `[caspar-bridge] ⚠ the live-layer ledger at ${loaded.problem.file} is present but ` +
+          `unusable (${loaded.problem.reason}) — booting with an EMPTY ledger, so any layers ` +
+          `still lit from a previous run are unreachable until they are cleared by hand
+`,
+      );
+    }
+    if (loaded.ledger !== null) {
+      // Occupancy is not knowable at this point — no session has connected yet — so every
+      // record adopts UNVERIFIED rather than being dropped. Absence of knowledge is not
+      // knowledge of absence: dropping here would strand exactly the producers this item
+      // exists to stop stranding. A later reading corrects the ledger; a wrong drop cannot
+      // be undone.
+      const adoption = runtime.adoptLiveLayers(loaded.ledger, () => 'unknown');
+      process.stderr.write(
+        `[caspar-bridge] adopted ${String(adoption.adopted.size)} item(s) of live layers from ` +
+          `${options.liveLayersPath} (${String(adoption.unverified.length)} unverified until the ` +
+          `first occupancy reading)
+`,
+      );
+    }
+    const liveLayersPath = options.liveLayersPath;
+    runtime.liveLayersChanged.subscribe((ledger) => {
+      try {
+        savePersistedLiveLayers(liveLayersPath, ledger);
+      } catch (err) {
+        process.stderr.write(
+          `[caspar-bridge] ⚠ failed to persist the live-layer ledger to ${liveLayersPath}: ` +
+            `${err instanceof Error ? err.message : String(err)} — seated layers will not ` +
+            `survive a bridge restart
+`,
+        );
+      }
+    });
+  }
+
   const routes = buildRoutes(runtime, {
     ...(options.persistPath !== undefined ? { persistPath: options.persistPath } : {}),
     ...(options.fixedLayersPath !== undefined ? { fixedLayersPath: options.fixedLayersPath } : {}),

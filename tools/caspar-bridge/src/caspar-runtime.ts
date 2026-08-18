@@ -84,7 +84,14 @@ import {
 } from './fixed-layers-store.js';
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
-import type { LiveLayerLedger, LiveLayerRecord, NormalizedRect } from './live-layers.js';
+import {
+  reconcileLiveLayers,
+  type LiveLayerAdoption,
+  type LiveLayerLedger,
+  type LiveLayerOccupancy,
+  type LiveLayerRecord,
+  type NormalizedRect,
+} from './live-layers.js';
 import { AuditWriter, readRecentEntries } from '@cg/audit';
 import { resolvePlateAssignments } from './live-plate-assignment.js';
 import { resolvePlateAspect } from './live-plate-fit.js';
@@ -446,6 +453,15 @@ export class CasparRuntime {
    * every browser is showing plates it now affects.
    */
   readonly sourceAssignmentsChanged = new Emitter<SourceAssignments>();
+  /**
+   * B-145 — emitted with the FULL ledger whenever the Live Source layers this bridge owns
+   * change, so it can be PERSISTED and survive a restart.
+   *
+   * 🔴 **The runtime emits; it does not write files.** That is the same seam
+   * `sourceCatalogChanged` / `sourceAssignmentsChanged` already use, and it is what keeps
+   * `fs` out of the class that talks to the wire. `bridge.ts` subscribes and persists.
+   */
+  readonly liveLayersChanged = new Emitter<LiveLayerLedger>();
   /**
    * R-030 — emitted when a browser changes the channel raster AND when a fresh
    * `INFO <channel>` reading lands. Both, because the mismatch verdict is a
@@ -3718,9 +3734,23 @@ export class CasparRuntime {
   registerLiveLayers(itemId: string, records: readonly LiveLayerRecord[]): void {
     if (records.length === 0) {
       this.#liveLayers.delete(itemId);
+      this.#publishLiveLayers();
       return;
     }
     this.#liveLayers.set(itemId, [...records]);
+    this.#publishLiveLayers();
+  }
+
+  /**
+   * B-145 — announce the ledger so it can be persisted.
+   *
+   * Called from the ONE write path and the ONE release path, for the reason
+   * {@link releaseLiveLayers} already gives about its own body: a rule with four
+   * implementations is a rule that drifts. If a future change adds a third way to mutate
+   * the ledger, it goes through those two — not around them.
+   */
+  #publishLiveLayers(): void {
+    this.liveLayersChanged.emit(this.#liveLayers);
   }
 
   /**
@@ -3736,6 +3766,7 @@ export class CasparRuntime {
    */
   releaseLiveLayers(itemId: string): void {
     this.#liveLayers.delete(itemId);
+    this.#publishLiveLayers();
   }
 
   /**
@@ -3780,6 +3811,38 @@ export class CasparRuntime {
       await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
     }
     this.releaseLiveLayers(itemId);
+  }
+
+  /**
+   * 🔴 **B-145 — ADOPT a persisted ledger at boot, corrected by what the server actually
+   * has.**
+   *
+   * The persisted file knows the NAMES this bridge gave those layers — the `itemId`, the
+   * symbolic `sourceId`, the fill/key `role` — none of which the server was ever told, so
+   * no amount of server reading re-derives them. The server knows the TRUTH about which
+   * layers still carry a producer. `reconcileLiveLayers` resolves the two, and **its result
+   * becomes the ledger**: one authority, with the file as an input to it rather than a
+   * second answer consulted later.
+   *
+   * ⚠ **`observe` is INJECTED rather than read from a socket here**, mirroring
+   * `fixed-layers-store.ts`'s `slotOccupancy` option. It keeps "what is on this layer" out
+   * of "what does the ledger say", so the rule is testable without a server and the caller
+   * stays free to source occupancy from `INFO` (measured to report per-layer producers and
+   * to drop a layer as soon as it is cleared) or from the OSC tap.
+   *
+   * Returns the adoption so the caller can REPORT what the server contradicted. A record
+   * dropped here means a producer went away while the bridge was down; that is a fact worth
+   * printing, not a silent correction.
+   */
+  adoptLiveLayers(
+    persisted: LiveLayerLedger,
+    observe: (slot: CommandSlot) => LiveLayerOccupancy,
+  ): LiveLayerAdoption {
+    const adoption = reconcileLiveLayers({ persisted, observe });
+    this.#liveLayers.clear();
+    for (const [itemId, records] of adoption.adopted) this.#liveLayers.set(itemId, [...records]);
+    this.#publishLiveLayers();
+    return adoption;
   }
 
   /** The ledger, for tests and for phase 6's re-emission of `FILL`/`CLIP`. */

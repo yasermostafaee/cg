@@ -3850,7 +3850,7 @@ general mechanism for the UI to do so.
   [[B-143]] (the honesty half never built), [[B-139]] / [[R-053]] (the row-level home three
   per-plate facts already want — a per-row warning surface should be built once, not four times).
 
-## [ ] B-145 — the bridge's live-layer ledger does not survive a restart: seated producers are stranded on air, unreachable by any code path ⟨priority: high — a live face on air with no handle to it⟩
+## [x] B-145 — the bridge's live-layer ledger does not survive a restart: seated producers are stranded on air, unreachable by any code path — **DONE 2026-08-18 (session AS): shape A+B, the named fallback** ⟨priority: high — a live face on air with no handle to it⟩
 
 **What:** `#liveLayers` is a `Map` in the bridge process (`tools/caspar-bridge/src/caspar-runtime.ts`,
 `readonly #liveLayers: LiveLayerLedger = new Map()`). It is the only record of which band layers
@@ -3889,6 +3889,47 @@ and under it a stranded producer is a live guest on air that no code path can re
 mapping. A second consumer wants the same truth — `multibox-layout-switch` `design.md` §12.6's
 refusal predicate has to know what is on air after a restore — and two mechanisms answering "what is
 seated" is the two-spellings shape this repo keeps paying for.
+
+### RESOLVED 2026-08-18 — `INFO` was measured, and the answer is **A + B**
+
+**`INFO` is NOT sufficient on its own, and what it lacks is exactly the part the server was never
+told.** Measured on the plant (`2.5.0 69e8ad5`) with controls in both directions — an empty channel
+returns no `<stage>` at all; two seated producers are both listed; **clearing one removes it from the
+reply**:
+
+| `INFO <channel>` exposes                                                                       | `INFO` does NOT expose                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| every occupied layer number (`<layer_10>`)                                                     | the **`itemId`** — CasparCG has no concept of our stack items                                                                                                                                                                                            |
+| the producer KIND (`route`, `color`, `html`, …)                                                | the symbolic **`sourceId`** (`guest-1`). Only the RESOLVED producer is on the wire, and reverse-mapping it through the catalog is not injective — two plates may resolve to one producer, and the mapping can have been edited while the bridge was down |
+| that producer's own parameters (`<route><channel>1</channel><layer>11</layer></route>`)        | the fill/key **`role`**                                                                                                                                                                                                                                  |
+| `<paused>`, and the foreground/background split                                                |                                                                                                                                                                                                                                                          |
+| …and `MIXER … FILL` / `CLIP` / `VOLUME` read back exactly, so the geometry half IS recoverable |                                                                                                                                                                                                                                                          |
+
+**The named fallback: PERSIST (A) plus a boot RECONCILE against the server (B).** The file knows the
+NAMES, the server knows the TRUTH, and **the reconciliation of the two IS the ledger** — one
+authority, with the file an input to it rather than a second answer consulted later.
+
+**The three-valued rule, and why `unknown` adopts.** `occupied` → adopt; `empty` → **drop** (the
+self-correcting direction acceptance 3 asks for); `unknown` → **adopt and mark unverified**, because
+absence of knowledge is not knowledge of absence (R-015, and the B-101 lesson about reading silence
+on one channel as death on another). Dropping an unverifiable record would strand exactly the
+producer this item exists to stop stranding — the same failure, reached from the other side.
+
+**A stale claim was found and corrected on the way.** `packages/caspar-client/src/osc/occupancy-tap.ts`
+asserted that _"`INFO <channel>` returns no per-layer data on the 2.3+ lineage"_, citing a live
+capture on this exact build. It is false there, and it is the kind of false that costs: it says AMCP
+cannot answer a question AMCP answers, and this item's boot adoption is precisely the one-shot
+occupancy reading that would have gone without. The tap's own justification (passive, costs no
+commands) is unaffected and is now what the comment says.
+
+**What landed:** `tools/caspar-bridge/src/live-layers-store.ts` (atomic write; it fails **soft** where
+its `reserved-layers-store` sibling fails hard — an empty ledger is the pre-B-145 status quo, so
+refusing to boot over a malformed bookkeeping file would take the console off air to avoid a
+degradation it lived with for months), `reconcileLiveLayers()` in `live-layers.ts`,
+`CasparRuntime.adoptLiveLayers()` plus a `liveLayersChanged` emitter fired from the ONE write path,
+and the `bridge.ts` wiring behind a new `liveLayersPath` option. Ten tests in
+`tools/caspar-bridge/tests/live-layers-restart.test.ts`, one per acceptance line plus the store's
+failure modes; the drop rule is mutation-tested (breaking it reddens three).
 
 **Acceptance:**
 

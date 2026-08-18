@@ -3116,9 +3116,12 @@ word alignment untouched, and that invariant has a recorded on-air failure behin
 after them** (`design.md` §13.6.1): the operator does not pick a transition mode per switch in v1 —
 the author's per-arrangement mode runs — so the escape is one action, not a mode picker.
 
-🔴 **BLOCKED ON [[B-145]].** The live-layer ledger must survive a bridge restart before this ships:
-the switch seats and releases plates continuously rather than once per take, so a stranded producer
-under it is a live guest on air that no code path can reach.
+🔴 **UNBLOCKED 2026-08-18 — [[B-145]] IS DONE.** The live-layer ledger now survives a bridge restart:
+it is persisted on every change and ADOPTED at boot, corrected against what the server actually has
+(`INFO` supplies the truth about occupancy; the file supplies the `itemId` / `sourceId` / `role` the
+server was never told). That mattered here because the switch seats and releases plates continuously
+rather than once per take, so a stranded producer under it would be a live guest on air that no code
+path could reach.
 
 **Refusals — legible, never silent truncation** (owner, 2026-08-18):
 

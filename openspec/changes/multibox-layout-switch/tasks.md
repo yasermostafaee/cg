@@ -165,13 +165,13 @@ BLOCKING.
 Full item: `docs/prd/bugs-runtime.md` → `B-145`. It carries the acceptance criteria and the two
 candidate shapes.
 
-- [ ] 2.1 **Recon: what does the server's `INFO` actually expose?** Enough to re-derive the
+- [x] 2.1 **Recon: what does the server's `INFO` actually expose?** MEASURED 2026-08-18 — per-layer occupancy, producer kind and that producer's parameters (and a layer drops out as soon as it is cleared), but **NOT the `itemId`, the symbolic `sourceId` or the fill/key `role`.** It also disproved `occupancy-tap.ts`'s claim that `INFO` returns no per-layer data on this build; that comment is corrected. Enough to re-derive the
       plate ↔ layer ↔ item mapping, or not?
       **Files:** none — a plant/mock reading.
       **Done when:** the finding is written into `B-145` and into the handoff, naming exactly what
       `INFO` carries and what it lacks.
       **Visual:** nothing visual — verify by reading the recorded `INFO` output.
-- [ ] 2.2 **Choose the shape from 2.1, not from preference.** `INFO` sufficient ⇒ **shape B**
+- [x] 2.2 **Choose the shape from 2.1, not from preference.** **A + B, the named fallback** — the file supplies the names, the server the truth, and their reconciliation IS the ledger. `INFO` sufficient ⇒ **shape B**
       (reconcile against the server at boot, self-correcting in both directions, the shape the item
       recommends). `INFO` insufficient ⇒ the named fallback: **persist (shape A) PLUS a boot
       reconcile** for whatever `INFO` can confirm, **stating exactly what `INFO` lacked**.
@@ -182,16 +182,16 @@ candidate shapes.
       **Done when:** the chosen shape is implemented and the reason is in the code, not only in a
       commit message.
       **Visual:** nothing visual at this step.
-- [ ] 2.3 **Test: a restart with seated plates leaves them listed and controllable.** (`B-145`
+- [x] 2.3 **Test: a restart with seated plates leaves them listed and controllable.** (`B-145`
       acceptance 1.)
       **Files:** `tools/caspar-bridge/tests/`.
       **Done when:** a test fails before the change and passes after — **rebuilt between the runs,
       and the report says it was.**
-- [ ] 2.4 **Test: the rebuilt ledger comes from ONE authority.** (`B-145` acceptance 2.)
-- [ ] 2.5 **Test: a producer that vanished server-side while the bridge was down is NOT asserted as
+- [x] 2.4 **Test: the rebuilt ledger comes from ONE authority.** (`B-145` acceptance 2.)
+- [x] 2.5 **Test: a producer that vanished server-side while the bridge was down is NOT asserted as
       seated.** (`B-145` acceptance 3 — the self-correcting direction, and the one a
       persist-only shape gets wrong.)
-- [ ] 2.6 **Tick `B-145`'s checkbox**, and update the cross-references that point at it — 8.2 below
+- [x] 2.6 **Tick `B-145`'s checkbox**, and update the cross-references that point at it — 8.2 below
       and `R-057`'s **BLOCKED ON** line.
       **Visual:** 🔴 **this is the one visually checkable step of stage A.** Take a row whose
       template declares Live Source plates, restart the bridge, and open the **layer list**: the

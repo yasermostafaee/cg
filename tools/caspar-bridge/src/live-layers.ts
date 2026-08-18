@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { CommandSlot } from './command-builder.js';
 
 /**
@@ -104,3 +105,124 @@ export interface LiveLayerRecord {
  * fold every coordinate in here into its `owned` set in one pass.
  */
 export type LiveLayerLedger = Map<string, LiveLayerRecord[]>;
+
+// ─────────────────────────── B-145 — SURVIVING A RESTART ───────────────────────────
+
+/**
+ * B-145 — the persisted form of {@link LiveLayerLedger}.
+ *
+ * A `Map` is not JSON, so the wire form is an array of `[itemId, records]` pairs. It is
+ * validated on the way IN because a hand-edited or half-written file must not become the
+ * bridge's belief about what is on air.
+ */
+const NormalizedRectSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+
+const LiveLayerRecordSchema = z.object({
+  slot: z.object({ channel: z.number().int().positive(), layer: z.number().int().nonnegative() }),
+  sourceId: z.string().min(1),
+  role: z.enum(['fill', 'key']),
+  producer: z.string(),
+  fill: NormalizedRectSchema,
+  clip: NormalizedRectSchema,
+  intendedVolume: z.number(),
+});
+
+export const PersistedLiveLayersSchema = z.array(
+  z.tuple([z.string().min(1), z.array(LiveLayerRecordSchema)]),
+);
+export type PersistedLiveLayers = z.infer<typeof PersistedLiveLayersSchema>;
+
+/** The ledger as it persists. */
+export function toPersistedLiveLayers(ledger: LiveLayerLedger): PersistedLiveLayers {
+  return [...ledger].map(([itemId, records]) => [itemId, [...records]]);
+}
+
+/** The ledger as it comes back. */
+export function fromPersistedLiveLayers(persisted: PersistedLiveLayers): LiveLayerLedger {
+  return new Map(persisted.map(([itemId, records]) => [itemId, [...records]]));
+}
+
+/**
+ * What the SERVER says about one layer, at adopt time.
+ *
+ * Deliberately the same three-valued shape as `fixed-layers-store.ts`'s `SlotOccupancy`,
+ * and for the same reason: `unknown` is a THIRD answer, not a synonym for `empty`.
+ */
+export type LiveLayerOccupancy = 'occupied' | 'empty' | 'unknown';
+
+/** One record the boot reconcile did not adopt, and why. */
+export interface DroppedLiveLayer {
+  readonly itemId: string;
+  readonly record: LiveLayerRecord;
+  readonly reason: 'server-says-empty';
+}
+
+export interface LiveLayerAdoption {
+  /** 🔴 THE ONE AUTHORITY. Neither the file nor the server is consulted again after this. */
+  readonly adopted: LiveLayerLedger;
+  /** Records the server contradicted — dropped, and reported rather than silently lost. */
+  readonly dropped: readonly DroppedLiveLayer[];
+  /** Records adopted WITHOUT confirmation, because occupancy was not knowable. */
+  readonly unverified: readonly LiveLayerRecord[];
+}
+
+/**
+ * 🔴 **B-145 — rebuild the ledger from the persisted CLAIM, corrected by the server's
+ * EVIDENCE.**
+ *
+ * ── WHY BOTH INPUTS, AND WHY THAT IS STILL *ONE* AUTHORITY ──────────────────
+ *
+ * `INFO <channel>` was measured on the plant (2.5.0 `69e8ad5`, 2026-08-18) to report every
+ * occupied layer, its producer kind and that producer's own parameters — and to DROP a
+ * layer from the reply as soon as it is cleared, which is the control that makes it usable
+ * as evidence in both directions. What it cannot report is anything the server was never
+ * told: **the `itemId`, the symbolic `sourceId` (`guest-1`), and the fill/key `role`.**
+ * Those are this bridge's own naming, so no amount of server reading re-derives them.
+ *
+ * So neither input is sufficient alone — the file knows the NAMES, the server knows the
+ * TRUTH — and the reconciliation of the two is what becomes the ledger. **That resolved
+ * result is the single authority**; the file is an input to it, never a second answer
+ * consulted later. A design that kept consulting both would be the two-spellings failure
+ * this repo keeps paying for.
+ *
+ * ── THE THREE-VALUED RULE, AND WHY `unknown` ADOPTS ─────────────────────────
+ *
+ * - `occupied` → adopt. The claim is confirmed.
+ * - `empty`    → **DROP**. The server is the authority on what is on it; a producer that
+ *                went away while the bridge was down must not come back as a belief.
+ * - `unknown`  → **adopt, and mark it unverified.** Absence of knowledge is not knowledge
+ *                of absence (R-015, and the B-101 lesson about reading silence on one
+ *                channel as death on another). Dropping an unverifiable record would
+ *                strand exactly the producer this item exists to stop stranding — it is
+ *                the failure mode, arrived at from the other side.
+ */
+export function reconcileLiveLayers(input: {
+  readonly persisted: LiveLayerLedger;
+  readonly observe: (slot: CommandSlot) => LiveLayerOccupancy;
+}): LiveLayerAdoption {
+  const adopted: LiveLayerLedger = new Map();
+  const dropped: DroppedLiveLayer[] = [];
+  const unverified: LiveLayerRecord[] = [];
+
+  for (const [itemId, records] of input.persisted) {
+    const keep: LiveLayerRecord[] = [];
+    for (const record of records) {
+      const seen = input.observe(record.slot);
+      if (seen === 'empty') {
+        dropped.push({ itemId, record, reason: 'server-says-empty' });
+        continue;
+      }
+      if (seen === 'unknown') unverified.push(record);
+      keep.push(record);
+    }
+    // An item whose every layer the server contradicted owns nothing — and an empty
+    // entry is bookkeeping to drop, exactly as `registerLiveLayers` treats it.
+    if (keep.length > 0) adopted.set(itemId, keep);
+  }
+  return { adopted, dropped, unverified };
+}

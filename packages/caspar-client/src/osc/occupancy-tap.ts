@@ -28,9 +28,22 @@ const MAX_ENTRIES = 2048;
  * tracker). It emits nothing, subscribes to nothing, and never feeds the
  * Reconciler; consumers (the bridge's periodic orphan sweep) sample it.
  *
- * Why OSC and not AMCP: verified by live capture on CasparCG 2.5.0
- * (`69e8ad5`) — `INFO <channel>` returns no per-layer data on the 2.3+
- * lineage; the per-layer producer signal exists only on OSC (ADR 0004).
+ * Why OSC and not AMCP: this tap is PASSIVE — it costs no commands, samples
+ * continuously and cannot starve the queue, which is what suits a periodic sweep.
+ *
+ * ⚠ **CORRECTED 2026-08-18 (B-145): the reason previously given here was WRONG on the
+ * production build.** It read _"`INFO <channel>` returns no per-layer data on the 2.3+
+ * lineage; the per-layer producer signal exists only on OSC"_. Re-measured on the plant at
+ * `2.5.0 69e8ad5` — the very build that claim cited — `INFO <channel>` DOES return a
+ * `<stage>` block naming every occupied layer, its producer kind and that producer's own
+ * parameters, and a layer DISAPPEARS from the reply as soon as it is cleared (controls run
+ * in both directions: empty channel → no `<stage>` at all; two producers seated → both
+ * listed; `CLEAR` one → it is gone). `INFO <ch>-<layer>` answers `201` for one layer.
+ *
+ * The tap's own justification is unaffected — passive beats polling for a sweep that runs
+ * every few seconds — but the false half mattered: it says AMCP cannot answer a question
+ * AMCP answers, and the next person needing a definite one-shot occupancy reading (B-145's
+ * boot adoption is exactly that) would have believed it and gone without.
  *
  * Freshness matters: real CasparCG goes SILENT for a CLEARed layer (B-053
  * finding) rather than reporting `empty`, so consumers must treat entries
