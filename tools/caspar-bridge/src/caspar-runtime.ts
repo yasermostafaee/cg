@@ -4998,6 +4998,11 @@ export class CasparRuntime {
    *      `#recordAudit` at the moment of the append — is the outcome's time, and
    *      file order is OUTCOME order rather than invocation order. Two concurrent
    *      takes appear in the order they finished, which is the order air saw.
+   *      ⚠ **This half of the guarantee is NOT ours alone**: it also needs
+   *      `AuditWriter` to CHAIN its appends, because `#recordAudit` is
+   *      fire-and-forget and two concurrent `write`s complete in either order.
+   *      That was missing at first and CI caught it — a refusal landed ahead of
+   *      the accepted action that preceded it, on a tree where Windows agreed.
    *   3. **It cannot fail the operation.** `#recordAudit` is fire-and-forget and
    *      swallows the writer's rejection; a full disk surfaces through
    *      `auditHealth().lastError` and the station stays on air. The contrast with

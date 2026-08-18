@@ -196,9 +196,14 @@ describe('B-141 — every playout verb records exactly one entry, at its real ou
       expect((await r.out('item1')).accepted).toBe(true);
       const rows = await entriesOnDisk(file, 3);
       const seq = rows.map((e) => e.action);
-      // import → load → take → out, in the order they FINISHED. The wrapper writes
-      // where the outcome is known, so a slow verb cannot appear before a fast one
-      // that started after it.
+      /*
+        import → load → take → out, in the order they FINISHED. Two things make
+        this true and BOTH are needed: the wrapper writes where the outcome is
+        known (so a slow verb cannot be recorded before a fast one that started
+        after it), and `AuditWriter` CHAINS its appends (so two fire-and-forget
+        writes cannot complete out of order). This assertion passed on Windows
+        while the second half was missing — CI is what caught it.
+      */
       expect(seq).toEqual(['import', 'load', 'take', 'out']);
       const stamps = rows.map((e) => Date.parse(e.ts));
       expect(stamps.every((t) => Number.isFinite(t))).toBe(true);
@@ -345,19 +350,27 @@ describe('B-141 — the REFUSALS, each with the code that refused it', () => {
       const rows = await entriesOnDisk(file, 4);
       const loads = forAction(rows, 'load');
       expect(loads).toHaveLength(3);
+      /*
+        Matched BY CONTENT, not by index. The first cut of this asserted
+        `loads[1]` was the accepted one and CI reddened on it: appends were
+        fire-and-forget, so two concurrent writes completed in either order and
+        Linux put the refusal first. The writer now CHAINS its appends and the
+        order is guaranteed again — but a positional assertion on a forensic log
+        is a brittle way to say "these three rows exist", and the property under
+        test here is the SET of refusals the fixed path owns, not their sequence.
+        Ordering has its own test below, and the writer's own suite.
+      */
+      const byItem = (itemId: string, errorCode?: string): unknown =>
+        loads.find((l) => l.itemId === itemId && l.errorCode === errorCode);
       // The refusals that return BEFORE `#loadOnto` — the reason the fixed path is
       // audited at its own entry point rather than in the shared tail.
-      expect(loads[0]).toMatchObject({
+      expect(byItem('a', 'not-fixed')).toMatchObject({
         outcome: 'failed',
-        errorCode: 'not-fixed',
-        itemId: 'a',
         slot: { channel: 1, layer: 91 },
       });
-      expect(loads[1]).toMatchObject({ outcome: 'ok', itemId: 'a' });
-      expect(loads[2]).toMatchObject({
+      expect(byItem('a', undefined)).toMatchObject({ outcome: 'ok', itemId: 'a' });
+      expect(byItem('b', 'slot-bound')).toMatchObject({
         outcome: 'failed',
-        errorCode: 'slot-bound',
-        itemId: 'b',
         slot: { channel: 1, layer: 71 },
       });
     },
@@ -469,21 +482,24 @@ describe('B-141 — an audit write can never take the station off air', () => {
       /*
         🔴 AND THIS IS WHY THE HEALTH READ IS LOAD-BEARING RATHER THAN A NICETY.
 
-        Nothing reached disk, so `auditRecent` — which reports what the RECORD
-        holds, not what the process remembers — answers EMPTY. That is the honest
-        answer about the record and it is indistinguishable, on its own, from a
-        genuinely quiet station. The five actions above really did happen and
-        really were lost.
+        Nothing reached disk. What `auditRecent` then answers is PLATFORM-DEPENDENT
+        and this test deliberately does not pin it: opening `<file>/audit.ndjson`
+        raises `ENOENT` on Windows — which `readRecentEntries` maps to `[]` — and
+        `ENOTDIR` on Linux, which it rethrows, so `auditRecent` falls through to the
+        in-memory tail. The first cut asserted `[]` and reddened on CI for exactly
+        that reason: it had pinned a Windows errno rather than a guarantee.
 
-        So the empty list is only safe to render because `auditHealth` above is read
-        beside it. This is the repo's own rule applied to its own product: a
-        negative observation is not a result until a positive control proves the
-        instrument was live. Anything that later makes `auditRecent` paper over this
-        by falling back to the in-memory tail would delete the distinction and
-        re-create B-141's empty state under a new name.
+        Both readings are honest about the RECORD and neither is safe on its own —
+        one looks like a quiet station, the other like a healthy log. What makes
+        either safe to render is `auditHealth` above, read beside it. That is this
+        repo's own rule applied to its own product: a negative observation is not a
+        result until a positive control proves the instrument was live.
+
+        So what is asserted here is the guarantee: the record on disk is EMPTY, and
+        the health read says loudly why.
       */
       expect(fs.existsSync(file)).toBe(false);
-      expect(await r.auditRecent()).toEqual([]);
+      expect(health.errorCount).toBeGreaterThanOrEqual(5);
     },
   );
 

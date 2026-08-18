@@ -60,6 +60,12 @@ return — by any branch, including an exception — without its entry having be
 - **WHEN** the wire step that action also performs fails
 - **THEN** the entry records the failure and its code, even though the response reported success
 
+#### Scenario: The record's order is the order outcomes happened
+
+- **WHEN** several actions complete close together
+- **THEN** their entries appear in the record in the order the outcomes landed, and a failed write
+  for one of them does not drop the entries that follow it
+
 #### Scenario: Only actions the bridge really performs are recorded
 
 - **WHEN** an action in the schema's set has no operation in this process

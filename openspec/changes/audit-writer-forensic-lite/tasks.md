@@ -78,6 +78,13 @@ next day.
       acted on.
 - [x] 5.4 **`ts` is stamped at the OUTCOME**, so file order is outcome order rather than invocation
       order. Two concurrent takes appear in the order they finished, which is the order air saw.
+      🔴 **This was FALSE as first shipped and CI caught it** — `#recordAudit` is fire-and-forget, so
+      two concurrent `handle.write`s completed in either order and a refusal landed ahead of the
+      accepted action before it (Linux disagreed with Windows on the same tree). `AuditWriter` now
+      CHAINS its appends; its tail can never reject, so one failed write cannot silently swallow
+      every append after it, and `close()` awaits the tail so a shutdown's last rows still land.
+      Six tests in `packages/audit/tests/writer.test.ts`, proven red against the naive
+      short-circuiting chain.
 - [x] 5.5 🔴 **`remove` — the one verb whose response cannot carry its own outcome.** It answers
       `{ accepted: true }` unconditionally, which is right for the caller (the row leaves the stack
       either way) but wrong for the log: a CLEAR that did not land leaves a graphic ON AIR with its

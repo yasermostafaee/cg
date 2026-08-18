@@ -46,7 +46,8 @@ Three consequences worth stating, because each is a property the naive version l
 - **The `errorCode` travels.** A refused take is `failed` + `rehearsing` / `live-source-unassigned` /
   `disconnected`, never a bare "failed". The refusals are the entries a dispute turns on.
 - **`ts` is stamped at the OUTCOME**, so file order is outcome order rather than invocation order:
-  two concurrent takes appear in the order they finished, which is the order air saw them.
+  two concurrent takes appear in the order they finished, which is the order air saw them. ⚠ That
+  needs BOTH halves — see "the ordering claim was false" below.
 - **The pre-state is what gets named.** `remove` deletes the slot and `out` empties the layer, so the
   item / template / layer are read BEFORE the impl runs — otherwise the record would name the layer
   the item is on now (none) instead of the one the operator acted on.
@@ -63,6 +64,17 @@ Three consequences worth stating, because each is a property the naive version l
 - **The audit file handle was never closed.** `AuditWriter` holds one open for its whole life and
   offers `close()`; nothing called it, so every runtime leaked a descriptor that node destroys at GC
   — a hard `ERR_INVALID_STATE` since node 22. `CasparRuntime.stop()` now closes it.
+- 🔴 **THE ORDERING CLAIM WAS FALSE WHEN FIRST MADE, AND CI IS WHAT CAUGHT IT.** `#recordAudit` is
+  fire-and-forget by contract, so two `handle.write`s were in flight at once. Each is atomic under
+  `O_APPEND`, but two concurrent ones dispatch to different threadpool threads and complete in
+  EITHER order — so a refusal landed ahead of the accepted action that preceded it. The local
+  Windows gate had agreed with the claim; the Linux run did not.
+
+  `AuditWriter` now CHAINS its appends, which makes the claim true rather than retracting it. ⚠ The
+  chain's tail can NEVER reject (`link.then(noop, noop)`): a plain `tail = tail.then(write)`
+  short-circuits, so one rejected link would poison the chain and drop every later append in
+  silence — a fix that becomes a no-op at exactly the moment the thing it guards starts failing.
+  `close()` awaits the tail, so the rows queued as a process goes down still land.
 
 ## Scope, decided
 
