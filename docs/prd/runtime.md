@@ -3052,3 +3052,96 @@ Number.isFinite(n) ? n : 0; }` (`PositionPicker.tsx:106-109`). An emptied or hal
 - **Cross-refs:** [[R-054]] (the same space discipline, argued once there — this item does not
   re-argue it), [[B-072]] (the seed precedence the marker depends on), [[R-011]] (the position
   override itself).
+
+## [ ] R-057 — the multi-box arrangement switch: the OPERATOR half ⟨priority: high — the client runs a 3-box show and cannot change it live⟩
+
+**What:** the operator can switch a running row between the box COUNTS its template declares — 3-box
+→ 2-box → 1-box and back — with **exactly ONE active at a time, so the operator cannot make a
+mistake**. Concretely: an always-visible control on the row that IS the state readout and the switch
+in one object; a single reconcile that applies the change to what is on air; the transition; and the
+refusals.
+
+⚠ **This is HALF the feature. The authoring half is [[D-152]]** — the arrangements themselves, their
+geometry and the per-box titles, are a Designer concern and a Designer-focused reader must find them
+there. The split follows [[D-137]] / [[C-015]]: one capability, two items, cross-referenced both
+ways. **Design, evidence and task list for both halves live in ONE change:**
+`openspec/changes/multibox-layout-switch/`.
+
+**Why:** the client's requirement, verbatim (owner, 2026-08-17):
+
+> The operator is on a 3-box layout and must be able to switch to 2-box or 1-box, and back. There
+> must be a switch between the multi-box layouts, with **exactly ONE active at a time, so the
+> operator cannot make a mistake.**
+
+No such switch exists. The workaround in use — playing all counts at once and stopping the top one
+to reveal the next — produced a **measured** defect on the plant (2026-08-17): every live source
+sits BELOW every template, so a hole punched by one template opens onto the whole stack beneath it
+and reveals whatever live layer is topmost at that pixel, **which may belong to a different
+template**. Both reported symptoms follow at once — one arrangement appearing under another, and
+boxes that look cropped. The switch makes that state unreachable.
+
+**The model (owner, 2026-08-18).** The operator picks a **COUNT**; a count may have several named
+**ARRANGEMENTS**; one arrangement per count is the authored default. **The common case is ONE
+ACTION** — pick the count, get its default arrangement — with choosing a non-default arrangement an
+explicit extra step.
+
+**The decisions this item implements** (all owner-answered, `design.md` §12–§13):
+
+|                                             | Decision                                                                                                                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Phasing**                                 | the CUT ships first; the animated switch second. Both share the carrier and the mask work                                                                                                         |
+| **The control**                             | an **always-visible segmented control on the row**, showing which count is live. A menu is disqualified — it hides the current state, and the requirement is that the operator cannot be mistaken |
+| **A dropped box**                           | its source is **HELD muted and idle**, so switching back is instant. A source kind that cannot be held falls back to teardown as a **NAMED, observable** behaviour, never a silent difference     |
+| **Two multi-box templates on air together** | **REFUSED**, in `take()` **AND** `restore()` — restore never passes through take — through **ONE predicate CALLED from both**                                                                     |
+| **The Inspector's assignment edit**         | surface only — see [[B-146]], which carries it                                                                                                                                                    |
+| **Transition modes**                        | cut / fade / move, the author setting the default and the operator always having an immediate cut as an escape                                                                                    |
+
+🔴 **The switch and the live-source change are ONE mechanism.** A switch changes _which plates exist
+and where_; a source change changes _what one plate shows_. Both are "reconcile the seated
+live-plate set of a RUNNING row against a freshly-resolved desired set". `swapLiveSource` (R-048,
+shipped) becomes a CALLER of that reconcile, not a peer — **do not build a second mechanism beside
+it.**
+
+⚠ **The control re-opens the closed six-column verb grid, and collides with it twice** — the SHAPE
+rule (`layerRowActions.ts:407-409`, why conditionally-present controls became `surface: 'menu'`) and,
+more sharply, the fixed-px column model (`layerTable.ts:1-22`, `VERB_COUNT = 6`). A segmented control
+has one segment per declared count, so its width varies by row. `design.md` §12.8 poses three
+placements and recommends a **second line on the row, outside the verb block** — it leaves
+`VERB_COUNT` and the header word alignment untouched, and that invariant has a recorded on-air
+failure behind it.
+
+🔴 **BLOCKED ON [[B-145]].** The live-layer ledger must survive a bridge restart before this ships:
+the switch seats and releases plates continuously rather than once per take, so a stranded producer
+under it is a live guest on air that no code path can reach.
+
+**Refusals — legible, never silent truncation** (owner, 2026-08-18):
+
+- Selecting **more sources than the largest arrangement holds** is refused, **naming the count
+  selected and the largest available**.
+- Selecting a **count with no arrangement** is refused in the same family, with the same wording
+  discipline — arrangements are NOT required for every count.
+
+**Acceptance:**
+
+- WHEN the operator switches a running row from 3-box to 2-box THEN the 2-box arrangement is the
+  only one on air, and no part of the 3-box one remains visible — neither its painted frames nor the
+  holes its plates punched
+- WHEN the operator switches back THEN each box shows the same source it showed before, with no
+  operator action, because assignment is keyed `(templateId, plateId)` and the plate keeps one
+  identity
+- WHEN the operator picks a count THEN it takes ONE action and uses that count's default arrangement
+- WHEN a box has no counterpart in the target count THEN its source is held (or its teardown is
+  surfaced), and it is not reassigned onto a surviving box
+- WHEN the operator selects more sources than the largest arrangement holds THEN the refusal names
+  the count and the largest available, rather than truncating
+- WHEN the operator selects a count with no authored arrangement THEN it is refused in the same
+  family, with the same wording
+- WHEN a take or a restore would put a second multi-box template on air THEN it is refused by ONE
+  predicate called from both paths
+- WHEN a plate's geometry or opacity is animated THEN the page and the server both use `linear`, so
+  the hole and the picture stay together
+
+- **Cross-refs:** [[D-152]] (the AUTHORING half — arrangements, geometry, titles; read both),
+  [[B-145]] (must land first), [[B-146]] (the Inspector surface, same row), [[R-048]] (the source
+  swap this reconcile absorbs), [[C-015]] (Live Source routing and seating), [[D-137]] (the Live
+  Source element), [[R-028]] (the declared-rows model the control lives in).

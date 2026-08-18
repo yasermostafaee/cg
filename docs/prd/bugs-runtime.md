@@ -3849,3 +3849,136 @@ general mechanism for the UI to do so.
 - **Cross-refs:** [[B-141]] (the audit wrapper that made the failure visible in the log),
   [[B-143]] (the honesty half never built), [[B-139]] / [[R-053]] (the row-level home three
   per-plate facts already want — a per-row warning surface should be built once, not four times).
+
+## [ ] B-145 — the bridge's live-layer ledger does not survive a restart: seated producers are stranded on air, unreachable by any code path ⟨priority: high — a live face on air with no handle to it⟩
+
+**What:** `#liveLayers` is a `Map` in the bridge process (`tools/caspar-bridge/src/caspar-runtime.ts`,
+`readonly #liveLayers: LiveLayerLedger = new Map()`). It is the only record of which band layers
+carry which item's plates. Release happens on `stopItem` / `out` / `remove` **and on no other path**
+— not on disconnect, not on bridge restart. So a restart loses the ledger while the CasparCG
+producers keep running: the layers stay lit and **nothing in the product can name them, clear them
+or re-adopt them.**
+
+**Repro:**
+
+1. Take a row whose template declares Live Source plates, so band layers are seated.
+2. Restart the bridge (or let it crash and come back).
+3. Look at the layer list, and try to clear or repoint those plates.
+
+**Expected:** the seated layers still appear and are controllable — the console can see what is on
+air and act on it.
+**Actual:** the ledger is empty. The producers are still on air. `layers.clear` refuses them as
+`foreign` at best; nothing re-associates them with the row they belong to.
+**Env:** Runtime + bridge, any build. Read from the code at `056ffdd5`.
+
+**Why it is filed now, and separately.** It is **pre-existing** and is not caused by the multi-box
+arrangement switch, so folding it into that change would misattribute it. But the switch **seats and
+releases plates continuously** rather than once per take, so it multiplies the ledger's write rate —
+and under it a stranded producer is a live guest on air that no code path can reach.
+🔴 **It must land BEFORE the arrangement switch ships** (`openspec/changes/multibox-layout-switch/`
+`tasks.md` 1.11 / 4.7, `design.md` §12.7 — the owner's decision, 2026-08-18).
+
+**The two mechanisms are NOT equivalent, and that is the design question:**
+
+| shape                                                 | what it buys                                                                    | what it leaves                                                                                                                                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A — PERSIST the ledger**                            | cheap, and exact for the case where only we changed anything                    | records what we BELIEVE. A producer can also vanish from the server's side (a channel reset, a hand-issued `CLEAR`) and the persisted ledger is none the wiser — it then asserts a layer that is not there |
+| **B — RECONCILE against the server's `INFO` at boot** | reads what the server ACTUALLY has, so it is self-correcting in both directions | must re-derive the plate↔layer↔item mapping from what `INFO` exposes, which may not be enough on its own                                                                                                   |
+
+**Recommendation, not a decision: B, with A only if `INFO` proves insufficient** to re-derive the
+mapping. A second consumer wants the same truth — `multibox-layout-switch` `design.md` §12.6's
+refusal predicate has to know what is on air after a restore — and two mechanisms answering "what is
+seated" is the two-spellings shape this repo keeps paying for.
+
+**Acceptance:**
+
+- WHEN the bridge restarts while live plates are seated THEN those layers appear in the layer list
+  and are controllable, rather than being invisible to every code path
+- WHEN the ledger is rebuilt at boot THEN it is rebuilt from ONE authority, and a plate that the
+  server no longer carries is not asserted as seated
+- WHEN a producer disappeared from the server's side while the bridge was down THEN the rebuilt
+  ledger reflects the server, not a stale belief
+
+- **Cross-refs:** [[B-144]] (the same shape one layer up — a graphic on air whose row the operator
+  can no longer reach), [[R-057]] / [[D-152]] (the arrangement switch this must land before),
+  [[C-015]] (the Live Source seating and the band).
+
+## [ ] B-146 — the Inspector's source assignment silently reaches nothing on air, and its picker is blind to an active override ⟨priority: high — the operator believes they repointed a live box⟩
+
+**What:** two halves of one confusion — the Inspector confidently shows, and appears to change, a
+source that is not what is on air.
+
+1. **The edit reaches nothing.** The Inspector writes the **template-scoped** assignment.
+   `setSourceAssignments` (`tools/caspar-bridge/src/caspar-runtime.ts:5219-5229`) validates, assigns,
+   emits and returns — it **is not `async`**, so it is structurally incapable of sending an AMCP
+   command. The spec says so too (`openspec/specs/runtime-live-source-routing/spec.md`: _"an
+   assignment is read at the TAKE and never re-composites the graphic already on the channel"_), and
+   so does the code (`apps/runtime/src/renderer/features/inspector/applyDraft.ts:36-38`). **Nothing
+   tells the operator.**
+2. **The picker is override-blind.** `appliedPlateSources`
+   (`apps/runtime/src/renderer/features/inspector/livePlates.ts:19-29`) resolves via the TEMPLATE
+   assignment, and `effectivePlateSource` (`.../draftStore.ts:177-184`) returns
+   `staged ?? applied ?? ''`. Neither consults `item.sourceOverride`.
+   `SEARCH:` `git grep -rn "sourceOverride" -- apps/runtime/src/renderer` → **exactly one hit**,
+   `features/layers/LiveSourceSwapDialog.tsx:80`. An active override is invisible everywhere except
+   the dialog that set it.
+
+**Repro:** take a row carrying a template with Live Source plates. Open the Inspector, change a
+plate's source, apply. Nothing on air changes and nothing says so. Separately, swap a source via the
+row's SOURCE verb, then open the Inspector: it shows the OLD source as current.
+
+**Expected:** the surface says the edit takes effect at the next take and names the live path; and
+the picker shows what is actually on air.
+**Actual:** silence, and a confident wrong reading.
+**Env:** Runtime, any build. Read from the code at `056ffdd5`.
+
+🔴 **The defect is a MISSING REFUSAL/SURFACE, not a missing mutator.** R-048's row SOURCE swap is
+shipped and already does the live thing — `swapLiveSource` re-issues as a producer replace through
+the same resolver a take uses and re-derives the fit. And the assignment is shared by **every row
+carrying that template** (`resolvePlateAssignments` filters `a.templateId === input.templateId`,
+`live-plate-assignment.ts:95`, with no item id anywhere), so silently re-issuing would repoint every
+other row on air with nobody told. **A control that silently does nothing is the worst of the three
+outcomes, and it is what ships today.**
+
+**THE DECISION IS TAKEN** (owner, 2026-08-18, `multibox-layout-switch` `design.md` §12.5): **SURFACE
+ONLY.** The edit saves; the surface says _"takes effect at the next take"_ and **names the live path
+— the row's SOURCE swap**. Refusing or confirming is friction without capability, since neither can
+re-issue: after any dialog is dismissed the outcome is identical in all three candidates.
+
+⚠ **The two halves ship together, or the repair is a half-repair** — telling the operator "this takes
+effect at the next take" while still showing them the wrong current source would replace one
+confusion with another.
+
+**Acceptance:**
+
+- WHEN the operator edits a plate's source in the Inspector while any row carrying that template is
+  on air THEN the surface states that it takes effect at the next take, and names the row's SOURCE
+  swap as the live path
+- WHEN a row carries an active `sourceOverride` THEN the Inspector shows the source that is actually
+  on air, not the template assignment it overrides
+- WHEN the assignment is shared by more than one row THEN that is visible at the point of edit,
+  rather than discovered by its effect on another row
+
+- **Cross-refs:** [[B-145]] (the ledger this surface will read once it survives a restart),
+  [[R-057]] (the operator half of the arrangement switch — same surface, same row),
+  [[C-015]] / [[D-137]] (Live Source routing and the plate model), [[B-143]] (the other
+  never-built honesty half in this area).
+
+<!--
+  CROSS-REFERENCE, deliberately NOT a second item.
+
+  The text-fit defect — three schema spellings of "make the text fit" and NO runtime
+  implementation, plus a Designer control (`autoSqueeze`) that writes a field nothing
+  reads — is filed ONCE, as [[B-147]] in `bugs-designer.md`. It belongs there because the
+  schema field, the control that writes it and the renderer that ignores it are all
+  Designer-side.
+
+  It is noted here because a RUNTIME reader meets it from the other direction: [[R-057]]'s
+  arrangement switch needs a per-box title to fit a wide 1-box cell AND a narrow 4-box
+  cell, and the first long Persian guest name overflows the narrow one ON AIR. So the
+  operator-side symptom is a broadcast defect while the cause and the fix are both in the
+  Designer.
+
+  One root cause with two spellings must not get two fixes — the same discipline the
+  B-140 / Splitter cross-reference in `bugs-designer.md` records, in the other direction.
+-->

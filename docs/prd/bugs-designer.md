@@ -2281,6 +2281,67 @@ mutations). An E2E asserting the marker appears on a video whose assetId resolve
 **Related:** [[B-136]] (the identical symptom from a different cause, and the item that surfaced
 this), [[B-137]] (the once-per-element logging precedent).
 
+## [ ] B-147 — three schema spellings of "make the text fit" and the runtime implements NONE; the Designer ships an `autoSqueeze` control that writes a field nothing reads ⟨priority: high — it is a control that silently does nothing, and the failure lands on air with the next long name⟩
+
+**What:** the schema offers **three** ways to say "shrink the text so it fits its box". The runtime
+honours **none** of them.
+
+| Spelling                                     | Where                                                                            | State                                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fitMode: 'shrink-to-fit'`                   | `packages/shared-schema/src/elements.ts:188`                                     | **Not implemented** — the schema's own docstring says so: _"`shrink-to-fit` (font-shrink) is NOT yet implemented — it renders like `fixed` today"_ (`:185-187`)                                                                                                                                                                                                                                              |
+| `autoSqueeze: boolean`                       | `elements.ts:205`, documented as _"the runtime shrinks the font to fit the box"_ | 🔴 **The runtime never reads it.** `SEARCH:` `git grep -rn "autoSqueeze" -- packages/` → **one hit: the declaration itself.** The Designer's Inspector WRITES it (`apps/designer/src/renderer/features/inspector/TextStyleSection.tsx:67,120`), and `bindings.ts:130` carries a comment asserting _"the element's own auto-size / auto-squeeze then handles fit"_ — describing behaviour that does not exist |
+| `overflow: 'clip' \| 'ellipsis' \| 'shrink'` | `elements.ts:189`                                                                | **Never read.** `SEARCH:` `git grep -rn "\.overflow" -- packages/template-runtime/src` → every hit is a hardcoded `style.overflow = 'hidden'`/`'visible'`; the one `textOverflow = 'ellipsis'` (`scene-builder.ts:1660`) is the Live Source plate's **id label**, an author-mode affordance, not authored text                                                                                               |
+
+Only `fitMode: 'autosize'` is implemented (D-060) — and it does the **opposite** of what is wanted:
+it **hugs the content**, growing the box to the text, rather than shrinking the text to the box.
+
+**Repro:** author a text element, set the Inspector's squeeze control to "yes", give it a string
+longer than its box. Export or preview.
+**Expected:** the font shrinks to fit, as the control says it will.
+**Actual:** nothing happens. The text overflows or clips exactly as it did with the control off.
+**Env:** Designer + `@cg/template-runtime`, any build. Read from the code at `056ffdd5`.
+
+**Why it is filed at high priority.** Two reasons, and the second is the one that dates it:
+
+1. **A shipped control that writes a field nothing reads is the same class as [[B-146]]** — the
+   operator/author is told an action happened and it did not. Here it is worse in one way: the author
+   sets it, sees the Designer look correct at the length they typed, and ships.
+2. 🔴 **The multi-box arrangement switch makes it load-bearing.** A per-box TITLE must fit a wide
+   1-box cell **and** a narrow 4-box cell (`multibox-layout-switch` `design.md` §13.7.4). Without a
+   fit rule the first long Persian guest name overflows the narrow cell **on air**.
+
+⚠ **THE RULE THAT FIXES IT MUST MEASURE THE RENDERED BOX, AFTER SHAPING — not the string.** Persian
+shaping means glyph advances are not the sum of character advances: contextual forms and ligatures
+change the width, so a rule based on character COUNT works for Latin and fails for Persian.
+`@cg/text-shaping`'s `truncate()` is exactly that shape — code-unit based, and its own docstring
+admits _"Persian text with combining diacritics or ZWNJ-joined compounds may still split at
+inconvenient boundaries"_ (`packages/text-shaping/src/truncate.ts:1-10`). It is a **length cap, not a
+width fit**, and it cannot answer "does this fit the narrow cell". Measure `scrollWidth` /
+`getBoundingClientRect` after layout. **A rule that works for Latin and not for shaped Persian is not
+a rule** — it looks fine in the Designer and breaks on air with the next guest's name.
+
+**The three shapes, posed rather than chosen** (`design.md` §13.7.4 recommends (b) first):
+
+- **(a)** a per-arrangement font-size override on the text element — most control, most authoring
+- **(b)** a real shrink-to-fit measured after shaping — least authoring, one rule everywhere
+- **(c)** both, with (b) the default and (a) the escape
+
+🔴 **And whichever lands, the three spellings must become ONE.** Leaving two unimplemented synonyms
+beside a working one is how the next author picks the dead one.
+
+**Acceptance:**
+
+- WHEN a text element is set to shrink to fit and its content is too wide THEN the rendered font
+  shrinks until it fits, in the Designer preview AND in the export
+- WHEN that text is shaped Persian THEN the fit is decided from the RENDERED box, so ligatures and
+  contextual forms are accounted for
+- WHEN the schema is read by a new author THEN there is ONE spelling of "make the text fit", not
+  three, and no control writes a field the runtime ignores
+
+- **Cross-refs:** [[D-152]] (the arrangement authoring that needs this for per-box titles),
+  [[R-057]] (the operator half), [[B-146]] (the same class — a control that silently does nothing),
+  [[D-060]] (`fitMode: 'autosize'`, the one that IS implemented).
+
 <!--
   CROSS-REFERENCE, deliberately NOT a second item.
 
