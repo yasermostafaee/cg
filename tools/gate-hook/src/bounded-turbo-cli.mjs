@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 /**
- * B-098 — the thin CLI half of the gate's test-parallelism bound. Runs turbo with
- * `--concurrency` set to the computed task bound, and with vitest's own fork cap
- * exported into the environment, so the PRODUCT of the two stays inside the machine.
+ * B-098 / P-034 — the thin CLI half of the gate's test-parallelism bound. Runs turbo
+ * with `--concurrency` set to the computed task bound, and with vitest's fork cap AND
+ * Playwright's worker cap exported into the environment, so the PRODUCT of the two
+ * stays inside the machine.
+ *
+ * BOTH caps are exported on EVERY invocation, with no branch on which task is being
+ * run. A `test` run ignores `CG_E2E_WORKERS` and a `test:e2e` run ignores the `VITEST_*`
+ * names, and that is cheaper than a task-name switch that has to be right — the way
+ * this bound came to miss `test:e2e` in the first place was a decision about which
+ * scripts it applied to.
  *
  * All decidable logic lives in the pure `resolveTestBound` next door, where the unit
  * tests pin the `taskConcurrency * forksPerTask <= cores` invariant; this file is only
@@ -22,7 +29,14 @@
  */
 import { spawn } from 'node:child_process';
 import os from 'node:os';
-import { applyConcurrencyFlag, resolveTestBound, testWorkerEnv } from './test-concurrency.mjs';
+import {
+  applyConcurrencyFlag,
+  e2eWorkerEnv,
+  readConcurrencyFlag,
+  resolveE2eWorkers,
+  resolveTestBound,
+  testWorkerEnv,
+} from './test-concurrency.mjs';
 
 const detectedCores =
   typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
@@ -35,17 +49,35 @@ const bound = resolveTestBound(detectedCores, {
   taskConcurrency: process.env.CG_TEST_TASK_CONCURRENCY,
 });
 
-const args = applyConcurrencyFlag(process.argv.slice(2), bound.taskConcurrency);
+const rawArgs = process.argv.slice(2);
+const args = applyConcurrencyFlag(rawArgs, bound.taskConcurrency);
+
+// P-034 — the Playwright half. Divided by the concurrency ACTUALLY in force, which is
+// the caller's own `--concurrency` when it set one (`gate:e2e` does, for B-095's
+// stricter reason) and the computed bound otherwise. Read from the same argv
+// `applyConcurrencyFlag` honours, so the two can never disagree about the divisor.
+const effectiveConcurrency = readConcurrencyFlag(rawArgs) ?? bound.taskConcurrency;
+const e2eWorkers = resolveE2eWorkers(
+  bound.cores,
+  effectiveConcurrency,
+  process.env.CG_E2E_WORKERS_PER_TASK,
+);
 
 process.stdout.write(
   `gate bound (B-098): ${bound.cores} cores -> ${bound.taskConcurrency} concurrent tasks x ` +
-    `${bound.forksPerTask} vitest forks = ${bound.maxTestWorkers} max test workers\n`,
+    `${bound.forksPerTask} vitest forks = ${bound.maxTestWorkers} max test workers\n` +
+    `gate bound (P-034): ${bound.cores} cores -> ${effectiveConcurrency} concurrent tasks x ` +
+    `${e2eWorkers} playwright workers = ${effectiveConcurrency * e2eWorkers} max e2e workers\n`,
 );
 
 const child = spawn('turbo', args, {
   stdio: 'inherit',
   shell: true,
-  env: { ...process.env, ...testWorkerEnv(bound.forksPerTask) },
+  env: {
+    ...process.env,
+    ...testWorkerEnv(bound.forksPerTask),
+    ...e2eWorkerEnv(e2eWorkers),
+  },
 });
 
 // Fail closed: a spawn error or a signal death must not read as a passing gate.

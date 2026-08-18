@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyConcurrencyFlag,
+  defaultPlaywrightWorkers,
+  e2eWorkerEnv,
+  readConcurrencyFlag,
+  resolveE2eWorkers,
   resolveTestBound,
   testWorkerEnv,
   toPositiveInt,
@@ -182,5 +186,147 @@ describe('applyConcurrencyFlag', () => {
     const args = ['run', 'test'];
     applyConcurrencyFlag(args, 3);
     expect(args).toEqual(['run', 'test']);
+  });
+});
+
+describe('readConcurrencyFlag', () => {
+  it.each([
+    [['run', 'test:e2e', '--concurrency=1'], 1],
+    [['run', 'test:e2e', '--concurrency', '2'], 2],
+    [['run', '--concurrency=4', 'test:e2e'], 4],
+  ])('reads %p as %i', (args, expected) => {
+    expect(readConcurrencyFlag(args)).toBe(expected);
+  });
+
+  it.each([
+    [['run', 'test:e2e']],
+    [['run', 'test:e2e', '--force']],
+    [['run', 'test:e2e', '--concurrency']],
+    [['run', 'test:e2e', '--concurrency=0']],
+    [['run', 'test:e2e', '--concurrency', 'lots']],
+  ])('returns null for %p', (args) => {
+    expect(readConcurrencyFlag(args)).toBeNull();
+  });
+
+  it('agrees with applyConcurrencyFlag about whether the caller set one', () => {
+    // The pair has to see the same argv the same way: applyConcurrencyFlag defers to a
+    // caller's flag, and the e2e bound divides the budget by whatever turbo actually
+    // ran on. If one of them read `--concurrency 1` and the other did not, the bound
+    // would be computed for a machine the run is not on.
+    for (const args of [
+      ['run', 'test:e2e'],
+      ['run', 'test:e2e', '--concurrency=1'],
+      ['run', 'test:e2e', '--concurrency', '1'],
+    ]) {
+      const callerSet = readConcurrencyFlag(args) !== null;
+      const untouched = applyConcurrencyFlag(args, 3).length === args.length;
+      expect(untouched).toBe(callerSet);
+    }
+  });
+});
+
+describe('defaultPlaywrightWorkers', () => {
+  it.each([
+    [1, 1],
+    [2, 1],
+    [4, 2],
+    [8, 4],
+    [12, 6],
+    [16, 8],
+  ])('matches Playwright’s own 50%% default on %i cores', (cores, expected) => {
+    expect(defaultPlaywrightWorkers(cores)).toBe(expected);
+  });
+
+  it.each([0, -1, 'x', null, undefined, Number.NaN])('floors an unusable %p at 1', (bad) => {
+    expect(defaultPlaywrightWorkers(bad)).toBe(1);
+  });
+});
+
+describe('resolveE2eWorkers — the invariant', () => {
+  it.each(CORE_COUNTS)('never oversubscribes a %i-core machine', (cores) => {
+    const bound = resolveTestBound(cores);
+    const workers = resolveE2eWorkers(cores, bound.taskConcurrency);
+    expect(bound.taskConcurrency * workers).toBeLessThanOrEqual(bound.workerBudget);
+    expect(bound.taskConcurrency * workers).toBeLessThanOrEqual(cores);
+  });
+
+  it.each(CORE_COUNTS)('still schedules real work on a %i-core machine', (cores) => {
+    expect(
+      resolveE2eWorkers(cores, resolveTestBound(cores).taskConcurrency),
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it.each(CORE_COUNTS)('never widens past Playwright’s own default on %i cores', (cores) => {
+    // The property that makes this a BOUND. `gate:e2e` runs `--concurrency=1`, so the
+    // whole budget would otherwise fall to a single suite and it would run WIDER than
+    // it does unbounded today. A bound that can widen something is B-073's longer rope.
+    for (const concurrency of [1, 2, 3, 4, 8]) {
+      expect(resolveE2eWorkers(cores, concurrency)).toBeLessThanOrEqual(
+        defaultPlaywrightWorkers(cores),
+      );
+    }
+  });
+
+  it('closes the measured P-034 case on the 12-core reference box', () => {
+    // What shipped before: a bare `turbo run test:e2e` started both apps' suites at
+    // Playwright's full default -- measured 6 + 6 = 12 workers for 12 cores, the whole
+    // machine claimed by browsers before the two vite preview servers and turbo itself.
+    const bound = resolveTestBound(12);
+    const workers = resolveE2eWorkers(12, bound.taskConcurrency);
+    expect(defaultPlaywrightWorkers(12) * 2).toBe(12); // the unbounded shape, for contrast
+    expect(workers).toBe(2);
+    expect(workers * 2).toBe(4); // the two e2e tasks, bounded
+  });
+
+  it('leaves a serialised gate:e2e at the width it already ran', () => {
+    // gate:e2e passes --concurrency=1 for B-095's stricter reason. Bounding it further
+    // would slow the one command whose fan-out was never the problem.
+    expect(resolveE2eWorkers(12, 1)).toBe(defaultPlaywrightWorkers(12));
+    expect(resolveE2eWorkers(8, 1)).toBe(defaultPlaywrightWorkers(8));
+  });
+});
+
+describe('resolveE2eWorkers — degenerate input and overrides', () => {
+  it.each([0, -4, 1.5, Number.NaN, null, undefined, '', 'lots', {}])(
+    'falls back to a single worker for cores %p',
+    (cores) => {
+      expect(resolveE2eWorkers(cores, 1)).toBe(1);
+    },
+  );
+
+  it.each([0, -1, 'x', null, undefined])(
+    'treats an unusable concurrency %p as one task',
+    (concurrency) => {
+      expect(resolveE2eWorkers(12, concurrency)).toBe(resolveE2eWorkers(12, 1));
+    },
+  );
+
+  it('accepts an override that tightens', () => {
+    expect(resolveE2eWorkers(12, 1, 2)).toBe(2);
+  });
+
+  it('refuses an override that would widen', () => {
+    expect(resolveE2eWorkers(12, 4, 99)).toBe(resolveE2eWorkers(12, 4));
+  });
+
+  it.each([0, -1, 'two', '', null])('ignores the unusable override %p', (bad) => {
+    expect(resolveE2eWorkers(12, 4, bad)).toBe(2);
+  });
+});
+
+describe('e2eWorkerEnv', () => {
+  it('names the ONE variable the Playwright configs read', () => {
+    // Also the name that must appear in `test:e2e`'s passThroughEnv in turbo.json --
+    // turbo's strict env mode would otherwise filter it and the bound would be a
+    // silent no-op, the same way the vitest names would be.
+    expect(e2eWorkerEnv(2)).toEqual({ CG_E2E_WORKERS: '2' });
+  });
+
+  it('emits a string, since a child environment holds no numbers', () => {
+    expect(typeof e2eWorkerEnv(4).CG_E2E_WORKERS).toBe('string');
+  });
+
+  it.each([0, -1, 'x', null, undefined])('floors an unusable cap %p at 1', (bad) => {
+    expect(e2eWorkerEnv(bad as unknown as number).CG_E2E_WORKERS).toBe('1');
   });
 });

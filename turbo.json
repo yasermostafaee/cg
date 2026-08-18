@@ -76,7 +76,8 @@
       "dependsOn": ["build", "@cg/amcp-mock#build"],
       "outputs": ["playwright-report/**", "test-results/**"],
       "inputs": ["src/**", "tests/e2e/**", "playwright.config.*"],
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["CG_E2E_WORKERS"]
     },
     "package": {
       "dependsOn": ["build"],

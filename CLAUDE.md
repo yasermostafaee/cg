@@ -120,16 +120,23 @@ command, so the flag lands on `openspec validate --all --strict --force` →
 `error: unknown option '--force'`: a bogus red on an otherwise green gate. Same trap
 for any `pnpm <script> <flag>` where the script chains commands.
 
-**The gate's test fan-out is BOUNDED to the host — leave it bounded (B-098).** `gate`,
-`test` and `test:integration` no longer call `turbo` directly; they route through
-`tools/gate-hook/src/bounded-turbo-cli.mjs`, which caps BOTH multipliers that used to
-compound — turbo's task concurrency AND each `vitest run`'s fork count — so the worst case
-`taskConcurrency × forksPerTask` stays ≤ cores (8 cores → 3 × 2 = 6 workers; the run prints
-its own bound). Unbounded, those two defaults wanted ~64 workers on 8 cores and starved
-whichever timing-sensitive suite was co-scheduled — the same `did not reach HEALTHY`
-contention red B-073 first met. **Always run these tasks through their `pnpm` script (`pnpm
-gate` / `pnpm test`); NEVER call `turbo run test` — or `turbo run` for any gate task —
-directly.** A direct `turbo` invocation skips `tools/gate-hook/src/bounded-turbo-cli.mjs` and so
+**The gate's test fan-out is BOUNDED to the host — leave it bounded (B-098, P-034).** `gate`,
+`test`, `test:integration`, **`test:e2e` and `gate:e2e`** no longer call `turbo` directly; they
+route through `tools/gate-hook/src/bounded-turbo-cli.mjs`, which caps BOTH multipliers that used to
+compound — turbo's task concurrency AND each task's own worker count (`vitest run`'s forks, and
+Playwright's browser workers) — so the worst case `taskConcurrency × workersPerTask` stays ≤ cores
+(12 cores → 4 × 2 = 8 workers; the run prints its own bound, one line per half). Unbounded, the
+vitest defaults wanted ~64 workers on 8 cores and starved whichever timing-sensitive suite was
+co-scheduled — the same `did not reach HEALTHY` contention red B-073 first met.
+
+⭐ **`test:e2e` was the sibling the bound never reached, and it is why this list now names five
+scripts rather than three (P-034).** It stayed a bare `turbo run` and therefore started both apps'
+Playwright suites at full width at once — 6 + 6 = 12 browsers on 12 cores — and the tests it broke
+were, every time, "did this ANIMATE within N milliseconds" assertions whose VICTIMS MOVED between
+runs. **One rule, two spellings** is the shape to watch for: when you bound something, bound its
+siblings in the same commit, and never let the list of covered scripts be a decision someone has to
+remember. **Always run these tasks through their `pnpm` script (`pnpm gate` / `pnpm test` / `pnpm
+test:e2e`); NEVER call `turbo run test` — or `turbo run` for any gate task — directly.** A direct `turbo` invocation skips `tools/gate-hook/src/bounded-turbo-cli.mjs` and so
 drops the worker cap, reviving the B-098 `did not reach HEALTHY` load-flake class the bound
 exists to prevent. Do NOT "simplify" a script back to a bare `turbo run test`
 (it removes the cap), do NOT drop the `VITEST_*` `passThroughEnv` keys in `turbo.json` (strict

@@ -39,6 +39,25 @@ function resolveChannel(): string | undefined {
 
 const channel = resolveChannel();
 
+/**
+ * How many Playwright workers this suite may run — P-034.
+ *
+ * CI stays at 1 (unchanged, and it wins outright). Locally the number comes from
+ * `CG_E2E_WORKERS`, which `tools/gate-hook/src/bounded-turbo-cli.mjs` computes so that
+ * `turboTaskConcurrency × workersPerSuite` fits the box; the arithmetic and its
+ * invariant live there, with unit tests, and this file only reads the answer.
+ *
+ * Unset means an ISOLATED run — `pnpm --filter @cg/designer test:e2e`, or a hand-typed
+ * `playwright test` — which is not contended and keeps Playwright's own default. That
+ * is the same reasoning as the vitest half: the hazard is the PRODUCT of two fan-outs,
+ * so capping a single-suite run would cost time and buy nothing.
+ */
+function resolveWorkers(): number | undefined {
+  if (process.env.CI) return 1;
+  const bounded = Number(process.env.CG_E2E_WORKERS);
+  return Number.isInteger(bounded) && bounded >= 1 ? bounded : undefined;
+}
+
 export default defineConfig({
   // P-036 — refuse to run against a stale build. See tools/gate-hook/src/e2e-staleness.mjs.
   globalSetup: './tests/e2e-global-setup.mjs',
@@ -47,7 +66,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: resolveWorkers(),
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   timeout: 30_000,
   expect: { timeout: 7_000 },

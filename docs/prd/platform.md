@@ -1825,11 +1825,49 @@ only extra exclusion is `src/generated`, unrelated.
 - **Cross-refs:** [[B-139]] (whose fix rests on the guarantee), [[B-142]] (the same shape one level
   out — a rule the Designer enforces and the Runtime does not).
 
-## [ ] P-034 — a Designer E2E failed once, unreproducibly, and the record exists so a SECOND one is legible ⟨priority: low⟩
+## [x] P-034 — `pnpm test:e2e` starved its own suites: B-098's concurrency bound was applied to `test` and its sibling `test:e2e` escaped it ⟨priority: high — RE-SCORED 2026-08-18 from `low`⟩ — fixed in `openspec/changes/platform-e2e-fan-out-bound/`
 
-**What:** on 2026-08-17 the Designer Playwright suite failed one test out of 268, in the middle of
-three consecutive runs that otherwise passed, with **zero Designer source changed** in the session.
-It did not reproduce.
+**What:** the root `pnpm test:e2e` was a **bare `turbo run`**, so it started BOTH apps' Playwright
+tasks at once and each opened its own default pool — **6 + 6 = 12 Chromium workers on a 12-core
+host**, the whole machine claimed by browsers before the two `vite preview` servers, the two node
+parents and turbo itself. Timing-sensitive tests then missed their deadlines and failed.
+
+```
+"test":     "node tools/gate-hook/src/bounded-turbo-cli.mjs run test --continue=…"
+"test:e2e": "turbo run test:e2e --continue=…"          ← a BARE turbo run
+```
+
+🔴 **One rule, two spellings** — this repo's most frequent failure shape, on the one gate script
+B-098's bound was never applied to. `CLAUDE.md` states the rule and names three scripts (`gate`,
+`test`, `test:integration`); `test:e2e` was not one of them.
+
+**Fix:** `test:e2e` and `gate:e2e:run` route through `bounded-turbo-cli.mjs` like their siblings,
+and the pure bound gained its Playwright half (`resolveE2eWorkers`) **in the same module** as the
+vitest half. See the change for the full shape.
+
+**Proof, before → after, same host, same command, rebuilt between runs:**
+
+|          | before                     | after          |
+| -------- | -------------------------- | -------------- |
+| workers  | 6 + 6 = **12** on 12 cores | **2 + 2 = 4**  |
+| designer | **264 passed, 4 failed**   | **268 passed** |
+| runtime  | **80 passed, 1 failed**    | **81 passed**  |
+
+🔴 **What made starvation the hypothesis, and it is the durable lesson here: ALL of the failures,
+across every occurrence, are TIMING assertions — not one is a logic assertion.** A clock that has
+not rendered, a crawl whose transform has not started, an opacity transition that has not finished,
+a page that never reached `toBeVisible`. And **the set of victims MOVES between runs** — the four
+named below are not the five that failed on the fix's base commit; one spec overlaps. A brittle test
+fails repeatably; a starved host fails whoever was unlucky. **The suite was never flaky about WHAT
+it checks, only about WHEN.**
+
+⚠ **The three occurrences below are kept as the evidence trail**, in the order they were found,
+including the CI half that was written and then withdrawn. They are not tidied into hindsight: the
+first two are still unexplained, and the record says so.
+
+**Original filing (2026-08-17), kept verbatim:** on 2026-08-17 the Designer Playwright suite failed
+one test out of 268, in the middle of three consecutive runs that otherwise passed, with **zero
+Designer source changed** in the session. It did not reproduce.
 
 **Repro:** none. That is the point of the item.
 
@@ -1964,10 +2002,17 @@ is not one of them.** So `pnpm test:e2e` runs BOTH apps' Playwright tasks concur
 its own worker pool: **6 + 6 = 12 Chromium workers on an 8-core host.** That is precisely the
 compounding-multiplier shape B-098 exists to prevent, on the one script it does not cover.
 
-**Candidate remedy, NOT applied here:** route `test:e2e` through `bounded-turbo-cli.mjs` like its
-siblings, and/or set Playwright's `workers` from the bound. It is one line, and it is deliberately
-left to the owner — this is shared config every session picks up, and this item's own rule is that a
-flake is not answered by whoever happens to be looking at it.
+**Candidate remedy, since TAKEN (owner decision, 2026-08-18):** route `test:e2e` through
+`bounded-turbo-cli.mjs` like its siblings, and set Playwright's `workers` from the bound. It was
+left to the owner rather than applied by the session that found it — shared config every session
+picks up, and this item's own rule is that a flake is not answered by whoever happens to be looking
+at it. See the closing section for what shipped.
+
+⚠ **One correction to this occurrence's own record: the Env line below says 8 cores. The host is
+12** (`os.availableParallelism()` and `os.cpus().length` agree). The `6 + 6` figure is right —
+Playwright resolves `workers` to 50% of logical CPUs — but it is 12 workers on 12 cores, i.e. 100%
+of the machine with ZERO headroom, against the bound's 75% budget. That makes it a worse instance of
+B-098's headroom bug than the item claimed, not a milder one.
 
 🔴 **What must NOT be done, restated because this is exactly the moment it gets done:** no timeout is
 to be widened, no pixel threshold loosened, no retry added, and none of the four named tests is to be
@@ -2026,6 +2071,36 @@ four named tests, and every one of them is an animate-within-N-milliseconds asse
 - whether the local concurrency finding and the CI flakes share anything at all — **no evidence
   either way**, which is a different state from "consistent with a single cause" and must not be
   written back as one.
+
+## ✅ CLOSED — 2026-08-18, the remedy taken and measured
+
+Fixed in `openspec/changes/platform-e2e-fan-out-bound/`. What shipped, and what it is worth:
+
+- `test:e2e` and `gate:e2e:run` route through `bounded-turbo-cli.mjs`. **Every `turbo run` in the
+  root `package.json` was swept**, not just the one named: `build`, `lint`, `typecheck`, `test:e2e`,
+  `gate:e2e:run`, `package`, `dev`, `clean`. Only the two E2E scripts spawn browser worker pools;
+  the rest run one process per task and cannot compound. `gate:e2e:run` already carried
+  `--concurrency=1` from B-095 so it was NOT exhibiting the defect — routed anyway, because one
+  rule with two spellings is what this item is about.
+- The Playwright bound lives in the **same** `test-concurrency.mjs` as the vitest bound, with 82 new
+  unit tests. A second module would have been the defect re-created one level out.
+- The cap can only ever **tighten**: `workersPerTask` is capped at the number Playwright would have
+  chosen unaided, so a serialised `gate:e2e` is not handed the whole budget and made WIDER. An
+  isolated single-suite run is left at the default — it is not contended.
+
+🔴 **Nothing was tuned.** No timeout widened, no threshold loosened, no retry added, no test edited.
+Every one of the named tests passes under the concurrent run that failed it.
+
+⚠ **STILL OPEN, and deliberately not closed with this item** — the SECOND occurrence
+(`video-import.spec.ts:291`, one flaky in run
+<https://github.com/yasermostafaee/cg/actions/runs/32054398518>, commit `56c0799f`) had been
+explained by the withdrawn CI claim and is therefore **unexplained again**. It is CI, this fix is
+local, and no evidence connects them. It is recorded here so the next occurrence has somewhere to
+land; a warning that outlives its truth and an EXPLANATION that outlives its truth are the same
+rule running in opposite directions, and both must leave the record honest rather than empty.
+
+⚠ **Owed:** a completed, green Linux CI `e2e` run for the commit carrying the fix, with its flaky
+count read from the log. It is recorded in the change's `tasks.md` §4.4.
 
 ## [~] P-035 — a NEVER-STAGE guard, because `git add <directory>` swept the owner's uncommitted hack onto `dev` ⟨priority: high⟩ — implemented: the guard, its list and its tests ship with this item
 

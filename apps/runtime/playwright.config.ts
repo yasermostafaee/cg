@@ -38,6 +38,20 @@ function resolveChannel(): string | undefined {
 
 const channel = resolveChannel();
 
+/**
+ * How many Playwright workers this suite may run — P-034. Mirrors the Designer config:
+ * CI stays at 1, an isolated run keeps Playwright's default, and a turbo-orchestrated
+ * run takes the bound `tools/gate-hook/src/bounded-turbo-cli.mjs` exports. See that
+ * file's `resolveE2eWorkers` for the arithmetic — a bare `turbo run test:e2e` used to
+ * start both apps' suites at full width at once, and every test it broke was an
+ * animate-within-N-milliseconds assertion.
+ */
+function resolveWorkers(): number | undefined {
+  if (process.env.CI) return 1;
+  const bounded = Number(process.env.CG_E2E_WORKERS);
+  return Number.isInteger(bounded) && bounded >= 1 ? bounded : undefined;
+}
+
 export default defineConfig({
   // P-036 — refuse to run against a stale build. See tools/gate-hook/src/e2e-staleness.mjs.
   globalSetup: './tests/e2e-global-setup.mjs',
@@ -46,7 +60,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: resolveWorkers(),
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   timeout: 30_000,
   expect: { timeout: 7_000 },
