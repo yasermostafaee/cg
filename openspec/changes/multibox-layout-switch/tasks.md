@@ -163,6 +163,10 @@
 - [ ] 1.11 ⟨MINT⟩ **the live-layer ledger item**, per §12.7 — the ledger survives a bridge restart.
       Next free `B-` reported in `design.md` §12.7; recommended home `docs/prd/bugs-runtime.md`.
       **No number is minted in this change.** ⟨READY — §12.7 decided⟩
+- [ ] 1.12 ⟨MINT⟩ **the text-fit item** (`design.md` §13.7.4): the schema offers THREE spellings of
+      "make the text fit" and the runtime implements NONE — and the Designer ships an `autoSqueeze`
+      control that writes a field nothing reads. Same class as §5's Inspector: a control that
+      silently does nothing. **No number is minted in this change.** ⟨READY — §12.2 decided⟩
 
 ## 2. UNIT B′ — the mask mutator enumeration (PREREQUISITE, not cleanup)
 
@@ -236,6 +240,31 @@
 - [ ] 7.4 **KEEP the v1 `live-source-animated` refusal** and pin with a test that a runtime layout
       change does NOT trip it, while an authored keyframe still does. (Replaces the earlier "relax
       the refusal" item, withdrawn by `design.md` §2b.) ⟨READY — §12.1 decided⟩
+- [ ] 7.5 The MODE SET per `design.md` §13.5 — cut / fade / move, the author's default mode and
+      duration in the same `Layouts` section as the layout list, and an immediate cut always
+      reachable by the operator as an escape. ⟨READY — §12.2 decided⟩
+- [ ] 7.6 The BACKGROUND transition (§13.1, §13.2) — shared vs per-layout backgrounds need no new
+      concept, and a background takes ANY easing and duration. 🔴 Scope 7.3's guard to the
+      boundary: it must catch a PLATE transition with no timing function without forbidding a
+      designed ease on a backdrop. ⟨READY — §12.2 decided⟩
+- [ ] 7.7 ⚠ §13.3 — BOTH backdrops carry the current mask through a crossfade, and the outgoing
+      one's participation OUTLIVES the fade. The existing per-element z-order rule already gives
+      both of them holes; what must be built is that the layout state distinguishes **leaving** from
+      **hidden**, or UNIT B′'s resolved visibility strips the outgoing backdrop's holes mid-fade.
+      ⟨READY — §12.2 decided⟩
+- [ ] 7.8 §13.4 — the ANIMATED mask. `clip-path` interpolation is VERIFIED on the plant's CEF
+      (§9.6e) at −4 % of the frame budget (§9.6f). 🔴 **A plate hidden in the target layout must
+      contribute a DEGENERATE (zero-area) hole, not NO hole**, so the point count is invariant and
+      the browser can interpolate. ⚠ It is a SECOND mask mechanism beside the settled
+      `mask-mode: luminance`; do NOT re-open the static choice on the strength of it. ⟨GATE: §12.9⟩
+- [ ] 7.9 §13.7.2 — hiding an element during a transition is an authored PER-ELEMENT option, not a
+      blanket rule (a box title leaves; a logo must not blink). 🔴 Resolved visibility must come
+      from ONE function — the same one 2.1 gives `sceneMaskHoles` — rather than a third independent
+      boolean. ⟨GATE: §12.9⟩
+- [ ] 7.10 §13.7.4 — the text FIT. Build the rule that makes one title fit a wide 1-box cell and a
+      narrow 4-box cell. ⚠ It MUST measure the RENDERED box after shaping, never the string:
+      `@cg/text-shaping`'s `truncate()` is code-unit based and is a length cap, not a width fit, so
+      a count-based rule works for Latin and fails for Persian. ⟨GATE: §12.9⟩
 
 ## 8. Still owed — measurements
 

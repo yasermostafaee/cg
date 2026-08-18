@@ -71,7 +71,8 @@ Documentation only:
 | Path                                       | Effect                                                     |
 | ------------------------------------------ | ---------------------------------------------------------- |
 | `openspec/changes/multibox-layout-switch/` | this change — proposal, design, tasks, one capability spec |
-| `docs/handoff/2026-08-17-session-aq.md`    | the session handoff, opening with the SHA read             |
+| `docs/handoff/2026-08-17-session-aq.md`    | the first session's handoff, opening with the SHA read     |
+| `docs/handoff/2026-08-18-session-ar.md`    | the second session's handoff (the gates + §12.9 + §13)     |
 
 ## Impact if it proceeds
 
@@ -85,8 +86,39 @@ Documentation only:
 | `apps/designer`        | authoring per-layout geometry; the `live-source-animated` refusal is KEPT                        |
 | `@cg/vcg-format`       | `collectLiveSources` emits per-layout rects; no format change                                    |
 
-## Status
+## Status — updated 2026-08-18
 
-**DESIGN-FIRST. This change defines no implementation task as ready to start.** Eight owner questions
-are recorded in `design.md` §12 rather than guessed, and two things are decided here with their
-reasoning rather than deferred: the plate identity model (§0.5) and the v1 animation refusal (§2b).
+**DESIGN-FIRST. Still no product code.** Two things were decided here with their reasoning rather
+than deferred: the plate identity model (§0.5) and the v1 animation refusal (§2b).
+
+**Seven of the eight owner gates are now ANSWERED** and recorded in `design.md` §12 as DECIDED —
+§12.1 (cut first), §12.2 (`linear` both sides), §12.4 (the dropped box is held), §12.5 (the
+Inspector is surface-only), §12.6 (refuse two multi-box templates, one predicate called from two
+sites), §12.7 (the ledger survives a restart, filed separately), §12.8 (a segmented control on the
+row). The `⟨GATE: §x⟩` tasks that named them are unblocked.
+
+🔴 **§12.9 remains OPEN, and was WIDENED rather than settled.** The owner withdrew candidate B — _a
+layout is a designed SCENE, not a set of rectangles, and computed geometry cannot carry a background
+at all_ — and offered a candidate of his own (**D**: give layers a TYPE, and let a _group_ layer bind
+several ordinary templates with one live). **D was investigated on the plant and is REFUSED**, on
+four independent grounds, three of them measured:
+
+- 🔴 **Two templates cannot share one video layer.** `CG ADD` at cg-layer 1 is accepted (`202`) and
+  **REPLACES** the page at cg-layer 0; `INFO` reports one `html` producer and both cg-layer indices
+  then route to the survivor. The cg-layer argument is **inert**. ⇒ the "hole in the upper page"
+  question is **moot — there is no upper page**.
+- **A replace costs ~3 frames** (118 ms median = 2.95 frames), fifteen times the measured cut.
+  `LOADBG` + `PLAY` removes that gap entirely — but a layer has **exactly one background slot**, so
+  only one _announced_ alternative is gapless and the rest are not.
+- It cannot animate a rearrangement (§0.2, cited), so §12.1's phase two would need candidate A built
+  anyway.
+- **Assignment cannot survive it** — the key is `(templateId, plateId)` and each layout is a
+  different `templateId`.
+
+`design.md` §12.9.6 recommends **A′** — candidate A's identity model with a box authored as a
+**nested composition** and per-layout geometry carried on the **instance** — with its evidence.
+It is a recommendation, not a decision.
+
+The owner also extended the transition requirement (selectable modes, background transitions) and
+added per-box titles; both are recorded with their costs in `design.md` §13, and the mode set is now
+a spec requirement.

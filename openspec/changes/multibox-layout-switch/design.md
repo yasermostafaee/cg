@@ -417,18 +417,19 @@ in this change.**
 **The enumeration** (AO's list, plus what this design adds). For each: does it move or remove a
 plate, and does the mask follow today?
 
-| Mutator                         | Moves/removes a plate? | Mask follows today? |
-| ------------------------------- | ---------------------- | ------------------- |
-| take                            | yes                    | 🔴 no               |
-| teardown                        | yes                    | 🔴 no               |
-| position override               | yes                    | 🔴 no               |
-| resize                          | yes                    | 🔴 no               |
-| lifecycle range                 | yes                    | 🔴 no               |
-| retention restore               | yes                    | 🔴 no               |
-| z-order reorder                 | changes WHO is masked  | 🔴 no               |
-| **layout switch** (new)         | **yes — both**         | 🔴 no               |
-| **a `visible` binding** (new)   | **removes**            | 🔴 no               |
-| **a `transform` binding** (new) | **moves**              | 🔴 no               |
+| Mutator                                 | Moves/removes a plate?                  | Mask follows today? |
+| --------------------------------------- | --------------------------------------- | ------------------- |
+| take                                    | yes                                     | 🔴 no               |
+| teardown                                | yes                                     | 🔴 no               |
+| position override                       | yes                                     | 🔴 no               |
+| resize                                  | yes                                     | 🔴 no               |
+| lifecycle range                         | yes                                     | 🔴 no               |
+| retention restore                       | yes                                     | 🔴 no               |
+| z-order reorder                         | changes WHO is masked                   | 🔴 no               |
+| **layout switch** (new)                 | **yes — both**                          | 🔴 no               |
+| **a `visible` binding** (new)           | **removes**                             | 🔴 no               |
+| **a `transform` binding** (new)         | **moves**                               | 🔴 no               |
+| **a background CROSSFADE** (new, §13.3) | neither — it changes WHO must be masked | 🔴 no               |
 
 **Two open questions AO flagged that this design must answer rather than inherit:**
 
@@ -730,8 +731,8 @@ cannot be a monotonic decline:
 expensive kind, on an otherwise empty page and an idle channel; a real scene has more in it, and
 flat colours or images would cost less. The worst frame gap under `fade` is **120 ms — three frames
 at 25 fps** — so the risk this names is a visible stutter during the transition, not a steady-state
-one. What this does and does not do to the owner's "a background transition is FREE" framing is
-recorded with the transition requirements.
+one. §13.2 records what this does and does not do to the owner's "a background transition is FREE"
+framing.
 
 #### 9.6g `MIXER … OPACITY` takes a duration and a tween, with FILL's exact vocabulary
 
@@ -750,8 +751,8 @@ And the tween genuinely RUNS — polling the readback through `OPACITY 0 50 line
 about the right time.
 
 ⇒ **§9.2's disjoint-vocabulary finding is not specific to `FILL`.** OPACITY accepts the Penner names
-and rejects both CSS ones, so §12.2's `linear`-only rule is the same rule here — and the transition
-requirements explain why it nonetheless binds only the PLATES.
+and rejects both CSS ones, so §12.2's `linear`-only rule is the same rule here — and §13.2 explains
+why it nonetheless binds only the PLATES.
 
 ---
 
@@ -872,6 +873,19 @@ mechanism rather than a convention.** §9.2 measured the CSS default `ease` at *
 every CasparCG tween — over a third of the frame width — and `transition: left 2s` is exactly what a
 developer writes by accident. The rule must be enforced by lint or test (`tasks.md` 7.3) because the
 failure is invisible in the Designer, where there is no server tween to disagree with.
+
+🔴 **SCOPE — this rule binds THE PLATES, not the whole design (added 2026-08-18, §13.2).** A plate's
+geometry has a server-side counterpart that must agree with it; a BACKGROUND is page content only,
+with no `MIXER`, no second clock, and therefore **any easing and any duration**. The lint/test guard
+7.3 must be scoped the same way, or it bans a designed ease on a backdrop while still missing the
+case it exists for.
+
+⚠ **And a note that changes what the cheap fallback costs (§13.7.3).** Candidate C — "plates FADE
+rather than travel" — is the named fallback if per-frame mask movement proves unaffordable. Because
+§13.7.2's titles are hidden during the move anyway, **the only things actually travelling are the
+plates**, so C loses much less than the table above suggests. ⚠ C's own cost is also corrected in
+§13.5: a fade does NOT sidestep hole/fill agreement entirely — it converts a geometry error into a
+luminance error.
 
 **Unblocks:** `tasks.md` 7.1, 7.2, 7.3.
 
@@ -1243,7 +1257,7 @@ where the flattener already walks.
   `scope.videos` entry at play). The authored `visible` field is consulted for hold-driver purposes
   only — _"a hidden video is never a driver"_ (B-034, `runtime.ts:303-305`) — which is about the
   HOLD, not about decoding.
-  ⇒ **The MODEL needs no new concept for per-layout backgrounds**, **but
+  ⇒ **The MODEL needs no new concept for per-layout backgrounds** (§13.1 confirms that half), **but
   the RUNTIME does: the layout state must reach the video driver**, or every layout's background
   video decodes for the whole time the row is up. **This needs measuring** — CEF's behaviour for a
   `display: none` media element is not something to assume — and §9.6f shows the frame budget is
@@ -1347,3 +1361,261 @@ that for the price of a nesting level the tree already supports.
 
 🔴 **This remains the OPEN gate.** A′ is this design's recommendation with its evidence; it is not a
 decision, and `tasks.md` section 3 stays `⟨GATE: §12.9⟩` until the owner answers.
+
+---
+
+## 13. ⭐ THE TRANSITION AND THE TITLES — the owner's 2026-08-18 extension, as requirements
+
+> Backgrounds may be shared across layouts or different per layout. There must be a transition
+> **between the backgrounds as well as between the boxes**, with **several selectable modes** — an
+> immediate one with no transition, plus a few ordinary ones.
+>
+> Each box can have its own title. Its position, colour and font are set in the Designer. During a
+> transition the titles can be hidden so the move does not look messy.
+
+**These EXTEND §12.1 and §12.2; they do not re-open them.** The phasing is still cut-first and the
+plate curve is still `linear`. What follows is what those decisions now have to cover, each with its
+cost, and each marked **REQUIREMENT** (something the feature must do) or **POSED** (something the
+owner must still choose).
+
+### 13.1 REQUIREMENT — a background may be SHARED or PER-LAYOUT, and this needs NO new concept
+
+**Confirmed from the model, not added to it.** A layout under candidate A already controls
+**non-plate element visibility** (§12.9.1). So:
+
+- a background with **no per-layout override** is an ordinary element visible in every layout — it is
+  **shared** because nothing hides it, not because a sharing concept exists;
+- a **per-layout** background is an ordinary element visible in one layout — the same mechanism,
+  used once per layout.
+
+There is no "shared background" flag to design and no inheritance rule to get wrong. **The two cases
+are the same mechanism at two settings**, which is why this half is free.
+
+⚠ **One exception, and it is the RUNTIME rather than the model** — the owner explicitly named a
+**motion or video background**. §12.9.3 established that **nothing in the tree pauses a hidden
+`<video>`**: a `visible` binding writes `el.style.display` and only that
+(`packages/template-runtime/src/bindings.ts:180-186`), while the video driver is driven by the
+LIFECYCLE (`runtime.ts:1079`). So four layouts with four video backgrounds would decode four videos
+for as long as the row is up, whichever layout is live. ⇒ **the layout state must reach the video
+driver, not just `style.display`.** How much that actually costs in CEF is `tasks.md` 8.3 — unmeasured,
+and §9.6f shows the frame budget is already the tight resource.
+
+### 13.2 🔴 REQUIREMENT — THE BOUNDARY: backgrounds transition FREELY, plates are `linear`-only
+
+**Write it down, or §12.2's rule gets applied to backgrounds too and the design is needlessly stiff.**
+
+|                  | What has to agree                                                                                                                                                                                   | Curve rule                                                                                                                                                                              |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A PLATE**      | the HOLE (page, CEF's `requestAnimationFrame` clock) and the PICTURE (`MIXER FILL` on the server's clock) — two independent timelines, no shared origin, no shared tick (`live-source-multibox` §6) | 🔴 **`linear` on both sides, always** (§12.2). It is the ONLY exactly-matchable pair: the vocabularies are otherwise disjoint and the nearest shared-sounding name is ~36 px out (§9.2) |
+| **A BACKGROUND** | nothing — it is **page content only**. No `MIXER`, no server-side counterpart, **no second clock to agree with**                                                                                    | **Any easing, any duration.** A designed ease is correct here, not a risk                                                                                                               |
+
+**⇒ §12.2's `linear`-only rule binds THE PLATES.** And the guard it demands (`tasks.md` 7.3 — forbid
+a CSS transition that omits its timing function, because the default `ease` measured 580–835 px out)
+must be **scoped to the same boundary**: it must catch a plate transition with no timing function
+without forbidding a deliberate `ease-in-out` on a backdrop. A guard that cannot tell the two apart
+will either miss the dangerous case or ban the safe one.
+
+🔴 **The correction measurement forces, and it must not be filed as a quibble.** "Free" here means
+**free of the SYNC problem**. It does **not** mean free of the FRAME budget, and §9.6f measured the
+opposite of the intuitive ordering:
+
+> **Crossfading two full-frame backdrops cost −10 % of the frame budget with a 120 ms worst gap.
+> Interpolating three plate holes cost −4 %. The background transition is the EXPENSIVE half.**
+
+So the boundary above is about **correctness**, and the cost ordering runs the other way. Both are
+true and they are about different things; someone who reads only "backgrounds are free" will reach
+for a full-frame gradient crossfade and spend three frames on it.
+
+⚠ **And the boundary is drawn at the SERVER, not at the property.** §9.6g measured
+`MIXER … OPACITY` accepting a duration and a tween with `FILL`'s exact vocabulary (`linear` `202`;
+`ease` and `cubic-bezier` `403`). So a mode that fades a plate's **picture** is still on the PLATE
+side of this boundary and still takes `linear` — it is "which side has a server counterpart", not
+"is it geometry".
+
+### 13.3 ⚠ REQUIREMENT — during a background crossfade, BOTH backdrops carry the current mask
+
+**The failure being prevented:** while the outgoing and incoming backdrops are both visible, if only
+the incoming one is masked, **the outgoing one stays opaque over every hole for the whole fade and
+the guests disappear.**
+
+**The good news: the existing rule already does this, and it does not need extending.** The punch is
+computed **per masked element** from z-order and intersection — for each element, its holes are every
+plate ABOVE it in paint order whose rect intersects it (`sceneMaskHoles`,
+`packages/shared-schema/src/scene-flatten.ts:346-390`). Two crossfading backdrops are two ordinary
+elements, both below the plates, both intersecting them, so **both get holes by construction**.
+
+🔴 **What DOES need stating, because it is the way this breaks:** the outgoing background's
+participation in the mask must **OUTLIVE the crossfade**. Today the mask is computed once at build
+from the authored `visible`, so the question does not arise. Under UNIT B′'s **resolved** visibility
+(`tasks.md` 2.1), a layout switch that marks the outgoing background hidden at the START of the fade
+strips its holes while it is still painting — which is exactly the failure above, introduced by the
+fix. ⇒ **the layout state must distinguish LEAVING from HIDDEN.** Added to §6b's enumeration as its
+own mutator.
+
+### 13.4 🔴 REQUIREMENT — what moves the mask during an animated switch
+
+Today the mask is computed **once, at build** (§2.3.2). An animated switch means it changes **every
+frame**, and this is the real cost of the animated phase.
+
+**§3b.4's lead is VERIFIED, on the plant's own CEF (§9.6e).** Chromium 142 interpolates
+`clip-path: polygon(evenodd, …)` and `clip-path: path(evenodd, '…')` — nine distinct intermediate
+values sampled through a 2 s `linear` transition, and `Element.animate` does it too. **The browser
+moves the holes itself: no per-frame JavaScript, no SVG regeneration.** And §9.6f measured the cost
+at **−4 % of the frame budget** for three holes at 1920×1080 — affordable.
+
+🔴 **The condition the lead depends on is a DESIGN CONSTRAINT, not a footnote.** Interpolation
+requires a **stable point count**, and a layout that drops a box changes it — 3-box → 2-box removes
+four points and the browser snaps instead of tweening.
+
+> **⇒ A plate that is hidden in the target layout must contribute a DEGENERATE (zero-area) hole
+> rather than NO hole.** The point count is then invariant across every layout by construction.
+
+That is not a workaround; it is also **exactly consistent with §12.4** — a zero-area hole punches
+nothing, which IS "a hidden plate stops punching", while the plate's producer stays seated on its
+band layer. One rule satisfies the animation's requirement and the release policy's at once.
+
+⚠ **The honest cost, recorded so it is not discovered later.** `clip-path` would be a **SECOND mask
+mechanism** beside the shipped `mask-image` + `mask-mode: luminance`, which was chosen **by
+measurement** — `mask-mode` is the load-bearing line and a wrong default there is a no-op
+indistinguishable from a mask that never applied
+(`packages/template-runtime/src/live-source-punch.ts:14-23`). 🔴 **This design does NOT re-open that
+choice on the strength of this lead**, and neither should the next reader: the static mechanism is
+settled. Whether the two can later be unified is a question the ANIMATED phase must ask **with its
+own measurement**, and it is recorded here as a known cost of that phase, not as a proposal.
+
+**And the fallback is NAMED rather than left implicit.** If per-frame mask movement turns out
+unaffordable in a real scene, **"plates FADE rather than travel" becomes the only animated mode** —
+§12.2's candidate C. 🔴 **That is an OWNER decision, not this design's**, and §13.7.3 records why it
+loses less than it appears to.
+
+### 13.5 REQUIREMENT — the mode set, and the technical ordering that explains why the modes differ
+
+| Mode     | What it costs                           | Why                                                                                                                                                                                        |
+| -------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Cut**  | **free** — 0.20 frames, measured (§9.3) | No tween on either side. Nothing has to agree with anything                                                                                                                                |
+| **Fade** | forgiving                               | The plates **do not move**, so drift between the page's clock and the server's is not a POSITION error. `MIXER … OPACITY` takes a duration and a tween (§9.6g), so the server half is real |
+| **Move** | **exacting**                            | The only mode where drift is visible on air as a position offset — hence §12.2's `linear`                                                                                                  |
+
+⚠ **A correction to "fade sidesteps hole/fill agreement entirely" (§12.2's candidate C).** It does
+not, and the reason is worth a sentence because the naive version is very persuasive. A plate's hole
+is **transparent**: fading the picture out with `MIXER OPACITY` while the hole stays open reveals
+whatever is under the live layer — **nothing, i.e. black** — so a fade needs the hole closed, or a
+backdrop faded in over it, in step. ⇒ **the fade does not remove the two clocks; it converts a
+GEOMETRY error into a LUMINANCE error.** That is a genuine improvement — the eye forgives a few ms
+of brightness mismatch where it will not forgive a face sliding out from behind its frame — but
+"forgiving" is the correct word for it, and "free" is not.
+
+### 13.6 POSED, not decided — who picks a mode, and at what scope
+
+**The owner's direction, recorded as settled:** the **AUTHOR** sets the default mode and duration, in
+the same `Layouts` section as the layout list; the **OPERATOR** always has an **immediate cut
+available as an escape**, which is broadcast practice.
+
+Two questions are genuinely open and are posed rather than answered:
+
+1. **May the operator also pick a mode PER SWITCH?** ⚠ Note the surface cost before answering:
+   §12.8's decision already re-opens the closed six-column verb grid for the segmented control, and a
+   per-switch mode picker is a **second** new control on the same row. If the answer is yes, the two
+   should be designed together rather than sequentially.
+2. **Is the mode per-COMPOSITION, per-LAYOUT, or per-PAIR?** 🔴 The owner's own example —
+   _"a 1-box→2-box move but a 3-box→1-box cut"_ — is a statement about an ORDERED PAIR, which is a
+   third scope neither option names and which costs **N² − N** entries for N layouts (12 for the
+   owner's four). Per-layout ("this layout is always entered with a fade") is N entries and covers
+   most of the intent. **This distinction should be settled before the authoring surface is drawn**,
+   because a per-pair table and a per-layout field are different UIs, not different defaults.
+
+### 13.7 Per-box titles — a title is an ORDINARY TEXT ELEMENT; four things still need answers
+
+**No element type is invented.** The two-property model already covers position, colour and font.
+
+#### 13.7.1 🔴 A title must be BOUND to its plate — and the binding does not exist today
+
+With four layouts and four boxes, independent placement is **sixteen manual placements**, and the
+first one that drifts puts a title under the wrong box on air. That is _extend the list, forget the
+mutator_ in authoring form.
+
+**What exists today: nothing.** There is no "this text belongs to that plate" relation in the schema
+— a Live Source plate carries a `routeKey` and a rect, and a text element carries its own transform,
+and nothing relates them.
+
+**⇒ The lead was tested against the mask path before being recommended, and it HOLDS.** Make each box
+a small **NESTED COMPOSITION** holding the plate and its title, so a layout positions ONE instance
+and the title follows. Compositions nest and the guard is shipped (`canNestCompositionInActive`,
+wired at `CompositionsPanel.tsx:54`, `CanvasOverlay.tsx:544,688`). The concern design.md raised was
+that some nested/stamped subtrees have no static scene-px rect for a hole to be pulled from — so it
+was checked:
+
+- `flattenElements` **does** descend into a `composition` (`scene-flatten.ts:274-290`), composing the
+  instance's transform AND its inner `preScale` into the ancestor chain, and keys each flat element by
+  the **instance path** — `${prefix}${el.id}`, the prefix extended by `${key}/` per level.
+- `scene-builder.ts` extends `maskKeyPrefix` by **exactly the same rule** (`:399`) and looks the holes
+  up with it (`:265`).
+- The two therefore compose the same key from the same parts, so **a plate inside a nested
+  composition punches correctly, at any depth or scale.**
+- 🔴 **The warning applies to STAMPED scopes, not to composition instances.** `STAMPED_SCOPE_MASKS`
+  is an intentionally EMPTY mask map given to sequence items and repeater rows
+  (`scene-builder.ts:124-134`), because a stamped row's positions are computed at RUN time. A
+  composition instance is not stamped and is not affected.
+
+⇒ **Recommended as part of A′** (§12.9.6). It reuses shipped machinery and it is the same nesting
+that makes A′'s per-layout geometry work.
+
+#### 13.7.2 REQUIREMENT — hiding a title during a transition is page-only, and therefore free of the sync problem
+
+Text needs no `MIXER` and has no server-side counterpart, so it sits on the **background** side of
+§13.2's boundary: any easing, any duration.
+
+🔴 **It must be an authored PER-ELEMENT option, not a blanket rule.** A box title should leave during
+the move; a logo inside the multi-box must not blink on every switch. A blanket "hide text during
+transitions" rule would produce the second behaviour while aiming at the first.
+
+**POSED — where the option lives.** The natural home is a per-element flag ("hide while the layout is
+changing"), beside the element rather than in the layout. ⚠ Worth saying out loud: that would be a
+**third** per-element visibility notion, alongside the authored `visible` and A's per-layout
+visibility. Three booleans that all mean "is this on screen" is precisely the shape that produces a
+predicate whose name stops matching what it tests, so whichever way it is authored, **the resolved
+visibility must come from ONE function** — the same one UNIT B′ gives `sceneMaskHoles` (`tasks.md` 2.1).
+
+#### 13.7.3 ⚠ A consequence that makes the cheap fallback CHEAPER — recorded in §12.2's reasoning
+
+If the titles are hidden while the boxes move, **the only things actually travelling are the
+plates**. So if §13.4's `clip-path` lead had failed and "plates FADE rather than travel" became the
+only affordable animated mode, **it would lose much less than it appears to** — half the visible
+complexity of the transition was hidden anyway. The lead did not fail (§9.6e), so this is insurance
+rather than the plan; it is recorded because it changes how expensive the fallback is, and that is
+exactly the kind of thing that is re-derived from scratch a year later.
+
+#### 13.7.4 🔴 THE SAME TITLE MUST FIT A WIDE 1-BOX CELL AND A NARROW 4-BOX CELL — and NOTHING SHIPPED DOES THIS
+
+A long Persian guest name overflows the narrow cell. **What exists was established rather than
+assumed, and the answer is worse than "not much": the schema offers THREE spellings of "make the
+text fit" and the runtime implements NONE of them.**
+
+| Spelling                                     | Where                                                                            | State                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fitMode: 'shrink-to-fit'`                   | `packages/shared-schema/src/elements.ts:188`                                     | 🔴 **Not implemented** — the schema's own docstring says so: _"`shrink-to-fit` (font-shrink) is NOT yet implemented — it renders like `fixed` today"_ (`:185-187`)                                                                                                                                                                                                                                              |
+| `autoSqueeze: boolean`                       | `elements.ts:205`, documented as _"the runtime shrinks the font to fit the box"_ | 🔴 **The runtime never reads it.** `SEARCH:` `git grep -rn "autoSqueeze" -- packages/` → **one hit, the schema declaration itself.** The only other references anywhere are the Designer control that WRITES it (`apps/designer/src/renderer/features/inspector/TextStyleSection.tsx:67,120`) and a comment in `bindings.ts:130` asserting that _"the element's own auto-size / auto-squeeze then handles fit"_ |
+| `overflow: 'clip' \| 'ellipsis' \| 'shrink'` | `elements.ts:189`                                                                | 🔴 **Never read.** `SEARCH:` `git grep -rn "\.overflow" -- packages/template-runtime/src` → every hit is a hardcoded `style.overflow = 'hidden'`/`'visible'`; the one `textOverflow = 'ellipsis'` (`scene-builder.ts:1660`) is the Live Source plate's **id label**, an author-mode affordance, not authored text                                                                                               |
+
+Only `fitMode: 'autosize'` is implemented (D-060) — and it does the **opposite** of what is needed:
+it **hugs the content**, growing the box to the text, rather than shrinking the text to the box.
+
+> 🔴 **⟨MINT⟩ A shipped Designer control that writes a field nothing reads is its own defect**, and
+> it is the same class as §5's Inspector: a control that silently does nothing. It needs a `B-`
+> number — reported, not minted, in §12.7. `tasks.md` 1.12.
+
+⚠ **And the rule that gets written to fix it must measure SHAPED text.** Persian shaping means glyph
+advances are not the sum of character advances — contextual forms and ligatures change the width —
+so a fit rule based on character COUNT works for Latin and fails for Persian. `@cg/text-shaping`'s
+`truncate()` is exactly that shape: **code-unit based**, and its own docstring admits _"Persian text
+with combining diacritics or ZWNJ-joined compounds may still split at inconvenient boundaries"_
+(`packages/text-shaping/src/truncate.ts:1-10`). It is a LENGTH cap, not a WIDTH fit, and it cannot
+answer "does this fit the narrow cell". ⇒ **the fit must be measured from the rendered box**
+(`scrollWidth` / `getBoundingClientRect` after shaping), never computed from the string. It looks
+fine in the Designer and breaks on air with the next guest's name.
+
+**POSED — which of the three shapes the layout switch needs**, since none exists and one has to be
+built: (a) a per-layout font-size override on the text element (most control, most authoring); (b) a
+real shrink-to-fit measured after shaping (least authoring, one rule everywhere); (c) both, with (b)
+as the default and (a) as the escape. **(b) is the one to build first** — it is the only one that
+degrades gracefully for a name nobody anticipated, which is the actual failure mode.

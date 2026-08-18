@@ -1,9 +1,10 @@
 # runtime-multibox-layout
 
-> Only the requirements SETTLED by `design.md` §0 appear here. Everything about HOW — the transition
-> curve, the release policy for a dropped box, where the control lives, whether the layout set is
-> authored or fixed — is an open owner question in `design.md` §12 and is deliberately absent. A
-> requirement written before its gate is answered would be a guess with the authority of a spec.
+> Only requirements whose owner gate is ANSWERED appear here. As of 2026-08-18 that is `design.md`
+> §0 plus the transition contract (§12.1, §12.2 and §13). **Everything that still depends on §12.9 —
+> how per-layout geometry and per-layout DESIGN are authored, and therefore how a layout, its
+> background and its per-box titles are expressed — is deliberately ABSENT.** A requirement written
+> before its gate is answered would be a guess with the authority of a spec.
 
 ## ADDED Requirements
 
@@ -98,3 +99,76 @@ allocation — the corresponding INVERSE SHALL exist and be exercised by a test.
 - **WHEN** the reconcile seats a plate, punches a hole, sets a fit, or allocates a layer
 - **THEN** a corresponding release, un-punch, fit-clear and de-allocation exists and is covered by a
   test, so no half of a pair can ship without the other
+
+### Requirement: The transition between layouts has SELECTABLE MODES, and its curve rule binds the PLATES only
+
+A layout switch SHALL offer several transition modes, including an **immediate cut with no
+transition**. The author SHALL set the default mode and its duration; the operator SHALL always have
+an immediate cut available as an escape, whatever the authored default.
+
+A transition SHALL move **the backgrounds as well as the boxes**. A background with no per-layout
+override is shared across layouts; a per-layout background is an ordinary element visible in one
+layout. Neither requires a concept beyond per-layout element visibility.
+
+Where a plate's geometry or opacity is animated, **both sides SHALL use `linear`** — the page's CSS
+transition and the server's `MIXER` tween. A plate is the only thing with a server-side counterpart
+that must agree with the page, the two run on independent clocks, and `linear` is the ONLY curve
+name the two vocabularies both denote: the CasparCG tween names and the CSS timing functions
+otherwise share none, and the nearest same-sounding pair separates hole from picture by ~36 px on a
+1920 raster.
+
+A CSS transition on a plate that OMITS its timing function SHALL be refused by lint or test. The CSS
+default is `ease`, which is 580–835 px from every CasparCG tween — over a third of the frame width —
+and it is what gets written by accident.
+
+The `linear` rule SHALL NOT be applied to backgrounds, titles, or any other page-only content. Those
+have no server-side counterpart and therefore no second clock to agree with, so any easing and any
+duration is correct for them.
+
+#### Scenario: The operator cuts between layouts with no transition
+
+- **WHEN** the operator switches layouts using the immediate-cut mode
+- **THEN** the new layout is on air with no tween on either the page or the server, and the operator
+  can reach that mode whatever transition the author set as the default
+
+#### Scenario: A moving plate's hole and picture stay together
+
+- **WHEN** a layout switch animates a plate from one position to another
+- **THEN** the page's hole and the server's picture follow the same `linear` curve over the same
+  duration, so the live picture never appears outside its frame
+
+#### Scenario: A background transition is not held to the plate curve
+
+- **WHEN** an author gives a per-layout background an eased crossfade
+- **THEN** it is accepted, because a background has no server-side counterpart to disagree with —
+  while a plate transition that omits its timing function is still refused
+
+#### Scenario: Both backdrops keep their holes through a crossfade
+
+- **WHEN** an outgoing and an incoming background are both visible during a crossfade
+- **THEN** both carry the current mask, so neither is opaque over a plate's hole for any part of the
+  fade
+
+### Requirement: A source with no box in the target layout is HELD, or its teardown is NAMED
+
+A live source whose box does not exist in the target layout SHALL be **held muted and idle** rather
+than torn down, so switching back is immediate. Its producer stays seated on its live-source band
+layer while its plate stops punching a hole.
+
+Where a source kind cannot be held open, the fallback to teardown SHALL be a **named, observable
+behaviour** — never a silent difference. An operator whose switch-back is not immediate SHALL be
+able to see that the source was released rather than held, so the inconsistency does not read as a
+fault in the switch.
+
+#### Scenario: Switching away and back restores the dropped box immediately
+
+- **GIVEN** a 3-box layout whose third box has a source assigned
+- **WHEN** the operator switches to the 2-box layout and then back
+- **THEN** the third box shows its source again without a re-seat, because the producer was held
+
+#### Scenario: A source that cannot be held says so
+
+- **GIVEN** a source kind that cannot be held open while hidden
+- **WHEN** the operator switches to a layout without that box
+- **THEN** the source is torn down and that is surfaced, rather than the switch-back silently taking
+  longer than it does for every other source
