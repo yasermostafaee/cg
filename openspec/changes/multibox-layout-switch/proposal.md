@@ -66,13 +66,16 @@ implementation task is gated on an owner question** (`⟨GATE: §x⟩`).
 
 ## What changes in the repo
 
-Documentation only:
+Documentation, plus the measurement harness (no product code):
 
-| Path                                       | Effect                                                     |
-| ------------------------------------------ | ---------------------------------------------------------- |
-| `openspec/changes/multibox-layout-switch/` | this change — proposal, design, tasks, one capability spec |
-| `docs/handoff/2026-08-17-session-aq.md`    | the first session's handoff, opening with the SHA read     |
-| `docs/handoff/2026-08-18-session-ar.md`    | the second session's handoff (the gates + §12.9 + §13)     |
+| Path                                            | Effect                                                       |
+| ----------------------------------------------- | ------------------------------------------------------------ |
+| `openspec/changes/multibox-layout-switch/`      | this change — proposal, design, tasks, one capability spec   |
+| `docs/handoff/2026-08-17-session-aq.md`         | the first session's handoff, opening with the SHA read       |
+| `docs/handoff/2026-08-18-session-ar.md`         | the second session's handoff (the gates + §12.9 + §13)       |
+| `docs/prd/runtime.md` · `designer.md`           | `R-057` and `D-152` — the two parent items                   |
+| `docs/prd/bugs-runtime.md` · `bugs-designer.md` | `B-145`, `B-146`, `B-147`                                    |
+| `tools/caspar-amcp-probe/bin/`                  | the plant harness this change's measurements were taken with |
 
 ## Impact if it proceeds
 
@@ -86,39 +89,56 @@ Documentation only:
 | `apps/designer`        | authoring per-layout geometry; the `live-source-animated` refusal is KEPT                        |
 | `@cg/vcg-format`       | `collectLiveSources` emits per-layout rects; no format change                                    |
 
-## Status — updated 2026-08-18
+## Status — ✅ ALL EIGHT GATES ANSWERED (2026-08-18)
 
-**DESIGN-FIRST. Still no product code.** Two things were decided here with their reasoning rather
-than deferred: the plate identity model (§0.5) and the v1 animation refusal (§2b).
+**DESIGN-FIRST. Still no product code in this change.** Two things were decided here with their
+reasoning rather than deferred: the plate identity model (§0.5) and the v1 animation refusal (§2b).
 
-**Seven of the eight owner gates are now ANSWERED** and recorded in `design.md` §12 as DECIDED —
-§12.1 (cut first), §12.2 (`linear` both sides), §12.4 (the dropped box is held), §12.5 (the
-Inspector is surface-only), §12.6 (refuse two multi-box templates, one predicate called from two
-sites), §12.7 (the ledger survives a restart, filed separately), §12.8 (a segmented control on the
-row). The `⟨GATE: §x⟩` tasks that named them are unblocked.
+**Every owner gate in `design.md` §12 is now answered** — §12.1 (cut first), §12.2 (`linear` both
+sides, PLATES only), §12.4 (the dropped box is held), §12.5 (the Inspector is surface-only), §12.6
+(refuse two multi-box templates, one predicate called from two sites), §12.7 (the ledger survives a
+restart, filed separately), §12.8 (a segmented control on the row), and **§12.9 last: A′ ADOPTED**.
 
-🔴 **§12.9 remains OPEN, and was WIDENED rather than settled.** The owner withdrew candidate B — _a
-layout is a designed SCENE, not a set of rectangles, and computed geometry cannot carry a background
-at all_ — and offered a candidate of his own (**D**: give layers a TYPE, and let a _group_ layer bind
-several ordinary templates with one live). **D was investigated on the plant and is REFUSED**, on
-four independent grounds, three of them measured:
+🔴 **§12.9 — A′.** A box is authored as a **nested composition**; an **arrangement** positions the box
+**instances**; per-arrangement geometry lives on the instance. Candidate B (a fixed computed
+1/2/3-box family) stays withdrawn — a layout is a designed SCENE, not a set of rectangles. The
+owner's own candidate D (bind several ordinary templates to one layer) was investigated on the plant
+and **refused on the premise, not on preference**:
 
 - 🔴 **Two templates cannot share one video layer.** `CG ADD` at cg-layer 1 is accepted (`202`) and
   **REPLACES** the page at cg-layer 0; `INFO` reports one `html` producer and both cg-layer indices
-  then route to the survivor. The cg-layer argument is **inert**. ⇒ the "hole in the upper page"
-  question is **moot — there is no upper page**.
-- **A replace costs ~3 frames** (118 ms median = 2.95 frames), fifteen times the measured cut.
-  `LOADBG` + `PLAY` removes that gap entirely — but a layer has **exactly one background slot**, so
-  only one _announced_ alternative is gapless and the rest are not.
-- It cannot animate a rearrangement (§0.2, cited), so §12.1's phase two would need candidate A built
-  anyway.
-- **Assignment cannot survive it** — the key is `(templateId, plateId)` and each layout is a
-  different `templateId`.
+  then route to the survivor. ⇒ the "hole in the upper page" question is **moot — there is no upper
+  page**.
+- A replace costs **2.95 frames**; `LOADBG` + `PLAY` removes that gap but a layer has **one**
+  background slot, so only one _announced_ alternative is gapless.
+- It cannot animate a rearrangement (§0.2, cited), and **assignment cannot survive it** — the key is
+  `(templateId, plateId)` and each layout is a different `templateId`.
 
-`design.md` §12.9.6 recommends **A′** — candidate A's identity model with a box authored as a
-**nested composition** and per-layout geometry carried on the **instance** — with its evidence.
-It is a recommendation, not a decision.
+A′ is cheap because the punch was **verified, not assumed**: a plate inside a nested composition
+punches correctly at any depth, because the flattener's instance path and the builder's
+`maskKeyPrefix` are composed from the same parts.
 
-The owner also extended the transition requirement (selectable modes, background transitions) and
-added per-box titles; both are recorded with their costs in `design.md` §13, and the mode set is now
-a spec requirement.
+**Also settled 2026-08-18:** a default arrangement per count with the operator's pick as ONE action;
+declared cell order in v1; legible refusals (never truncation) for "more sources than the largest
+arrangement holds" and "a count with no arrangement"; and **one shared background is enough** — the
+per-arrangement capability stays, but it carries a measured **−10 %** frame cost that the default
+path no longer pays.
+
+**The transition modes are measured, not estimated.** Cut 0.20 frames; **move** −4 % via verified
+`clip-path` interpolation on the plant's CEF; **fade** −3.4 % via the owner's fade-the-mask's-
+luminance lead, which leaves the `linear` rule's scope entirely because it has no server half.
+
+## Where the work lives now
+
+Five PRD items were minted 2026-08-18, numbers confirmed by heading sweep before writing:
+
+| Item                             | Half                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| **`R-057`** (`runtime.md`)       | the OPERATOR half — the switch control, the one reconcile, the refusals    |
+| **`D-152`** (`designer.md`)      | the DESIGNER half — arrangements authoring, geometry, titles, the exporter |
+| **`B-145`** (`bugs-runtime.md`)  | the live-layer ledger surviving a restart — **must land before `R-057`**   |
+| **`B-146`** (`bugs-runtime.md`)  | the Inspector's silent no-op edit and its override-blindness               |
+| **`B-147`** (`bugs-designer.md`) | three spellings of "make the text fit", none implemented                   |
+
+`R-057` and `D-152` are two items for one capability, on this repo's own `D-137`/`C-015` precedent,
+and each names the other.

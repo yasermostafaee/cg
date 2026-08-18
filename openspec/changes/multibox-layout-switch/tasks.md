@@ -1,13 +1,14 @@
 # Tasks — the multi-box layout switch
 
-> **STATUS 2026-08-18 — seven of the eight owner gates are ANSWERED, so most of this file is now
-> UNBLOCKED.** `design.md` §12 records §12.1, §12.2, §12.4, §12.5, §12.6, §12.7 and §12.8 as DECIDED
-> with their reasoning.
+> **STATUS 2026-08-18 — ✅ ALL EIGHT owner gates are ANSWERED. Nothing in this file is gate-blocked.**
+> `design.md` §12 records every decision with its reasoning; §12.9 closed last, with **A′ adopted**.
 >
 > - `⟨READY — §x decided⟩` marks a task whose gate is answered. **Ready is not started and not done.**
-> - 🔴 `⟨GATE: §12.9⟩` is the ONE remaining block. Everything it holds is the per-layout GEOMETRY and
->   per-layout DESIGN carrier, which §12.9 widened rather than settled.
-> - Section 0 is complete; section 0b records the 2026-08-18 recon.
+>   Every task in this file now carries one.
+> - The work is carried by two PRD items minted 2026-08-18 on the D-137/C-015 precedent —
+>   **`R-057`** (operator half) and **`D-152`** (arrangements authoring) — plus **`B-145`**, which
+>   must land FIRST, and **`B-146`** / **`B-147`**.
+> - Sections 0 and 0b are complete; 0b records the 2026-08-18 plant recon.
 
 ## 0. Recon and design — COMPLETE
 
@@ -66,13 +67,13 @@
 - [x] 0b.2 Does this codebase ever address a cg-layer other than `0`, and can it? **NO and NO.**
       `FLASH_LAYER = 0` is a module constant in all five CG verbs
       (`command-builder.ts:16,59,64,69,90,105`); non-zero cg-layers exist only in probes.
-      (`design.md` §12.9.2 D-1)
+      (`design.md` §12.9.6 D-1)
 - [x] 0b.3 🔴 MEASURE whether two templates can sit on ONE video layer at different cg-layers.
       **THEY CANNOT.** `CG ADD 1` is accepted (`202`) and REPLACES the page at cg-layer 0 — the
       first page dies (50/s → 0), `INFO` reports one `<foreground>` with one `html` producer, and
       both `UPDATE 0` and `UPDATE 1` are answered by the survivor. **The cg-layer argument is
       INERT.** ⇒ the "hole in the upper page" question is MOOT: there is no upper page.
-      (`design.md` §9.6a, §12.9.2 D-2)
+      (`design.md` §9.6a, §12.9.6 D-2)
 - [x] 0b.4 MEASURE the replace-on-one-layer gap. **118 ms median = 2.95 frames** (2.80–3.13, n=8),
       against the cut's 0.20 frames. The outgoing page dies ~22 ms after the command and does not
       wait for the incoming one. (`design.md` §9.6b)
@@ -83,31 +84,31 @@
       (`design.md` §9.6c, §9.6d)
 - [x] 0b.6 What does D cost §12.1's phase two? **All of it** — §0.2's "not expressible across two
       independent pages" is CITED, and strengthened: the pages cannot coexist on the layer at all.
-      D would need candidate A built anyway. (`design.md` §12.9.2 D-4)
+      D would need candidate A built anyway. (`design.md` §12.9.6 D-4)
 - [x] 0b.7 Where would a "group" live in R-028's declared-rows model? **At the root of a row's
       identity** (`stack.load` is one `templateId`; 80 references across 38 files). Assignment is
       keyed `(templateId, plateId)`, so **a group switch changes the key and assignment cannot
-      survive** — the §3 disqualification, inherited. (`design.md` §12.9.2 D-5)
+      survive** — the §3 disqualification, inherited. (`design.md` §12.9.6 D-5)
 - [x] 0b.8 ⇒ **VERDICT ON D: REFUSED**, on four independent grounds, three of them measured.
-      (`design.md` §12.9.2)
+      (`design.md` §12.9.6)
 - [x] 0b.9 Is there any precedent for "a set of elements visible together as a state"? **The
       closest is a `sequence` of COMPOSITION items — the tree's only exactly-one-of-N primitive —
       and it is disqualified twice: `flattenElements` never descends into a `sequence`, and stamped
       scopes get an EMPTY mask map on purpose.** No precedent exists for a runtime-selected
-      one-of-N sub-scene a Live Source can live inside. (`design.md` §12.9.3)
+      one-of-N sub-scene a Live Source can live inside. (`design.md` §12.9.7)
 - [x] 0b.10 Per-layout backgrounds: what happens to a hidden `<video>`? **Nothing pauses it.** A
       `visible` binding writes `style.display` only; the video driver is lifecycle-driven. The MODEL
-      needs no new concept; the RUNTIME does. **Needs measuring — 9.3.** (`design.md` §12.9.3)
+      needs no new concept; the RUNTIME does. **Needs measuring — 9.3.** (`design.md` §12.9.7)
 - [x] 0b.11 What must the carrier become under A? **One rect per layout per plate.** The exporter
       already derives a rect through the full ancestor chain (`flat.rect`); it lacks a reason to do
       it more than once. 🔴 And an asymmetry was found: `collectLiveSources` has NO visibility
       filter while `sceneMaskHoles` does — **today a hidden plate is DECLARED but does not PUNCH**.
-      (`design.md` §12.9.3, feeds 2.5)
+      (`design.md` §12.9.7, feeds 2.5)
 - [x] 0b.12 Does a plate inside a NESTED COMPOSITION still punch correctly? **YES, verified** — the
       flattener's instance path and the builder's `maskKeyPrefix` are composed from the same parts
       (`scene-flatten.ts:250-292` / `scene-builder.ts:265,399`). The "no static scene-px rect"
       warning applies to STAMPED scopes (repeater rows, sequence items), not to composition
-      instances. (`design.md` §12.9.4)
+      instances. (`design.md` §12.9.8)
 - [x] 0b.13 🔴 VERIFY §3b.4's `clip-path` interpolation lead on the plant's CEF. **VERIFIED** —
       Chromium 142; `path(evenodd,…)`, `polygon(evenodd,…)` and WAAPI all interpolate (9 distinct
       intermediates each). (`design.md` §9.6e)
@@ -121,6 +122,13 @@
 - [x] 0b.16 Report the next free item number for §12.7's ledger item. **`B-145`** (and `B-146`,
       `B-147` for the two other pending B-items). **Nothing minted.** (`design.md` §12.7)
 - [x] 0b.17 Handoff at `docs/handoff/2026-08-18-session-ar.md`, opening with the SHA read.
+- [x] 0b.18 🔴 PROBE the owner's fade-the-MASK'S-LUMINANCE lead. **IT WORKS, and not by the obvious
+      spelling.** `transition: mask-image` between two gradients **does NOT interpolate** (0
+      intermediates); an `@property`-registered `<color>` feeding the gradient **does** (9
+      intermediates). Cost **−3.4 %**, the cheapest animated thing measured. Grey→openness is
+      **α ≈ grey ÷ 255** (mid-grey = half-open) — read through an SVG-mask **proxy**, so the CSS-path
+      confirmation is owed (8.5). ⇒ the FADE mode leaves the `linear` rule's scope entirely.
+      (`design.md` §9.6h, §13.5a)
 
 ## 1. Owner decisions — SEVEN ANSWERED 2026-08-18, ONE OPEN
 
@@ -148,31 +156,34 @@
 - [x] 1.7 §12.8 — where the switch control lives. **ANSWERED: an always-visible SEGMENTED CONTROL on
       the row** showing which layout is live; a menu is disqualified because it hides the current
       state. 🔴 Re-opens the six-column verb grid — see §12.8's two collisions. (`design.md` §12.8)
-- [ ] 1.8 Answer §12.9 — **how per-layout GEOMETRY and per-layout DESIGN are authored.** The largest
-      piece, with no precedent in the tree. **WIDENED 2026-08-18**, not settled: candidate **B is
-      WITHDRAWN by the owner** (a layout is a designed SCENE, not a set of rectangles — computed
-      geometry cannot carry a background at all), and the owner's candidate **D was investigated and
-      is REFUSED on four grounds, three measured** (0b.3–0b.8). `design.md` §12.9.6 recommends
-      **A′** — candidate A's identity model with a box authored as a nested composition and
-      per-layout geometry on the INSTANCE — with its evidence. ⟨GATE: §12.9⟩
-- [ ] 1.9 ⟨MINT⟩ a bug item for the Inspector's silent no-op assignment edit and its
-      override-blindness, filed in `docs/prd/bugs-runtime.md` (a Runtime-app defect, not
-      cross-cutting). **Next free `B-` is reported in `design.md` §12.7; no number is minted in this
-      change.** ⟨READY — §12.5 decided⟩
-- [ ] 1.10 ⟨MINT⟩ a PRD item for this feature itself — none was minted here. ⟨READY — §12.1 decided⟩
-- [ ] 1.11 ⟨MINT⟩ **the live-layer ledger item**, per §12.7 — the ledger survives a bridge restart.
-      Next free `B-` reported in `design.md` §12.7; recommended home `docs/prd/bugs-runtime.md`.
-      **No number is minted in this change.** ⟨READY — §12.7 decided⟩
-- [ ] 1.12 ⟨MINT⟩ **the text-fit item** (`design.md` §13.7.4): the schema offers THREE spellings of
-      "make the text fit" and the runtime implements NONE — and the Designer ships an `autoSqueeze`
-      control that writes a field nothing reads. Same class as §5's Inspector: a control that
-      silently does nothing. **No number is minted in this change.** ⟨READY — §12.2 decided⟩
+- [x] 1.8 §12.9 — **how per-arrangement GEOMETRY and per-arrangement DESIGN are authored.**
+      **ANSWERED: A′ IS ADOPTED** — candidate A's identity model with a box authored as a NESTED
+      COMPOSITION and per-arrangement geometry on the INSTANCE. Candidate B stays withdrawn;
+      the owner's candidate D was investigated and **refused on the premise, not on preference**
+      (0b.3–0b.8). Four further questions were posed and answered with it (§12.9.1), and a single
+      shared background was settled as enough (§12.9.2). (`design.md` §12.9)
+- [x] 1.9 ⟨MINT⟩ the Inspector's silent no-op assignment edit and its override-blindness.
+      **MINTED `B-146`**, `docs/prd/bugs-runtime.md`. (`design.md` §5, §12.5)
+- [x] 1.10 ⟨MINT⟩ a PRD item for the feature itself. **MINTED AS TWO, on the D-137/C-015 precedent:
+      `R-057`** (the operator half — the switch control, the reconcile, the refusals) in
+      `docs/prd/runtime.md`, and **`D-152`** (the arrangements authoring) in `docs/prd/designer.md`.
+      Each names the other as half the feature, in its opening and in its cross-refs.
+- [x] 1.11 ⟨MINT⟩ the live-layer ledger item. **MINTED `B-145`**, `docs/prd/bugs-runtime.md`, and
+      recorded there as **blocking `R-057`**. (`design.md` §12.7)
+- [x] 1.12 ⟨MINT⟩ the text-fit item. **MINTED `B-147`**, `docs/prd/bugs-designer.md` (the field, the
+      control and the renderer that ignores it are all Designer-side), cross-referenced from
+      `bugs-runtime.md` by a deliberate NOT-a-second-item note. (`design.md` §13.7.4)
+
+> **The sweep, for the record.** All five numbers were confirmed free by heading sweep BEFORE
+> writing — the exact-number sweep and the all-refs widening sweep both returned 0, maxima were
+> `B-144` / `D-151` / `R-056`, `git stash list` empty — and re-audited after: the duplicate sweep
+> still prints exactly `B-056` and `B-080`, and `C`/`D`/`P`/`R` print nothing.
 
 ## 2. UNIT B′ — the mask mutator enumeration (PREREQUISITE, not cleanup)
 
 - [ ] 2.1 Give `sceneMaskHoles` **resolved** visibility instead of the scene's authored `visible`
       (`packages/shared-schema/src/scene-flatten.ts:352-354`). ⟨READY — §12.1 decided⟩
-- [ ] 2.2 Give it **current** geometry, so a moved plate takes its hole with it. ⟨GATE: §12.9⟩
+- [ ] 2.2 Give it **current** geometry, so a moved plate takes its hole with it. ⟨READY — §12.9 decided⟩
 - [ ] 2.3 A re-punch pass after `update()` in `@cg/template-runtime`, reassigning the mask
       properties on the existing nodes. ⟨READY — §12.1 decided⟩
 - [ ] 2.4 Cover every mutator in `design.md` §6b's table with a test: take, teardown, position
@@ -182,18 +193,18 @@
       suppresses a punch, and whether a hidden plate is **declared while hidden**. Under §0.5 a
       hidden plate must stop punching AND stop being seated. ⟨READY — §12.4 decided⟩
 - [ ] 2.6 Refuse a Live Source plate inside a `sequence` — `flattenElements` never descends into
-      one, so such a plate declares nothing and punches nothing, silently. ⟨GATE: §12.9⟩
+      one, so such a plate declares nothing and punches nothing, silently. ⟨READY — §12.9 decided⟩
 
 ## 3. Per-layout geometry — the carrier and the authoring surface
 
-- [ ] 3.1 Per-layout geometry on the element, in `@cg/shared-schema`. ⟨GATE: §12.9⟩
+- [ ] 3.1 Per-layout geometry on the element, in `@cg/shared-schema`. ⟨READY — §12.9 decided⟩
 - [ ] 3.2 `collectLiveSources` emits per-layout rects onto the declaration block, following
       `live-source-multibox` §1's carrier (derived once at import, the `hasNext` precedent). No
-      `.vcg` format change. ⟨GATE: §12.9⟩
-- [ ] 3.3 The Designer surface for authoring it. ⟨GATE: §12.9⟩
+      `.vcg` format change. ⟨READY — §12.9 decided⟩
+- [ ] 3.3 The Designer surface for authoring it. ⟨READY — §12.9 decided⟩
 - [ ] 3.4 Preflight: exactly one layout active at author time; **the overlap check applies WITHIN a
       layout, not across layouts** — today it is per-document and would not fire across them.
-      ⟨GATE: §12.9⟩
+      ⟨READY — §12.9 decided⟩
 
 ## 4. The one mechanism — reconcile a running row's live plates
 
@@ -217,7 +228,7 @@
 ## 5. Exclusivity
 
 - [ ] 5.1 ONE authority for the layout state, read by the switch, the mask and the reconcile.
-      ⟨GATE: §12.9⟩
+      ⟨READY — §12.9 decided⟩
 - [ ] 5.2 (If §12.6 is A) one canonical predicate refusing a second multi-box template, enforced in
       BOTH `take()` and `restore()`/`#decidePendingRestores` — restore never passes through
       `take()`. ⟨READY — §12.6 decided⟩
@@ -256,15 +267,15 @@
       (§9.6e) at −4 % of the frame budget (§9.6f). 🔴 **A plate hidden in the target layout must
       contribute a DEGENERATE (zero-area) hole, not NO hole**, so the point count is invariant and
       the browser can interpolate. ⚠ It is a SECOND mask mechanism beside the settled
-      `mask-mode: luminance`; do NOT re-open the static choice on the strength of it. ⟨GATE: §12.9⟩
+      `mask-mode: luminance`; do NOT re-open the static choice on the strength of it. ⟨READY — §12.9 decided⟩
 - [ ] 7.9 §13.7.2 — hiding an element during a transition is an authored PER-ELEMENT option, not a
       blanket rule (a box title leaves; a logo must not blink). 🔴 Resolved visibility must come
       from ONE function — the same one 2.1 gives `sceneMaskHoles` — rather than a third independent
-      boolean. ⟨GATE: §12.9⟩
+      boolean. ⟨READY — §12.9 decided⟩
 - [ ] 7.10 §13.7.4 — the text FIT. Build the rule that makes one title fit a wide 1-box cell and a
       narrow 4-box cell. ⚠ It MUST measure the RENDERED box after shaping, never the string:
       `@cg/text-shaping`'s `truncate()` is code-unit based and is a length cap, not a width fit, so
-      a count-based rule works for Latin and fails for Persian. ⟨GATE: §12.9⟩
+      a count-based rule works for Latin and fails for Persian. ⟨READY — §12.9 decided⟩
 
 ## 8. Still owed — measurements
 
@@ -276,8 +287,14 @@
 - [ ] 8.3 🔴 Whether a hidden `<video>` keeps DECODING in CEF. Nothing in the tree pauses one — a
       `visible` binding writes `style.display` and the video driver is lifecycle-driven — so under
       candidate A every layout's background video may decode for as long as the row is up. §9.6f
-      shows the frame budget is already the tight resource. ⟨GATE: §12.9⟩
+      shows the frame budget is already the tight resource. ⟨READY — §12.9 decided⟩
 - [ ] 8.4 The pixel confirmation that a `LOADBG` background producer is NOT composited. Not
-      measurable this session (no plant disk for `PRINT`; §9.6). ⚠ **It cannot change §12.9.2's
+      measurable this session (no plant disk for `PRINT`; §9.6). ⚠ **It cannot change §12.9.6's
       verdict on D** — D loses under both branches — so this is completeness, not a blocker.
       ⟨READY — §12.1 decided⟩
+- [ ] 8.5 🔴 The CSS-path confirmation of §9.6h's luminance transfer: a **channel-side capture** of a
+      half-luminance mask over a real live plate. §9.6h read α ≈ grey ÷ 255 through an SVG-mask →
+      canvas **proxy** in the same engine, not through `mask-mode: luminance` compositing over SDI.
+      ⚠ Also pin α ≈ grey/255 with a test — it is an ENGINE property a CEF bump could change, not a
+      spec guarantee (SVG 1.1 specifies linearRGB, which would make 50 % grey ≈ 21 % open).
+      ⟨READY — §12.2 decided⟩

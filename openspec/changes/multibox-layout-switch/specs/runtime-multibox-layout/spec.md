@@ -1,10 +1,12 @@
 # runtime-multibox-layout
 
-> Only requirements whose owner gate is ANSWERED appear here. As of 2026-08-18 that is `design.md`
-> §0 plus the transition contract (§12.1, §12.2 and §13). **Everything that still depends on §12.9 —
-> how per-layout geometry and per-layout DESIGN are authored, and therefore how a layout, its
-> background and its per-box titles are expressed — is deliberately ABSENT.** A requirement written
-> before its gate is answered would be a guess with the authority of a spec.
+> ✅ **All eight owner gates are answered** (`design.md` §12), so this capability's requirements are
+> no longer partial. The work is carried by two PRD items on the D-137/C-015 precedent — `R-057`
+> (operator) and `D-152` (authoring) — and is BLOCKED on `B-145`.
+>
+> ⚠ **Vocabulary.** A **COUNT** is how many boxes (1, 2, 3, 4…) and is what the operator picks. An
+> **ARRANGEMENT** is a named geometry for a count; a count may have several, one of which is the
+> authored default.
 
 ## ADDED Requirements
 
@@ -106,9 +108,10 @@ A layout switch SHALL offer several transition modes, including an **immediate c
 transition**. The author SHALL set the default mode and its duration; the operator SHALL always have
 an immediate cut available as an escape, whatever the authored default.
 
-A transition SHALL move **the backgrounds as well as the boxes**. A background with no per-layout
-override is shared across layouts; a per-layout background is an ordinary element visible in one
-layout. Neither requires a concept beyond per-layout element visibility.
+A transition SHALL move **the backgrounds as well as the boxes** where an author has given
+arrangements different backgrounds. **ONE shared background is the default and is sufficient**; a
+per-arrangement background is an ordinary element visible in one arrangement, and requires no concept
+beyond per-arrangement element visibility.
 
 Where a plate's geometry or opacity is animated, **both sides SHALL use `linear`** — the page's CSS
 transition and the server's `MIXER` tween. A plate is the only thing with a server-side counterpart
@@ -125,6 +128,12 @@ The `linear` rule SHALL NOT be applied to backgrounds, titles, or any other page
 have no server-side counterpart and therefore no second clock to agree with, so any easing and any
 duration is correct for them.
 
+Where a mode fades a box rather than moving it, it SHALL fade **the mask's luminance** rather than the
+producer's opacity. A luminance-keyed mask makes a grey hole a partly-open hole, so the backdrop
+progressively re-covers the picture — which keeps the whole transition on the page, with no server
+tween and therefore no second clock. Fading the producer's opacity while the hole stays open would
+reveal what lies under the live layer, which is black.
+
 #### Scenario: The operator cuts between layouts with no transition
 
 - **WHEN** the operator switches layouts using the immediate-cut mode
@@ -136,6 +145,12 @@ duration is correct for them.
 - **WHEN** a layout switch animates a plate from one position to another
 - **THEN** the page's hole and the server's picture follow the same `linear` curve over the same
   duration, so the live picture never appears outside its frame
+
+#### Scenario: A fade needs no server tween and shows no black
+
+- **WHEN** a transition fades a box out
+- **THEN** the mask's luminance is what fades, so the backdrop re-covers the picture progressively
+  and no black rectangle appears where the hole was
 
 #### Scenario: A background transition is not held to the plate curve
 
@@ -172,3 +187,53 @@ fault in the switch.
 - **WHEN** the operator switches to a layout without that box
 - **THEN** the source is torn down and that is surfaced, rather than the switch-back silently taking
   longer than it does for every other source
+
+### Requirement: The operator picks a COUNT in one action, and gets that count's default arrangement
+
+Exactly one arrangement of one count SHALL be active at a time. A template MAY declare several
+**arrangements** for the same box **count**.
+
+Picking a count SHALL be **ONE operator action**, and SHALL activate that count's **authored default
+arrangement**. Choosing a non-default arrangement SHALL be possible and SHALL be an **explicit**
+additional step — the common case must not pay for the rare one.
+
+Sources SHALL be matched to cells in **declared order**. Per-cell assignment is deliberately not
+provided: it introduces a cell as a separately addressable identity, and the need for it is unproven.
+
+#### Scenario: Switching to a 2-box count takes one action
+
+- **WHEN** the operator picks the 2-box count on a running row
+- **THEN** that count's default arrangement is on air, in one action, with no arrangement chooser in
+  the way
+
+#### Scenario: A non-default arrangement is reachable but explicit
+
+- **GIVEN** a count with more than one authored arrangement
+- **WHEN** the operator wants the non-default one
+- **THEN** they can select it explicitly, and the default is what a plain count pick still gives
+
+### Requirement: A shape the template does not have is REFUSED legibly, never truncated
+
+Two situations SHALL be refused by ONE refusal family, with the same wording discipline: naming what
+was asked for and what exists.
+
+- Selecting **more sources than the largest arrangement holds** SHALL be refused, naming the count
+  selected and the largest available.
+- Selecting a **count for which no arrangement is authored** SHALL be refused the same way.
+  Arrangements are NOT required for every count.
+
+Neither SHALL be resolved by silently dropping sources or by silently substituting another count. A
+truncation would put a source off air without saying so, which is the failure the refusal exists to
+prevent.
+
+#### Scenario: More sources than any arrangement can hold
+
+- **WHEN** the operator selects five sources and the largest authored arrangement is 4-box
+- **THEN** the action is refused with a message naming both the five requested and the 4-box maximum,
+  and no source is silently dropped
+
+#### Scenario: A count with no arrangement
+
+- **WHEN** the operator picks a 3-box count on a template that authors only 1-box and 2-box
+- **THEN** the action is refused in the same family and with the same wording discipline, rather than
+  falling back to another count

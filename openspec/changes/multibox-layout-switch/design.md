@@ -754,6 +754,62 @@ about the right time.
 and rejects both CSS ones, so §12.2's `linear`-only rule is the same rule here — and §13.2 explains
 why it nonetheless binds only the PLATES.
 
+#### 9.6h 🔴 THE OWNER'S FADE-THE-MASK'S-LUMINANCE LEAD — it works, and NOT the way it first looks
+
+The lead (owner, 2026-08-18): the punch mask is **luminance-keyed**, so a **grey hole is a half-open
+hole** — the backdrop progressively re-covers the picture. No black, **no `MIXER`, and no second
+clock at all**, because the whole transition stays on the page.
+
+Probed on the plant, same session, same build. **Two halves, and only one is answerable without
+pixels.**
+
+**(1) THE MECHANISM — measured, and the obvious spelling FAILS.**
+
+| What was animated                                                                                | Result                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `transition: mask-image` between two gradients differing only in the punch colour                | 🔴 **DOES NOT INTERPOLATE** — 1 distinct sampled value, **0 intermediates**. The computed `mask-image` sat at its start value and snapped |
+| an `@property`-registered `<color>` custom property feeding that gradient, `transition: --punch` | ✅ **INTERPOLATES** — 10 distinct values, **9 intermediates**, e.g. `rgb(0,0,0)` → `rgb(84,84,84)` → `#fff`                               |
+
+`CSS.supports` on the plant: `mask-mode: luminance` ✅, `CSS.registerProperty` ✅, `@property` ✅.
+
+⇒ **The mechanism exists, but it is NOT "animate `mask-image`".** It is: register the punch colour as
+a custom property and transition **that**; the gradient re-resolves every frame. Anyone who tries the
+direct spelling first will conclude the lead is dead, which is precisely why the negative result is
+recorded beside the positive one.
+
+**(2) THE COST — cheaper than either alternative.** Same instrument as §9.6f, fresh page, at-rest
+controls before and after:
+
+|                                                    | at rest | animating         | worst gap | at rest after |
+| -------------------------------------------------- | ------- | ----------------- | --------- | ------------- |
+| mask-luminance fade (`@property`)                  | 50.1    | **48.4 (−3.4 %)** | 60 ms     | 49.8          |
+| _cf._ interpolating three plate holes (§9.6f)      | 50.7    | 48.7 (−4 %)       | 79.9 ms   | 50.3          |
+| _cf._ crossfading two full-frame backdrops (§9.6f) | 50.5    | 45.6 (−10 %)      | 120 ms    | 50.6          |
+
+⇒ **The mask-luminance fade is the CHEAPEST animated thing measured in this design.**
+
+**(3) THE TRANSFER — grey to openness — measured only through a PROXY, and labelled as one.**
+Reading the composited result needs pixels, which this session does not have (§9.6). What CAN be read
+in the same engine is an **SVG `mask-type: luminance` rendered to a canvas**, whose alpha is
+readable:
+
+| mask grey       | 0   | 32    | 64    | 96    | **128**   | 160   | 192   | 224   | 255 |
+| --------------- | --- | ----- | ----- | ----- | --------- | ----- | ----- | ----- | --- |
+| resulting alpha | 0   | 0.125 | 0.251 | 0.376 | **0.502** | 0.627 | 0.753 | 0.878 | 1   |
+
+⇒ **α ≈ grey ÷ 255 — linear in the sRGB-CODED value, so mid-grey is a half-open hole.** The owner's
+intuition is exactly right. ⚠ **And it is worth saying which trap did NOT bite:** SVG 1.1 specifies
+mask luminance on **linearRGB**, which would have made "50 % grey" ≈ 21 % open and the fade visibly
+front-loaded. Blink applies the coefficients to the sRGB-coded channels, so it does not. That is an
+ENGINE behaviour, not a spec guarantee — it is measured here rather than assumed, and it is the kind
+of thing a CEF bump could change.
+
+⚠ **WHAT IS STILL OWED, and it is a real gap:** this is the **SVG mask path** rendered to a canvas,
+not the CSS `mask-mode: luminance` path compositing over a live SDI layer. Same engine and the same
+luminance-to-alpha filter, so it is strong evidence — **but it is a proxy, and it is recorded as one.**
+The confirming measurement is a channel-side capture of a half-luminance mask over a real plate.
+`tasks.md` 8.5.
+
 ---
 
 ## 10. Where the switch control would live
@@ -807,11 +863,15 @@ Also `live-source-multibox` `tasks.md` has **two items numbered 6.3**.
 
 ## 12. 🔴 OWNER GATES — SEVEN OF EIGHT ARE ANSWERED (owner, 2026-08-18)
 
-**Status.** The owner answered **§12.1, §12.2, §12.4, §12.5, §12.6, §12.7 and §12.8** on 2026-08-18.
-Each is recorded below as **the decision, the owner's own reasoning, and what it unblocks or costs**.
-§12.3 was already withdrawn (measured). **§12.9 is the one gate still open** — the owner's answer did
-not settle it, it **widened** it: a candidate was withdrawn and a new one added. §12.9 is rewritten
-below with the real candidate set.
+**Status: ✅ ALL EIGHT GATES ARE ANSWERED (owner, 2026-08-18).** §12.1, §12.2, §12.4, §12.5, §12.6,
+§12.7 and §12.8 were answered first; **§12.9 — the last and largest — was then CLOSED with A′
+adopted**, after the plant readings in §9.6 refused the owner's candidate D on its premise. §12.3 was
+already withdrawn (measured). Each gate below records **the decision, the owner's own reasoning, and
+what it unblocks or costs**.
+
+🔴 **`design.md` §12 no longer holds an open question.** The work is carried by two PRD items minted
+2026-08-18 — **`R-057`** (operator half) and **`D-152`** (arrangements authoring) — plus **`B-145`**,
+which must land first, and **`B-146`** / **`B-147`**.
 
 **The candidate tables are KEPT under each decision.** They are the record of what was weighed, and a
 decision whose alternatives have been deleted cannot be re-read later to check whether it still
@@ -884,8 +944,8 @@ case it exists for.
 rather than travel" — is the named fallback if per-frame mask movement proves unaffordable. Because
 §13.7.2's titles are hidden during the move anyway, **the only things actually travelling are the
 plates**, so C loses much less than the table above suggests. ⚠ C's own cost is also corrected in
-§13.5: a fade does NOT sidestep hole/fill agreement entirely — it converts a geometry error into a
-luminance error.
+§13.5a — and then REPLACED by the owner's mask-luminance fade, which is measured at −3.4 % with **no
+server half at all**, so the fade mode leaves the `linear` rule's scope entirely.
 
 **Unblocks:** `tasks.md` 7.1, 7.2, 7.3.
 
@@ -1038,7 +1098,13 @@ sweep; `git stash list` is empty; the duplicate audit prints exactly `B-056` and
 | `P-`   | 036                                              | `P-037`       |
 | `R-`   | 056                                              | `R-057`       |
 
-⇒ **Recommended: `B-145`, filed in `docs/prd/bugs-runtime.md`.** It is a defect in shipped behaviour
+✅ **MINTED 2026-08-18 as `B-145`, in `docs/prd/bugs-runtime.md`** — the sweep was re-run
+immediately before writing (0 headings for it on every ref; maxima `B-144` / `D-151` / `R-056`; stash
+empty), and re-audited after (the duplicate sweep still prints exactly `B-056` and `B-080`).
+`B-146` (the Inspector) and `B-147` (the text fit) took the next two; `R-057` and `D-152` are the two
+parent items. The recommendation that earned it:
+
+⇒ **`B-145`, filed in `docs/prd/bugs-runtime.md`.** It is a defect in shipped behaviour
 — a restart strands seated producers unreachable by any code path — not a new capability, and
 `bugs-runtime.md` is where the bridge's defects live (`B-144` is its immediate neighbour and is the
 same shape: a graphic on air that the row can no longer reach). If the owner reads it instead as new
@@ -1097,14 +1163,105 @@ tightest density, or it will be the thing that reintroduces wrapping.
 
 **Unblocks:** `tasks.md` 6.1.
 
-### §12.9 — 🔴 STILL OPEN, and WIDENED: how are per-layout GEOMETRY **and per-layout DESIGN** authored?
+### §12.9 — ✅ **CLOSED (owner, 2026-08-18): A′ IS ADOPTED.** All eight gates are now answered
+
+> **DECISION: A′ — candidate A's identity model, with a box authored as a NESTED COMPOSITION and
+> per-arrangement geometry carried on the INSTANCE.**
+>
+> The owner's words on why: _"Your measurement refused D on the premise, not on a preference, and the
+> nested-composition punch verification is what makes A′ cheap."_
+
+**⭐ THE EIGHTH AND LAST GATE. `design.md` §12 now has no open question**, and `tasks.md`'s
+`⟨GATE: §12.9⟩` items are unblocked. Two PRD items carry the work, on this repo's own D-137/C-015
+precedent — **`R-057`** (the operator half) and **`D-152`** (the arrangements authoring). Both were
+minted 2026-08-18 and each names the other as half the feature.
+
+⚠ **A TERMINOLOGY CHANGE THAT COMES WITH THE DECISION, and it is not cosmetic.** The owner's answers
+introduce a **two-level** model where this document had one:
+
+| Term            | Meaning                                                                                 |
+| --------------- | --------------------------------------------------------------------------------------- |
+| **COUNT**       | how many boxes — 1-box, 2-box, 3-box, 4-box. **This is what the operator picks.**       |
+| **ARRANGEMENT** | a NAMED GEOMETRY for a count. A count may have several; **one is the authored default** |
+
+Everything this document called a "layout" is an **arrangement**. The distinction is load-bearing
+rather than a rename: **§12.8's segmented control shows COUNTS, not arrangements** — a small,
+bounded, authored set — while arrangements are open-ended and are a secondary, explicit choice. That
+materially eases §12.8's fixed-width collision, though it does not remove it.
+
+#### 12.9.1 The four questions the owner posed AND answered (2026-08-18)
+
+⚠ These were **not** in §13.6's posed list — they arrive with their answers, and are recorded here
+with the question reconstructed beside each so the record stands on its own.
+
+| #   | Question                                                                  | ✅ Decision                                                                                                                                       |
+| --- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | When the operator picks a count, which arrangement do they get?           | **An authored DEFAULT arrangement per count**, with the operator able to choose another **explicitly**. 🔴 **The common case must be ONE ACTION** |
+| 2   | How is a source matched to a cell — declared order, or a per-cell choice? | **DECLARED ORDER in v1.** Side-swapping is a LATER item: it introduces per-cell assignment and **the need is unproven**                           |
+| 3   | What if more sources are selected than the largest arrangement holds?     | **REFUSED LEGIBLY, naming the count and the largest available** — the refusal doctrine, **not a silent truncation**                               |
+| 4   | Must every count have an arrangement?                                     | **NO.** Selecting a count with no arrangement is **refused in the same family, with the same wording discipline**                                 |
+
+**Why 3 and 4 are one rule and should be built as one.** Both are "you asked for a shape this
+template does not have", both must name what was asked for and what exists, and both are the
+alternative to a silent truncation that would put a guest off air without saying so. **One refusal
+family, two triggers** — not two refusals that happen to look alike. That is the same discipline
+§12.6 applies to its predicate.
+
+**Why 2's deferral is the right shape and not a shortcut.** Declared order needs no new identity:
+the Nth declared plate goes in the Nth cell, and `(templateId, plateId)` already keys the assignment
+(§3). Per-cell assignment would introduce a **cell** as a thing that can be named and addressed —
+a second identity beside the plate — for a need that has not been demonstrated. **The v1 rule is a
+rule, not a placeholder**: an author who wants a different order declares a different order.
+
+#### 12.9.2 🔴 ONE SHARED BACKGROUND IS ENOUGH (owner, 2026-08-18) — and what that changes
+
+> **DECISION: a single fixed background is enough. Per-arrangement backgrounds are NOT required.**
+> The capability stays — a per-arrangement background remains free to support (a visibility
+> override, the same two properties) — but **one shared background is the default and the
+> expectation.**
+
+**What it removes, in measured terms:**
+
+- **The −10 % crossfade** (§9.6f) — the most expensive thing measured in this design, with a 120 ms
+  worst frame gap — is **not on the default path** at all.
+- **§13.3's "both backdrops must carry the mask through a crossfade"** stops being a requirement of
+  the default path and becomes a **conditional** one, owed only if an author uses the optional
+  per-arrangement background.
+- ⇒ **An animated switch is now just HOLES + `FILL`** — §9.6f's **−4 %** case, or §9.6h's **−3.4 %**
+  for the fade.
+
+⚠ **THE COST IS RECORDED HERE ON PURPOSE, so nobody rediscovers it.** The optional capability still
+carries the −10 % and the 120 ms gap the moment it is used. A future author reaching for
+per-arrangement backgrounds is not doing something forbidden — they are spending the most expensive
+frame budget in this feature, and they should be able to find out from the design rather than from a
+stuttering transition.
+
+🔴 **AND THE HONEST CONSEQUENCE FOR §12.9.4, stated rather than left for someone to notice.**
+Candidate B — the fixed computed 1/2/3-box family — died for **two** reasons. This decision
+**weakens one of them**:
+
+| B's death reason                                                                                                     | Status after this decision                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _"computed geometry cannot carry a background at all"_                                                               | ⚠ **WEAKENED.** If one shared background serves every arrangement, the background is no longer something each arrangement must carry, so B no longer has to compute one                 |
+| _"a layout is a designed SCENE, not a set of rectangles" — cell placement is a DESIGN decision, not a computed grid_ | ✅ **STANDS, and it is the load-bearing one.** Where the boxes sit, how they are framed, what a 4-box grid looks like on this client's show — none of that is arithmetic over the frame |
+
+**⇒ A′ STANDS**, and it stands on the surviving reason, which was always the stronger of the two.
+Recorded this way so that a later reader who notices the weakened half does not conclude the whole
+refusal was thin — and so that B is not re-proposed on the strength of it. Per-box TITLES are a
+second independent answer to the same question: a computed grid has nowhere to put an authored
+title, its colour and its font.
+
+#### 12.9.3 The gate as it was asked, and the evidence that closed it
+
+**The question:** how are per-arrangement GEOMETRY **and per-arrangement DESIGN** authored? Everything
+from here down is the evidence the decision above rests on, kept in the order it was gathered.
 
 **The owner's 2026-08-18 answer did not settle this gate. It changed the question.**
 
 > There may be a **4-box** too, **with different backgrounds — even a motion or video background
 > built in the Designer.**
 
-#### 12.9.0 ⛔ CANDIDATE B IS WITHDRAWN BY THE OWNER — do not re-propose it
+#### 12.9.4 ⛔ CANDIDATE B IS WITHDRAWN BY THE OWNER — do not re-propose it
 
 The old candidate B was _"the system ships a fixed 1/2/3-box family with geometry computed in
 code"_. It is withdrawn, and the reason is the owner's:
@@ -1119,7 +1276,7 @@ the thing that differs between layouts is _artwork_, and artwork has no closed f
 expensive than thought"; it is **unable to express the requirement**, which is a different kind of
 refusal and the reason it must not come back when the schedule gets tight.
 
-#### 12.9.1 The candidates now
+#### 12.9.5 The candidates now
 
 |                                                               | Shape                                                                                                                                                                                         |
 | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1129,7 +1286,7 @@ refusal and the reason it must not come back when the schedule gets tight.
 
 ---
 
-#### 12.9.2 🔴 THE VERDICT ON D — measured on the plant, and it is a refusal on the mechanism
+#### 12.9.6 🔴 THE VERDICT ON D — measured on the plant, and it is a refusal on the mechanism
 
 **D was taken seriously and tested first, because if it worked it would be much the cheapest: every
 layout is an ordinary template the author already knows how to build.** It does not work, and the
@@ -1230,7 +1387,7 @@ got.**
 
 ---
 
-#### 12.9.3 Candidate A — what the tree already has, and the two things it does not
+#### 12.9.7 Candidate A — what the tree already has, and the two things it does not
 
 **Is there ANY precedent for "a set of elements visible together as a state"? The closest thing is
 shipped, and it excludes Live Sources by construction.**
@@ -1285,7 +1442,7 @@ asymmetry in the wrong direction.
 
 ---
 
-#### 12.9.4 Candidate C — better than §0.5's framing suggested, and still strictly more expensive than A
+#### 12.9.8 Candidate C — better than §0.5's framing suggested, and still strictly more expensive than A
 
 C's advantage is real and was understated: **a plate inside a nested composition instance punches
 CORRECTLY, and this session verified it rather than assuming it.** `flattenElements` walks
@@ -1305,7 +1462,7 @@ element to a different element. C therefore needs the declaration to become layo
 
 ---
 
-#### 12.9.5 The three-way comparison on the things §0.3 and §0.5 already settled
+#### 12.9.9 The three-way comparison on the things §0.3 and §0.5 already settled
 
 |       | Assignment survives a switch                                                                                   | Plates keep their layers               | Overlap check                                                                                                        |
 | ----- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -1322,7 +1479,7 @@ why §0.5 stands untouched: §0.5 refused _separate plate sets_, and A has one s
 
 ---
 
-#### 12.9.6 ⭐ THE RECOMMENDATION — **A, with a box authored as a nested composition and per-layout geometry carried on the INSTANCE**
+#### 12.9.10 ⭐ **A′ — ADOPTED**: a box authored as a nested composition, per-arrangement geometry on the INSTANCE
 
 Call it **A′**. It is candidate A's identity model with candidate C's authoring affordance, and every
 part of it is a mechanism this session verified rather than proposed:
@@ -1337,7 +1494,7 @@ part of it is a mechanism this session verified rather than proposed:
    whole reason §0.5 chose this model.
 4. **The hole follows the box** with no new mask concept: the instance's transform is part of the
    ancestor chain both `flattenElements` and `maskKeyPrefix` compose, so moving the instance moves
-   the declared rect AND the punch together (§12.9.4).
+   the declared rect AND the punch together (§12.9.8).
 5. **The title follows its box** — §3c.1's authoring problem dissolves, because a layout positions
    ONE instance and everything inside travels with it. Sixteen manual placements become four.
 
@@ -1352,19 +1509,24 @@ part of it is a mechanism this session verified rather than proposed:
   cleaner than widening bindings, and it does not have to be a binding at all.
 - **UNIT B′ regardless** (§6b) — the mask still has to recompute; A′ changes what moves, not whether
   the mask follows.
-- **The declaration emitting one rect per layout** (§12.9.3).
+- **The declaration emitting one rect per layout** (§12.9.7).
 
 **Why not simply A-without-the-composition.** Nothing forbids it, and it is a smaller first step.
 But §3c.1's binding problem then has no answer — four layouts × four boxes is sixteen independent
 title placements, and the first one that drifts puts a title under the wrong box on air. A′ buys
 that for the price of a nesting level the tree already supports.
 
-🔴 **This remains the OPEN gate.** A′ is this design's recommendation with its evidence; it is not a
-decision, and `tasks.md` section 3 stays `⟨GATE: §12.9⟩` until the owner answers.
+✅ **ADOPTED (owner, 2026-08-18).** This was written as a recommendation and was accepted as one —
+_"the nested-composition punch verification is what makes A′ cheap"_. `tasks.md` section 3 and every
+other `⟨GATE: §12.9⟩` item is unblocked; the work is carried by `R-057` and `D-152`.
 
 ---
 
 ## 13. ⭐ THE TRANSITION AND THE TITLES — the owner's 2026-08-18 extension, as requirements
+
+> ⚠ **TERMINOLOGY.** Written before §12.9 closed, this section says "layout" where the adopted model
+> says **ARRANGEMENT** (a named geometry for a box COUNT). The mapping is one-to-one and is recorded
+> in §12.9; new text below uses the adopted word.
 
 > Backgrounds may be shared across layouts or different per layout. There must be a transition
 > **between the backgrounds as well as between the boxes**, with **several selectable modes** — an
@@ -1378,21 +1540,28 @@ plate curve is still `linear`. What follows is what those decisions now have to 
 cost, and each marked **REQUIREMENT** (something the feature must do) or **POSED** (something the
 owner must still choose).
 
-### 13.1 REQUIREMENT — a background may be SHARED or PER-LAYOUT, and this needs NO new concept
+### 13.1 REQUIREMENT — ONE SHARED background is the default; a per-arrangement one is OPTIONAL and needs NO new concept
+
+> ✅ **DECIDED (owner, 2026-08-18): a single fixed background is enough. Per-arrangement backgrounds
+> are NOT required** — the capability stays, the expectation changes. §12.9.2 records what that
+> removes, and the −10 % it removes it from.
 
 **Confirmed from the model, not added to it.** A layout under candidate A already controls
-**non-plate element visibility** (§12.9.1). So:
+**non-plate element visibility** (§12.9.5). So:
 
-- a background with **no per-layout override** is an ordinary element visible in every layout — it is
-  **shared** because nothing hides it, not because a sharing concept exists;
-- a **per-layout** background is an ordinary element visible in one layout — the same mechanism,
-  used once per layout.
+- a background with **no per-arrangement override** is an ordinary element visible in every
+  arrangement — it is **shared** because nothing hides it, not because a sharing concept exists;
+- a **per-arrangement** background is an ordinary element visible in one arrangement — the same
+  mechanism, used once per arrangement.
+
+⚠ **And the DEFAULT is the first of those.** One fixed background needs no override at all, which is
+why the decision costs nothing to honour: it is the mechanism above, used zero times.
 
 There is no "shared background" flag to design and no inheritance rule to get wrong. **The two cases
 are the same mechanism at two settings**, which is why this half is free.
 
 ⚠ **One exception, and it is the RUNTIME rather than the model** — the owner explicitly named a
-**motion or video background**. §12.9.3 established that **nothing in the tree pauses a hidden
+**motion or video background**. §12.9.7 established that **nothing in the tree pauses a hidden
 `<video>`**: a `visible` binding writes `el.style.display` and only that
 (`packages/template-runtime/src/bindings.ts:180-186`), while the video driver is driven by the
 LIFECYCLE (`runtime.ts:1079`). So four layouts with four video backgrounds would decode four videos
@@ -1415,16 +1584,26 @@ must be **scoped to the same boundary**: it must catch a plate transition with n
 without forbidding a deliberate `ease-in-out` on a backdrop. A guard that cannot tell the two apart
 will either miss the dangerous case or ban the safe one.
 
-🔴 **The correction measurement forces, and it must not be filed as a quibble.** "Free" here means
-**free of the SYNC problem**. It does **not** mean free of the FRAME budget, and §9.6f measured the
-opposite of the intuitive ordering:
+🔴 **THE WORDING CORRECTED, because "backgrounds are free" WILL be misread (owner, 2026-08-18).**
+Both halves, written together so neither can travel alone:
+
+> **A background transition is FREE OF THE SYNC PROBLEM — there is no `MIXER`, no server-side
+> counterpart, and therefore no second clock to agree with. It is NOT free of COST. Measured, the
+> full-frame backdrop crossfade is the EXPENSIVE half (−10 %) and the interpolating holes are the
+> CHEAP one (−4 %) — the inverse of the intuition.**
+
+Neither half implies the other, and each is the one someone reaches for while forgetting the other.
+"Free" licenses any easing and any duration; it licenses nothing about how much frame budget the
+result costs. §9.6f measured the opposite of the intuitive ordering:
 
 > **Crossfading two full-frame backdrops cost −10 % of the frame budget with a 120 ms worst gap.
 > Interpolating three plate holes cost −4 %. The background transition is the EXPENSIVE half.**
 
 So the boundary above is about **correctness**, and the cost ordering runs the other way. Both are
 true and they are about different things; someone who reads only "backgrounds are free" will reach
-for a full-frame gradient crossfade and spend three frames on it.
+for a full-frame gradient crossfade and spend three frames on it. ⇒ **§12.9.2's single-background
+decision takes that path off the default entirely**, which is the cheapest possible resolution of the
+tension: the free-of-sync half stays true and the expensive half is simply not travelled.
 
 ⚠ **And the boundary is drawn at the SERVER, not at the property.** §9.6g measured
 `MIXER … OPACITY` accepting a duration and a tween with `FILL`'s exact vocabulary (`linear` `202`;
@@ -1432,7 +1611,12 @@ for a full-frame gradient crossfade and spend three frames on it.
 side of this boundary and still takes `linear` — it is "which side has a server counterpart", not
 "is it geometry".
 
-### 13.3 ⚠ REQUIREMENT — during a background crossfade, BOTH backdrops carry the current mask
+### 13.3 ⚠ CONDITIONAL REQUIREMENT — during a background crossfade, BOTH backdrops carry the current mask
+
+> ⚠ **NOT on the default path any more (§12.9.2).** With ONE shared background there is no crossfade,
+> so this requirement is owed **only if an author uses the optional per-arrangement background.**
+> **It is kept in full rather than deleted**: the capability survives the decision, and a requirement
+> that exists only while someone remembers it is how the failure below ships.
 
 **The failure being prevented:** while the outgoing and incoming backdrops are both visible, if only
 the incoming one is masked, **the outgoing one stays opaque over every hole for the whole fade and
@@ -1490,20 +1674,48 @@ loses less than it appears to.
 
 ### 13.5 REQUIREMENT — the mode set, and the technical ordering that explains why the modes differ
 
-| Mode     | What it costs                           | Why                                                                                                                                                                                        |
-| -------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Cut**  | **free** — 0.20 frames, measured (§9.3) | No tween on either side. Nothing has to agree with anything                                                                                                                                |
-| **Fade** | forgiving                               | The plates **do not move**, so drift between the page's clock and the server's is not a POSITION error. `MIXER … OPACITY` takes a duration and a tween (§9.6g), so the server half is real |
-| **Move** | **exacting**                            | The only mode where drift is visible on air as a position offset — hence §12.2's `linear`                                                                                                  |
+| Mode     | What it costs                                                                 | Why                                                                                                             |
+| -------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Cut**  | **free** — 0.20 frames, measured (§9.3)                                       | No tween on either side. Nothing has to agree with anything                                                     |
+| **Fade** | 🔴 **FREE of the sync problem too, and the cheapest thing measured (−3.4 %)** | Fade the **MASK'S LUMINANCE**, not the producer's opacity: no `MIXER`, no server half, no second clock — §13.5a |
+| **Move** | **exacting**                                                                  | The only mode where drift is visible on air as a position offset — hence §12.2's `linear`                       |
 
-⚠ **A correction to "fade sidesteps hole/fill agreement entirely" (§12.2's candidate C).** It does
-not, and the reason is worth a sentence because the naive version is very persuasive. A plate's hole
-is **transparent**: fading the picture out with `MIXER OPACITY` while the hole stays open reveals
-whatever is under the live layer — **nothing, i.e. black** — so a fade needs the hole closed, or a
-backdrop faded in over it, in step. ⇒ **the fade does not remove the two clocks; it converts a
-GEOMETRY error into a LUMINANCE error.** That is a genuine improvement — the eye forgives a few ms
-of brightness mismatch where it will not forgive a face sliding out from behind its frame — but
-"forgiving" is the correct word for it, and "free" is not.
+#### 13.5a Why the OBVIOUS fade is the wrong one, and what replaces it
+
+**The obvious fade — `MIXER OPACITY` on the producer — has a defect the naive reading misses.** A
+plate's hole is **transparent**: fading the picture out while the hole stays open reveals whatever is
+under the live layer — **nothing, i.e. black**. So that fade needs the hole closed, or a backdrop
+faded in over it, in step; it does not remove the two clocks, it converts a GEOMETRY error into a
+LUMINANCE error. Better, but still two clocks. ⚠ This corrects §12.2's candidate C, which claimed a
+fade _"sidesteps hole/fill agreement entirely"_.
+
+🔴 **THE OWNER'S LEAD REPLACES IT, AND IT MEASURES OUT (owner, 2026-08-18; §9.6h).**
+
+> **Fade the MASK'S LUMINANCE instead of the producer's opacity.** The mask is luminance-keyed, so a
+> **grey hole is a half-open hole** and the backdrop **progressively re-covers** the picture. No
+> black, no `MIXER`, and **no sync problem at all — the whole transition stays on the page.**
+
+| What was measured (§9.6h)                                     | Result                                                                                                                                      |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| grey → openness, via an SVG-mask **proxy** in the same engine | **α ≈ grey ÷ 255** — mid-grey is a half-open hole. The linearRGB trap that would have made 50 % grey ≈ 21 % open does **not** bite in Blink |
+| animating `mask-image` between two gradients                  | 🔴 **DOES NOT INTERPOLATE** — 0 intermediates                                                                                               |
+| animating an `@property` `<color>` feeding the gradient       | ✅ **9 intermediates** — this is the mechanism                                                                                              |
+| frame cost                                                    | **−3.4 %**, worst gap 60 ms — cheaper than the move (−4 %) and far cheaper than a backdrop crossfade (−10 %)                                |
+
+⇒ 🔴 **FADE MOVES TO THE FREE SIDE OF §13.2'S BOUNDARY.** It becomes page-only content with no server
+counterpart, so **any easing and any duration** — the `linear` rule does not reach it. That leaves
+`linear` binding exactly ONE mode: **move**.
+
+⚠ **Two things this does NOT settle, and they are why it is a lead ANSWERED rather than a mechanism
+FINISHED.** The transfer curve was read through an **SVG-mask → canvas proxy**, not the CSS
+`mask-mode: luminance` path compositing over a live SDI layer (`tasks.md` 8.5); and α ≈ grey/255 is an
+**engine** property a CEF bump could change, so it wants a pinning test rather than a comment.
+Neither weakens the direction — the mechanism, the cost and the sign of the effect are all measured.
+
+⚠ **And it does NOT re-open the static mask mechanism.** This animates the punch colour INSIDE the
+shipped `mask-image` + `mask-mode: luminance` path rather than replacing it — which is why it is
+cheaper than §13.4's `clip-path` route in a second way the frame numbers do not show: **it needs no
+second mask mechanism at all.**
 
 ### 13.6 POSED, not decided — who picks a mode, and at what scope
 
@@ -1511,18 +1723,21 @@ of brightness mismatch where it will not forgive a face sliding out from behind 
 the same `Layouts` section as the layout list; the **OPERATOR** always has an **immediate cut
 available as an escape**, which is broadcast practice.
 
-Two questions are genuinely open and are posed rather than answered:
+⚠ **The owner's 2026-08-18 answers settled four questions about ARRANGEMENTS (§12.9.1) and did NOT
+reach these two.** They remain open, and the arrangement model sharpens the second of them:
 
 1. **May the operator also pick a mode PER SWITCH?** ⚠ Note the surface cost before answering:
    §12.8's decision already re-opens the closed six-column verb grid for the segmented control, and a
    per-switch mode picker is a **second** new control on the same row. If the answer is yes, the two
    should be designed together rather than sequentially.
-2. **Is the mode per-COMPOSITION, per-LAYOUT, or per-PAIR?** 🔴 The owner's own example —
+2. **Is the mode per-TEMPLATE, per-ARRANGEMENT, or per-PAIR?** 🔴 The owner's own example —
    _"a 1-box→2-box move but a 3-box→1-box cut"_ — is a statement about an ORDERED PAIR, which is a
-   third scope neither option names and which costs **N² − N** entries for N layouts (12 for the
-   owner's four). Per-layout ("this layout is always entered with a fade") is N entries and covers
-   most of the intent. **This distinction should be settled before the authoring surface is drawn**,
-   because a per-pair table and a per-layout field are different UIs, not different defaults.
+   third scope neither option names and which costs **N² − N** entries for N counts (12 for the
+   owner's four). Per-arrangement ("this arrangement is always entered with a fade") is N entries and
+   covers most of the intent. **This should be settled before the authoring surface is drawn**,
+   because a per-pair table and a per-arrangement field are different UIs, not different defaults.
+   ⚠ Note the model makes this cheaper to defer than it looks: the mode lives beside the arrangement
+   list either way, so the N-entry form is a strict subset of the N²-entry one.
 
 ### 13.7 Per-box titles — a title is an ORDINARY TEXT ELEMENT; four things still need answers
 
@@ -1557,7 +1772,7 @@ was checked:
   (`scene-builder.ts:124-134`), because a stamped row's positions are computed at RUN time. A
   composition instance is not stamped and is not affected.
 
-⇒ **Recommended as part of A′** (§12.9.6). It reuses shipped machinery and it is the same nesting
+⇒ **Recommended as part of A′** (§12.9.10). It reuses shipped machinery and it is the same nesting
 that makes A′'s per-layout geometry work.
 
 #### 13.7.2 REQUIREMENT — hiding a title during a transition is page-only, and therefore free of the sync problem
@@ -1581,9 +1796,13 @@ visibility must come from ONE function** — the same one UNIT B′ gives `scene
 If the titles are hidden while the boxes move, **the only things actually travelling are the
 plates**. So if §13.4's `clip-path` lead had failed and "plates FADE rather than travel" became the
 only affordable animated mode, **it would lose much less than it appears to** — half the visible
-complexity of the transition was hidden anyway. The lead did not fail (§9.6e), so this is insurance
-rather than the plan; it is recorded because it changes how expensive the fallback is, and that is
-exactly the kind of thing that is re-derived from scratch a year later.
+complexity of the transition was hidden anyway.
+
+**Both leads held**, so this is insurance rather than the plan — and the insurance got cheaper twice
+over: §9.6e verified the `clip-path` move at −4 %, and §13.5a's mask-luminance fade came in at
+**−3.4 % with no server half at all**. ⇒ **the "fallback" is now the cheapest and safest mode in the
+set**, which is worth stating plainly: if the animated move ever proves troublesome in a real scene,
+falling back costs the rearrangement look and nothing else.
 
 #### 13.7.4 🔴 THE SAME TITLE MUST FIT A WIDE 1-BOX CELL AND A NARROW 4-BOX CELL — and NOTHING SHIPPED DOES THIS
 
@@ -1600,9 +1819,11 @@ text fit" and the runtime implements NONE of them.**
 Only `fitMode: 'autosize'` is implemented (D-060) — and it does the **opposite** of what is needed:
 it **hugs the content**, growing the box to the text, rather than shrinking the text to the box.
 
-> 🔴 **⟨MINT⟩ A shipped Designer control that writes a field nothing reads is its own defect**, and
-> it is the same class as §5's Inspector: a control that silently does nothing. It needs a `B-`
-> number — reported, not minted, in §12.7. `tasks.md` 1.12.
+> 🔴 **✅ FILED as `B-147` (2026-08-18, `docs/prd/bugs-designer.md`).** A shipped Designer control
+> that writes a field nothing reads is its own defect, and it is the same class as §5's Inspector —
+> which is `B-146`. `B-147` sits in the Designer file because the field, the control and the renderer
+> that ignores it are all Designer-side, and is cross-referenced from `bugs-runtime.md` because a
+> runtime reader meets it as an on-air defect. `D-152` depends on it.
 
 ⚠ **And the rule that gets written to fix it must measure SHAPED text.** Persian shaping means glyph
 advances are not the sum of character advances — contextual forms and ligatures change the width —
