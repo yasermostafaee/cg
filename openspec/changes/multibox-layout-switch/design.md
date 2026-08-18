@@ -576,6 +576,185 @@ sub-frame)**, and pre-warmed `CG PLAY` → `play()` **6.0 / 6.9 / 6.8 ms**.
 
 ---
 
+### 9.6 🔴 THE 2026-08-18 PLANT SESSION — the readings that decide §12.9's candidate D
+
+**Same plant, same build, asserted again before every reading: `192.168.21.50:5250`,
+`2.5.0 69e8ad5 Stable`, channel `1080i5000`.** 🔴 The retired 2.3.2 install at
+`D:\programs\CasparCG` was never contacted. Channel 1 was read EMPTY before the session and
+verified EMPTY after (`INFO 1` → no `<layer_n>`, no `html` producer); layers **150–152** were used
+and cleared.
+
+**Instrument.** The committed AMCP harness (`tools/caspar-amcp-probe/bin/live-probe-lib.mjs` — one
+command at a time, any non-`2xx` a hard failure, build asserted by `assertProductionBuild`), plus a
+throwaway HTTP+beacon server on `192.168.21.93` serving instrumented pages. Each page beacons at
+script-eval, at its **first committed frame** (double-`requestAnimationFrame`, the same definition
+§9.1 used), **once per animation frame** as a heartbeat, and on every `window.update`. Every beacon
+is timestamped **at receipt on the harness side**, so all deltas share one clock.
+
+🔴 **The heartbeat is what makes a page's DEATH observable**, and it is why these readings can answer
+a question §9's instrument could not: a page that stops beaconing has stopped being ticked.
+
+**Controls, run before every reading that reads a silence:**
+
+- **Negative** — a `CG ADD` at a URL the harness 404s: command **accepted (`202`)**, the plant
+  **did fetch the bad URL from us**, and **no beacon fired**. Reproduced this session.
+- **Positive** — before any silence is read as death, the page is proven ALIVE: a `CG UPDATE` is
+  answered, and the heartbeat rate is asserted (`< 5/s` ⇒ **VOID**, never a value). Observed rate at
+  rest is **50–52/s**, matching the channel's 50 field rate.
+
+⚠ **NO PIXELS THIS SESSION, and the reason is recorded rather than worked around.** `PRINT` writes
+to the plant's own disk. SMB is open on the plant (port 445) but no share is readable from here —
+`\\192.168.21.50\d$`, `\c$`, `\media`, `\casparcg` all `Test-Path` **false**, and `net view` lists
+nothing. So §9.5's limit still stands and every reading below is **command- and renderer-side**.
+
+#### 9.6a 🔴 Two templates CANNOT share one video layer — the cg-layer argument is INERT
+
+`CG <ch>-<layer> ADD <cg-layer> …` with `<cg-layer> = 1`, onto a layer already carrying a page at
+cg-layer `0`:
+
+| Observation                         | Result                                                                                |
+| ----------------------------------- | ------------------------------------------------------------------------------------- |
+| The second `ADD`'s reply            | **`202` — ACCEPTED.** It does not refuse                                              |
+| The first page's heartbeat after it | **0** beyond 400 ms, from a proven 50/s ⇒ **the first page DIED**                     |
+| `CG … UPDATE 0` afterwards          | answered by the **SECOND** page, not the first                                        |
+| `CG … UPDATE 1` afterwards          | answered by the **SECOND** page                                                       |
+| `INFO <ch>-<layer>`                 | ONE `<foreground>`, ONE `<producer>html</producer>`, `<path>` = the second page's URL |
+
+⇒ **A video layer carries exactly ONE html page. `CG ADD` at a different cg-layer REPLACES it, and
+both cg-layer indices then route to the one surviving page.** Reproduced across three runs.
+
+**This is what the codebase already assumes, and now it is a measured server fact rather than a
+convention.** `FLASH_LAYER = 0` is a module-level constant in `tools/caspar-bridge/src/command-builder.ts:16`,
+interpolated into every CG verb the product emits — `ADD` (`:59`), `PLAY` (`:64`), `UPDATE` (`:69`),
+`STOP` (`:90`), `NEXT` (`:105`). There is no parameter and no caller can pass anything else.
+`SEARCH:` `git grep -rn "FLASH_LAYER" -- packages apps tools` → those five emission sites and the
+declaration, nothing more. The only non-zero cg-layers anywhere in the tree are in **probes**, not
+production: `tools/caspar-amcp-probe` takes a configurable `flashLayer`, and `tools/soak-runner`
+hardcodes `1` (`harness.ts:216-218`). Its own docstring already said so — _"HTML producers use a
+single layer"_ (`command-builder.ts:13-14`) — and that sentence is now measured.
+
+#### 9.6b The REPLACE gap — 2.95 frames, against the cut's 0.20
+
+Replacing the page on one video layer with `CG ADD`, alternating direction, all runs with the
+outgoing page's heartbeat asserted live first (n = 8):
+
+|                                                    | min    | median     | max    |
+| -------------------------------------------------- | ------ | ---------- | ------ |
+| **gap** (outgoing's last frame → incoming's first) | 112 ms | **118 ms** | 125 ms |
+| **in frames @ 25 fps**                             | 2.80   | **2.95**   | 3.13   |
+| the outgoing page survived the `ADD` by            | 16 ms  | 22 ms      | 29 ms  |
+| `ADD` → first painted frame                        | 137 ms | 140 ms     | 141 ms |
+
+> 🔴 **A template REPLACE on one video layer costs ~3 FRAMES of empty layer — about fifteen times
+> the measured cost of the cut this design already has (0.20 frames, §9.3).**
+
+**The outgoing page does not wait for the incoming one.** It dies ~22 ms after the command, and the
+incoming page paints ~118 ms later; the layer composites nothing in between, so what shows is
+whatever is below it on the channel — nothing, in the case D needs.
+
+⚠ **`ADD` → first paint reads 140 ms here against §9.4's median of 70.2 ms.** It sits inside §9.4's
+range (33.7–157.3 ms), but the pages differ — §9.1's painted essentially nothing, this one paints a
+full-frame backdrop and runs a heartbeat — so this is **NOT claimed as a confirming control** on
+§9.4. It is recorded as its own number, for its own page.
+
+#### 9.6c 🔴 `LOADBG` DOES pre-warm an html page — and it makes the cut gapless
+
+The layer's `INFO` carries a `<background>` beside its `<foreground>`, and that slot is usable:
+
+- `LOADBG <ch>-<layer> [HTML] "<url>"` → **`202 LOADBG OK`**.
+- The backgrounded page **fetched its HTML, painted a first frame, and ticked at 51.7/s** — it is
+  fully live while in the background slot.
+- `PLAY <ch>-<layer>` then cuts to it. Across n = 6, **both pages were asserted ticking (50/s each)
+  immediately before the cut**, and the incoming page **kept beaconing straight through it** (~81
+  heartbeats retained) — it was already painting, so **there is no load gap at the swap**. The
+  outgoing page survived the `PLAY` by 39–64 ms (median 60 ms) and was then destroyed.
+- 🔴 **And the product's data channel survives that path**: `CG <ch>-<layer> UPDATE 0 "<json>"` on a
+  page seated by `LOADBG` + `PLAY` answered **`202 CG OK`** and reached the page's `window.update`
+  with the payload byte-exact, with the page proven alive at 50/s at that moment.
+
+#### 9.6d 🔴 …but there is exactly ONE background slot, so only ONE alternative can be pre-warmed
+
+Three **distinct** pages (an earlier two-page version of this reading was VOID — both pages served
+the same id, so a survivor could not be told from a reload; it was rebuilt with a third page):
+
+- foreground **A**, then `LOADBG` **B** → both ticking, **A 50/s, B 51.7/s** (positive control).
+- then `LOADBG` **C** → **C 50/s, A 50/s, and B `0/s`.**
+- `INFO` reports exactly **1 `<foreground>` and 1 `<background>`**, paths `["c", "a"]`.
+
+⇒ **A second `LOADBG` DESTROYS the first pre-warm.** A layer holds two producers, never three.
+
+⚠ **What is NOT measured, and it cannot change any verdict below.** That the background producer is
+not COMPOSITED is CasparCG's defined `LOADBG` semantics and is consistent with everything observed
+(`PLAY` promotes it; the old foreground is destroyed after), but it was not confirmed with pixels —
+no plant disk (above), and starting the local 2.5.0 install to `PRINT` against was not available to
+this session. **The verdict on candidate D holds under BOTH branches**, which is why the gap is
+recorded rather than chased: if the background is not composited, D can pre-warm exactly one
+alternative (§12.9's D-3); if it WERE composited, two pages would be on air at once and D would
+re-enter §1's measured crosstalk — worse for D, not better.
+
+#### 9.6e The plant's CEF is **Chromium 142**, and it INTERPOLATES a `clip-path`
+
+Read from inside the plant's own browser (`navigator.userAgent`):
+`Mozilla/5.0 (Windows NT 10.0; Win64; x64) … Chrome/142.0.0.0 Safari/537.36`. Viewport 1920×1080,
+`devicePixelRatio` 1. `CSS.supports` — `clip-path: path(…)` ✅, `clip-path: polygon(evenodd, …)` ✅,
+`mask-mode: luminance` ✅, `Element.animate` ✅.
+
+**§3b.4's lead is VERIFIED**, by sampling `getComputedStyle(el).clipPath` through a 2 s `linear`
+transition with the point count held stable on both sides:
+
+| Form                                   | Distinct intermediate values        | A sampled midpoint                                        |
+| -------------------------------------- | ----------------------------------- | --------------------------------------------------------- |
+| `clip-path: polygon(evenodd, …)`       | **9**                               | hole corner `200px 200px` → `438px 234px` → `676px 268px` |
+| `clip-path: path(evenodd, '…')`        | **9**                               | `M 200 200` → `M 438 234` → `M 676 268`                   |
+| the same via `Element.animate` (WAAPI) | interpolating, `playState: running` | `522px 246px`                                             |
+
+⇒ **The browser moves the holes itself. No per-frame JS, no SVG regeneration.**
+
+#### 9.6f 🔴 …but interpolation is not free, and the EXPENSIVE half is not the one expected
+
+Frame rate measured **from inside the page** (rAF count over a fixed window), 1920×1080, **a fresh
+page load per mode**, each run carrying its own at-rest control **before and after** so a low number
+cannot be a monotonic decline:
+
+| Mode                                                        | at rest | **while animating** | worst frame gap | at rest after |
+| ----------------------------------------------------------- | ------- | ------------------- | --------------- | ------------- |
+| `none` — nothing animates (the floor)                       | 51.1    | 50.1                | 37.4 ms         | 50.1          |
+| `clip` — ONE backdrop, its `clip-path` interpolating        | 50.7    | **48.7** (−4 %)     | 79.9 ms         | 50.3          |
+| `fade` — TWO full-frame backdrops crossfading, masks STATIC | 50.5    | **45.6** (−10 %)    | 120 ms          | 50.6          |
+| `both` — clip-path on both AND the crossfade                | 50.5    | **35.8** (−29 %)    | 120 ms          | 50.0          |
+
+> 🔴 **Moving three interpolated holes costs ~4 % of the frame budget. Crossfading two full-frame
+> backdrops costs ~10 %. The BACKGROUND transition is the expensive half, not the mask.**
+
+⚠ Read it for what it is. The backdrops here are a `linear-gradient` and a `radial-gradient`, the
+expensive kind, on an otherwise empty page and an idle channel; a real scene has more in it, and
+flat colours or images would cost less. The worst frame gap under `fade` is **120 ms — three frames
+at 25 fps** — so the risk this names is a visible stutter during the transition, not a steady-state
+one. What this does and does not do to the owner's "a background transition is FREE" framing is
+recorded with the transition requirements.
+
+#### 9.6g `MIXER … OPACITY` takes a duration and a tween, with FILL's exact vocabulary
+
+| Form                                   | Reply                                                           |
+| -------------------------------------- | --------------------------------------------------------------- |
+| `MIXER <ch>-<layer> OPACITY` (no args) | `201 MIXER OK` + the current value — it reads back, like `FILL` |
+| `… OPACITY 0.5`                        | `202`                                                           |
+| `… OPACITY 1 25` (duration only)       | `202`                                                           |
+| `… OPACITY 0.2 50 linear`              | `202`                                                           |
+| `… OPACITY 1 50 easeinoutquad`         | `202`                                                           |
+| `… OPACITY 0.5 50 ease`                | 🔴 **`403 MIXER OPACITY FAILED`**                               |
+| `… OPACITY 0.5 50 cubic-bezier`        | 🔴 **`403 MIXER OPACITY FAILED`**                               |
+
+And the tween genuinely RUNS — polling the readback through `OPACITY 0 50 linear` (50 frames =
+2000 ms): `0.74 → 0.56 → 0.38 → 0.20 → 0.02 → 0`, monotone, six distinct values, arriving at 0 at
+about the right time.
+
+⇒ **§9.2's disjoint-vocabulary finding is not specific to `FILL`.** OPACITY accepts the Penner names
+and rejects both CSS ones, so §12.2's `linear`-only rule is the same rule here — and the transition
+requirements explain why it nonetheless binds only the PLATES.
+
+---
+
 ## 10. Where the switch control would live
 
 Session AH's wall is confirmed at `f6c7329`: the row's verb block is a **fixed six-column grid**
@@ -904,12 +1083,267 @@ tightest density, or it will be the thing that reintroduces wrapping.
 
 **Unblocks:** `tasks.md` 6.1.
 
-### §12.9 — 🔴 How is per-layout geometry AUTHORED?
+### §12.9 — 🔴 STILL OPEN, and WIDENED: how are per-layout GEOMETRY **and per-layout DESIGN** authored?
 
-The largest piece of work (§7), and it has no precedent in the tree.
+**The owner's 2026-08-18 answer did not settle this gate. It changed the question.**
 
-| Candidate                                                                                        | Cost                                                                                                                          |
-| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| **A — the author defines layouts and positions each plate per layout**                           | Maximum flexibility. Costs a new per-state geometry concept in the schema, the Designer, the carrier and the exporter         |
-| **B — the system ships a fixed 1/2/3-box family** with computed geometry                         | Far less Designer work; the switch is a closed enum the operator cannot misuse. Costs every future layout being a code change |
-| **C — layouts are authored as compositions, geometry derived from the instance's own transform** | Reuses shipped machinery. Costs the §0.5 analysis being partly re-opened, and needs the overlap check made layout-aware       |
+> There may be a **4-box** too, **with different backgrounds — even a motion or video background
+> built in the Designer.**
+
+#### 12.9.0 ⛔ CANDIDATE B IS WITHDRAWN BY THE OWNER — do not re-propose it
+
+The old candidate B was _"the system ships a fixed 1/2/3-box family with geometry computed in
+code"_. It is withdrawn, and the reason is the owner's:
+
+> 🔴 **A layout is a designed SCENE, not a set of rectangles — and computed geometry cannot carry a
+> background at all.**
+
+B's entire appeal was that it needed no Designer work. That appeal depended on a layout being
+expressible as arithmetic over the frame. Once a layout carries **its own background — possibly a
+motion or video background authored in the Designer** — there is nothing for arithmetic to compute:
+the thing that differs between layouts is _artwork_, and artwork has no closed form. B is not "more
+expensive than thought"; it is **unable to express the requirement**, which is a different kind of
+refusal and the reason it must not come back when the schedule gets tight.
+
+#### 12.9.1 The candidates now
+
+|                                                               | Shape                                                                                                                                                                                         |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A**                                                         | ONE template holding N layouts. A layout is a STATE controlling plate visibility, plate geometry, **and now non-plate element visibility** — each layout's own background, decorations, video |
+| **D** _(the owner's, offered for investigation not adoption)_ | Layers get a TYPE — a _simple_ type and a _group_ type. For the group type, **several ordinary templates bind to one layer**, exactly one live                                                |
+| **C**                                                         | Layouts authored as COMPOSITIONS, geometry derived from each instance's own transform                                                                                                         |
+
+---
+
+#### 12.9.2 🔴 THE VERDICT ON D — measured on the plant, and it is a refusal on the mechanism
+
+**D was taken seriously and tested first, because if it worked it would be much the cheapest: every
+layout is an ordinary template the author already knows how to build.** It does not work, and the
+reason is not a cost — it is that the server does not offer the mechanism D is built on.
+
+**D-1 — does this codebase ever address a cg-layer other than `0`? No, and it cannot.**
+`FLASH_LAYER = 0` is a module-level constant interpolated into all five CG verbs the product emits
+(`tools/caspar-bridge/src/command-builder.ts:16`, used at `:59`, `:64`, `:69`, `:90`, `:105`). There
+is no parameter. `SEARCH:` `git grep -rn "FLASH_LAYER" -- packages apps tools` → the declaration and
+those five sites, nothing else. The only non-zero cg-layers in the tree are in probes
+(`tools/caspar-amcp-probe`'s configurable `flashLayer`; `tools/soak-runner/src/harness.ts:216-218`
+hardcodes `1`), never in production. The reconciler emits nothing of its own — `command-builder.ts`
+is the single AMCP construction seam (ADR 0006).
+
+**D-2 — 🔴 THE QUESTION THAT DECIDES D: if two templates sit on one video layer at different
+cg-layers, are BOTH rendered, and what does a hole in the upper one reveal?**
+
+> **MEASURED (§9.6a): they cannot sit there. `CG ADD` at cg-layer 1 is ACCEPTED (`202`) and
+> REPLACES the page at cg-layer 0 — the first page dies (50/s → 0), `INFO` reports ONE
+> `<foreground>` with ONE `html` producer, and BOTH `UPDATE 0` and `UPDATE 1` are then answered by
+> the survivor. The cg-layer argument is INERT for the HTML producer.**
+
+⇒ **The hole question is MOOT: there is no upper page and no lower page.** D does not re-enter the
+measured crosstalk condition inside a layer — because it cannot get two pages into a layer at all.
+That is the strongest possible answer to the question as asked, and it is a refusal of D's premise
+rather than of its cost.
+
+⚠ **And it is worth being explicit about the branch that was not closed with pixels.** §9.6d records
+that "a background producer is not composited" is CasparCG's defined semantics but was not confirmed
+with a frame capture this session. **D loses under both branches**, which is why nothing here waits
+on it: if the background is not composited, D can pre-warm exactly one alternative (D-3); if it
+WERE, two pages would be on air together and each masks only its OWN backdrop, so a hole in the
+upper one would reveal the upper page's own backdrop hole onto the lower page — which is §1's
+crosstalk moved inside a single layer, and worse for D still.
+
+**D-3 — if they REPLACE each other instead, is there a gap? YES: ~3 frames — unless the next layout
+was announced in advance.**
+
+| Path                                           | Cost, measured                                                  |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `CG ADD` a different template onto the layer   | **118 ms median = 2.95 frames** of empty layer (§9.6b)          |
+| `LOADBG [HTML]` the next template, then `PLAY` | **no load gap** — the incoming page is already painting (§9.6c) |
+| This design's own cut (§9.3)                   | **0.20 frames**                                                 |
+
+🔴 **`LOADBG` genuinely rescues D's cut — and then exactly one fact takes it away again.**
+§9.6d: **a video layer has ONE background slot**, and a second `LOADBG` **destroys** the first
+pre-warm (a proven-live page at 51.7/s went to 0/s). With the owner's four layouts, the operator can
+switch to **one** pre-announced layout gaplessly and to **any of the other three at ~3 frames of
+black**. Nothing can know which the operator will pick — that is what "so the operator cannot make a
+mistake" means: any layout, at any moment. A design whose cost depends on guessing the operator's
+next action correctly is not a switch.
+
+**What D would have to become to escape this is the owner's original workaround.** N layouts
+pre-warmed means N video layers, one template each, stacked — and that is precisely the
+configuration §1 measured producing both reported symptoms. D's escape route is the defect this
+change exists to remove.
+
+**D-4 — what does D cost §12.1's phase two? The whole of it.** §0.2 already settled this and it is
+**cited, not re-derived**: Family 2's crude animated switch _"cannot rearrange — a box travelling
+from its 3-box position to its 2-box position is not expressible across two independent pages."_
+§9.6a strengthens it from an architectural claim to a mechanical one: the two pages are not merely
+independent, they **cannot coexist on the layer at all**, so there is no interval in which a box
+could travel between them. ⇒ **Under D, §12.1's phase two would require candidate A to be built
+anyway** — the owner has decided on cut-then-animation, so D buys the cut and then needs the other
+architecture for the animation. That is the "two implementations of one capability" failure that
+closed §0.2, arrived at from a new direction.
+
+**D-5 — where would a "group" live in R-028's declared-rows model, and what breaks?**
+
+A row's identity is ONE template: `stack.load` is `{ itemId, templateId, fields }`
+(`packages/shared-ipc/src/channels/stack.ts:31-34`), and a fixed-bank row likewise names a single
+`templateId` (`channels/fixedLayers.ts:468`). A group would make `templateId` a LIST plus a current
+index, at the root of the row's identity.
+
+`SEARCH:` `git grep -rn "templateId" -- apps/runtime/src tools/caspar-bridge/src packages/shared-ipc/src`
+(excluding tests) → **80 references across 38 files**. Three break in ways that are not mechanical:
+
+1. **The layer allocator and the ledger.** `#liveLayers` is keyed by `itemId`, so the row's key
+   survives a switch — but the PLATES do not. Plates come from the template, so a group switch
+   replaces the whole plate set, and `live-source-multibox` `tasks.md` 6.0's _"A RE-TAKE LANDS ON
+   THE SAME LAYERS"_ has nothing to hold onto.
+2. 🔴 **Assignment. This is the one that cannot be repaired.** Assignment is keyed
+   `(templateId, plateId)` (`channels/sources.ts:321-326`) and `resolvePlateAssignments` filters
+   `a.templateId === input.templateId` (`live-plate-assignment.ts:95`). Under D each layout **is** a
+   different `templateId`, so **every switch changes the key and the assignment does not survive** —
+   §0.3's requirement, and §3's independent code-level proof that Family 2 could not meet it. D is
+   Family 2 with a nicer surface, and it inherits the disqualification.
+3. **The operator surface.** §12.8's decision is a segmented control showing which layout is live.
+   Under D that control's segments are TEMPLATES, so it must show template names in a row whose
+   identity is already a template — and `deps.hasLivePlates`
+   (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:655`) becomes a per-segment
+   question.
+
+**⇒ D IS REFUSED**, on the mechanism (D-1/D-2), on the operator model (D-3), on §12.1's phase two
+(D-4), and on assignment survival (D-5.2) — four independent grounds, three of them measured.
+**Recorded with respect: it was the cheapest idea on the table and it deserved the plant time it
+got.**
+
+---
+
+#### 12.9.3 Candidate A — what the tree already has, and the two things it does not
+
+**Is there ANY precedent for "a set of elements visible together as a state"? The closest thing is
+shipped, and it excludes Live Sources by construction.**
+
+| Candidate precedent                              | What it is                                                                                                                                                                                 | Distance from what A needs                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A `sequence` of COMPOSITION items** (D-083)    | 🔴 the tree's ONLY exactly-one-of-N primitive: an ordered list showing ONE item at a time, and an item may be a whole composition (`SequenceCompositionItemSchema`, `elements.ts:559-563`) | **Disqualified, twice.** `flattenElements` descends into `container` and `composition` ONLY (`scene-flatten.ts:264,274`) — never a `sequence` — so a plate inside one **declares nothing and punches nothing, silently**; and stamped scopes are given an EMPTY mask map on purpose (`STAMPED_SCOPE_MASKS`, `scene-builder.ts:131-134`) |
+| **`layer.visible`**                              | a whole layer's children hidden together (`scene-builder.ts:192`)                                                                                                                          | A set toggled together — but AUTHORED and static, with no exclusivity and no runtime selection                                                                                                                                                                                                                                          |
+| **A composition instance + a `visible` binding** | a named sub-scene, instanced with its own transform; a boolean field toggles it                                                                                                            | **The closest WORKING thing** — and it is what C and the recommendation below are built from                                                                                                                                                                                                                                            |
+| **`container`**                                  | a grouping element in the schema                                                                                                                                                           | **Inert** — the runtime renders it via `buildPlaceholder` and DISCARDS its children (`scene-builder.ts:297`)                                                                                                                                                                                                                            |
+| **zones**                                        | `data-cg-zone` scoping for countdowns                                                                                                                                                      | Not a visibility concept at all                                                                                                                                                                                                                                                                                                         |
+
+⇒ **There is no precedent for a runtime-selected one-of-N sub-scene that a Live Source can live
+inside.** The one-of-N primitive exists, is shipped and is wired to UI — and the flattener's refusal
+to walk it is exactly what keeps plates out. A must invent the layout-state concept; it should
+**model it on the sequence's item list** (an ordered set with exactly one current) while placing it
+where the flattener already walks.
+
+**Per-layout backgrounds in one page — what happens to the hidden ones.**
+
+- **A hidden `<video>` is NOT paused, and nothing in the tree pauses it.** A `visible` binding writes
+  `el.style.display` and only that (`packages/template-runtime/src/bindings.ts:180-186`); the video
+  driver is driven by the LIFECYCLE, not by visibility (`runtime.ts:1079` starts every
+  `scope.videos` entry at play). The authored `visible` field is consulted for hold-driver purposes
+  only — _"a hidden video is never a driver"_ (B-034, `runtime.ts:303-305`) — which is about the
+  HOLD, not about decoding.
+  ⇒ **The MODEL needs no new concept for per-layout backgrounds**, **but
+  the RUNTIME does: the layout state must reach the video driver**, or every layout's background
+  video decodes for the whole time the row is up. **This needs measuring** — CEF's behaviour for a
+  `display: none` media element is not something to assume — and §9.6f shows the frame budget is
+  already the tight resource. `tasks.md` 9.3.
+- A **static** per-layout background (colour, gradient, image) costs only its own compositing and is
+  genuinely free of new machinery.
+
+**What the carrier has to become — and it is smaller than §7 feared.**
+`collectLiveSources` emits `rect: flat.rect` (`packages/vcg-format/src/live-sources.ts:88-110`), and
+`flat.rect` is _"the element's own box, flattened to SCENE pixels through its full ancestor chain"_
+(`scene-flatten.ts:194-195`), composition instances included **with the instance's inner scale**. So
+the exporter **already** derives a rect through the ancestor chain; what it lacks is a reason to do
+it more than once. Under A it must emit **one rect per layout per plate**, and the declaration block
+on `TemplateInfo` must carry them (the shipped `hasNext` precedent — derived once at import, no
+`.vcg` format change).
+
+🔴 **One asymmetry found while verifying this, and it lands squarely on `tasks.md` 2.5.**
+`collectLiveSources` has **no visibility filter at all** — it declares `el.type === 'video-placeholder'`
+and nothing else — while `sceneMaskHoles` **does** filter (`f.element.visible`,
+`scene-flatten.ts:354`). ⇒ **Today a hidden plate is DECLARED but does not PUNCH.** Under §12.4's
+decision that is nearly the wanted behaviour by accident (held-but-not-visible = seated, not
+punching) — but it is currently keyed off the AUTHORED `visible`, not the layout state, so it is a
+coincidence rather than a mechanism. Naming it is what stops the next reader from "fixing" the
+asymmetry in the wrong direction.
+
+---
+
+#### 12.9.4 Candidate C — better than §0.5's framing suggested, and still strictly more expensive than A
+
+C's advantage is real and was understated: **a plate inside a nested composition instance punches
+CORRECTLY, and this session verified it rather than assuming it.** `flattenElements` walks
+composition instances and keys each flat element by the instance PATH (`${prefix}${el.id}`, prefix
+extended per level, `scene-flatten.ts:250-292`); `scene-builder.ts` extends `maskKeyPrefix` by
+exactly the same rule (`:399`) and looks the holes up with it (`:265`). The two compose the same
+path from the same parts, so the hole lands in the right element's own box at any nesting depth.
+The "no static scene-px rect" warning applies to **stamped** scopes — repeater rows and sequence
+items — **not** to composition instances.
+
+**But C, as "each layout is its own composition", is the separate-plate-sets model §0.5 refused**,
+and this session found nothing that contradicts §0.5 — so it is **not re-opened**. Two of §0.5's
+three grounds are re-confirmed by the reading above: every layout's plates would be **declared**
+(`collectLiveSources` has no visibility filter), hence seated; and a box cannot tween from one
+element to a different element. C therefore needs the declaration to become layout-aware **anyway**
+— A's work — **plus** the overlap check made layout-aware, **plus** an identity story A gets free.
+
+---
+
+#### 12.9.5 The three-way comparison on the things §0.3 and §0.5 already settled
+
+|       | Assignment survives a switch                                                                                   | Plates keep their layers               | Overlap check                                                                                                        |
+| ----- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **A** | ✅ **free** — one plate element per box, so `(templateId, plateId)` cannot change (§3)                         | ✅ free — same plates, same seats      | must run **per layout** rather than once; the rule is unchanged, only its input                                      |
+| **D** | ❌ **impossible** — each layout is a different `templateId`, and the assignment key is `(templateId, plateId)` | ❌ whole plate set replaced per switch | per template, as today — but the sets are unrelated                                                                  |
+| **C** | ❌ needs new machinery — N plate elements sharing a `routeKey` is §0.6's duplicate case                        | ⚠ needs new machinery                  | must become layout-aware **and** cross-composition; today the loop is per-document and would not fire across layouts |
+
+**The overlap check does NOT re-open §0.5.** Under A the layouts' plates occupy the same screen area
+by construction, and the shipped `live-source-overlap` error
+(`apps/designer/src/renderer/state/live-source-preflight.ts:293-315`, `severity: 'error'`) compares
+every pair inside one document. What changes is the INPUT — evaluate the same rule once per layout,
+over that layout's own rects — not the rule. That is `tasks.md` 3.4 as already written, and it is
+why §0.5 stands untouched: §0.5 refused _separate plate sets_, and A has one set.
+
+---
+
+#### 12.9.6 ⭐ THE RECOMMENDATION — **A, with a box authored as a nested composition and per-layout geometry carried on the INSTANCE**
+
+Call it **A′**. It is candidate A's identity model with candidate C's authoring affordance, and every
+part of it is a mechanism this session verified rather than proposed:
+
+1. **A BOX is a nested composition** holding its plate and its title (and its frame, its lower-third,
+   whatever the design wants). Compositions nest and the guard is shipped
+   (`canNestCompositionInActive`, wired at `CompositionsPanel.tsx:54`, `CanvasOverlay.tsx:544,688`).
+2. **A LAYOUT positions the box INSTANCES** — one transform per box per layout — and sets which
+   non-plate elements (each layout's background, decorations, video) are visible.
+3. **The plate keeps ONE identity**, because the composition is instanced once per box, not once per
+   layout. `(templateId, plateId)` never changes ⇒ **§0.3 is satisfied for free**, which is the
+   whole reason §0.5 chose this model.
+4. **The hole follows the box** with no new mask concept: the instance's transform is part of the
+   ancestor chain both `flattenElements` and `maskKeyPrefix` compose, so moving the instance moves
+   the declared rect AND the punch together (§12.9.4).
+5. **The title follows its box** — §3c.1's authoring problem dissolves, because a layout positions
+   ONE instance and everything inside travels with it. Sixteen manual placements become four.
+
+**What A′ still costs, stated plainly rather than buried:**
+
+- **The layout-state concept itself** — an ordered set with exactly one current, and ONE authority
+  for it (`tasks.md` 5.1), plus the Designer surface to author it (3.3).
+- **Per-layout instance geometry.** ⚠ Worth knowing before scoping: `x`, `y` and `scale` are ALREADY
+  bindable transform properties in the schema (`packages/shared-schema/src/bindings.ts:40`) — it is
+  `width`/`height` that are not, and the one production `transform` constructor hardcodes
+  `'opacity'` (`bind-resolver.ts:105`). A per-layout **override table** read by the layout state is
+  cleaner than widening bindings, and it does not have to be a binding at all.
+- **UNIT B′ regardless** (§6b) — the mask still has to recompute; A′ changes what moves, not whether
+  the mask follows.
+- **The declaration emitting one rect per layout** (§12.9.3).
+
+**Why not simply A-without-the-composition.** Nothing forbids it, and it is a smaller first step.
+But §3c.1's binding problem then has no answer — four layouts × four boxes is sixteen independent
+title placements, and the first one that drifts puts a title under the wrong box on air. A′ buys
+that for the price of a nesting level the tree already supports.
+
+🔴 **This remains the OPEN gate.** A′ is this design's recommendation with its evidence; it is not a
+decision, and `tasks.md` section 3 stays `⟨GATE: §12.9⟩` until the owner answers.

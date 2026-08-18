@@ -59,6 +59,69 @@
 - [x] 0.17 File UNIT B′ with its enumeration as this feature's PREREQUISITE. (`design.md` §6b)
 - [x] 0.18 Handoff at `docs/handoff/2026-08-17-session-aq.md`, opening with the SHA read.
 
+## 0b. Recon — the 2026-08-18 session (§12.9's candidate D) — COMPLETE
+
+- [x] 0b.1 Read the tree at `dev` @ `fc663dc` (`git pull --ff-only`; `HEAD == origin/dev`).
+      Anchors re-verified where re-cited; drift called out at the citation.
+- [x] 0b.2 Does this codebase ever address a cg-layer other than `0`, and can it? **NO and NO.**
+      `FLASH_LAYER = 0` is a module constant in all five CG verbs
+      (`command-builder.ts:16,59,64,69,90,105`); non-zero cg-layers exist only in probes.
+      (`design.md` §12.9.2 D-1)
+- [x] 0b.3 🔴 MEASURE whether two templates can sit on ONE video layer at different cg-layers.
+      **THEY CANNOT.** `CG ADD 1` is accepted (`202`) and REPLACES the page at cg-layer 0 — the
+      first page dies (50/s → 0), `INFO` reports one `<foreground>` with one `html` producer, and
+      both `UPDATE 0` and `UPDATE 1` are answered by the survivor. **The cg-layer argument is
+      INERT.** ⇒ the "hole in the upper page" question is MOOT: there is no upper page.
+      (`design.md` §9.6a, §12.9.2 D-2)
+- [x] 0b.4 MEASURE the replace-on-one-layer gap. **118 ms median = 2.95 frames** (2.80–3.13, n=8),
+      against the cut's 0.20 frames. The outgoing page dies ~22 ms after the command and does not
+      wait for the incoming one. (`design.md` §9.6b)
+- [x] 0b.5 Is the gap escapable? **`LOADBG [HTML]` + `PLAY` pre-warms and cuts with NO load gap
+      (n=6) — and `CG UPDATE` still reaches a page seated that way.** But a layer has exactly ONE
+      background slot: a second `LOADBG` DESTROYS the first pre-warm (proven-live 51.7/s → 0/s). So
+      only ONE announced alternative is gapless; the others cost ~3 frames.
+      (`design.md` §9.6c, §9.6d)
+- [x] 0b.6 What does D cost §12.1's phase two? **All of it** — §0.2's "not expressible across two
+      independent pages" is CITED, and strengthened: the pages cannot coexist on the layer at all.
+      D would need candidate A built anyway. (`design.md` §12.9.2 D-4)
+- [x] 0b.7 Where would a "group" live in R-028's declared-rows model? **At the root of a row's
+      identity** (`stack.load` is one `templateId`; 80 references across 38 files). Assignment is
+      keyed `(templateId, plateId)`, so **a group switch changes the key and assignment cannot
+      survive** — the §3 disqualification, inherited. (`design.md` §12.9.2 D-5)
+- [x] 0b.8 ⇒ **VERDICT ON D: REFUSED**, on four independent grounds, three of them measured.
+      (`design.md` §12.9.2)
+- [x] 0b.9 Is there any precedent for "a set of elements visible together as a state"? **The
+      closest is a `sequence` of COMPOSITION items — the tree's only exactly-one-of-N primitive —
+      and it is disqualified twice: `flattenElements` never descends into a `sequence`, and stamped
+      scopes get an EMPTY mask map on purpose.** No precedent exists for a runtime-selected
+      one-of-N sub-scene a Live Source can live inside. (`design.md` §12.9.3)
+- [x] 0b.10 Per-layout backgrounds: what happens to a hidden `<video>`? **Nothing pauses it.** A
+      `visible` binding writes `style.display` only; the video driver is lifecycle-driven. The MODEL
+      needs no new concept; the RUNTIME does. **Needs measuring — 9.3.** (`design.md` §12.9.3)
+- [x] 0b.11 What must the carrier become under A? **One rect per layout per plate.** The exporter
+      already derives a rect through the full ancestor chain (`flat.rect`); it lacks a reason to do
+      it more than once. 🔴 And an asymmetry was found: `collectLiveSources` has NO visibility
+      filter while `sceneMaskHoles` does — **today a hidden plate is DECLARED but does not PUNCH**.
+      (`design.md` §12.9.3, feeds 2.5)
+- [x] 0b.12 Does a plate inside a NESTED COMPOSITION still punch correctly? **YES, verified** — the
+      flattener's instance path and the builder's `maskKeyPrefix` are composed from the same parts
+      (`scene-flatten.ts:250-292` / `scene-builder.ts:265,399`). The "no static scene-px rect"
+      warning applies to STAMPED scopes (repeater rows, sequence items), not to composition
+      instances. (`design.md` §12.9.4)
+- [x] 0b.13 🔴 VERIFY §3b.4's `clip-path` interpolation lead on the plant's CEF. **VERIFIED** —
+      Chromium 142; `path(evenodd,…)`, `polygon(evenodd,…)` and WAAPI all interpolate (9 distinct
+      intermediates each). (`design.md` §9.6e)
+- [x] 0b.14 MEASURE what the animated path COSTS in frames. **Interpolating three holes: −4 %
+      (50.7 → 48.7 fps). Crossfading two full-frame backdrops: −10 % (50.5 → 45.6, worst gap
+      120 ms). Both together: −29 %.** The background transition is the expensive half, not the
+      mask. (`design.md` §9.6f)
+- [x] 0b.15 Does `MIXER … OPACITY` take a duration and a tween? **YES, with FILL's exact
+      vocabulary** — `linear`/`easeinoutquad` `202`, `ease`/`cubic-bezier` `403`; readback works and
+      the tween was observed running. (`design.md` §9.6g)
+- [x] 0b.16 Report the next free item number for §12.7's ledger item. **`B-145`** (and `B-146`,
+      `B-147` for the two other pending B-items). **Nothing minted.** (`design.md` §12.7)
+- [x] 0b.17 Handoff at `docs/handoff/2026-08-18-session-ar.md`, opening with the SHA read.
+
 ## 1. Owner decisions — SEVEN ANSWERED 2026-08-18, ONE OPEN
 
 - [x] 1.1 §12.1 — cut first, or one animated release. **ANSWERED: CUT FIRST, animation second** —
@@ -86,9 +149,12 @@
       the row** showing which layout is live; a menu is disqualified because it hides the current
       state. 🔴 Re-opens the six-column verb grid — see §12.8's two collisions. (`design.md` §12.8)
 - [ ] 1.8 Answer §12.9 — **how per-layout GEOMETRY and per-layout DESIGN are authored.** The largest
-      piece, with no precedent in the tree. **WIDENED 2026-08-18**, not settled: candidate B is
-      withdrawn by the owner and candidate D added. `design.md` §12.9 carries the real candidate set
-      and this design's recommendation. ⟨GATE: §12.9⟩
+      piece, with no precedent in the tree. **WIDENED 2026-08-18**, not settled: candidate **B is
+      WITHDRAWN by the owner** (a layout is a designed SCENE, not a set of rectangles — computed
+      geometry cannot carry a background at all), and the owner's candidate **D was investigated and
+      is REFUSED on four grounds, three measured** (0b.3–0b.8). `design.md` §12.9.6 recommends
+      **A′** — candidate A's identity model with a box authored as a nested composition and
+      per-layout geometry on the INSTANCE — with its evidence. ⟨GATE: §12.9⟩
 - [ ] 1.9 ⟨MINT⟩ a bug item for the Inspector's silent no-op assignment edit and its
       override-blindness, filed in `docs/prd/bugs-runtime.md` (a Runtime-app defect, not
       cross-cutting). **Next free `B-` is reported in `design.md` §12.7; no number is minted in this
@@ -178,3 +244,11 @@
       ⟨READY — §12.3 decided⟩
 - [ ] 8.2 Whether a 1-box layout LETTERBOXES — the plant trace shows `FILL` ≡ `CLIP` for a 1280×536
       `AMB.mkv`, i.e. crop-to-fill is not being applied. ⟨READY — §12.1 decided⟩
+- [ ] 8.3 🔴 Whether a hidden `<video>` keeps DECODING in CEF. Nothing in the tree pauses one — a
+      `visible` binding writes `style.display` and the video driver is lifecycle-driven — so under
+      candidate A every layout's background video may decode for as long as the row is up. §9.6f
+      shows the frame budget is already the tight resource. ⟨GATE: §12.9⟩
+- [ ] 8.4 The pixel confirmation that a `LOADBG` background producer is NOT composited. Not
+      measurable this session (no plant disk for `PRINT`; §9.6). ⚠ **It cannot change §12.9.2's
+      verdict on D** — D loses under both branches — so this is completeness, not a blocker.
+      ⟨READY — §12.1 decided⟩
