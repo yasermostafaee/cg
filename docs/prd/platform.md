@@ -1968,3 +1968,72 @@ pre-push decision, the message-region lint).
   → no hits. **It needs a number and I do not mint one** — flagged for the owner.
 - **Cross-refs:** `P-009` (the Stop-hook gate, the same "enforce rather than remember" shape),
   `P-013` (the host gate lock).
+
+## [~] P-036 — an E2E run against a STALE build makes red-then-green vacuous while looking rigorous ⟨priority: high⟩ — implemented: the guard, wired into both apps, with its proof
+
+**What:** the E2E runner REFUSES to start when the built bundle is older than the newest source file
+it covers, naming the stale file.
+
+**Why:** the suites run against the built `dist/` via `vite preview`, never against source.
+`turbo.json` already declares `test:e2e` `dependsOn: ['build']`, so the ROOT `pnpm test:e2e`
+rebuilds — but **`pnpm --filter <app> test:e2e` runs `playwright test` directly and bypasses turbo
+entirely.** Nothing rebuilds, and the suite tests whatever bundle happens to be on disk.
+
+🔴 **That silently invalidates RED-THEN-GREEN**, which is this project's standard proof that a test
+guards what it claims to guard — every implementation prompt asks for it by name. Edit the source,
+run the suite, revert the fix, run again: **both runs execute the same bundle, agree perfectly, and
+prove nothing.** The comparison looks exactly as rigorous as a real one.
+
+**It has already produced a false result.** On 2026-08-17 (session B) a defect was reported in CC's
+own B-140 fix — "the teardown runs but the divider still paints as dragging" — recorded as an open
+defect in the change, and **escalated to the owner as decision-relevant**. It was retracted only when
+it emerged that the second run had executed the first run's bundle. With a rebuild between runs the
+picture inverted and was consistent.
+
+**A proof that is vacuous while looking rigorous is worse than no proof**, because nobody goes
+looking for the missing one. That is why this outranks a feature.
+
+**Acceptance:**
+
+- WHEN an E2E run starts and any bundled source is newer than the build THEN the run is REFUSED
+  before any test executes, and the message names the offending file and how far behind the build is
+- WHEN the build is current THEN the run proceeds unchanged, with no false positive
+- WHEN there is no build at all THEN the run is refused rather than serving whatever is on disk
+- WHEN editing only a SPEC file THEN the run proceeds — a spec is loaded from source by Playwright,
+  never bundled, so it cannot make the build stale
+- WHEN testing the existing bundle IS the intent THEN `CG_ALLOW_STALE_E2E=1` allows it and says
+  loudly that it did
+- WHEN either app's suite is run by any entry point THEN the same rule applies — one rule, one
+  spelling
+
+**Notes:**
+
+- **Mechanism chosen: a freshness check inside Playwright's `globalSetup`**, not a turbo dependency.
+  🔴 **The turbo dependency already exists and does not close the hole** — the failing path is
+  precisely the one that does not go through turbo. A check in the runner catches EVERY entry point
+  (turbo, a filtered `pnpm` script, a hand-typed `pnpm exec playwright test`) because they all end in
+  the same runner.
+- **It refuses rather than rebuilding**, deliberately: a guard that silently rebuilt would hide how
+  long the suite really takes and would make "test the bundle I have" impossible. Naming the stale
+  file is the point.
+- **Shipped:** `tools/gate-hook/src/e2e-staleness.mjs` (the walk + the pure `decideStaleness`),
+  `apps/{runtime,designer}/tests/e2e-global-setup.mjs`, both `playwright.config.ts` files, and 5 unit
+  tests in `tools/gate-hook/tests/e2e-staleness.test.ts`.
+- ⚠ **Both apps checked and both had the identical hole** — `"test:e2e": "playwright test"` in each.
+  Fixed in the same shape rather than one app at a time.
+- 🔴 **PROVEN TO FIRE, with a rebuild between the runs** — the guard must not be validated by the very
+  mistake it exists to prevent:
+  1. build → run: **3 passed** (no false positive);
+  2. touch one source → run: **REFUSED**, _"`ShellDivider.tsx` is 28s NEWER than the newest file in
+     `apps/runtime/dist`"_;
+  3. rebuild → run: **3 passed** again;
+  4. touch again with `CG_ALLOW_STALE_E2E=1` → **ran, printing the override**.
+     The Designer was proven the same way (refused at 841m behind, then green after its build).
+- ⚠ **Scope, stated honestly:** the check compares the app's own `src/**`, `index.html` and
+  `vite.config.ts` against its `dist/`. It does **not** track workspace-package sources — a change in
+  `@cg/gesture` rebuilt into its own `dist` does not mark the app's bundle stale. That is a narrower
+  guarantee than "the bundle is current in every sense", and it covers the failure that actually
+  occurred. ⟨Owner: widen to workspace deps later, or leave it here?⟩
+- **Cross-refs:** `B-140`'s change (`shared-drag-gesture/tasks.md` §6b) records the false result this
+  item prevents; `P-035` (the other guard filed the same day, same "enforce rather than remember"
+  shape).

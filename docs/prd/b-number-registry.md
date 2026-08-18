@@ -907,3 +907,23 @@ heading was `P-032`; `git grep -nE "P-03[34]" -- docs/` returned **no occurrence
 Next free: `P-035`.**
 
 The owner supplied both numbers and the sweep agreed, so nothing was minted here.
+
+## 2026-08-18 — two guards filed and built the same day (`P-035`, `P-036`)
+
+| Prefix | Claimed | Item                                                                               | File                       |
+| ------ | ------- | ---------------------------------------------------------------------------------- | -------------------------- |
+| `P-`   | `P-035` | a NEVER-STAGE guard, after `git add <directory>` swept the owner's hack onto `dev` | [platform.md](platform.md) |
+| `P-`   | `P-036` | an E2E run against a STALE build makes red-then-green vacuous                      | [platform.md](platform.md) |
+
+**Verified free by the heading sweep immediately before the headings were written.** Highest `P-`
+heading was `P-034`; `git grep -nE "P-03[56]" -- docs/` returned exactly ONE hit — this file's own
+"Next free: `P-035`" line — and none as a heading. That is the forward-reference false positive this
+file has now recorded four times, and the reason the rule is "highest HEADING". The space stays
+contiguous `P-001` … `P-036`, **no gaps. Next free: `P-037`.**
+
+The owner supplied both numbers and the sweep agreed, so nothing was minted here.
+
+⚠ **One item is KNOWN MISSING and needs a number the owner must mint:** the **bridge advertise-host
+refactor**, which is the CURE for the hack `P-035` merely nets. SEARCH:
+`grep -rniE "advertise.?host|LAN host|guessLanHost|serve-host" docs/prd/` → **no hits**. It is
+referenced by `P-035` but has no ID of its own.

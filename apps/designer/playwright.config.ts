@@ -40,6 +40,8 @@ function resolveChannel(): string | undefined {
 const channel = resolveChannel();
 
 export default defineConfig({
+  // P-036 — refuse to run against a stale build. See tools/gate-hook/src/e2e-staleness.mjs.
+  globalSetup: './tests/e2e-global-setup.mjs',
   testDir: './tests/e2e',
   testMatch: '**/*.spec.ts',
   fullyParallel: true,
