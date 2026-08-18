@@ -2005,6 +2005,10 @@ looking for the missing one. That is why this outranks a feature.
   loudly that it did
 - WHEN either app's suite is run by any entry point THEN the same rule applies — one rule, one
   spelling
+- WHEN a WORKSPACE PACKAGE the app bundles has a source newer than the build THEN the run is
+  REFUSED naming that file, exactly as for the app's own sources
+- WHEN a new workspace dependency is added THEN it is covered without anyone editing the guard —
+  the set is resolved from the dependency graph, never from a list
 
 **Notes:**
 
@@ -2016,9 +2020,10 @@ looking for the missing one. That is why this outranks a feature.
 - **It refuses rather than rebuilding**, deliberately: a guard that silently rebuilt would hide how
   long the suite really takes and would make "test the bundle I have" impossible. Naming the stale
   file is the point.
-- **Shipped:** `tools/gate-hook/src/e2e-staleness.mjs` (the walk + the pure `decideStaleness`),
-  `apps/{runtime,designer}/tests/e2e-global-setup.mjs`, both `playwright.config.ts` files, and 5 unit
-  tests in `tools/gate-hook/tests/e2e-staleness.test.ts`.
+- **Shipped:** `tools/gate-hook/src/e2e-staleness.mjs` (the walk, the pure `decideStaleness`, and
+  the workspace-graph resolver), `apps/{runtime,designer}/tests/e2e-global-setup.mjs`, both
+  `playwright.config.ts` files, and 15 unit tests across
+  `tools/gate-hook/tests/e2e-staleness{,-graph}.test.ts`.
 - ⚠ **Both apps checked and both had the identical hole** — `"test:e2e": "playwright test"` in each.
   Fixed in the same shape rather than one app at a time.
 - 🔴 **PROVEN TO FIRE, with a rebuild between the runs** — the guard must not be validated by the very
@@ -2029,11 +2034,45 @@ looking for the missing one. That is why this outranks a feature.
   3. rebuild → run: **3 passed** again;
   4. touch again with `CG_ALLOW_STALE_E2E=1` → **ran, printing the override**.
      The Designer was proven the same way (refused at 841m behind, then green after its build).
-- ⚠ **Scope, stated honestly:** the check compares the app's own `src/**`, `index.html` and
-  `vite.config.ts` against its `dist/`. It does **not** track workspace-package sources — a change in
-  `@cg/gesture` rebuilt into its own `dist` does not mark the app's bundle stale. That is a narrower
-  guarantee than "the bundle is current in every sense", and it covers the failure that actually
-  occurred. ⟨Owner: widen to workspace deps later, or leave it here?⟩
+- ⭐ **WIDENED to the DEPENDENCY GRAPH (owner decision, 2026-08-18).** The first cut compared only
+  the app's own `src/**`, `index.html` and `vite.config.ts`, which left the guard blind to every
+  workspace package the app bundles: a change in `@cg/gesture` — consumed by both apps' dividers —
+  left a stale bundle looking CURRENT. Same false green, one level out, and it would have been found
+  the same way: not at all.
+
+  **The costs are asymmetric, and that is the reasoning:** a wrong refusal costs one rebuild; a
+  wrong green costs a wrong conclusion, and this project has already paid that once. Every judgement
+  in the resolver therefore leans toward refusing.
+
+  🔴 **Resolved from the graph, NOT from a list.** `bundleInputDirs` walks the app's own
+  `package.json` and follows every `@cg/*` dependency TRANSITIVELY (both `dependencies` and
+  `devDependencies` — deciding per dependency kind which can reach a bundle is a judgement the
+  resolver would have to get right every time, while following both is a rule it cannot get wrong).
+  A hand-kept list is _extend the list, forget the mutator_: the next package added is exactly the
+  one nobody adds to it, and the guard would go quiet where it is newest. A `@cg/*` dependency that
+  cannot be LOCATED throws rather than being skipped — an unresolvable package must never be
+  indistinguishable from a fresh one.
+
+  ⚠ **Per dependency it takes `src` + `package.json`, NOT `dist` and NOT `tests`.** Both
+  exclusions are decisions: a turbo CACHE RESTORE rewrites a package's `dist` mtimes with nothing
+  edited, so including it would refuse on ordinary builds — and a guard that refuses routinely is
+  one whose override becomes habit; and a package's tests are never bundled, the same reason the
+  app's own `tests/` is absent. The one case this does not catch is a package rebuilt without any
+  source change, which is not an edit and so is not the red-then-green hazard.
+
+- 🔴 **PROVEN AGAIN, both apps, with a rebuild between the runs** (2026-08-18):
+  1. touch `packages/gesture/src/index.ts` → **@cg/designer REFUSED**, naming
+     `packages\gesture\src\index.ts` as _"8m NEWER than the newest file in apps\designer\dist"_;
+  2. same touch → **@cg/runtime REFUSED**, same file, same shape;
+  3. rebuild → **designer 268 passed**, **runtime 81 passed**.
+- ⚠ **MEASURED during that proof, and encoded in the refusal message: a FULL turbo cache hit does
+  not re-stamp `dist`.** Turbo hashes CONTENT, so a file whose mtime moved without its bytes
+  changing produces a 100% cache hit — `pnpm build` reports "21 cached, 21 total", writes nothing,
+  and the guard keeps refusing with the remedy it just printed. An ordinary edit does not hit this
+  (changed bytes bust the hash and the app rebuilds), but a rebase, a checkout or a `touch` does.
+  The message now names `pnpm build --force` for that case. **A guard whose printed remedy does not
+  work is a guard whose override becomes the habit**, and then it protects nothing — so this is a
+  correctness property of the guard, not a documentation nicety.
 - **Cross-refs:** `B-140`'s change (`shared-drag-gesture/tasks.md` §6b) records the false result this
   item prevents; `P-035` (the other guard filed the same day, same "enforce rather than remember"
   shape).

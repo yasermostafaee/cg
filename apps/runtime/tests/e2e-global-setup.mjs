@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertFreshBuild } from '../../../tools/gate-hook/src/e2e-staleness.mjs';
+import { assertFreshBuild, bundleInputDirs } from '../../../tools/gate-hook/src/e2e-staleness.mjs';
 
 /**
  * P-036 — refuse an E2E run against a stale build.
@@ -12,18 +12,22 @@ import { assertFreshBuild } from '../../../tools/gate-hook/src/e2e-staleness.mjs
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = path.resolve(here, '..');
+const repoRoot = path.resolve(app, '..', '..');
 
 export default function globalSetup() {
   assertFreshBuild({
     label: '@cg/runtime',
     distDir: path.join(app, 'dist'),
-    // What the bundle is built FROM. `tests/` is deliberately absent: a spec is
-    // loaded from source by Playwright, never bundled, so editing one does not
-    // make the build stale.
-    inputDirs: [
-      path.join(app, 'src'),
-      path.join(app, 'index.html'),
-      path.join(app, 'vite.config.ts'),
-    ],
+    /*
+      What the bundle is built FROM — the app's own sources AND every workspace
+      package it depends on, resolved TRANSITIVELY from the dependency graph
+      (`bundleInputDirs`).
+
+      Not a hand-kept list of packages: the next package added is exactly the one
+      nobody remembers to add, and the guard would go quiet where it is newest.
+      `tests/` is deliberately absent at every level — a spec is loaded from source
+      by Playwright, never bundled, so editing one does not make a build stale.
+    */
+    inputDirs: bundleInputDirs({ appDir: app, repoRoot }),
   });
 }

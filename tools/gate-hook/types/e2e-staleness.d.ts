@@ -33,4 +33,24 @@ declare module '*e2e-staleness.mjs' {
     inputDirs: readonly string[];
     escape?: string;
   }): void;
+
+  /** Every workspace package, NAME → absolute directory (read from each manifest). */
+  export function readWorkspacePackages(
+    repoRoot: string,
+    groups?: readonly string[],
+  ): Map<string, string>;
+
+  /**
+   * The workspace packages `entryDir` depends on, TRANSITIVELY. Throws on a
+   * `scope`d dependency that is not a workspace package — an unresolvable one must
+   * never be indistinguishable from a fresh one.
+   */
+  export function resolveWorkspaceDeps(
+    entryDir: string,
+    byName: Map<string, string>,
+    scope?: string,
+  ): string[];
+
+  /** Everything that can change what an app's bundle contains. */
+  export function bundleInputDirs(options: { appDir: string; repoRoot: string }): string[];
 }
