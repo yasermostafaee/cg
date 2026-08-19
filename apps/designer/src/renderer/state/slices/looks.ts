@@ -174,7 +174,11 @@ export const looksSlice = {
       looks: [...withLook.looks, look],
       defaultLookId: withLook.defaultLookId ?? look.id,
     });
-    if (scene !== null) set({ scene, activeLookId: look.id });
+    // `addElement` auto-selects the new instance, which flips the right panel to
+    // ELEMENT properties — hiding this very section the moment a look is created (the
+    // panel-switches-away phenomenon the section docstring warns about). The author's
+    // next act lives in the looks list, so creation leaves nothing selected.
+    if (scene !== null) set({ scene, activeLookId: look.id, selection: new Set<string>() });
     return look.id;
   },
 
