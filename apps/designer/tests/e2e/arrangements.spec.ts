@@ -1,5 +1,5 @@
 import type { FrameLocator } from '@playwright/test';
-import { expect, test } from './fixtures/designer.js';
+import { expect, test, type DesignerApp } from './fixtures/designer.js';
 
 /**
  * ⭐ **`multibox-layout-switch` C2 — the ARRANGEMENT authoring surface, walked end to end.**
@@ -271,4 +271,118 @@ test.describe('D-153 — the arrangement surface is legible', () => {
       ).toBeVisible();
     },
   );
+});
+
+/**
+ * 🔴 **`D-154` — the gizmo edits the CELL, and is drawn where the element IS.**
+ *
+ * ⚠ **These tests ask WHERE THE GIZMO IS.** That is the axis every previous suite here
+ * missed: AV's asked where the box was, AX's asked what the panel said, and the selection
+ * rectangle sat in empty space through all of them. The owner found it by trying to drag it.
+ */
+test.describe('D-154 — a box is edited through its cell', () => {
+  /** Author a Main with two box instances and a 2-box + 1-box arrangement. */
+  async function twoBoxes(app: DesignerApp): Promise<void> {
+    await app.goto();
+    await app.newProject('D154');
+    await app.newComposition('Box');
+    await app.addLiveSource({ x: 200, y: 160 });
+    await app.newComposition('Main');
+    await app.openComposition('Main');
+    await app.page.getByRole('button', { name: 'Arrangements' }).click();
+    await app.page.getByTitle('Add a 2-box arrangement').click();
+    await app.page.getByTitle('Add a 1-box arrangement').click();
+    await app.nestCompositionInstance('Box');
+    await app.nestCompositionInstance('Box');
+    await app.page.getByLabel('Active arrangement').selectOption({ index: 1 });
+  }
+
+  test('🔴 the GIZMO rect equals the RENDERED rect for a box under an active arrangement', async ({
+    app,
+  }) => {
+    await twoBoxes(app);
+    await app.clickCanvas({ x: 120, y: 120 });
+
+    const gizmo = await app.page.locator('[data-testid="gizmo-frame"]').boundingBox();
+    const rendered = await app.canvasFrame
+      .locator('.cg-stage > .cg-layer > [data-cg-element-id]')
+      .first()
+      .boundingBox();
+    if (gizmo === null || rendered === null) throw new Error('no gizmo or no rendered box');
+
+    // 🔴 CENTRES, exactly — that is the claim, and it is the one a tolerance cannot fudge.
+    //
+    // MEASURED: gizmo {x 387.72, y 101.30, w 236, h 265} against rendered
+    // {x 389.72, y 103.30, w 232, h 261} — a UNIFORM 2 px outset on every side, which is the
+    // selection outline being drawn just OUTSIDE the content edge rather than over it. The
+    // centres are identical to the pixel (505.72, 233.80).
+    //
+    // The defect this catches is not subtle, and the magnitude was MEASURED rather than
+    // guessed: reverting the one line in `Gizmo.tsx` and rebuilding put the width out by
+    // **236 px** at this zoom (the gizmo drew the authored 1920-wide instance while the
+    // element rendered the 960-wide cell), which moves the CENTRE by ~118 px. An assertion on
+    // centres therefore fails hard on the old behaviour and exactly on the new one.
+    const centre = (b: { x: number; y: number; width: number; height: number }) => ({
+      x: b.x + b.width / 2,
+      y: b.y + b.height / 2,
+    });
+    expect(Math.abs(centre(gizmo).x - centre(rendered).x), 'gizmo centre x').toBeLessThanOrEqual(1);
+    expect(Math.abs(centre(gizmo).y - centre(rendered).y), 'gizmo centre y').toBeLessThanOrEqual(1);
+    // …and the SIZE differs only by that outset, never by a scene-geometry mistake.
+    const OUTSET = 5;
+    expect(Math.abs(gizmo.width - rendered.width), 'gizmo width').toBeLessThanOrEqual(OUTSET);
+    expect(Math.abs(gizmo.height - rendered.height), 'gizmo height').toBeLessThanOrEqual(OUTSET);
+  });
+
+  test('🔴 the Transform panel shows the CELL, and editing it moves ONLY this arrangement', async ({
+    app,
+  }) => {
+    await twoBoxes(app);
+    await app.clickCanvas({ x: 120, y: 120 });
+
+    // Option (a): the panel shows the cell. Cell 1 of a 2-box arrangement is at x = 0.
+    const xField = app.page.getByLabel('X position').first();
+    await expect(xField).toHaveValue('0');
+
+    // Write through it — this must land on the 2-box arrangement's cell 1.
+    await xField.fill('300');
+    await xField.press('Enter');
+
+    // The CELLS field for cell 1 agrees: one value, two surfaces.
+    await app.deselect();
+    await expect(app.page.getByTestId('arrangement-cell-1')).toBeVisible();
+
+    // …and the 1-box arrangement is UNTOUCHED — the owner's actual complaint.
+    await app.page.getByLabel('Active arrangement').selectOption({ index: 2 });
+    await app.clickCanvas({ x: 120, y: 120 });
+    await expect(
+      app.page.getByLabel('X position').first(),
+      'editing the 2-box arrangement moved the 1-box one too',
+    ).not.toHaveValue('300');
+  });
+
+  // ⚠ "a NON-box element is untouched" and "a box with NO cell refuses geometry" are asserted
+  // in `tests/arrangement-cell-geometry.test.ts` instead: they are claims about which VALUE a
+  // commit lands on, and driving a scrub-surface number field through a browser tests the
+  // field's plumbing rather than the routing rule.
+
+  test('🔴 switching to "As authored" RESTORES the authored geometry', async ({ app }) => {
+    // Found by refusing to accept a screenshot that merely looked plausible. `repunch` had a
+    // DEFAULT PARAMETER — `(view = arrangementView)` — so `repunch(undefined)`, which is
+    // exactly what "As authored" sends, fell into the default and re-applied the PREVIOUS
+    // arrangement. Every box stayed parked at the last arrangement's cells, and the preview
+    // silently stopped being "the composition with no arrangement applied".
+    await twoBoxes(app);
+    const widths = async (): Promise<string[]> =>
+      app.canvasFrame
+        .locator('.cg-stage > .cg-layer > [data-cg-element-id]')
+        .evaluateAll((ns) => ns.map((n) => (n as HTMLElement).style.width));
+
+    // Under the 2-box arrangement each box is half the frame — the positive control.
+    expect(await widths()).toEqual(['960px', '960px']);
+
+    await app.page.getByLabel('Active arrangement').selectOption({ index: 0 });
+    // …and "As authored" puts them back at the instance's own 1920-wide transform.
+    await expect.poll(async () => (await widths()).join(',')).toBe('1920px,1920px');
+  });
 });

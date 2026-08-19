@@ -417,6 +417,21 @@ function HowBoxesWork(): JSX.Element {
         arrangement is the default and is usually enough. To give one arrangement its own, add a
         second element and hide it in the others with the eye on its timeline row.
       </p>
+      {/* D-154 §3.4 — what the authored transform IS for, said where the author meets it. The
+          algebra behind "does not reach air" is pinned by
+          packages/vcg-format/tests/box-instance-transform-cancels.test.ts. */}
+      <p className={cls.calloutBody}>
+        <strong>With an arrangement active, a box is positioned by its CELL.</strong> Dragging the
+        box on canvas edits that arrangement’s cell — the other arrangements are not touched. The
+        Transform panel shows the same numbers; they are one value, two places.
+      </p>
+      <p className={cls.calloutWarn}>
+        ⚠ <strong>“As authored” is a preview, not a layout.</strong> Where you place a box with no
+        arrangement active does <em>not</em> reach air: only the plate’s proportion inside its own
+        box composition is exported, so moving or resizing the box <em>instance</em>
+        changes nothing on air. Use it to see the composition bare; author real positions in the
+        cells.
+      </p>
       <p className={cls.calloutWarn}>
         ⚠ <strong>The checkerboard is not a background.</strong> It is the editor backdrop, shown so
         you can see transparency while designing; it never reaches air. If you want something behind

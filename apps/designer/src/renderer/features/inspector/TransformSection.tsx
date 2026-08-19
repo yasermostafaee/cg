@@ -13,6 +13,7 @@ import {
 import { descriptorFor, isKeyframeable } from './field-registry.js';
 import { Seg, SingleField, transformFieldProps } from './transform-fields.js';
 import * as s from './TransformSection.css.js';
+import { arrangedTransform } from '../../state/slices/arrangements.js';
 
 interface Props {
   element: Element;
@@ -35,7 +36,11 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
   // Show the *effective* values at the current frame so editing a keyframe (or
   // scrubbing) updates these fields in lock-step with the canvas, not the
   // element's frozen static transform.
-  const t = effectiveTransformAt(element, currentFrame);
+  // 🔴 D-154, option (a) — with an arrangement active this panel SHOWS and EDITS the cell.
+  // Option (b) (keep the authored numbers, mark them overridden) was refused: it leaves two
+  // number sets on screen claiming to be the same thing, which is the shape this repo keeps
+  // paying for. The write side needs nothing here — `commitAnimatable` routes to the cell.
+  const t = arrangedTransform(element, effectiveTransformAt(element, currentFrame));
   const opacity = effectiveOpacityAt(element, currentFrame);
   const id = element.id;
 

@@ -458,7 +458,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * `<video>`'s decode position, a sequence's dwell, the operator's field values — is lost
    * to keeping the mask honest.
    */
-  const repunch = (view: ArrangementView | undefined = arrangementView): void => {
+  /**
+   * 🔴 **NO DEFAULT PARAMETER — and that is a fix, not a style choice.**
+   *
+   * This read `(view = arrangementView)`, which meant `repunch(undefined)` — exactly what
+   * `setArrangementView(undefined)` does for the Designer's "As authored" — fell into the
+   * default and RE-APPLIED the previous arrangement instead of clearing it. Switching back to
+   * "As authored" left every box parked at the last arrangement's cells. `undefined` is a
+   * MEANINGFUL value here ("no arrangement"), so it must never be a stand-in for "not passed".
+   */
+  const repunch = (view: ArrangementView | undefined): void => {
     // 🔴 MOVE THE BOXES FIRST, then re-punch. Both halves are needed and the order is
     // load-bearing: `liveArrangementView` reads the page's CURRENT layout back, so the mask
     // is computed against where the nodes now ARE rather than where the view said to put
@@ -2213,7 +2222,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       reapplySequenceItemFields();
       reapplyClockTargets();
-      repunch();
+      repunch(arrangementView);
       bus.emit('update');
     },
 

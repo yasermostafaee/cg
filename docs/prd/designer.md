@@ -4640,10 +4640,101 @@ format, not a tool.
 - WHEN an author looks for the background THEN the surface says it is an ordinary element of the
   main composition, and distinguishes it from the editor backdrop
 
-- **Cross-refs:** [[B-148]] (found the same session and deliberately kept SEPARATE: that one is a
+- **Cross-refs:** [[D-154]] (the CONTROL defect beneath this one — a box's gizmo edited a value
+  that is global across arrangements and inert at air, and was drawn where the element was not;
+  D-153 makes the model explicable, D-154 makes it editable), [[B-148]] (found the same session
+  and deliberately kept SEPARATE: that one is a
   missing REFUSAL — instancing one box composition twice exports two declarations with the same
   `elementId` and `sourceId` — while this one is a missing EXPLANATION; a fix for either leaves the
   other standing), [[D-152]] (this is its usability gap, not a second feature — read it first),
   [[R-057]] (the operator half, whose surface faces the same "what is on air" question),
   `openspec/changes/multibox-layout-switch/specs/designer-multibox-arrangements/spec.md` (the
   contract this surface is meant to make usable).
+
+## [ ] D-154 — a box has TWO geometry editors: the discoverable one is global AND inert, and the gizmo is drawn where the element is not ⟨priority: high — the owner could not author, and nothing on screen said why⟩
+
+**What:** with an arrangement active, a box's geometry lives in the arrangement's **CELL**. The
+control an author naturally reaches for — the canvas gizmo, and the Transform panel behind it — went
+on reading and writing the element's own `transform`, which is **one value shared by every
+arrangement** and **reaches air through no route at all**.
+
+**The owner's words, and he was right — this is not user error:**
+
+> _"Adjusting one box in one layer affects the other layers too. It is very confusing, and it is not
+> clear how the correct setting is supposed to be done."_
+
+### The two editors
+
+|                               | Where                                            | Scope                                  | Reaches air? |
+| ----------------------------- | ------------------------------------------------ | -------------------------------------- | ------------ |
+| the element's own `transform` | the **Transform panel** and the **canvas gizmo** | ONE value, shared by every arrangement | 🔴 **NO**    |
+| the arrangement's **cell**    | the `CELLS` number fields                        | per arrangement                        | ✅ yes       |
+
+`arrangementViewOf` sets `geometry[id] = {...cell}` and `applyArrangementToNodes` writes it onto the
+node, so **the cell fully overrides the authored transform** for any box that has one.
+
+### 🔴 And the authored transform is INERT — measured, not argued
+
+The instance's authored X/Y/W/H **cancels out of the exported hole entirely**:
+
+```
+plate.scene   = instance.pos + plate.local × preScale,  preScale = instance.size / comp.resolution
+boxRelative.x = (plate.scene.x − instance.x) / instance.width = plate.local.x / comp.width
+boxRelative.w =  plate.scene.width / instance.width          = plate.local.w / comp.width
+```
+
+⇒ **`boxRelativeRect` depends only on the plate's rect inside the box COMPOSITION's own
+resolution.** Pinned by `packages/vcg-format/tests/box-instance-transform-cancels.test.ts`, whose
+discriminating case is a **non-unit `preScale`** — with an instance the same size as its composition
+the cancellation is invisible, so the test instances one 960×540 composition at 960×540, at an
+offset, at 480×270, and at a non-uniform 1440×270, and requires identical output. A control asserts
+the SCENE rect does still track the instance, so the four equalities are reporting a real
+cancellation rather than a derivation that ignores the instance.
+
+⇒ The authored instance transform survives **only** as the **"As authored"** preview — the
+composition with no arrangement applied.
+
+### And it was visible on screen
+
+In the owner's 3-box screenshot the rendered `cell 1` picture sat top-left while the **selection
+rectangle and its handles sat somewhere else** (`925.79 × 348.63`). **The gizmo was drawn at the
+authored rect; the element rendered at the cell rect.** Dragging did not move what he could see —
+which alone makes the surface untrustworthy, whatever else is true.
+
+### The shape of the fix
+
+**ONE value, several surfaces.** A single resolver answers "does the active arrangement own this
+element's rect?", and every reader and writer goes through it:
+
+- **WRITE** — intercepted in `commitAnimatable`, the one chokepoint every geometry edit passes
+  through (gizmo drag, gizmo resize, group move, Transform panel fields). Intercepting once is what
+  makes "the gizmo and the `CELLS` fields are two views of one value" true by construction rather
+  than by four call sites remembering to agree.
+- **READ** — the gizmo, the hit-test and the Transform panel resolve the same way, so the selection
+  rectangle is drawn where the element is and a click selects it there.
+- **Transform panel: option (a)** — it shows and edits the CELL. Option (b) (keep the authored
+  numbers, mark them overridden) was refused: it leaves two number sets on screen claiming to be the
+  same thing, which is the shape this repo keeps paying for.
+- ⚠ **Non-box elements are untouched.** Only a root-level composition instance that an arrangement
+  positions changes; the background image and everything else keep ordinary Transform behaviour.
+- ⚠ **A box with NO cell in the active arrangement is HIDDEN**, and its geometry edits are refused
+  rather than falling back to the authored transform — that fall-back is this defect again, in the
+  one case where it is hardest to notice.
+
+**Acceptance:**
+
+- WHEN an arrangement is active and a box is selected THEN the selection rectangle coincides with the
+  rendered element
+- WHEN that box is dragged or resized THEN the ACTIVE arrangement's cell changes and every other
+  arrangement is untouched
+- WHEN the `CELLS` fields are edited THEN the gizmo follows, and vice versa — one value, two surfaces
+- WHEN a box has no cell in the active arrangement THEN its geometry edits are refused, never written
+  to the authored transform
+- WHEN a NON-box element is selected THEN Transform behaves exactly as it always did
+- WHEN no arrangement is active THEN everything behaves exactly as it always did, and the surface says
+  what "As authored" is
+
+- **Cross-refs:** [[D-153]] (the legibility item — **this is the CONTROL defect beneath it**: D-153
+  makes the model explicable, D-154 makes it editable; neither fixes the other), [[D-152]] /
+  [[R-057]] (the arrangement feature), [[B-148]] (the other defect found in the same area — a missing
+  refusal, not a control fault).

@@ -3,8 +3,10 @@ import {
   type Arrangement,
   type ArrangementTransition,
   type ArrangementView,
+  type Element,
   type LiveSourceRect,
   type Scene,
+  type Transform,
 } from '@cg/shared-schema';
 import { current, set } from '../store-core.js';
 import { activeDocOf, activeLayersOf, withActiveDoc } from '../scene-doc.js';
@@ -271,4 +273,126 @@ export function arrangementViewOf(
     geometry[id] = { ...cell };
   });
   return { geometry, visibility };
+}
+
+// ─────────────── D-154 — ONE geometry for a box: the cell, read and written ───────────────
+
+/** Where an element's geometry actually lives while an arrangement is active. */
+export interface ActiveCell {
+  readonly arrangementId: string;
+  readonly index: number;
+  readonly rect: LiveSourceRect;
+}
+
+/**
+ * 🔴 **The CELL that positions `elementId` in the ACTIVE arrangement, or `null`.**
+ *
+ * ── WHY THIS EXISTS: A BOX HAD TWO GEOMETRY EDITORS ─────────────────────────
+ *
+ * `arrangementViewOf` sets `geometry[id] = {...cell}` and `applyArrangementToNodes` writes it
+ * onto the node, so **the cell fully overrides the authored transform** for any box that has
+ * one. The Transform panel and the canvas gizmo went on reading and writing
+ * `element.transform` — a value that is (a) ONE number set shared by every arrangement, and
+ * (b) **inert at air**.
+ *
+ * Inert is the part nobody could have guessed, and the algebra is pinned by
+ * `arrangement-geometry.test.ts` so the next reader does not re-derive it or "fix" the
+ * cancellation as a bug:
+ *
+ * ```
+ * plate.scene   = instance.pos + plate.local × preScale,  preScale = instance.size / comp.resolution
+ * boxRelative.x = (plate.scene.x − instance.x) / instance.width = plate.local.x / comp.width
+ * boxRelative.w =  plate.scene.width / instance.width          = plate.local.w / comp.width
+ * ```
+ *
+ * **The instance's authored X/Y/W/H cancels out of the exported hole entirely.** It survives
+ * only as the "As authored" preview — the composition with no arrangement applied.
+ *
+ * So: `null` here means "this element's geometry is its own transform, as always"; a cell
+ * means "the arrangement owns this element's rect", and EVERY reader and writer must go
+ * through that answer. One value, several surfaces.
+ */
+export function activeCellFor(scene: Scene | null, elementId: string): ActiveCell | null {
+  if (scene === null) return null;
+  const id = current.activeArrangementId;
+  if (id === null) return null;
+  const arrangement = activeArrangements(scene).find((a) => a.id === id);
+  if (arrangement === undefined) return null;
+  const index = boxInstanceIds(scene).indexOf(elementId);
+  if (index === -1) return null;
+  const rect = arrangement.cells[index];
+  // A box with NO cell in this arrangement is HIDDEN, not authored-positioned. Returning
+  // `null` here would silently hand it back to the authored transform — which is this whole
+  // defect, reintroduced for the one case where it is hardest to notice.
+  if (rect === undefined) return { arrangementId: id, index, rect: NO_CELL };
+  return { arrangementId: id, index, rect };
+}
+
+/**
+ * The sentinel rect for "this box has no cell in the active arrangement".
+ *
+ * Zero-sized and at the origin so it can never be mistaken for a real cell, and so a gizmo
+ * drawn from it has no area to grab — the box is off screen, and an invisible box must not
+ * offer handles that would write a cell index the arrangement does not have.
+ */
+export const NO_CELL: LiveSourceRect = { x: 0, y: 0, width: 0, height: 0 };
+
+/** Does this cell mean "no cell here"? */
+export function isNoCell(rect: LiveSourceRect): boolean {
+  return rect.width === 0 && rect.height === 0;
+}
+
+/**
+ * The four transform properties a CELL owns. Rotation and scale are deliberately absent: a
+ * cell is an axis-aligned RECT, and the authored rotation still applies on top of it (the
+ * node keeps its CSS transform). Widening this set without widening the cell would start
+ * dropping edits on the floor.
+ */
+const CELL_PROPERTIES: Readonly<Record<string, keyof LiveSourceRect>> = {
+  'position.x': 'x',
+  'position.y': 'y',
+  'size.w': 'width',
+  'size.h': 'height',
+};
+
+/**
+ * 🔴 **The WRITE side — route a geometry commit to the cell when the arrangement owns it.**
+ *
+ * Returns `true` when it handled the write. Called from `commitAnimatable`, which is the ONE
+ * chokepoint every geometry edit passes through — the gizmo drag, the gizmo resize, the group
+ * move, and the Transform panel's number fields all end up there. Intercepting once is what
+ * makes "the gizmo and the CELLS fields are two views of one value" true by construction
+ * rather than by four call sites remembering to agree.
+ */
+export function commitToActiveCell(elementId: string, property: string, value: unknown): boolean {
+  const key = CELL_PROPERTIES[property];
+  if (key === undefined || typeof value !== 'number') return false;
+  const cell = activeCellFor(current.scene, elementId);
+  if (cell === null) return false;
+  // A hidden box (no cell) accepts no geometry: there is no cell to write into, and writing
+  // the authored transform instead is exactly the silent fall-back this item exists to end.
+  if (isNoCell(cell.rect)) return true;
+  arrangementsSlice.setArrangementCell(cell.arrangementId, cell.index, {
+    ...cell.rect,
+    [key]: value,
+  });
+  return true;
+}
+
+/**
+ * 🔴 **The READ side — the transform a box actually renders at.**
+ *
+ * The gizmo, the hit-test and the Transform panel all call this instead of
+ * `effectiveTransformAt`, so the selection rectangle is drawn where the element IS. Before
+ * this, the gizmo was drawn at the authored rect while the element rendered at the cell —
+ * the owner's handles sat in empty space and dragging them moved nothing he could see.
+ */
+export function arrangedTransform(element: Element, base: Transform): Transform {
+  const cell = activeCellFor(current.scene, element.id);
+  if (cell === null) return base;
+  return {
+    ...base,
+    position: { x: cell.rect.x, y: cell.rect.y },
+    size: { w: cell.rect.width, h: cell.rect.height },
+  };
 }

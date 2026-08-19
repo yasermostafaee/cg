@@ -26,6 +26,7 @@ import {
 } from './geometry.js';
 import { colors } from '../../theme.js';
 import * as s from './Gizmo.css.js';
+import { arrangedTransform } from '../../state/slices/arrangements.js';
 
 interface Props {
   element: Element;
@@ -144,7 +145,10 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   // asynchronously; webfonts swap in later). Subscribing re-renders the gizmo so the
   // auto box stays glued without polling.
   useSyncExternalStore(subscribeMeasure, getMeasureVersion);
-  let t = effectiveTransformAt(element, currentFrame);
+  // 🔴 D-154 — the ARRANGED transform, not the authored one. With an arrangement active a
+  // box renders at its CELL, and a gizmo drawn from `element.transform` sat in empty space
+  // while the picture was elsewhere — the owner's handles did not touch what he could see.
+  let t = arrangedTransform(element, effectiveTransformAt(element, currentFrame));
   // D-060 §C — an auto-sized text box is content-driven, so `transform.size` is not
   // authoritative. Trace the RENDERED box (the element's local content size measured
   // from the iframe — `offsetWidth/Height`, unaffected by zoom or scale/rotate), and

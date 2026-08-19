@@ -70,6 +70,7 @@ import { Gizmo, MultiGizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
 import { ArrangementCellOverlay } from './ArrangementCellOverlay.js';
+import { arrangedTransform } from '../../state/slices/arrangements.js';
 
 /**
  * The default canvas pointer — a bold black arrow with a white outline, a bit
@@ -341,7 +342,8 @@ export function CanvasOverlay({
     const boxPoints = el.type === 'path' ? effectivePathBoxPoints(el, currentFrame) : null;
     return {
       ...el,
-      transform: effectiveTransformAt(el, currentFrame),
+      // D-154 — hit-test the ARRANGED rect, so a click selects the box where it is drawn.
+      transform: arrangedTransform(el, effectiveTransformAt(el, currentFrame)),
       ...(boxPoints !== null ? { points: boxPoints } : {}),
     };
   });
