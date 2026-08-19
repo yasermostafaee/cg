@@ -12,7 +12,7 @@ import type {
   TemplateInfo,
 } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 
 /**
  * C-015 phase 6 (6.5f) — **THE RAISE HALF OF THE AUDIO RULE: the explicit recorded
@@ -135,6 +135,10 @@ async function boot(): Promise<CasparRuntime> {
   await r.startServing();
   r.templateImport(TEMPLATE, '<!doctype html><html><body>served</body></html>');
   await r.whenServerHealthy(HEALTH_MS);
+  // The refused-edit case asserts "the wire shows NOTHING" from a `before`
+  // baseline — valid only once R-030's timer-driven one-shot `INFO` has drained
+  // (flake family 3, support/harness.ts).
+  await awaitChannelModeRead(r);
   return r;
 }
 

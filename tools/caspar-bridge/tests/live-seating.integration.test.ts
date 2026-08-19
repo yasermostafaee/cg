@@ -11,7 +11,7 @@ import type {
   TemplateInfo,
 } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 
 /**
  * C-015 phase 6 (task 6.0) — **THE ASSEMBLY: a declared plate actually puts a
@@ -172,6 +172,10 @@ async function boot(options: {
   await r.startServing();
   r.templateImport(options.template, '<!doctype html><html><body>served</body></html>');
   await r.whenServerHealthy(HEALTH_MS);
+  // The refusal cases below assert "NOTHING reaches the wire" from a `before`
+  // baseline — valid only once R-030's timer-driven one-shot `INFO` has drained
+  // (flake family 3, support/harness.ts).
+  await awaitChannelModeRead(r);
   return r;
 }
 

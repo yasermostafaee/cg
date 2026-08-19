@@ -20,6 +20,21 @@ import { afterEach } from 'vitest';
  *    asserting "the handshake completes within 5 s" — so the budget must be generous
  *    enough that only a genuinely broken health path fails. It still fails loudly:
  *    a server that never goes healthy just fails `HEALTH_MS` later.
+ *
+ * 3. **An ambient one-shot inside a "nothing reaches the wire" window.** R-030's
+ *    channel-mode read (`INFO <channel>`, priority `low`) rides the first sweep tick
+ *    after the session goes live — a TIMER, decoupled from anything the test body
+ *    does. On a quiet box a whole test body completes inside one sweep interval, so
+ *    the one-shot lands outside every assertion window and the suite is green for
+ *    months; under full-gate CPU load the body stretches, the tick lands between a
+ *    `before` baseline and its `slice(before) → []` assertion, and an ambient
+ *    `INFO 1` reads as take traffic (observed twice, in live-seating's refusal
+ *    cases, gate runs only). A negative observation is valid only from a
+ *    PROVEN-QUIESCENT wire, so a boot whose tests baseline the wire calls
+ *    `awaitChannelModeRead` first: it WAITS for the one-shot to complete instead of
+ *    filtering it out of the assertion — the assertions stay exact, and if R-030's
+ *    read ever stops happening, boot fails loudly rather than letting the silence
+ *    pass vacuously.
  */
 
 /**
@@ -38,6 +53,33 @@ export const HEALTH_MS = 15_000;
  * still fails, via the test timeout.
  */
 export const BOUNDED_STOP_MS = 5_000;
+
+/**
+ * Wait until R-030's one-shot channel-mode read has COMPLETED — flake family 3's
+ * quiescence control.
+ *
+ * The wait is on the read's own latch, not on the wire: `observed` gains its entry
+ * in the same block that sets `#modeReadFrom` (the guard that stops re-sends), so
+ * when this returns, every mode-read `INFO` this connection will ever send is
+ * already in the trace and a baseline taken now excludes all of it. The other two
+ * ambient emitters are structurally silent in these harnesses: R-022's volume
+ * re-assert fires once with zero declared rows, and the `VERSION` liveness probe
+ * needs OSC silence while the mock streams OSC continuously.
+ */
+export async function awaitChannelModeRead(runtime: {
+  channelSettingsState(): { observed: readonly unknown[] };
+}): Promise<void> {
+  const deadline = Date.now() + HEALTH_MS;
+  while (runtime.channelSettingsState().observed.length === 0) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        "R-030's one-shot channel-mode read never completed — the quiescent-wire " +
+          'baseline cannot be established (did the sweep or the INFO reply break?)',
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
 
 type Release = () => Promise<void> | void;
 

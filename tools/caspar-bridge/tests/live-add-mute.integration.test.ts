@@ -6,7 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, RetainedStackItem, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 
 /**
  * C-015 phase 6 (6.5 / 6.5a / 6.5b / 6.5c / 6.5d) — **EVERY `CG ADD` IS PRECEDED BY
@@ -105,6 +105,9 @@ async function boot(): Promise<CasparRuntime> {
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
   await r.whenServerHealthy(HEALTH_MS);
+  // SITE 2's "the wire stays untouched" baseline is valid only once R-030's
+  // timer-driven one-shot `INFO` has drained (flake family 3, support/harness.ts).
+  await awaitChannelModeRead(r);
   return r;
 }
 
