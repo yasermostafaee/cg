@@ -8,6 +8,7 @@ import {
   ResolutionSchema,
 } from './primitives.js';
 import { ArrangementsSchema } from './arrangements.js';
+import { LookGroupsSchema } from './looks.js';
 import { ElementSchema, type Element } from './elements.js';
 import { DynamicFieldSchema } from './fields.js';
 import { FieldBindingSchema } from './bindings.js';
@@ -242,6 +243,15 @@ const CompositionObjectSchema = z
      * unchanged.
      */
     arrangements: ArrangementsSchema.optional(),
+    /**
+     * LOOKS (`design.md` §14, adopted 2026-08-19) — the multi-frame groups authored in
+     * this composition. Same two homes as `arrangements` and for the same reason: the
+     * composition is the authoring home, the scene is the projection the preflight, the
+     * exporter and the runtime read. Optional so everything authored before the feature
+     * validates unchanged. ⚠ A′'s `arrangements` beside it is COEXISTENCE, one session
+     * wide — phase 2 deletes arrangements (`tasks.md` §1b's deletion clause).
+     */
+    lookGroups: LookGroupsSchema.optional(),
   })
   .superRefine(refineLifecycle);
 /**
@@ -559,6 +569,8 @@ const SceneObjectSchema = z
      * a box able to rearrange itself, which is not a state this feature has.
      */
     arrangements: ArrangementsSchema.optional(),
+    /** LOOKS (§14) — see the composition-side field; this is the projection/runtime home. */
+    lookGroups: LookGroupsSchema.optional(),
     metadata: SceneMetadataSchema,
   })
   .superRefine(refineLifecycle);

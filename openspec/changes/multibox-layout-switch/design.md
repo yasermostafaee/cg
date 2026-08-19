@@ -2301,3 +2301,24 @@ be SAID to him rather than discovered. Once templates ship and the reconcile lan
 costs a format migration, a bridge change and operator retraining. A reader in three months should
 know: the gate was posed the week the evidence existed, because that was the last week the answer
 was allowed to be cheap.
+
+### 14.9 Phase-1 representation decisions (session BA) — where §14 left a choice open
+
+- **`lookGroups` is an ARRAY with a preflight refusal of a second entry** (`look-second-group`),
+  not a singular field: lifting a refusal later breaks no authored format, where widening a
+  singular field would (§13.6.2's subset argument, reused).
+- **`defaultLookId` is REQUIRED as soon as a group has any look** (a schema refinement): "what
+  does take show?" may not be an accident of array order.
+- **`entered` is `{ mode: 'cut' }`** — an object, so the animated phase ADDS union arms without a
+  format break; a stale `durationMs` on a cut is normalised away, never a parse error.
+- **A ROOT-LEVEL plate (outside every look) is on screen in EVERY look.** It must reference a
+  declared source like any other (B.1), it joins every look's VISIBLE SET — root plates + the
+  look's plates — and that set is the unit both the duplicate check (B.2) and the overlap pass
+  (B.3) judge, because "what is on air together" is what every rule here is about.
+- **The visible-set overlap pass checks CROSS-BOUNDARY pairs only** (one participant root, one in
+  the look): the per-document loop already covers root-vs-root and each document's interior, so
+  this keeps every collision reported once. ⚠ v1 residual, restated from §14.3 claim 3: a plate
+  in a composition nested INSIDE a look vs a plate directly in that look is checked only at each
+  document's own level.
+- **A look's instance is a DIRECT child of a scene layer in v1** (the runtime's DOM read-back is
+  root-scope only); the constraint is written at the schema, not scattered.

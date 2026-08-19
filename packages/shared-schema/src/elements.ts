@@ -135,6 +135,15 @@ export const ElementBaseSchema = z.object({
    * A local `if (el.hideDuringTransition)` at a point of use looks obviously correct in
    * isolation and is the breach `visibility.ts` exists to prevent. Absent ⇒ `false`, so
    * every scene authored before this field resolves exactly as it did.
+   *
+   * 🔴 **PARKED (2026-08-19 — LOOKS adopted, `design.md` §14.4).** v1's look switch is a
+   * CUT, and a cut has no transition window, so this flag has NOTHING TO GATE: no shipped
+   * code path ever sets a transition active. It stays because deleting it would re-cost
+   * the D4 decision when the window returns; it is parked EXPLICITLY so it is not the next
+   * written-but-unreachable field (`B-147`'s class). **What un-parks it:** an ANIMATED
+   * look-switch mode — the phase that gives `resolveVisibility`'s transition input a
+   * window at all. Until then, do not surface it in new UI and do not read it anywhere
+   * but `resolveVisibility`.
    */
   hideDuringTransition: z.boolean().optional(),
   /**

@@ -11,6 +11,7 @@ import {
   applyArrangementGeometry,
   flattenElements,
   liveSourcesInStampedScopes,
+  lookContaining,
   resolveVisibilityOf,
 } from '@cg/shared-schema';
 import { arrangementViewOf, boxInstanceIds } from './slices/arrangements.js';
@@ -398,6 +399,124 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
               `arrangements are fine — they are never on air together.`,
             elementId: self.element.id,
           });
+        }
+      }
+    }
+  }
+
+  // ── `multibox-layout-switch` §14 (LOOKS, adopted 2026-08-19) — THE LOOKS REFUSAL FAMILY ──
+  //
+  // One family, one wording discipline: name what was asked for and what exists. The four
+  // members below share the per-look VISIBLE SET — root-level plates (outside every look,
+  // on screen in EVERY look) plus the look's own plates — because "what is on air together"
+  // is the unit every rule here judges.
+  const groups = scene.lookGroups ?? [];
+  for (const extra of groups.slice(1)) {
+    issues.push({
+      severity: 'error',
+      code: 'look-second-group',
+      message:
+        `This template authors ${String(groups.length)} multi-frame groups; v1 supports ` +
+        `exactly ONE per template (group "${extra.id}" is beyond it). The refusal is a v1 ` +
+        `bound, not a model limit — the format already carries a list.`,
+    });
+  }
+  const group = groups[0];
+  if (group !== undefined) {
+    const declared = new Set(group.sources.map((s) => s.routeKey));
+    const declaredList =
+      group.sources.length === 0
+        ? '(none)'
+        : group.sources.map((s) => `"${s.routeKey}"`).join(', ');
+    const flatPlates = flattenElements(scene, 'document').filter(
+      (f) => f.element.type === 'video-placeholder',
+    );
+    const ancestorIds = (f: FlatElement): string[] => f.ancestry.map((a) => a.id);
+
+    // B.1 — every plate in a group-bearing template references a DECLARED source. An
+    // undeclared plate would be invisible to the carrier: never declared, never seated —
+    // the 4.6 cancel-and-vanish failure by another door.
+    for (const f of flatPlates) {
+      const routeKey = (f.element as { routeKey?: string }).routeKey ?? '';
+      if (!declared.has(routeKey)) {
+        issues.push({
+          severity: 'error',
+          code: 'look-source-undeclared',
+          message:
+            `Live Source "${label(f.element)}" references source "${routeKey}", which the ` +
+            `multi-frame group does not declare. Declared sources: ${declaredList}. A group ` +
+            `declares each source ONCE and every plate references a declared one — an ` +
+            `undeclared plate would never be seated, and nothing else would say so.`,
+          elementId: f.element.id,
+        });
+      }
+    }
+
+    for (const look of group.looks) {
+      const visibleSet = flatPlates.filter((f) => {
+        const owner = lookContaining(group, ancestorIds(f));
+        return owner === undefined || owner.id === look.id;
+      });
+
+      // B.2 — the same source TWICE in one look's visible set is refused: two frames, one
+      // seat, and which frame shows the picture is an accident. ACROSS looks the same
+      // source is the point — one seat, held over the switch — and the message says so,
+      // because the author who hits this refusal is usually one edit away from the
+      // legitimate case.
+      const byRoute = new Map<string, FlatElement[]>();
+      for (const f of visibleSet) {
+        const routeKey = (f.element as { routeKey?: string }).routeKey ?? '';
+        byRoute.set(routeKey, [...(byRoute.get(routeKey) ?? []), f]);
+      }
+      for (const [routeKey, plates] of byRoute) {
+        if (plates.length < 2 || !declared.has(routeKey)) continue;
+        for (const f of plates) {
+          issues.push({
+            severity: 'error',
+            code: 'look-source-duplicate',
+            message:
+              `Source "${routeKey}" appears ${String(plates.length)} times when look ` +
+              `"${look.name}" is active (a plate outside every look is on screen in EVERY ` +
+              `look). One source is ONE seat, so only one frame can show it. Referencing ` +
+              `the same source from DIFFERENT looks is fine — that is the identity ` +
+              `mechanism, one seat held across the switch.`,
+            elementId: f.element.id,
+          });
+        }
+      }
+
+      // B.3 — the visible-set overlap pass: ROOT-level plates vs this look's plates. The
+      // per-document loop above cannot see this pair (they live in different documents),
+      // and it already covers root-vs-root and each document's interior — so this pass
+      // checks exactly the cross-boundary pairs, and only those, to report each collision
+      // once. ⚠ Known v1 residual, recorded in `design.md` §14.3 claim 3: a plate in a
+      // composition nested INSIDE a look vs a plate directly in that look is checked only
+      // at each document's own level.
+      for (let i = 0; i < visibleSet.length; i++) {
+        for (let j = i + 1; j < visibleSet.length; j++) {
+          const a = visibleSet[i];
+          const b = visibleSet[j];
+          if (a === undefined || b === undefined) continue;
+          const ownerA = lookContaining(group, ancestorIds(a));
+          const ownerB = lookContaining(group, ancestorIds(b));
+          if ((ownerA === undefined) === (ownerB === undefined)) continue;
+          if (!rectsOverlap(a.rect, b.rect)) continue;
+          for (const [self, other] of [
+            [a, b],
+            [b, a],
+          ] as const) {
+            issues.push({
+              severity: 'error',
+              code: 'live-source-overlap',
+              message:
+                `Live Source "${label(self.element)}" overlaps "${label(other.element)}" ` +
+                `when look "${look.name}" is active. Each is composited on its own CasparCG ` +
+                `layer, so overlapping holes put two live sources over the same pixels and ` +
+                `which one shows is a z-order accident. The same two plates in DIFFERENT ` +
+                `looks are fine — they are never on air together.`,
+              elementId: self.element.id,
+            });
+          }
         }
       }
     }

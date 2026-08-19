@@ -12,6 +12,7 @@ export * from './bindings.js';
 export * from './live-source.js';
 export * from './visibility.js';
 export * from './arrangements.js';
+export * from './looks.js';
 export * from './live-geometry.js';
 export * from './scene.js';
 export * from './scene-flatten.js';
