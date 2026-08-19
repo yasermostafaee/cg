@@ -1206,6 +1206,9 @@ addition to it.
 
 ### §12.9 — ✅ **CLOSED (owner, 2026-08-18): A′ IS ADOPTED.** All eight gates are now answered
 
+> ⚠ **2026-08-19: §12.9's AUTHORING SHAPE is under re-examination — see §14's gate (the LOOKS
+> pivot). A′ stands unless §14 is answered YES; stage D is HALTED while the gate is open.**
+
 > **DECISION: A′ — candidate A's identity model, with a box authored as a NESTED COMPOSITION and
 > per-arrangement geometry carried on the INSTANCE.**
 >
@@ -1986,3 +1989,303 @@ built: (a) a per-layout font-size override on the text element (most control, mo
 real shrink-to-fit measured after shaping (least authoring, one rule everywhere); (c) both, with (b)
 as the default and (a) as the escape. **(b) is the one to build first** — it is the only one that
 degrades gracefully for a name nobody anticipated, which is the actual failure mode.
+
+---
+
+## 14. 🔴 THE LOOKS PIVOT (2026-08-19) — §12.9's authoring shape re-examined, priced from the code, under ONE gate
+
+> **⟨GATE: §14 — THE ONLY OPEN QUESTION IN THIS DOCUMENT⟩ ADOPT THE LOOKS MODEL — YES or NO?**
+>
+> **YES** means: §12.9.10's A′ authoring shape (nested-box-per-plate, per-arrangement geometry on
+> the instance, cells) is SUPERSEDED by per-look sub-scenes; the cells carrier and its Designer
+> surface are retired per §14.5; stage D restarts against the look carrier; stage E becomes a look
+> picker + per-slot preset. **NO** means: A′ stands exactly as adopted, stage D resumes unchanged,
+> and this section remains the record of why the pivot was weighed and declined.
+>
+> ⭐ **RECOMMENDATION: ADOPT.** The evidence is §14.1 (the refusal's grounds are gone), §14.3
+> (every load-bearing mechanism verified in the code), and §14.4's cost table — with the three
+> priced preconditions in §14.7 (the punch-test gap, the cross-instance overlap replacement, the
+> migration note) taken as part of the price, not discovered later.
+>
+> **Folded sub-decision — the TERM is `LOOK`.** The owner says "layer" in chat; that word already
+> means a scene layer, a CasparCG video layer AND a cg-layer in this repo, and a fourth meaning is
+> the two-spellings disease. `ARRANGEMENT` is refused for continuity's sake too: this document
+> DEFINES an arrangement as "an ordered list of cell rects for a COUNT" (§12.9), and the pivot's
+> object has neither cells nor a count — keeping the name would make one word denote two
+> incompatible schemas across this change's own history, and the code that carries the name is
+> exactly the code being deleted, so there is no continuity asset to protect. `LOOK` is vision-mixing
+> vernacular for precisely this (a recallable composed state), and `look`/`looks` collides with no
+> identifier in `@cg/shared-schema` or the Designer state (checked — English-prose hits only).
+
+**Until this gate is answered, STAGE D IS HALTED** (recorded in `tasks.md` §5). Building
+`reconcileLivePlates` against the cells carrier while the carrier itself is in question would be the
+most expensive possible timing: the reconcile is the one stage whose shape the pivot changes at the
+input and does not change at the mechanism (§14.7 stage D).
+
+### 14.1 Why this re-examination is obligatory rather than churn
+
+The owner, after authoring his first real multi-arrangement template (`nghab.vcg`), proposed this
+model himself and, asked about transitions, answered: **"the transition does not matter — a cut is
+enough."**
+
+**The per-look-sub-scenes shape was REFUSED before** — §0.5 (2026-08-17) refused "three sets of
+plate elements, one per layout", and §12.9.8 (2026-08-18) re-confirmed that refusal for candidate C.
+A refusal whose grounds have dissolved must be formally re-examined, not quietly ignored. §0.5's
+refusal rested on **THREE grounds, not two** — the session brief that commissioned this section said
+"both grounds are gone", and that undercount is corrected here first, because ground 2 is the one a
+YES must keep answering:
+
+1. **The overlap preflight survived only on a per-document technicality.** DISSOLVED by session AV:
+   the overlap check was rebuilt as an explicitly arrangement-scoped pass over the shared flattener
+   (`live-source-preflight.ts:372`), so "evading a check by scoping" is no longer the situation —
+   though §14.3 claim 3 corrects what "retire it" actually means.
+2. **Every declared plate is seated at take** — three looks' worth of plates would be N producers
+   for one source, and a physical DeckLink cannot be opened three times. DISSOLVED **not by today's
+   news but by the model's own load-bearing amendment**: sources are declared ONCE, on the
+   multi-frame element, and a look's plates REFERENCE a declared source (§14.2). The owner's raw
+   sketch — each look independently declaring its plates — would still be refused on this ground
+   today. LOOKS-as-specified-here is a different model from the one §0.5 refused.
+3. **It cannot reach the animated case** — a box cannot tween from one element to a different
+   element. DISSOLVED by the owner's cut-is-enough: v1 is cut-only, the animated phase is PARKED
+   (§14.6), and §12.1's "cut first" becomes "cut, full stop" for this model's v1.
+
+Two further facts sharpen the timing. **The owner hit two Designer defects in one day** (`D-153`,
+`D-154` — and `B-149` reached air the same day) **that all exist only because A′ splits box geometry
+into two levels** (authored instance transform vs. cell): the authored transform cancels out of the
+exported hole (`box-instance-transform-cancels.test.ts` pins the algebra), so the Designer had to
+grow a cell overlay, a gizmo→cell binding and a mask-readback fix to stop the two levels lying to
+the author. Under LOOKS there is one level — an element's geometry is its transform in its look's
+sub-scene — and that defect class is structurally unreachable. And **stage D (the reconcile) is not
+built yet** (verified: the bridge consumes NOTHING of the arrangement carrier — zero references to
+`LiveSourceArrangementSchema` or `boxRelativeRect` in `tools/caspar-bridge/src`), so the carrier can
+still change without reworking a single bridge line.
+
+### 14.2 The model
+
+Working name **LOOKS**; final term per the gate above.
+
+- A **multi-frame element** is created from a toolbar icon beside the other tools.
+- Its inspector manages a list of **LOOKS** — any count, no upfront declaration of how many. Each
+  look is a **full sub-scene**: its plates, titles, decor, positioned freely by ordinary dragging.
+  The Transform panel is simply correct again — `D-154`'s whole problem does not exist.
+- **Exactly one look is active**; the switch is a **cut** in v1.
+- 🔴 **SOURCES are declared ONCE, on the multi-frame element** — `{routeKey, expectedAspect,
+dynamic}` — **and a look's plates REFERENCE a declared source.** The cheapest faithful reading:
+  a plate keeps its `routeKey` field, and a preflight requires it to name a declared source
+  (set-membership), so `(templateId, plateId=routeKey)` — the assignment key at
+  `packages/shared-ipc/src/channels/sources.ts:323` — is stable across looks BY CONSTRUCTION, and
+  the duplicate-routeKey hazard (`B-148`) inverts into the identity mechanism: the same source
+  referenced in two looks is ONE seat, held across switches (§12.4 unchanged). `expectedAspect` and
+  `dynamic` move UP onto the source declaration, so two looks cannot disagree about them —
+  disagreement becomes unrepresentable rather than checked.
+- The **single shared background stays outside the looks** (§12.9.2 unchanged).
+- **Operator model: preset-then-take.** A look picker on the row IS the on-air readout — one-of-N
+  by construction, so an invalid state is unrepresentable (§14.5 on what that retires) — and the
+  operator may re-point any source before switching, through the existing staged-assignment
+  machinery (`B-139`'s chip semantics, §12.5's surface-only rule, `R-048`'s `swapLiveSource` at
+  `caspar-runtime.ts:3595` as the live path).
+- **Implementation shape (evaluated, not invented): each look is a managed nested composition
+  instance.** The inspector creates and manages N sibling instances plus a one-of-N state; authors
+  edit a look through the existing composition-editing machinery. 🔴 **No new container type** —
+  verified: `container` is defined (`packages/shared-schema/src/elements.ts:1341-1363`), constructed
+  by nobody in product code, and the runtime renders it via `buildPlaceholder` and DISCARDS its
+  children (`scene-builder.ts:318`). Looks must be ordinary composition instances, NOT `sequence`
+  items — the flattener deliberately never walks a stamped scope, and 4.6's refusal
+  (`liveSourcesInStampedScopes`) already enforces exactly that boundary.
+
+### 14.3 The seven claims, verified against the code — what was CONFIRMED and what was CORRECTED
+
+Every claim below arrived as a chat-derived hypothesis and was verified against `HEAD` before being
+written in. Corrections are stated as corrections.
+
+**1 — the carrier: CONFIRMED, with a sharper mechanism than claimed.** `collectLiveSources` emits
+one declaration per plate ELEMENT — `elementId: el.id`, `sourceId: el.routeKey`
+(`packages/vcg-format/src/live-sources.ts:199-207`) — and the collision is real, but it is NOT a
+silent map-overwrite at ingest. It is two concrete failures: **DOUBLE-SEAT** —
+`resolvePlateAssignments` iterates declarations without dedup (`live-plate-assignment.ts:111-129`)
+and `#planLiveSeating` seats one producer PER DECLARATION (`caspar-runtime.ts:3307-3338`), so one
+route gets two producers on two band layers, the exact opposite of one-seat-held; and **FIRST-MATCH
+ADDRESSING** — the held-layer map and every per-plate lookup key on `sourceId`
+(`caspar-runtime.ts:3365, 3605, 3630`), so the second duplicate's seat is unreachable by
+`swapLiveSource`. ⭐ **The useful sharpening: the bridge NEVER reads `elementId`** (zero matches in
+`tools/caspar-bridge/src`) — it is already effectively source-keyed. So dedup-by-routeKey at export
+alone is collision-safe with today's bridge unchanged; the per-look `{routeKey → rect}` map is what
+the bridge additionally needs **for geometry** (the fit path reads the single `declaration.rect`,
+`caspar-runtime.ts:3321, 3677`) — and that retarget path is stage D's job anyway.
+
+**2 — the punch: CONFIRMED in production code; the claimed verification DOES NOT EXIST.** Hiding a
+look-instance suppresses its plates' punches with existing machinery: `sceneMaskHoles` filters each
+plate through `onScreen`, which resolves the plate AND every `ancestry` entry — composition
+instances included — through the one `resolveVisibilityOf`
+(`packages/shared-schema/src/scene-flatten.ts:520-529`, ancestry built at `:327-333`); and a hidden
+plate stays DECLARED as a recorded decision — _"visibility governs the PUNCH, never the
+DECLARATION"_ (`live-sources.ts:163`). The runtime re-punches through the same function
+(`runtime.ts:479`). 🔴 **But no test anywhere pins a plate inside a COMPOSITION instance punching,
+or stopping when that instance is hidden** — the flagship ancestor-suppression test uses a
+`container` (`packages/shared-schema/tests/arrangements.test.ts:165`), and composition-instance
+coverage exists only for flattening geometry and declaration geometry. "Zero new machinery" is true
+by inspection and unverified by test; adopting LOOKS on this basis requires **new tests, not new
+mechanism** — priced into stage C′ (§14.7).
+
+**3 — the overlap: CORRECTED.** Two parts of the claim are true: AV's pass was ADDED beside the
+untouched per-document loop (both exist today), and under LOOKS the per-document loop
+(`live-source-preflight.ts:329` — ⚠ the brief's "~:315" anchor drifted) gives **within-look checking
+for free**, because each look-as-composition is its own document entry and plates of look A vs look
+B are never compared — legitimate cross-look overlap is accepted structurally, exactly as
+`arrangement-preflight.test.ts:112` pins it for arrangements today. 🔴 **"Retired rather than
+rescoped" is the wrong half:** the per-arrangement pass is the ONLY check that compares plates
+ACROSS composition-instance boundaries (it rides `flattenElements`, which descends instances —
+`scene-flatten.ts:311` — where the per-document loop's `collectFlat` descends containers only,
+`live-source-preflight.ts:101`). Pure retirement leaves a root-document plate vs. the active look's
+plates, and two multi-frame elements' simultaneously-visible looks, checked by NOTHING. ⇒ A YES
+owes a replacement: **v1 refuses the configurations instead of checking them** — every plate lives
+inside a look, and one multi-frame element per scene — which is two cheap preflights in the same
+family as 4.6's, OR a visible-set overlap pass. Priced in §14.7; the five arrangement-preflight
+tests die with the pass either way.
+
+**4 — exclusivity and the ledger: CONFIRMED, nothing keys on arrangements.**
+`#refuseSecondMultiBox` keys on templateId + channel + on-air status, deciding "multi-box" from the
+DECLARATION COUNT (`template.liveSources?.sources.length`, `caspar-runtime.ts:3244`), called from
+both doors (`:1654`, `:2192`). The `B-145` ledger records `slot`, symbolic `sourceId`, role,
+producer string, rects — keyed by `itemId` (`live-layers.ts:107-138`). The single "arrangement" hit
+in the bridge is a doc comment explaining why the count IGNORES arrangements
+(`caspar-runtime.ts:3229`). The carrier's `arrangements` field reaches the bridge on the wire
+(`shared-ipc/channels/templates.ts:86`) and is consumed NOWHERE in it. ⭐ Under LOOKS with sources
+declared once, "multi-box = `sources.length > 1`" remains exactly right — a routeKey in several
+looks counts once.
+
+**5 — the animated door: MIXED, and the honest paragraph is §14.6.** The per-band-layer leg is
+CONFIRMED: `mixerFit` emits `MIXER … FILL`/`CLIP` per slot (`command-builder.ts:243`), one seated
+source per band layer, so the server half is per-source today. The page half is NOT: mask holes are
+keyed by the MASKED element and are an anonymous positional rect list with no source identity
+(`scene-flatten.ts:547`, `MaskHole` at `scene.ts:789`), the §13.4 zero-area rule is spec text only
+(`tasks.md` 8.7, unchecked), and the bridge explicitly refuses zero-area rects — _"seat NO PRODUCER
+AT ALL rather than emit a zero-area rect"_ (`caspar-runtime.ts:3328`).
+
+**6 — what dies / what is parked: verified as §14.4-14.5's tables**, with three findings worth
+lifting out: the bridge consumes none of the carrier (killing it strands exporter + shared-ipc
+only); engine docs carry NO arrangement references (no doc-sync debt); and zod strips unknown keys,
+so already-saved scenes and persisted `TemplateInfo` records carrying `arrangements` keep PARSING
+while their authored arrangement data is SILENTLY DROPPED — named in §14.8.
+
+**7 — the reversal record is §14.5.**
+
+### 14.4 What SURVIVES, what DIES, what is PARKED
+
+| Fate         | What                                                                                                   | Where / evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SURVIVES** | §0.2 Family 1 (one template, states of one scene)                                                      | LOOKS is still one page, one `templateId`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **SURVIVES** | §0.5's identity PRINCIPLE, now at the SOURCE level                                                     | `(templateId, plateId=routeKey)` — `sources.ts:323`; bridge never reads `elementId`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **SURVIVES** | §12.4 held, §12.5 surface-only, §12.6 exclusivity, §12.7/`B-145` ledger                                | §14.3 claims 1 and 4; stage A/B code untouched                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **SURVIVES** | The whole declaration/seating side                                                                     | `buildTemplateLiveSources` (the one assembly seam), `resolvePlateAssignments`, `#planLiveSeating`, `swapLiveSource`, `#multiBoxCount`                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **SURVIVES** | The punch mechanism: `sceneMaskHoles` + ancestry suppression + the runtime re-punch pass               | minus the `ArrangementView` parameter; §14.3 claim 2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **SURVIVES** | `resolveVisibility` as THE one chokepoint                                                              | inputs re-meant under LOOKS; the one-function principle (4.1/§13.7.2) is the invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **SURVIVES** | 4.6's stamped-scope refusal — strengthened: it is the boundary that makes looks composition instances  | `liveSourcesInStampedScopes`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **SURVIVES** | The per-document overlap loop + its tests                                                              | `live-source-preflight.ts:329`; within-look checking free under LOOKS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **SURVIVES** | §9's measurements + the probe suite (0.20-frame cut, tween separations)                                | evidence the cut-only v1 leans on; `tools/caspar-amcp-probe/bin/arrangement-probes.mjs` is PARKED as evidence, not killed                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **SURVIVES** | preview's retain-and-reassert and CanvasArea's switch-is-not-a-rebuild message shape                   | `preview.ts:318, 641-647`; payload changes, pattern survives                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **DIES**     | The cells carrier                                                                                      | `arrangements.ts` (`ArrangementSchema`, `ArrangementsSchema` + one-default-per-count, `LiveSourceArrangementSchema`), `Scene`/`Composition.arrangements` (`scene.ts:244, 561`), shared-ipc `arrangements` field (`templates.ts:86`)                                                                                                                                                                                                                                                                                                                                                                |
+| **DIES**     | `boxRelativeRect` and its algebra                                                                      | `live-source.ts:76`, `live-sources.ts:103` (`relativeRect`), `collectArrangements` (+ its `vcg-format/src/index.ts:31` re-export)                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **DIES**     | The runtime arrangement view                                                                           | `arrangement-view.ts` whole file (incl. `B-149`'s fix — the LESSON survives in the handoffs), `ArrangementView` + `applyArrangementGeometry` (`scene-flatten.ts:358, 424`), `setArrangementView`'s API shape                                                                                                                                                                                                                                                                                                                                                                                       |
+| **DIES**     | The Designer cells surface                                                                             | `slices/arrangements.ts` whole slice (CRUD, `boxInstanceIds`, `activeCellFor`/`NO_CELL`, `commitToActiveCell`/`arrangedTransform`), the `commitAnimatable` intercept (`timeline.ts:481`, two-line revert), `scene-doc.ts:149` projection, `store-core.ts:81` `activeArrangementId`, `ArrangementCellOverlay`, `ArrangementsSection`, `ArrangementElementSection`, `ArrangementPicker` (and "As authored" as a concept — one look is always active), three `arrangedTransform` read sites (`Gizmo.tsx:151`, `CanvasOverlay.tsx:346`, `TransformSection.tsx:43`), `ElementRow`'s resolved-eye wiring |
+| **DIES**     | `D-153`'s and `D-154`'s fixes — SUPERSEDED, not wrong                                                  | the defect class they repaired is structural under A′ and unreachable under LOOKS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **DIES**     | The count-shaped refusal triggers (over-lit / absent count / all-off) and `defaultArrangementForCount` | replaced by one trigger: **no looks authored** (+ author-time membership refusals, §14.3 claim 3)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **DIES**     | ~88 pinned test cases across 8 files                                                                   | schema 25, carrier 7, transform-cancels 6, mutators 16 (partial — visibility rows survive re-keyed), hole-size 5, cell-geometry 12, arrangement-preflight 5, E2E 12 — most die with their subjects; a Linux `gate:e2e` debt attaches to whatever replaces the E2E                                                                                                                                                                                                                                                                                                                                  |
+| **PARKED**   | D2 beyond cut: the `fade`/`move` arms, §12.2's `linear` contract, §13.5's mode set                     | the per-ENTERED scope and its strict-subset-of-per-pair argument (§13.6.2) carry to looks unchanged when the animated phase arrives                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **PARKED**   | 🔴 D4's `hideDuringTransition` (`elements.ts:139`)                                                     | under cut-only there is NO transition window — the flag is exactly the written-but-unreachable field this repo keeps filing bugs about (`B-147`'s class). **A YES parks it with an explicit schema comment in the pivot's first implementation commit** — not deleted (the animated phase re-reaches it), never silently dead. Its checkbox (`ArrangementElementSection`) dies with the surface                                                                                                                                                                                                    |
+| **PARKED**   | §13.4's animated-mask plan (zero-area rule, `clip-path` interpolation)                                 | spec text, stays spec text; §14.6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+
+### 14.5 What is REVERSED — recorded against §12 so the decisions stay readable
+
+- **§12.8, the SECOND reversal: segmented control (withdrawn at `056ffdd5`) → D1's
+  toggle-per-source → LOOK PICKER + per-slot preset.** WHY, precisely: toggles existed because
+  under A′ the OPERATOR composes the on-air state — which sources are lit — and the count/
+  arrangement derives from it. Under LOOKS the AUTHOR composes each state fully; **with per-slot
+  preset, toggles no longer carry the combination — the look does.** The operator selects one look
+  and re-points sources through the preset. What §12.8 decided UNDERNEATH both reversals survives
+  intact: always visible, state-carrying, no menu; placement (ii) — a second line outside the verb
+  block — survives, and the fixed-width collision SHRINKS again: one picker instead of N toggles.
+- **§12.9's A′ authoring shape is reversed** (nested-box-per-plate + per-arrangement instance
+  geometry → per-look sub-scenes). **A′'s identity core is NOT** — it moves from the plate element
+  to the source declaration and gets stronger (one declaration per routeKey by construction).
+- **§12.9.1 Q2 (declared order fills cells) is reversed:** a look's plates name their source, so
+  "which source sits in which frame" becomes AUTHORED per look — the positional rule, and `D-153`'s
+  hardest-won lesson about teaching it, retire together. Q1/Q3/Q4 and 12.9.1a dissolve with counts:
+  one-of-N by construction makes over-lit, absent-count and all-off UNREPRESENTABLE — and all-off
+  stays never-a-STOP because the picker cannot express it.
+- **§12's terminology table (COUNT / ARRANGEMENT) is superseded by LOOK.**
+- **What STANDS, explicitly:** §0.2, §0.3/§3 (structural, per §14.3 claim 1), §0.5's principle,
+  §12.1 (cut first — now cut-only v1), §12.2 (parked with the animated phase, undisturbed), §12.4,
+  §12.5 (strengthened: preset-then-take makes "takes effect at the next take" the operator's normal
+  grammar), §12.6, §12.7, §2b (the v1 animation refusal — plates still must not carry authored
+  keyframes), §13.1/§12.9.2 (one shared background), §13.7.4/`B-147` (a fit rule is still owed
+  generally, though a per-look title is now SIZED per look by its author, so it stops blocking this
+  feature's v1). **The candidate tables of §12.9 are kept above, un-edited** — this section
+  supersedes a decision; it does not erase the record of how it was made.
+
+### 14.6 The animated door — one honest paragraph, no promise
+
+A later animated look switch is NOT designed here and nothing in v1 buys it. What would keep the
+door ajar: the server half already moves per source-seat (`MIXER FILL`/`CLIP` per band layer,
+`command-builder.ts:243`), and one seat held across switches means the thing that animates has a
+stable server identity. The page half is the real distance: mask holes today carry NO source
+identity (an anonymous rect list per masked element, `scene.ts:789`), so "the same source's hole
+interpolates from look X's rect to look Y's rect" needs either per-source hole keying or §13.4's
+stable-point-count construction; the zero-area rule for a source absent from one side is spec text
+with an unchecked task (8.7) and the bridge currently refuses zero-area rects outright
+(`caspar-runtime.ts:3328`); and the interpolation mechanism (`clip-path`) is a SECOND mask mechanism
+that §13.4 explicitly declines to let re-open the measured `mask-image` choice. All of that was
+equally unbuilt under A′ — the pivot neither narrows nor widens this door; it moves the geometry
+that would interpolate from cells to per-look rects, which §13.4's machinery is indifferent to.
+
+### 14.7 The priced tasks delta — by stage, no renumbering, nothing minted
+
+- **Stage A (`B-145`)** — untouched. Task 2.8's display half is still open and still due before
+  stage E (now: before the picker ships).
+- **Stage B (§12.6)** — untouched, DONE, survives verbatim (§14.3 claim 4).
+- **Stage C → C′ — the largest delta.** DIES: 5.1/5.2 as written (cells + `boxRelativeRect`), 5.3's
+  surface, 5.6's arrangement pass, 4.2's geometry override. SURVIVES: 4.1 (the one visibility
+  function), 4.3 (re-punch), 4.6 (stamped-scope refusal), 4.4's matrix re-keyed to visibility.
+  NEW WORK, priced: (a) the **source-declaration surface** — the source list on the multi-frame
+  element, the membership preflight, and its refusals (dangling reference, duplicate routeKey
+  WITHIN one look — `B-148` becomes within-look-only); ⚠ this is the pivot's biggest cost and the
+  session brief that commissioned this section did not price it at all — today "declare a source"
+  IS "draw a plate", and a separate declaration list is a new concept with its own UI; (b) the
+  **look management** surface (create the multi-frame element, N managed instances, one-of-N state);
+  (c) the **composition-punch tests** §14.3 claim 2 found missing — they land BEFORE anything leans
+  on the mechanism; (d) the two structural refusals or the visible-set overlap pass (claim 3);
+  (e) the carrier: `sources[]` deduped by routeKey + per-look `{routeKey → rect}` — comparable in
+  size to the per-arrangement carrier it replaces.
+- **Stage D — HALTED until this gate; then restarts cheap.** The reconcile's shape is UNCHANGED
+  (ONE `reconcileLivePlates`, §4 verbatim); its input becomes **the active look's
+  `{routeKey → rect}`**. 6.4's re-fit-per-arrangement becomes re-fit-per-look (same reason: aspect
+  changes, `MIXER FILL` survives a producer swap, wrong crop announces nothing). 6.5 (held / named
+  teardown) unchanged. Nothing built, nothing lost — this is why the halt exists.
+- **Stage E** — 7.1-7.6 are rewritten: toggles → **look picker + per-slot preset** (B-139 chips as
+  the staging surface, R-048's swap as the live path); 7.5's three-trigger family → ONE trigger
+  (no looks authored); 7.6's cut escape dies (v1 is cut-only — there is no mode to escape to);
+  7.2's placement (ii) and the density rule survive. 7.7/7.8 (§12.5, `B-146`) unchanged.
+- **Stage F** — the cut ships, unchanged. **Stage G** — parked whole (§14.4).
+- **One authored `visible`-binding interaction to specify at C′:** a per-look override addressed to
+  an element INSIDE a look needs a per-instance key (`arrangement-view.ts:28-33`'s root-scope limit,
+  which LOOKS at root level respects — a DEEPER override is out of v1 scope and refused, not
+  half-supported).
+- ⚠ **One measurement stays owed regardless of the gate:** a hidden look's `<video>` decor is not
+  paused by `display: none` alone (§12.9.7's finding — nothing in the tree pauses a hidden video),
+  and under LOOKS every look is a full sub-scene, so N looks' motion decor can decode
+  simultaneously. The shared background stays OUTSIDE the looks (§12.9.2), which contains the
+  common case; `tasks.md` 9.3's measurement decides whether the look state must reach the video
+  driver in v1.
+
+### 14.8 The compat window — why this is now-or-never
+
+**This pivot is cheap ONLY while nothing is delivered.** No `.vcg` in the field carries
+arrangements; the bridge consumes none of the carrier (zero references — §14.3 claim 6); stage D is
+unbuilt; the code being retired is five days old and this repo is its only author. The one real
+migration: already-saved scenes and persisted `TemplateInfo` records carrying `arrangements` keep
+parsing (zod strips unknown keys) while their authored arrangement data is SILENTLY dropped — today
+that data is the owner's own `nghab.vcg` authoring, re-authorable as looks in minutes, and it must
+be SAID to him rather than discovered. Once templates ship and the reconcile lands, this same pivot
+costs a format migration, a bridge change and operator retraining. A reader in three months should
+know: the gate was posed the week the evidence existed, because that was the last week the answer
+was allowed to be cheap.

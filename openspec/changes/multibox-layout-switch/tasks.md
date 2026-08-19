@@ -403,6 +403,13 @@ candidate shapes.
 
 ## 5. STAGE D — the ONE reconcile (§4)
 
+> 🔴 **STAGE D IS HALTED (2026-08-19) until `design.md` §14's gate — the LOOKS pivot — is
+> answered.** Building `reconcileLivePlates` against the cells carrier while the carrier itself
+> is in question would be the most expensive possible timing: the pivot changes the reconcile's
+> INPUT (the active look's `{routeKey → rect}`) and not its mechanism, so nothing is lost by
+> waiting and a whole stage would be lost by not. A YES restarts D against the look carrier; a NO
+> resumes it unchanged.
+
 - [ ] 6.1 **`reconcileLivePlates(itemId, desired)`** in `tools/caspar-bridge/src/caspar-runtime.ts`:
       seat / re-fit / release as a **DELTA** against `#liveLayers`, resolving through
       `resolvePlateAssignments` as the ONE resolver.
