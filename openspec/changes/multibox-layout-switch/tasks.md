@@ -158,11 +158,11 @@ plan.
 
 ## 1b. THE LOOKS PHASES (2026-08-19) — and phase 2's DELETION CLAUSE
 
-| Phase | What                                                                                                                               | Session |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| **1** | Schema (`looks` group, sources-once, preflights), the LOOK carrier, the runtime switch (visibility + re-punch), the pin tests      | **BA**  |
-| **2** | The Designer UI swap: toolbar icon, looks inspector, per-look canvas, look picker in the preview — **AND THE A′ DELETION (below)** | next    |
-| **3** | Stage D's reconcile (§4) on the look carrier; then stage E's operator surface                                                      | after 2 |
+| Phase | What                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Session |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| **1** | Schema (`looks` group, sources-once, preflights), the LOOK carrier, the runtime switch (visibility + re-punch), the pin tests — ✅ LANDED (`b47f3eca`); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32278566981> (attempt 2, `success`, `E2E (Playwright)` RAN — attempt 1 was killed at `timeout-minutes: 20` by an apt-mirror stall BEFORE Playwright started; the suite never ran and was re-run, not weakened) | **BA**  |
+| **2** | The Designer UI swap: toolbar icon, looks inspector, per-look canvas, look picker in the preview — **AND THE A′ DELETION (below)**                                                                                                                                                                                                                                                                                                                     | next    |
+| **3** | Stage D's reconcile (§4) on the look carrier; then stage E's operator surface                                                                                                                                                                                                                                                                                                                                                                          | after 2 |
 
 🔴 **PHASE 2'S DELETION CLAUSE — the two-spellings window is ONE session, closed by this task,
 not by memory.** Phase 2 deletes, in the same session that swaps the UI: the arrangements schema

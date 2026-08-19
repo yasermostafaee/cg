@@ -1,6 +1,7 @@
 import type {
   AnimatableProperty,
   Arrangement,
+  LookGroups,
   Composition,
   DynamicField,
   Element,
@@ -42,6 +43,8 @@ export interface EditDocFields {
   editorBackdrop: Scene['editorBackdrop'];
   /** `multibox-layout-switch` — this document's arrangements (see `Composition.arrangements`). */
   arrangements?: Arrangement[] | undefined;
+  /** LOOKS phase 2 (§14) — this document's multi-frame groups (see `Composition.lookGroups`). */
+  lookGroups?: LookGroups | undefined;
 }
 
 export function activeCompId(): string | null {

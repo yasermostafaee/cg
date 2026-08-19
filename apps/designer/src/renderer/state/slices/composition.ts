@@ -221,14 +221,15 @@ export const compositionSlice = {
   /**
    * Place an instance of composition `childId` into the active document as a
    * new layer element (a reference — the child's own layers are NOT copied).
-   * Refuses (returns false) if it would create a cycle. `at` is the optional
-   * scene-space drop point for the instance's top-left.
+   * Returns the new instance's ELEMENT id (LOOKS phase 2 registers a look by it), or
+   * `null` on refusal — a cycle, or an unknown child. Truthiness is unchanged for the
+   * boolean-era callers. `at` is the optional scene-space drop point.
    */
-  addCompositionInstance(childId: string, at?: { x: number; y: number }): boolean {
-    if (current.scene === null) return false;
+  addCompositionInstance(childId: string, at?: { x: number; y: number }): string | null {
+    if (current.scene === null) return null;
     const child = current.scene.compositions?.find((c) => c.id === childId);
-    if (child === undefined) return false;
-    if (!canNestComposition(current.scene, current.activeCompositionId, childId)) return false;
+    if (child === undefined) return null;
+    if (!canNestComposition(current.scene, current.activeCompositionId, childId)) return null;
     // D-025 — the instance name is the field namespace, so it must be unique among
     // the active doc's instances (default to the child name, then "name 2", …).
     const takenNames = compositionInstancesOf({ layers: activeLayersOf(current.scene) }).map(
@@ -252,6 +253,6 @@ export const compositionSlice = {
       zIndex: 0,
     };
     designerStore.addElement(el);
-    return true;
+    return el.id;
   },
 } as const;

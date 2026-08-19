@@ -15,6 +15,7 @@ import {
 } from './store-core.js';
 import { editSceneOf, scopeSceneToComposition } from './scene-doc.js';
 import { arrangementsSlice } from './slices/arrangements.js';
+import { looksSlice } from './slices/looks.js';
 import { compositionSlice } from './slices/composition.js';
 import { documentSlice } from './slices/document.js';
 import { elementsSlice } from './slices/elements.js';
@@ -53,6 +54,10 @@ export const designerStore = {
   // cell geometry, the entry transition, per-element visibility). 🔴 No action here takes a
   // COUNT and no state here caches one: the count IS `cells.length`.
   ...arrangementsSlice,
+
+  // LOOKS phase 2 (`design.md` §14) — the multi-frame group: sources declared once,
+  // looks as instanced sub-scene compositions, the session's active look.
+  ...looksSlice,
 
   // Undo/redo + the history boundary/save markers live in `store-core.ts` — the
   // history engine is welded to `set`'s coalescing and the `dirty` flag.

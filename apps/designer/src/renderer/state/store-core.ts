@@ -80,6 +80,13 @@ export interface DesignerStoreState {
    */
   activeArrangementId: string | null;
   /**
+   * LOOKS phase 2 (`design.md` §14) — the LOOK the canvas is currently showing, or
+   * `null` for "the group's default". EDITOR state, exactly as `activeArrangementId`
+   * above: what a fresh TAKE enters is the group's authored `defaultLookId`, which is
+   * scene state; what the canvas shows right now is the session's business alone.
+   */
+  activeLookId: string | null;
+  /**
    * Top-level routing: the Designer starts at the Landing screen
    * (starter picker / recent / new) and flips to the Studio whenever
    * a scene becomes active. Clearing the scene flips it back.
@@ -180,6 +187,7 @@ export const initialState: DesignerStoreState = {
   notice: null,
   previewScene: null,
   activeArrangementId: null,
+  activeLookId: null,
   view: 'landing',
   tool: 'cursor',
   selection: new Set<string>(),
