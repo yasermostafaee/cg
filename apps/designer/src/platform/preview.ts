@@ -318,6 +318,10 @@ export class Preview {
         // multibox-layout-switch C2 — the ACTIVE ARRANGEMENT's view, retained across
         // rebuilds so a fresh runtime is re-told which arrangement the author is on.
         let arrangementView = undefined;
+        // LOOKS phase 1D (design.md section 14) — the ACTIVE LOOK's id, retained across
+        // rebuilds for the same reason. Phase 2's Designer UI is this seam's first caller;
+        // in phase 1 nothing posts 'look' yet (said so the seam is not taken for dead).
+        let activeLookId = undefined;
         // Families we've already loaded into this iframe's
         // document.fonts. Keyed by family name; the value is the
         // assetUrl we loaded from, so we can re-fetch when a font
@@ -645,6 +649,9 @@ export class Preview {
             // next keystroke, and the selector would look intermittently broken rather
             // than unwired.
             if (arrangementView) runtime.setArrangementView(arrangementView);
+            // LOOKS phase 1D — re-assert the active look onto the fresh runtime, for the
+            // same reason as the arrangement line above (a rebuild forgets it).
+            if (activeLookId) runtime.setActiveLook(activeLookId);
             // D-087 — a broadcast preview leaves cg-pending in place so the
             // stage stays blank until play(); the canvas reveals frame 0 now.
             if (REVEAL_ON_LOAD) document.body.classList.remove('cg-pending');
@@ -982,6 +989,15 @@ export class Preview {
                 // (No backticks in this block: it lives inside a template literal.)
                 arrangementView = msg.view ?? undefined;
                 if (runtime) runtime.setArrangementView(arrangementView);
+              } else if (msg.action === 'look') {
+                // LOOKS phase 1D — the ACTIVE LOOK, straight into setActiveLook. Same
+                // shape as 'arrangement' above and deliberately NOT a scene-replace: a
+                // look switch is a visibility flip + re-punch on the live nodes, which is
+                // the cut being previewed. An absent lookId only clears the retention —
+                // there is no lookless state to enter; a rebuilt runtime falls back to the
+                // group's default look on its own.
+                activeLookId = typeof msg.lookId === 'string' ? msg.lookId : undefined;
+                if (runtime && activeLookId !== undefined) runtime.setActiveLook(activeLookId);
               } else if (msg.action === 'editing-text') {
                 editingTextId = typeof msg.elementId === 'string' ? msg.elementId : null;
                 applyEditingHide();

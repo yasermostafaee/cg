@@ -17,6 +17,9 @@ import {
   type Scene,
   sceneMaskHoles,
   type ArrangementView,
+  defaultLookOf,
+  lookGroupOf,
+  type Look,
 } from '@cg/shared-schema';
 import {
   applyAnimationAtFrame,
@@ -479,6 +482,34 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     repunchLiveSourceHoles(built.punchTargets, sceneMaskHoles(scene, live));
   };
   let arrangementView: ArrangementView | undefined;
+
+  // ── LOOKS (`design.md` §14, phase 1D) — the look-state driver ─────────────────────────
+  //
+  // Exactly ONE look's instance is visible; a switch is a VISIBILITY FLIP plus a re-punch,
+  // and deliberately nothing else — no geometry override machinery, because under LOOKS the
+  // geometry is authored inside each look's own sub-scene (that is the whole point of the
+  // model). The flip rides the same `repunch` seam as the A′ view during the one-session
+  // coexistence window: the derived view carries ONLY `visibility`, the ancestry check in
+  // `sceneMaskHoles` suppresses the hidden instances' punches, and phase 2 re-plumbs the
+  // internals when the A′ machinery is deleted — the PUBLIC seam (`setActiveLook`) does not
+  // change then. ⚠ Consequence of the shared seam, accepted for the window: a later
+  // `setArrangementView(undefined)` clears the look state too. No template authors both.
+  const lookGroup = lookGroupOf(scene);
+  let currentLookId: string | undefined;
+  const applyLook = (look: Look): void => {
+    if (lookGroup === undefined) return;
+    const visibility: Record<string, boolean> = {};
+    for (const l of lookGroup.looks) visibility[l.instanceId] = l.id === look.id;
+    currentLookId = look.id;
+    repunch({ visibility });
+  };
+  {
+    // A fresh build enters the DEFAULT look — "exactly one active" holds from the first
+    // frame, whatever the instances' authored `visible` says. Synchronous with the build,
+    // so no other state is ever painted.
+    const entry = lookGroup === undefined ? undefined : defaultLookOf(lookGroup);
+    if (entry !== undefined) applyLook(entry);
+  }
 
   // D-062 — wire image `src` from a host-supplied assetId→URL map. The scene
   // builder emits `<img data-cg-asset-id>` with no `src`; exporters pass the
@@ -2207,6 +2238,19 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     setArrangementView(view: ArrangementView | undefined): void {
       if (machine.state === 'removed') return;
       repunch(view);
+    },
+
+    setActiveLook(lookId: string): boolean {
+      if (machine.state === 'removed') return false;
+      if (lookGroup === undefined) return false;
+      const look = lookGroup.looks.find((l) => l.id === lookId);
+      if (look === undefined) return false;
+      applyLook(look);
+      return true;
+    },
+
+    activeLookId(): string | undefined {
+      return currentLookId;
     },
 
     async update(data, opts: UpdateOptions = {}): Promise<void> {

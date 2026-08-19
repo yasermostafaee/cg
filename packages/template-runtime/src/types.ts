@@ -75,6 +75,21 @@ export interface TemplateRuntime {
    */
   setArrangementView(view: ArrangementView | undefined): void;
 
+  /**
+   * `multibox-layout-switch` §14 (LOOKS) phase 1D — switch the ACTIVE LOOK. Exactly one
+   * look's instance is visible; the switch is a visibility flip plus a re-punch — a CUT,
+   * v1's only mode. Returns `false` (and changes nothing) for an unknown look id or a
+   * scene with no multi-frame group; a fresh build enters the group's DEFAULT look.
+   *
+   * ⚠ Phase 2's Designer UI is this seam's first production caller (via the preview's
+   * `look` message); in phase 1 it is exercised by tests only — said here so the next
+   * reader does not take an unreferenced method for dead.
+   */
+  setActiveLook(lookId: string): boolean;
+
+  /** The active look's id, `undefined` when the scene has no multi-frame group. */
+  activeLookId(): string | undefined;
+
   /** Play the exit animation. Stub for M3.2-α — instant transition. */
   stop(opts?: StopOptions): Promise<void>;
 

@@ -316,3 +316,58 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
     expect(block.defaultLookId).toBeUndefined();
   });
 });
+
+describe('D.3 — the 6-box case: declarations are look-INDEPENDENT', () => {
+  const sixBoxScene = (defaultLookId: string): Scene =>
+    scene({
+      rootChildren: [
+        instance('inst-six', 'comp-six', 0, 0, 1920, 1080),
+        instance('inst-solo', 'comp-solo6', 0, 0, 1920, 1080),
+      ],
+      compositions: [
+        comp(
+          'comp-six',
+          [0, 1, 2, 3, 4, 5].map((i) =>
+            plate(
+              `six-p${String(i + 1)}`,
+              `guest-${String(i + 1)}`,
+              (i % 3) * 640,
+              i < 3 ? 0 : 540,
+              640,
+              540,
+            ),
+          ),
+        ),
+        comp('comp-solo6', [plate('solo-p1', 'guest-1', 320, 180, 1280, 720)]),
+      ],
+      lookGroups: [
+        {
+          id: 'g1',
+          sources: [0, 1, 2, 3, 4, 5].map((i) => ({
+            routeKey: `guest-${String(i + 1)}`,
+            dynamic: false,
+          })),
+          looks: [look('look-six', 'inst-six'), look('look-solo', 'inst-solo')],
+          defaultLookId,
+        },
+      ],
+    });
+
+  it('🔴 SIX DECLARED ALWAYS — under either default, five of them absent from the solo map', () => {
+    for (const dflt of ['look-six', 'look-solo']) {
+      const carrier = collectLookCarrier(sixBoxScene(dflt));
+      expect(carrier?.sources).toHaveLength(6);
+      expect(Object.keys(rectsOfCarrier(carrier, 'look-six'))).toHaveLength(6);
+      expect(Object.keys(rectsOfCarrier(carrier, 'look-solo'))).toEqual(['guest-1']);
+    }
+  });
+});
+
+function rectsOfCarrier(
+  carrier: ReturnType<typeof collectLookCarrier>,
+  lookId: string,
+): Record<string, unknown> {
+  const found = carrier?.looks.find((l) => l.id === lookId);
+  if (found === undefined) throw new Error(`no look ${lookId}`);
+  return found.rects;
+}
