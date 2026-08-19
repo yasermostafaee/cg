@@ -32,7 +32,7 @@ import type {
 } from '@cg/shared-schema';
 import type { BuildSceneResult, FieldScope, LifecycleSource, RenderMode } from './types.js';
 import { clockInitialText } from './clock-driver.js';
-import { applyLiveSourceMask } from './live-source-punch.js';
+import { applyLiveSourceMask, type PunchTarget } from './live-source-punch.js';
 import { makeSequenceItemNode } from './sequence-driver.js';
 import { TEXT_NODE_DATASET } from './text-render-node.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
@@ -93,6 +93,17 @@ interface BuildCtx {
   masks: ReadonlyMap<string, MaskHole[]>;
   /** The instance path this scope renders under — `''` at the root, `id/` per level. */
   maskKeyPrefix: string;
+  /**
+   * `tasks.md` 4.3 — every built element, by mask key, so the RE-PUNCH pass can reach the
+   * live nodes without rebuilding the scene.
+   *
+   * 🔴 **EVERY element is registered, not only the ones punched at build time.** An element
+   * that carries no hole today can acquire one when a plate moves over it, an arrangement
+   * changes, or a `visible` binding reveals a plate above it — and one registered only when
+   * it was punched is one the re-punch can never reach. The map is also what makes the
+   * "had a hole, has none now" case reachable, which is the one that puts black on air.
+   */
+  punchTargets: Map<string, PunchTarget>;
 }
 
 function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
@@ -171,6 +182,7 @@ export function buildScene(
     paintEditorBackdrop,
     masks: sceneMaskHoles(scene),
     maskKeyPrefix: '',
+    punchTargets: new Map<string, PunchTarget>(),
   };
 
   for (const layer of scene.layers) {
@@ -182,6 +194,7 @@ export function buildScene(
     elementMap: rootScope.elementMap,
     textOriginals: rootScope.textOriginals,
     scopeTree: rootScope,
+    punchTargets: ctx.punchTargets,
   };
 }
 
@@ -262,7 +275,15 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
  * equivalent to absence.
  */
 function punchLiveSourceHoles(element: SceneElement, node: HTMLElement, ctx: BuildCtx): void {
-  const holes = ctx.masks.get(`${ctx.maskKeyPrefix}${element.id}`);
+  const key = `${ctx.maskKeyPrefix}${element.id}`;
+  // Registered BEFORE the early return, and that ordering is the point: an element with no
+  // hole today is exactly the one that acquires one when a plate moves over it.
+  ctx.punchTargets.set(key, {
+    node,
+    width: element.transform.size.w,
+    height: element.transform.size.h,
+  });
+  const holes = ctx.masks.get(key);
   if (holes === undefined) return;
   const mask = liveSourceMask(holes, {
     width: element.transform.size.w,
@@ -1006,6 +1027,13 @@ export function buildSequenceCompositionItem(
   // but NEVER in `scope.children` (the sequence driver owns its lifecycle).
   const itemScope = newScope(inner, comp);
   const itemCtx: BuildCtx = {
+    // ⚠ Its OWN empty map, deliberately: `flattenElements` does NOT walk a `sequence` or a
+    // `repeater` (their stamps' positions are computed at run time), so nothing inside one
+    // ever carries a hole — and every stamp of the same authored element would key to the
+    // same mask key, so one shared map would have the last stamp silently stand for all of
+    // them. Registering nothing is the honest answer, and 4.6 refuses the case that would
+    // have made it matter.
+    punchTargets: new Map<string, PunchTarget>(),
     doc,
     scene,
     scope: itemScope,
@@ -1153,6 +1181,8 @@ export function buildRepeaterRows(
     // content holds) by construction, but NEVER in `scope.children`.
     const rowScope = newScope(inner, comp);
     const rowCtx: BuildCtx = {
+      // Its OWN empty map — see the identical note on the sequence item context above.
+      punchTargets: new Map<string, PunchTarget>(),
       doc,
       scene,
       scope: rowScope,

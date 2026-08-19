@@ -123,6 +123,21 @@ export const ElementBaseSchema = z.object({
    */
   lifespan: FrameRangeSchema.optional(),
   /**
+   * 🔴 D4 (`multibox-layout-switch` §13.7.2) — hide this element while an ARRANGEMENT
+   * TRANSITION is running, so the move does not look messy.
+   *
+   * Authored beside the ELEMENT rather than on the arrangement, because the distinction
+   * being authored is a property of the element: a box title should leave during the move,
+   * while a logo inside the multi-box must not blink on every switch. An arrangement-level
+   * flag would force one answer for everything the arrangement contains.
+   *
+   * ⚠ **This is the THIRD input to {@link resolveVisibility} and is read NOWHERE ELSE.**
+   * A local `if (el.hideDuringTransition)` at a point of use looks obviously correct in
+   * isolation and is the breach `visibility.ts` exists to prevent. Absent ⇒ `false`, so
+   * every scene authored before this field resolves exactly as it did.
+   */
+  hideDuringTransition: z.boolean().optional(),
+  /**
    * Operator-chosen colour for this element's timeline lifespan bar
    * (set via the layer right-click → Color menu). Absent means the
    * timeline falls back to its deterministic per-id colour.

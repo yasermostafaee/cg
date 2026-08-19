@@ -1,3 +1,5 @@
+import type { ArrangementView } from '@cg/shared-schema';
+import type { PunchTarget } from './live-source-punch.js';
 import type {
   ClockElement,
   LottieElement,
@@ -60,6 +62,18 @@ export interface TemplateRuntime {
    * absent from `data` back to its declared default.
    */
   update(data: Partial<FieldValues>, opts?: UpdateOptions): Promise<void>;
+  /**
+   * `multibox-layout-switch` `tasks.md` 4.2 / 4.3 — switch the ACTIVE ARRANGEMENT (or clear
+   * it with `undefined`), re-punching every mask against the new geometry and visibility.
+   *
+   * This is the seam an arrangement switch drives. It does not rebuild the scene: the boxes
+   * are moved by the view's geometry and the masks are reassigned on the live nodes, so a
+   * switch costs the page none of its content.
+   *
+   * ⚠ It does not ANIMATE the change — the transition modes are stage G. Called on its own
+   * it is a CUT, which is exactly `design.md` §13.5's free mode and the one that ships first.
+   */
+  setArrangementView(view: ArrangementView | undefined): void;
 
   /** Play the exit animation. Stub for M3.2-α — instant transition. */
   stop(opts?: StopOptions): Promise<void>;
@@ -365,6 +379,15 @@ export interface BuildSceneResult {
    * values route to the right copy even when a child is instanced more than once.
    */
   scopeTree: FieldScope;
+  /**
+   * `multibox-layout-switch` `tasks.md` 4.3 — every built element by MASK KEY, so the
+   * re-punch pass can reassign mask properties on the live nodes instead of rebuilding.
+   *
+   * Keyed by mask key (the composition-instance path + element id) rather than by element
+   * id, because the same authored element inside a composition instanced twice has two DOM
+   * copies at two different scene positions — and they punch different holes.
+   */
+  punchTargets: Map<string, PunchTarget>;
 }
 
 /**

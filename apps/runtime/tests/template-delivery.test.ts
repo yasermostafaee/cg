@@ -567,6 +567,18 @@ describe('produceTemplateDelivery — D-137 the Live Source carrier', () => {
         rect: { x: 1100, y: 650, width: 200, height: 100 },
         expectedAspect: 16 / 9,
         dynamic: false,
+        // `multibox-layout-switch` 5.2 — this plate sits inside a ROOT-LEVEL composition
+        // instance, which is exactly what a BOX is under A′, so its position WITHIN that box
+        // is carried as fractions. Composed with an arrangement's cell rect it gives the
+        // plate's hole in that arrangement — the pair that replaces a per-plate rect the
+        // import cannot derive (which plate lands in which cell is the operator's toggles).
+        // The instance is 480×270 at (1000,600); the plate is 200×100 at (1100,650).
+        boxRelativeRect: {
+          x: 100 / 480,
+          y: 50 / 270,
+          width: 200 / 480,
+          height: 100 / 270,
+        },
       },
     ]);
   });

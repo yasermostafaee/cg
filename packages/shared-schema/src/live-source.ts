@@ -59,6 +59,22 @@ export const LiveSourceDeclarationSchema = z.object({
   /** The hole, flattened to scene pixels through its FULL ancestor chain. */
   rect: LiveSourceRectSchema,
   /**
+   * `multibox-layout-switch` `tasks.md` 5.2 — **where this plate's hole sits INSIDE its own
+   * BOX, as fractions of the box (0..1 on each axis).**
+   *
+   * A box is a nested composition instance (A′), and an arrangement positions the INSTANCE.
+   * So the plate's position within its box is arrangement-INDEPENDENT by construction — that
+   * is what authoring a box as a composition means — and this fraction, composed with the
+   * arrangement's cell rect, is the plate's hole in that arrangement. The pair exists
+   * because the per-plate rect itself is NOT derivable at import: which plate lands in which
+   * cell depends on which sources the operator has lit (see `LiveSourceArrangementSchema`).
+   *
+   * ABSENT for a plate that is not inside a composition instance — an ordinary single-plate
+   * template, which is every template that exists today. Such a plate has no box, takes part
+   * in no arrangement, and keeps using {@link rect} exactly as before.
+   */
+  boxRelativeRect: LiveSourceRectSchema.optional(),
+  /**
    * The author's DECLARATION about the source's shape, carried verbatim — the
    * bridge validates the installation's mapping against it (design.md §3). Absent
    * is a real third state ("I am not asserting anything"), not a missing value:

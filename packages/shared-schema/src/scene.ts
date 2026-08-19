@@ -7,6 +7,7 @@ import {
   ISODateSchema,
   ResolutionSchema,
 } from './primitives.js';
+import { ArrangementsSchema } from './arrangements.js';
 import { ElementSchema, type Element } from './elements.js';
 import { DynamicFieldSchema } from './fields.js';
 import { FieldBindingSchema } from './bindings.js';
@@ -519,6 +520,21 @@ const SceneObjectSchema = z
      * referenced composition is deleted.
      */
     entryCompositionId: IdSchema.optional(),
+    /**
+     * `multibox-layout-switch` (A′, §12.9.10) — the template's ARRANGEMENTS: one ordered
+     * list of cell rects per authored count, each carrying the transition it is ENTERED
+     * with and its own per-element visibility opinions.
+     *
+     * Optional, so every scene authored before the feature validates and plays unchanged;
+     * absent and empty both mean "this template has no arrangements", and neither reaches
+     * any arrangement machinery.
+     *
+     * ⚠ On the SCENE and not on a composition. A box is a nested composition INSTANCE and
+     * an arrangement positions those instances — so arrangements belong to the thing that
+     * contains the instances, which is the scene. Putting them on a composition would make
+     * a box able to rearrange itself, which is not a state this feature has.
+     */
+    arrangements: ArrangementsSchema.optional(),
     metadata: SceneMetadataSchema,
   })
   .superRefine(refineLifecycle);

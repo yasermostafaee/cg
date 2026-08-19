@@ -3,6 +3,7 @@ import {
   CompositionFieldGroupSchema,
   DynamicFieldSchema,
   IdSchema,
+  LiveSourceArrangementSchema,
   LiveSourceDeclarationSchema,
   PositionSchema,
   ResolutionSchema,
@@ -72,6 +73,17 @@ export const TemplateLiveSourcesSchema = z.object({
    * array and an absent block is the whole point of the block.
    */
   sources: z.array(LiveSourceDeclarationSchema),
+  /**
+   * `multibox-layout-switch` `tasks.md` 5.2 — the template's ARRANGEMENTS, derived once at
+   * import beside {@link sources}.
+   *
+   * OPTIONAL, and absent is not "none": a template imported before this field existed cannot
+   * say whether it has arrangements, exactly as {@link TemplateInfo.liveSources} itself
+   * cannot say whether a pre-carrier template has holes. An EMPTY array is the positive
+   * statement "this template has no arrangements" — which is what every template a current
+   * build imports will carry, since a scene with no arrangements produces one.
+   */
+  arrangements: z.array(LiveSourceArrangementSchema).optional(),
 });
 export type TemplateLiveSources = z.infer<typeof TemplateLiveSourcesSchema>;
 

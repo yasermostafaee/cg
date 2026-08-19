@@ -8,11 +8,10 @@ import type {
 import {
   aggregateCompositionFields,
   hasNextStep,
-  resolveDefaultPosition,
   type Manifest,
   type Position,
 } from '@cg/shared-schema';
-import { collectLiveSources, unpack, verify } from '@cg/vcg-format';
+import { buildTemplateLiveSources, unpack, verify } from '@cg/vcg-format';
 import {
   ExporterSingleFile,
   cgCss,
@@ -193,20 +192,11 @@ export async function produceTemplateDelivery(
     // bridge parses no HTML, and no `.vcg` ever reaches the bridge — so a fact not
     // captured here is not recoverable later.
     //
-    // ALWAYS EMITTED, including with an EMPTY `sources`. That is what makes the
-    // absent block mean "imported before this existed" rather than "has none":
-    // collapsing the two would let a template with real holes go to air with
-    // nothing composited behind them (see `liveSourceCarrierState`).
-    //
-    // `defaultPosition` is the RESOLVED authored default via the canonical
-    // `resolveDefaultPosition`, never a local `{ anchor: 'center' }`: the page
-    // falls through to that same function, and two spellings of "centred" is how
-    // the composited box comes to sit somewhere the transparent hole is not.
-    liveSources: {
-      resolution: scene.resolution,
-      defaultPosition: resolveDefaultPosition(scene),
-      sources: collectLiveSources(scene),
-    },
+    // ⭐ The block is ASSEMBLED IN ONE PLACE (`buildTemplateLiveSources`) rather than
+    // field-by-field here. It gained a fourth field with the arrangement carrier
+    // (`multibox-layout-switch` 5.2), and a block built by hand at a call site is one
+    // whose NEXT field gets added here and forgotten at the next call site.
+    liveSources: buildTemplateLiveSources(scene),
   };
 
   try {

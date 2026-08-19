@@ -1,5 +1,5 @@
 import type { Element, Layer, Scene } from '@cg/shared-schema';
-import { LiveSourceIdSchema } from '@cg/shared-schema';
+import { LiveSourceIdSchema, liveSourcesInStampedScopes } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { frameAabb, GEOMETRY_TRACK_KEYS, type Aabb } from './off-frame.js';
 
@@ -159,6 +159,26 @@ function label(el: Element): string {
 /** The four Live Source preflight checks, over the whole project. */
 export function liveSourceIssues(scene: Scene): ExportIssue[] {
   const issues: ExportIssue[] = [];
+
+  // 🔴 `multibox-layout-switch` 4.6 — a plate inside a STAMPED scope (`sequence` item or
+  // `repeater`) is invisible to BOTH sides at once: nothing declares it, so no producer is
+  // seated, and nothing punches it, so the backdrop stays solid. The two failures cancel and
+  // the page looks intact — which is why it has to be said HERE, at authoring time, rather
+  // than discovered as "the guest never appeared". Detected by the flattener's own module,
+  // beside the non-descent that causes it.
+  for (const stamped of liveSourcesInStampedScopes(scene)) {
+    issues.push({
+      severity: 'error',
+      code: 'live-source-in-stamped-scope',
+      message:
+        `Live Source "${label(stamped.element)}" sits inside a ${stamped.scope}, which stamps ` +
+        `its content at run time. A plate there declares no hole to the runtime and punches ` +
+        `none in the backdrop, so nothing is composited behind it and nothing says so — and ` +
+        `every stamp would carry the same source id, so the copies would fight over one live ` +
+        `layer. Move the plate out of the ${stamped.scope}.`,
+      elementId: stamped.element.id,
+    });
+  }
   const docs: { layers: readonly Layer[]; width: number; height: number; where: string }[] = [
     {
       layers: scene.layers,

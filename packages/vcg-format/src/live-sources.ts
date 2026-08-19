@@ -1,5 +1,12 @@
-import { flattenElements } from '@cg/shared-schema';
-import type { FieldBinding, LiveSourceDeclaration, Scene } from '@cg/shared-schema';
+import { flattenElements, resolveDefaultPosition } from '@cg/shared-schema';
+import type {
+  FieldBinding,
+  FlatElement,
+  LiveSourceArrangement,
+  LiveSourceDeclaration,
+  LiveSourceRect,
+  Scene,
+} from '@cg/shared-schema';
 
 /**
  * D-137 / C-015 — derive the runtime's Live Source DECLARATIONS from a scene.
@@ -78,18 +85,103 @@ function dynamicRoleIndex(scene: Scene): Map<string, Set<'fill' | 'key'>> {
 }
 
 /**
+ * A plate's **BOX** — the OUTERMOST `composition` instance it sits inside, or `null` when it
+ * sits in no composition at all.
+ *
+ * Outermost rather than nearest, because an ARRANGEMENT positions the boxes the scene itself
+ * contains: a composition nested inside a box is part of that box's own design and travels
+ * with it. `null` is the ordinary single-plate template — every template that exists today —
+ * and it takes part in no arrangement.
+ */
+function boxIdOf(plate: FlatElement, boxes: ReadonlySet<string>): string | null {
+  // `ancestry` is outermost → innermost and begins with the LAYER, which is never a box.
+  for (const a of plate.ancestry) if (boxes.has(a.id)) return a.id;
+  return null;
+}
+
+/** Where `inner` sits inside `outer`, as fractions of `outer` on each axis. */
+function relativeRect(inner: LiveSourceRect, outer: LiveSourceRect): LiveSourceRect | null {
+  if (outer.width === 0 || outer.height === 0) return null;
+  return {
+    x: (inner.x - outer.x) / outer.width,
+    y: (inner.y - outer.y) / outer.height,
+    width: inner.width / outer.width,
+    height: inner.height / outer.height,
+  };
+}
+
+/**
+ * 🔴 **`tasks.md` 5.2 — the ARRANGEMENTS, as the runtime receives them.**
+ *
+ * Derived here, once, at import, beside `collectLiveSources` and for the same reason: no
+ * `.vcg` reaches the bridge and the scene is discarded after import. **The `.vcg` FORMAT is
+ * unchanged** — arrangements are read out of the scene the package already carried, exactly
+ * as the declarations are.
+ *
+ * The runtime does not receive the arrangement's per-element `visibility` map: that is a
+ * PAGE fact (it decides what the page paints and what it punches, through
+ * `resolveVisibility`), and the bridge neither paints nor punches. Sending it would put a
+ * second, un-actioned copy of the visibility rule on the wire.
+ */
+export function collectArrangements(scene: Scene): LiveSourceArrangement[] {
+  return (scene.arrangements ?? []).map((a) => ({
+    id: a.id,
+    name: a.name,
+    cells: a.cells.map((c) => ({ ...c })),
+    isDefault: a.isDefault,
+    transition: a.transition,
+  }));
+}
+
+/**
  * Every Live Source in `scene`, flattened to SCENE pixels through its full
  * ancestor chain — containers AND composition instances, the latter including
  * the instance's inner scale.
  *
  * Emission order is document order (depth-first, layers in order), which makes
  * the declaration array stable across exports of an unchanged scene.
+ *
+ * ── 🔴 IS A HIDDEN PLATE DECLARED? YES — AND THAT IS NOW A DECISION ─────────
+ *
+ * **AO's second inherited question** (`design.md` §6b), which §12.9.7 records the tree as
+ * answering **by accident**: this function has no visibility filter while `sceneMaskHoles`
+ * does, so a hidden plate has always been DECLARED but has never PUNCHED. That is very
+ * nearly the wanted behaviour — reached by nobody deciding it.
+ *
+ * **It is decided now, and it stays yes.** A declaration is the template's plate SET, and
+ * the plate set is what `(templateId, plateId)` assignment is keyed to (§0.3). Making it
+ * depend on visibility would mean:
+ *
+ * - a plate hidden in the ACTIVE arrangement drops out of the declaration, so the operator's
+ *   assignment for it has nothing to attach to and is lost on the next switch — the exact
+ *   thing A′ was chosen to make impossible; and
+ * - §12.4's HELD state becomes unreachable. A source with no cell in the target arrangement
+ *   is held **muted and idle on its band layer**, which requires the bridge to still know
+ *   about it. An undeclared plate cannot be held; it can only be torn down.
+ *
+ * ⚠ **So the two sides are deliberately asymmetric, and this is the sentence to keep:**
+ * **visibility governs the PUNCH, never the DECLARATION.** The punch is a per-frame fact
+ * about what is on screen and is resolved through `resolveVisibility` — including the
+ * arrangement's opinion and D4's transition flag. The declaration is a static fact about
+ * what the template HAS, and it is arrangement-independent by design. They were the same
+ * shape by coincidence before; they are the same shape on purpose now.
  */
 export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
   const dynamicRoles = dynamicRoleIndex(scene);
 
+  const flattened = flattenElements(scene, 'document');
+  // Every ROOT-level composition instance is a candidate BOX, with its authored scene rect.
+  // Root-level because that is what an arrangement's cells position (A′, §12.9.10).
+  const boxRects = new Map<string, LiveSourceRect>();
+  for (const f of flattened) {
+    if (f.element.type === 'composition' && f.depth === 0 && f.ancestry.length === 1) {
+      boxRects.set(f.element.id, f.rect);
+    }
+  }
+  const boxIds: ReadonlySet<string> = new Set(boxRects.keys());
+
   const out: LiveSourceDeclaration[] = [];
-  for (const flat of flattenElements(scene, 'document')) {
+  for (const flat of flattened) {
     const el = flat.element;
     if (el.type !== 'video-placeholder') continue;
     const roles = dynamicRoles.get(el.id);
@@ -101,13 +193,51 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
     // parsing; emitting them here would carry a scene's guess about a plant
     // it cannot see all the way to the bridge, where it would compete with
     // the mapping that actually knows.
+    const boxId = boxIdOf(flat, boxIds);
+    const boxRect = boxId === null ? undefined : boxRects.get(boxId);
+    const boxRelativeRect = boxRect === undefined ? null : relativeRect(flat.rect, boxRect);
     out.push({
       elementId: el.id,
       sourceId: el.routeKey,
       rect: flat.rect,
       ...(el.expectedAspect !== undefined ? { expectedAspect: el.expectedAspect } : {}),
       dynamic: roles?.has('fill') ?? false,
+      ...(boxRelativeRect !== null ? { boxRelativeRect } : {}),
     });
   }
   return out;
+}
+
+/**
+ * 🔴 **The WHOLE Live Source carrier for one scene — the block `TemplateInfo.liveSources`
+ * carries — assembled in ONE place.**
+ *
+ * It was assembled at the call site, which was fine while the block had three fields that
+ * one line each produced. `tasks.md` 5.2 adds a fourth that must be derived in step with the
+ * others, and a block assembled by hand at the call site is a block whose next field gets
+ * added at one call site and forgotten at the next — the "extend the list, forget the
+ * mutator" shape this repo keeps paying for.
+ *
+ * ⚠ **ALWAYS EMITTED, including with an EMPTY `sources` and an EMPTY `arrangements`.** That
+ * is what makes an ABSENT block mean "imported before this existed" rather than "has none";
+ * collapsing the two would let a template with real holes reach air with nothing composited
+ * behind them (`liveSourceCarrierState`).
+ *
+ * `defaultPosition` is the RESOLVED authored default via the canonical
+ * `resolveDefaultPosition`, never a local `{ anchor: 'center' }`: the page falls through to
+ * that same function, and two spellings of "centred" is how the composited box comes to sit
+ * somewhere the transparent hole is not.
+ */
+export function buildTemplateLiveSources(scene: Scene): {
+  resolution: Scene['resolution'];
+  defaultPosition: ReturnType<typeof resolveDefaultPosition>;
+  sources: LiveSourceDeclaration[];
+  arrangements: LiveSourceArrangement[];
+} {
+  return {
+    resolution: scene.resolution,
+    defaultPosition: resolveDefaultPosition(scene),
+    sources: collectLiveSources(scene),
+    arrangements: collectArrangements(scene),
+  };
 }

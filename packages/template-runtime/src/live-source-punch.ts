@@ -1,4 +1,4 @@
-import type { LiveSourceMask } from '@cg/shared-schema';
+import { liveSourceMask, type LiveSourceMask, type MaskHole } from '@cg/shared-schema';
 
 /**
  * 1.5c — **apply a {@link LiveSourceMask} to an element, in ONE place.**
@@ -48,3 +48,62 @@ export const LIVE_SOURCE_MASK_PROPERTIES: readonly string[] = [
   '-webkit-mask-source-type',
   'mask-mode',
 ];
+
+/**
+ * Remove every property {@link applyLiveSourceMask} writes.
+ *
+ * 🔴 **This is the half of the re-punch that is easy to forget and expensive to omit.** The
+ * build-time rule is that an element nothing punches carries NO mask property at all — so on
+ * a re-punch, an element that HAD a hole and no longer has one must have its properties
+ * REMOVED, not left standing. A stale mask is a hole in a backdrop with nothing behind it:
+ * black, on air, in the shape of a box that is no longer there.
+ */
+export function clearLiveSourceMask(style: CSSStyleDeclaration): void {
+  for (const property of LIVE_SOURCE_MASK_PROPERTIES) style.removeProperty(property);
+}
+
+/** One element the re-punch can reach: its node and the box its mask is expressed in. */
+export interface PunchTarget {
+  readonly node: HTMLElement;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * ⭐ **`multibox-layout-switch` `tasks.md` 4.3 — THE RE-PUNCH PASS.**
+ *
+ * ── WHY THIS IS A REASSIGNMENT AND NOT A RE-EXPORT ──────────────────────────
+ *
+ * The mask is INLINE CSS on a live node (design.md §6), and a runtime mask path already
+ * exists for stamped scopes — so making the mask follow a mutation needs the properties
+ * rewritten on the nodes that are already there, not the scene rebuilt. Rebuilding would
+ * discard every piece of live state the page is holding: a playing animation's progress, a
+ * `<video>`'s decode position, a sequence's dwell, the operator's field values. UNIT B′ is
+ * about the mask keeping up with a moving plate; it must not cost the page its content.
+ *
+ * ── THE THREE CASES, AND THE ONE THAT IS NOT OBVIOUS ────────────────────────
+ *
+ * - **had a hole, has a (possibly different) hole** → reassign the properties.
+ * - **had no hole, has one now** → assign them. Reachable because every element is
+ *   registered as a target at build time, not just the ones that were punched then.
+ * - 🔴 **had a hole, has NONE now** → {@link clearLiveSourceMask}. This is the case a
+ *   "reassign what is in the map" implementation silently drops, and it is the one that
+ *   puts black on air.
+ */
+export function repunchLiveSourceHoles(
+  targets: ReadonlyMap<string, PunchTarget>,
+  masks: ReadonlyMap<string, readonly MaskHole[]>,
+): void {
+  for (const [key, target] of targets) {
+    const holes = masks.get(key);
+    const mask =
+      holes === undefined || holes.length === 0
+        ? null
+        : liveSourceMask([...holes], { width: target.width, height: target.height });
+    if (mask === null) {
+      clearLiveSourceMask(target.node.style);
+      continue;
+    }
+    applyLiveSourceMask(target.node.style, mask);
+  }
+}

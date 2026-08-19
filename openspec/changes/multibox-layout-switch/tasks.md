@@ -308,9 +308,21 @@ candidate shapes.
 
 ## 4. STAGE C — UNIT B′ and the per-arrangement carrier (ONE stage, interleaved)
 
+> ⭐ **SPLIT INTO C1 / C2 (owner, 2026-08-19).** **C1 — everything that is schema or runtime —
+> LANDED in session AU**: 4.1–4.6, 5.1, 5.2, and the SCHEMA halves of 5.4 and 5.5. **C2 is the
+> Designer's authoring surface**: 5.3, 5.6, and the CONTROLS for 5.4 and 5.5.
+>
+> 🔴 **The split runs THROUGH 5.4 and 5.5, not around them.** Their fields had to land with C1
+> because 4.1 cannot read a `hideDuringTransition` flag that does not exist; their controls
+> belong to C2 because a UI built on a schema that is still moving is a UI built twice.
+>
+> **Nothing in C1 is visually checkable** — no UI, no Designer control, no layer-list change.
+> Its verification is the eleven-row mutator matrix (4.4) and the `sequence` refusal (4.6).
+> The first visually checkable thing in this feature is C2's authoring surface.
+
 ### 4a. UNIT B′ — the mask must follow
 
-- [ ] 4.1 🔴 **ONE resolved-visibility function**, and give `sceneMaskHoles` its result instead of
+- [x] 4.1 🔴 **ONE resolved-visibility function**, and give `sceneMaskHoles` its result instead of LANDED 2026-08-19 (session AU). `resolveVisibility` in the new `packages/shared-schema/src/visibility.ts` — a file whose whole content is that one decision. `sceneMaskHoles` calls it; so does the ancestry check 4.5 added.
       the scene's authored `visible` (`packages/shared-schema/src/scene-flatten.ts:354`).
       ⚠ **THIS IS THE D4 CONSTRAINT'S HOME (§13.7.2).** The function has **three inputs**: the
       authored `visible`, per-arrangement visibility, and the per-element
@@ -320,38 +332,38 @@ candidate shapes.
       **Files:** `packages/shared-schema/src/scene-flatten.ts`, `packages/template-runtime/src/`.
       **Done when:** one exported function, three inputs, and every consumer calls it.
       **Visual:** nothing visual — verify by the 4.4 test matrix.
-- [ ] 4.2 **Give `sceneMaskHoles` CURRENT geometry**, so a moved plate takes its hole with it.
+- [x] 4.2 **Give `sceneMaskHoles` CURRENT geometry**, so a moved plate takes its hole with it. LANDED 2026-08-19 (session AU). `sceneMaskHoles(scene, view)` takes an `ArrangementView`; `applyArrangementGeometry` re-places the flattened scene through the fit affine, remapping `toScene` alongside `rect` so the hole is pulled back at the NEW position.
       ⚠ **Blocked on 5.1's carrier** — there is no per-arrangement geometry to read until it exists.
-- [ ] 4.3 **A re-punch pass after `update()`** in `@cg/template-runtime`, reassigning the mask
+- [x] 4.3 **A re-punch pass after `update()`** in `@cg/template-runtime`, reassigning the mask LANDED 2026-08-19 (session AU). `repunchLiveSourceHoles` + `clearLiveSourceMask` in `live-source-punch.ts`, driven from `update()` and from the new `runtime.setArrangementView()`. Every element is registered as a punch target at build (not just the punched ones), so "had no hole, has one now" and "had a hole, has NONE now" are both reachable.
       properties on the existing nodes. Not a re-export: the mask is inline CSS on a live node
       (§6), and a runtime mask path already exists for stamped scopes.
       **Files:** `packages/template-runtime/src/runtime.ts`, `.../live-source-punch.ts`.
-- [ ] 4.4 **Cover every mutator in §6b's table with a test:** take, teardown, position override,
+- [x] 4.4 **Cover every mutator in §6b's table with a test:** take, teardown, position override, LANDED 2026-08-19 (session AU) — `packages/template-runtime/tests/unit-b-prime-mutators.test.ts`, **eleven rows, sixteen tests** (the extra five are controls). ⚠ Rows 3 and 4 are answered on the OUTPUT side via `liveSourceFit`, not on the page: a position override / raster change moves the whole GRAPHIC and changes nothing inside the page, so the page mask must NOT follow and the bridge FILL/CLIP must. That is the row's finding, and both halves are asserted.
       resize, lifecycle range, retention restore, z-order reorder, arrangement switch, a `visible`
       binding, a `transform` binding, **and a background crossfade** (§13.3, conditional — only if a
       per-arrangement background is authored).
       **Done when:** eleven rows, eleven tests.
-- [ ] 4.5 **Answer AO's two inherited questions deliberately:** whether an **invisible ancestor**
+- [x] 4.5 **Answer AO's two inherited questions deliberately:** whether an **invisible ancestor** ANSWERED 2026-08-19 (session AU), in the mechanism. **Q1 — an invisible ancestor NOW suppresses the punch**: `FlatElement.ancestry` carries the layer + every container / composition instance, and `sceneMaskHoles` resolves each through the same one function. **Q2 — a hidden plate IS still declared**, and it is a decision now rather than a coincidence: written at `collectLiveSources` as _visibility governs the PUNCH, never the DECLARATION_, because a declaration is the plate SET that `(templateId, plateId)` is keyed to, and an undeclared plate cannot be HELD (§12.4) — only torn down.
       suppresses a punch, and whether a hidden plate is **declared while hidden**.
       🔴 **The tree's current answer to the second is an ACCIDENT, and 12.9.7 says so:**
       `collectLiveSources` has **no** visibility filter while `sceneMaskHoles` does, so today a
       hidden plate is **DECLARED but does not PUNCH**. Under §12.4 that is nearly the wanted
       behaviour — but keyed off the AUTHORED `visible`, not the arrangement state. **Make it a
       mechanism or change it; do not leave it a coincidence.**
-- [ ] 4.6 **Refuse a Live Source plate inside a `sequence`** — `flattenElements` never descends into
+- [x] 4.6 **Refuse a Live Source plate inside a `sequence`** — `flattenElements` never descends into LANDED 2026-08-19 (session AU). `liveSourcesInStampedScopes` in `scene-flatten.ts` — beside the non-descent that causes it — surfaced by the Designer preflight as `live-source-in-stamped-scope`. ⚠ The reason it must be REFUSED rather than documented is that the two failures CANCEL: nothing declares the plate and nothing punches it, so the page looks intact and the guest simply never appears.
       one (`scene-flatten.ts:264,274`), so such a plate declares nothing and punches nothing,
       silently.
       **Done when:** a preflight error exists with a test.
 
 ### 4b. The carrier and the authoring surface
 
-- [ ] 5.1 **Per-arrangement geometry in `@cg/shared-schema`** — an arrangement is an ordered list of
+- [x] 5.1 **Per-arrangement geometry in `@cg/shared-schema`** — an arrangement is an ordered list of LANDED 2026-08-19 (session AU). `packages/shared-schema/src/arrangements.ts` + `Scene.arrangements`. ⚠ The scoping note was VERIFIED at `bindings.ts:40` and holds: `x`/`y`/`scale` are bindable transform properties and `width`/`height` are not — so this is an OVERRIDE TABLE and not a binding, as the note recommended. No `count` field: the count IS `cells.length`, read through `arrangementCount`.
       cell rects for a count, and geometry lives on the box **INSTANCE** (A′, §12.9.10).
       ⚠ Note before scoping: `x`, `y` and `scale` are ALREADY bindable transform properties
       (`packages/shared-schema/src/bindings.ts:40`); it is `width`/`height` that are not. A
       per-arrangement **override table** read by the arrangement state is cleaner than widening
       bindings, and need not be a binding at all.
-- [ ] 5.2 **`collectLiveSources` emits ONE RECT PER ARRANGEMENT per plate** onto the declaration
+- [x] 5.2 **`collectLiveSources` emits ONE RECT PER ARRANGEMENT per plate** onto the declaration LANDED 2026-08-19 (session AU). `collectArrangements` + `LiveSourceDeclaration.boxRelativeRect`, assembled with the rest by `buildTemplateLiveSources`. **No `.vcg` format change.** 🔴 It carries CELLS plus a per-plate box fraction rather than 5.2's literal "one rect per arrangement per plate", because that shape is NOT derivable at import: cell order is the order LIT sources are seated, so which plate lands in which cell depends on the operator's toggles. The two pieces compose to exactly that rect at reconcile time (6.4); the reason is written at the mechanism.
       block on `TemplateInfo`, following `live-source-multibox` §1's carrier (derived once at import,
       the shipped `hasNext` precedent). **No `.vcg` format change** — the mask is computed at boot.
       **Files:** `packages/vcg-format/src/live-sources.ts`.
@@ -359,10 +371,10 @@ candidate shapes.
       the per-arrangement geometry. See the `designer-multibox-arrangements` spec.
       **Visual:** ⭐ **this one IS visual** — open the Designer, add a box composition, author a
       2-box and a 3-box arrangement, and switch between them in the preview.
-- [ ] 5.4 **D2's per-arrangement MODE + DURATION field**, in the same section as the arrangement list
+- [x] 5.4 **D2's per-arrangement MODE + DURATION field**, in the same section as the arrangement list SCHEMA HALF LANDED 2026-08-19 (session AU) — `ArrangementTransitionSchema`, a DISCRIMINATED UNION so §13.5's and §12.2's measured rules are unrepresentable to violate: a cut carries no duration or easing, a move is `linear` only, a fade takes any easing (§13.5a moved it off the server side), and an OMITTED timing function cannot be expressed at all. ⏭ **Its authoring CONTROL is C2.**
       (§13.6.2). Per-arrangement is a **strict subset** of the deferred per-pair form, so the
       authored format does not have to change if per-pair is taken up later.
-- [ ] 5.5 **D4's per-element hide-while-transitioning flag** — authored beside the element, and wired
+- [x] 5.5 **D4's per-element hide-while-transitioning flag** — authored beside the element, and wired SCHEMA HALF LANDED 2026-08-19 (session AU) — `hideDuringTransition` on `ElementBaseSchema`, wired as 4.1's THIRD input and read nowhere else. ⏭ **Its authoring CONTROL is C2.**
       as **4.1's third input**.
 - [ ] 5.6 **Preflight:** exactly one arrangement active at author time, and the `live-source-overlap`
       check applied **WITHIN** an arrangement, not across arrangements — today the loop is

@@ -15,6 +15,8 @@ import {
   type NestedFieldValues,
   type Playout,
   type Scene,
+  sceneMaskHoles,
+  type ArrangementView,
 } from '@cg/shared-schema';
 import {
   applyAnimationAtFrame,
@@ -22,6 +24,8 @@ import {
   type AnimatedElement,
 } from './animation-applier.js';
 import { applyScopedFieldValues, isNamespace, type FieldDocLite } from './bindings.js';
+import { liveArrangementView } from './arrangement-view.js';
+import { repunchLiveSourceHoles } from './live-source-punch.js';
 
 /**
  * Deep-merge a nested field-value patch into the current values. Plain objects
@@ -439,6 +443,27 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
   const built = buildScene(scene, doc, mode, paintEditorBackdrop);
   root.appendChild(built.container);
+
+  /**
+   * ⭐ **`multibox-layout-switch` `tasks.md` 4.3 — UNIT B′'s re-punch pass.**
+   *
+   * The mask used to be computed ONCE, at build, and nothing recomputed it — which is the
+   * whole of UNIT B′: every mutator in `design.md` §6b's table moves or removes a plate, and
+   * the hole stayed where the plate used to be. A hole with no plate behind it is not a
+   * cosmetic defect; it is the backdrop punched through to nothing, i.e. BLACK on air, in
+   * the shape of a box that has gone.
+   *
+   * It reassigns the mask properties on the nodes that are already there (§6: the mask is
+   * inline CSS on a live node), so nothing the page is holding — a playing animation, a
+   * `<video>`'s decode position, a sequence's dwell, the operator's field values — is lost
+   * to keeping the mask honest.
+   */
+  const repunch = (view: ArrangementView | undefined = arrangementView): void => {
+    arrangementView = view;
+    const live = liveArrangementView(scene, built.elementMap, view);
+    repunchLiveSourceHoles(built.punchTargets, sceneMaskHoles(scene, live));
+  };
+  let arrangementView: ArrangementView | undefined;
 
   // D-062 — wire image `src` from a host-supplied assetId→URL map. The scene
   // builder emits `<img data-cg-asset-id>` with no `src`; exporters pass the
@@ -2164,6 +2189,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       bus.emit('play.end');
     },
 
+    setArrangementView(view: ArrangementView | undefined): void {
+      if (machine.state === 'removed') return;
+      repunch(view);
+    },
+
     async update(data, opts: UpdateOptions = {}): Promise<void> {
       if (machine.state === 'removed') {
         throw new Error('Runtime removed; update() unavailable');
@@ -2177,6 +2207,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       reapplySequenceItemFields();
       reapplyClockTargets();
+      repunch();
       bus.emit('update');
     },
 

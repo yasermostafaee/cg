@@ -2,6 +2,7 @@ import type { Composition, Layer, MaskHole, Scene } from './scene.js';
 import type { Element } from './elements.js';
 import type { Transform } from './primitives.js';
 import type { LiveSourceRect } from './live-source.js';
+import { resolveVisibilityOf, type VisibilitySubject } from './visibility.js';
 
 /**
  * C-015 phase 6 / 1.5c — **the ONE walk that flattens a scene's elements to SCENE
@@ -207,6 +208,17 @@ export interface FlatElement {
   readonly key: string;
   /** Composition nesting depth, bounded exactly as the builder bounds it. */
   readonly depth: number;
+  /**
+   * 🔴 **Everything between the scene root and this element that can HIDE it** — the LAYER
+   * it sits on, then each `container` / `composition` instance, outermost → innermost.
+   *
+   * This exists to answer AO's first inherited question (`design.md` §6b), and it exists as
+   * DATA rather than as a boolean because the answer depends on a context this walk does
+   * not have: an ancestor's visibility is itself resolved through {@link resolveVisibility},
+   * so an arrangement that hides a whole BOX hides everything inside it. Collapsing it to a
+   * flag here would have to pick a context, and the wrong one is silent.
+   */
+  readonly ancestry: readonly VisibilitySubject[];
 }
 
 /**
@@ -237,6 +249,28 @@ const MAX_COMPOSITION_DEPTH = 8;
  * inside one has a static scene-px rect; declaring the template's own unstamped
  * coordinates would name a rect no stamp actually occupies.
  */
+/**
+ * A layer or an element, reduced to what {@link resolveVisibility} needs of it.
+ *
+ * ONE projection, used for both, because "can this hide what is under it" is one question
+ * and a `Layer` and an `Element` answer it with the same two fields. A `Layer` has no
+ * `hideDuringTransition` — layers are not authored per arrangement — and `undefined` is
+ * exactly the right answer there rather than a `false` that looks like a decision.
+ */
+function subjectOf(node: {
+  id: string;
+  visible: boolean;
+  hideDuringTransition?: boolean | undefined;
+}): VisibilitySubject {
+  return {
+    id: node.id,
+    visible: node.visible,
+    ...(node.hideDuringTransition !== undefined
+      ? { hideDuringTransition: node.hideDuringTransition }
+      : {}),
+  };
+}
+
 export function flattenElements(scene: Scene, order: SiblingOrder = 'document'): FlatElement[] {
   const byId = new Map<string, Composition>();
   for (const c of scene.compositions ?? []) byId.set(c.id, c);
@@ -248,6 +282,7 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
     visited: ReadonlySet<string>,
     depth: number,
     prefix: string,
+    ancestry: readonly VisibilitySubject[],
   ): void => {
     const ordered =
       order === 'paint' ? [...children].sort((a, b) => a.zIndex - b.zIndex) : children;
@@ -258,6 +293,7 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
         rect: sceneRect(el, ancestors),
         toScene: elementToScene(el, ancestors),
         ancestors,
+        ancestry,
         key,
         depth,
       });
@@ -268,6 +304,7 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
           visited,
           depth,
           prefix,
+          [...ancestry, subjectOf(el)],
         );
         continue;
       }
@@ -287,20 +324,131 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
         const nextVisited = new Set(visited).add(el.compositionId);
         const layers: readonly Layer[] = comp.layers;
         for (const layer of layers) {
-          walk(layer.children, [...ancestors, level], nextVisited, depth + 1, `${key}/`);
+          // The composition INSTANCE can hide its whole subtree, and so can the layer
+          // INSIDE the composition that a child sits on — both go on the chain.
+          walk(layer.children, [...ancestors, level], nextVisited, depth + 1, `${key}/`, [
+            ...ancestry,
+            subjectOf(el),
+            subjectOf(layer),
+          ]);
         }
       }
       // A `repeater` is deliberately NOT walked — see the docstring.
     }
   };
 
-  for (const layer of scene.layers) walk(layer.children, [], new Set<string>(), 0, '');
+  for (const layer of scene.layers)
+    walk(layer.children, [], new Set<string>(), 0, '', [subjectOf(layer)]);
   return out;
 }
 
 /** Do two axis-aligned rects share any AREA? Touching edges do not count. */
 function intersects(a: LiveSourceRect, b: LiveSourceRect): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+/**
+ * 🔴 **`tasks.md` 4.2 — the ACTIVE arrangement, as the context every geometry and
+ * visibility question is answered in.**
+ *
+ * `undefined` everywhere means "no arrangement, nothing transitioning", which resolves to
+ * exactly today's behaviour — so every existing caller, every template authored before this
+ * feature and every existing test is unchanged by its introduction.
+ */
+export interface ArrangementView {
+  /**
+   * `elementId → the box INSTANCE's rect in this arrangement`, in SCENE pixels.
+   *
+   * A′ (§12.9.10) puts per-arrangement geometry on the box INSTANCE and never on the plate
+   * element, which is what keeps `(templateId, plateId)` stable across a switch. Everything
+   * inside the instance — the plate, its title, its frame — travels with it.
+   */
+  readonly geometry?: Readonly<Record<string, LiveSourceRect>> | undefined;
+  /** The arrangement's per-element visibility opinions. Input 2 of `resolveVisibility`. */
+  readonly visibility?: Readonly<Record<string, boolean>> | undefined;
+  /**
+   * ⚠ **Input 1 of `resolveVisibility`, as the PAGE currently has it** — the authored
+   * `visible` AFTER `visible` bindings and lifespan gates have written to it. An absent key
+   * means "nothing overrode it", and the scene's authored value stands.
+   *
+   * 🔴 **This is NOT a fourth notion of visibility, and the distinction matters.** It is
+   * input 1 with a live source rather than a static one: a `visible` binding's whole job is
+   * to retarget the authored value at playout, and a lifespan gate's is to withdraw it for
+   * part of the timeline. Both are the authored value CHANGING, not a new opinion beside
+   * it — which is exactly why they belong here and not in {@link visibility}, whose meaning
+   * is "what the ARRANGEMENT says". Collapsing the two would make an arrangement appear to
+   * have an opinion it never expressed.
+   */
+  readonly currentVisible?: Readonly<Record<string, boolean>> | undefined;
+  /** Whether a transition into this arrangement is running. Half of input 3. */
+  readonly transitioning?: boolean | undefined;
+}
+
+/**
+ * The axis-aligned affine that carries `from` onto `to`, or `null` when `from` has no area
+ * to scale out of.
+ *
+ * This is the whole of "the box moved": an arrangement states where a box INSTANCE sits,
+ * and everything under that instance is carried by the same map — which is why a title
+ * needs no per-arrangement placement of its own (§12.9.10 point 5, the sixteen manual
+ * placements that become four).
+ */
+function fitAffine(from: LiveSourceRect, to: LiveSourceRect): Affine | null {
+  if (from.width === 0 || from.height === 0) return null;
+  const sx = to.width / from.width;
+  const sy = to.height / from.height;
+  return { a: sx, b: 0, c: 0, d: sy, e: to.x - from.x * sx, f: to.y - from.y * sy };
+}
+
+/**
+ * Re-place a flattened scene into the ACTIVE arrangement — `tasks.md` 4.2's "give
+ * `sceneMaskHoles` CURRENT geometry, so a moved plate takes its hole with it".
+ *
+ * ── WHY THIS IS A POST-PASS AND NOT A CHANGE TO THE WALK ────────────────────
+ *
+ * An override states an element's SCENE rect. The walk composes PARENT-space transforms,
+ * so applying an override inside it would mean inverting the ancestor chain to invent a
+ * transform whose composed result is the wanted rect — anchor, rotation and scale included.
+ * Mapping the finished rect is exact for the axis-aligned case, needs no such inversion,
+ * and reuses `rectThrough` / `composeAffine` rather than adding a second geometry path.
+ *
+ * `toScene` is remapped alongside `rect`, and that is not incidental: `sceneMaskHoles`
+ * pulls each hole back through `invert(toScene)`, so a rect that moved while its `toScene`
+ * did not would punch the hole at the OLD position — the exact failure UNIT B′ exists to
+ * fix, reintroduced by a half-applied fix.
+ *
+ * **NEAREST override wins.** For an element under an overridden ancestor, the ancestor's
+ * map carries it; if the element itself is overridden, its own is the more specific
+ * statement and takes precedence for it and for its own subtree.
+ */
+export function applyArrangementGeometry(
+  flat: readonly FlatElement[],
+  geometry: Readonly<Record<string, LiveSourceRect>> | undefined,
+): FlatElement[] {
+  if (geometry === undefined || Object.keys(geometry).length === 0) return [...flat];
+
+  // The AUTHORED scene rect of every element an override could name. Read before anything
+  // is moved, because every map is measured from where the scene actually put the box.
+  const authored = new Map<string, LiveSourceRect>();
+  for (const f of flat) if (!authored.has(f.element.id)) authored.set(f.element.id, f.rect);
+
+  const affineFor = (id: string): Affine | null => {
+    const to = geometry[id];
+    const from = authored.get(id);
+    if (to === undefined || from === undefined) return null;
+    return fitAffine(from, to);
+  };
+
+  return flat.map((f) => {
+    // Nearest first: the element itself, then its ancestry innermost → outermost.
+    const chain = [f.element.id, ...[...f.ancestry].reverse().map((a) => a.id)];
+    for (const id of chain) {
+      const m = affineFor(id);
+      if (m === null) continue;
+      return { ...f, rect: rectThrough(m, f.rect), toScene: composeAffine(m, f.toScene) };
+    }
+    return f;
+  });
 }
 
 /**
@@ -343,15 +491,42 @@ function intersects(a: LiveSourceRect, b: LiveSourceRect): boolean {
  * a rotated quad and is re-bounded — an OVER-punch, never an under-punch, so the
  * live picture is never cropped by it.
  */
-export function sceneMaskHoles(scene: Scene): Map<string, MaskHole[]> {
-  const flat = flattenElements(scene, 'paint');
+export function sceneMaskHoles(
+  scene: Scene,
+  view: ArrangementView | undefined = undefined,
+): Map<string, MaskHole[]> {
+  const flat = applyArrangementGeometry(flattenElements(scene, 'paint'), view?.geometry);
+  const context = {
+    arrangementVisibility: view?.visibility,
+    transitioning: view?.transitioning,
+  };
+  /**
+   * 🔴 `tasks.md` 4.1 + 4.5 — visibility comes from the ONE function, and it is asked about
+   * the plate AND about everything that can hide it.
+   *
+   * **AO's first inherited question, answered as a MECHANISM (`design.md` §6b):** an
+   * INVISIBLE ANCESTOR now suppresses the punch. It did not before — the filter tested
+   * `visible` on the PLATE alone, so a plate on a hidden LAYER, in a hidden container, or
+   * inside a hidden box still punched a hole through everything below it. AO left that
+   * alone because the page and the bridge still AGREED (both acted on the hidden plate).
+   * An arrangement that hides a whole BOX is precisely the case where they stop agreeing:
+   * the box is gone, its hole is not, and what shows through the hole is nothing at all —
+   * §1's crosstalk arriving from inside one template.
+   */
+  const live = (subject: VisibilitySubject): VisibilitySubject => {
+    const override = view?.currentVisible?.[subject.id];
+    return override === undefined ? subject : { ...subject, visible: override };
+  };
+  const onScreen = (f: FlatElement): boolean =>
+    resolveVisibilityOf(live({ ...f.element }), context) &&
+    f.ancestry.every((a) => resolveVisibilityOf(live(a), context));
 
   // Paint order is the array order of `flat`: `flattenElements` emits an element
   // before its children and sorts siblings by `zIndex`, which is exactly what
   // `buildLayer` appends. So "above" is simply "at a higher index".
   const plates = flat
     .map((f, index) => ({ f, index }))
-    .filter(({ f }) => f.element.type === 'video-placeholder' && f.element.visible);
+    .filter(({ f }) => f.element.type === 'video-placeholder' && onScreen(f));
 
   const holes = new Map<string, MaskHole[]>();
   if (plates.length === 0) return holes;
@@ -378,4 +553,140 @@ export function sceneMaskHoles(scene: Scene): Map<string, MaskHole[]> {
     );
   }
   return holes;
+}
+
+// ───────────────── STAMPED SCOPES: the plates the walk deliberately never sees ─────────────────
+
+/** One Live Source plate found inside a scope this module does not walk. */
+export interface StampedLiveSource {
+  /** The `video-placeholder` element. */
+  readonly element: Element;
+  /** Which kind of stamped scope swallowed it. */
+  readonly scope: 'sequence' | 'repeater';
+  /** The `sequence` / `repeater` element that contains it. */
+  readonly scopeElementId: string;
+}
+
+/**
+ * 🔴 **`multibox-layout-switch` `tasks.md` 4.6 — every Live Source plate sitting inside a
+ * STAMPED scope, which is a template that is broken in a way nothing currently says.**
+ *
+ * ── WHY IT LIVES HERE, BESIDE THE WALK THAT CAUSES IT ───────────────────────
+ *
+ * {@link flattenElements} descends into `container` and `composition` and into nothing else.
+ * That is deliberate and documented — a `repeater` stamps rows at positions computed at RUN
+ * time, and a `sequence` swaps its items over time, so nothing inside either has a static
+ * scene-px rect to declare. The consequence, which was NOT deliberate, is that a plate in
+ * one is **invisible to both sides at once**: `collectLiveSources` declares nothing, so the
+ * bridge seats no producer; `sceneMaskHoles` punches nothing, so the backdrop stays solid.
+ *
+ * ⚠ **The two failures cancel, and that is exactly what makes this worth refusing.** The
+ * page looks intact — no black hole, no error — and the plate simply is not there. An
+ * operator assigning a source to it sees the assignment accepted and nothing reach air, with
+ * no message anywhere naming the cause. A refusal at authoring time is the only point where
+ * this is cheap to say.
+ *
+ * A second reason, specific to this feature: a stamp would carry the SAME `sourceId` on
+ * every copy, so N stamps would fight over one live layer even if the geometry existed.
+ *
+ * Reported rather than thrown — the caller decides whether it is an export error or a
+ * warning, and the Designer's preflight already owns that vocabulary.
+ */
+export function liveSourcesInStampedScopes(scene: Scene): StampedLiveSource[] {
+  const byId = new Map<string, Composition>();
+  for (const c of scene.compositions ?? []) byId.set(c.id, c);
+
+  const found: StampedLiveSource[] = [];
+  const seenScopes = new Set<string>();
+
+  /** Walk everything under a scope that IS stamped, collecting plates at any depth. */
+  const collect = (
+    children: readonly Element[],
+    scope: 'sequence' | 'repeater',
+    scopeElementId: string,
+    depth: number,
+    visited: ReadonlySet<string>,
+  ): void => {
+    if (depth > MAX_COMPOSITION_DEPTH) return;
+    for (const el of children) {
+      if (el.type === 'video-placeholder') {
+        found.push({ element: el, scope, scopeElementId });
+        continue;
+      }
+      if (el.type === 'container') {
+        collect(el.children, scope, scopeElementId, depth, visited);
+        continue;
+      }
+      if (el.type === 'composition') {
+        const comp = byId.get(el.compositionId);
+        if (comp === undefined || visited.has(el.compositionId)) continue;
+        const next = new Set(visited).add(el.compositionId);
+        for (const layer of comp.layers) {
+          collect(layer.children, scope, scopeElementId, depth + 1, next);
+        }
+      }
+    }
+  };
+
+  /** Walk the ORDINARY tree, looking for stamped scopes to hand to `collect`. */
+  const walk = (
+    children: readonly Element[],
+    depth: number,
+    visited: ReadonlySet<string>,
+  ): void => {
+    if (depth > MAX_COMPOSITION_DEPTH) return;
+    for (const el of children) {
+      if (el.type === 'repeater') {
+        const comp = byId.get(el.compositionId);
+        if (comp !== undefined && !seenScopes.has(el.id)) {
+          seenScopes.add(el.id);
+          for (const layer of comp.layers) {
+            collect(
+              layer.children,
+              'repeater',
+              el.id,
+              depth + 1,
+              new Set(visited).add(el.compositionId),
+            );
+          }
+        }
+        continue;
+      }
+      if (el.type === 'sequence') {
+        if (!seenScopes.has(el.id)) {
+          seenScopes.add(el.id);
+          for (const item of el.items) {
+            if (item.kind !== 'composition') continue;
+            const comp = byId.get(item.compositionId);
+            if (comp === undefined) continue;
+            for (const layer of comp.layers) {
+              collect(
+                layer.children,
+                'sequence',
+                el.id,
+                depth + 1,
+                new Set(visited).add(item.compositionId),
+              );
+            }
+          }
+        }
+        continue;
+      }
+      if (el.type === 'container') {
+        walk(el.children, depth, visited);
+        continue;
+      }
+      if (el.type === 'composition') {
+        const comp = byId.get(el.compositionId);
+        if (comp === undefined || depth >= MAX_COMPOSITION_DEPTH || visited.has(el.compositionId)) {
+          continue;
+        }
+        const next = new Set(visited).add(el.compositionId);
+        for (const layer of comp.layers) walk(layer.children, depth + 1, next);
+      }
+    }
+  };
+
+  for (const layer of scene.layers) walk(layer.children, 0, new Set<string>());
+  return found;
 }
