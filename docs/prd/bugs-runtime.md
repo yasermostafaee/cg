@@ -3850,7 +3850,7 @@ general mechanism for the UI to do so.
   [[B-143]] (the honesty half never built), [[B-139]] / [[R-053]] (the row-level home three
   per-plate facts already want — a per-row warning surface should be built once, not four times).
 
-## [x] B-145 — the bridge's live-layer ledger does not survive a restart: seated producers are stranded on air, unreachable by any code path — **DONE 2026-08-18 (session AS): shape A+B, the named fallback** ⟨priority: high — a live face on air with no handle to it⟩
+## [~] B-145 — the bridge's live-layer ledger does not survive a restart: seated producers are stranded on air, unreachable by any code path — **PERSISTENCE DONE (sessions AS + AT); the DISPLAY half of acceptance 1 is still open** ⟨priority: high — a live face on air with no handle to it⟩
 
 **What:** `#liveLayers` is a `Map` in the bridge process (`tools/caspar-bridge/src/caspar-runtime.ts`,
 `readonly #liveLayers: LiveLayerLedger = new Map()`). It is the only record of which band layers
@@ -3921,6 +3921,30 @@ capture on this exact build. It is false there, and it is the kind of false that
 cannot answer a question AMCP answers, and this item's boot adoption is precisely the one-shot
 occupancy reading that would have gone without. The tap's own justification (passive, costs no
 commands) is unaffected and is now what the comment says.
+
+### 🔴 RE-OPENED 2026-08-19 (session AU) — it was ticked with half of acceptance 1 unmet
+
+**What is DONE:** the ledger is persisted, adopted at boot against the server, and persistence is ON
+by default (sessions AS and AT). An adopted layer IS controllable — the row's existing verbs reach
+it, because the browser re-delivers the stack intent on connect ([[B-092]]), the ledger is keyed by
+`itemId`, and every teardown/repoint door reads it by that key.
+
+**What REMAINS — and it is the first half of acceptance 1, not a nicety.** Acceptance 1 reads _"those
+layers **appear in the layer list** and are controllable"_. They do not appear. Nothing displays the
+seated layers AS layers: `CasparRuntime.liveLayers()` has no production caller, no `@cg/shared-ipc`
+channel carries the ledger, and the only panel that lists station layers enumerates `#reservedLayers`
+only — a band the Live Source layers are deliberately kept OUT of.
+
+🔴 **Tracked as task 2.8 in `openspec/changes/multibox-layout-switch/tasks.md`, and NOT split into a
+second number.** The blocking relation to [[R-057]] is already recorded here, and splitting one
+acceptance list across two items is exactly the churn `docs/prd/b-number-registry.md` exists to
+avoid. This item is `[~]`, not `[x]`, until 2.8 lands.
+
+⏱ **WHEN it must land: before STAGE E**, the operator surface (`tasks.md` section 6). Not before
+that, and the reason is specific rather than a preference — Stage E is where the band's state becomes
+something the operator is EXPECTED to read, so an invisible seated layer stops being a diagnostic gap
+and becomes a lie on the surface they act from. Stages C and D touch neither the list nor the band's
+visibility, so they are not blocked on it.
 
 ### 🔴 COMPLETED 2026-08-19 (session AT) — the default was OFF, and the display half is still owed
 
