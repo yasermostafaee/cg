@@ -3053,16 +3053,17 @@ Number.isFinite(n) ? n : 0; }` (`PositionPicker.tsx:106-109`). An emptied or hal
   re-argue it), [[B-072]] (the seed precedence the marker depends on), [[R-011]] (the position
   override itself).
 
-## [ ] R-057 — the multi-box arrangement switch: the OPERATOR half ⟨priority: high — the client runs a 3-box show and cannot change it live⟩
+## [ ] R-057 — the multi-box LOOK switch: the OPERATOR half ⟨priority: high — the client runs a 3-box show and cannot change it live⟩
 
-**What:** the operator can switch a running row between the box COUNTS its template declares — 3-box
-→ 2-box → 1-box and back — with **exactly ONE active at a time, so the operator cannot make a
-mistake**. Concretely: an always-visible control on the row that IS the state readout and the switch
-in one object; a single reconcile that applies the change to what is on air; the transition; and the
-refusals.
+**What:** the operator can switch a running row between the **LOOKS** its template authors — the
+6-box grid → the 1-box solo and back — with **exactly ONE active at a time, so the operator cannot
+make a mistake**. Concretely: a **look picker** on the row that IS the on-air readout and the switch
+in one object; **preset-then-take** (any declared source can be re-pointed BEFORE the switch,
+through the staged-assignment machinery that already exists); a single reconcile that applies the
+change to what is on air; and one refusal.
 
-⚠ **This is HALF the feature. The authoring half is [[D-152]]** — the arrangements themselves, their
-geometry and the per-box titles, are a Designer concern and a Designer-focused reader must find them
+⚠ **This is HALF the feature. The authoring half is [[D-152]]** — the looks themselves, the declared
+sources and the background are a Designer concern and a Designer-focused reader must find them
 there. The split follows [[D-137]] / [[C-015]]: one capability, two items, cross-referenced both
 ways. **Design, evidence and task list for both halves live in ONE change:**
 `openspec/changes/multibox-layout-switch/`.
@@ -3080,85 +3081,77 @@ and reveals whatever live layer is topmost at that pixel, **which may belong to 
 template**. Both reported symptoms follow at once — one arrangement appearing under another, and
 boxes that look cropped. The switch makes that state unreachable.
 
-**The model (owner, 2026-08-18).** The operator toggles **SOURCES**; the **COUNT** is derived from how
-many are lit; a count may have several named **ARRANGEMENTS**, one of which is the authored default.
-**The common case is ONE ACTION** — flip a toggle, and the derived count's default arrangement
-follows — with choosing a non-default arrangement an explicit extra step.
+**The model (owner, 2026-08-19 — LOOKS, `design.md` §14).** The author composes each **LOOK** as a
+full sub-scene — plates, titles, decor, freely placed; **SOURCES are declared ONCE on the
+multi-frame group** and a look's plates REFERENCE them, so the same source in two looks is ONE seat,
+held across switches. The operator **SELECTS a look**; what each frame shows is re-pointable through
+the preset. ⚠ **This supersedes TWO earlier operator models on this item** — the segmented control
+over counts (`056ffdd5`) and D1's toggle-per-source (2026-08-18): with per-slot preset, toggles no
+longer carry the combination — **the look does** (`design.md` §14.5 records both reversals). What
+survives every reversal: always visible, state-carrying, no menu.
 
-**The decisions this item implements** (all owner-answered, `design.md` §12–§13):
+**The decisions this item implements** (owner-answered; `design.md` §12 as re-keyed by §14):
 
-|                                             | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Phasing**                                 | the CUT ships first; the animated switch second. Both share the carrier and the mask work                                                                                                                                                                                                                                                                                                                                                                                        |
-| **The control**                             | 🔴 **ONE TOGGLE PER DECLARED SOURCE, always visible on the row — which toggles are LIT is what is on air, and the COUNT is DERIVED from how many.** A menu is disqualified: it hides the current state, and the requirement is that the operator cannot be mistaken. ⚠ Supersedes the segmented-control-over-counts wording this row carried at `056ffdd5` — a control over counts cannot express _which_ two of four, and the owner's answer was **any combination, any count** |
-| **A dropped box**                           | its source is **HELD muted and idle**, so switching back is instant. A source kind that cannot be held falls back to teardown as a **NAMED, observable** behaviour, never a silent difference                                                                                                                                                                                                                                                                                    |
-| **Two multi-box templates on air together** | **REFUSED**, in `take()` **AND** `restore()` — restore never passes through take — through **ONE predicate CALLED from both**                                                                                                                                                                                                                                                                                                                                                    |
-| **The Inspector's assignment edit**         | surface only — see [[B-146]], which carries it                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **Transition modes**                        | cut / fade / move. The mode and duration are **per-ARRANGEMENT — a property of the arrangement being ENTERED** (`design.md` §13.6.2); the operator does **not** pick a mode per switch in v1, and always has an immediate cut as an escape (§13.6.1)                                                                                                                                                                                                                             |
+|                                               | Decision                                                                                                                                                                                                                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Phasing**                                   | **cut-only v1** (owner: "the transition does not matter — a cut is enough"). The animated switch is PARKED with D2's fade/move modes (§14.4), not designed here                                                                                                    |
+| **The control**                               | 🔴 **ONE LOOK PICKER, always visible on the row — the picker IS the on-air readout.** One-of-N by construction: an invalid state is unrepresentable. A menu stays disqualified: it hides the current state, and the requirement is the operator cannot be mistaken |
+| **A source with no plate in the active look** | **HELD muted and idle**, so switching back is instant (§12.4 unchanged). A source kind that cannot be held falls back to teardown as a **NAMED, observable** behaviour, never a silent difference                                                                  |
+| **Two multi-box templates on air together**   | **REFUSED**, in `take()` **AND** `restore()` — restore never passes through take — through **ONE predicate CALLED from both** (§12.6, SHIPPED; keys on the declaration count, arrangement/look-independent)                                                        |
+| **The Inspector's assignment edit**           | surface only — see [[B-146]], which carries it. **Strengthened by preset-then-take:** "takes effect at the next take" becomes the operator's normal grammar                                                                                                        |
+| **Transition modes**                          | **cut in v1, full stop.** D2's per-entered-look mode set and §12.2's `linear` contract are PARKED for the animated phase (§14.4); the subset argument (§13.6.2) carries over unchanged when it arrives                                                             |
 
-🔴 **The switch and the live-source change are ONE mechanism.** A switch changes _which plates exist
-and where_; a source change changes _what one plate shows_. Both are "reconcile the seated
-live-plate set of a RUNNING row against a freshly-resolved desired set". `swapLiveSource` (R-048,
-shipped) becomes a CALLER of that reconcile, not a peer — **do not build a second mechanism beside
-it.**
+🔴 **The switch and the live-source change are ONE mechanism.** A switch changes _which plates are
+visible and where_; a source change changes _what one plate shows_. Both are "reconcile the seated
+live-plate set of a RUNNING row against a freshly-resolved desired set" — the desired set is now
+**the active look's `{routeKey → rect}`** from the look carrier. `swapLiveSource` (R-048, shipped)
+becomes a CALLER of that reconcile, not a peer — **do not build a second mechanism beside it.**
 
-⚠ **The control re-opens the closed six-column verb grid, and collides with it twice** — the SHAPE
-rule (`layerRowActions.ts:407-409`, why conditionally-present controls became `surface: 'menu'`) and,
-more sharply, the fixed-px column model (`layerTable.ts:1-22`, `VERB_COUNT = 6` at `:75`). The toggle
-set has **one element per declared plate**, so its width still varies by row — bounded now by a
-quantity the surface already carries rather than by an independent authored dimension, which makes it
-smaller but not gone. `design.md` §12.8 poses three placements and recommends a **second line on the
-row, outside the verb block**; a list of same-sized toggles is exactly what a free-flowing second line
-accommodates and exactly what a fixed-px column grid does not. It leaves `VERB_COUNT` and the header
-word alignment untouched, and that invariant has a recorded on-air failure behind it.
-
-⚠ **The operator's immediate-CUT escape shares this surface and is designed WITH the toggles, not
-after them** (`design.md` §13.6.1): the operator does not pick a transition mode per switch in v1 —
-the author's per-arrangement mode runs — so the escape is one action, not a mode picker.
+⚠ **The control still lands on the closed six-column verb grid, and the collision SHRANK twice** —
+first from an authored dimension to the plate count (D1), now to **one picker** (§14.5). The SHAPE
+rule (`layerRowActions.ts:407-409`) and the fixed-px column model (`layerTable.ts:1-22`,
+`VERB_COUNT = 6` at `:75`) still bind; `design.md` §12.8's placement **(ii) — a second line on the
+row, outside the verb block** — stands and is easiest of all for a single control. It leaves
+`VERB_COUNT` and the header word alignment untouched, and that invariant has a recorded on-air
+failure behind it.
 
 🔴 **UNBLOCKED 2026-08-18 — [[B-145]] IS DONE.** The live-layer ledger now survives a bridge restart:
 it is persisted on every change and ADOPTED at boot, corrected against what the server actually has
 (`INFO` supplies the truth about occupancy; the file supplies the `itemId` / `sourceId` / `role` the
 server was never told). That mattered here because the switch seats and releases plates continuously
 rather than once per take, so a stranded producer under it would be a live guest on air that no code
-path could reach.
+path could reach. ⚠ Its DISPLAY half (change `tasks.md` 2.8) is still owed before the picker ships.
 
-**Refusals — legible, never silent truncation** (owner, 2026-08-18):
+**Refusals — ONE trigger in v1** (`design.md` §14.5; supersedes the three count-shaped triggers of
+2026-08-18, which are retired UNREPRESENTABLE rather than moved):
 
-- Lighting **more toggles than the largest arrangement holds** is refused, **naming the number lit
-  and the largest available**.
-- Reaching a **count with no arrangement** is refused in the same family, with the same wording
-  discipline — arrangements are NOT required for every count.
-- 🔴 **ALL TOGGLES OFF (count 0)** is an ordinary count: the authored 0-cell arrangement if there is
-  one, else the same refusal. It is **never** an implicit way to take the row off air — the row has a
-  STOP verb, and a second implicit route to off-air would be the quietest possible one.
+- A multi-box template that authors **NO LOOKS** refuses the take, naming what is missing.
+- Over-lit, absent-count and **all-off cannot be expressed** by a one-of-N picker. Taking the row
+  off air stays the STOP verb's job alone — the picker offers no implicit route to off-air.
 
 **Acceptance:**
 
-- WHEN the operator switches a running row from 3-box to 2-box THEN the 2-box arrangement is the
-  only one on air, and no part of the 3-box one remains visible — neither its painted frames nor the
-  holes its plates punched
-- WHEN the operator switches back THEN each box shows the same source it showed before, with no
-  operator action, because assignment is keyed `(templateId, plateId)` and the plate keeps one
-  identity
-- WHEN the operator flips a source toggle THEN it takes ONE action, the derived count's default
-  arrangement follows, and the lit toggles are what is on air
-- WHEN the operator lights any COMBINATION — the first and third of four, say — THEN those two are on
-  air, because the primitive is per-source and not per-count
-- WHEN a box has no counterpart in the target count THEN its source is held (or its teardown is
-  surfaced), and it is not reassigned onto a surviving box
-- WHEN the operator lights more toggles than the largest arrangement holds THEN the refusal names the
-  number lit and the largest available, rather than truncating
-- WHEN the toggles reach a count with no authored arrangement THEN it is refused in the same family,
-  with the same wording
-- WHEN the operator unlights the LAST source THEN a 0-cell arrangement is shown if the template
-  authors one, and otherwise it is refused by that same family — **all-off is never an implicit STOP**
+- WHEN the operator switches a running row from the 6-box look to the solo look THEN the solo look
+  is the only one on air, and no part of the 6-box one remains visible — neither its painted frames
+  nor the holes its plates punched
+- WHEN the operator switches back THEN each frame shows the same source it showed before, with no
+  operator action, because a source is declared ONCE and `(templateId, plateId=routeKey)` never
+  changes across looks
+- WHEN the operator picks a look THEN it takes ONE action, and the picker afterwards reads as what
+  is on air
+- WHEN the operator re-points a source and then switches THEN the new pointing rides the switch —
+  preset-then-take through the staged-assignment machinery, with [[R-048]]'s swap as the live path
+- WHEN a source has no plate in the picked look THEN it is held (or its teardown is surfaced), and
+  it is not reassigned onto a surviving frame
 - WHEN a take or a restore would put a second multi-box template on air THEN it is refused by ONE
   predicate called from both paths
-- WHEN a plate's geometry or opacity is animated THEN the page and the server both use `linear`, so
-  the hole and the picture stay together
+- WHEN a multi-box template authors no looks THEN the take is refused naming what is missing — and
+  there is NO picker state expressing all-off, over-capacity or an absent count
+- (animated phase, PARKED) WHEN a plate's geometry or opacity is animated THEN the page and the
+  server both use `linear`, so the hole and the picture stay together
 
-- **Cross-refs:** [[D-152]] (the AUTHORING half — arrangements, geometry, titles; read both),
-  [[B-145]] (must land first), [[B-146]] (the Inspector surface, same row), [[R-048]] (the source
-  swap this reconcile absorbs), [[C-015]] (Live Source routing and seating), [[D-137]] (the Live
-  Source element), [[R-028]] (the declared-rows model the control lives in).
+- **Cross-refs:** [[D-152]] (the AUTHORING half — looks, declared sources, titles; read both),
+  [[B-145]] (landed; its display half still owed), [[B-146]] (the Inspector surface, same row),
+  [[R-048]] (the source swap this reconcile absorbs), [[C-015]] (Live Source routing and seating),
+  [[C-023]] (the confidence thumbnails — with six live inputs nothing here detects a dead one),
+  [[D-137]] (the Live Source element), [[R-028]] (the declared-rows model the control lives in).

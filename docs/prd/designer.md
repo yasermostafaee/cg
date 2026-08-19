@@ -4455,116 +4455,109 @@ holds once the intent is declarable in one click. Two consequences for the imple
 item is where "a loop range is authorable unconditionally" lives, and it is what makes the open
 question above answerable at all.
 
-## [ ] D-152 — multi-box ARRANGEMENTS: authoring the per-arrangement geometry, the per-box titles and the background ⟨priority: high⟩
+## [ ] D-152 — multi-box LOOKS: authoring the looks, the declared sources and the background ⟨priority: high⟩
 
-**What:** the Designer half of the multi-box arrangement switch — how an author builds a template
-that holds several box arrangements, and what the exporter emits for them.
+**What:** the Designer half of the multi-box look switch — how an author builds a template that
+holds several **LOOKS**, declares its **SOURCES once**, and what the exporter emits for them.
 
-⚠ **This is HALF the feature. The operator half is [[R-057]]** — the live switch control, the
-reconcile and the refusals. The split follows [[D-137]] / [[C-015]]: one capability, two items,
-cross-referenced both ways. **Design, evidence and task list for both halves live in ONE change:**
+⚠ **This is HALF the feature. The operator half is [[R-057]]** — the look picker, the reconcile and
+the refusal. The split follows [[D-137]] / [[C-015]]: one capability, two items, cross-referenced
+both ways. **Design, evidence and task list for both halves live in ONE change:**
 `openspec/changes/multibox-layout-switch/`.
 
-**The model (owner, 2026-08-18).** A **COUNT** is how many boxes (1, 2, 3, 4…). An **ARRANGEMENT**
-is a named geometry for a count. A count may have several arrangements; **one per count is the
-authored default**, and the operator can choose another explicitly ([[R-057]]).
+### The adopted architecture — LOOKS (owner, 2026-08-19; `design.md` §14)
 
-### The adopted architecture — A′ (owner, 2026-08-18; `design.md` §12.9)
+> **A LOOK is a full sub-scene — its plates, titles and decor freely placed by ordinary dragging —
+> authored as a managed nested composition instance. Exactly one look is active; the switch is a
+> cut in v1. SOURCES are declared ONCE on the multi-frame group — `{routeKey, expectedAspect,
+dynamic}` — and a look's plates REFERENCE a declared source.**
 
-> **A box is a nested COMPOSITION holding its plate and its title. An arrangement positions the box
-> INSTANCES. Per-arrangement geometry lives on the INSTANCE, not on the plate.**
+⚠ **This supersedes A′** (nested-box-per-plate with per-arrangement instance geometry, adopted
+2026-08-18, `design.md` §12.9) — §14.5 records the reversal, and §14.1 records why it is not churn:
+the grounds on which per-look sub-scenes were refused dissolved (cut-is-enough; the
+arrangement-scoped overlap rebuild; sources-declared-once answering the N-producers ground), and the
+owner hit two Designer defects in one day (`D-153`, `D-154` — and `B-149` reached air) that exist
+ONLY because A′ splits box geometry into two levels. Under LOOKS there is one level: an element's
+geometry is its transform in its look's sub-scene, and **the Transform panel is simply correct.**
+What SURVIVES A′ intact is its identity core, moved to the SOURCE level: `(templateId,
+plateId=routeKey)` never changes across looks, so **assignment survives the switch structurally.**
 
-Three candidates were weighed and the evidence is in `design.md` §12.9:
+The candidate history stands un-edited in `design.md` §12.9, and two of its refusals bind LOOKS too:
 
-- **The fixed computed 1/2/3-box family is WITHDRAWN** (owner): a layout is a **designed SCENE, not
-  a set of rectangles**. ⚠ **Recorded honestly**: the owner later settled that a single fixed
-  background is enough, which weakens one of the two reasons that candidate died (that a
-  per-arrangement background cannot be computed). **The reason that SURVIVES is the load-bearing
-  one — cell placement is a design decision, not a computed grid.**
-- **Binding several ordinary templates to one layer** (the owner's own proposal, investigated on the
-  plant) is **REFUSED on the premise, not on preference**: a video layer carries exactly ONE html
-  page. `CG ADD` at a different cg-layer is accepted (`202`) and **REPLACES** the page already there,
-  and both cg-layer indices then route to the survivor.
-- **A′ is cheap because the punch was VERIFIED, not assumed**: a plate inside a nested composition
-  punches correctly at any depth or scale, because the flattener's instance path
-  (`scene-flatten.ts:250-292`) and the builder's `maskKeyPrefix` (`scene-builder.ts:265,399`) are
-  composed from the same parts. The "no static scene-px rect" warning covers STAMPED scopes —
-  repeater rows and sequence items — **not** composition instances.
-
-**Why A′ and not separate plate sets per arrangement.** A plate keeps ONE identity across every
-arrangement, so the `(templateId, plateId)` assignment tuple cannot change and **source assignment
-survives a switch for free**. Separate sets also collide with the shipped, export-blocking
-`live-source-overlap` preflight, would seat every arrangement's plates at once, and cannot reach the
-animated case at all.
+- **The fixed computed 1/2/3-box family stays WITHDRAWN** (owner): a layout is a **designed SCENE,
+  not a set of rectangles** — under LOOKS more than ever, since each look carries its own design.
+- **Binding several ordinary templates to one layer stays REFUSED on the premise**: a video layer
+  carries exactly ONE html page (`CG ADD` at a different cg-layer REPLACES the page). Looks are
+  states of ONE page, which is why the model works at all.
 
 ### What has to be authored
 
-1. **A box as a nested composition** — plate + title (+ frame, decorations). Compositions nest and
-   the guard is shipped (`canNestCompositionInActive`). **This is what makes the titles tractable:**
-   an arrangement positions ONE instance and the title travels with it. Four arrangements × four
-   boxes would otherwise be **sixteen independent title placements**, and the first that drifts puts
-   a title under the wrong box on air.
-2. **Per-arrangement instance geometry** — a per-arrangement override table read by the arrangement
-   state. ⚠ Note before scoping: `x`, `y` and `scale` are ALREADY bindable transform properties
-   (`packages/shared-schema/src/bindings.ts:40`); it is `width`/`height` that are not. An override
-   table is cleaner than widening bindings, and it need not be a binding at all.
-3. **Per-box titles** — an **ordinary text element; no element type is invented**. Position, colour
-   and font are the two-property model already. 🔴 **But the same title must fit a wide 1-box cell
-   AND a narrow 4-box cell, and nothing shipped does this — see [[B-147]]**, which found three
-   schema spellings of "make the text fit" and zero implementations.
-4. **Hiding an element during a transition** — an authored **PER-ELEMENT** option, not a blanket
-   rule: a box title should leave during the move, while a logo inside the multi-box must not blink
-   on every switch. ⚠ It would be a THIRD per-element visibility notion beside authored `visible`
-   and per-arrangement visibility, so **resolved visibility must come from ONE function.**
-5. **The background — ONE SHARED background is the default and is enough** (owner, 2026-08-18).
-   Per-arrangement backgrounds stay FREE TO SUPPORT — a visibility override, the same two properties,
-   no new concept — but they are **not required**. ⚠ **Recorded so the cost is not rediscovered:**
-   crossfading two full-frame backdrops was **measured at −10 % of the CEF frame budget with a 120 ms
-   worst frame gap**, against **−4 %** for interpolating the plate holes. A single fixed background
-   removes that cost and the "both backdrops must carry the mask through a crossfade" requirement
-   entirely, leaving an animated switch as **holes + `FILL`**.
-6. **Cell ORDER is the DECLARED order in v1** (owner). Side-swapping is a later item: it introduces
-   per-cell assignment and the need is unproven.
-7. **The preflight** — exactly one arrangement active at author time, and the `live-source-overlap`
-   check applied **WITHIN** an arrangement rather than across arrangements (today the loop is
-   per-document and would not fire across them). ⚠ The rule does not change; only its input does.
+1. **The multi-frame group** — created from a toolbar icon; its inspector manages the look list
+   (any count, no upfront declaration) and the **declared source list**. Each look is a real nested
+   composition instance; **no new container type** (`container` is discarded by the runtime).
+2. **The declared sources** — `{routeKey, expectedAspect, dynamic}`, ONCE for the whole group. A
+   plate references a declared source; `expectedAspect`/`dynamic` live on the declaration so two
+   looks cannot disagree about them. 🔴 This is a correctness condition, not a convenience — it is
+   what makes the same source in two looks ONE seat instead of N producers on one route.
+3. **Per-look titles and decor** — ordinary elements inside each look, sized and placed per look by
+   the author. A′'s sixteen-placements problem does not arise: there is nothing to keep in sync,
+   because each look IS its own design. [[B-147]]'s measured-after-shaping fit rule remains a real
+   Designer item but **no longer blocks this feature's v1** — the author sizes each look's text.
+4. **Hiding an element during a transition (D4)** — **PARKED** (`design.md` §14.4): cut-only v1 has
+   no transition window, so `hideDuringTransition` is explicitly parked in the schema with the
+   reason, not left silently dead. An animated mode un-parks it.
+5. **The background — ONE SHARED background outside the looks** is the default and is enough
+   (owner, 2026-08-18; §12.9.2 unchanged). Per-look decor inside each look is free by construction.
+   ⚠ Recorded so the cost is not rediscovered: crossfading two full-frame backdrops measured −10 %
+   of the CEF frame budget; the shared background removes it.
+6. **Which source sits in which frame is AUTHORED per look** — a look's plates name their sources.
+   The v1 declared-order rule (2026-08-18) is superseded with the counts that carried it.
+7. **The preflights** — exactly one look active at author time, and ONE refusal family: a plate
+   referencing an UNDECLARED source (naming it and the declared list); the same source referenced
+   TWICE within ONE look (across looks it is the identity mechanism); `live-source-overlap` WITHIN
+   a look (each look is its own composition document, so the per-document loop gives this
+   structurally) plus a visible-set pass for root-level plates vs the active look; a SECOND
+   multi-frame group per template (refused in v1); a plate inside a `sequence`/`repeater` (existing
+   refusal, unchanged).
 
 ### What the exporter emits
 
-**One rect per arrangement per plate**, onto the declaration block on `TemplateInfo` — the shipped
-`hasNext` precedent, derived once at import. **No `.vcg` format change**, because the mask is
-computed at boot rather than baked. `collectLiveSources` already derives a rect through the full
-ancestor chain (`flat.rect`); what it lacks is a reason to do it more than once.
+**`sources[]` deduped by routeKey, plus per-look `{routeKey → rect}` maps, the default look and each
+look's entered-with (cut in v1)** — onto the declaration block on `TemplateInfo`, derived once at
+import (the shipped `hasNext` precedent). **No `.vcg` format change.** A source ABSENT from a look
+has NO entry for that look — never a zero-area rect (the bridge refuses zero-area rects outright);
+the EMPTY look is valid and carries an empty map — background alone.
 
-🔴 **An asymmetry to resolve deliberately, not by accident:** `collectLiveSources` has **no
-visibility filter** while `sceneMaskHoles` does — so today a hidden plate is **DECLARED but does not
-PUNCH**. Under the held-source decision that is nearly the wanted behaviour, but it is keyed off the
-AUTHORED `visible` rather than the arrangement state, so it is a coincidence rather than a mechanism.
+🔴 **The declared-but-does-not-punch asymmetry becomes a MECHANISM under LOOKS:** declaration comes
+from the group's source list — visibility-independent by construction — while the punch follows
+resolved visibility through the instance's ancestry. The coincidence A′ had to warn about
+(`collectLiveSources` having no visibility filter) is now the designed behaviour with a designed
+home.
 
 **Acceptance:**
 
-- WHEN an author defines a 3-box and a 2-box arrangement THEN each box is positioned per arrangement
-  by moving ONE instance, and its title moves with it
-- WHEN an author sets one arrangement per count as the default THEN the operator's count pick is one
-  action ([[R-057]])
-- WHEN a plate sits inside a nested box composition THEN it declares its scene rect and punches its
-  hole correctly at any nesting depth or scale
-- WHEN two plates' holes overlap WITHIN one arrangement THEN the export-blocking overlap error fires;
-  WHEN they overlap only ACROSS arrangements THEN it does not
-- WHEN a template is exported THEN the declaration carries one rect per arrangement per plate, and
-  the `.vcg` format is unchanged
-- WHEN no per-arrangement background is authored THEN one shared background serves every arrangement,
-  with no crossfade and no per-arrangement mask requirement
-- WHEN a title is too long for a narrow cell THEN it fits, decided from the RENDERED box after
-  shaping ([[B-147]])
+- WHEN an author creates a multi-frame group and authors a 6-box look and a solo look THEN each look
+  is a full sub-scene edited by ordinary dragging, and the Transform panel reads and writes the
+  element's real geometry — no cells, no second geometry editor
+- WHEN a plate references a declared source THEN the same source referenced in two looks is ONE
+  declaration and ONE seat; WHEN it references an UNDECLARED source THEN export is refused naming
+  the source and the declared list
+- WHEN the same source is referenced twice within ONE look THEN export is refused — and the refusal
+  says that across looks it would be the identity mechanism
+- WHEN two plates' holes overlap WITHIN one look THEN the export-blocking overlap error fires; WHEN
+  they overlap only ACROSS looks THEN it does not
+- WHEN a template is exported THEN the declaration carries deduped sources and one `{routeKey →
+rect}` map per look, a source absent from a look has no entry, and the `.vcg` format is unchanged
+- WHEN a look authors no plates THEN it is valid and exports an empty map — background alone
+- WHEN no per-look background is authored THEN one shared background outside the looks serves every
+  look
 
-- **Cross-refs:** [[D-153]] (this item's USABILITY gap — the surface authors cells the author
-  cannot see; the model here is right and D-153 is what makes it teachable), [[R-057]] (the
-  OPERATOR half — the live switch, the reconcile, the refusals; read both),
-  [[B-147]] (the text fit this depends on), [[D-137]] (the Live Source element these boxes
-  are built from), [[C-015]] (the installation mapping and seating), [[D-060]] (`fitMode`, and the
-  one fit mode that IS implemented), [[D-083]] (composition items — the tree's one-of-N primitive,
-  and why it could NOT be the carrier).
+- **Cross-refs:** [[D-153]] / [[D-154]] (the A′ usability and control defects this model retires —
+  superseded, not wrong; their fixes are deleted with A′ in phase 2), [[R-057]] (the OPERATOR half —
+  the picker, the reconcile, the refusal; read both), [[B-147]] (the text fit — real, no longer
+  blocking v1), [[D-137]] (the Live Source element these plates are), [[C-015]] (the installation
+  mapping and seating), [[D-060]] (`fitMode`, and the one fit mode that IS implemented), [[D-083]]
+  (composition items — the tree's one-of-N primitive, and why it could NOT be the carrier).
 
 ## [ ] D-153 — the arrangement surface authors CELLS the author cannot see, bound to BOXES it does not name, under a CONVENTION it never states ⟨priority: high — the feature shipped and could not be used⟩
 

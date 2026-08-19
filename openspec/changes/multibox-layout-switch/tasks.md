@@ -151,6 +151,34 @@ the design says something different from the obvious reading it is called out.
 | **F**          | ⭐ **THE CUT SHIPS**                                   | §12.1: cut first, animation second. A–E is the whole of phase one                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | **G**          | **The transition modes (§13.5)**                       | Phase two. §12.1: _"phase two then adds only the tween and its curve contract"_                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
+⭐ **RE-KEYED 2026-08-19 — LOOKS adopted (`design.md` §14).** The stages stand, their subjects
+change: C's carrier work is superseded by the LOOK carrier (phase 1), D's desired set becomes the
+active look's `{routeKey → rect}`, E becomes the look picker + preset. §1b below is the phase
+plan.
+
+## 1b. THE LOOKS PHASES (2026-08-19) — and phase 2's DELETION CLAUSE
+
+| Phase | What                                                                                                                               | Session |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| **1** | Schema (`looks` group, sources-once, preflights), the LOOK carrier, the runtime switch (visibility + re-punch), the pin tests      | **BA**  |
+| **2** | The Designer UI swap: toolbar icon, looks inspector, per-look canvas, look picker in the preview — **AND THE A′ DELETION (below)** | next    |
+| **3** | Stage D's reconcile (§4) on the look carrier; then stage E's operator surface                                                      | after 2 |
+
+🔴 **PHASE 2'S DELETION CLAUSE — the two-spellings window is ONE session, closed by this task,
+not by memory.** Phase 2 deletes, in the same session that swaps the UI: the arrangements schema
+(`packages/shared-schema/src/arrangements.ts`, `Scene`/`Composition.arrangements`), the A′ carrier
+(`collectArrangements`, `boxRelativeRect` + `relativeRect`, shared-ipc's `arrangements` field), the
+runtime view (`packages/template-runtime/src/arrangement-view.ts`, `ArrangementView`,
+`applyArrangementGeometry`, `setArrangementView`), the Designer surface (the arrangements slice,
+`ArrangementCellOverlay`, `ArrangementsSection`, `ArrangementElementSection`, `ArrangementPicker`,
+the `commitAnimatable` intercept, the `arrangedTransform` read sites, `scene-doc`'s projection,
+`store-core.activeArrangementId`), and their tests (§14.4's table is the checklist — ~88 cases).
+⚠ The deletion is a `[ ]` task so it cannot be skipped silently:
+
+- [ ] **P2.DEL** — delete the A′ arrangements schema, carrier, runtime and Designer machinery per
+      §14.4's DIES table, in the SAME session that lands the looks UI. A session that swaps the UI
+      and defers the deletion has re-opened the two-spellings window it was scoped to close.
+
 🔴 **The one correction to make out loud:** a reading that puts exclusivity after the reconcile is
 following section numbering, not the design. §12.1 explicitly says the phasing does **not** close
 §8's doors. Stage **B** can land the day stage A does.
@@ -403,12 +431,11 @@ candidate shapes.
 
 ## 5. STAGE D — the ONE reconcile (§4)
 
-> 🔴 **STAGE D IS HALTED (2026-08-19) until `design.md` §14's gate — the LOOKS pivot — is
-> answered.** Building `reconcileLivePlates` against the cells carrier while the carrier itself
-> is in question would be the most expensive possible timing: the pivot changes the reconcile's
-> INPUT (the active look's `{routeKey → rect}`) and not its mechanism, so nothing is lost by
-> waiting and a whole stage would be lost by not. A YES restarts D against the look carrier; a NO
-> resumes it unchanged.
+> ✅ **THE HALT IS LIFTED (2026-08-19): §14's gate was answered YES — LOOKS is adopted.** Stage
+> D is **LOOKS phase 3** (§1b): the reconcile's mechanism is §4 unchanged; its INPUT is the
+> ACTIVE LOOK's `{routeKey → rect}` from the look carrier (phase 1, session BA). Every
+> "arrangement" below reads as "look" — rewritten where the difference is load-bearing, noted
+> here where it is only vocabulary.
 
 - [ ] 6.1 **`reconcileLivePlates(itemId, desired)`** in `tools/caspar-bridge/src/caspar-runtime.ts`:
       seat / re-fit / release as a **DELTA** against `#liveLayers`, resolving through
@@ -418,9 +445,10 @@ candidate shapes.
       and the "record before the send is awaited" rule.
 - [ ] 6.3 **Make `swapLiveSource` a CALLER of it.** 🔴 **Do not build a second mechanism beside
       R-048's swap** — `swapLiveSource` already argues this case for itself one level down.
-- [ ] 6.4 **Re-derive the fit PER ARRANGEMENT.** A 1-box arrangement changes each box's aspect, and
-      because `MIXER FILL` **survives a producer swap**, getting this wrong is a **wrong crop rather
-      than an obvious break** — the failure mode that does not announce itself.
+- [ ] 6.4 **Re-derive the fit PER LOOK.** A solo look changes a plate's aspect against its
+      6-box rect, and because `MIXER FILL` **survives a producer swap**, getting this wrong is
+      a **wrong crop rather than an obvious break** — the failure mode that does not announce
+      itself.
 - [ ] 6.5 **The release policy for a plate with no cell in the target arrangement (§12.4):** HELD
       muted and idle by default; a source kind that cannot be held falls back to teardown as a
       **NAMED, observable** behaviour.
@@ -430,36 +458,39 @@ candidate shapes.
 
 ---
 
-## 6. STAGE E — the operator surface (§12.8, as rewritten by D1)
+## 6. STAGE E — the operator surface (§14.5 — the look picker; supersedes §12.8's toggles)
 
-- [ ] 7.1 🔴 **ONE TOGGLE PER DECLARED SOURCE on the row, always visible.** Which toggles are lit
-      **is** what is on air; the COUNT is **derived**. Not a menu.
-      **Files:** `apps/runtime/src/renderer/features/layers/` — and see §12.8 for the two verb-grid
-      collisions this re-opens.
-      **Done when:** a row with N declared plates shows N toggles, and flipping one changes what is
-      on air through stage D's reconcile.
-      **Visual:** ⭐ **the primary visual check of the whole feature** — open the Runtime layer list
-      on a multi-box row.
+> ⚠ **REWRITTEN 2026-08-19 (LOOKS adopted, §14).** D1's toggle-per-source is superseded — with
+> per-slot preset, toggles no longer carry the combination; the LOOK does (§14.5, the second
+> reversal). What §12.8 decided UNDERNEATH both reversals still binds: always visible,
+> state-carrying, no menu, placement (ii), survives density.
+
+- [ ] 7.1 🔴 **ONE LOOK PICKER on the row, always visible — the picker IS the on-air readout.**
+      One-of-N by construction: over-lit, absent-count and all-off are UNREPRESENTABLE, and taking
+      the row off air stays the STOP verb's job alone.
+      **Files:** `apps/runtime/src/renderer/features/layers/` — §12.8's verb-grid collisions still
+      bound the surface, shrunk to one control.
+      **Done when:** a row whose template authors N looks shows the picker with N entries, and
+      picking one changes what is on air through stage D's reconcile.
+      **Visual:** ⭐ **the primary visual check of the whole feature** — open the Runtime layer
+      list on a multi-box row.
 - [ ] 7.2 **Placement (ii): a second line on the row, outside the verb block.** It leaves
       `VERB_COUNT = 6` (`apps/runtime/src/renderer/features/layers/layerTable.ts:75`) and the header
       word alignment untouched — the invariant with the recorded on-air failure behind it.
-      ⚠ **Must survive density** (`gridTemplateColumns(density)`, `layerTable.ts:225`): a row with
-      eight declared plates has eight toggles at every density.
-- [ ] 7.3 **The derived-count resolution:** on any toggle change, resolve the count, activate that
-      count's **authored default arrangement**, and seat the lit sources into its cells in
-      **declared order**.
-- [ ] 7.4 **The non-default arrangement chooser** — an explicit secondary action, never in the way of
-      the common case.
-- [ ] 7.5 🔴 **THE REFUSAL FAMILY — ONE family, THREE triggers** (§12.9.1, §12.9.1a):
-      more toggles lit than the largest arrangement holds (**name the number lit and the largest
-      available**); a derived count with no authored arrangement (**name the count and the counts
-      authored**); and **ALL TOGGLES OFF**.
-      🔴 **All-off is an ordinary count:** the authored 0-cell arrangement if there is one, else the
-      same refusal. **It is NEVER an implicit STOP** — the row has a STOP verb, and a second implicit
-      route to off-air would be the quietest possible one.
-      **Done when:** one refusal function, three triggers, three tests.
-- [ ] 7.6 **D3's immediate-CUT escape** — one action, not a mode picker, designed **with** the toggle
-      set rather than after it (§13.6.1) because they share one surface and one collision.
+      ⚠ **Must survive density** (`gridTemplateColumns(density)`, `layerTable.ts:225`) — one
+      picker is narrower than N toggles, and the rule still holds at the tightest density.
+- [ ] 7.3 **Preset-then-take:** the operator may re-point any declared source BEFORE switching,
+      through the existing staged-assignment machinery (`B-139`'s chip semantics; `R-048`'s swap is
+      the live path; §12.5's surface-only rule names it).
+- [ ] 7.4 **The default look:** a fresh take enters the authored default look; the picker shows it.
+- [ ] 7.5 🔴 **THE REFUSAL FAMILY — ONE trigger in v1: NO LOOKS AUTHORED** (a multi-box template
+      whose group authors zero looks refuses the take, naming what is missing). The count-shaped
+      triggers (§12.9.1 Q3/Q4, all-off) are retired UNREPRESENTABLE, not moved.
+      **Done when:** one refusal function, one trigger, one test — and a test that the picker
+      cannot express all-off.
+- [ ] 7.6 ~~D3's immediate-CUT escape~~ **RETIRED (2026-08-19):** v1 is cut-only (§14.4 parks D2's
+      other modes), so there is no mode to escape to. Returns with the animated phase if it returns
+      at all.
 - [ ] 7.7 **The Inspector's on-air behaviour (§12.5, `B-146`):** surface only — the edit saves, the
       surface says "takes effect at the next take" and **names the row's SOURCE swap as the live
       path**.

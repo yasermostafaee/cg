@@ -1206,8 +1206,10 @@ addition to it.
 
 ### §12.9 — ✅ **CLOSED (owner, 2026-08-18): A′ IS ADOPTED.** All eight gates are now answered
 
-> ⚠ **2026-08-19: §12.9's AUTHORING SHAPE is under re-examination — see §14's gate (the LOOKS
-> pivot). A′ stands unless §14 is answered YES; stage D is HALTED while the gate is open.**
+> ⚠ **SUPERSEDED 2026-08-19: §14's gate was answered YES (owner) — the LOOKS model is adopted
+> and A′'s AUTHORING SHAPE is superseded per §14.5.** §12.9 stands as the record of how A′ was
+> chosen and of the candidates weighed; the identity core it decided survives at the SOURCE level
+> (§14.2).
 
 > **DECISION: A′ — candidate A's identity model, with a box authored as a NESTED COMPOSITION and
 > per-arrangement geometry carried on the INSTANCE.**
@@ -1992,9 +1994,15 @@ degrades gracefully for a name nobody anticipated, which is the actual failure m
 
 ---
 
-## 14. 🔴 THE LOOKS PIVOT (2026-08-19) — §12.9's authoring shape re-examined, priced from the code, under ONE gate
+## 14. ⭐ THE LOOKS PIVOT (2026-08-19) — ✅ **ADOPTED (owner, 2026-08-19).** §12.9's authoring shape re-examined, priced from the code, under ONE gate
 
-> **⟨GATE: §14 — THE ONLY OPEN QUESTION IN THIS DOCUMENT⟩ ADOPT THE LOOKS MODEL — YES or NO?**
+> **⟨GATE: §14⟩ ADOPT THE LOOKS MODEL — YES or NO?**
+>
+> ✅ **ANSWERED (owner, 2026-08-19): YES — ADOPT, with the term `LOOK`.** The consequences below
+> are now the plan: A′'s authoring shape is superseded per §14.5, the retirements run per §14.4,
+> and the priced delta in §14.7 is the work order — phase 1 (schema, carrier, runtime switch:
+> session BA), phase 2 (the Designer UI swap AND the A′ deletion, one session), phase 3 (stage
+> D's reconcile on the look carrier). `design.md` again holds no open question.
 >
 > **YES** means: §12.9.10's A′ authoring shape (nested-box-per-plate, per-arrangement geometry on
 > the instance, cells) is SUPERSEDED by per-look sub-scenes; the cells carrier and its Designer
@@ -2017,10 +2025,9 @@ degrades gracefully for a name nobody anticipated, which is the actual failure m
 > vernacular for precisely this (a recallable composed state), and `look`/`looks` collides with no
 > identifier in `@cg/shared-schema` or the Designer state (checked — English-prose hits only).
 
-**Until this gate is answered, STAGE D IS HALTED** (recorded in `tasks.md` §5). Building
-`reconcileLivePlates` against the cells carrier while the carrier itself is in question would be the
-most expensive possible timing: the reconcile is the one stage whose shape the pivot changes at the
-input and does not change at the mechanism (§14.7 stage D).
+**The STAGE-D HALT this section imposed is LIFTED with the answer** (recorded in `tasks.md` §5):
+stage D restarts as phase 3, against the LOOK carrier — the halt did exactly what it was for, and
+the reconcile's mechanism (§4) was never in question, only its input.
 
 ### 14.1 Why this re-examination is obligatory rather than churn
 
@@ -2077,7 +2084,10 @@ dynamic}` — **and a look's plates REFERENCE a declared source.** The cheapest 
   the duplicate-routeKey hazard (`B-148`) inverts into the identity mechanism: the same source
   referenced in two looks is ONE seat, held across switches (§12.4 unchanged). `expectedAspect` and
   `dynamic` move UP onto the source declaration, so two looks cannot disagree about them —
-  disagreement becomes unrepresentable rather than checked.
+  disagreement becomes unrepresentable rather than checked. ⚠ Related, priority note only: with
+  six declared live inputs NOTHING here detects a dead one — a black feed and a colour-bar feed
+  are both "present" — which is exactly `C-023`'s confidence thumbnails; the 6-box case raises
+  that item's priority, no work here.
 - The **single shared background stays outside the looks** (§12.9.2 unchanged).
 - **Operator model: preset-then-take.** A look picker on the row IS the on-air readout — one-of-N
   by construction, so an invalid state is unrepresentable (§14.5 on what that retires) — and the
@@ -2260,7 +2270,9 @@ that would interpolate from cells to per-look rects, which §13.4's machinery is
   (ONE `reconcileLivePlates`, §4 verbatim); its input becomes **the active look's
   `{routeKey → rect}`**. 6.4's re-fit-per-arrangement becomes re-fit-per-look (same reason: aspect
   changes, `MIXER FILL` survives a producer swap, wrong crop announces nothing). 6.5 (held / named
-  teardown) unchanged. Nothing built, nothing lost — this is why the halt exists.
+  teardown) unchanged. Nothing built, nothing lost — this is why the halt exists. ⚠ The 6-box
+  debate's reference case, priced so nobody asks: six held sources occupy six of the 50-layer
+  band (§12.4's arithmetic) — capacity is a non-issue.
 - **Stage E** — 7.1-7.6 are rewritten: toggles → **look picker + per-slot preset** (B-139 chips as
   the staging surface, R-048's swap as the live path); 7.5's three-trigger family → ONE trigger
   (no looks authored); 7.6's cut escape dies (v1 is cut-only — there is no mode to escape to);
