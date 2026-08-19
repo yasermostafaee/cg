@@ -342,12 +342,31 @@ export const RestoreSkipReasonSchema = z.enum([
   'unknown-template',
   'no-layer',
   'fixed-slot-taken',
+  /**
+   * `multibox-layout-switch` §12.6 — exactly ONE multi-box template may be on air per
+   * channel, and this restore would have made a second.
+   *
+   * Restore is the door with no other cover: it never passes through `take()` and adopts
+   * every retained on-air item with no cap, so without a refusal here a reconnect
+   * re-seats the very pair a take refuses — silently, on a link that just came back.
+   */
+  'multibox-already-on-air',
 ]);
 export type RestoreSkipReason = z.infer<typeof RestoreSkipReasonSchema>;
 
 export const RestoreSkipSchema = z.object({
   itemId: IdSchema,
   reason: RestoreSkipReasonSchema,
+  /**
+   * The refusal's OWN sentence, when it has one a fixed code cannot carry.
+   *
+   * The same shape, and the same rule, as `stack.take`'s `message`: OPTIONAL and ADDITIVE,
+   * every existing skip keeps answering with its code alone, and when both are present the
+   * detail WINS because it is the more specific of the two. `multibox-already-on-air` needs
+   * it — the code says a rule was broken, and only a sentence can say WHICH template is
+   * already on air, which is the half that makes the refusal actionable.
+   */
+  detail: z.string().optional(),
 });
 export type RestoreSkip = z.infer<typeof RestoreSkipSchema>;
 

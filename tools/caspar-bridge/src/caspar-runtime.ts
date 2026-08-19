@@ -29,6 +29,7 @@ import type {
   RetainedStackItem,
   StackItemState,
 } from '@cg/shared-schema';
+import { isRetainedOnAir } from '@cg/shared-schema';
 import {
   isLayerVisible,
   // R-030 — the video-mode token map lives in shared-ipc, not caspar-client, so
@@ -1632,6 +1633,40 @@ export class CasparRuntime {
         continue;
       }
       const { slot } = placement;
+      /*
+        🔴 §12.6 — DOOR 2 OF 2: EXCLUSIVITY, on the door that has NO OTHER COVER.
+
+        A restore never passes through `take()` (`design.md` §8), and it adopts every
+        retained on-air item with no cap — so without this a reconnect re-seats the very
+        pair of multi-box templates a take refuses, and does it silently, on a link that
+        just came back. ONE predicate, called from both sites, never re-derived here
+        (golden rule 6).
+
+        Gated on `isRetainedOnAir` — the canonical reading of a retained state, the same
+        one `restoreItem` uses — because only a row coming back ON AIR can collide. A
+        `loaded` or `cleared` multi-box row puts nothing on the channel and must still come
+        back, or the refusal would quietly delete rows the operator can see.
+
+        Refused BEFORE `restoreItem`, so a refused restore mutates nothing — the same
+        discipline the take door keeps, and the same as the three skips above it.
+      */
+      if (isRetainedOnAir(item.state)) {
+        const exclusivity = this.#refuseSecondMultiBox(item.itemId, item.templateId, slot.channel);
+        if (exclusivity !== null) {
+          // B-114 — release by the SAME door the slot was taken through (see below).
+          if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
+          else this.#layers.deallocate(slot);
+          skipped.push({
+            itemId: item.itemId,
+            reason: 'multibox-already-on-air',
+            // The bridge's own sentence, naming BOTH halves. `RestoreSkipReason` is a
+            // fixed code and cannot say WHICH template is already on air — the same gap
+            // `stack.take`'s `message` exists to fill, and filled the same way.
+            detail: exclusivity.message,
+          });
+          continue;
+        }
+      }
       if (
         this.#reconciler.restoreItem({
           itemId: item.itemId,
@@ -2141,6 +2176,32 @@ export class CasparRuntime {
       there is for an html producer. Every frame between seating and the take is
       a frame with a guest's picture on air and no graphic around it.
     */
+    /*
+      §12.6 — DOOR 1 OF 2: EXCLUSIVITY. Exactly one multi-box template on air per
+      channel.
+
+      Here for the same reason `#planLiveSeating` is here — a refusal costs nothing at
+      this point, with the wire, the Reconciler and the ledger all untouched. BEFORE the
+      seating plan rather than inside it: the plan resolves THIS item's plates, while this
+      asks about the on-air SET, and folding one question into the other is how the answer
+      to either stops being findable.
+
+      The second door is `restore()`, which never passes through here. Both call
+      `#refuseSecondMultiBox` — ONE predicate, two sites (golden rule 6).
+    */
+    const exclusivity = this.#refuseSecondMultiBox(
+      itemId,
+      this.#reconciler.get(itemId)?.templateId ?? itemId,
+      slot.channel,
+    );
+    if (exclusivity !== null) {
+      process.stderr.write(
+        `[caspar-bridge] take refused for ${itemId}: ${exclusivity.message}
+`,
+      );
+      return { accepted: false, ...exclusivity };
+    }
+
     const plan = this.#planLiveSeating(itemId, slot);
     if (!plan.ok) {
       process.stderr.write(`[caspar-bridge] take refused for ${itemId}: ${plan.message}\n`);
@@ -3108,6 +3169,114 @@ export class CasparRuntime {
    * where the warning can be acted on (the template picker marks the row as
    * needing a re-import), which is the same place the spec puts it.
    */
+  /**
+   * 🔴 **§12.6 — THE ONE PREDICATE: is another item carrying a MULTI-BOX template already
+   * on air on this channel?**
+   *
+   * The client's requirement is *"a switch between the multi-box layouts, with exactly ONE
+   * active at a time, so the operator cannot make a mistake"* (`design.md` §0.1). §8 measured
+   * that two multi-box templates on air together is reachable TODAY, by two doors — a take
+   * (`#planLiveSeating` allocates a second template's plates AROUND the first's rather than
+   * refusing) and a restore (`#decidePendingRestores` adopts every retained on-air item with
+   * no cap). There is no mutual-exclusion primitive anywhere in the tree to build the rule
+   * out of, so this is it.
+   *
+   * ── ONE PREDICATE, TWO CALL SITES, AND WHY THAT IS THE WHOLE DECISION ───────
+   *
+   * Restore **never passes through `take()`**, so the refusal has two sites by necessity.
+   * `CLAUDE.md` golden rule 6 is written about exactly this shape: the second site must CALL
+   * this, never re-derive the condition locally, because *"a second local copy is how a name
+   * comes to lie about what it tests"*.
+   *
+   * ⚠ **It is deliberately NOT `hasLivePlates`.** `deps.hasLivePlates`
+   * (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:655`) is a RENDERER fact
+   * about one row's template DECLARING plates. This is a BRIDGE fact about the on-air SET.
+   * §8 offers that name as the tree's nearest existing shape, not as the predicate; reusing
+   * it for a different condition is the failure golden rule 6 forbids.
+   *
+   * ── THE THREE TERMS, EACH ANSWERED BY THE ONE THING THAT OWNS IT ────────────
+   *
+   * - **"on air"** — {@link isOnAirStatus}, the canonical status predicate, reused rather
+   *   than re-spelled. Its own comment says unknown must count as on air in every gate
+   *   whose failure mode is acting on a live graphic. This is such a gate.
+   * - **"on this channel"** — `#slots`, the single source of where an item's template lives.
+   *   Two multi-box templates on DIFFERENT channels do not compete for one output.
+   * - **"multi-box"** — {@link multiBoxCount} below.
+   *
+   * Returns the INCUMBENT rather than a boolean, because the refusal has to be able to name
+   * what is already on air (`design.md` §12.6's refusal-family discipline). A bare `true`
+   * would send the operator hunting.
+   */
+  #multiBoxItemOnAirOnChannel(
+    channel: number,
+    exceptItemId: string,
+  ): { itemId: string; templateId: string; boxes: number } | null {
+    for (const item of this.#reconciler.snapshot()) {
+      if (item.itemId === exceptItemId) continue;
+      if (!isOnAirStatus(item.status, item.pending)) continue;
+      if (this.#slots.get(item.itemId)?.channel !== channel) continue;
+      const boxes = this.#multiBoxCount(item.templateId);
+      if (boxes > 1) return { itemId: item.itemId, templateId: item.templateId, boxes };
+    }
+    return null;
+  }
+
+  /**
+   * How many BOXES a template declares — 0 when it declares none, and 0 when nothing can
+   * say.
+   *
+   * A box IS a Live Source plate (`design.md` §0.5: `plateId` IS the `routeKey`); an
+   * arrangement positions box INSTANCES and does not change how many there are. So the
+   * count is the carrier's declaration length, and `> 1` is what "multi-box" means.
+   *
+   * ⚠ **`'unknown'` counts as 0, and that is the same call `#planLiveSeating` already
+   * makes** for the same reason, written up in its header: a template imported before the
+   * carrier existed cannot be read, the great majority have no holes, and treating them as
+   * multi-box would refuse a station's whole existing rundown on upgrade. Such a template
+   * also seats NO plates at all, so it is not an incumbent whose boxes this rule protects.
+   * The operator is warned where the warning can be acted on — the template picker marks
+   * the row as needing a re-import.
+   */
+  #multiBoxCount(templateId: string): number {
+    const template = this.#templates.get(templateId);
+    if (template === null || template === undefined) return 0;
+    if (liveSourceCarrierState(template) !== 'declared') return 0;
+    return template.liveSources?.sources.length ?? 0;
+  }
+
+  /**
+   * §12.6 — the refusal itself, in the refusal family's words, or `null` when the item may
+   * proceed.
+   *
+   * Both call sites get the SAME sentence from here, so the two doors cannot describe one
+   * rule differently. It names BOTH halves — what is already on air and what was refused —
+   * because a refusal that names neither is a dead end at the moment the operator is under
+   * time pressure.
+   */
+  #refuseSecondMultiBox(
+    itemId: string,
+    templateId: string,
+    channel: number,
+  ): { errorCode: string; message: string } | null {
+    // Only a multi-box arrival can collide: a lower-third over a live 3-box is ordinary
+    // stacking, not the crosstalk this refuses.
+    //
+    // ⚠ `templateId` is a PARAMETER rather than looked up from the reconciler, because the
+    // restore door asks this question BEFORE the item exists there. A lookup would answer
+    // `undefined` at that site and silently let every restore through — the refusal would
+    // be present, wired, and dead on the door that has no other cover.
+    if (this.#multiBoxCount(templateId) <= 1) return null;
+    const incumbent = this.#multiBoxItemOnAirOnChannel(channel, itemId);
+    if (incumbent === null) return null;
+    return {
+      errorCode: 'multibox-already-on-air',
+      message:
+        `exactly one multi-box template may be on air per channel: "${incumbent.templateId}" ` +
+        `(${String(incumbent.boxes)} boxes, item "${incumbent.itemId}") is already on air on ` +
+        `channel ${String(channel)} — take it off air first`,
+    };
+  }
+
   #planLiveSeating(itemId: string, slot: CommandSlot): LiveSeatingPlan {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     const template = this.#templates.get(templateId);

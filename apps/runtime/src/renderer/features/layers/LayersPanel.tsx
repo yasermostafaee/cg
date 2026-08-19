@@ -678,10 +678,7 @@ export function LayersPanel({
                       come back
                     </strong>{' '}
                     after the bridge restarted:{' '}
-                    {restoreSkips
-                      .map((s) => `${s.itemId} — ${restoreSkipReason(s.reason)}`)
-                      .join('; ')}
-                    .
+                    {restoreSkips.map((s) => `${s.itemId} — ${restoreSkipReason(s)}`).join('; ')}.
                   </span>
                   <Button
                     variant="ghost"

@@ -141,15 +141,15 @@
 below is **taken from `design.md`'s own ordering statements**, not from section numbering, and where
 the design says something different from the obvious reading it is called out.
 
-| #     | Stage                                                  | Why it is here, in the design's own words                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ----- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A** | **`B-145` — the ledger survives a bridge restart**     | §12.7: filed as a SEPARATE item that **must land BEFORE the switch ships**. It is also what makes stage D's reconcile trustworthy — a reconcile against a ledger that a restart silently emptied is a reconcile against a lie                                                                                                                                                                                                                                                                                                      |
-| **B** | **§12.6's exclusivity refusal**                        | ⚠ **NOT where the obvious reading puts it.** §12.1 says the two measured crosstalk symptoms are closed by exclusivity, but that §8's two doors — `take()` and `restore()` seating a SECOND multi-box template — _"are a different reachability and are closed by §12.6's refusal, **not by this phasing**"_. **It depends on nothing else in this file**: it is a predicate in two call sites. It is the cheapest closure of a measured on-air failure mode in the whole plan, so it goes early rather than waiting for the switch |
-| **C** | **UNIT B′ + the per-arrangement carrier, INTERLEAVED** | §6b: UNIT B′ is _"this feature's PREREQUISITE, not latent cleanup"_. §12.1: phase one _"must already build the per-arrangement geometry carrier (§7) and the mask recompute (UNIT B′, §6b)"_. ⚠ **They are one stage, not two:** 2.1 (resolved visibility) needs no carrier, while 2.2 (current geometry) cannot be written until the carrier exists to be read                                                                                                                                                                    |
-| **D** | **The reconcile (§4)**                                 | §4: ONE `reconcileLivePlates`, with `swapLiveSource` becoming a **caller** rather than a peer. Needs C's carrier to compute a desired set                                                                                                                                                                                                                                                                                                                                                                                          |
-| **E** | **The operator surface (§12.8)**                       | The toggles are what drives D. Needs D to have something to call                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **F** | ⭐ **THE CUT SHIPS**                                   | §12.1: cut first, animation second. A–E is the whole of phase one                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **G** | **The transition modes (§13.5)**                       | Phase two. §12.1: _"phase two then adds only the tween and its curve contract"_                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| #             | Stage                                                  | Why it is here, in the design's own words                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A**         | **`B-145` — the ledger survives a bridge restart**     | §12.7: filed as a SEPARATE item that **must land BEFORE the switch ships**. It is also what makes stage D's reconcile trustworthy — a reconcile against a ledger that a restart silently emptied is a reconcile against a lie                                                                                                                                                                                                                                                                                                      |
+| **B** ✅ DONE | **§12.6's exclusivity refusal**                        | ⚠ **NOT where the obvious reading puts it.** §12.1 says the two measured crosstalk symptoms are closed by exclusivity, but that §8's two doors — `take()` and `restore()` seating a SECOND multi-box template — _"are a different reachability and are closed by §12.6's refusal, **not by this phasing**"_. **It depends on nothing else in this file**: it is a predicate in two call sites. It is the cheapest closure of a measured on-air failure mode in the whole plan, so it goes early rather than waiting for the switch |
+| **C**         | **UNIT B′ + the per-arrangement carrier, INTERLEAVED** | §6b: UNIT B′ is _"this feature's PREREQUISITE, not latent cleanup"_. §12.1: phase one _"must already build the per-arrangement geometry carrier (§7) and the mask recompute (UNIT B′, §6b)"_. ⚠ **They are one stage, not two:** 2.1 (resolved visibility) needs no carrier, while 2.2 (current geometry) cannot be written until the carrier exists to be read                                                                                                                                                                    |
+| **D**         | **The reconcile (§4)**                                 | §4: ONE `reconcileLivePlates`, with `swapLiveSource` becoming a **caller** rather than a peer. Needs C's carrier to compute a desired set                                                                                                                                                                                                                                                                                                                                                                                          |
+| **E**         | **The operator surface (§12.8)**                       | The toggles are what drives D. Needs D to have something to call                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **F**         | ⭐ **THE CUT SHIPS**                                   | §12.1: cut first, animation second. A–E is the whole of phase one                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **G**         | **The transition modes (§13.5)**                       | Phase two. §12.1: _"phase two then adds only the tween and its curve contract"_                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 🔴 **The one correction to make out loud:** a reading that puts exclusivity after the reconcile is
 following section numbering, not the design. §12.1 explicitly says the phasing does **not** close
@@ -244,20 +244,52 @@ candidate shapes.
 
 ## 3. STAGE B — exclusivity (§12.6), which depends on nothing above
 
-- [ ] 3.1 **ONE canonical predicate** answering "is another item carrying a multi-box template
-      already on air on this channel?"
+- [x] 3.1 **ONE canonical predicate** answering "is another item carrying a multi-box template
+      already on air on this channel?" LANDED 2026-08-19 (session AT) as
+      `#multiBoxItemOnAirOnChannel` + `#refuseSecondMultiBox` in
+      `tools/caspar-bridge/src/caspar-runtime.ts`. Each of its three terms is answered by the
+      thing that already owns it rather than re-spelled: **"on air"** by `isOnAirStatus`
+      (`caspar-runtime.ts:310`, extracted for exactly this class of gate), **"on this channel"**
+      by `#slots`, and **"multi-box"** by `#multiBoxCount` — the carrier's declaration length,
+      `> 1`, since a box IS a plate (§0.5) and an arrangement only positions box INSTANCES. An
+      `unknown` carrier counts as 0, the same call `#planLiveSeating` already makes and for the
+      reason written in its header: such a template seats no plates at all, and refusing it
+      would take a station's whole pre-carrier rundown off air on upgrade.
       ⚠ **It is NOT `deps.hasLivePlates`** (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:655`)
       — that is a renderer fact about one row's template declaring plates. §12.6 offers it as the
       tree's nearest existing shape, not as the predicate. Reusing the name for a different condition
       is what golden rule 6 forbids.
       **Files:** `tools/caspar-bridge/src/caspar-runtime.ts`.
       **Done when:** the predicate exists once, and its name states the condition it tests.
-- [ ] 3.2 **CALL it from `take()` AND from `restore()` / `#decidePendingRestores`** — restore never
+- [x] 3.2 **CALL it from `take()` AND from `restore()` / `#decidePendingRestores`** — restore never
       passes through `take()` (§8), so there are two sites by necessity and **one predicate by rule**.
       **Done when:** both call sites call it; neither re-derives the condition locally.
-- [ ] 3.3 **A test per door**, including the restore door, which is the one that has no other cover.
+      DONE 2026-08-19. Door 1 sits in `#takeImpl` immediately BEFORE `#planLiveSeating`, where a
+      refusal still costs nothing — the plan resolves THIS item's plates while exclusivity asks
+      about the on-air SET, and folding one into the other is how the answer to either stops being
+      findable. Door 2 sits in `restore()`'s loop before `restoreItem`, gated on `isRetainedOnAir`
+      (only a row coming back ON AIR can collide; a `loaded` or `cleared` multi-box row must still
+      return, or the refusal would silently delete rows the operator can see — the B-108 hazard).
+      🔴 `templateId` is a PARAMETER of the predicate rather than a reconciler lookup, because the
+      restore door asks before the item exists there; a lookup would answer `undefined` at that
+      site and leave the refusal present, wired, and DEAD on the door with no other cover.
+      The refusal is legible at both: `stack.take` answers `multibox-already-on-air` + its
+      `message`, and `restore` answers a new `RestoreSkip` reason carrying the same sentence in a
+      new optional `detail` — the shape `stack.take`'s `message` already established, with the
+      same "the specific one wins" rule, now enforced inside `restoreSkipReason` so no consumer
+      can forget it.
+- [x] 3.3 **A test per door**, including the restore door, which is the one that has no other cover.
+      LANDED as `tools/caspar-bridge/tests/multibox-exclusivity.integration.test.ts` — 7 tests: one
+      per door, three BOUNDARY cases (a single-box template is not refused; an item is never its
+      own incumbent; a `loaded` row still restores), a proof that the refused restore mutates
+      nothing, and one asserting **both doors produce the SAME sentence** — golden rule 6 asserted
+      rather than asserted-about. 🔴 **Each door was mutation-tested independently**: disabling the
+      restore door alone reddens 3, disabling the take door alone reddens 2, and neither disabling
+      reddens the other door's test. Vitest transpiles from source per run, so no stale artifact
+      sat between the runs.
       **Visual:** nothing visual — verify by attempting a second multi-box take and reading the
-      refusal.
+      refusal. Verbatim, as the bridge emits it:
+      `exactly one multi-box template may be on air per channel: "three-box" (3 boxes, item "item-1") is already on air on channel 1 — take it off air first`
 
 ---
 

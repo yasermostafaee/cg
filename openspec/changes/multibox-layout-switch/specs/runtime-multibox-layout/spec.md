@@ -44,6 +44,50 @@ forbids.
 - **THEN** the row still has exactly one active layout, because the change replaces the single
   layout state rather than adding to a set
 
+### Requirement: At most ONE multi-box template is on air per channel, refused at every door
+
+At most one item carrying a multi-box template SHALL be on air on a given channel at any moment. A
+second one SHALL be **refused**, at every path that can reach air, and the refusal SHALL name both
+what is already on air and what was refused.
+
+A template is **multi-box** when its Live Source carrier declares more than one box. A template
+whose carrier is ABSENT (`unknown`) SHALL NOT count as multi-box: nothing can read it, it seats no
+plates, and treating it as multi-box would refuse a station's whole pre-carrier rundown on upgrade.
+
+The condition SHALL be decided by **ONE predicate**, called from every door. `design.md` §8 records
+that a restore never passes through a take, so there are two call sites by necessity — and a second
+local copy of the condition is the drift `CLAUDE.md` golden rule 6 exists to prevent.
+
+A refusal SHALL mutate nothing: no slot taken, no ledger entry, no wire traffic.
+
+#### Scenario: A second multi-box take is refused, naming the incumbent
+
+- **WHEN** an operator takes a multi-box template while another multi-box template is already on air
+  on that channel
+- **THEN** the take is refused with `multibox-already-on-air` and a message naming the template and
+  item already on air, and nothing about the refused item reaches the wire
+
+#### Scenario: A restore after reconnect cannot re-seat a second one
+
+- **WHEN** a reconnect restores retained rows and two of them carry multi-box templates in the
+  on-air state on one channel
+- **THEN** the first is restored and the second is skipped with `multibox-already-on-air`, carrying
+  the same sentence the take refusal gives, and holds no slot afterwards
+
+#### Scenario: A single-box template is not refused
+
+- **WHEN** an operator takes a template declaring one box, or none, while a multi-box template is on
+  air
+- **THEN** the take is accepted — the rule is about multi-box templates, not about live plates in
+  general
+
+#### Scenario: A row that is not coming back on air still restores
+
+- **WHEN** a reconnect restores a multi-box row whose retained state is `loaded` or `cleared` while
+  another multi-box row restores on air
+- **THEN** it is restored normally, because it puts nothing on the channel and dropping it would
+  silently remove a row the operator can see
+
 ### Requirement: Source assignment SURVIVES a layout switch
 
 A source the operator has assigned to a box SHALL remain on the corresponding box after a layout

@@ -31,14 +31,21 @@ export function useRestoreSkips(): readonly RestoreSkip[] {
 }
 
 /**
- * What the operator is told about a lost row, per reason.
+ * What the operator is told about a lost row.
  *
  * Each says WHAT happened and WHAT TO DO — a reason code on its own ("no-layer") is
- * not an explanation, and these two situations need different actions from the
- * operator, which is the whole reason `restore()` distinguishes them.
+ * not an explanation, and these situations need different actions from the operator,
+ * which is the whole reason `restore()` distinguishes them.
+ *
+ * ⭐ Takes the whole SKIP, not just its `reason`, so the "a detail wins over its code"
+ * rule lives HERE rather than at each call site. A skip that carries the bridge's own
+ * sentence is carrying the more specific of the two, exactly as `stack.take`'s `message`
+ * outranks its `errorCode`; a second consumer that read `.reason` directly would print
+ * the generic wording and quietly lose the specific one.
  */
-export function restoreSkipReason(reason: RestoreSkip['reason']): string {
-  switch (reason) {
+export function restoreSkipReason(skip: RestoreSkip): string {
+  if (skip.detail !== undefined) return skip.detail;
+  switch (skip.reason) {
     case 'unknown-template':
       return 'its template is no longer registered — re-import it';
     case 'no-layer':
@@ -61,5 +68,14 @@ export function restoreSkipReason(reason: RestoreSkip['reason']): string {
      */
     case 'already-held':
       return 'the bridge already had it';
+    /*
+     * `multibox-layout-switch` §12.6 — exactly one multi-box template on air per channel.
+     * In practice the bridge always sends a `detail` naming WHICH template holds the
+     * channel, and that is returned above. This is the wording if it ever arrives without
+     * one: still true, still actionable, and it keeps the switch exhaustive so a NEW
+     * reason fails to compile until someone writes its sentence.
+     */
+    case 'multibox-already-on-air':
+      return 'another multi-box template is already on air on its channel — take that one off air, then load this row again';
   }
 }
