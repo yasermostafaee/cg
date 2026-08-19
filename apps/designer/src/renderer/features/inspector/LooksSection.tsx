@@ -5,6 +5,7 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { activeLookGroup } from '../../state/slices/looks.js';
+import { liveSourceIssues } from '../../state/live-source-preflight.js';
 import { CollapseSection } from './CollapseSection.js';
 import { TextField } from './controls.js';
 import * as cls from './LooksSection.css.js';
@@ -39,6 +40,7 @@ export function LooksSection({ scene }: { scene: Scene }): JSX.Element | null {
         One multi-frame group: sources are declared ONCE here, and every look references them — the
         same source in two looks is one seat, held across the switch.
       </p>
+      <IssuesPart scene={scene} />
       <SourcesPart sources={group.sources} />
       <LooksPart scene={scene} />
     </CollapseSection>
@@ -225,6 +227,40 @@ function LookRow({
             onCommit={(v) => designerStore.renameLook(look.id, v)}
           />
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The LOOKS refusal family, surfaced WHERE THE AUTHOR WORKS — the same preflight the
+ * export runs (`liveSourceIssues`), filtered to this family, so a refusal is met while
+ * authoring rather than at the export dialog (the wrong end of the process). FIRST in
+ * the section: guidance that scrolls off under the fields is present and unreadable
+ * (the AX lesson).
+ */
+function IssuesPart({ scene }: { scene: Scene }): JSX.Element | null {
+  const issues = liveSourceIssues(scene).filter(
+    (i) =>
+      i.code === 'look-source-undeclared' ||
+      i.code === 'look-source-duplicate' ||
+      i.code === 'look-second-group' ||
+      (i.code === 'live-source-overlap' && i.message.includes('look "')),
+  );
+  const unique = [...new Set(issues.map((i) => i.message))];
+  if (unique.length === 0) return null;
+  return (
+    <div role="alert" aria-label="Look issues">
+      <p className={cls.groupLabel}>
+        {unique.length} issue{unique.length === 1 ? '' : 's'} — export will refuse
+      </p>
+      {unique.slice(0, 6).map((m) => (
+        <p key={m} className={cls.issue}>
+          {m}
+        </p>
+      ))}
+      {unique.length > 6 && (
+        <p className={cls.hint}>…and {unique.length - 6} more, in the export preflight.</p>
       )}
     </div>
   );
