@@ -1,6 +1,14 @@
 import type { FrameLocator } from '@playwright/test';
 import { expect, test, type DesignerApp } from './fixtures/designer.js';
 
+// ⚠ A′'s arrangement surface is DISABLED, not deleted (owner, 2026-08-19; LOOKS §14):
+// this spec drives UI that is deliberately unreachable, so every case is SKIPPED — not
+// to go green, but because its subject was retired. The spec is DELETED with the A′
+// code by `tasks.md` §1b P2.DEL; until then it documents what the surface did.
+test.beforeEach(() => {
+  test.skip(true, 'A′ arrangements surface disabled (owner, 2026-08-19) — deleted with P2.DEL');
+});
+
 /**
  * ⭐ **`multibox-layout-switch` C2 — the ARRANGEMENT authoring surface, walked end to end.**
  *

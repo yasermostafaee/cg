@@ -175,9 +175,15 @@ the `commitAnimatable` intercept, the `arrangedTransform` read sites, `scene-doc
 `store-core.activeArrangementId`), and their tests (§14.4's table is the checklist — ~88 cases).
 ⚠ The deletion is a `[ ]` task so it cannot be skipped silently:
 
-- [ ] **P2.DEL** — delete the A′ arrangements schema, carrier, runtime and Designer machinery per
-      §14.4's DIES table, in the SAME session that lands the looks UI. A session that swaps the UI
-      and defers the deletion has re-opened the two-spellings window it was scoped to close.
+- [ ] **P2.DEL** — ⚠ **RE-SCOPED (owner, 2026-08-19): A′ was retired by DISABLING its entry
+      points, not deleting its code** — session BB unmounted `ArrangementsSection`,
+      `ArrangementElementSection`, `ArrangementPicker` and `ArrangementCellOverlay` and skipped
+      their E2E spec, so authoring is LOOKS-only while the A′ code stays compiling and
+      unreachable (a bug in the new surface cannot strand the owner). **This task is now the
+      CODE DELETION**, due once the owner has authored a real template on the new path: delete
+      the arrangements schema, carrier, runtime view, Designer machinery and tests per §14.4's
+      DIES table, plus the disabled-but-present components above and the skipped
+      `arrangements.spec.ts`.
 
 🔴 **The one correction to make out loud:** a reading that puts exclusivity after the reconcile is
 following section numbering, not the design. §12.1 explicitly says the phasing does **not** close

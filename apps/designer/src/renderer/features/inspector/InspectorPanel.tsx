@@ -16,8 +16,6 @@ import { RealtimeNumberInput } from './controls.js';
 import { DynamicDataSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
-import { ArrangementElementSection } from './ArrangementElementSection.js';
-import { ArrangementsSection } from './ArrangementsSection.js';
 import { LooksSection } from './LooksSection.js';
 import { PlayoutSection } from './PlayoutSection.js';
 import { selectedElements } from './shared-properties.js';
@@ -91,10 +89,9 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
       <PlayoutSection scene={scene} />
       {/* `multibox-layout-switch` C2 — beside Playout, because an arrangement is a property
           of the COMPOSITION: the thing that becomes the `.vcg` on one layer. */}
-      <ArrangementsSection scene={scene} />
-      {/* LOOKS phase 2 (§14) — the multi-frame group: sources declared once, looks as
-          sub-scenes. Beside Arrangements through the one-session coexistence window;
-          step 5 unmounts the A′ section. */}
+      {/* A′'s ArrangementsSection is DISABLED, not deleted (owner, 2026-08-19):
+          authoring uses LOOKS only, and the A′ code stays compiling-but-unreachable so a
+          bug in the new surface cannot strand the owner. `tasks.md` §1b P2.DEL deletes it. */}
       <LooksSection scene={scene} />
       {(scene.fields.length > 0 || compositionInstancesOf(scene).length > 0) && (
         <>
@@ -129,8 +126,6 @@ function ElementInspector({
         <TransformSection element={element} selectedKeyframe={selectedKeyframe} />
       </CollapseSection>
       <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
-      {/* multibox-layout-switch C2 — D4's flag lives BESIDE THE ELEMENT (5.5). */}
-      <ArrangementElementSection element={element} scene={scene} />
       {(element.type === 'text' ||
         element.type === 'ticker' ||
         element.type === 'sequence' ||

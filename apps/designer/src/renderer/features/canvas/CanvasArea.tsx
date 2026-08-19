@@ -20,7 +20,6 @@ import {
 } from '../sharedLibrary/sharedImageUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { LookPicker } from './LookPicker.js';
-import { ArrangementPicker } from './ArrangementPicker.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { arrangementViewOf, boxInstanceIds } from '../../state/slices/arrangements.js';
 import { PreviewHost } from './PreviewHost.js';
@@ -923,13 +922,8 @@ export function CanvasArea({
         {showToolbar && <CanvasToolbar tool={tool} />}
         {/* multibox-layout-switch C2 — always visible, because the right panel switches to
             element properties the moment you select something to adjust. */}
-        <ArrangementPicker
-          arrangements={arrangements}
-          activeId={activeArrangementId}
-          onPick={(id) => designerStore.setActiveArrangement(id)}
-        />
-        {/* LOOKS phase 2 (§14) — the active-look selector; drives `setActiveLook` in the
-            preview through the effect above. Always visible for the same reason. */}
+        {/* A′'s ArrangementPicker is DISABLED, not deleted (owner, 2026-08-19) — see
+            `tasks.md` §1b P2.DEL. The LOOKS selector below is the authoring control. */}
         <LookPicker
           looks={lookGroup?.looks ?? []}
           activeId={effectiveLookId}
