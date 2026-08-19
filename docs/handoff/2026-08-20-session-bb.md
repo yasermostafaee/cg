@@ -76,8 +76,9 @@ requiring the rendered box to land at 320 × scale (the D-154 regression class).
   exported single-file HTML carries the group (`lookGroups`, the look ids); the scene→carrier
   round-trip is pinned at unit level (`scene-doc` projection test, `look-carrier` tests). The
   "Export (.vcg)" button exists — a hand re-import check is worth one minute of your time.
-- `exportHtml` in the spec timed out ONCE and passed on re-run (3.2 s total) — not reproduced;
-  noted rather than diagnosed.
+- The `exportHtml` timeout that was first waved off as unreproduced WAS the CI red — diagnosed
+  and fixed (see the correction at the top): preflight-refused export alerts produce no download,
+  and the wait times out with nothing saying why.
 - **`D-152` already describes the source-declaration surface** (BA's rewrite) — nothing added,
   nothing minted.
 - Sources UI is add/remove/name-at-declaration; `expectedAspect`/`dynamic` are schema-carried but
