@@ -212,9 +212,17 @@ export interface BridgeOptions {
   /**
    * B-145 — where the LIVE LAYER LEDGER persists (JSON).
    *
-   * Omitted → no persistence, which is the pre-B-145 behaviour: a restart loses the ledger
-   * and the seated producers are stranded. Configured → the ledger is written on every
-   * change and ADOPTED at boot, corrected against what the server actually has.
+   * Configured → the ledger is written on every change and ADOPTED at boot, corrected
+   * against what the server actually has. Omitted → no persistence, which is the
+   * pre-B-145 behaviour: a restart loses the ledger and the seated producers are stranded.
+   *
+   * 🔴 **A STATION NEVER REACHES THE OMITTED CASE.** `bin/caspar-bridge.mjs` resolves this
+   * through `resolveLiveLayersPath`, so an unconfigured station gets
+   * `~/.cg-runtime/bridge-live-layers.json` and persistence is ON; omitting it here is the
+   * EMBEDDER case the repo already ruled on for the fixed bank — *"`createBridge({})` is
+   * not a station"* (`tests/default-bank-boot.integration.test.ts:164`). Defaulting it in
+   * this function instead would have every bridge a unit test constructs read, and any
+   * test that seats a live layer WRITE, the developer's real station ledger.
    *
    * ⚠ Like {@link sourceAssignmentsPath}, it must NOT live inside {@link templatesDir}
    * (B-116).
@@ -275,6 +283,24 @@ export interface BridgeHandle {
     value: SourceAssignments;
     source: SourceAssignmentsSource;
     pruned: readonly { templateId: string; plateId: string; sourceId: string }[];
+  };
+  /**
+   * B-145 — the LIVE-LAYER LEDGER's provenance, so the CLI can SAY it at boot.
+   *
+   * Same reason as every sibling above, with one that is sharper here: this is the store
+   * whose whole purpose is to be believed after a restart. A bridge that adopted nothing
+   * and a bridge that is not persisting at all look identical from every screen — and the
+   * second is the pre-B-145 bug, which for one release shipped as the DEFAULT.
+   *
+   * `path: null` means persistence is deliberately OFF (`--no-live-layers`), never that
+   * nobody configured it: absence now resolves to the station default.
+   */
+  readonly liveLayers: {
+    readonly path: string | null;
+    readonly source: 'file' | 'absent' | 'unusable' | 'off';
+    readonly adopted: number;
+    readonly unverified: number;
+    readonly dropped: number;
   };
   /** Force-close every client socket — used by tests to simulate a mid-session drop. */
   dropConnections(): void;
@@ -476,9 +502,23 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   // 🔴 ADOPT BEFORE SUBSCRIBING TO THE CHANGES, and the order is load-bearing: subscribing
   // first would have the adopt's own publish write the file back before it has been
   // corrected, which for one moment persists a claim nothing had verified.
+  const liveLayersProvenance: {
+    path: string | null;
+    source: 'file' | 'absent' | 'unusable' | 'off';
+    adopted: number;
+    unverified: number;
+    dropped: number;
+  } = {
+    path: options.liveLayersPath ?? null,
+    source: options.liveLayersPath === undefined ? 'off' : 'absent',
+    adopted: 0,
+    unverified: 0,
+    dropped: 0,
+  };
   if (options.liveLayersPath !== undefined) {
     const loaded = loadPersistedLiveLayers(options.liveLayersPath);
     if (loaded.problem !== undefined) {
+      liveLayersProvenance.source = 'unusable';
       process.stderr.write(
         `[caspar-bridge] ⚠ the live-layer ledger at ${loaded.problem.file} is present but ` +
           `unusable (${loaded.problem.reason}) — booting with an EMPTY ledger, so any layers ` +
@@ -493,6 +533,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       // exists to stop stranding. A later reading corrects the ledger; a wrong drop cannot
       // be undone.
       const adoption = runtime.adoptLiveLayers(loaded.ledger, () => 'unknown');
+      liveLayersProvenance.source = 'file';
+      liveLayersProvenance.adopted = adoption.adopted.size;
+      liveLayersProvenance.unverified = adoption.unverified.length;
+      liveLayersProvenance.dropped = adoption.dropped.length;
       process.stderr.write(
         `[caspar-bridge] adopted ${String(adoption.adopted.size)} item(s) of live layers from ` +
           `${options.liveLayersPath} (${String(adoption.unverified.length)} unverified until the ` +
@@ -590,6 +634,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       source: resolvedAssignments.source,
       pruned: prunedAssignments.dropped,
     },
+    liveLayers: liveLayersProvenance,
     dropConnections() {
       for (const client of wss.clients) client.terminate();
     },

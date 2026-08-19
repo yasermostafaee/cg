@@ -198,6 +198,48 @@ candidate shapes.
       seated layers must still be listed and still be controllable (clear / repoint) instead of
       vanishing while the producers stay lit on air.
 
+- [x] 2.7 **Persistence is ON by default, and a test can TELL.** Landed 2026-08-19 (session AT).
+      The first cut put the store behind a `liveLayersPath` option that nothing defaulted, so a
+      station that never configured it still lost its ledger — and, worse, **every test passed
+      either way**, which is the same written-but-unreachable class as `autoSqueeze` (`B-147`) and
+      `resolvePlateAspect`'s `assumed` flag (`B-143`).
+      **Files:** `tools/caspar-bridge/src/live-layers-store.ts` (`defaultLiveLayersPath` /
+      `resolveLiveLayersPath`), `tools/caspar-bridge/bin/caspar-bridge.mjs` (the default, the
+      `--no-live-layers` opt-out and the boot line), `tools/caspar-bridge/src/bridge.ts`
+      (`BridgeHandle.liveLayers` provenance), `tools/caspar-bridge/tests/live-layers-default.test.ts`.
+      **Done state:** saying nothing resolves to `~/.cg-runtime/bridge-live-layers.json` — the same
+      convention as every sibling store — and OFF is reachable only by typing `--no-live-layers`.
+      The default is applied by the CLI, not by `createBridge`, per the repo's own ruling that
+      _"`createBridge({})` is not a station"_ (`tests/default-bank-boot.integration.test.ts:164`);
+      a test spawns the real CLI so the WIRING is covered too, not just the resolver.
+      **Visual:** the boot line — `[caspar-bridge] live layer ledger: …` — says which of the three
+      states the station is in, because a bridge that adopted nothing and a bridge that is not
+      persisting at all otherwise look identical from every screen.
+
+- [ ] 2.8 🔴 **THE DISPLAY HALF OF `B-145` ACCEPTANCE 1 IS NOT MET — an adopted layer is
+      CONTROLLABLE but INVISIBLE.** Traced 2026-08-19 (session AT); **written down, deliberately not
+      fixed there.**
+      **What holds already (no work needed):** the browser retains the stack intent and re-delivers
+      it on every connect (`B-092`), so the row and its `itemId` survive the restart; the ledger is
+      keyed by `itemId` (`tools/caspar-bridge/src/live-layers.ts:107`); and every teardown/repoint
+      door reads `#liveLayers` by that key — `teardownLiveLayers`
+      (`tools/caspar-bridge/src/caspar-runtime.ts:3802`), the swap paths at `:3461` and `:3639`. So
+      the row's existing verbs DO reach the adopted records.
+      **What is missing:** nothing displays the seated layers AS layers.
+      `CasparRuntime.liveLayers()` (`caspar-runtime.ts:3849`) has **no production caller** — its own
+      comment says _"for tests and for phase 6's re-emission"_ — and no `@cg/shared-ipc` channel
+      carries the ledger, so it never crosses the wire. The only panel that lists station layers is
+      the PLAYOUT tab, and `playoutLayersState()` (`caspar-runtime.ts:4064`) enumerates
+      **`#reservedLayers` only**; the Live Source band is deliberately NOT reserved (`live-layers.ts:20-26`
+      — reserving it would make it unplaceable, unreservable and unclearable), so it can never appear
+      there, and `stationLayerOccupancy` would refuse the clear anyway because it offers one only for
+      producer kind exactly `html` while a plate is a `route`. The Inspector's plate rows read
+      `currentSourceAssignments()` (`apps/runtime/src/renderer/features/inspector/livePlates.ts:23`)
+      — the ASSIGNMENT config, i.e. what a plate _should_ use, never what is seated.
+      **Done when:** a surface exists that lists the layers the bridge itself has seated, and an
+      operator can tell an adopted layer from a stranded one. **Needs a channel and a panel decision,
+      which is why it is its own item and not a patch to stage A.**
+
 ---
 
 ## 3. STAGE B — exclusivity (§12.6), which depends on nothing above

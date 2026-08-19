@@ -1,4 +1,6 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {
   PersistedLiveLayersSchema,
   fromPersistedLiveLayers,
@@ -93,4 +95,65 @@ export function savePersistedLiveLayers(filePath: string, ledger: LiveLayerLedge
   const tmp = `${filePath}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(toPersistedLiveLayers(ledger), null, 2), 'utf8');
   fs.renameSync(tmp, filePath);
+}
+
+// ─────────────────────── WHERE THE LEDGER LIVES BY DEFAULT ───────────────────────
+
+/**
+ * 🔴 **B-145 completion — persistence is ON by default, and OFF is a thing you SAY.**
+ *
+ * The first cut of this item shipped the store behind a `liveLayersPath` option that
+ * nothing defaulted, so a station that never configured it still lost its ledger — a
+ * safety mechanism defaulting to off is a safety mechanism the station does not have.
+ * Worse, the tests passed either way, so nothing would have caught the default drifting
+ * back. That is the same class as `autoSqueeze`'s reader-less schema field (`B-147`) and
+ * `resolvePlateAspect`'s zero-reader `assumed` flag (`B-143`): written, unreachable.
+ *
+ * ── WHY THE DEFAULT IS RESOLVED HERE AND APPLIED BY THE CLI, NOT BY `createBridge` ──
+ *
+ * The repo has already decided this exact question, out loud, in a test:
+ * `tests/default-bank-boot.integration.test.ts:164` — *"`createBridge({})` is not a
+ * station. The default applies to a CONFIGURED location that holds no file, which is what
+ * every real install has."* Every sibling store (connection, fixed bank, reserved layers,
+ * templates, source catalog, assignments, audit log) follows it: the default path is
+ * applied by `bin/caspar-bridge.mjs`, which is what a station actually runs.
+ *
+ * There is a second, concrete reason not to default inside `createBridge`: ~40 tests
+ * construct a bridge with no paths at all. Defaulting there would have every one of them
+ * READ the developer's real `~/.cg-runtime/bridge-live-layers.json` — and any test that
+ * seats or releases a live layer would WRITE it, clobbering a running station's ledger
+ * from a unit test.
+ *
+ * ⚠ What the first cut got wrong was not the layer — it was that the default did not
+ * exist at all, and that its absence was untestable because it lived in an inline
+ * `path.join` inside a `.mjs` script no test could reach. So the resolution lives HERE,
+ * as one exported function, and `live-layers-default.test.ts` holds it to its answer.
+ */
+
+/** The station-standard location: the same `~/.cg-runtime/bridge-*.json` shape as every sibling store. */
+export function defaultLiveLayersPath(homeDir: string = os.homedir()): string {
+  return path.join(homeDir, '.cg-runtime', 'bridge-live-layers.json');
+}
+
+/**
+ * What a caller may say about persistence. `false` is the ONLY way to switch it off —
+ * absence means "not configured", and not-configured must never mean "unprotected".
+ */
+export type LiveLayersPathOption = string | false;
+
+/**
+ * Resolve the configured option to the path the bridge should use, or `null` for a
+ * deliberate OFF.
+ *
+ * - `undefined` (said nothing) → the station default. **Persistence is on.**
+ * - `false` (said "off")       → `null`. Explicit, and reported at boot as a choice.
+ * - a string                   → exactly that path.
+ */
+export function resolveLiveLayersPath(
+  configured: LiveLayersPathOption | undefined,
+  homeDir: string = os.homedir(),
+): string | null {
+  if (configured === false) return null;
+  if (typeof configured === 'string') return configured;
+  return defaultLiveLayersPath(homeDir);
 }

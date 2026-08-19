@@ -14,6 +14,8 @@
 //   caspar-bridge --templates-dir C:\cg\templates     # R-028: where the template library persists
 //   caspar-bridge --source-catalog-path C:\cg\sources.json      # D-137/C-015: the lives this plant has
 //   caspar-bridge --source-assignments-path C:\cg\plates.json   # D-137/C-015: which live each plate uses
+//   caspar-bridge --live-layers-path C:\cg\live.json         # B-145: where the live-layer ledger persists
+//   caspar-bridge --no-live-layers                    # B-145: deliberately DO NOT persist it
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -65,7 +67,7 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createBridge, parseReservedLayersFlag } from '../dist/index.js';
+import { createBridge, parseReservedLayersFlag, resolveLiveLayersPath } from '../dist/index.js';
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -118,6 +120,36 @@ const sourceAssignmentsPath =
   typeof args['source-assignments-path'] === 'string'
     ? args['source-assignments-path']
     : path.join(os.homedir(), '.cg-runtime', 'bridge-source-assignments.json');
+
+// 🔴 B-145 — the LIVE LAYER LEDGER: which layers the bridge itself has seated behind a
+// template's holes. Unlike every store above, this one is not station CONFIG — it is the
+// bridge's own record of what it put on air, and losing it strands a live guest on a layer
+// no code path can name, clear or repoint.
+//
+// So the default is ON and the absence of a flag is not a way to switch it off: saying
+// nothing gets ~/.cg-runtime/bridge-live-layers.json, and OFF is `--no-live-layers`, a
+// thing you have to type. The first cut of B-145 shipped the store behind an option
+// nothing defaulted, which is a safety mechanism the station does not have.
+//
+// ABSENT file = a first boot, or a bridge that had seated nothing — an EMPTY ledger, and
+// not a boot failure. PRESENT but unusable = reported loudly and treated as absent, NOT a
+// hard failure like the config stores above: an empty ledger is exactly the pre-B-145
+// behaviour, so refusing to boot over a malformed bookkeeping file would take the whole
+// console off air to avoid a degradation it lived with for months (see live-layers-store.ts).
+if (args['live-layers-path'] === true) {
+  console.error(
+    '[caspar-bridge] --live-layers-path needs a value (the JSON file the ledger persists to). ' +
+      'Use --no-live-layers if you meant to switch persistence off.',
+  );
+  process.exit(1);
+}
+const liveLayersPath = resolveLiveLayersPath(
+  args['no-live-layers'] === true
+    ? false
+    : typeof args['live-layers-path'] === 'string'
+      ? args['live-layers-path']
+      : undefined,
+);
 
 // B-141 — the AUDIT LOG, NDJSON, append-only. Same shape as the stores above and
 // for the same reason: its own flag, its own default, and NEVER inside
@@ -183,13 +215,17 @@ const handle = await createBridge({
   templatesDir,
   sourceCatalogPath,
   sourceAssignmentsPath,
+  ...(liveLayersPath !== null ? { liveLayersPath } : {}),
   auditLogPath,
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
 console.error(`[caspar-bridge] candidate layers: ${describeFixedBank(handle.fixedBankSource)}`);
 console.error(`[caspar-bridge] live sources: ${describeSourceCatalog(handle.sourceCatalog)}`);
-console.error(`[caspar-bridge] plate assignments: ${describeAssignments(handle.sourceAssignments)}`);
+console.error(
+  `[caspar-bridge] plate assignments: ${describeAssignments(handle.sourceAssignments)}`,
+);
+console.error(`[caspar-bridge] live layer ledger: ${describeLiveLayers(handle.liveLayers)}`);
 console.error(
   `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
     (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)'),
@@ -296,6 +332,33 @@ function describeAssignments({ value, source, pruned }) {
   if (pruned.length === 0) return head;
   const lost = pruned.map((a) => `${a.templateId}/${a.plateId} -> ${a.sourceId}`).join(', ');
   return `${head} - DROPPED ${pruned.length} naming a source this catalog does not define (${lost})`;
+}
+
+/**
+ * The LIVE LAYER LEDGER in one line, WITH WHERE IT CAME FROM.
+ *
+ * The three lines above are the precedent and this reads the same way, for a reason that
+ * is sharper here: a bridge that adopted nothing and a bridge that is not persisting at
+ * all look identical from every screen — and the second is the pre-B-145 bug, which for
+ * one release shipped as the default. This line is what distinguishes them, every boot,
+ * in the terminal the bridge starts in.
+ *
+ * ASCII only, deliberately: the Windows console this prints to renders an en-dash as
+ * mojibake, and a line whose whole job is to be READ must not arrive with garbage in it.
+ */
+function describeLiveLayers({ path: file, source, adopted, unverified, dropped }) {
+  // Said plainly, because it IS the bug this item exists to fix: seated producers that a
+  // restart makes unreachable. It is reachable only by typing --no-live-layers.
+  if (source === 'off' || file === null) {
+    return 'NOT PERSISTED (--no-live-layers) - layers seated behind a template hole will NOT survive a restart';
+  }
+  if (source === 'absent') return `nothing to adopt (no file at ${file}) - persisting from now on`;
+  if (source === 'unusable') {
+    return `UNUSABLE FILE at ${file} - booted with an EMPTY ledger; any layers still lit from the previous run are unreachable until cleared by hand`;
+  }
+  const notes = [`${unverified} unverified until the first occupancy reading`];
+  if (dropped > 0) notes.push(`${dropped} DROPPED, contradicted by the server`);
+  return `adopted ${adopted} item(s) from ${file} (${notes.join(', ')})`;
 }
 
 function parseArgs(argv) {

@@ -3922,6 +3922,34 @@ cannot answer a question AMCP answers, and this item's boot adoption is precisel
 occupancy reading that would have gone without. The tap's own justification (passive, costs no
 commands) is unaffected and is now what the comment says.
 
+### 🔴 COMPLETED 2026-08-19 (session AT) — the default was OFF, and the display half is still owed
+
+Two things the first cut left open, both now settled rather than assumed:
+
+1. **Persistence now defaults ON.** It shipped behind a `liveLayersPath` option that nothing
+   defaulted, so a station that never configured it still lost its ledger — and every test passed
+   either way, so nothing would have caught the default drifting back. `resolveLiveLayersPath`
+   (`tools/caspar-bridge/src/live-layers-store.ts`) makes saying nothing resolve to
+   `~/.cg-runtime/bridge-live-layers.json`, the same convention as every sibling store, and OFF is
+   reachable only by typing `--no-live-layers`. The resolution is applied by
+   `bin/caspar-bridge.mjs`, not by `createBridge`, per this repo's own ruling that
+   _"`createBridge({})` is not a station"_ (`tools/caspar-bridge/tests/default-bank-boot.integration.test.ts:164`)
+   — defaulting it inside `createBridge` would have every unit test read, and any test seating a
+   live layer WRITE, the developer's real station ledger. `live-layers-default.test.ts` spawns the
+   real CLI so the WIRING is covered too; flipping the default to off reddens four of its tests.
+
+2. 🔴 **Acceptance 1's DISPLAY half is NOT met — an adopted layer is controllable but invisible.**
+   The control half holds with no further work: the browser re-delivers the stack intent on connect
+   ([[B-092]]) so the row and its `itemId` survive, the ledger is keyed by `itemId`, and
+   `teardownLiveLayers` (`tools/caspar-bridge/src/caspar-runtime.ts:3802`) plus the swap paths at
+   `:3461`/`:3639` all read it by that key. But **nothing displays the seated layers as layers**:
+   `CasparRuntime.liveLayers()` (`caspar-runtime.ts:3849`) has no production caller, no
+   `@cg/shared-ipc` channel carries the ledger, and the one panel that lists station layers
+   enumerates `#reservedLayers` only (`caspar-runtime.ts:4064`) — a band the Live Source layers are
+   deliberately kept OUT of. Written up as task 2.8 in
+   `openspec/changes/multibox-layout-switch/tasks.md`; it needs a channel and a panel decision, so
+   it is not a patch to this item.
+
 **What landed:** `tools/caspar-bridge/src/live-layers-store.ts` (atomic write; it fails **soft** where
 its `reserved-layers-store` sibling fails hard — an empty ledger is the pre-B-145 status quo, so
 refusing to boot over a malformed bookkeeping file would take the console off air to avoid a
