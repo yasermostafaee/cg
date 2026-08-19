@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Element, Scene } from '@cg/shared-schema';
 import { liveSourceIssues } from '../src/renderer/state/live-source-preflight.js';
+import { editSceneOf } from '../src/renderer/state/scene-doc.js';
 
 /**
  * `multibox-layout-switch` §14 (LOOKS) phase 1, session BA — **THE LOOKS REFUSAL FAMILY.**
@@ -273,5 +274,17 @@ describe('B.4 — a plate inside a stamped scope stays refused, including INSIDE
     const issues = byCode(s, 'live-source-in-stamped-scope');
     expect(issues).toHaveLength(1);
     expect(issues[0]?.elementId).toBe('stamped-plate');
+  });
+});
+
+describe('the projection — lookGroups reach the working Scene, which is the export path input', () => {
+  it('editSceneOf projects the active composition lookGroups exactly as it projects arrangements', () => {
+    const s = scene({
+      compositions: [
+        { ...lookComp('comp-root', []), lookGroups: [{ id: 'g9', sources: [], looks: [] }] },
+      ],
+    });
+    const projected = editSceneOf(s, 'comp-root');
+    expect(projected?.lookGroups?.[0]?.id).toBe('g9');
   });
 });

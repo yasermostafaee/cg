@@ -147,6 +147,11 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     // export; authoring writes the COMPOSITION's, so two compositions in one project cannot
     // end up sharing one arrangement list.
     arrangements: c.arrangements ?? [],
+    // LOOKS phase 1 (`design.md` §14) — the ACTIVE composition's look groups, projected for
+    // the same reason and to the same contract as `arrangements` above: the Scene field is
+    // the projection's TARGET, read by the export preflight and `collectLookCarrier`.
+    // Without this line an exported template's looks would never reach either.
+    lookGroups: c.lookGroups ?? [],
   };
 }
 
