@@ -147,8 +147,8 @@ describe('a plate inside a HIDDEN composition instance stops punching AND stays 
 
   it('the PLATE own authored visible suppresses too — the third input axis, beside the two ancestor ones', () => {
     const s = scene();
-    const comp = (s as unknown as { compositions: (typeof LOOK_COMP)[] }).compositions[0]!;
-    const plate = comp.layers[0]!.children[0] as unknown as { visible: boolean };
+    const comps = (s as unknown as { compositions: (typeof LOOK_COMP)[] }).compositions;
+    const plate = comps[0]?.layers[0]?.children[0] as unknown as { visible: boolean };
     plate.visible = false;
     expect(backdropHoles(s)).toEqual([]);
   });

@@ -229,8 +229,8 @@ describe('the source-keyed declaration list', () => {
     expect(carrier?.sources[0]?.rect).toEqual({ x: 0, y: 0, width: 640, height: 360 });
     // Make guest-2 absent from the default: default = look-solo, which has no guest-2.
     const s = twoLookScene();
-    (s as unknown as { lookGroups: { defaultLookId: string }[] }).lookGroups[0]!.defaultLookId =
-      'look-solo';
+    const g = (s as unknown as { lookGroups: { defaultLookId: string }[] }).lookGroups[0];
+    if (g !== undefined) g.defaultLookId = 'look-solo';
     const c2 = collectLookCarrier(s);
     expect(c2?.sources.find((d) => d.sourceId === 'guest-2')?.rect).toEqual({
       x: 960,
