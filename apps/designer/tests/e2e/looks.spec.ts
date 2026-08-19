@@ -20,18 +20,23 @@ import { expect, test } from './fixtures/designer.js';
 test.setTimeout(300_000);
 
 /**
- * The six roughly-3×2 drop points, as FRACTIONS of the canvas surface — the canvas is
- * zoom-scaled (≈24% for 1080p), so absolute pixel points can land outside it and a
- * position-click then waits forever.
+ * 🔴 The 6-box grid in SCENE coordinates, WRITTEN through the Transform panel after each
+ * plate is placed. The click position only creates the element; relying on it for the
+ * final geometry made the spec viewport-dependent — on CI the fraction-derived clicks
+ * landed plates overlapping, the preflight refused the export with a `window.alert` the
+ * fixture auto-dismisses, and the download wait timed out with nothing saying why.
+ * Deterministic authored geometry is also six more panel→canvas writes (the D-154 class).
  */
-const GRID_FRACTIONS = [
-  [0.2, 0.25],
-  [0.5, 0.25],
-  [0.8, 0.25],
-  [0.2, 0.65],
-  [0.5, 0.65],
-  [0.8, 0.65],
+const GRID_SCENE = [
+  { x: 40, y: 160 },
+  { x: 680, y: 160 },
+  { x: 1320, y: 160 },
+  { x: 40, y: 600 },
+  { x: 680, y: 600 },
+  { x: 1320, y: 600 },
 ] as const;
+const PLATE_W = 560;
+const PLATE_H = 280;
 
 test('the 6-box debate: group → six sources → two looks → the selector switches the canvas', async ({
   app,
@@ -66,14 +71,23 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
   // ── look-1: the 6-box, authored freely as a full sub-scene ────────────────
   await app.inspector.getByRole('button', { name: '+ Look' }).click();
   await app.inspector.getByRole('button', { name: 'Edit contents of look-1' }).click();
-  for (const [i, [fx, fy]] of GRID_FRACTIONS.entries()) {
-    await app.addLiveSource(at(fx, fy));
+  const writeField = async (name: string, value: number): Promise<void> => {
+    const field = app.inspector.getByRole('spinbutton', { name, exact: true });
+    await field.fill(String(value));
+    await field.press('Enter');
+  };
+  for (const [i, cell] of GRID_SCENE.entries()) {
+    await app.addLiveSource(at(0.4, 0.4));
     // The plate REFERENCES a declared source through the picker — with a group in the
     // project there is no free-text routeKey control at all.
     await expect(app.liveSourceIdInput).toHaveCount(0);
     await app.inspector
       .getByRole('combobox', { name: 'source' })
       .selectOption(`live-${String(i + 1)}`);
+    await writeField('X position', cell.x);
+    await writeField('Y position', cell.y);
+    await writeField('Width', PLATE_W);
+    await writeField('Height', PLATE_H);
     await app.deselect();
   }
   await app.addTextElement(at(0.5, 0.9));
@@ -87,11 +101,10 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
   await app.addLiveSource(at(0.4, 0.4));
   await app.inspector.getByRole('combobox', { name: 'source' }).selectOption('live-1');
 
-  // §6.6 — panel→canvas coherence, asserted by WRITING: set X to a known value and
+  // §6.6 — panel→canvas coherence, asserted by WRITING: set X/Y to known values and
   // require the RENDERED box to land there. A screenshot cannot witness this.
-  const xField = app.inspector.getByRole('spinbutton', { name: 'X position' });
-  await xField.fill('320');
-  await xField.press('Enter');
+  await writeField('X position', 320);
+  await writeField('Y position', 180);
   const soloPlate = app.canvasFrame.locator('[data-cg-live-source="live-1"]');
   const stage = app.canvasFrame.locator('.cg-stage');
   const stageBox = await stage.boundingBox();
@@ -104,6 +117,9 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
 
   // ── back home: the selector switches, and the canvas VISIBLY changes ──────
   await app.openComposition(homeName);
+  // The POSITIVE CONTROL for the export below: the refusal family must be silent, or
+  // the export's alert-and-no-download failure mode reads as a bare timeout.
+  await expect(app.inspector.getByText('export will refuse')).toHaveCount(0);
   const picker = app.page.getByLabel('Active look');
   await expect(picker).toBeVisible();
 

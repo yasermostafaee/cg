@@ -13,8 +13,16 @@
   `E2E (Playwright)` job RAN (10 m 51 s). Attempt 1 was an apt-mirror stall killed at
   `timeout-minutes: 20` **before Playwright started** — infrastructure, not the suite. Recorded
   in `tasks.md` §1b.
-- **BB's own `gate:e2e`** runs on the final push — the session report quotes the run URL and its
-  conclusion; if you are reading this before it completed, check that run before building on top.
+- 🔴 **CORRECTION (same evening): the run on `2ee11fe5` was RED** —
+  <https://github.com/yasermostafaee/cg/actions/runs/32288446144>, two failures, both this
+  session's and both fixed in the follow-up commit that carries this note: (1) `looks.spec`
+  placed plates by viewport-relative clicks, so on CI they landed overlapping, the preflight
+  refused the export with an alert the fixture auto-dismisses, and the download wait timed out —
+  the grid is now WRITTEN in scene coordinates through the Transform panel (deterministic, and
+  six more D-154-class panel→canvas writes); (2) `icon-pack.spec`'s toolbar pin predates the
+  multi-frame button — updated for the deliberately changed surface. **BB's `gate:e2e` is
+  therefore discharged only by the run on the FIX commit or later** — the session report quotes
+  it; check it before building on top.
 - **The single next action:** author the real 6-box debate template by hand (the walk below), then
   phase 3 — stage D's reconcile on the look carrier (`tasks.md` §1b), and later P2.DEL (the A′
   CODE deletion — re-scoped, still open).
