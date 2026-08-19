@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Element, Scene } from '@cg/shared-schema';
+import { lookGroupOf } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import {
   getAll as assetUrlGetAll,
@@ -18,6 +19,7 @@ import {
   primeAll as primeAllSharedImages,
 } from '../sharedLibrary/sharedImageUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
+import { LookPicker } from './LookPicker.js';
 import { ArrangementPicker } from './ArrangementPicker.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { arrangementViewOf, boxInstanceIds } from '../../state/slices/arrangements.js';
@@ -358,6 +360,28 @@ export function CanvasArea({
       '*',
     );
   }, [arrangementViewKey]);
+
+  // ⭐ LOOKS phase 2 (§14, phase 1's D.5) — the ACTIVE LOOK, pushed into the preview's
+  // `runtime.setActiveLook()`. THIS is the production caller phase 1 said did not exist
+  // yet. Same contract as the arrangement message above: not a scene edit, no rebuild —
+  // the runtime flips instance visibility and re-punches on the live nodes, which is the
+  // cut being previewed. The RESOLVED id is posted (session pick, else the group's
+  // default), so a stale session pick can never address a deleted look.
+  const activeLookIdSession = useDesignerSelector((st) => st.activeLookId);
+  const lookGroup = scene === null ? undefined : lookGroupOf(scene);
+  const effectiveLookId =
+    lookGroup === undefined
+      ? null
+      : (lookGroup.looks.find((l) => l.id === activeLookIdSession)?.id ??
+        lookGroup.defaultLookId ??
+        null);
+  useEffect(() => {
+    if (effectiveLookId === null) return;
+    iframeRef.current?.contentWindow?.postMessage(
+      { kind: 'cg-preview', action: 'look', lookId: effectiveLookId },
+      '*',
+    );
+  }, [effectiveLookId]);
 
   // Stream live scene updates to the existing iframe via postMessage,
   // rAF-throttled so we never queue more than one rebuild per frame.
@@ -903,6 +927,13 @@ export function CanvasArea({
           arrangements={arrangements}
           activeId={activeArrangementId}
           onPick={(id) => designerStore.setActiveArrangement(id)}
+        />
+        {/* LOOKS phase 2 (§14) — the active-look selector; drives `setActiveLook` in the
+            preview through the effect above. Always visible for the same reason. */}
+        <LookPicker
+          looks={lookGroup?.looks ?? []}
+          activeId={effectiveLookId}
+          onPick={(id) => designerStore.setActiveLook(id)}
         />
         <span className={s.spacer} />
         <span className={s.zoomReadout} data-testid="zoom-readout">

@@ -48,3 +48,12 @@ export const arrangementPicker = style({
   fontSize: '0.72rem',
   height: '28px',
 });
+
+/** LOOKS phase 2 — the look selector's surface (its own class; A′'s is deleted with A′). */
+export const lookPicker = style({
+  marginInlineStart: '0.5rem',
+  minWidth: '9rem',
+  maxWidth: '16rem',
+  fontSize: '0.72rem',
+  height: '28px',
+});

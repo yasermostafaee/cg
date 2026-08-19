@@ -71,6 +71,7 @@ import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
 import { ArrangementCellOverlay } from './ArrangementCellOverlay.js';
 import { arrangedTransform } from '../../state/slices/arrangements.js';
+import { lookGroupOf } from '@cg/shared-schema';
 
 /**
  * The default canvas pointer — a bold black arrow with a white outline, a bit
@@ -316,6 +317,10 @@ export function CanvasOverlay({
     activeArrangementId === null
       ? null
       : ((scene.arrangements ?? []).find((a) => a.id === activeArrangementId) ?? null);
+  // LOOKS phase 2 (§14) — which look the canvas is showing, resolved the same way the
+  // preview resolves it (session pick, else the group's default). Self-subscribed like
+  // the two above.
+  const activeLookIdSession = useDesignerSelector((s) => s.activeLookId);
   const layerRef = useRef<HTMLDivElement>(null);
   // B-037 — the pointer's scene position while a pen draft is live (null otherwise),
   // driving the rubber-band + close-affordance feedback overlay.
@@ -326,8 +331,26 @@ export function CanvasOverlay({
   const frameRef = useRef<HTMLDivElement>(null);
 
   const allElements: Element[] = [];
-  for (const layer of scene.layers) {
-    for (const el of layer.children) allElements.push(el);
+  {
+    // LOOKS phase 2 — a HIDDEN look's instance is not on the canvas, so it must not be
+    // hittable: every look instance sits full-frame at the origin, and without this
+    // filter a click (and the double-click drill) would land on the TOPMOST look in
+    // document order rather than the one the canvas shows.
+    const lookGroup = lookGroupOf(scene);
+    const shownLookId =
+      lookGroup === undefined
+        ? null
+        : (lookGroup.looks.find((l) => l.id === activeLookIdSession)?.id ??
+          lookGroup.defaultLookId ??
+          null);
+    const hiddenInstances = new Set(
+      (lookGroup?.looks ?? []).filter((l) => l.id !== shownLookId).map((l) => l.instanceId),
+    );
+    for (const layer of scene.layers) {
+      for (const el of layer.children) {
+        if (!hiddenInstances.has(el.id)) allElements.push(el);
+      }
+    }
   }
   // For hit-testing: clone each element with its *visually effective*
   // transform at the current frame, so the bounding boxes the
