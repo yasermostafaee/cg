@@ -114,3 +114,58 @@ one photograph identically.
   reservation.
 - **Anchor drift:** none in this session's targets. `Gizmo.tsx:147`, `CanvasOverlay.tsx:344`,
   `TransformSection.tsx:38` and `timeline.ts:472` all read as expected.
+
+---
+
+## 7. PATCH 01 — item zero: `B-149`, the mask hole that reached air
+
+Arrived after AY was pushed; done as a patch, before anything else.
+
+**The defect.** `applyArrangementToNodes` writes all four geometry properties onto a box's node;
+`liveArrangementView`, in the same file, read back only `left`/`top` and took width/height from the
+AUTHORED rect. Every hole was punched **at the cell's position, at the authored size**.
+
+🔴 **This one REACHED AIR** — unlike `D-154`, which never left the Designer. A hole larger than its
+box opens the live layer BENEATH the template where no box exists: §1's crosstalk, arriving from
+inside the feature built to prevent it.
+
+### 🔴 The mechanism was CLOBBERING, not omission
+
+`liveArrangementView` seeds its map from `base.geometry`, which already holds the **correct** cell. A
+cell that only RESIZED a box added no readback entry, so the correct value survived — **that case was
+never broken**. The fault was that the readback **OVERWROTE** the correct base entry with
+`{cell position, authored size}` the moment it detected a MOVE.
+
+⇒ **"Seed the base better" would have fixed nothing.** And it is why the test file keeps a size-only
+case even though it passed before the fix: without it, a later change could repair the base and leave
+the clobber standing.
+
+### The axis nobody had asserted
+
+C1's eleven-row UNIT B′ matrix asserted where the hole WAS — and **every one of its cases moved a box
+without resizing it**, so a size-blind readback passed all eleven. That is the same one-axis blindness
+AV found (the suite asked where the hole was, never where the box was) and AY found again (nobody
+asked where the gizmo was), now a third time. **The pattern is worth naming: each of these suites was
+thorough along the axis it already believed in.**
+
+**Measured, red → green:** position-and-size punched `42,0 1851×1018` for a `922×534` cell before, and
+the cell exactly after. At app level the hole came back **320 px** wide — the plate scaled by the
+cell's 0.5 `preScale` — where the pre-fix value would have been the unscaled 640.
+
+⚠ **On the visual evidence, honestly:** the after-screenshot is consistent but not decisive, because
+the backdrop rectangle in my fixture does not cover the frame, so some of the checkerboard in it is
+"no backdrop there" rather than "a hole". The decisive evidence is the red→green test and the 320 px
+readback.
+
+⚠ `scale` / `rotation` remain deliberately unread, and the comment now says why that is a DIFFERENT
+case rather than the same one half-applied — so the distinction is not collapsed later.
+
+---
+
+## 8. CI
+
+- ✅ **AY's Linux `gate:e2e` is DISCHARGED** — commit `039fe2b5`:
+  <https://github.com/yasermostafaee/cg/actions/runs/32258009382>, `conclusion: success`, with the
+  **`E2E (Playwright)` job having RUN** (`success`, not `skipped`).
+- 🔴 **`B-149`'s commit owes its own run**, since it changes `@cg/template-runtime` — the render
+  engine.
