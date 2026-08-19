@@ -102,10 +102,14 @@ one photograph identically.
 
 ## 6. Flags
 
-- 🔴 **A Linux `gate:e2e` is OWED.** ⚠ And note for the next session: **AX's run was CANCELLED**
-  (`32252553391`, `f894d0e8`) because a second push superseded it — so AX's debt was never discharged
-  by it. That also contradicts `P-027`'s claim that push runs are no longer cancelled by a newer push;
-  worth re-reading that platform item against observed behaviour.
+- 🔴 **A Linux `gate:e2e` is OWED.** ⚠ And note: **AX's run reads `cancelled`** (`32252553391`,
+  `f894d0e8`), so AX's debt was not discharged by it.
+  🔴 **CORRECTED 2026-08-19 (session AW), and the correction matters more than the original note:**
+  I wrote here that it was cancelled by a superseding push and that this contradicts `P-027`. **Both
+  halves were wrong.** The `e2e` job hit `timeout-minutes: 20` (it ran 20 m 16 s), and GitHub reports
+  a timeout as `cancelled`. The timeline disproves the supersede reading outright — the next push was
+  at 12:43:00 and the job ran on to 12:45:37. `P-027` stands; see its 2026-08-19 addendum for the rule
+  (**read the duration before reading the word**).
 - ⚠ **Rotation on a box under an arrangement is out of scope and falls through to the authored
   transform** (asserted). A cell is an axis-aligned rect; the node keeps its CSS rotation on top. If
   an author rotates a box, the cell and the rotation compose in a way nobody has specified.

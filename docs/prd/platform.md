@@ -1200,6 +1200,30 @@ for the normal one-at-a-time cadence, not for a burst. The lever if that ever ma
 concurrency group — deliberately NOT taken, because it removes the serialization that keeps
 runner-minute spend bounded.
 
+### ⚠ ADDENDUM 2026-08-19 — a `cancelled` conclusion has TWO causes, and they demand OPPOSITE responses
+
+Session AY read a `cancelled` push run as a supersede and concluded, in its handoff, that this item's
+claim was false. **It is not.** Verified two ways on run `32252553391` (`f894d0e8`):
+
+1. **The config says so** — `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`, so a
+   push run is never cancelled by a newer push.
+2. 🔴 **The timeline proves it independently** — the next push landed at **12:43:00** and that run's
+   `e2e` job went on running until **12:45:37**, outliving it by 2½ minutes. A supersede would have
+   killed it at 12:43.
+
+**What actually happened: the `e2e` job hit `timeout-minutes: 20`** (it ran 12:25:21 → 12:45:37 =
+20 m 16 s), **and GitHub reports a job killed by `timeout-minutes` as `cancelled`, not `failed`.**
+
+⇒ **Read the DURATION before reading the word.** A supersede is noise and the right response is to
+ignore it; a timeout is a real signal about the suite and the right response is to investigate. They
+are indistinguishable by `conclusion` alone, which is precisely how one gets mistaken for the other.
+
+⚠ **And the numbers say this one was a HANG, not a suite that has outgrown its budget.** The five
+healthy `e2e` runs that day took **9 m 37 s, 10 m 11 s, 11 m 44 s, 12 m 10 s, 12 m 12 s** — the worst
+is 61 % of the ceiling. A run that reached 20 m was not creeping past a budget; it stopped making
+progress. Raising `timeout-minutes` would hide that, which is `B-073`'s lesson: the fix is never a
+longer rope.
+
 **A SECOND, INDEPENDENT CAUSE — found by the acceptance test, which is the entire reason the fix is
 verified end to end rather than reasoned about.** With the base fixed, a docs-only push STILL ran
 `ci` and `e2e` (run 31257557820, whose only changed file was `docs/prd/bugs.md`). The filter's own
