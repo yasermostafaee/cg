@@ -238,6 +238,12 @@ test.describe('D-153 — the arrangement surface is legible', () => {
     await expect(app.page.getByText('This arrangement has no boxes to place.')).toBeVisible();
     await expect(app.page.getByText(/Add to composition/)).toBeVisible();
     await expect(app.page.getByText(/repeater/)).toBeVisible();
+
+    // 🔴 The misunderstanding an author ARRIVES with — "switch to 3-box and import 3, then
+    // switch to 2-box and import 2". Boxes are imported ONCE, as many as the largest
+    // arrangement needs. It is not tidiness: per-arrangement instances would give each
+    // arrangement its own plate identities, so the assigned source would not survive a switch.
+    await expect(app.page.getByText(/not once per arrangement/)).toBeVisible();
   });
 
   test(

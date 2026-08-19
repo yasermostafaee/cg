@@ -2342,6 +2342,80 @@ beside a working one is how the next author picks the dead one.
   [[R-057]] (the operator half), [[B-146]] (the same class — a control that silently does nothing),
   [[D-060]] (`fitMode: 'autosize'`, the one that IS implemented).
 
+## [ ] B-148 — instancing ONE box composition twice exports TWO declarations with the SAME `elementId` and `sourceId`: the boxes fight over one live layer, and nothing refuses it ⟨priority: high — a template that exports clean and cannot work⟩
+
+**What:** a multi-box template authored the obvious way — one `box` composition, instanced N times —
+produces N Live Source declarations that are **identical in both identity fields**. The bridge keys
+plate assignment on `(templateId, plateId)` where `plateId` IS the `sourceId`, so N boxes resolve to
+ONE live layer and fight over it. Export raises nothing.
+
+🔴 **The tree ALREADY REFUSES THIS EXACT HAZARD one door along, in these words:**
+
+> _"…every stamp would carry the same source id, so the copies would fight over one live layer."_
+> — `apps/designer/src/renderer/state/live-source-preflight.ts`, the `live-source-in-stamped-scope`
+> refusal (added for `repeater` / `sequence` stamps)
+
+A stamped scope is refused for it. **A composition instance is not, and produces the same
+collision.** One hazard, one reasoning, one refusal — currently applied to one of the two doors.
+
+### MEASURED, not read (2026-08-19, session AX)
+
+`collectLiveSources` over a scene with two root-level instances of one box composition emits:
+
+|            | `elementId` | `sourceId` | `rect`          |
+| ---------- | ----------- | ---------- | --------------- |
+| instance A | `plate`     | `guest-1`  | `0,0 960×540`   |
+| instance B | `plate`     | `guest-1`  | `960,0 960×540` |
+
+**The GEOMETRY is right and the IDENTITY collides.** The cause is one line: `collectLiveSources`
+emits `elementId: el.id` / `sourceId: el.routeKey` from the **authored** element, which is shared by
+every instance — while `FlatElement.key` (the composition-instance path + element id, _"UNIQUE per
+rendered copy, where the element id alone is not"_) is in the same loop, in hand, and unused.
+
+### ⚠ The binding route does NOT rescue it — established, because it decides the wording
+
+`live-source-id` bindings exist and D-025 gives each composition instance its own field namespace, so
+in principle one composition instanced N times could carry N different source ids. **It does not
+work today.** Re-measured with a `live-source-id` binding on the box composition: both declarations
+come back `dynamic: true` and **still carry the same `elementId` and `sourceId`**, and the
+declaration block has **no instance path at all** — so nothing downstream can tell the two apart, and
+the bridge is handed two records it cannot distinguish.
+
+⇒ **The item is therefore "instancing a box composition is REFUSED, full stop"**, not "refuse the
+unbound case only".
+
+### The fix, named but deliberately not taken here
+
+Two shapes, and they are not equivalent:
+
+1. **REFUSE** it in `live-source-preflight.ts`, in the stamped-scope refusal's own family and
+   wording — cheap, immediate, and it makes the author's next move obvious (author N box
+   compositions, each with its own `routeKey`).
+2. **CARRY the instance path** — emit `FlatElement.key` so N instances are N distinct plates. This
+   is the better end state and is a **carrier change** (`TemplateInfo.liveSources`), touching the
+   bridge's assignment keying and `boxRelativeRect`'s pairing. It is `multibox-layout-switch` work,
+   not a bug fix.
+
+⚠ **Refusing first does not foreclose carrying later** — a refusal removed when the carrier grows is
+an ordinary widening. Shipping the carrier change under a bug number is what would foreclose review.
+
+**Acceptance:**
+
+- WHEN a scene has two root-level instances of one composition containing a Live Source plate THEN
+  export is refused with a named error, in the same family and wording discipline as
+  `live-source-in-stamped-scope`
+- WHEN the refusal fires THEN it names both instances and says what to do instead — author one
+  composition per box, each with its own source id
+- WHEN a template has one instance of a box composition THEN nothing is refused
+- WHEN two DIFFERENT compositions each hold a plate with a distinct `routeKey` THEN nothing is
+  refused, because that is the correct authoring shape
+
+- **Cross-refs:** [[D-153]] (the surface's legibility gap, filed the same session — that one is a
+  missing EXPLANATION, this is a missing REFUSAL, which is why they are two items), [[D-152]] /
+  [[R-057]] (the arrangement feature this arises in), [[D-137]] (the Live Source element and its
+  `routeKey`), [[C-015]] (the `(templateId, plateId)` assignment keying this collides on), and the
+  `live-source-in-stamped-scope` refusal whose reasoning it shares.
+
 <!--
   CROSS-REFERENCE, deliberately NOT a second item.
 

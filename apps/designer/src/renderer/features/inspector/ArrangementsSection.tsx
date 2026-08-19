@@ -349,7 +349,12 @@ function NoBoxesYet(): JSX.Element {
       <p className={cls.calloutBody}>
         To make one: create a <strong>new composition</strong>, put the plate and the title inside
         it, then come back here, <strong>right-click that composition</strong> in the Compositions
-        panel and choose <strong>“Add to composition”</strong>. Do that once per box.
+        panel and choose <strong>“Add to composition”</strong>.
+      </p>
+      <p className={cls.calloutBody}>
+        Do that <strong>once per box</strong>, for as many boxes as your <em>largest</em>{' '}
+        arrangement needs — <strong>not once per arrangement</strong>. A 3-box and a 2-box
+        arrangement share the same three boxes; the 2-box one simply hides the third.
       </p>
       <p className={cls.calloutWarn}>
         ⚠ Don’t put a plate inside a <code>repeater</code> or a <code>sequence</code> item — those
@@ -374,6 +379,25 @@ function NoBoxesYet(): JSX.Element {
 function HowBoxesWork(): JSX.Element {
   return (
     <CollapseSection title="How boxes and backgrounds work">
+      {/* 🔴 FIRST, because it is the misunderstanding an author actually ARRIVES with — the
+          owner described exactly this workflow: "switch to 3-box and import 3, then switch to
+          2-box and import 2…". It is not merely untidy: a per-arrangement instance set would give
+          every arrangement its own plate identities, so `(templateId, plateId)` would change on
+          every switch and the assigned source would NOT survive it — the model design.md §3
+          rejected outright. */}
+      <p className={cls.calloutBody}>
+        <strong>Import each box ONCE — as many as the biggest arrangement needs.</strong> You do not
+        add boxes per arrangement. Every arrangement is a different set of cells over the{' '}
+        <em>same</em> boxes: with three imported, the 3-box arrangement fills all three, the 2-box
+        fills boxes 1–2 and hides the third for you, the 1-box fills box 1 and hides the rest.
+        “Adjust the 2-box arrangement” means moving <em>its two cells</em>, never importing two more
+        boxes.
+      </p>
+      <p className={cls.calloutBody}>
+        That is also what keeps a source assigned: a box holds one plate identity for the whole
+        template, so the source an operator points at box 2 stays there through every switch. Give
+        each arrangement its own boxes and the identities change underneath them.
+      </p>
       <p className={cls.calloutBody}>
         <strong>Size a box like a typical cell.</strong> Only the plate’s{' '}
         <em>proportion inside its box</em> is exported — the box is measured, the plate’s rect is

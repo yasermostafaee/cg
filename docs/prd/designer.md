@@ -4640,7 +4640,10 @@ format, not a tool.
 - WHEN an author looks for the background THEN the surface says it is an ordinary element of the
   main composition, and distinguishes it from the editor backdrop
 
-- **Cross-refs:** [[D-152]] (this is its usability gap, not a second feature — read it first),
+- **Cross-refs:** [[B-148]] (found the same session and deliberately kept SEPARATE: that one is a
+  missing REFUSAL — instancing one box composition twice exports two declarations with the same
+  `elementId` and `sourceId` — while this one is a missing EXPLANATION; a fix for either leaves the
+  other standing), [[D-152]] (this is its usability gap, not a second feature — read it first),
   [[R-057]] (the operator half, whose surface faces the same "what is on air" question),
   `openspec/changes/multibox-layout-switch/specs/designer-multibox-arrangements/spec.md` (the
   contract this surface is meant to make usable).
