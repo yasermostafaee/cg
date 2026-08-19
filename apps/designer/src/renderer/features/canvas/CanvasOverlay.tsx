@@ -69,6 +69,7 @@ import {
 import { Gizmo, MultiGizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
+import { ArrangementCellOverlay } from './ArrangementCellOverlay.js';
 
 /**
  * The default canvas pointer — a bold black arrow with a white outline, a bit
@@ -307,6 +308,13 @@ export function CanvasOverlay({
   // D-124 — the path in point-edit mode (anchors/handles shown, gizmo hidden).
   // Self-subscribed (like TransformSection's currentFrame) rather than drilled.
   const editingPathId = useDesignerSelector((s) => s.editingPathId);
+  // D-153 — the arrangement whose cells are drawn below. Self-subscribed like
+  // `editingPathId`, so the overlay follows the toolbar selector without drilling props.
+  const activeArrangementId = useDesignerSelector((s) => s.activeArrangementId);
+  const activeArrangement =
+    activeArrangementId === null
+      ? null
+      : ((scene.arrangements ?? []).find((a) => a.id === activeArrangementId) ?? null);
   const layerRef = useRef<HTMLDivElement>(null);
   // B-037 — the pointer's scene position while a pen draft is live (null otherwise),
   // driving the rubber-band + close-affordance feedback overlay.
@@ -751,6 +759,11 @@ export function CanvasOverlay({
           height: scene.resolution.height * scale,
         }}
       >
+        {/* ⭐ D-153 face 1 — the ACTIVE arrangement's cells, drawn. Inside the scene-origin
+            box, so a scene rect is just `× scale` and the cells use the SAME mapping the
+            gizmo and click→scene conversion do. Non-interactive: the canvas below is the
+            editing surface, and a cell that ate a click would make elements unselectable. */}
+        <ArrangementCellOverlay scene={scene} arrangement={activeArrangement} scale={scale} />
         {/* B-037 — no gizmo while the pen is armed: addElement auto-selects the
             in-progress draft, and the gizmo's corner/edge/rotation hit-zones sit
             exactly where pen clicks go (the first anchor is always on the draft's

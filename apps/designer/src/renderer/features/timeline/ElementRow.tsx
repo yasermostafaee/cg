@@ -24,7 +24,11 @@ import {
 import { resolveVisibilityOf } from '@cg/shared-schema';
 import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
-import { activeArrangements } from '../../state/slices/arrangements.js';
+import {
+  activeArrangements,
+  arrangementViewOf,
+  boxInstanceIds,
+} from '../../state/slices/arrangements.js';
 import { activeFieldData } from '../../state/scene-doc.js';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
@@ -92,12 +96,29 @@ function ElementRowLabel(props: Props): JSX.Element {
    * with the canvas the moment an arrangement had an opinion.
    */
   const activeArrangementId = useDesignerSelector((st) => st.activeArrangementId);
-  const activeArrangement = useDesignerSelector((st) =>
-    st.scene === null || activeArrangementId === null
+  const scene = useDesignerSelector((st) => st.scene);
+  const activeArrangement =
+    scene === null || activeArrangementId === null
       ? null
-      : (activeArrangements(st.scene).find((a) => a.id === activeArrangementId) ?? null),
-  );
+      : (activeArrangements(scene).find((a) => a.id === activeArrangementId) ?? null);
+  // The AUTHORED opinion — what the ◆ marker reports and what clicking it clears.
   const arrangementOpinion = activeArrangement?.visibility?.[element.id];
+  /**
+   * 🔴 The RESOLVED view, not the authored map — and the difference is `D-153` face 2.
+   *
+   * A box instance with no cell in the active arrangement is hidden by `arrangementViewOf`,
+   * which derives that from the cell count rather than from anything the author wrote.
+   * Reading the authored map alone would show a cheerful open eye for a box the canvas has
+   * just made disappear — the exact "reads as a bug" confusion this item exists to end. The
+   * timeline is visible whatever is selected, so this is where an author actually learns it.
+   */
+  // ⚠ Computed in the render body, NOT inside `useDesignerSelector`. `arrangementViewOf`
+  // returns a FRESH OBJECT every call, and a `useSyncExternalStore` snapshot that is never
+  // reference-equal to the last one re-renders forever — it took the whole app down, and the
+  // symptom was "the Compositions button does not exist" rather than anything about
+  // visibility. Subscribe to STABLE references (the scene, the id) and derive from them here.
+  const view =
+    scene === null ? undefined : arrangementViewOf(activeArrangement, boxInstanceIds(scene));
   const onScreen = resolveVisibilityOf(
     {
       id: element.id,
@@ -106,8 +127,12 @@ function ElementRowLabel(props: Props): JSX.Element {
         ? { hideDuringTransition: element.hideDuringTransition }
         : {}),
     },
-    { arrangementVisibility: activeArrangement?.visibility },
+    { arrangementVisibility: view?.visibility },
   );
+  // Hidden because the arrangement has no cell for it — a DERIVED state with no authored
+  // opinion behind it, so it gets its own words rather than the ◆ marker's "you set this".
+  const hiddenByNoCell =
+    activeArrangement !== null && !onScreen && arrangementOpinion === undefined;
   // D-098 — a layer bound to data (a field binding in the active composition targets it) gets a
   // small key icon AFTER its name (kept visible even when the name ellipsizes). Stable boolean →
   // no per-frame re-render.
@@ -222,9 +247,12 @@ function ElementRowLabel(props: Props): JSX.Element {
             ? onScreen
               ? 'Hide element'
               : 'Show element'
-            : onScreen
-              ? `Hide in "${activeArrangement.name}" only`
-              : `Show in "${activeArrangement.name}" only`
+            : hiddenByNoCell
+              ? `Hidden in "${activeArrangement.name}" — this arrangement has no cell for it. ` +
+                `Its source is held, not torn down. Click to show it anyway.`
+              : onScreen
+                ? `Hide in "${activeArrangement.name}" only`
+                : `Show in "${activeArrangement.name}" only`
         }
         aria-label={onScreen ? 'Hide element' : 'Show element'}
         aria-pressed={!onScreen}

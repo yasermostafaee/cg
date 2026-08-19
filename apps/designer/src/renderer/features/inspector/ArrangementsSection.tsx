@@ -1,6 +1,7 @@
 import {
   arrangementCount,
   type Arrangement,
+  type Element,
   type ArrangementEasing,
   type ArrangementTransition,
   type Scene,
@@ -9,7 +10,8 @@ import { Star, Trash2 } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
-import { activeArrangements } from '../../state/slices/arrangements.js';
+import { activeArrangements, boxInstanceIds } from '../../state/slices/arrangements.js';
+import { activeLayersOf } from '../../state/scene-doc.js';
 import { CollapseSection } from './CollapseSection.js';
 import { NumberField, SelectField, TextField } from './controls.js';
 import * as s from './InspectorPanel.css.js';
@@ -62,8 +64,13 @@ export function ArrangementsSection({ scene }: { scene: Scene }): JSX.Element {
         </p>
       )}
 
+      {/* 🔴 FIRST, not last. Session AX opened the panel in this state and the guidance was
+          scrolled off the top under the cell number fields — present, and unreadable. When
+          there are no boxes, nothing else on this panel matters. */}
+      {arrangements.length > 0 && boxInstanceIds(scene).length === 0 && <NoBoxesYet />}
+
       {arrangements.map((a) => (
-        <ArrangementRow key={a.id} arrangement={a} active={a.id === activeId} />
+        <ArrangementRow key={a.id} scene={scene} arrangement={a} active={a.id === activeId} />
       ))}
 
       <div className={cls.addRow}>
@@ -82,6 +89,7 @@ export function ArrangementsSection({ scene }: { scene: Scene }): JSX.Element {
         A new arrangement starts on an even grid — that is a starting point to drag, not a computed
         layout. Where a box sits is a design decision.
       </p>
+      <HowBoxesWork />
     </CollapseSection>
   );
 }
@@ -102,9 +110,11 @@ const EASINGS: readonly ArrangementEasing[] = [
 ];
 
 function ArrangementRow({
+  scene,
   arrangement,
   active,
 }: {
+  scene: Scene;
   arrangement: Arrangement;
   active: boolean;
 }): JSX.Element {
@@ -224,6 +234,8 @@ function ArrangementRow({
             </>
           )}
 
+          <BoxBinding scene={scene} arrangement={arrangement} />
+
           <h4 className={cls.cellsHead}>cells</h4>
           {arrangement.cells.length === 0 ? (
             <p className={cls.hint}>
@@ -253,5 +265,139 @@ function ArrangementRow({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * ⭐ **`D-153` face 2 — WHICH BOX EACH CELL HOLDS, and which box is hidden.**
+ *
+ * `arrangementViewOf` fills cell `i` with box instance `i` in document order. That rule was
+ * correct and completely invisible: a box with no cell in the active arrangement simply
+ * VANISHED from the canvas, which reads as a bug rather than as §12.4's HELD state (the
+ * plate stops being on screen while its producer stays seated).
+ *
+ * ⚠ **A READOUT of the existing order — not a new binding.** Per-cell assignment is
+ * deliberately not provided (§12.9.1 Q2): a cell is not a separately addressable identity
+ * beside the plate, and an author who wants a different order authors a different order.
+ * Nothing here is a control.
+ */
+function BoxBinding({
+  scene,
+  arrangement,
+}: {
+  scene: Scene;
+  arrangement: Arrangement;
+}): JSX.Element {
+  const ids = boxInstanceIds(scene);
+  // Same accessor as `boxInstanceIds`, so the names and the ids come from ONE document.
+  const byId = new Map<string, Element>();
+  for (const layer of activeLayersOf(scene)) for (const el of layer.children) byId.set(el.id, el);
+
+  // The EMPTY state is not rendered from here: it now sits at the top of the section (see
+  // `ArrangementsSection`). Buried under four number fields per cell it was scrolled out of
+  // view exactly when it was the only thing worth reading — measured by eye, session AX.
+  if (ids.length === 0) return <></>;
+
+  return (
+    <>
+      <h4 className={cls.cellsHead}>boxes</h4>
+      {ids.map((id, i) => {
+        const held = i < arrangement.cells.length;
+        return (
+          <p key={id} className={held ? cls.boxRow : cls.boxRowHidden}>
+            <span className={cls.boxName}>{byId.get(id)?.name ?? id}</span>
+            <span className={held ? cls.boxWhere : cls.boxWhereHidden}>
+              {held
+                ? `cell ${String(i + 1)}`
+                : 'hidden in this arrangement — its source is held, not torn down'}
+            </span>
+          </p>
+        );
+      })}
+      {arrangement.cells.length > ids.length && (
+        <p className={cls.hint}>
+          {arrangement.cells.length - ids.length} cell
+          {arrangement.cells.length - ids.length === 1 ? '' : 's'} have no box yet.
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * 🔴 **`D-153` face 3 — the EMPTY STATE, which is the screen the owner was actually on.**
+ *
+ * He had four arrangements and eight cell coordinates and asked _"now what do I do — do I
+ * have to add a live source with those coordinates to each layer myself?"_ The panel at that
+ * moment explained counts and refusals: guidance for a later problem than the one he had.
+ *
+ * ⚠ **This POINTS AT the shipped flow and does not reimplement it.** Session AV established
+ * from the code that the existing path works — a composition holding the plate and its
+ * title, then the Compositions panel's right-click → "Add to composition". A second way to
+ * do one operation is the divergence this repo keeps paying for, so this is a signpost, not
+ * a button.
+ */
+function NoBoxesYet(): JSX.Element {
+  return (
+    <div className={cls.callout}>
+      <p className={cls.calloutHead}>This arrangement has no boxes to place.</p>
+      <p className={cls.calloutBody}>
+        A <strong>box</strong> is a composition holding one live-source plate and its title. The
+        cells above position box <em>instances</em>: the first box goes in cell 1, the second in
+        cell 2, and so on in the order they sit in this composition.
+      </p>
+      <p className={cls.calloutBody}>
+        To make one: create a <strong>new composition</strong>, put the plate and the title inside
+        it, then come back here, <strong>right-click that composition</strong> in the Compositions
+        panel and choose <strong>“Add to composition”</strong>. Do that once per box.
+      </p>
+      <p className={cls.calloutWarn}>
+        ⚠ Don’t put a plate inside a <code>repeater</code> or a <code>sequence</code> item — those
+        stamp their content at play time, so a plate in one declares no hole and punches none.
+        Export refuses it.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * 🔴 **`D-153` face 3 — THE CONVENTION, stated where it is needed.**
+ *
+ * ── WHY IT IS INLINE AND NOT A DOCS PAGE ────────────────────────────────────
+ *
+ * Every fact below is already true and already decided; the only place to learn any of it
+ * was by reading `live-sources.ts`. A linked docs page is one click an author under time
+ * pressure does not take, and it rots separately from the code. This is collapsed by
+ * default so it costs nothing once learned, and it sits in the panel where the questions
+ * arise rather than in the panel where someone might later look them up.
+ */
+function HowBoxesWork(): JSX.Element {
+  return (
+    <CollapseSection title="How boxes and backgrounds work">
+      <p className={cls.calloutBody}>
+        <strong>Size a box like a typical cell.</strong> Only the plate’s{' '}
+        <em>proportion inside its box</em> is exported — the box is measured, the plate’s rect is
+        divided by it, and at play time the hole is that fraction of whatever cell the box lands in.
+        Absolute pixels inside the box are not stored, so a box drawn at the size of a cell shows
+        you what will air.
+      </p>
+      <p className={cls.calloutWarn}>
+        ⚠ <strong>One box across counts of different shape changes its CROP.</strong> The fractions
+        are fixed, so a box designed for a half-frame cell that later lands in a full-frame one
+        keeps its proportions and re-crops the picture. It is not an obvious break — the plate is a
+        hole filled edge-to-edge — so check a wide arrangement and a narrow one before air.
+      </p>
+      <p className={cls.calloutBody}>
+        <strong>The background is an ordinary element</strong> of this composition — a shape or an
+        image behind the boxes — not a setting on an arrangement. One background shared by every
+        arrangement is the default and is usually enough. To give one arrangement its own, add a
+        second element and hide it in the others with the eye on its timeline row.
+      </p>
+      <p className={cls.calloutWarn}>
+        ⚠ <strong>The checkerboard is not a background.</strong> It is the editor backdrop, shown so
+        you can see transparency while designing; it never reaches air. If you want something behind
+        the boxes on air, draw it.
+      </p>
+    </CollapseSection>
   );
 }

@@ -1,7 +1,6 @@
 import type { Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
-import { activeArrangements } from '../../state/slices/arrangements.js';
 import { CollapseSection } from './CollapseSection.js';
 import * as s from './InspectorPanel.css.js';
 import * as cls from './ArrangementsSection.css.js';
@@ -37,7 +36,20 @@ export function ArrangementElementSection({
   element: Element;
   scene: Scene;
 }): JSX.Element | null {
-  if (activeArrangements(scene).length === 0) return null;
+  /**
+   * 🔴 Shown when the PROJECT uses arrangements anywhere — not only when the OPEN
+   * composition has them.
+   *
+   * Measured by eye (session AX): a box's TITLE lives inside the BOX composition, and the
+   * arrangements live on the composition that INSTANCES it. Scoping this to the active
+   * document therefore hid the flag on exactly the element D4 was written for — _"a box
+   * title should leave during the move"_ — and showed it only on the box instance, where it
+   * is far less useful. The narrow test was correct-looking and wrong.
+   */
+  const usesArrangements =
+    (scene.arrangements?.length ?? 0) > 0 ||
+    (scene.compositions ?? []).some((c) => (c.arrangements?.length ?? 0) > 0);
+  if (!usesArrangements) return null;
   const on = element.hideDuringTransition ?? false;
   return (
     <CollapseSection title="Arrangement" defaultExpanded={on}>

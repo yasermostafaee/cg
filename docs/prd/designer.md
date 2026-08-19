@@ -4558,8 +4558,89 @@ AUTHORED `visible` rather than the arrangement state, so it is a coincidence rat
 - WHEN a title is too long for a narrow cell THEN it fits, decided from the RENDERED box after
   shaping ([[B-147]])
 
-- **Cross-refs:** [[R-057]] (the OPERATOR half — the live switch, the reconcile, the refusals; read
-  both), [[B-147]] (the text fit this depends on), [[D-137]] (the Live Source element these boxes
+- **Cross-refs:** [[D-153]] (this item's USABILITY gap — the surface authors cells the author
+  cannot see; the model here is right and D-153 is what makes it teachable), [[R-057]] (the
+  OPERATOR half — the live switch, the reconcile, the refusals; read both),
+  [[B-147]] (the text fit this depends on), [[D-137]] (the Live Source element these boxes
   are built from), [[C-015]] (the installation mapping and seating), [[D-060]] (`fitMode`, and the
   one fit mode that IS implemented), [[D-083]] (composition items — the tree's one-of-N primitive,
   and why it could NOT be the carrier).
+
+## [ ] D-153 — the arrangement surface authors CELLS the author cannot see, bound to BOXES it does not name, under a CONVENTION it never states ⟨priority: high — the feature shipped and could not be used⟩
+
+**What:** three faces of ONE defect in the arrangement authoring surface that [[D-152]] delivered.
+Filed as one item because they are one failure — **the model is right and the surface does not teach
+it** — and splitting them would invite fixing the easy face and calling the defect closed.
+
+⚠ **This is [[D-152]]'s USABILITY gap, not a second feature.** No capability is missing. Everything
+below is already possible; none of it is discoverable.
+
+**The evidence, and it is the strongest kind — the owner using it.** He opened the Designer after
+stage C2 landed, authored four arrangements with eight cell coordinates, and then asked:
+
+> _"Now what do I do — do I have to add a live source with those coordinates to each layer myself?"_
+> _"Where on the canvas should the live plate go? What size? Where do I set the background?"_
+
+**Every one of those has a definite answer in the code.** Answering them required reading
+`packages/vcg-format/src/live-sources.ts` and `packages/shared-schema/src/arrangements.ts`. An
+author who has to read the exporter to learn where to put a rectangle has been handed a data
+format, not a tool.
+
+### The three faces
+
+1. 🔴 **The cells are INVISIBLE.** They exist only as four number fields per cell in the right
+   panel. The argument that won A′ over the computed-grid candidate (§12.9) was that _cell placement
+   is a DESIGN decision, not a computed grid_ — and a surface whose only input is typing four
+   numbers per cell **is** a computed grid, entered by hand. Nothing on the canvas shows where a cell
+   is, so the author cannot see the layout they are authoring.
+
+2. **The cell ↔ box binding is UNSTATED.** `arrangementViewOf` fills cell `i` with box instance `i`
+   in document order, and nothing says so. A cell does not name the box it holds; a box with no cell
+   in the active arrangement simply VANISHES from the canvas with no explanation, which reads as a
+   bug rather than as §12.4's HELD state.
+
+3. **The CONVENTION is never stated.** The exporter stores
+   `boxRelativeRect = (plate.rect − boxInstance.rect) ÷ boxInstance.size` as **fractions 0..1**
+   (`live-sources.ts:103`, verified 2026-08-19), so **only the PROPORTION of the plate inside its
+   box survives** — absolute pixels inside the box do not. Three consequences the author must know
+   and cannot learn:
+   - **author the box instance at the size of a typical cell**, so what they see is what airs;
+   - ⚠ **the stretch caveat** — one box used across counts of different aspect changes its CROP, not
+     its layout, and because the plate is a hole filled by crop-to-fill the result is a **different
+     crop rather than an obvious break** (tracked by `multibox-layout-switch` `tasks.md` 6.4 / 9.2,
+     neither landed);
+   - **the background is an ORDINARY ELEMENT** in the main composition, not a field on an
+     arrangement — one shared background is the default and is enough (§12.9.2). ⚠ And the
+     checkerboard the author sees is the **editor backdrop**, not a broadcast background; nothing on
+     screen distinguishes them.
+
+### What must NOT be done in fixing it
+
+- ⚠ **No new box-creation affordance.** Session AV established from the code that the shipped flow
+  already reaches it: create a composition holding the plate and its title, then right-click it in
+  the Compositions panel → **"Add to composition"** (guarded by `canNestCompositionInActive` and
+  [[D-151]]'s duration guard). **The gap is DISCOVERABILITY, not capability**, and a second path to
+  one operation is the divergence this repo keeps paying for.
+- ⚠ **No per-cell assignment.** Declared order is the v1 rule (§12.9.1 Q2): a cell is deliberately
+  NOT a separately addressable identity beside the plate. Face 2 is a **readout of the existing
+  order**, never a new binding.
+
+**Acceptance:**
+
+- WHEN an arrangement is active THEN its cells are drawn on the canvas as labelled rectangles in
+  authored order, so the author sees the layout rather than inferring it from numbers
+- WHEN a cell is drawn THEN it names the box instance it holds, or says plainly that it holds none
+- WHEN a box has no cell in the active arrangement THEN the surface says it is HIDDEN, rather than
+  the box silently vanishing
+- WHEN a composition has arrangements but no box instances THEN the surface says what a box is and
+  points at the SHIPPED way to make one
+- WHEN an author needs the size convention THEN the surface states that only the plate's proportion
+  inside its box is stored, and warns that reusing one box across counts of different aspect changes
+  its crop
+- WHEN an author looks for the background THEN the surface says it is an ordinary element of the
+  main composition, and distinguishes it from the editor backdrop
+
+- **Cross-refs:** [[D-152]] (this is its usability gap, not a second feature — read it first),
+  [[R-057]] (the operator half, whose surface faces the same "what is on air" question),
+  `openspec/changes/multibox-layout-switch/specs/designer-multibox-arrangements/spec.md` (the
+  contract this surface is meant to make usable).

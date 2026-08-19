@@ -7,7 +7,7 @@ import {
   type Scene,
 } from '@cg/shared-schema';
 import { current, set } from '../store-core.js';
-import { activeDocOf, withActiveDoc } from '../scene-doc.js';
+import { activeDocOf, activeLayersOf, withActiveDoc } from '../scene-doc.js';
 
 /**
  * `multibox-layout-switch` stage C2 — the ARRANGEMENT authoring slice (`tasks.md` 5.3–5.6).
@@ -219,7 +219,14 @@ export const arrangementsSlice = {
  * box's design and travels with it.
  */
 export function boxInstanceIds(scene: Scene): string[] {
-  return scene.layers
+  // 🔴 `activeLayersOf`, NOT `scene.layers`. Callers pass two different things: the canvas
+  // and the preflight pass the PROJECTED edit scene (whose `layers` are already the active
+  // composition's), while the timeline passes the RAW store scene (whose `layers` are the
+  // root's). Reading `.layers` directly was right for the first two and silently wrong for
+  // the third — every box read as "has a cell", so a hidden box showed an open eye. This
+  // accessor resolves the active document for both shapes, so one function is correct
+  // everywhere instead of correct-by-luck at two call sites out of three.
+  return activeLayersOf(scene)
     .flatMap((l) => l.children)
     .filter((e) => e.type === 'composition')
     .map((e) => e.id);

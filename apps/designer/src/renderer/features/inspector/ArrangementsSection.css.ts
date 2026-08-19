@@ -116,3 +116,68 @@ export const addRow = style({
   gap: '0.25rem',
   marginTop: '0.4rem',
 });
+
+// ────────────────────── D-153 — the box readout and the guidance ──────────────────────
+
+const boxRowBase = {
+  display: 'flex',
+  alignItems: 'baseline',
+  justifyContent: 'space-between',
+  gap: '0.4rem',
+  margin: '0.12rem 0',
+  fontSize: '0.66rem',
+} as const;
+
+export const boxRow = style(boxRowBase);
+
+/**
+ * A box with no cell in the ACTIVE arrangement.
+ *
+ * Dimmed AND labelled, never dimmed alone: "hidden" is a legitimate on-air state (§12.4 —
+ * the source is HELD, muted and idle, not torn down), and an author who reads it as "broken"
+ * will go looking for a fault that is not there.
+ */
+export const boxRowHidden = style({ ...boxRowBase, opacity: 0.62 });
+
+export const boxName = style({
+  color: colors.text,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+
+export const boxWhere = style({ color: colors.accent, flexShrink: 0 });
+
+export const boxWhereHidden = style({ color: colors.caution, textAlign: 'end' });
+
+/** The empty-state callout — the screen the owner was actually on when he asked. */
+export const callout = style({
+  border: `1px solid ${colors.border}`,
+  borderInlineStartWidth: '3px',
+  borderInlineStartColor: colors.caution,
+  borderRadius: '0.25rem',
+  padding: '0.4rem 0.5rem',
+  margin: '0.3rem 0',
+  background: colors.panelMuted,
+});
+
+export const calloutHead = style({
+  margin: '0 0 0.3rem',
+  fontSize: '0.7rem',
+  fontWeight: 600,
+  color: colors.text,
+});
+
+export const calloutBody = style({
+  margin: '0 0 0.35rem',
+  fontSize: '0.66rem',
+  lineHeight: 1.5,
+  color: colors.textMuted,
+});
+
+export const calloutWarn = style({
+  margin: '0 0 0.15rem',
+  fontSize: '0.64rem',
+  lineHeight: 1.5,
+  color: colors.caution,
+});
