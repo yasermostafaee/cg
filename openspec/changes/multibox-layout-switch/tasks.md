@@ -309,12 +309,24 @@ candidate shapes.
 ## 4. STAGE C — UNIT B′ and the per-arrangement carrier (ONE stage, interleaved)
 
 > ⭐ **SPLIT INTO C1 / C2 (owner, 2026-08-19).** **C1 — everything that is schema or runtime —
-> LANDED in session AU**: 4.1–4.6, 5.1, 5.2, and the SCHEMA halves of 5.4 and 5.5. **C2 is the
-> Designer's authoring surface**: 5.3, 5.6, and the CONTROLS for 5.4 and 5.5.
+> LANDED in session AU**: 4.1–4.6, 5.1, 5.2, and the SCHEMA halves of 5.4 and 5.5. **C2 — the
+> Designer's authoring surface — LANDED in session AV**: 5.3, 5.6, and the CONTROLS for 5.4
+> and 5.5. **Stage C is complete.**
+>
+> 🔴 **C2 found a defect in C1 that C1's own tests could not see.** `setArrangementView`
+> re-punched the MASK and never moved the BOX — every C1 test asked where the HOLE was, and
+> the geometry override feeds `sceneMaskHoles`, so they all passed against a canvas that
+> never changed. `applyArrangementToNodes` is the missing half. The lesson is not "add a
+> test" but _which_ test: C2's acceptance reads the rendered rect out of the preview iframe,
+> so it asks the question the operator would.
 >
 > 🔴 **The split runs THROUGH 5.4 and 5.5, not around them.** Their fields had to land with C1
 > because 4.1 cannot read a `hideDuringTransition` flag that does not exist; their controls
 > belong to C2 because a UI built on a schema that is still moving is a UI built twice.
+>
+> ✅ **C1's Linux `gate:e2e` is DISCHARGED**: commit `1b05cf68` on `dev` —
+> <https://github.com/yasermostafaee/cg/actions/runs/32241631336>, `conclusion: success`,
+> with the **`E2E (Playwright)` job having RUN** (`success`, not `skipped`).
 >
 > **Nothing in C1 is visually checkable** — no UI, no Designer control, no layer-list change.
 > Its verification is the eleven-row mutator matrix (4.4) and the `sequence` refusal (4.6).
@@ -367,7 +379,7 @@ candidate shapes.
       block on `TemplateInfo`, following `live-source-multibox` §1's carrier (derived once at import,
       the shipped `hasNext` precedent). **No `.vcg` format change** — the mask is computed at boot.
       **Files:** `packages/vcg-format/src/live-sources.ts`.
-- [ ] 5.3 **The Designer surface for authoring arrangements** — the list, the default per count, and
+- [x] 5.3 **The Designer surface for authoring arrangements** — the list, the default per count, and LANDED 2026-08-19 (session AV). The **Arrangements section** in the right panel beside Playout (`ArrangementsSection.tsx`), the **active-arrangement selector in the canvas header** (`ArrangementPicker.tsx`), and per-element visibility + an override marker on the **timeline rows** (`ElementRow.tsx`). 🔴 The selector drives `runtime.setArrangementView()` through the preview iframe, and the E2E asserts the box's REAL rendered rect out of the iframe — which is how it found that C1's `setArrangementView` moved masks but never nodes (`applyArrangementToNodes` is the fix).
       the per-arrangement geometry. See the `designer-multibox-arrangements` spec.
       **Visual:** ⭐ **this one IS visual** — open the Designer, add a box composition, author a
       2-box and a 3-box arrangement, and switch between them in the preview.
@@ -376,7 +388,7 @@ candidate shapes.
       authored format does not have to change if per-pair is taken up later.
 - [x] 5.5 **D4's per-element hide-while-transitioning flag** — authored beside the element, and wired SCHEMA HALF LANDED 2026-08-19 (session AU) — `hideDuringTransition` on `ElementBaseSchema`, wired as 4.1's THIRD input and read nowhere else. ⏭ **Its authoring CONTROL is C2.**
       as **4.1's third input**.
-- [ ] 5.6 **Preflight:** exactly one arrangement active at author time, and the `live-source-overlap`
+- [x] 5.6 **Preflight:** exactly one arrangement active at author time, and the `live-source-overlap` LANDED 2026-08-19 (session AV). ⚠ **The input swap was NOT the clean substitution the plan assumed, and the reason is structural:** the existing loop runs PER COMPOSITION DOCUMENT and `collectFlat` descends into containers only, never into a `composition` instance — so under A′, where each box IS an instance, two boxes are never flattened into one coordinate space and that loop CANNOT fire between them, with or without arrangements. There was nothing to suppress; what was missing was the check. Added as a per-arrangement pass over the SHARED flattener (`flattenElements` + `applyArrangementGeometry`), so the preflight and the canvas measure the same hole. The rule itself is unchanged. Five tests, including the ⭐ case that must be ACCEPTED (the same two plates in different arrangements) and a positive control.
       check applied **WITHIN** an arrangement, not across arrangements — today the loop is
       per-document (`apps/designer/src/renderer/state/live-source-preflight.ts:178`) and would not
       fire across them. ⚠ **The rule does not change; only its input does.**

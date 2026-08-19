@@ -16,6 +16,7 @@ import { RealtimeNumberInput } from './controls.js';
 import { DynamicDataSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
+import { ArrangementElementSection } from './ArrangementElementSection.js';
 import { ArrangementsSection } from './ArrangementsSection.js';
 import { PlayoutSection } from './PlayoutSection.js';
 import { selectedElements } from './shared-properties.js';
@@ -123,6 +124,8 @@ function ElementInspector({
         <TransformSection element={element} selectedKeyframe={selectedKeyframe} />
       </CollapseSection>
       <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
+      {/* multibox-layout-switch C2 — D4's flag lives BESIDE THE ELEMENT (5.5). */}
+      <ArrangementElementSection element={element} scene={scene} />
       {(element.type === 'text' ||
         element.type === 'ticker' ||
         element.type === 'sequence' ||

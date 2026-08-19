@@ -2,6 +2,7 @@ import {
   arrangementCount,
   type Arrangement,
   type ArrangementTransition,
+  type ArrangementView,
   type LiveSourceRect,
   type Scene,
 } from '@cg/shared-schema';
@@ -206,3 +207,61 @@ export const arrangementsSlice = {
     if (scene !== null) set({ scene });
   },
 };
+
+// ──────────── THE ONE cells → box-instances MAPPING, shared by canvas and preflight ────────────
+
+/**
+ * The BOX INSTANCES of a composition, in DOCUMENT order — the order `flattenElements`
+ * emits and the order an arrangement's cells are filled in.
+ *
+ * Root-level `composition` elements only: an arrangement positions the boxes the
+ * composition itself contains (A′), and a composition nested INSIDE a box is part of that
+ * box's design and travels with it.
+ */
+export function boxInstanceIds(scene: Scene): string[] {
+  return scene.layers
+    .flatMap((l) => l.children)
+    .filter((e) => e.type === 'composition')
+    .map((e) => e.id);
+}
+
+/**
+ * 🔴 **The ACTIVE arrangement as an {@link ArrangementView} — ONE mapping, two consumers.**
+ *
+ * The canvas uses it to drive `runtime.setArrangementView()`; the preflight uses it to ask
+ * where the plates ARE in each arrangement. They must agree exactly, or the author is shown
+ * an overlap the canvas does not display, or shown a clean canvas that fails export. That
+ * is the two-spellings shape `CLAUDE.md` golden rule 6 names, and it lives here rather than
+ * in either consumer so neither owns it.
+ *
+ * ── WHY THE MAPPING IS POSITIONAL ───────────────────────────────────────────
+ *
+ * The carrier ships CELLS, and which box lands in which cell is decided at play time by
+ * which sources are lit — an operator fact that does not exist while authoring. So for
+ * AUTHORING the mapping is the one the author is designing against: box instances in
+ * document order fill cells in order, which is what the runtime produces when every declared
+ * source is lit.
+ *
+ * ⚠ A box with NO cell in this arrangement is HIDDEN rather than left where it was
+ * authored. That is §12.4's HELD state as the page sees it — the plate stops being on screen
+ * (so it stops punching) while its producer stays seated — and it is why C1 separated PUNCH
+ * from DECLARATION. Leaving it visible would show the author a box the arrangement does not
+ * contain, and would make the canvas the union of arrangements rather than one of them.
+ */
+export function arrangementViewOf(
+  arrangement: Arrangement | null,
+  instanceIds: readonly string[],
+): ArrangementView | undefined {
+  if (arrangement === null) return undefined;
+  const geometry: Record<string, LiveSourceRect> = {};
+  const visibility: Record<string, boolean> = { ...(arrangement.visibility ?? {}) };
+  instanceIds.forEach((id, i) => {
+    const cell = arrangement.cells[i];
+    if (cell === undefined) {
+      if (visibility[id] === undefined) visibility[id] = false;
+      return;
+    }
+    geometry[id] = { ...cell };
+  });
+  return { geometry, visibility };
+}

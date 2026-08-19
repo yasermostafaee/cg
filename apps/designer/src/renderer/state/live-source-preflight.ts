@@ -1,5 +1,19 @@
-import type { Element, Layer, Scene } from '@cg/shared-schema';
-import { LiveSourceIdSchema, liveSourcesInStampedScopes } from '@cg/shared-schema';
+import type {
+  ArrangementView,
+  Element,
+  FlatElement,
+  Layer,
+  LiveSourceRect,
+  Scene,
+} from '@cg/shared-schema';
+import {
+  LiveSourceIdSchema,
+  applyArrangementGeometry,
+  flattenElements,
+  liveSourcesInStampedScopes,
+  resolveVisibilityOf,
+} from '@cg/shared-schema';
+import { arrangementViewOf, boxInstanceIds } from './slices/arrangements.js';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { frameAabb, GEOMETRY_TRACK_KEYS, type Aabb } from './off-frame.js';
 
@@ -335,5 +349,70 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
       }
     }
   }
+
+  // 🔴 `multibox-layout-switch` 5.6 — OVERLAP, APPLIED WITHIN AN ARRANGEMENT.
+  //
+  // ⚠ The RULE is unchanged and is deliberately not re-implemented: two holes that
+  // intersect put two live sources over the same pixels and which one shows is a z-order
+  // accident. What changes is the INPUT it is evaluated over.
+  //
+  // ── WHY THIS IS AN ADDITION AND NOT A SWAP ─────────────────────────────────
+  //
+  // The plan expected the existing loop's input to be swapped. It cannot be, and the reason
+  // is worth stating: that loop runs PER COMPOSITION DOCUMENT and `collectFlat` descends
+  // into containers only — never into a `composition` instance. Under A′ each box IS a
+  // composition instance, so two boxes are never flattened into one coordinate space and
+  // the existing loop CANNOT fire between them, with or without arrangements. There is
+  // therefore nothing to suppress; what was missing is the check itself.
+  //
+  // This uses the SHARED flattener (`flattenElements` + `applyArrangementGeometry`) rather
+  // than `collectFlat`, because the hole the page punches and the hole this check measures
+  // have to be one computation — a preflight that disagrees with the canvas about where a
+  // hole is teaches the author to distrust the preflight.
+  for (const arrangement of scene.arrangements ?? []) {
+    const view = arrangementViewOf(arrangement, boxInstanceIds(scene));
+    const plates = applyArrangementGeometry(
+      flattenElements(scene, 'document'),
+      view?.geometry,
+    ).filter((f) => f.element.type === 'video-placeholder');
+    for (let i = 0; i < plates.length; i++) {
+      for (let j = i + 1; j < plates.length; j++) {
+        const a = plates[i];
+        const b = plates[j];
+        if (a === undefined || b === undefined) continue;
+        // A box with no cell in this arrangement is not on screen, so it cannot collide.
+        if (hiddenInArrangement(a, view) || hiddenInArrangement(b, view)) continue;
+        if (!rectsOverlap(a.rect, b.rect)) continue;
+        for (const [self, other] of [
+          [a, b],
+          [b, a],
+        ] as const) {
+          issues.push({
+            severity: 'error',
+            code: 'live-source-overlap',
+            message:
+              `Live Source "${label(self.element)}" overlaps "${label(other.element)}" in ` +
+              `arrangement "${arrangement.name}". Each is composited on its own CasparCG ` +
+              `layer, so overlapping holes put two live sources over the same pixels and ` +
+              `which one shows is a z-order accident. The same two plates in DIFFERENT ` +
+              `arrangements are fine — they are never on air together.`,
+            elementId: self.element.id,
+          });
+        }
+      }
+    }
+  }
   return issues;
+}
+
+/** Is this flattened element hidden by the arrangement (itself or through an ancestor)? */
+function hiddenInArrangement(flat: FlatElement, view: ArrangementView | undefined): boolean {
+  const context = { arrangementVisibility: view?.visibility };
+  if (!resolveVisibilityOf({ ...flat.element }, context)) return true;
+  return flat.ancestry.some((a) => !resolveVisibilityOf(a, context));
+}
+
+/** The same "do two rects share area" rule as {@link overlaps}, on `LiveSourceRect`s. */
+function rectsOverlap(a: LiveSourceRect, b: LiveSourceRect): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }

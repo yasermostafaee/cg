@@ -18,8 +18,9 @@ import {
   primeAll as primeAllSharedImages,
 } from '../sharedLibrary/sharedImageUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
-import { ArrangementPicker, arrangementViewOf } from './ArrangementPicker.js';
+import { ArrangementPicker } from './ArrangementPicker.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
+import { arrangementViewOf, boxInstanceIds } from '../../state/slices/arrangements.js';
 import { PreviewHost } from './PreviewHost.js';
 import { B042Probe, b042ProbeEnabled } from './B042Probe.js';
 import {
@@ -343,16 +344,9 @@ export function CanvasArea({
   // everything it is holding — which is also the manoeuvre being previewed.
   const activeArrangementId = useDesignerSelector((st) => st.activeArrangementId);
   const arrangements = scene?.arrangements ?? [];
-  // Box instances in DOCUMENT order — the order `flattenElements` emits and the order cells
-  // are filled in. Root-level only: an arrangement positions the boxes the composition
-  // itself contains (A′), and a composition nested inside a box travels with that box.
-  const boxInstanceIds = (scene?.layers ?? [])
-    .flatMap((l) => l.children)
-    .filter((e) => e.type === 'composition')
-    .map((e) => e.id);
   const arrangementView = arrangementViewOf(
     arrangements.find((a) => a.id === activeArrangementId) ?? null,
-    boxInstanceIds,
+    scene === null ? [] : boxInstanceIds(scene),
   );
   // Serialized so the effect re-fires on a CELL edit, not only on an id change — dragging a
   // cell's geometry has to move the canvas as it is typed, which is the whole point of

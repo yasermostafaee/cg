@@ -21,8 +21,10 @@ import {
   Video,
   type LucideIcon,
 } from 'lucide-react';
+import { resolveVisibilityOf } from '@cg/shared-schema';
 import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { activeArrangements } from '../../state/slices/arrangements.js';
 import { activeFieldData } from '../../state/scene-doc.js';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
@@ -81,6 +83,31 @@ export function ElementRow(props: Props): JSX.Element {
 function ElementRowLabel(props: Props): JSX.Element {
   const { element, expanded, onToggleExpand, isSelected, onContextMenu, onReorderPointerDown } =
     props;
+  /**
+   * ⭐ multibox-layout-switch C2 — the ACTIVE arrangement, if any.
+   *
+   * 🔴 The eye below reports `resolveVisibility`'s ANSWER, never one of its inputs. That
+   * distinction is D4's whole constraint: there are three notions of "is this on screen"
+   * and a row that read `element.visible` directly would be a fourth reader disagreeing
+   * with the canvas the moment an arrangement had an opinion.
+   */
+  const activeArrangementId = useDesignerSelector((st) => st.activeArrangementId);
+  const activeArrangement = useDesignerSelector((st) =>
+    st.scene === null || activeArrangementId === null
+      ? null
+      : (activeArrangements(st.scene).find((a) => a.id === activeArrangementId) ?? null),
+  );
+  const arrangementOpinion = activeArrangement?.visibility?.[element.id];
+  const onScreen = resolveVisibilityOf(
+    {
+      id: element.id,
+      visible: element.visible,
+      ...(element.hideDuringTransition !== undefined
+        ? { hideDuringTransition: element.hideDuringTransition }
+        : {}),
+    },
+    { arrangementVisibility: activeArrangement?.visibility },
+  );
   // D-098 — a layer bound to data (a field binding in the active composition targets it) gets a
   // small key icon AFTER its name (kept visible even when the name ellipsizes). Stable boolean →
   // no per-frame re-render.
@@ -163,20 +190,64 @@ function ElementRowLabel(props: Props): JSX.Element {
           </span>
         )}
       </span>
+      {/* ⭐ multibox-layout-switch C2 — the OVERRIDE indicator, and the only way back.
+          Shown only when the ACTIVE arrangement has an opinion about this element, because
+          that is the whole thing it reports. Clicking it CLEARS the opinion, which is a
+          third state and not a synonym for "visible": an arrangement with no opinion lets
+          the authored `visible` stand. Without this the author could set an override and
+          never get back to "not decided". */}
+      {arrangementOpinion !== undefined && (
+        <Control
+          variant="bare"
+          className={cx('cg-tl-toggle', s.toggleButton, s.arrangementOverride)}
+          title={`Overridden in this arrangement (${
+            arrangementOpinion ? 'shown' : 'hidden'
+          }) — click to clear`}
+          aria-label="Clear this arrangement's visibility override"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (activeArrangement !== null) {
+              designerStore.setArrangementElementVisibility(activeArrangement.id, element.id, null);
+            }
+          }}
+        >
+          <span aria-hidden>◆</span>
+        </Control>
+      )}
       <Control
         variant="bare"
-        className={cx('cg-tl-toggle', s.toggleButton, element.visible && s.toggleButtonActive)}
-        title={element.visible ? 'Hide element' : 'Show element'}
-        aria-label={element.visible ? 'Hide element' : 'Show element'}
-        aria-pressed={!element.visible}
+        className={cx('cg-tl-toggle', s.toggleButton, onScreen && s.toggleButtonActive)}
+        title={
+          activeArrangement === null
+            ? onScreen
+              ? 'Hide element'
+              : 'Show element'
+            : onScreen
+              ? `Hide in "${activeArrangement.name}" only`
+              : `Show in "${activeArrangement.name}" only`
+        }
+        aria-label={onScreen ? 'Hide element' : 'Show element'}
+        aria-pressed={!onScreen}
         onClick={(e) => {
           e.stopPropagation();
+          // 🔴 With an arrangement active the eye writes THAT arrangement's opinion —
+          // input 2 of `resolveVisibility` — and never the authored `visible`. Editing the
+          // authored value while looking at one arrangement would silently change every
+          // other arrangement too, which is the opposite of what the author just asked for.
+          if (activeArrangement !== null) {
+            designerStore.setArrangementElementVisibility(
+              activeArrangement.id,
+              element.id,
+              !onScreen,
+            );
+            return;
+          }
           designerStore.updateElement(element.id, {
             visible: !element.visible,
           } as Partial<Element>);
         }}
       >
-        {element.visible ? <EyeOpenIcon /> : <EyeClosedIcon />}
+        {onScreen ? <EyeOpenIcon /> : <EyeClosedIcon />}
       </Control>
       <Control
         variant="bare"

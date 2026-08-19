@@ -1,4 +1,4 @@
-import { arrangementCount, type Arrangement, type ArrangementView } from '@cg/shared-schema';
+import { arrangementCount, type Arrangement } from '@cg/shared-schema';
 import { Select } from '../../ui/Select.js';
 import * as s from './CanvasToolbar.css.js';
 
@@ -50,40 +50,4 @@ export function ArrangementPicker({
       ))}
     </Select>
   );
-}
-
-/**
- * 🔴 **The ACTIVE arrangement, as the `ArrangementView` the runtime takes.**
- *
- * ── WHY IT MAPS CELLS ONTO BOX INSTANCES HERE ───────────────────────────────
- *
- * The carrier ships CELLS, and which BOX lands in which cell is decided by which sources
- * are lit — an operator fact that does not exist at authoring time. So for the CANVAS the
- * mapping is the authored one: box instances in document order fill cells in order, which
- * is what the author is designing against and what the runtime will produce when every
- * declared source is lit.
- *
- * ⚠ A box instance with no cell in this arrangement is HIDDEN rather than left where it
- * was authored. That is the §12.4 HELD state as the page sees it: the plate stops being on
- * screen (so it stops punching), while its producer stays seated — which is exactly why C1
- * separated PUNCH from DECLARATION. Leaving it visible would show the author a box the
- * arrangement does not contain.
- */
-export function arrangementViewOf(
-  arrangement: Arrangement | null,
-  boxInstanceIds: readonly string[],
-): ArrangementView | undefined {
-  if (arrangement === null) return undefined;
-  const geometry: Record<string, { x: number; y: number; width: number; height: number }> = {};
-  const visibility: Record<string, boolean> = { ...(arrangement.visibility ?? {}) };
-  boxInstanceIds.forEach((id, i) => {
-    const cell = arrangement.cells[i];
-    if (cell === undefined) {
-      // No cell for this box in this arrangement — off screen, not left behind.
-      if (visibility[id] === undefined) visibility[id] = false;
-      return;
-    }
-    geometry[id] = { ...cell };
-  });
-  return { geometry, visibility };
 }
