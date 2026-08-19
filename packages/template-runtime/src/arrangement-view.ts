@@ -52,22 +52,45 @@ export function liveArrangementView(
     const box = authored.get(id);
     if (box === undefined) continue;
     // A `transform` binding on `x` / `y` writes absolute `left` / `top` in PARENT space,
-    // which for a root-level element IS scene space. `scale` and `rotation` write a CSS
-    // `transform` that the binding layer itself documents as overriding rather than
-    // composing with the baseline — so they are deliberately not read here; a mask derived
-    // from a half-applied transform would be worse than one derived from none.
+    // which for a root-level element IS scene space.
+    //
+    // 🔴 **`B-149` — WIDTH AND HEIGHT ARE READ HERE TOO, and leaving them out was a hole on
+    // air.** `applyArrangementToNodes` writes all four properties, so a cell that RESIZES a
+    // box wrote `width`/`height` that nothing read back: this took the cell's POSITION and
+    // the AUTHORED SIZE, and — worse than merely ignoring the cell — it OVERWROTE the correct
+    // entry already in `base.geometry` whenever it detected a move. A box authored larger
+    // than its cell then punched the backdrop far outside its own picture, opening the live
+    // layer where no box exists: the crosstalk this feature was built to eliminate.
+    //
+    // ⚠ `scale` and `rotation` remain deliberately UNREAD, and that is a DIFFERENT case
+    // rather than the same one half-applied: they are written into a CSS `transform` that the
+    // binding layer itself documents as OVERRIDING the baseline rather than composing with
+    // it, so a mask derived from one would be worse than a mask derived from none.
+    // `width`/`height` carry no such ambiguity — they are plain px, written by this module.
     const left = numericPx(node.style.left);
     const top = numericPx(node.style.top);
-    if (left === null && top === null) continue;
+    const width = numericPx(node.style.width);
+    const height = numericPx(node.style.height);
+    if (left === null && top === null && width === null && height === null) continue;
     const moved: LiveSourceRect = {
       x: left ?? box.x,
       y: top ?? box.y,
-      width: box.width,
-      height: box.height,
+      width: width ?? box.width,
+      height: height ?? box.height,
     };
-    // Only when it actually moved — an identity override is work for every element on every
+    // Only when it actually differs — an identity override is work for every element on every
     // update, and a map that says "everything moved" cannot be read for what did.
-    if (moved.x !== box.x || moved.y !== box.y) geometry[id] = moved;
+    //
+    // ⚠ SIZE is compared as well as position. Comparing position alone meant a cell that only
+    // RESIZED a box produced no override at all.
+    if (
+      moved.x !== box.x ||
+      moved.y !== box.y ||
+      moved.width !== box.width ||
+      moved.height !== box.height
+    ) {
+      geometry[id] = moved;
+    }
   }
 
   return {

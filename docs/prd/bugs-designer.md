@@ -2416,6 +2416,64 @@ an ordinary widening. Shipping the carrier change under a bug number is what wou
   `routeKey`), [[C-015]] (the `(templateId, plateId)` assignment keying this collides on), and the
   `live-source-in-stamped-scope` refusal whose reasoning it shares.
 
+## [x] B-149 — the arrangement mask punched every hole at the CELL'S POSITION and the AUTHORED SIZE, opening the live layer where no box exists ⟨priority: high — on-air crosstalk, reintroduced by the feature built to prevent it⟩ — FIXED 2026-08-19 (session AY patch)
+
+**What:** `applyArrangementToNodes` writes all four geometry properties onto a box's node, but
+`liveArrangementView` — in the same file — read back only `left` and `top` and took width/height
+from the **authored** rect. So the mask was computed at the cell's POSITION with the AUTHORED SIZE.
+
+🔴 **This reached air, and it is the exact failure the multi-box feature exists to prevent.** A hole
+larger than its box opens the live layer BENEATH the template in places where no box is — §1's
+crosstalk, arriving from inside the feature itself rather than from a neighbouring template.
+
+**The owner photographed it:** in a 3-box arrangement a large transparent region covered most of the
+frame below the top two cells; only cell 3 looked right, because only cell 3's authored size was
+close to its cell.
+
+| box  | authored size     | 3-box cell              | hole actually punched                        |
+| ---- | ----------------- | ----------------------- | -------------------------------------------- |
+| box1 | 1851.58 × 1018.79 | 42, 0, **922 × 534**    | 42, 0, **1851.58 × 1018.79**                 |
+| box2 | 896.24 × 1020.19  | 1002, 16, **876 × 516** | 1002, 16, **896.24 × 1020.19**               |
+| box3 | 926.57 × 486.99   | 505, 568, 928 × 488     | ≈ the cell — hence the one that looked right |
+
+### 🔴 The mechanism was CLOBBERING, not omission — and that matters for the fix
+
+`liveArrangementView` seeds its map from `base.geometry`, which already holds the **correct** cell.
+With a cell that only RESIZED a box, the old readback added no entry and the correct value survived —
+so that case was never broken. The fault was that the readback **OVERWROTE** the correct base entry
+with `{cell position, authored size}` the moment it detected a MOVE.
+
+⚠ **That is why the fix is not "seed the base better".** It is why the test file keeps a size-only
+case even though it passed before: without it, a later change could repair the base and leave the
+clobber in place.
+
+### The fix
+
+Read `width` / `height` back the same way `left` / `top` are read, and widen the "only when it
+actually differs" guard to compare size as well as position (comparing position alone meant a
+size-only cell produced no override at all).
+
+⚠ **`scale` and `rotation` remain deliberately UNREAD, and that distinction is preserved in the
+comment rather than collapsed:** they are written into a CSS `transform` that the binding layer
+documents as OVERRIDING the baseline rather than composing with it, so a mask derived from one would
+be worse than a mask derived from none. `width`/`height` carry no such ambiguity — they are plain px,
+written by that same module.
+
+### 🔴 The test axis nobody had asserted
+
+`packages/template-runtime/tests/arrangement-hole-size.test.ts`. **C1's eleven-row UNIT B′ matrix
+asserted where the hole WAS, and every one of its cases moved a box without resizing it** — so a
+size-blind readback passed all eleven. The new file asserts position-only, size-only and both, plus a
+positive control and a restore.
+
+**Measured, red → green:** the position-and-size case punched `42,0 1851×1018` for a `922×534` cell
+before the fix and the cell exactly after. At app level the hole came back **320 px** wide — the
+plate scaled by the cell's 0.5 `preScale` — where the pre-fix value would have been the unscaled 640.
+
+- **Cross-refs:** [[D-154]] (the Designer control defect found in the same session — that one never
+  reached air, this one did), [[D-152]] / [[R-057]] (the arrangement feature), [[D-153]] (the
+  legibility item over the same surface), [[B-148]] (the other runtime-adjacent defect in this area).
+
 <!--
   CROSS-REFERENCE, deliberately NOT a second item.
 

@@ -4734,7 +4734,11 @@ element's rect?", and every reader and writer goes through it:
 - WHEN no arrangement is active THEN everything behaves exactly as it always did, and the surface says
   what "As authored" is
 
-- **Cross-refs:** [[D-153]] (the legibility item — **this is the CONTROL defect beneath it**: D-153
+- **Cross-refs:** [[B-149]] (found in the same session — the arrangement mask punched every hole
+  at the cell's POSITION and the AUTHORED SIZE. ⚠ Distinct from this item and more serious:
+  B-149 REACHED AIR, opening the live layer where no box exists, while this one is a control
+  defect that never left the Designer), [[D-153]] (the legibility item — **this is the CONTROL
+  defect beneath it**: D-153
   makes the model explicable, D-154 makes it editable; neither fixes the other), [[D-152]] /
   [[R-057]] (the arrangement feature), [[B-148]] (the other defect found in the same area — a missing
   refusal, not a control fault).
