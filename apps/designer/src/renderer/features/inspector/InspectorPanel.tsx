@@ -18,6 +18,7 @@ import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
 import { ArrangementElementSection } from './ArrangementElementSection.js';
 import { ArrangementsSection } from './ArrangementsSection.js';
+import { LooksSection } from './LooksSection.js';
 import { PlayoutSection } from './PlayoutSection.js';
 import { selectedElements } from './shared-properties.js';
 import { StyleSection } from './StyleSection.js';
@@ -91,6 +92,10 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
       {/* `multibox-layout-switch` C2 — beside Playout, because an arrangement is a property
           of the COMPOSITION: the thing that becomes the `.vcg` on one layer. */}
       <ArrangementsSection scene={scene} />
+      {/* LOOKS phase 2 (§14) — the multi-frame group: sources declared once, looks as
+          sub-scenes. Beside Arrangements through the one-session coexistence window;
+          step 5 unmounts the A′ section. */}
+      <LooksSection scene={scene} />
       {(scene.fields.length > 0 || compositionInstancesOf(scene).length > 0) && (
         <>
           <h3 className={s.heading}>FIELDS</h3>

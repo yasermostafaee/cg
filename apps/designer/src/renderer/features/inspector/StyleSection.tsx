@@ -47,6 +47,7 @@ import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { projectLookGroup } from '../../state/slices/looks.js';
 import { activeDocOf, activeFieldData, activeLayersOf } from '../../state/scene-doc.js';
 import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/follow-attach.js';
 import { videoFollowClipFacts } from '@cg/shared-schema';
@@ -601,6 +602,9 @@ function ImageSections({
  */
 function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const id = element.id;
+  // The scene ref is stable between edits, so deriving the group in the render body
+  // avoids the fresh-object useSyncExternalStore trap (the C2 lesson).
+  const sceneForPicker = useDesignerSelector((st) => st.scene);
   // Bumped on a REFUSED id, and folded into each input's key: an uncontrolled input
   // that committed a bad value keeps the bad text on screen otherwise (the committed
   // value did not change, so nothing re-mounts it), leaving the author looking at a
@@ -620,16 +624,38 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
     }
     designerStore.updateElement(id, { routeKey: value } as Partial<Element>);
   };
+  // LOOKS phase 2 (§14) — with a multi-frame group in the project, a plate REFERENCES a
+  // DECLARED source through a picker; a free-typed routeKey is not possible, so identity
+  // stays structural (the same source in two looks is one seat). A dangling legacy value
+  // is shown as itself, labeled undeclared, so the select never lies about the scene.
+  const declared = projectLookGroup(sceneForPicker)?.sources.map((src) => src.routeKey);
   return (
     <>
       <CollapseSection title="Live Source" defaultExpanded>
-        <TextField
-          label="source id"
-          ariaLabel="Live Source source id"
-          value={element.routeKey}
-          resetKey={`${id}-${String(rejectSeq)}`}
-          onCommit={commitId}
-        />
+        {declared === undefined ? (
+          <TextField
+            label="source id"
+            ariaLabel="Live Source source id"
+            value={element.routeKey}
+            resetKey={`${id}-${String(rejectSeq)}`}
+            onCommit={commitId}
+          />
+        ) : (
+          <SelectField
+            label="source"
+            value={element.routeKey}
+            options={
+              declared.includes(element.routeKey) ? declared : [element.routeKey, ...declared]
+            }
+            labels={(declared.includes(element.routeKey)
+              ? declared
+              : [element.routeKey, ...declared]
+            ).map((k) => (declared.includes(k) ? k : `${k} (undeclared)`))}
+            onCommit={(value) => {
+              designerStore.updateElement(id, { routeKey: value } as Partial<Element>);
+            }}
+          />
+        )}
         <AspectRow element={element} />
         {/*
           D-137 — ONE line, said once, instead of a row of disabled controls saying
