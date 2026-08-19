@@ -218,6 +218,30 @@ const CompositionObjectSchema = z
      */
     fields: z.array(DynamicFieldSchema).optional(),
     bindings: z.array(FieldBindingSchema).optional(),
+    /**
+     * 🔴 `multibox-layout-switch` (A′) — this composition's ARRANGEMENTS.
+     *
+     * ── WHY THEY LIVE HERE AND NOT ONLY ON THE SCENE ────────────────────────
+     *
+     * C1 put `arrangements` on {@link SceneSchema}, reasoning that an arrangement
+     * positions box INSTANCES so it belongs to the thing that contains them. That
+     * is right about the RUNTIME and wrong about AUTHORING, because this Designer
+     * has no root-scene editing surface at all: _"No 'main scene': editing always
+     * targets a composition"_ (`scene-doc.ts`, `editSceneOf`). With them only on
+     * the Scene, two compositions in one project would share one arrangement list
+     * and the second author to touch it would silently retune the first's boxes.
+     *
+     * So they sit here too, exactly as `resolution`, `frameRange`, `activeRange`,
+     * `lifecycle`, `playout`, `editorBackdrop`, `layers`, `fields` and `bindings`
+     * already do — and `editSceneOf` PROJECTS this composition's onto the working
+     * scene, which is the same one-way mechanism those nine use. It is a
+     * projection, not a second spelling: the Scene field is the projection's
+     * TARGET and the only thing `collectArrangements` ever reads.
+     *
+     * Optional, so every composition authored before the feature validates
+     * unchanged.
+     */
+    arrangements: ArrangementsSchema.optional(),
   })
   .superRefine(refineLifecycle);
 /**

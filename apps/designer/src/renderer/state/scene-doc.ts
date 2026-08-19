@@ -1,5 +1,6 @@
 import type {
   AnimatableProperty,
+  Arrangement,
   Composition,
   DynamicField,
   Element,
@@ -39,6 +40,8 @@ export interface EditDocFields {
   lifecycle?: Lifecycle | undefined;
   playout?: Playout | undefined;
   editorBackdrop: Scene['editorBackdrop'];
+  /** `multibox-layout-switch` — this document's arrangements (see `Composition.arrangements`). */
+  arrangements?: Arrangement[] | undefined;
 }
 
 export function activeCompId(): string | null {
@@ -138,6 +141,12 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     // root so nested instances resolve and aggregate.
     fields: c.fields ?? [],
     bindings: c.bindings ?? [],
+    // `multibox-layout-switch` — the ACTIVE composition's arrangements, projected onto the
+    // working scene exactly as its resolution / range / layers / fields already are. The
+    // Scene field is this projection's TARGET, and it is what `collectArrangements` reads at
+    // export; authoring writes the COMPOSITION's, so two compositions in one project cannot
+    // end up sharing one arrangement list.
+    arrangements: c.arrangements ?? [],
   };
 }
 

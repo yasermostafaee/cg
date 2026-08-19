@@ -16,6 +16,7 @@ import { RealtimeNumberInput } from './controls.js';
 import { DynamicDataSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
+import { ArrangementsSection } from './ArrangementsSection.js';
 import { PlayoutSection } from './PlayoutSection.js';
 import { selectedElements } from './shared-properties.js';
 import { StyleSection } from './StyleSection.js';
@@ -86,6 +87,9 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
       <Row label="elements" value={String(countElements(scene))} />
       <BackgroundControl editorBackdrop={scene.editorBackdrop} variant="full" />
       <PlayoutSection scene={scene} />
+      {/* `multibox-layout-switch` C2 — beside Playout, because an arrangement is a property
+          of the COMPOSITION: the thing that becomes the `.vcg` on one layer. */}
+      <ArrangementsSection scene={scene} />
       {(scene.fields.length > 0 || compositionInstancesOf(scene).length > 0) && (
         <>
           <h3 className={s.heading}>FIELDS</h3>

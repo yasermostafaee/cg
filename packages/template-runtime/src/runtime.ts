@@ -24,7 +24,7 @@ import {
   type AnimatedElement,
 } from './animation-applier.js';
 import { applyScopedFieldValues, isNamespace, type FieldDocLite } from './bindings.js';
-import { liveArrangementView } from './arrangement-view.js';
+import { applyArrangementToNodes, liveArrangementView } from './arrangement-view.js';
 import { repunchLiveSourceHoles } from './live-source-punch.js';
 
 /**
@@ -459,6 +459,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * to keeping the mask honest.
    */
   const repunch = (view: ArrangementView | undefined = arrangementView): void => {
+    // 🔴 MOVE THE BOXES FIRST, then re-punch. Both halves are needed and the order is
+    // load-bearing: `liveArrangementView` reads the page's CURRENT layout back, so the mask
+    // is computed against where the nodes now ARE rather than where the view said to put
+    // them — one source of truth for the geometry, which is the same rule that keeps the
+    // hole the page punches and the hole the bridge fills a single computation.
+    applyArrangementToNodes(scene, built.elementMap, view, arrangementView);
     arrangementView = view;
     const live = liveArrangementView(scene, built.elementMap, view);
     repunchLiveSourceHoles(built.punchTargets, sceneMaskHoles(scene, live));

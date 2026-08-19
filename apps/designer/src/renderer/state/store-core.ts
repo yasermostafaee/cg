@@ -69,6 +69,17 @@ export interface DesignerStoreState {
    */
   previewScene: Scene | null;
   /**
+   * `multibox-layout-switch` C2 — the ARRANGEMENT the canvas is currently showing, or
+   * `null` for none.
+   *
+   * ⚠ EDITOR state, not scene state: which arrangement you are looking at belongs to the
+   * session exactly as the selection and the playhead do. At playout the active
+   * arrangement is DERIVED from which source toggles are lit (D1), so an authored field
+   * for it would be a value in the `.vcg` that the runtime must then be careful to ignore
+   * — a field that looks like it still means something.
+   */
+  activeArrangementId: string | null;
+  /**
    * Top-level routing: the Designer starts at the Landing screen
    * (starter picker / recent / new) and flips to the Studio whenever
    * a scene becomes active. Clearing the scene flips it back.
@@ -168,6 +179,7 @@ export const initialState: DesignerStoreState = {
   activeCompositionId: null,
   notice: null,
   previewScene: null,
+  activeArrangementId: null,
   view: 'landing',
   tool: 'cursor',
   selection: new Set<string>(),

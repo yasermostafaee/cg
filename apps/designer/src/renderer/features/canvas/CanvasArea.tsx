@@ -18,6 +18,7 @@ import {
   primeAll as primeAllSharedImages,
 } from '../sharedLibrary/sharedImageUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
+import { ArrangementPicker, arrangementViewOf } from './ArrangementPicker.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { PreviewHost } from './PreviewHost.js';
 import { B042Probe, b042ProbeEnabled } from './B042Probe.js';
@@ -333,6 +334,36 @@ export function CanvasArea({
       cancelled = true;
     };
   }, [sceneId]);
+
+  // ⭐ multibox-layout-switch C2 — the ACTIVE ARRANGEMENT, pushed into the preview's
+  // `runtime.setArrangementView()` so switching one visibly moves the canvas.
+  //
+  // A separate message from `scene-replace` on purpose: a switch is not a scene edit and
+  // must not rebuild. The runtime re-punches the masks on the live nodes, so the page keeps
+  // everything it is holding — which is also the manoeuvre being previewed.
+  const activeArrangementId = useDesignerSelector((st) => st.activeArrangementId);
+  const arrangements = scene?.arrangements ?? [];
+  // Box instances in DOCUMENT order — the order `flattenElements` emits and the order cells
+  // are filled in. Root-level only: an arrangement positions the boxes the composition
+  // itself contains (A′), and a composition nested inside a box travels with that box.
+  const boxInstanceIds = (scene?.layers ?? [])
+    .flatMap((l) => l.children)
+    .filter((e) => e.type === 'composition')
+    .map((e) => e.id);
+  const arrangementView = arrangementViewOf(
+    arrangements.find((a) => a.id === activeArrangementId) ?? null,
+    boxInstanceIds,
+  );
+  // Serialized so the effect re-fires on a CELL edit, not only on an id change — dragging a
+  // cell's geometry has to move the canvas as it is typed, which is the whole point of
+  // authoring against a live preview.
+  const arrangementViewKey = JSON.stringify(arrangementView ?? null);
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { kind: 'cg-preview', action: 'arrangement', view: JSON.parse(arrangementViewKey) },
+      '*',
+    );
+  }, [arrangementViewKey]);
 
   // Stream live scene updates to the existing iframe via postMessage,
   // rAF-throttled so we never queue more than one rebuild per frame.
@@ -872,6 +903,13 @@ export function CanvasArea({
       <PreviewHost />
       <div className={s.header} aria-label="Canvas header">
         {showToolbar && <CanvasToolbar tool={tool} />}
+        {/* multibox-layout-switch C2 — always visible, because the right panel switches to
+            element properties the moment you select something to adjust. */}
+        <ArrangementPicker
+          arrangements={arrangements}
+          activeId={activeArrangementId}
+          onPick={(id) => designerStore.setActiveArrangement(id)}
+        />
         <span className={s.spacer} />
         <span className={s.zoomReadout} data-testid="zoom-readout">
           {zoomPct}%

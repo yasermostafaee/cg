@@ -315,6 +315,9 @@ export class Preview {
         // D-026 — PER-SCOPE overrides keyed by instance-name path ('' = root). Lets
         // the preview time each nested child independently (session-only).
         let scopeOverrides = undefined;
+        // multibox-layout-switch C2 — the ACTIVE ARRANGEMENT's view, retained across
+        // rebuilds so a fresh runtime is re-told which arrangement the author is on.
+        let arrangementView = undefined;
         // Families we've already loaded into this iframe's
         // document.fonts. Keyed by family name; the value is the
         // assetUrl we loaded from, so we can re-fetch when a font
@@ -635,6 +638,13 @@ export class Preview {
               });
             }
             await runtime.ready;
+            // ⭐ multibox-layout-switch C2 — RE-ASSERT the active arrangement onto the
+            // fresh runtime. Every scene edit rebuilds (createRuntime above), and a new
+            // runtime knows nothing about which arrangement the author is looking at — so
+            // without this line the canvas would snap back to the authored geometry on the
+            // next keystroke, and the selector would look intermittently broken rather
+            // than unwired.
+            if (arrangementView) runtime.setArrangementView(arrangementView);
             // D-087 — a broadcast preview leaves cg-pending in place so the
             // stage stays blank until play(); the canvas reveals frame 0 now.
             if (REVEAL_ON_LOAD) document.body.classList.remove('cg-pending');
@@ -956,6 +966,22 @@ export class Preview {
                   if (playing) pendingLottieRebuild = true;
                   else await applyScene(currentScene);
                 }
+              } else if (msg.action === 'arrangement') {
+                // ⭐ multibox-layout-switch C2 — THE ACTIVE ARRANGEMENT, straight into the
+                // entry point C1 built. This is what makes the toolbar selector visibly
+                // change the canvas rather than only changing the authored state.
+                //
+                // 🔴 It is deliberately NOT a scene-replace. setArrangementView() re-punches
+                // the masks on the LIVE nodes, so switching arrangements costs the page
+                // nothing it is holding — a playing animation, a <video>'s decode position,
+                // a sequence's dwell all survive. Rebuilding would blank and restart the
+                // graphic on every switch, which is the manoeuvre being previewed.
+                //
+                // arrangementView is retained so the next applyScene() can re-assert it:
+                // a rebuild creates a fresh runtime, which knows nothing about it.
+                // (No backticks in this block: it lives inside a template literal.)
+                arrangementView = msg.view ?? undefined;
+                if (runtime) runtime.setArrangementView(arrangementView);
               } else if (msg.action === 'editing-text') {
                 editingTextId = typeof msg.elementId === 'string' ? msg.elementId : null;
                 applyEditingHide();
