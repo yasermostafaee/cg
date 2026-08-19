@@ -78,6 +78,8 @@ export const addRow = style({
 
 export const addField = style({ flex: 1, minWidth: 0 });
 
+export const rowBody = style({ padding: '0.1rem 0.25rem 0.25rem' });
+
 export const issue = style({
   fontSize: '0.64rem',
   color: colors.caution,

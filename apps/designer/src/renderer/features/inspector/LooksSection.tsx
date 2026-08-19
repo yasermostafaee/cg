@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { LiveSourceIdSchema, type Scene } from '@cg/shared-schema';
-import { Trash2 } from 'lucide-react';
+import { LiveSourceIdSchema, type Look, type Scene } from '@cg/shared-schema';
+import { PencilLine, Star, Trash2 } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { activeLookGroup } from '../../state/slices/looks.js';
 import { CollapseSection } from './CollapseSection.js';
+import { TextField } from './controls.js';
 import * as cls from './LooksSection.css.js';
 
 /**
@@ -115,19 +116,116 @@ function SourcesPart({
   );
 }
 
-/** The looks half — grown in step 3 (list, default, edit-contents). */
+/**
+ * The LOOKS half: the list, the default, and the door into each sub-scene.
+ *
+ * `entered` is shown as a fixed word, not a control: v1 is CUT-ONLY (D2's other modes
+ * are parked with the animated phase, `design.md` §14.4) — offering a picker over one
+ * value would be a control that cannot do anything.
+ */
 function LooksPart({ scene }: { scene: Scene }): JSX.Element {
+  const activeId = useDesignerSelector((st) => st.activeLookId);
   const group = activeLookGroup(scene);
-  const count = group?.looks.length ?? 0;
+  const looks = group?.looks ?? [];
   return (
     <>
-      <p className={cls.groupLabel}>Looks</p>
-      {count === 0 && (
+      <p className={cls.groupLabel}>Looks — entered with a cut</p>
+      {looks.length === 0 && (
         <p className={cls.empty}>
           No looks yet. A look is a full sub-scene — its plates, titles and decor are authored
-          freely, and exactly one look is on air at a time (the switch is a cut).
+          freely inside it, and exactly one look is on air at a time (the switch is a cut).
+        </p>
+      )}
+      {looks.map((look) => (
+        <LookRow
+          key={look.id}
+          look={look}
+          active={look.id === (activeId ?? group?.defaultLookId)}
+          isDefault={look.id === group?.defaultLookId}
+        />
+      ))}
+      <div className={cls.addRow}>
+        <Button
+          variant="secondary"
+          onClick={() => designerStore.addLook()}
+          title="Add a look — a new sub-scene composition, instanced full-frame"
+        >
+          + Look
+        </Button>
+      </div>
+      {looks.length > 0 && (
+        <p className={cls.hint}>
+          Open a look to author it — its plates and titles are ordinary elements, and the Transform
+          panel reads their real geometry. Double-clicking a look on the canvas opens it too.
         </p>
       )}
     </>
+  );
+}
+
+function LookRow({
+  look,
+  active,
+  isDefault,
+}: {
+  look: Look;
+  active: boolean;
+  isDefault: boolean;
+}): JSX.Element {
+  return (
+    <div className={active ? cls.rowActive : cls.row}>
+      <div className={cls.rowHead}>
+        <Button
+          variant="bare"
+          className={cls.rowName}
+          aria-pressed={active}
+          onClick={() => designerStore.setActiveLook(look.id)}
+          title="Show this look on the canvas"
+        >
+          {look.name}
+        </Button>
+        <Button
+          variant="bare"
+          aria-pressed={isDefault}
+          disabled={isDefault}
+          onClick={() => designerStore.setDefaultLook(look.id)}
+          title={
+            isDefault ? 'The look a fresh take enters' : 'Make this the look a fresh take enters'
+          }
+          aria-label={
+            isDefault ? `${look.name} is the default look` : `Make ${look.name} the default look`
+          }
+        >
+          <Icon icon={Star} size={13} />
+        </Button>
+        <Button
+          variant="bare"
+          onClick={() => designerStore.editLookContents(look.id)}
+          title="Open this look and author its contents"
+          aria-label={`Edit contents of ${look.name}`}
+        >
+          <Icon icon={PencilLine} size={13} />
+        </Button>
+        <Button
+          variant="bare"
+          onClick={() => designerStore.removeLook(look.id)}
+          title="Remove this look — its sub-scene composition stays in the project"
+          aria-label={`Remove look ${look.name}`}
+        >
+          <Icon icon={Trash2} size={13} />
+        </Button>
+      </div>
+      {active && (
+        <div className={cls.rowBody}>
+          <TextField
+            label="name"
+            ariaLabel={`Look name`}
+            value={look.name}
+            resetKey={look.id}
+            onCommit={(v) => designerStore.renameLook(look.id, v)}
+          />
+        </div>
+      )}
+    </div>
   );
 }
