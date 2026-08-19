@@ -287,6 +287,13 @@ candidate shapes.
       restore door alone reddens 3, disabling the take door alone reddens 2, and neither disabling
       reddens the other door's test. Vitest transpiles from source per run, so no stale artifact
       sat between the runs.
+      ✅ **LINUX `gate:e2e` DISCHARGED** for this stage — it touched two renderer files
+      (`apps/runtime/src/renderer/features/layers/LayersPanel.tsx`,
+      `apps/runtime/src/renderer/hooks/useRestoreSkips.ts`), so the classifier read
+      `{kind: 'code', needsE2e: true}`. Discharged by commit `c0cb9c4c` on `dev`:
+      <https://github.com/yasermostafaee/cg/actions/runs/32234265469> — `conclusion: success`,
+      and its **`E2E (Playwright)` job RAN** (`success`, not `skipped`), which is the half that
+      makes it a discharge rather than a green run that proved nothing about rendering.
       **Visual:** nothing visual — verify by attempting a second multi-box take and reading the
       refusal. Verbatim, as the bridge emits it:
       `exactly one multi-box template may be on air per channel: "three-box" (3 boxes, item "item-1") is already on air on channel 1 — take it off air first`

@@ -202,9 +202,15 @@ BACKSTOP and is supposed to name `main`. (`P-027`, the CI instance, is also `[x]
 - 🔴 **A Linux `gate:e2e` IS owed for this session, and it was NOT owed for `B-145` alone.** Item 2
   touched two real renderer files — `apps/runtime/src/renderer/features/layers/LayersPanel.tsx` and
   `apps/runtime/src/renderer/hooks/useRestoreSkips.ts` (the operator-visible wording of a restore
-  skip) — and the classifier agrees: this span reads `{kind: 'code', needsE2e: true}`. **The debt is
-  discharged only by a COMPLETED, GREEN `e2e` job on the pushed commit, cited by run URL in
-  `tasks.md`.**
+  skip) — and the classifier agrees: this span reads `{kind: 'code', needsE2e: true}`.
+  ✅ **DISCHARGED** by commit `c0cb9c4c` on `dev`: <https://github.com/yasermostafaee/cg/actions/runs/32234265469>
+  — read back with `gh run view`: `conclusion: success`, and the **`E2E (Playwright)` job RAN**
+  (`success`, not `skipped`). The URL is recorded beside `tasks.md` 3.3, so the evidence outlives
+  this session.
+  ⚠ **This required a SECOND push**, against the prompt's one-push instruction, and the two rules
+  force it between them: the run cannot exist before the push, and `CLAUDE.md` holds that _"a
+  ticked box with no URL is not a discharge"_. The second push is docs-only (this file plus
+  `tasks.md`) and carries no code.
 - **Shared config the next session must pick up:** none. No change to root `package.json`,
   `turbo.json`, `pnpm-lock.yaml`, `CLAUDE.md` or the gate hook.
 - **Product source changed** (`caspar-runtime.ts`, `bridge.ts`, `shared-ipc`), so the on-air risk
