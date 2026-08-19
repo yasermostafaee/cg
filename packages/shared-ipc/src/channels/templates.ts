@@ -5,6 +5,8 @@ import {
   IdSchema,
   LiveSourceArrangementSchema,
   LiveSourceDeclarationSchema,
+  LiveSourceRectSchema,
+  LookTransitionSchema,
   PositionSchema,
   ResolutionSchema,
 } from '@cg/shared-schema';
@@ -62,6 +64,17 @@ import { definePublishChannel } from '../publish.js';
  *
  * Absent is NOT "no live sources" — see {@link liveSourceCarrierState}.
  */
+/** One LOOK as the bridge sees it: identity, how it is entered, and its desired rects. */
+export const TemplateLookSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Cut-only in v1 (`design.md` §14.4 parks the other modes with the animated phase). */
+  entered: LookTransitionSchema,
+  /** routeKey → scene-px rect while this look is active. No entry = not in this look. */
+  rects: z.record(z.string(), LiveSourceRectSchema),
+});
+export type TemplateLook = z.infer<typeof TemplateLookSchema>;
+
 export const TemplateLiveSourcesSchema = z.object({
   /** The scene's own pixel raster — the space `sources[].rect` is expressed in. */
   resolution: ResolutionSchema,
@@ -84,6 +97,21 @@ export const TemplateLiveSourcesSchema = z.object({
    * build imports will carry, since a scene with no arrangements produces one.
    */
   arrangements: z.array(LiveSourceArrangementSchema).optional(),
+  /**
+   * `multibox-layout-switch` §14 (LOOKS, adopted 2026-08-19) — the template's LOOKS,
+   * derived once at import beside {@link sources}.
+   *
+   * When PRESENT, {@link sources} is SOURCE-KEYED — one declaration per declared source,
+   * deduped by routeKey — and each look's `rects` maps routeKey → the plate's scene-px
+   * rect when that look is active (root-level plates outside every look appear in EVERY
+   * look's map). 🔴 A source ABSENT from a look has NO entry for that look — never a
+   * zero-area rect, which the bridge refuses outright. The EMPTY look is valid and carries
+   * an empty map: background alone. OPTIONAL with the same absent-vs-empty contract as
+   * {@link arrangements}: absent = imported before LOOKS existed; `[]` = positively none.
+   */
+  looks: z.array(TemplateLookSchema).optional(),
+  /** Which look a fresh take enters. Present exactly when `looks` is non-empty. */
+  defaultLookId: z.string().min(1).optional(),
 });
 export type TemplateLiveSources = z.infer<typeof TemplateLiveSourcesSchema>;
 

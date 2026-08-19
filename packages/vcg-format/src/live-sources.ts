@@ -1,10 +1,16 @@
-import { flattenElements, resolveDefaultPosition } from '@cg/shared-schema';
+import {
+  defaultLookOf,
+  flattenElements,
+  lookGroupOf,
+  resolveDefaultPosition,
+} from '@cg/shared-schema';
 import type {
   FieldBinding,
   FlatElement,
   LiveSourceArrangement,
   LiveSourceDeclaration,
   LiveSourceRect,
+  LookTransition,
   Scene,
 } from '@cg/shared-schema';
 
@@ -193,6 +199,9 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
     // parsing; emitting them here would carry a scene's guess about a plant
     // it cannot see all the way to the bridge, where it would compete with
     // the mapping that actually knows.
+    // superseded by LOOKS — deleted in phase 2 (`tasks.md` §1b's deletion clause): the
+    // box-fraction pair below is A′'s carrier, kept functional through the one-session
+    // coexistence window because the Designer's shipped UI still authors arrangements.
     const boxId = boxIdOf(flat, boxIds);
     const boxRect = boxId === null ? undefined : boxRects.get(boxId);
     const boxRelativeRect = boxRect === undefined ? null : relativeRect(flat.rect, boxRect);
@@ -228,16 +237,130 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
  * that same function, and two spellings of "centred" is how the composited box comes to sit
  * somewhere the transparent hole is not.
  */
+/** One LOOK as the carrier emits it — mirrors shared-ipc's `TemplateLookSchema`. */
+export interface TemplateLookCarrier {
+  id: string;
+  name: string;
+  entered: LookTransition;
+  rects: Record<string, LiveSourceRect>;
+}
+
+/**
+ * `multibox-layout-switch` §14 (LOOKS) phase 1C — **the SOURCE-KEYED carrier for a scene
+ * with a multi-frame group.**
+ *
+ * When a group exists, the per-ELEMENT emission of {@link collectLiveSources} is the wrong
+ * carrier: the same source referenced in two looks would be TWO declarations sharing one
+ * `sourceId`, which the bridge seats as two producers on one route (`design.md` §14.3
+ * claim 1 — double-seat + first-match addressing). This derivation is source-keyed by
+ * construction:
+ *
+ * - **`sources`** — ONE declaration per DECLARED source (the group's list, in its order).
+ *   `expectedAspect` / `dynamic` come from the DECLARATION, never from a plate element —
+ *   the group is where two looks are prevented from disagreeing. The declaration's `rect`
+ *   is the source's rect in the DEFAULT look, falling back to the first look containing it
+ *   (a bridge that has not learned looks yet seats what a fresh take will show);
+ *   `elementId` is the first referencing plate's, document order (the bridge never reads
+ *   it — AZ-verified — it survives as the operator-facing handle).
+ * - **per-look `rects`** — the look's VISIBLE SET: its own plates plus every root-level
+ *   plate (a plate outside every look is on screen in EVERY look; so is one inside an
+ *   instance the group does not register, which the switch never hides). 🔴 A source
+ *   ABSENT from a look gets NO entry — never a zero-area rect, which the bridge refuses
+ *   outright ("seat NO PRODUCER AT ALL rather than to emit a zero-area rect"); zero-area
+ *   holes belong to the PARKED animated phase (§13.4/§14.6). The EMPTY look is valid and
+ *   carries an empty map — background alone.
+ * - A declared source REFERENCED NOWHERE yields no declaration: an unplaced source cannot
+ *   be shown, and declaring it would seat a producer no look can reveal.
+ *
+ * Tolerant on purpose where the PREFLIGHT refuses at export (an undeclared reference is
+ * skipped; a within-look duplicate is first-wins in document order): import must not
+ * refuse a whole template over what the preflight already guards — the zod-strip
+ * philosophy, one level up.
+ */
+export function collectLookCarrier(scene: Scene): {
+  sources: LiveSourceDeclaration[];
+  looks: TemplateLookCarrier[];
+  defaultLookId?: string;
+} | null {
+  const group = lookGroupOf(scene);
+  if (group === undefined) return null;
+
+  const lookByInstance = new Map(group.looks.map((l) => [l.instanceId, l] as const));
+  const declared = new Map(group.sources.map((s) => [s.routeKey, s] as const));
+  const rectsByLook = new Map<string, Record<string, LiveSourceRect>>(
+    group.looks.map((l) => [l.id, {}]),
+  );
+  const firstPlateFor = new Map<string, string>();
+
+  for (const flat of flattenElements(scene, 'document')) {
+    const el = flat.element;
+    if (el.type !== 'video-placeholder') continue;
+    if (!declared.has(el.routeKey)) continue;
+    if (!firstPlateFor.has(el.routeKey)) firstPlateFor.set(el.routeKey, el.id);
+    const ownerInstanceId = flat.ancestry.map((a) => a.id).find((id) => lookByInstance.has(id));
+    const owner = ownerInstanceId === undefined ? undefined : lookByInstance.get(ownerInstanceId);
+    const inLooks = owner === undefined ? group.looks : [owner];
+    for (const look of inLooks) {
+      const rects = rectsByLook.get(look.id);
+      if (rects !== undefined && !(el.routeKey in rects)) rects[el.routeKey] = flat.rect;
+    }
+  }
+
+  const fallback = defaultLookOf(group);
+  const sources: LiveSourceDeclaration[] = [];
+  for (const src of group.sources) {
+    let rect = fallback === undefined ? undefined : rectsByLook.get(fallback.id)?.[src.routeKey];
+    if (rect === undefined) {
+      for (const look of group.looks) {
+        rect = rectsByLook.get(look.id)?.[src.routeKey];
+        if (rect !== undefined) break;
+      }
+    }
+    if (rect === undefined) continue;
+    sources.push({
+      elementId: firstPlateFor.get(src.routeKey) ?? src.routeKey,
+      sourceId: src.routeKey,
+      rect,
+      ...(src.expectedAspect !== undefined ? { expectedAspect: src.expectedAspect } : {}),
+      dynamic: src.dynamic,
+    });
+  }
+
+  return {
+    sources,
+    looks: group.looks.map((l) => ({
+      id: l.id,
+      name: l.name,
+      entered: l.entered,
+      rects: rectsByLook.get(l.id) ?? {},
+    })),
+    ...(group.defaultLookId !== undefined ? { defaultLookId: group.defaultLookId } : {}),
+  };
+}
+
 export function buildTemplateLiveSources(scene: Scene): {
   resolution: Scene['resolution'];
   defaultPosition: ReturnType<typeof resolveDefaultPosition>;
   sources: LiveSourceDeclaration[];
   arrangements: LiveSourceArrangement[];
+  looks?: TemplateLookCarrier[];
+  defaultLookId?: string;
 } {
+  const lookCarrier = collectLookCarrier(scene);
   return {
     resolution: scene.resolution,
     defaultPosition: resolveDefaultPosition(scene),
-    sources: collectLiveSources(scene),
+    // With a multi-frame group the carrier is SOURCE-KEYED (one declaration per declared
+    // source); the per-element emission would double-seat a source two looks share.
+    sources: lookCarrier === null ? collectLiveSources(scene) : lookCarrier.sources,
     arrangements: collectArrangements(scene),
+    ...(lookCarrier === null
+      ? {}
+      : {
+          looks: lookCarrier.looks,
+          ...(lookCarrier.defaultLookId !== undefined
+            ? { defaultLookId: lookCarrier.defaultLookId }
+            : {}),
+        }),
   };
 }
