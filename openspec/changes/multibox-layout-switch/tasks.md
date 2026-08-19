@@ -328,6 +328,12 @@ candidate shapes.
 > <https://github.com/yasermostafaee/cg/actions/runs/32241631336>, `conclusion: success`,
 > with the **`E2E (Playwright)` job having RUN** (`success`, not `skipped`).
 >
+> ✅ **C2's Linux `gate:e2e` is DISCHARGED**: commit `b91bdc98` on `dev` —
+> <https://github.com/yasermostafaee/cg/actions/runs/32247619454>, `conclusion: success`,
+> with the **`E2E (Playwright)` job having RUN** (`success`, not `skipped`) — which is what
+> makes it a discharge for a Designer UI change rather than a green run that proved nothing
+> about rendering. It covers `apps/designer/tests/e2e/arrangements.spec.ts`.
+>
 > **Nothing in C1 is visually checkable** — no UI, no Designer control, no layer-list change.
 > Its verification is the eleven-row mutator matrix (4.4) and the `sequence` refusal (4.6).
 > The first visually checkable thing in this feature is C2's authoring surface.
