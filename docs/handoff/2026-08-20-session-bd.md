@@ -2,7 +2,12 @@
 
 ## THE STATE, first (read this cold)
 
-- **Pushed SHA:** see §0 below for the verified tip. **Safe to pull.**
+- **Pushed SHA:** `bc862a78d21dda9a4c5e40fb02cad8f115b6b50a` on `dev`, verified against
+  `git ls-remote origin dev`. **Safe to pull.**
+- **Linux `gate:e2e` DISCHARGED:**
+  <https://github.com/yasermostafaee/cg/actions/runs/32356923837> — `bc862a78`, `completed` +
+  `success`, **`E2E (Playwright)` RAN** (its `E2E` step `success`, 10:02:37 → 10:13:40 UTC).
+  Classifier: `kind=code needsE2e=true` — the page/render engine is touched.
 - **Base read:** `e0a5f49b` — exactly the expected tip, no delta.
 - **This is the first switch that is CORRECT END TO END on air.** Phase 3 moved the fills;
   this moves the holes with them, off the same look id.

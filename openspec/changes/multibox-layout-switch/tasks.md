@@ -568,6 +568,10 @@ candidate shapes.
       are asserted separately — against the ONE shared codec, which is what makes divergence
       impossible. The remaining seam is the plant's SDI output, a later measurement (`PRINT`
       needs the plant's own disk, §9.3).
+      **Linux `gate:e2e` DISCHARGED:** <https://github.com/yasermostafaee/cg/actions/runs/32356923837>
+      — commit `bc862a78`, `completed` + `success`, `E2E (Playwright)` RAN (its `E2E` step
+      `success`, 10:02:37 → 10:13:40 UTC). Classifier scored the diff `kind=code needsE2e=true`
+      — the page/render engine is touched, so the debt was genuinely owed and paid.
 
 ---
 
