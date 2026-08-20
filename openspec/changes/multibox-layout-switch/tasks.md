@@ -722,6 +722,18 @@ candidate shapes.
 
 ---
 
+> ✅ **Linux `gate:e2e` DISCHARGED for Stage E (7.1–7.8):**
+> <https://github.com/yasermostafaee/cg/actions/runs/32424237246> — head `0b6da499` (the commit
+> carrying the picker AND the eight review/CI fixes), `completed` + `success`, and the
+> **`E2E (Playwright)` job RAN** (its `E2E` step `success`, 22:37:28 → 22:46:35 UTC).
+>
+> ⚠ It is the RETRY of that run that is green. The first attempt failed on
+> `apps/designer/tests/e2e/video-import.spec.ts:291` — a KNOWN, open, unexplained flake recorded
+> at `docs/prd/platform.md`, now with its third occurrence and two of three on that same line.
+> The commit touches no designer, vcg-format or video code at all. **A retry is a legitimate
+> discharge only because the run that discharges it is a COMPLETED GREEN one whose e2e job RAN;
+> the red attempt is recorded rather than hidden.**
+
 - [ ] 7.9 🔴 **OPEN — A REFUSED SWITCH LEAVES AN INTENT THAT A LATER SWAP COMPLETES WITHOUT
       TELLING THE PAGE.** Found by reviewing Stage E (session BH), **not fixed there**, and
       flagged rather than changed because the fix alters an ON-AIR verb (`R-048`).

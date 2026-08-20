@@ -2092,6 +2092,34 @@ four named tests, and every one of them is an animate-within-N-milliseconds asse
 
 - the second occurrence (`video-import.spec.ts:291`, run 32054398518) — cause unknown, one green
   retry, no pattern it belongs to;
+- 🔴 **the THIRD occurrence — SAME SPEC, SAME LINE.** `video-import.spec.ts:291`, run
+  <https://github.com/yasermostafaee/cg/actions/runs/32424237246> on commit `0b6da499`
+  (2026-08-20). Recorded here because the paragraph above asked for somewhere for the next one
+  to land, and a second data point on an unexplained flake is worth more than a green tick.
+
+  **What is NEW evidence, and what is merely consistent.** New: it failed on the PIXEL
+  assertion (`video-import.spec.ts:368`, `px.left[0] > 200` — the OPAQUE control half reading
+  too dark), not on a timeout, so the clip decoded and the sampled frame was simply wrong. That
+  narrows it: whatever this is, it is not the spec giving up early. Consistent-but-not-new: one
+  green retry, same as occurrence two.
+
+  **What it is NOT.** The commit under it touches no designer, `@cg/vcg-format`,
+  `@cg/template-runtime` or video code at all — `git diff 9b587ddc..0b6da499` over those paths
+  is EMPTY — and the same test passed on the immediately preceding run (32420404344) on the
+  neighbouring commit. That bounds REACHABILITY, which is not the same as proving correctness,
+  and it is stated as the weaker claim it is.
+
+  ⚠ **The local suite cannot be used as evidence on this question, and was not.** Run on a
+  Windows host it fails 7 of 8 in this spec with `toContainText` — the conversion never
+  completes at all — which is a DIFFERENT failure mode from the pixel threshold CI hits. The
+  local Designer video environment is broken here (the geo-blocked Playwright CDN and its
+  system-Chrome fallback), so it says nothing either way and must not be quoted as if it did.
+
+  **The pattern now has two of three occurrences on the same line**, which is the first thing
+  about it that looks like a pattern rather than noise. Next occurrence: add it here, and if a
+  fourth lands on `:291` as well, that is enough to stop treating it as ambient and go and
+  measure the decode.
+
 - whether the local concurrency finding and the CI flakes share anything at all — **no evidence
   either way**, which is a different state from "consistent with a single cause" and must not be
   written back as one.

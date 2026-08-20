@@ -5,7 +5,13 @@
 
 ## THE STATE, first (read this cold)
 
-- **Pushed SHA:** see §8 — verified against `git ls-remote origin dev`. **Safe to pull.**
+- **Pushed SHA:** `0b6da4998107281915233504f166c4652c268d61` on `dev`, verified against
+  `git ls-remote origin dev`. **Safe to pull.**
+- ✅ **Linux `gate:e2e` DISCHARGED:**
+  <https://github.com/yasermostafaee/cg/actions/runs/32424237246> — `0b6da499`, `completed` +
+  `success`, **`E2E (Playwright)` RAN** (22:37:28 → 22:46:35 UTC). ⚠ On the RETRY: the first
+  attempt hit a known open flake (`video-import.spec.ts:291`), recorded as its third occurrence in
+  `docs/prd/platform.md` rather than waved through — see §8.
 - ⭐ **THE FEATURE THE CLIENT ASKED FOR IS COMPLETE.** An operator picks a look on the row and
   the boxes change on air. Everything under it had landed; this is the surface.
 - **Base read:** `9b587ddc` — exactly the expected tip, no delta, tree clean.
@@ -220,4 +226,14 @@ it turned out simply to be wrong, so it is corrected rather than left for you to
   the wrong rule. The test now pins the real distinction and says so.
 - `awaitChannelModeRead()` IS called in the new bridge boot (5.6) — several tests there baseline the
   trace and assert an EMPTY slice, which is only valid from a proven-quiescent wire.
-- 🔴 **A Linux `gate:e2e` is owed** (`apps/runtime` UI). Its URL and conclusion go in §9.
+- ✅ **Linux `gate:e2e` discharged** — run 32424237246 on `0b6da499`, `E2E (Playwright)` RAN and
+  passed. **The first attempt was RED**, on `apps/designer/tests/e2e/video-import.spec.ts:291`.
+  I did not call that flake on a hunch: it is already recorded in `docs/prd/platform.md` as a
+  KNOWN, OPEN, unexplained flake at that exact spec and line, it passed on my immediately
+  preceding run, and `git diff 9b587ddc..0b6da499` over `apps/designer`, `packages/vcg-format`,
+  `packages/template-runtime` and the video schema is EMPTY. I have added it there as the THIRD
+  occurrence — two of the three now on the same line, which is the first thing about it that looks
+  like a pattern.
+  ⚠ **The local Designer suite is NOT evidence here and I did not use it as such:** on this Windows
+  host it fails 7 of 8 in that spec with `toContainText` (the conversion never completes), a
+  different failure mode from CI’s pixel threshold.
