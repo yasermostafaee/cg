@@ -513,6 +513,13 @@ candidate shapes.
       decided from "did this PLATE have a prior record" rather than from what actually reached
       the SLOT. Both axes it needed — same-slot, and did-the-`PLAY`-land — are now single
       evaluations gating both the destructive step and the ledger entry.
+      **Linux `gate:e2e` DISCHARGED for the FIX:**
+      <https://github.com/yasermostafaee/cg/actions/runs/32349777373> — commit `9caa49e0`
+      (contains `868a8cfc`), `completed` + `success`, `E2E (Playwright)` RAN (its `E2E` step
+      `success`, 08:38:11 → 08:47:06 UTC). 🔴 `1f76edb0`'s own green run
+      (<https://github.com/yasermostafaee/cg/actions/runs/32323670161>) is real but it
+      verified a tree carrying the held-layer defect — do not cite it as this stage's
+      discharge.
 - [ ] 6.7 🔴 **NOT DONE, AND NAMED RATHER THAN ASSUMED — the bridge→page look transport.** A look
       switch is TWO mutations on two machines: the bridge moves the producers' `MIXER FILL`/`CLIP`
       (6.1, landed) and the PAGE flips which look's instance is visible and re-punches its holes

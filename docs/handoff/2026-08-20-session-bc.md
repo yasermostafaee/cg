@@ -10,7 +10,12 @@
   <https://github.com/yasermostafaee/cg/actions/runs/32292697141> — `head_sha` = `5d56c5a5`
   (BB's fix commit), `completed` + `success`, and the **`E2E (Playwright)` job RAN** (19:23:07 →
   19:31:53, `success`). Checked with `gh` against the API rather than taken from the doc.
-- **This session's own owed Linux `gate:e2e` — DISCHARGED:**
+- **This session's owed Linux `gate:e2e` — DISCHARGED ON THE FIX COMMIT:**
+  <https://github.com/yasermostafaee/cg/actions/runs/32349777373> — commit `9caa49e0`
+  (contains the `868a8cfc` fixes), `completed` + `success`, `E2E (Playwright)` **RAN** (its
+  `E2E` step `success`, 08:38:11 → 08:47:06 UTC). 🔴 The earlier green run below is real but
+  verified a tree that still carried the held-layer defect; it is NOT this stage's discharge.
+- **The superseded run**, kept for the record:
   <https://github.com/yasermostafaee/cg/actions/runs/32323670161> — commit `1f76edb0`,
   `completed` + `success`, `E2E (Playwright)` **RAN** (02:10:21 → 02:19:03 UTC, its `E2E` step
   `success`; the only skipped step is the browser install, a cache hit). Recorded in
