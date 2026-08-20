@@ -670,6 +670,23 @@ candidate shapes.
       `visible` binding writes `style.display` and the video driver is lifecycle-driven — so under A′
       every arrangement's background video may decode for as long as the row is up. §9.6f shows the
       frame budget is already the tight resource.
+      ⭐ **RAISED, AND CONFIRMED ON THE CODE SIDE (session BE, investigating an on-air "media plays
+      at ~2×" report).** Under LOOKS this stops being an A′-only worry and becomes the ordinary
+      case: `applyLook` hides a non-active look by writing `display:none` on its composition
+      INSTANCE, and **nothing pauses what is inside it.** Verified by sweep — `runtime.ts` gates
+      exactly ONE media kind on visibility (the Lottie, `l.element.visible === false`, line ~1003);
+      the video driver has no such gate, and in any case the authored `visible` flag is a DIFFERENT
+      fact from a look's runtime `display:none`, so even that gate would not catch this.
+      🔴 **The consequence is not only decode load: a hidden look's `<video>` keeps PLAYING ITS
+      AUDIO.** A template whose looks each carry media therefore has every look's audio on the
+      channel at once, offset from one another — which is a plausible plain-language "the media
+      playback is not normal", and is worth ruling out before anything exotic. It is NOT a 2× on a
+      single visible element (every driver derives its playhead from elapsed wall-time, pinned by
+      `packages/template-runtime/tests/one-driver-per-path.test.ts`).
+      **The fix is a POLICY decision, deliberately not taken here:** pausing a look's media on exit
+      and resuming on re-entry is §12.4's "held" shape applied to media, and it has to answer
+      whether a returning clip RESUMES or RESTARTS. That belongs with the operator surface, not
+      folded silently into a bug hunt.
 - [ ] 9.4 The pixel confirmation that a **`LOADBG` background producer is NOT composited**. ⚠ It
       **cannot change §12.9.6's verdict on D** — D loses under both branches — so this is
       completeness, not a blocker.

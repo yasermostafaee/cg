@@ -370,3 +370,54 @@ describe('🔴 tasks.md 6.7 — the BRIDGE→PAGE control payload switches the l
     expect(root.innerHTML).not.toContain(CG_CONTROL_KEY);
   });
 });
+
+describe('🔴 the PLAY path honours the control payload too — the re-take seam', () => {
+  /*
+    6.7 attaches the active look to the `CG ADD` data payload so a RE-TAKE cannot diverge: a
+    row switched to a solo look and then re-taken rebuilds the page, which enters the AUTHORED
+    DEFAULT, and only that payload can move it to the look the bridge actually seated.
+
+    CasparCG hands a template's load-time data to the page through whichever global it uses,
+    so reading the payload in `update()` alone left that fix INERT on any host that delivers
+    load data through `play`. Both entry points now go through the one `enterLook`.
+  */
+
+  it('a play() carrying a look enters it, instead of holding the authored default', async () => {
+    const { runtime, root } = boot();
+
+    await runtime.play(withCgControl({}, { look: 'look-solo' }) as never);
+
+    expect(runtime.activeLookId(), 'the payload must win over the authored default').toBe(
+      'look-solo',
+    );
+    expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+    expect(displayOf(root, 'inst-solo')).not.toBe('none');
+    expect(displayOf(root, 'inst-six')).toBe('none');
+  });
+
+  it('a play() with NO look keeps the authored default', async () => {
+    const { runtime, root } = boot();
+
+    await runtime.play({} as never);
+
+    expect(runtime.activeLookId()).toBe('look-six');
+    expect(holes(root)).toEqual(SIX_HOLES);
+  });
+
+  it('🔴 the reserved key never lands in the field values on the play path', async () => {
+    /*
+      `play()` MERGES its payload into the persistent value map, so an unstripped control key
+      would not merely pass through — it would LIVE there, re-walked by every later apply.
+      `isFieldNamespace` reads `{look: …}` as a nested-composition namespace, so it matched no
+      scope and broke nothing visibly, which is exactly why it needed a test rather than a
+      symptom.
+    */
+    const { runtime, root } = boot();
+
+    await runtime.play(withCgControl({}, { look: 'look-solo' }) as never);
+    await runtime.update({} as never);
+
+    expect(runtime.activeLookId(), 'and the look survives a later empty update').toBe('look-solo');
+    expect(root.innerHTML).not.toContain(CG_CONTROL_KEY);
+  });
+});

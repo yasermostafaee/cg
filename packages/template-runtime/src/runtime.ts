@@ -2168,11 +2168,35 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         throw new Error('Runtime removed; play() unavailable');
       }
       await ready;
+      /*
+        `tasks.md` 6.7 — THE CONTROL PAYLOAD IS LIFTED HERE TOO, and both halves of that
+        were missing rather than merely tidy.
+
+        The bridge attaches the active look to the `CG ADD` data payload (its `#sendAdd`
+        chokepoint), and CasparCG hands a template's load-time data to the page through
+        whichever global it uses — so this path can and does receive it. Without the two lines
+        below:
+
+        - the reserved key was MERGED INTO `currentValues`, where `isFieldNamespace` reads
+          `{look: …}` as a nested-composition namespace. It matched no scope so nothing
+          visibly broke, but it persisted in the value map and was re-walked on every later
+          apply — control data living permanently in the field state, which is exactly what
+          `CG_CONTROL_KEY`'s strip rule exists to prevent;
+        - and the LOOK ITSELF WAS DROPPED. 6.7's re-take fix depends on the ADD payload being
+          honoured: a row switched to a solo look and then re-taken rebuilds the page, which
+          enters the AUTHORED DEFAULT, and only this payload can move it to the look the
+          bridge actually seated. Read on `update()` alone, that fix was inert on any host
+          that delivers load data through `play`.
+      */
+      const control = readCgControl(data);
       // Merge (don't replace) so a `CG PLAY` with no data preserves whatever a
       // prior `CG ADD`/`UPDATE` already set — the CasparCG flow updates first,
       // then plays with no args. play(data) still applies its data. Order no
       // longer matters (D-018/D-019 acceptance).
-      currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
+      currentValues = mergeNestedValues(
+        currentValues,
+        stripCgControl(data as Record<string, unknown>) as NestedFieldValues,
+      );
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       reapplySequenceItemFields();
       reapplyClockTargets();
@@ -2255,6 +2279,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           message: `play() left the lifecycle machine in '${machine.state}'; stop()/out() will silently no-op until this runtime is rebuilt`,
         });
       }
+      /*
+        THE LOOK IS ENTERED LAST, and the position is load-bearing: `restoreContent()` above
+        clears exit styling by writing `display` back onto content nodes, so a look applied
+        earlier in this method would have its hidden instances un-hidden again by it. Entered
+        here, the final visibility state of the frame is the look's.
+
+        Through the SAME `enterLook` as `setActiveLook` and the update path — one
+        implementation, three entry points, so the page cannot grow a second answer to "which
+        look is active".
+      */
+      if (control?.look !== undefined) enterLook(control.look);
       bus.emit('play.end');
     },
 
