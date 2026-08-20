@@ -2,7 +2,12 @@
 
 ## THE STATE, first (read this cold)
 
-- **Pushed SHA:** see §0. **Safe to pull.**
+- **Pushed SHA:** `d1b76389d0535c6e83e7b741aea1d56af1bedcda` on `dev`, verified against
+  `git ls-remote origin dev`. **Safe to pull.**
+- **Linux `gate:e2e` DISCHARGED:**
+  <https://github.com/yasermostafaee/cg/actions/runs/32375649375> — `d1b76389`, `completed` +
+  `success`, **`E2E (Playwright)` RAN** (its `E2E` step `success`, 13:41:06 → 13:50:38 UTC).
+  Classifier: `kind=code needsE2e=true`.
 - **Base read:** `b8bcefa9` — exactly the expected tip, no delta.
 - 🔴 **THE 2× WAS NOT REPRODUCED, and I am not going to pretend otherwise.** Everything I could
   measure runs at exactly 1×. What the hunt DID find are two real defects in 6.7's own seam
