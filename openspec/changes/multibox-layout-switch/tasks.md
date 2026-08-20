@@ -338,6 +338,10 @@ candidate shapes.
       ⚠ The mock also diverged: it released plates only on `remove`, while the bridge tears them
       down on `stop` and `out` as well — so test mode reported a guest on screen after a STOP.
       It now hooks the same three verbs.
+      ✅ **Linux `gate:e2e` DISCHARGED:**
+      <https://github.com/yasermostafaee/cg/actions/runs/32397521008> — head `0d24978a` (the commit
+      carrying this work), `completed` + `success`, and the **`E2E (Playwright)` job RAN** rather
+      than being skipped (its `E2E` step `success`, 17:25:38 → 17:35:27 UTC).
       ⏱ Was DUE BEFORE STAGE E (section 6). 🔴 **STAGE E IS NO LONGER BLOCKED.**
 
 ---

@@ -5,7 +5,8 @@
 
 ## THE STATE, first (read this cold)
 
-- **Pushed SHA:** see §8 — verified against `git ls-remote origin dev`. **Safe to pull.**
+- **Pushed SHA:** `0d24978aa558e011fba4e8501912ef1096dafbc5` on `dev`, verified against
+  `git ls-remote origin dev`. **Safe to pull.**
 - ⚠ **THERE WERE TWO PUSHES, NOT ONE, AND THE SECOND IS THE IMPORTANT ONE.** Reviewing my own change
   turned up **five** real defects in it — one found by hand, four by an adversarial pass — of which
   two would have offered to cut a live guest on a guess and two made the console assert things it had
@@ -232,5 +233,9 @@ outside this codebase. Not chased in this session.
   bookkeeping that sends no AMCP, the unit tests open no sockets, and the two WS tests assert frames
   that ARRIVE. Adding it would imply a quiescence guarantee these assertions do not rest on. The file
   header records this.
-- 🔴 **A Linux `gate:e2e` IS OWED** (this is a UI/render change). Its run URL is recorded in §9 and
-  beside `tasks.md` 2.8 once the run completes green.
+- ✅ **Linux `gate:e2e` DISCHARGED:**
+  <https://github.com/yasermostafaee/cg/actions/runs/32397521008> — head `0d24978a`, `completed` +
+  `success`, **`E2E (Playwright)` RAN** (its `E2E` step `success`, 17:25:38 → 17:35:27 UTC).
+  Recorded beside `tasks.md` 2.8 as well, so the evidence outlives this session.
+  ⚠ The earlier green run 32391728732 was on `60b643ca` and does **NOT** discharge this work — it
+  predates the five fixes in §4b/§4c. A green run on the wrong commit is not a discharge.
