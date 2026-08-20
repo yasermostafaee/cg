@@ -79,6 +79,30 @@ describe('B-145 acceptance 1 — a restart with seated plates leaves them listed
   });
 });
 
+describe('LOOKS §12.4 — a HELD plate stays held across a restart', () => {
+  it('🔴 `held` round-trips, because the un-hold path re-asserts the volume off it', () => {
+    const file = tmpFile();
+    /*
+      A held producer is MUTED on the server. The reconcile re-asserts a plate's audio
+      intent exactly when it un-holds one (`prior.held === true`), so a restart that
+      forgot the flag would treat the plate as on-screen, never re-assert, and leave a
+      guest silent behind a hole that looks perfectly normal — the audio half of the
+      failure 6.9c names, arriving by way of a restart instead of a swap.
+    */
+    savePersistedLiveLayers(
+      file,
+      new Map([['item-a', [{ ...record(10, 'guest-1'), held: true }, record(11, 'guest-2')]]]),
+    );
+
+    const reloaded = loadPersistedLiveLayers(file).ledger;
+
+    expect(reloaded?.get('item-a')?.[0]?.held).toBe(true);
+    // Absent stays absent — a ledger written before looks existed describes what it
+    // described then, which is "on screen".
+    expect(reloaded?.get('item-a')?.[1]?.held).toBeUndefined();
+  });
+});
+
 describe('B-145 acceptance 2 — the rebuilt ledger comes from ONE authority', () => {
   it('the reconciled result is the whole answer: nothing the file said survives being contradicted', () => {
     const persisted = seated();

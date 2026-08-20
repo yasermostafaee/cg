@@ -162,7 +162,7 @@ plan.
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | **1** | Schema (`looks` group, sources-once, preflights), the LOOK carrier, the runtime switch (visibility + re-punch), the pin tests — ✅ LANDED (`b47f3eca`); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32278566981> (attempt 2, `success`, `E2E (Playwright)` RAN — attempt 1 was killed at `timeout-minutes: 20` by an apt-mirror stall BEFORE Playwright started; the suite never ran and was re-run, not weakened)   | **BA**  |
 | **2** | The Designer UI swap: toolbar icon, looks inspector, per-look canvas, look picker in the preview — **AND THE A′ DELETION (below)** — ✅ LANDED (session BB, `5d56c5a5`; A′ DISABLED not deleted, P2.DEL re-scoped below); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32292697141> (`success`, `E2E (Playwright)` RAN — the prior run on `2ee11fe5` was RED from two spec defects, fixed at the cause in `5d56c5a5`) | next    |
-| **3** | Stage D's reconcile (§4) on the look carrier; then stage E's operator surface                                                                                                                                                                                                                                                                                                                                                                            | after 2 |
+| **3** | Stage D's reconcile (§4) on the look carrier — ✅ **LANDED (session BC)**: `reconcileLivePlates` is the ONE delta, the take and `swapLiveSource` are both callers, §12.4's hold/teardown policy is named and observable. 🔴 Stage E's operator surface stays BLOCKED — on 2.8 (B-145's display half) and now also on 6.7 (the bridge→page look transport, filed in Stage D)                                                                              | after 2 |
 
 🔴 **PHASE 2'S DELETION CLAUSE — the two-spellings window is ONE session, closed by this task,
 not by memory.** Phase 2 deletes, in the same session that swaps the UI: the arrangements schema
@@ -443,24 +443,62 @@ candidate shapes.
 > "arrangement" below reads as "look" — rewritten where the difference is load-bearing, noted
 > here where it is only vocabulary.
 
-- [ ] 6.1 **`reconcileLivePlates(itemId, desired)`** in `tools/caspar-bridge/src/caspar-runtime.ts`:
+- [x] 6.1 **`reconcileLivePlates(itemId, desired)`** in `tools/caspar-bridge/src/caspar-runtime.ts`:
       seat / re-fit / release as a **DELTA** against `#liveLayers`, resolving through
       `resolvePlateAssignments` as the ONE resolver.
       **Done when:** one function, and the take path no longer seats plates its own way.
-- [ ] 6.2 **Route the take's `#seatLiveLayers` through it**, preserving the all-or-nothing rollback
+      ✅ **Session BC.** `desired` is the active look's `{routeKey → rect}`, resolved by the ONE
+      `#desiredPlateRects` (a pre-LOOKS carrier answers from its declarations, so every caller
+      downstream sees one kind of input). The reconcile is `#planLiveSeating` (DECIDE) +
+      `#applyLivePlates` (SEND); `reconcileLivePlates` composes them. Door: `setActiveLook`.
+- [x] 6.2 **Route the take's `#seatLiveLayers` through it**, preserving the all-or-nothing rollback
       and the "record before the send is awaited" rule.
-- [ ] 6.3 **Make `swapLiveSource` a CALLER of it.** 🔴 **Do not build a second mechanism beside
+      ✅ **Session BC.** `#seatLiveLayers` is GONE — the take calls the reconcile's two halves in
+      the order its on-air constraints demand (DECIDE before the pre-roll `CG ADD`, SEND one
+      command before the `CG PLAY`); collapsing them into the single-call form would move the
+      refusal after the `CG ADD` had already replaced the stage. One planner, one applier, no
+      third path. Rollback and record-before-await both preserved and still tested.
+- [x] 6.3 **Make `swapLiveSource` a CALLER of it.** 🔴 **Do not build a second mechanism beside
       R-048's swap** — `swapLiveSource` already argues this case for itself one level down.
-- [ ] 6.4 **Re-derive the fit PER LOOK.** A solo look changes a plate's aspect against its
+      ✅ **Session BC.** Its resolve/fit/`PLAY`/re-assert/re-ledger body is deleted; it validates,
+      writes the prospective override (rolled back on refusal, so a refused swap still records
+      nothing) and calls the reconcile. The REPLACE-with-no-CLEAR is now simply what "the seat
+      changed" means. Bonus fallout: swapping a HELD plate now costs the wire nothing and lands
+      when a look shows it.
+- [x] 6.4 **Re-derive the fit PER LOOK.** A solo look changes a plate's aspect against its
       6-box rect, and because `MIXER FILL` **survives a producer swap**, getting this wrong is
       a **wrong crop rather than an obvious break** — the failure mode that does not announce
       itself.
-- [ ] 6.5 **The release policy for a plate with no cell in the target arrangement (§12.4):** HELD
+      ✅ **Session BC.** The rect comes from the desired set, never from `declaration.rect` (which
+      is the DEFAULT look's rect, so reading it would pin every look to the default's geometry).
+      Asserted as a real crop, not just as "a command was sent": a 16:9 feed in a 1:1 hole must
+      end up wider than its own mask and starting left of it.
+- [x] 6.5 **The release policy for a plate with no cell in the target arrangement (§12.4):** HELD
       muted and idle by default; a source kind that cannot be held falls back to teardown as a
       **NAMED, observable** behaviour.
       ⚠ **Punch and seat are separate mutations here** — a held plate stops punching (or §1's
       crosstalk returns inside one template) while its producer stays seated on its band layer.
-- [ ] 6.6 **A test per inverse in §4's audit table** — plate set, mask, fit, layer allocation.
+      ✅ **Session BC.** `live-plate-release.ts` — `canHoldLivePlate` (exhaustive switch, so a new
+      producer form gets a compile error rather than inheriting "holdable") + `releaseLivePlate`
+      returning the disposition WITH its sentence, announced on `livePlateReleased`. `media` is
+      the kind that cannot be held: a clip held across a look runs to its end and comes back
+      black. Seat/punch separation is representable — `LiveLayerRecord.held`, additive and
+      persisted, because the un-hold path re-asserts the plate's volume off it.
+- [x] 6.6 **A test per inverse in §4's audit table** — plate set, mask, fit, layer allocation.
+      ✅ **Session BC.** `tools/caspar-bridge/tests/live-look-reconcile.integration.test.ts` —
+      four `INVERSE n/4` tests, plus the 6-box fixture and the position-only / size-only / both
+      axis trio. 🔴 The bridge cannot assert a PUNCHED hole (that is the page's half and the
+      transport is not wired — see 6.7 below); what it asserts is the layer's own mask —
+      `MIXER … CLIP` — which comes from the same geometry as `FILL`.
+- [ ] 6.7 🔴 **NOT DONE, AND NAMED RATHER THAN ASSUMED — the bridge→page look transport.** A look
+      switch is TWO mutations on two machines: the bridge moves the producers' `MIXER FILL`/`CLIP`
+      (6.1, landed) and the PAGE flips which look's instance is visible and re-punches its holes
+      (`@cg/template-runtime`'s own `setActiveLook`, landed in phase 1D). **Nothing carries the
+      look id from one to the other** — the served page learns nothing from a `CG UPDATE` today —
+      so on the plant `CasparRuntime.setActiveLook` currently moves the fills while the page keeps
+      punching the outgoing look's holes. It needs its own decision (a reserved field in the update
+      payload, and what a page that ignores it should do) and it BLOCKS stage E's picker being
+      usable on air, though not stage E's UI work.
 
 ---
 

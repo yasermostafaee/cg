@@ -95,6 +95,23 @@ export interface LiveLayerRecord {
    * silently mutes a guest is its own on-air fault.
    */
   readonly intendedVolume: number;
+  /**
+   * `multibox-layout-switch` `tasks.md` 6.5 / §12.4 — **this producer is seated but the
+   * active LOOK does not show it**: muted, idle, and with no hole punched for it.
+   *
+   * 🔴 **SEAT AND PUNCH ARE SEPARATE MUTATIONS, ON SEPARATE MACHINES, AND THIS FIELD IS
+   * WHERE THAT SEPARATION BECOMES REPRESENTABLE.** Every other field here describes the
+   * layer — where its producer is and what geometry it was given. This one describes
+   * whether the PAGE is currently punching a hole in front of it. Collapsing the two
+   * (dropping the record when a look hides the plate, say) is what would force a look
+   * switch to re-`PLAY` on the way back — a fresh producer, a visible re-acquire, and the
+   * cut §12.4 chose B to avoid.
+   *
+   * OPTIONAL, and absent means NOT held: it is additive to the persisted form (B-145), so
+   * a ledger written before looks existed parses unchanged and reads as "on screen", which
+   * is what it was.
+   */
+  readonly held?: boolean | undefined;
 }
 
 /**
@@ -130,6 +147,9 @@ const LiveLayerRecordSchema = z.object({
   fill: NormalizedRectSchema,
   clip: NormalizedRectSchema,
   intendedVolume: z.number(),
+  // Additive — see {@link LiveLayerRecord.held}. Absent parses as "not held", so a ledger
+  // persisted before looks existed comes back describing exactly what it described then.
+  held: z.boolean().optional(),
 });
 
 export const PersistedLiveLayersSchema = z.array(

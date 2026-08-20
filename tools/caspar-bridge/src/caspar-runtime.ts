@@ -25,6 +25,7 @@ import type {
   FieldValues,
   LivePlateVolumes,
   LiveSourceOverride,
+  LiveSourceRect,
   Position,
   RetainedStackItem,
   StackItemState,
@@ -55,6 +56,7 @@ import {
   type PendingUpdate,
   type Settings,
   type TemplateInfo,
+  type TemplateLook,
   type ChannelSettings,
   type ChannelSettingsState,
   EMPTY_SOURCE_ASSIGNMENTS,
@@ -101,6 +103,7 @@ import {
   LIVE_PLATE_NO_LAYER,
   LIVE_PLATE_NO_RANGE,
 } from './live-plate-seating.js';
+import { releaseLivePlate, type LivePlateRelease } from './live-plate-release.js';
 import { TemplateRegistry } from './template-registry.js';
 import { DelimiterStore } from './delimiter-store.js';
 import {
@@ -146,7 +149,36 @@ interface LivePlatePlacement {
 
 /** The decision half of the assembly: what to seat, or why the take is refused. */
 type LiveSeatingPlan =
-  | { readonly ok: true; readonly placements: readonly LivePlatePlacement[] }
+  | {
+      readonly ok: true;
+      /** What the DESIRED set asks to be on screen — one entry per plate with a rect. */
+      readonly placements: readonly LivePlatePlacement[];
+      /**
+       * `multibox-layout-switch` `tasks.md` 6.5 — **every plate the template DECLARES,
+       * resolved to its producer, whether or not the desired set places it.**
+       *
+       * The release policy needs BOTH axes and they are different questions: a plate with
+       * no rect in this look is HELD (it is still declared, a later look can show it),
+       * while a plate the template no longer declares at all is TORN DOWN (nothing can
+       * bring it back). A plan that carried only `placements` could not tell them apart,
+       * and the reconcile would have to re-read the carrier to find out — a second
+       * spelling of "what does this template declare", resolved a second way.
+       *
+       * It also carries the producer FORM, which is what `canHoldLivePlate` needs: the
+       * ledger records the producer as the string that went on the wire, and re-parsing
+       * that string to recover its kind would be a third spelling of the same fact.
+       */
+      readonly resolved: ReadonlyMap<string, SourceProducer>;
+      /**
+       * Plates the desired set DID place a rect for, whose hole then clipped to nothing —
+       * the row's position override has carried them off the frame entirely.
+       *
+       * Carried separately from plain absence because the two are different facts and the
+       * operator-facing sentence differs: "this look does not show it" is authoring, "it
+       * is off the frame" is the row's position. Same disposition, honest reason.
+       */
+      readonly offFrame: ReadonlySet<string>;
+    }
   | { readonly ok: false; readonly errorCode: string; readonly message: string };
 
 /** R-028 part B — a refused deliberate playout clear. */
@@ -464,6 +496,18 @@ export class CasparRuntime {
    */
   readonly liveLayersChanged = new Emitter<LiveLayerLedger>();
   /**
+   * `multibox-layout-switch` `tasks.md` 6.5 / §12.4 — emitted for EVERY plate the
+   * reconcile releases, held or torn down.
+   *
+   * 🔴 **This is what makes §12.4's teardown fallback "a NAMED, OBSERVABLE behaviour"
+   * rather than a teardown nobody can tell from a bug.** A held plate and a torn-down one
+   * look identical from outside — both stop being visible — and they differ in the one way
+   * that matters on air: the held one comes back as a cut, the torn-down one comes back as
+   * a fresh `PLAY`. An operator watching a switch that re-acquires needs to be able to
+   * learn WHY here, not by reading the source.
+   */
+  readonly livePlateReleased = new Emitter<LivePlateRelease>();
+  /**
    * R-030 — emitted when a browser changes the channel raster AND when a fresh
    * `INFO <channel>` reading lands. Both, because the mismatch verdict is a
    * function of the two together: a new reading can turn a settled `match` into
@@ -549,6 +593,21 @@ export class CasparRuntime {
    * an operator being invited to clear a face off air (`design.md` §4).
    */
   readonly #liveLayers: LiveLayerLedger = new Map();
+  /**
+   * `multibox-layout-switch` §14 (LOOKS) phase 3 — **itemId → the id of the look that
+   * item is currently showing.**
+   *
+   * ABSENT means "the authored default", never "no look": exactly one look is always
+   * active (§14.5), so this map records a DEPARTURE from the default rather than the
+   * state itself — which is why nothing has to write it at take time and why an item
+   * whose template has no looks simply never appears here.
+   *
+   * 🔴 **It is not a second spelling of the ledger.** The ledger says which producers are
+   * SEATED; this says which of them the page is PUNCHING A HOLE for. `tasks.md` 6.5 makes
+   * that separation load-bearing — a held plate is seated and not punched — so the two
+   * facts cannot share one store without one of them becoming unrepresentable.
+   */
+  readonly #activeLooks = new Map<string, string>();
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -2202,7 +2261,15 @@ export class CasparRuntime {
       return { accepted: false, ...exclusivity };
     }
 
-    const plan = this.#planLiveSeating(itemId, slot);
+    /*
+      §14 (LOOKS) phase 3 — A TAKE IS THE FIRST RECONCILE, AGAINST AN EMPTY PRIOR SET.
+
+      The desired set is the ACTIVE LOOK's rects — the authored default for a fresh row
+      (`#activeLookOf`), or whichever look a previous switch left recorded on a re-take, so
+      re-taking a row does not silently return it to the default look while the operator is
+      watching the one they chose.
+    */
+    const plan = this.#planLiveSeating(itemId, slot, this.#desiredPlateRects(itemId));
     if (!plan.ok) {
       process.stderr.write(`[caspar-bridge] take refused for ${itemId}: ${plan.message}\n`);
       // The MESSAGE rides out with the code. Which PLATE is unassigned, and which
@@ -2322,7 +2389,7 @@ export class CasparRuntime {
       loses its boxes, and the row is told why — which is honest, and is the
       whole reason this returns a code rather than a boolean.
     */
-    const seated = await this.#seatLiveLayers(itemId, plan.placements);
+    const seated = await this.#applyLivePlates(itemId, plan, 'take');
     if (!seated.ok) {
       const code = seated.errorCode ?? 'amcp-error';
       this.#reconciler.applyAck(seq, false, code);
@@ -3237,6 +3304,21 @@ export class CasparRuntime {
    * The operator is warned where the warning can be acted on — the template picker marks
    * the row as needing a re-import.
    */
+  /*
+    ⭐ §14 (LOOKS) phase 3 — VERIFIED UNCHANGED, AND HERE IS THE DRIFT TO REFUSE.
+
+    Under LOOKS the carrier's `sources` IS the multi-frame group's declaration list —
+    source-keyed, one entry per declared source — so this already counts the GROUP and never
+    the retired arrangements. Nothing had to move.
+
+    🔴 What a later reader will be tempted to do is count the ACTIVE LOOK's rects instead
+    ("only one box is showing, so this is not a multi-box template"). That is wrong, and the
+    failure is delayed rather than immediate: a row parked on a solo look would stop being an
+    incumbent, a second multi-box template would be allowed on air beside it, and the
+    collision would arrive later — when somebody switched the first row back to six boxes,
+    with both templates already playing. Exclusivity is a property of what a template CAN put
+    on the channel, which is its declaration, and a look switch must never change the answer.
+  */
   #multiBoxCount(templateId: string): number {
     const template = this.#templates.get(templateId);
     if (template === null || template === undefined) return 0;
@@ -3277,7 +3359,11 @@ export class CasparRuntime {
     };
   }
 
-  #planLiveSeating(itemId: string, slot: CommandSlot): LiveSeatingPlan {
+  #planLiveSeating(
+    itemId: string,
+    slot: CommandSlot,
+    desired: Readonly<Record<string, LiveSourceRect>>,
+  ): LiveSeatingPlan {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     const template = this.#templates.get(templateId);
     const carrier = template === null ? undefined : template.liveSources;
@@ -3286,7 +3372,7 @@ export class CasparRuntime {
       carrier === undefined ||
       liveSourceCarrierState(template) !== 'declared'
     )
-      return { ok: true, placements: [] };
+      return { ok: true, placements: [], resolved: new Map(), offFrame: new Set() };
 
     // 6.7 — ALL-OR-NOTHING, and it refuses before any geometry is computed: a
     // layout with one unfilled hole is the silent-empty-hole outcome reached by a
@@ -3304,6 +3390,26 @@ export class CasparRuntime {
     if (!assignment.ok)
       return { ok: false, errorCode: assignment.errorCode, message: assignment.message };
 
+    /*
+      §14 (LOOKS) phase 3 — EVERY DECLARED PLATE IS RESOLVED AND VALIDATED, AND ONLY THE
+      DESIRED ONES ARE FITTED.
+
+      🔴 The resolution above deliberately still runs over the WHOLE declaration list, not
+      over the active look's subset, and the reason is the moment the refusal would
+      otherwise arrive. Under LOOKS a source the current look does not show is one picker
+      click away from being on screen, so an unassigned or aspect-contradicted plate that
+      only refused when its look became active would refuse DURING a live switch — the
+      operator having already committed, with the previous look already leaving. 6.7's
+      argument ("a designed layout with a hole in it") covers every look the template can
+      reach, not merely the one it opens on, so the whole set is answered at the take where
+      a refusal is still free.
+
+      `collectLookCarrier` guarantees this costs nothing extra: a declared source that no
+      look references yields no declaration at all, so the list is exactly the reachable
+      set.
+    */
+    const resolved = new Map<string, SourceProducer>();
+    const offFrame = new Set<string>();
     const fitted: { plateId: string; producer: SourceProducer; fit: LivePlatePlacement['fit'] }[] =
       [];
     for (const plate of assignment.plates) {
@@ -3315,10 +3421,20 @@ export class CasparRuntime {
         expectedAspect: plate.declaration.expectedAspect,
       });
       if (!aspect.ok) return { ok: false, errorCode: aspect.errorCode, message: aspect.message };
+      resolved.set(plate.declaration.sourceId, plate.source.producer);
+      // 6.4 (LOOKS) — THE RECT COMES FROM THE DESIRED SET, never from the declaration.
+      // `declaration.rect` is the source's rect in the DEFAULT look (`collectLookCarrier`),
+      // so reading it here would pin every look to the default's geometry — and because
+      // `MIXER FILL` survives a producer swap, the symptom would be a WRONG CROP on a
+      // picture that is otherwise perfectly on air. A source with NO entry is absent from
+      // this look; the carrier never emits a zero-area rect, so absence is the only
+      // spelling of "not shown here".
+      const rect = desired[plate.declaration.sourceId];
+      if (rect === undefined) continue;
       const fit = this.liveSourceFitFor({
         channel: slot.channel,
         itemId,
-        rect: plate.declaration.rect,
+        rect,
         sceneResolution: carrier.resolution,
         carriedDefaultPosition: carrier.defaultPosition,
         sourceAspect: aspect.aspect,
@@ -3329,14 +3445,21 @@ export class CasparRuntime {
       // producer that will never be sent would burn a layer out of a band that
       // has to hold every other box. Not a refusal — nothing about it is visible
       // on air, so refusing the take would be refusing over an invisible detail.
-      if (fit.clip === null) continue;
+      if (fit.clip === null) {
+        offFrame.add(plate.declaration.sourceId);
+        continue;
+      }
       fitted.push({
         plateId: plate.declaration.sourceId,
         producer: plate.source.producer,
         fit: { fill: fit.fill, clip: fit.clip },
       });
     }
-    if (fitted.length === 0) return { ok: true, placements: [] };
+    // The EMPTY look is valid and carries an empty map — background alone (`collectLookCarrier`).
+    // It is not an early exit from the reconcile: everything the item has seated is still
+    // released through the policy below, which is the whole difference between a look with
+    // no plates and a template with none.
+    if (fitted.length === 0) return { ok: true, placements: [], resolved, offFrame };
 
     const range = this.#sourceCatalog.layerRange;
     if (range === undefined) {
@@ -3397,6 +3520,8 @@ export class CasparRuntime {
 
     return {
       ok: true,
+      resolved,
+      offFrame,
       placements: fitted.map((f, i) => ({
         slot: { channel: slot.channel, layer: layers[i] as number },
         plateId: f.plateId,
@@ -3407,10 +3532,211 @@ export class CasparRuntime {
   }
 
   /**
-   * C-015 phase 6 (task 6.0) — **THE ASSEMBLY, HALF TWO: put the pictures on the
-   * layers, and record what was actually sent.**
+   * `multibox-layout-switch` §14 (LOOKS) phase 3 — **which LOOK is this item showing.**
    *
-   * Per plate, in one batch on one connection:
+   * `undefined` when the template authors none — a pre-LOOKS template, or one whose
+   * carrier predates the field. That is a THIRD answer and not "the first look": a
+   * template with no looks has one fixed set of rects, and pretending it has a look would
+   * make `#desiredPlateRects` answer from an empty rect map and release every plate.
+   *
+   * An item that has never switched resolves to the AUTHORED DEFAULT (`defaultLookId`),
+   * because exactly one look is always active (§14.5): `#activeLooks` records a DEPARTURE
+   * from that default, so a fresh take needs no write to enter the right one. The final
+   * `?? looks[0]` is the same tolerant read `defaultLookOf` makes — a carrier whose
+   * `defaultLookId` names nothing is a broken import, and refusing to show anything at all
+   * would be a worse answer than showing the first look.
+   */
+  #activeLookOf(itemId: string): TemplateLook | undefined {
+    const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
+    const carrier = this.#templates.get(templateId)?.liveSources;
+    const looks = carrier?.looks;
+    if (looks === undefined || looks.length === 0) return undefined;
+    const wanted = this.#activeLooks.get(itemId) ?? carrier?.defaultLookId;
+    return looks.find((l) => l.id === wanted) ?? looks[0];
+  }
+
+  /** §14 phase 3 — the look this item is showing, for a caller that only needs the id. */
+  activeLookId(itemId: string): string | undefined {
+    return this.#activeLookOf(itemId)?.id;
+  }
+
+  /**
+   * 🔴 **THE ONE ANSWER to "which rect does each of this item's plates have RIGHT NOW" —
+   * the DESIRED set `reconcileLivePlates` reconciles against.**
+   *
+   * Two carriers, one shape. A LOOKS template answers from the active look's `rects`; a
+   * pre-LOOKS one answers from the declarations, whose `rect` is the only geometry it has.
+   * Both produce `{routeKey → rect}` and every caller downstream sees exactly one kind of
+   * input — which is what lets the take, the switch and the swap share one reconcile
+   * instead of each learning which carrier it is looking at.
+   *
+   * ⚠ A source ABSENT from the returned map is absent from the look. `collectLookCarrier`
+   * guarantees the carrier never emits a zero-area rect for a hidden plate, so absence is
+   * the only spelling and the reconcile can read it without ambiguity.
+   */
+  #desiredPlateRects(itemId: string): Record<string, LiveSourceRect> {
+    const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
+    const carrier = this.#templates.get(templateId)?.liveSources;
+    if (carrier === undefined) return {};
+    const look = this.#activeLookOf(itemId);
+    if (look !== undefined) return { ...look.rects };
+    return Object.fromEntries(carrier.sources.map((s) => [s.sourceId, s.rect] as const));
+  }
+
+  /**
+   * `multibox-layout-switch` §14.5 / `tasks.md` 6.1 — **SWITCH A ROW TO A DIFFERENT LOOK,
+   * while it is on air.**
+   *
+   * The bridge half of the switch, and the door stage E's look picker calls. It records
+   * which look the row is showing and reconciles the live plates against that look's
+   * rects — holes and fits move, seats do not (see {@link reconcileLivePlates}).
+   *
+   * ⚠ **THE PAGE'S HALF IS NOT WIRED YET, AND THIS METHOD DOES NOT PRETEND OTHERWISE.**
+   * A look switch is TWO mutations on two machines: the bridge moves the producers'
+   * `MIXER FILL`/`CLIP` (here), and the PAGE flips which look's instance is visible and
+   * re-punches its holes (`@cg/template-runtime`'s own `setActiveLook`, landed in phase
+   * 1D). There is no transport between them — the served page learns nothing from a `CG
+   * UPDATE` today — so on the plant this call currently moves the fills while the page
+   * keeps punching the outgoing look's holes. Wiring that transport is its own decision
+   * (a reserved field in the update payload, and what a page that ignores it should do),
+   * and it belongs with the operator surface rather than being invented here.
+   *
+   * An item with nothing seated is a legal target, exactly as `swapLiveSource`'s is: the
+   * look is recorded, nothing is sent, and the next take enters it. Deliberately not gated
+   * on reachability in that case — it is a list edit, not an on-air action.
+   */
+  async setActiveLook(
+    itemId: string,
+    lookId: string,
+  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    if (templateId === undefined || this.#slots.get(itemId) === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    const looks = this.#templates.get(templateId)?.liveSources?.looks ?? [];
+    const look = looks.find((l) => l.id === lookId);
+    if (look === undefined) {
+      return {
+        ok: false,
+        reason: 'unknown-look',
+        message: `This template has no look called "${lookId}".`,
+      };
+    }
+    // Recorded BEFORE the reconcile, and it stays recorded even if the reconcile refuses.
+    // The look is what the operator asked this row to show; a failed AMCP send is a fact
+    // about the wire. Rolling the intent back would leave the next take entering the OLD
+    // look with nothing anywhere saying why.
+    this.#activeLooks.set(itemId, lookId);
+    if ((this.#liveLayers.get(itemId) ?? []).length === 0) return { ok: true };
+    if (this.#noServerReachable()) {
+      return {
+        ok: false,
+        reason: 'disconnected',
+        message:
+          'Not connected to CasparCG — the look was recorded but the live sources were not ' +
+          'moved. Reissue it once the server is back.',
+      };
+    }
+    const reconciled = await this.reconcileLivePlates(itemId, this.#desiredPlateRects(itemId), {
+      mode: 'live',
+    });
+    if (reconciled.ok) return { ok: true };
+    return {
+      ok: false,
+      ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
+      ...(reconciled.message === undefined ? {} : { message: reconciled.message }),
+    };
+  }
+
+  /**
+   * `multibox-layout-switch` `design.md` §4 / `tasks.md` 6.1 — **THE ONE RECONCILE:
+   * bring the seated live-plate set of a RUNNING row into line with a freshly-resolved
+   * DESIRED set.**
+   *
+   * §4's whole argument, in one method. A **look switch** changes _which plates are
+   * visible and where_; a **source swap** changes _what one plate shows_; a **take** is
+   * the same thing against an empty prior set. All three are one question — "which
+   * producer is behind which hole, at what geometry" — and the tree used to answer it in
+   * two places that each knew half of it (`#seatLiveLayers`: every plate, take only;
+   * `swapLiveSource`: one plate, live). `swapLiveSource` already argued the case one level
+   * down — _"a swap that resolved plates its own way would be a second spelling"_ — and
+   * this is that argument applied one level up, so the switch never becomes a third path.
+   *
+   * ── THE INPUT: `desired` IS THE ACTIVE LOOK'S `{routeKey → rect}` ────────────────
+   *
+   * Nothing here reads a layout, an arrangement or a look object. It takes a rect map and
+   * reconciles against it, which is what lets the take, the switch and the swap share it
+   * without any of them learning the others' vocabulary. 🔴 **A source ABSENT from the map
+   * is absent from the look** — the carrier never emits a zero-area rect
+   * (`collectLookCarrier`), so absence is the ONLY spelling of "not shown here", and it is
+   * what triggers §12.4's release.
+   *
+   * ── WHY IT IS A DELTA AND NOT A RE-SEAT ─────────────────────────────────────────
+   *
+   * 🔴 **A plain look switch must issue NO `PLAY` AT ALL.** A `PLAY` creates a fresh
+   * producer: on the plant a route re-acquires visibly, so a switch that re-seated would
+   * be the very re-acquire §12.4 chose "held" to avoid. Every plate whose seat is
+   * unchanged — same layer, same producer — gets `MIXER FILL`/`CLIP` and nothing else. The
+   * seat is preserved by construction rather than by a special case: `#planLiveSeating`
+   * prefers the layer a plate is already on, and a held plate is still in the ledger, so
+   * it is still preferred.
+   *
+   * ── THE TWO MODES — ONE FACT, READ ONCE, GATING BOTH BEHAVIOURS ─────────────────
+   *
+   * `mode` says what the ACTION IS, not what it should do, because two behaviours follow
+   * from the same fact and letting a caller set them independently is how they would come
+   * to disagree (golden rule 7's shape: one condition, read once).
+   *
+   * - `'take'` — **the row is being put on air, from nothing.**
+   *   - _Re-asserts every plate._ 🔴 A re-take is the OPERATOR'S REPAIR VERB. The ledger is
+   *     a CLAIM, not a confirmation — nothing tracks live-layer liveness the way `#loaded`
+   *     tracks the CG producer (B-039) — so a plate whose producer the server has since
+   *     destroyed is indistinguishable here from a healthy one. A take that sent nothing
+   *     for it would leave the operator's one repair action doing nothing at all.
+   *   - _Rolls back everything on failure._ Nothing is on air yet, and the failure modes
+   *     are a producer with no geometry (a guest blown up across the programme, unmasked)
+   *     and a fill without its clip (renders nothing at all — `design.md` §3). A layer in
+   *     either state is worse than a layer left black, so every layer this action touched
+   *     comes down and the take is refused.
+   * - `'live'` — **a switch or a swap on a row ALREADY ON AIR.**
+   *   - _Delta only._ 🔴 A plate whose seat has not changed gets NO `PLAY`. Re-seating
+   *     would create a fresh producer, and on the plant a route re-acquires visibly — the
+   *     very re-acquire §12.4 chose "held" to avoid. This is what makes a look switch move
+   *     holes and fits and nothing else.
+   *   - _Undoes only the plate that failed._ Rolling back would mean blacking plates that
+   *     are working, to punish a plate that is not. Destructive only if this action CREATED
+   *     the plate: a REPLACE that failed left the previous producer on the layer untouched,
+   *     which is `B-126`'s rule and is exactly what `swapLiveSource` promises the operator.
+   */
+  async reconcileLivePlates(
+    itemId: string,
+    desired: Readonly<Record<string, LiveSourceRect>>,
+    opts: { mode: 'take' | 'live' },
+  ): Promise<{ ok: boolean; errorCode?: string; message?: string }> {
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) return { ok: false, errorCode: 'unknown-item' };
+    const plan = this.#planLiveSeating(itemId, slot, desired);
+    if (!plan.ok) return { ok: false, errorCode: plan.errorCode, message: plan.message };
+    return this.#applyLivePlates(itemId, plan, opts.mode);
+  }
+
+  /**
+   * C-015 phase 6 (task 6.0) — **THE ASSEMBLY, HALF TWO: put the pictures on the
+   * layers, and record what was actually sent** — now the SEND half of the §4
+   * reconcile above.
+   *
+   * ⚠ **WHY THE RECONCILE IS TWO HALVES A CALLER CAN USE SEPARATELY, rather than one
+   * call the take also makes.** The take's ordering is an on-air constraint, written up
+   * at both of its call sites: it DECIDES before the pre-roll `CG ADD` (so a refusal
+   * costs nothing and mutates nothing) and SENDS one command before the `CG PLAY` (so a
+   * guest's picture is never on the programme channel while the operator cues ahead).
+   * Collapsing those into one call would move the refusal AFTER the `CG ADD` had already
+   * replaced the stage — a mutation on a take the operator was told did not happen. So
+   * the take calls `#planLiveSeating` and this, in that order, with its own work between;
+   * `reconcileLivePlates` is the same two halves composed for callers with no such
+   * constraint. There is ONE planner and ONE applier, and no third path.
+   *
+   * Per plate SEATED, in one batch on one connection:
    *
    *   1. `PLAY <ch>-<layer> <producer>` — {@link CommandBuilder.playSource};
    *   2. `MIXER <ch>-<layer> VOLUME 0` — **6.5, immediately after and before the
@@ -3421,19 +3747,19 @@ export class CasparRuntime {
    *   3. `MIXER … FILL` + `MIXER … CLIP` — {@link CommandBuilder.mixerFit}, which
    *      emits both from one geometry so they can never be set apart.
    *
+   * A plate whose seat is UNCHANGED gets step 3 alone, and only when the geometry
+   * actually moved — see the delta note on {@link reconcileLivePlates}.
+   *
    * The ledger is written with `sourceArgument` — the SAME function `playSource`
    * uses — so `producer` records what went on the wire rather than a second
    * formatting of the same config.
    *
    * ── THE FAILURE PATH, WHICH IS THE PART WORTH READING ──────────────────────
    *
-   * 🔴 **Any failure rolls back EVERY layer this action touched, including one the
-   * item already owned.** The instinct is to keep a previously-on-air box up, and
-   * it is wrong here: the failure modes are a producer with NO geometry (a
-   * guest's picture blown up across the entire programme, unmasked) and a fill
-   * without its clip (design.md §3 — renders nothing at all). A layer left in
-   * either state is worse on air than a layer left black, so the half-placed layer
-   * comes down and the take is refused.
+   * 🔴 **Under `'take'`, any failure rolls back EVERY layer this action
+   * touched, including one the item already owned.** The instinct is to keep a
+   * previously-on-air box up, and it is wrong for a take: the half-placed layer comes
+   * down and the take is refused, for the reasons on {@link reconcileLivePlates}.
    *
    * The record is pushed BEFORE its send is awaited, deliberately: from the moment
    * a `PLAY` leaves this process a producer may be on that layer, so a rollback
@@ -3445,10 +3771,16 @@ export class CasparRuntime {
    * ours — which is what the R-009 sweep, the quarantine and the clear refusal all
    * read.
    */
-  async #seatLiveLayers(
+  async #applyLivePlates(
     itemId: string,
-    placements: readonly LivePlatePlacement[],
-  ): Promise<{ ok: boolean; errorCode?: string }> {
+    plan: {
+      readonly placements: readonly LivePlatePlacement[];
+      readonly resolved: ReadonlyMap<string, SourceProducer>;
+      readonly offFrame: ReadonlySet<string>;
+    },
+    mode: 'take' | 'live',
+  ): Promise<{ ok: boolean; errorCode?: string; message?: string }> {
+    const { placements, resolved, offFrame } = plan;
     const previous = this.#liveLayers.get(itemId) ?? [];
     if (placements.length === 0 && previous.length === 0) return { ok: true };
 
@@ -3467,74 +3799,196 @@ export class CasparRuntime {
       intent map outlives both, which is also what lets retention carry it.
     */
     const intent = this.#plateVolumes.get(itemId) ?? {};
+    const key = (record: { slot: CommandSlot }): string => adoptionKey(record.slot);
+    const same = (a: NormalizedRect, b: NormalizedRect): boolean =>
+      a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+    const priorByPlate = new Map(previous.map((r) => [r.sourceId, r] as const));
+
+    /** The ledger this action is building — seated plates first, then the held ones. */
+    const next: LiveLayerRecord[] = [];
+    /** Records this action actually sent a `PLAY` for — the rollback set. */
     const touched: LiveLayerRecord[] = [];
     let failure: string | undefined;
+    let failedPlate: { record: LiveLayerRecord; prior: LiveLayerRecord | undefined } | undefined;
 
     for (const placement of placements) {
-      touched.push({
+      const prior = priorByPlate.get(placement.plateId);
+      const producer = this.#builder.sourceArgument(placement.producer);
+      /*
+        🔴 THE DELTA'S ONE QUESTION: is this plate already sitting where it needs to be,
+        showing what it needs to show? Layer AND producer, both — the layer alone would
+        re-fit a plate whose source had been swapped underneath it, and the producer alone
+        would leave a plate re-fitted on a layer it no longer occupies.
+
+        `held` is deliberately NOT part of this comparison. A held plate IS seated; that is
+        the whole point of holding it, and all coming back costs is the fit and its volume.
+
+        ⚠ Asked ONLY under `'live'`. A take re-asserts unconditionally — see the mode note
+        on {@link reconcileLivePlates}: the ledger cannot tell a healthy producer from one
+        the server has destroyed, so the repair verb must send rather than reason.
+      */
+      const seatUnchanged =
+        mode === 'live' &&
+        prior !== undefined &&
+        key(prior) === key(placement) &&
+        prior.producer === producer;
+
+      const record: LiveLayerRecord = {
         slot: placement.slot,
         sourceId: placement.plateId,
         // `'fill'` for every producer form this change can seat. A fill+key PAIR is
         // two layers and is C-021's, blocked on hardware — the role is recorded
         // rather than assumed so the ledger is already shaped for it.
         role: 'fill',
-        producer: this.#builder.sourceArgument(placement.producer),
+        producer,
         fill: placement.fit.fill,
         clip: placement.fit.clip,
+        // `??`, never `||`: a plate whose recorded intent IS 0 must resolve to 0
+        // rather than falling through to the default that happens to equal it —
+        // the two agree today, and a future non-zero default would make the bug
+        // appear in a line nobody edited.
         intendedVolume: intent[placement.plateId] ?? CREATED_MUTED_VOLUME,
-      });
-      const lines = [
-        this.#builder.playSource(placement.slot, placement.producer),
-        this.#builder.mixerVolume(
-          placement.slot,
-          // `??`, never `||`: a plate whose recorded intent IS 0 must resolve to 0
-          // rather than falling through to the default that happens to equal it —
-          // the two agree today, and a future non-zero default would make the bug
-          // appear in a line nobody edited.
-          intent[placement.plateId] ?? CREATED_MUTED_VOLUME,
-        ),
-        ...this.#builder.mixerFit(placement.slot, placement.fit),
-      ];
+      };
+
+      const lines: string[] = [];
+      if (seatUnchanged && prior !== undefined) {
+        // 6.4 — THE FIT, RE-DERIVED PER LOOK. Emitted only when the geometry actually
+        // moved, so an unchanged plate costs the wire nothing; but when it moved this is
+        // the ONLY thing that moves it, and getting it wrong is a wrong CROP on a picture
+        // that is otherwise perfectly on air — `MIXER FILL` survives a producer swap, so
+        // nothing downstream would correct it and nothing would look broken.
+        if (!same(prior.fill, record.fill) || !same(prior.clip, record.clip)) {
+          lines.push(...this.#builder.mixerFit(placement.slot, placement.fit));
+        }
+        // A plate coming back from HELD was muted by the hold, so its intent has to be
+        // re-asserted or a deliberately-raised source returns silent — the same fault
+        // 6.9c names for the swap, arriving by the look switch instead.
+        if (prior.held === true) {
+          lines.push(this.#builder.mixerVolume(placement.slot, record.intendedVolume));
+        }
+      } else {
+        lines.push(
+          this.#builder.playSource(placement.slot, placement.producer),
+          this.#builder.mixerVolume(placement.slot, record.intendedVolume),
+          ...this.#builder.mixerFit(placement.slot, placement.fit),
+        );
+        touched.push(record);
+      }
+
+      next.push(record);
       for (const line of lines) {
         // Urgent lane: seating runs inside a take, and a take does not queue
         // behind a load.
         const sent = await this.#send(line, this.#nextSeq(), 'urgent');
         if (sent.ok) continue;
         failure = sent.errorCode ?? 'amcp-error';
+        failedPlate = { record, prior };
         break;
       }
       if (failure !== undefined) break;
     }
 
-    const key = (record: LiveLayerRecord): string => adoptionKey(record.slot);
-
     if (failure !== undefined) {
-      for (const record of touched) {
-        await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
-        await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
+      if (mode === 'take') {
+        for (const record of touched) {
+          await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
+          await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
+        }
+        const rolledBack = new Set(touched.map(key));
+        this.registerLiveLayers(
+          itemId,
+          previous.filter((record) => !rolledBack.has(key(record))),
+        );
+        return { ok: false, errorCode: failure };
       }
-      const rolledBack = new Set(touched.map(key));
+      /*
+        LIVE — undo the ONE plate that failed and leave every other plate exactly as
+        it is. The row is on air; blacking working boxes to punish a failing one is the
+        opposite of what the operator needs in that minute.
+
+        Destructive ONLY for a plate this action created. A failed REPLACE left the previous
+        producer on the layer (no CLEAR precedes a `PLAY` here — `B-126`), so the honest
+        ledger entry is the PRIOR record: the layer carries what it carried before, and the
+        caller reports that nothing was cleared.
+      */
+      const failed = failedPlate;
+      if (failed !== undefined && failed.prior === undefined) {
+        await this.#send(this.#builder.out(failed.record.slot), this.#nextSeq(), 'urgent');
+        await this.#send(this.#builder.mixerClear(failed.record.slot), this.#nextSeq(), 'urgent');
+      }
+      const settled = next
+        .filter((r) => failed === undefined || r.sourceId !== failed.record.sourceId)
+        .concat(failed?.prior === undefined ? [] : [failed.prior]);
+      const seatedNow = new Set(settled.map((r) => r.sourceId));
       this.registerLiveLayers(
         itemId,
-        previous.filter((record) => !rolledBack.has(key(record))),
+        settled.concat(previous.filter((r) => !seatedNow.has(r.sourceId))),
       );
       return { ok: false, errorCode: failure };
     }
 
-    this.registerLiveLayers(itemId, touched);
+    /*
+      §12.4 / 6.5 — THE RELEASE POLICY, for every plate the desired set does not place.
 
-    // A layer this item owned and no longer does — its template was re-imported
-    // with fewer plates, or a plate's hole moved off-frame. It is ours, it still
-    // has our producer on it, and nothing else will ever come for it: the ledger
-    // no longer names it, so teardown will not reach it and the R-009 sweep will
-    // not reclaim it (it is not an orphan; it is ours). Cleared LAST, after the
-    // ledger already names the layers that must survive.
-    const seated = new Set(touched.map(key));
+      HELD by default: the producer stays seated on its band layer, muted and idle, so
+      switching back is a cut. It stops being VISIBLE because the page stops punching its
+      hole — a different mutation on a different machine, which is why the record survives
+      with `held` set rather than being dropped.
+
+      The fallback is NAMED and OBSERVABLE rather than implicit (`releaseLivePlate`), and it
+      splits on two independent axes: a plate the template no longer DECLARES has no look
+      that could bring it back, and a `media` clip cannot be held idle because it would run
+      to its end and come back black.
+    */
+    const placed = new Set(placements.map((p) => p.plateId));
+    const releases: LivePlateRelease[] = [];
     for (const record of previous) {
-      if (seated.has(key(record))) continue;
+      if (placed.has(record.sourceId)) continue;
+      const release = releaseLivePlate({
+        itemId,
+        plateId: record.sourceId,
+        producer: resolved.get(record.sourceId),
+        stillDeclared: resolved.has(record.sourceId),
+        offFrame: offFrame.has(record.sourceId),
+      });
+      releases.push(release);
+      if (release.disposition !== 'held') continue;
+      next.push({ ...record, held: true });
+      // Mute on the way out, once — a plate held across two switches must not re-send it —
+      // and unconditionally under a take, which re-asserts every layer it owns for the
+      // repair reason above.
+      if (record.held !== true || mode === 'take') {
+        await this.#send(
+          this.#builder.mixerVolume(record.slot, CREATED_MUTED_VOLUME),
+          this.#nextSeq(),
+          'urgent',
+        );
+      }
+    }
+
+    this.registerLiveLayers(itemId, next);
+
+    /*
+      THE ONE SWEEP THAT CLEARS. A layer this item owned and no longer does — torn down by
+      the policy above, or left behind because a plate moved to a different layer (a
+      re-imported template, a re-declared band). It is ours, it still has our producer on
+      it, and nothing else will ever come for it: the ledger no longer names it, so teardown
+      will not reach it and the R-009 sweep will not reclaim it (it is not an orphan; it is
+      ours). Cleared LAST, after the ledger already names the layers that must survive.
+
+      🔴 Keyed on the SLOT, not on the plate, and that is what makes it total: hold, teardown
+      and a layer move all reduce to "is this coordinate still in the ledger", so no
+      disposition can invent a fourth way to leave a producer stranded.
+    */
+    const kept = new Set(next.map(key));
+    for (const record of previous) {
+      if (kept.has(key(record))) continue;
       await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
       await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
     }
+    // Announced AFTER the wire and the ledger agree, so a subscriber that reads the ledger
+    // on this event sees the state the sentence describes.
+    for (const release of releases) this.livePlateReleased.emit(release);
     return { ok: true };
   }
 
@@ -3647,98 +4101,51 @@ export class CasparRuntime {
       };
     }
 
-    // Resolve the plate exactly as a take would, through the ONE resolver, with
-    // the prospective override applied. A swap that resolved plates its own way
-    // would be a second spelling of "which producer is behind this hole".
-    const resolved = resolvePlateAssignments({
-      templateId,
-      declarations: [declaration],
-      assignments: this.#sourceAssignments,
-      catalog: this.#sourceCatalog,
-      overrides: next,
-    });
-    if (!resolved.ok) {
-      return { ok: false, reason: resolved.errorCode, message: resolved.message };
-    }
-    const plate = resolved.plates[0];
-    if (plate === undefined) return { ok: false, reason: 'unknown-plate' };
+    /*
+      🔴 §4 / 6.3 — THE SWAP IS A CALLER OF THE ONE RECONCILE, NOT A PEER OF IT.
 
-    // 6.9b — the fit re-derives, refusal included: a substitution the author's
-    // `expectedAspect` contradicts is refused rather than silently cropping.
-    const aspect = resolvePlateAspect({
-      plateId,
-      source: plate.source,
-      expectedAspect: declaration.expectedAspect,
+      This method used to resolve, fit, `PLAY`, re-assert and re-ledger one plate itself,
+      beside a seating path that did the same for all of them. Its own comment argued
+      against exactly that shape one level down — a swap that resolved plates its own way
+      would be a second spelling of "which producer is behind this hole" — and `design.md`
+      §4 applies the argument one level up: the layout switch must not become a third path
+      either, so all three go through `reconcileLivePlates`.
+
+      Everything the old body did survives, because the reconcile does it for every plate:
+      the resolution through `resolvePlateAssignments` WITH this override, the fit
+      re-derived from §3a's chain (6.9b), the plate's audio intent re-asserted onto the new
+      producer (6.9c), the ledger rewritten from what was actually sent — and the REPLACE
+      with no `CLEAR` in front of it, which under the reconcile is simply what "the seat
+      changed" means (`B-126`). The neighbours are untouched because their seats did not
+      change, not because this method walks around them.
+
+      THE OVERRIDE IS WRITTEN FIRST, AND ROLLED BACK ON REFUSAL. The resolver reads
+      `#sourceOverrides`, so the prospective value has to be in place for the reconcile to
+      resolve through it — and the contract this method has always kept is that a refused
+      swap records nothing. Written through the raw map rather than `#applySourceOverride`
+      so a refusal never publishes a substitution that did not happen.
+    */
+    const restore = this.#sourceOverrides.get(itemId);
+    if (Object.keys(next).length === 0) this.#sourceOverrides.delete(itemId);
+    else this.#sourceOverrides.set(itemId, next);
+
+    const reconciled = await this.reconcileLivePlates(itemId, this.#desiredPlateRects(itemId), {
+      // The row is ON AIR — this method's whole reason for existing. A failure must not
+      // black the plates that are working; see {@link reconcileLivePlates}.
+      mode: 'live',
     });
-    if (!aspect.ok) return { ok: false, reason: aspect.errorCode, message: aspect.message };
-    const fit = this.liveSourceFitFor({
-      channel: record.slot.channel,
-      itemId,
-      rect: declaration.rect,
-      sceneResolution: template?.liveSources?.resolution ?? { width: 1920, height: 1080 },
-      carriedDefaultPosition: template?.liveSources?.defaultPosition,
-      sourceAspect: aspect.aspect,
-    });
-    const clip = fit.clip;
-    if (clip === null) {
+    if (!reconciled.ok) {
+      if (restore === undefined) this.#sourceOverrides.delete(itemId);
+      else this.#sourceOverrides.set(itemId, restore);
       return {
         ok: false,
-        reason: 'off-frame',
-        message: `Plate "${plateId}" is outside the frame, so there is nothing to swap.`,
-      };
-    }
-
-    // THE REPLACE. No CLEAR precedes it — see the note above.
-    const played = await this.#send(
-      this.#builder.playSource(record.slot, plate.source.producer),
-      this.#nextSeq(),
-      'urgent',
-    );
-    if (!played.ok) {
-      // The previous producer is still on the layer and the ledger still names it.
-      // Nothing about this row changed, which is what makes the refusal honest.
-      return {
-        ok: false,
-        reason: played.errorCode ?? 'amcp-error',
+        reason: reconciled.errorCode ?? 'amcp-error',
         message:
+          reconciled.message ??
           `CasparCG refused the substitution, so plate "${plateId}" is still on its previous ` +
-          `source. Nothing was cleared.`,
+            `source. Nothing was cleared.`,
       };
     }
-    // 6.9c — the plate's intent, re-asserted onto the NEW producer, which was born
-    // muted like every other. Best effort, exactly as `take()`'s re-assert is: a
-    // volume refusal must not undo a substitution that already landed.
-    await this.#send(
-      // 6.5f — from the INTENT map, not from the ledger's as-sent copy. They agree
-      // whenever the last assertion landed; where they differ, the intent is what
-      // the operator asked for and the ledger is what a failed command left behind.
-      // Re-asserting the ledger would make one failed send permanent.
-      this.#builder.mixerVolume(
-        record.slot,
-        this.#plateVolumes.get(itemId)?.[plateId] ?? record.intendedVolume,
-      ),
-      this.#nextSeq(),
-      'urgent',
-    );
-    for (const line of this.#builder.mixerFit(record.slot, { fill: fit.fill, clip })) {
-      await this.#send(line, this.#nextSeq(), 'urgent');
-    }
-
-    // The ledger records what was SENT, on the SAME slot — one record replaced in
-    // place, its neighbours untouched.
-    this.registerLiveLayers(
-      itemId,
-      (this.#liveLayers.get(itemId) ?? []).map((r) =>
-        r.sourceId === plateId
-          ? {
-              ...r,
-              producer: this.#builder.sourceArgument(plate.source.producer),
-              fill: fit.fill,
-              clip,
-            }
-          : r,
-      ),
-    );
     this.#applySourceOverride(itemId, next);
     return { ok: true };
   }
@@ -4723,6 +5130,10 @@ export class CasparRuntime {
     // 6.5f — and the audio intent. A re-used itemId inheriting a RAISED plate is
     // the worst of the three: it puts a microphone on air that nobody asked for.
     this.#plateVolumes.delete(itemId);
+    // §14 (LOOKS) phase 3 — and the active look, by the same rule as the three above: a
+    // re-used itemId must enter its template's AUTHORED default, never the look some
+    // earlier row happened to leave behind.
+    this.#activeLooks.delete(itemId);
     // B-092 — a restore awaiting its occupancy decision dies with the item too:
     // the operator removed it, so there is nothing left to adopt or re-ADD (the
     // urgent CLEAR below is the removal's own, and it is unconditional).

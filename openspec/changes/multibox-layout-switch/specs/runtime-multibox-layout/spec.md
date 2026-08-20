@@ -126,6 +126,20 @@ resolved plates its own way would be a second spelling of "which producer is beh
 the two would eventually disagree about a plate that is on air — the argument the existing
 `swapLiveSource` already makes for itself, applied one level up.
 
+Under LOOKS (§14) the reconcile's INPUT is the active look's `{routeKey → rect}` map. A source
+ABSENT from that map is absent from the look: the carrier never emits a zero-area rect, so absence
+is the only spelling of "not shown here" and is what triggers the release rule below.
+
+A plain look switch SHALL re-seat NO producer. A `PLAY` creates a fresh producer, and a live input
+re-acquires visibly, so a switch that re-seated would produce exactly the re-acquire the held-source
+rule exists to avoid. Only plates whose SEAT has changed — a different layer, or a different
+producer — may be played; every other plate receives its new geometry and nothing else.
+
+A TAKE is the same reconcile against an empty prior set, with two differences that both follow from
+the single fact that the row is not yet on air: it re-asserts every plate (a re-take is the
+operator's repair verb, and the ledger is a claim rather than a confirmation), and a failure rolls
+back every layer it touched rather than only the plate that failed.
+
 For every mutation the reconcile performs — the plate set, the punch mask, the fit, and the layer
 allocation — the corresponding INVERSE SHALL exist and be exercised by a test.
 
@@ -139,6 +153,29 @@ allocation — the corresponding INVERSE SHALL exist and be exercised by a test.
 - **WHEN** a layout switch removes a plate from the active layout
 - **THEN** the hole that plate punched is removed in the same change, so nothing below shows
   through where the plate used to be
+
+#### Scenario: A plain look switch issues no re-seat
+
+- **GIVEN** a row on air whose template authors several looks
+- **WHEN** the operator switches to a look that shows a different set of sources
+- **THEN** no `PLAY` is issued for any plate whose layer and producer are unchanged, and the layer
+  allocation is identical before and after
+
+#### Scenario: The fit is re-derived per look
+
+- **GIVEN** a source whose box has a different size in the target look
+- **WHEN** the look becomes active
+- **THEN** that plate's `FILL` and `CLIP` are recomputed for the new box, so a change of box
+  aspect changes the crop rather than leaving the previous look's crop on a picture that still
+  renders
+
+#### Scenario: A failure mid-switch leaves the working plates alone
+
+- **GIVEN** a row on air, and a look that brings in a source that will not play
+- **WHEN** the switch is applied
+- **THEN** the switch is refused, only the plate that failed is undone, and every plate that was
+  already on air keeps its producer — while the same failure during a TAKE rolls the whole row back,
+  because a half-placed layer is worse on air than a black one
 
 #### Scenario: Every mutation has an enumerated inverse
 
@@ -214,6 +251,15 @@ A live source whose box does not exist in the target layout SHALL be **held mute
 than torn down, so switching back is immediate. Its producer stays seated on its live-source band
 layer while its plate stops punching a hole.
 
+SEAT and PUNCH are separate mutations, on separate machines, and the held state SHALL be
+representable as such: the bridge keeps the producer seated and records that the plate is not on
+screen, while the page stops punching that plate's hole. A consequence is that a look switch never
+frees a band layer, so the declared band must hold every DECLARED source rather than the largest
+single look.
+
+A plate the template NO LONGER DECLARES SHALL be torn down rather than held: no look can bring it
+back, so holding it would strand a producer that neither teardown nor the orphan sweep will reach.
+
 Where a source kind cannot be held open, the fallback to teardown SHALL be a **named, observable
 behaviour** — never a silent difference. An operator whose switch-back is not immediate SHALL be
 able to see that the source was released rather than held, so the inconsistency does not read as a
@@ -231,6 +277,13 @@ fault in the switch.
 - **WHEN** the operator switches to a layout without that box
 - **THEN** the source is torn down and that is surfaced, rather than the switch-back silently taking
   longer than it does for every other source
+
+#### Scenario: A media clip is the kind that cannot be held
+
+- **GIVEN** a plate assigned to a media clip, and a neighbouring plate assigned to a live input
+- **WHEN** the operator switches to a look showing neither
+- **THEN** the live input is held while the clip is torn down and announced with its reason, because
+  a clip held across a look runs to its end and would come back black
 
 ### Requirement: The operator's primitive is ONE TOGGLE PER DECLARED SOURCE; the COUNT is derived
 
