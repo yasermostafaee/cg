@@ -547,6 +547,15 @@ export class MockRuntime {
         message: `This template has no look called "${lookId}".`,
       };
     }
+    /*
+      `tasks.md` 7.9 — the bridge records the look only once the PAGE has been told, so that a
+      refused switch leaves nothing for a later `swapLiveSource` to act on. This is the same
+      rule, arriving at the same place from the other end: the offline mock has no wire and no
+      served page, so there is nothing that can disagree and recording IS the whole action.
+      ⚠ Do NOT "restore parity" by adding refusal handling here — there is no refusal to
+      handle, and inventing one would make the mock model a failure the offline path cannot
+      have.
+    */
     this.#activeLooks.set(itemId, lookId);
     this.#emitStack();
     return { ok: true };

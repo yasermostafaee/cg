@@ -437,11 +437,20 @@ would go to air empty. **Having no look group and having a group with no looks S
 distinguishable**, because the first describes every template authored before looks existed and
 refusing those would take an installation's whole existing rundown off air.
 
-Switching SHALL drive one path: the look is recorded, the seated live sources are reconciled
-against that look's geometry, and the page is told which look on the same payload that carries its
-data — so the holes it punches and the fills behind them are one computation. The page SHALL be
-told only after the reconcile succeeds, so a refused switch leaves the previous look intact rather
-than painting new holes over producers at the old geometry.
+Switching SHALL drive one path: the seated live sources are reconciled against the chosen look's
+geometry, the page is told which look on the same payload that carries its data, and only then is
+the look recorded — so the holes it punches and the fills behind them are one computation. The page
+SHALL be told only after the reconcile succeeds, so a refused switch leaves the previous look intact
+rather than painting new holes over producers at the old geometry.
+
+**A REFUSED SWITCH SHALL LEAVE NOTHING BEHIND.** The record of which look a row is on is what every
+later reconcile resolves its geometry from — including a source swap, which changes one plate and
+tells the page nothing. A look recorded but never delivered to the page is therefore not an inert
+note of intent; it is the geometry the next unrelated action will seat. So the record SHALL name the
+look the PAGE IS PUNCHING and nothing else: it SHALL be written only where that is true, which is
+when the page has been successfully told, or when there is no page yet and the next build will enter
+that look from its own payload. A refused switch SHALL leave the row on the look it is showing, and
+the control SHALL go on marking that look rather than the one that did not happen.
 
 The switch SHALL be a cut, and therefore SHALL itself be the immediate action: v1 offers no other
 transition mode, so there is no mode to choose and none to escape.
@@ -479,6 +488,13 @@ is on air now.
 - **GIVEN** one look showing two sources and another showing two entirely different ones
 - **WHEN** the operator switches between them
 - **THEN** the departing sources are held and the arriving ones are shown, each on its own layer
+
+#### Scenario: A refused switch does not move a later source swap
+
+- **GIVEN** a row on air whose switch to another look was refused
+- **WHEN** the operator later re-points one source, an action that mentions no look
+- **THEN** only that source's producer changes, every other box stays where the page is punching
+  its hole, and the row is still on the look it was showing
 
 #### Scenario: A preset applies on the switch, not before
 

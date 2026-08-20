@@ -734,26 +734,58 @@ candidate shapes.
 > discharge only because the run that discharges it is a COMPLETED GREEN one whose e2e job RAN;
 > the red attempt is recorded rather than hidden.**
 
-- [ ] 7.9 🔴 **OPEN — A REFUSED SWITCH LEAVES AN INTENT THAT A LATER SWAP COMPLETES WITHOUT
-      TELLING THE PAGE.** Found by reviewing Stage E (session BH), **not fixed there**, and
-      flagged rather than changed because the fix alters an ON-AIR verb (`R-048`).
-      **The mechanism, exactly.** `setActiveLook` records the look BEFORE the reconcile and
-      KEEPS it when the reconcile refuses — BC’s deliberate decision, and a defensible one:
-      _“the look is what the operator asked this row to show; a failed AMCP send is a fact
-      about the wire.”_ But `swapLiveSource` then reconciles against
-      `#desiredPlateRects(itemId)`, which resolves from that SAME recorded look — and
-      `swapLiveSource` never sends `updateLook`. So: a switch is refused (disconnected, say),
-      the operator is told; later they swap one source; the FILLS move to the new look while
-      the page is still punching the OLD look’s holes. A designed layout with the boxes in the
-      wrong holes, arriving from an action that never mentioned looks.
-      **Why it is Stage E’s to file.** The sequence was unreachable before the picker:
+- [x] 7.9 ✅ **FIXED AT CAUSE (2026-08-21, session BI) — A REFUSED SWITCH NOW LEAVES NOTHING.**
+      Found by reviewing Stage E (session BH), fixed here on the owner's ruling _"fix it at
+      cause, even if that changes `R-048`'s shipped on-air behaviour"_.
+      **The mechanism was reported correctly** — verified against the code before touching it:
+      `setActiveLook` wrote `#activeLooks` before the reconcile and kept the write through
+      every refusal; `#desiredPlateRects` resolves from that map; `swapLiveSource` reconciles
+      against `#desiredPlateRects` and sends no `updateLook`.
+      **THE FIX — one writer, and the write is a side effect of the telling.** `#activeLooks`
+      is no longer "what the operator asked for" but **"which look the page is punching"**, and
+      the only ways to write it are `#tellPageLook` (the record happens after, and only after,
+      the `CG UPDATE` lands) and the two cases where there is no page to disagree — an off-air
+      row with nothing seated, and a row whose producer is gone, both of which re-enter through
+      `#sendAdd`, which puts the look in the `CG ADD` payload unconditionally. The prospective
+      look now travels as an ARGUMENT (`#desiredPlateRects(itemId, look)`) instead of through
+      shared mutable state, so a refused switch has nothing to roll back — there is no rollback
+      to forget at the next call site.
+      🔴 **`R-048` IS UNCHANGED, and that is the finding rather than a shortcut.** The
+      anticipated fix — make `swapLiveSource` carry an `updateLook` too — was considered and
+      REJECTED at the site, in a comment: it treats the symptom (the swap reads state that can
+      no longer be wrong), and it would put a new failure mode on the emergency verb, which
+      would have to either fail a swap that succeeded or ignore a send — the seed of the next
+      divergence. The cause was upstream of `R-048` the whole time.
+      **The sweep (§2.4): `setActiveLook` was the ONLY write-before-refuse path in the file.**
+      Both take-door refusals (exclusivity, no-looks-authored) and both restore-door refusals
+      refuse before mutating anything; `setPosition` and `setPlateVolume` refuse before writing;
+      `swapLiveSource` writes `#sourceOverrides` early but explicitly rolls back. So the rule
+      was kept everywhere except here — this was the deviation, not the pattern.
+      **Superseded text replaced, not left standing:** the assertion in
+      `live-look-reconcile.integration.test.ts` that "the look stands" after a failed switch now
+      asserts the opposite with the reason; `setActiveLook`'s header no longer claims the page
+      transport does not exist (6.7 landed it); that file's header no longer says the same; and
+      `LookPicker`'s re-press note is re-argued — a re-press is now the REPAIR for a switch
+      whose `CG UPDATE` was refused, because it reconciles the fills back onto the look the
+      holes are on.
+      Tests: three in `live-look-reconcile.integration.test.ts`, all mutation-checked (restoring
+      the old write reddens each — and the swap in the first one fails outright with `amcp-404`,
+      which is the defect itself).
+      **What the defect looked like, kept as history.** `setActiveLook` USED TO record the look
+      before the reconcile and keep it when the reconcile refused — BC’s deliberate decision,
+      and a defensible-sounding one: _“the look is what the operator asked this row to show; a
+      failed AMCP send is a fact about the wire.”_ The argument was wrong about what the map IS.
+      A switch was refused (disconnected, say) and the operator was told; later they swapped one
+      source; the FILLS moved to the refused look while the page went on punching the OLD look’s
+      holes — a designed layout with the boxes in the wrong holes, arriving from an action that
+      never mentioned looks. ⚠ The argument’s other half — _“rolling the intent back would leave
+      the next take entering the OLD look with nothing anywhere saying why”_ — INVERTS once the
+      picker exists: the segment not moving is the loudest possible statement that the switch did
+      not happen, and it was the OLD behaviour that said nothing, marking a look the air had never
+      entered.
+      **Why it was Stage E’s to file.** The sequence was unreachable before the picker:
       `setActiveLook` had no operator caller at all, so no one could refuse a switch and then
-      swap. The picker makes it reachable.
-      **The shape of the fix, for the owner to rule on.** §6/§12.2 already states the rule this
-      breaks — _the hole the page punches and the hole the bridge fills are ONE computation_ —
-      so the candidate is: any reconcile that resolves against the active look also tells the
-      page that look, which would make `swapLiveSource` carry an `updateLook` too. That is a
-      change to a shipped on-air verb and wants a deliberate decision, not a session-end patch.
+      swap. The picker made it reachable.
 
 ## 7. STAGE F — the CUT ships. STAGE G — the transition modes (§13.5)
 

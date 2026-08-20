@@ -1858,6 +1858,14 @@ export class CasparRuntime {
         whatever the page is already showing, so without this the row would publish the
         default while the page shows the chosen look — the picker asserting something that
         is not on air.
+
+        ⚠ **This is the deliberate third writer of `#activeLooks`** ({@link #recordActiveLook}
+        names the other two, and `7.9` is why they are counted). It writes the map directly and
+        is entitled to: the value was PUBLISHED, and a look is published only once the page was
+        told it, so re-applying it restates a fact rather than asserting a new one. It is also
+        why this must stay a re-apply and never become a fresh `setActiveLook` call — that
+        would send a `CG UPDATE` to a page mid-restore, before the adopt-vs-re-ADD decision has
+        worked out whether there is a producer to send it to.
       */
       if (item.activeLookId !== undefined) {
         this.#activeLooks.set(item.itemId, item.activeLookId);
@@ -3819,33 +3827,115 @@ export class CasparRuntime {
    * ⚠ A source ABSENT from the returned map is absent from the look. `collectLookCarrier`
    * guarantees the carrier never emits a zero-area rect for a hidden plate, so absence is
    * the only spelling and the reconcile can read it without ambiguity.
+   *
+   * 🔴 **`look` OVERRIDES the recorded one, and exists for exactly one caller: `setActiveLook`,
+   * resolving the rects of a look it has NOT yet recorded (`tasks.md` 7.9).** Defaulted rather
+   * than required so every other caller keeps asking the same question it always asked. Note
+   * what this parameter is NOT: a licence to seat a look the page was not told about. It is the
+   * opposite — it is what lets the switch resolve a PROSPECTIVE look without writing it down,
+   * so a refused switch leaves nothing behind for a later reconcile to spread.
    */
-  #desiredPlateRects(itemId: string): Record<string, LiveSourceRect> {
+  #desiredPlateRects(
+    itemId: string,
+    look: TemplateLook | undefined = this.#activeLookOf(itemId),
+  ): Record<string, LiveSourceRect> {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     const carrier = this.#templates.get(templateId)?.liveSources;
     if (carrier === undefined) return {};
-    const look = this.#activeLookOf(itemId);
     if (look !== undefined) return { ...look.rects };
     return Object.fromEntries(carrier.sources.map((s) => [s.sourceId, s.rect] as const));
+  }
+
+  /**
+   * 🔴 **`tasks.md` 7.9 — WRITE "which look this row is on", and the ONE precondition for
+   * calling it: THE PAGE ALREADY AGREES.**
+   *
+   * `#activeLooks` is read by `#desiredPlateRects`, which is what every reconcile — the take,
+   * the switch, **and `swapLiveSource`** — resolves its rects from. So the map is not a record
+   * of what the operator ASKED for; it is a record of **which look's holes the page is
+   * punching**, and every write has to be able to justify that claim. There are exactly two
+   * ways to earn it, and they are the only call sites:
+   *
+   *   1. {@link #tellPageLook} succeeded — the page was told, in so many words;
+   *   2. there is no page to disagree — an off-air row with nothing seated, or a row whose
+   *      producer is gone. Both re-enter through `#sendAdd`, which puts `#activeLookOf` in the
+   *      `CG ADD` payload unconditionally, so the next build enters this look by construction.
+   *
+   * The restore path writes the map directly and is the deliberate third case: it re-applies a
+   * look that was published — therefore already told — before the bridge restarted.
+   */
+  #recordActiveLook(itemId: string, lookId: string): void {
+    this.#activeLooks.set(itemId, lookId);
+    /*
+      🔴 **PUBLISH IT. `stackSnapshot()` being correct is NOT the same as a browser knowing.**
+
+      `#published()` recomputes the look on every read, so a PULL was always right — which is
+      exactly why this was easy to miss and why the test that first covered it (reading
+      `stackSnapshot()`) passed while the console would have been stuck. The browser learns
+      about item state ONLY from `stackChanged`, and `#markDirty` is the one thing that emits
+      it. Without this line an operator presses a look, the fills move on air, and the picker
+      goes on marking the OLD one until some unrelated change happens to publish.
+
+      ⚠ The offline mock had it right from the start (`setActiveLook` → `#emitStack()`), which
+      inverted the usual risk: the mock was MORE correct than the bridge, so the E2E passed too.
+      A parity test is not a substitute for asking whether the real path publishes.
+    */
+    this.#markDirty(itemId);
+  }
+
+  /**
+   * 🔴 **`tasks.md` 6.7 / 7.9 — TELL THE PAGE WHICH LOOK TO PUNCH, and record it IF AND ONLY IF
+   * the telling landed.**
+   *
+   * The two used to be separate statements at one call site, and that is the whole of `7.9`:
+   * the record was written first and kept through every refusal, so a switch the wire never
+   * performed still moved `#desiredPlateRects` — and the next reconcile from ANY caller
+   * (`swapLiveSource`, in the report that found it) seated the new look's fills behind the old
+   * look's holes. Nobody had asked for a look change; the fills moved anyway.
+   *
+   * Fusing them is what makes that unrepresentable rather than merely unlikely. The record is a
+   * SIDE EFFECT of the successful send, so there is no second statement for a future caller to
+   * forget, no rollback to remember, and no window in which the map claims a look the page has
+   * not been given. `design.md` §6/§12.2 — the hole the page punches and the hole the bridge
+   * fills are ONE computation — now holds by construction of the writer rather than by the
+   * discipline of each caller.
+   *
+   * ⚠ Bounded by the same B-070 rule `update()` states: `CG UPDATE` needs a live PRODUCER, and
+   * real CasparCG 403s it on an empty layer. A row whose producer was destroyed has no page to
+   * tell, which is case 2 of {@link #recordActiveLook} and is handled by the caller.
+   */
+  async #tellPageLook(
+    itemId: string,
+    slot: CommandSlot,
+    lookId: string,
+  ): Promise<{ ok: boolean; errorCode?: string }> {
+    const told = await this.#send(
+      this.#builder.updateLook(slot, lookId),
+      this.#nextSeq(),
+      'urgent',
+    );
+    if (!told.ok)
+      return { ok: false, ...(told.errorCode !== undefined && { errorCode: told.errorCode }) };
+    this.#recordActiveLook(itemId, lookId);
+    return { ok: true };
   }
 
   /**
    * `multibox-layout-switch` §14.5 / `tasks.md` 6.1 — **SWITCH A ROW TO A DIFFERENT LOOK,
    * while it is on air.**
    *
-   * The bridge half of the switch, and the door stage E's look picker calls. It records
-   * which look the row is showing and reconciles the live plates against that look's
-   * rects — holes and fits move, seats do not (see {@link reconcileLivePlates}).
+   * The door stage E's look picker calls. A look switch is TWO mutations on two machines:
+   * the bridge moves the producers' `MIXER FILL`/`CLIP` (the reconcile), and the PAGE flips
+   * which look's instance is visible and re-punches its holes (`@cg/template-runtime`'s own
+   * `setActiveLook`). Both halves are here, in that order, and the transport between them is
+   * the reserved `__cg` key on a `CG UPDATE` (`tasks.md` 6.7 — this method's header used to
+   * say the transport did not exist, which stopped being true when 6.7 landed).
    *
-   * ⚠ **THE PAGE'S HALF IS NOT WIRED YET, AND THIS METHOD DOES NOT PRETEND OTHERWISE.**
-   * A look switch is TWO mutations on two machines: the bridge moves the producers'
-   * `MIXER FILL`/`CLIP` (here), and the PAGE flips which look's instance is visible and
-   * re-punches its holes (`@cg/template-runtime`'s own `setActiveLook`, landed in phase
-   * 1D). There is no transport between them — the served page learns nothing from a `CG
-   * UPDATE` today — so on the plant this call currently moves the fills while the page
-   * keeps punching the outgoing look's holes. Wiring that transport is its own decision
-   * (a reserved field in the update payload, and what a page that ignores it should do),
-   * and it belongs with the operator surface rather than being invented here.
+   * 🔴 **AND THE ORDER OF THE THIRD STEP — recording it — IS THE SUBJECT OF `tasks.md` 7.9.**
+   * The record is written by {@link #tellPageLook} as a side effect of the page being
+   * successfully told, never up front, so a refused switch leaves the row on the look it is
+   * genuinely showing. The long note at the old write site says why that reverses a decision
+   * this method shipped with; read it before moving the write back.
    *
    * An OFF-AIR item with nothing seated is a legal target, exactly as `swapLiveSource`'s
    * is: the look is recorded, nothing is sent, and the next take enters it. Deliberately not
@@ -3872,30 +3962,37 @@ export class CasparRuntime {
         message: `This template has no look called "${lookId}".`,
       };
     }
-    // Recorded BEFORE the reconcile, and it stays recorded even if the reconcile refuses.
-    // The look is what the operator asked this row to show; a failed AMCP send is a fact
-    // about the wire. Rolling the intent back would leave the next take entering the OLD
-    // look with nothing anywhere saying why.
-    this.#activeLooks.set(itemId, lookId);
     /*
-      🔴 **PUBLISH IT. `stackSnapshot()` being correct is NOT the same as a browser knowing.**
+      🔴 **NOTHING IS RECORDED HERE. `tasks.md` 7.9, and the reversal of a decision this method
+      shipped with — read the whole note before restoring the old spelling.**
 
-      `#published()` recomputes the look on every read, so a PULL was always right — which is
-      exactly why this was easy to miss and why the test that first covered it (reading
-      `stackSnapshot()`) passed while the console would have been stuck. The browser learns
-      about item state ONLY from `stackChanged`, and `#markDirty` is the one thing that emits
-      it. Without this line an operator presses a look, the fills move on air, and the picker
-      goes on marking the OLD one until some unrelated change happens to publish.
+      It used to write `#activeLooks` at this line, BEFORE the reconcile, and KEEP the write
+      through every refusal below, on a defensible-sounding argument: _"the look is what the
+      operator asked this row to show; a failed AMCP send is a fact about the wire."_ The
+      argument is wrong about what the map IS. `#desiredPlateRects` resolves from it, and
+      `swapLiveSource` reconciles against `#desiredPlateRects` — so an "intent" left here is
+      not inert. It is the DESIRED GEOMETRY of every later reconcile, and `swapLiveSource`
+      sends no `updateLook`. A switch refused at any door below therefore armed the next
+      source swap to seat the NEW look's fills behind the OLD look's holes: a designed layout
+      with the boxes in the wrong holes, arriving from an action that never mentioned looks.
 
-      ⚠ The offline mock had it right from the start (`setActiveLook` → `#emitStack()`), which
-      inverted the usual risk: the mock was MORE correct than the bridge, so the E2E passed too.
-      A parity test is not a substitute for asking whether the real path publishes.
+      That is precisely the crosstalk §14 exists to abolish, so the map's meaning is settled
+      the other way: **it records which look the PAGE is punching, and it is written only by
+      {@link #recordActiveLook}, whose two preconditions are stated on it.**
 
-      Recorded-then-published BEFORE the reconcile, deliberately: the picker should show what
-      the operator asked for the instant they ask, and the refusal below arrives as a toast if
-      the wire disagrees.
+      ⚠ **The old argument's remaining half — "rolling the intent back would leave the next
+      take entering the OLD look with nothing anywhere saying why" — INVERTS under the picker.**
+      There is now something saying why, and it is the loudest thing on the row: the segment
+      never moves. A refused switch leaves the picker marking the look that is genuinely on
+      air, and the refusal arrives as a toast. It was the OLD behaviour that said nothing —
+      the picker moved to a look the air had not entered, which is exactly the "on-air readout
+      that is not backed" defect Stage E fixed in two other places on this same row.
+
+      This is also simply the contract `swapLiveSource` has always kept, thirty lines of
+      comment apart: _"a refused swap records nothing."_ Two verbs on one row now answer a
+      refusal the same way, rather than two ways (golden rule 6's spirit — one rule, one
+      spelling).
     */
-    this.#markDirty(itemId);
     /*
       🔴 "IS THIS ROW ON AIR" IS ASKED OF THE STATUS, NOT OF THE LEDGER.
 
@@ -3918,19 +4015,36 @@ export class CasparRuntime {
     */
     const item = this.#reconciler.get(itemId);
     const onAir = item != null && isOnAirStatus(item.status, item.pending);
-    if (!onAir && (this.#liveLayers.get(itemId) ?? []).length === 0) return { ok: true };
+    if (!onAir && (this.#liveLayers.get(itemId) ?? []).length === 0) {
+      // Case 2 of `#recordActiveLook`: there is no page to disagree, and the next `CG ADD`
+      // carries this look into the build. Recording it IS the whole action.
+      this.#recordActiveLook(itemId, lookId);
+      return { ok: true };
+    }
     if (this.#noServerReachable()) {
       return {
         ok: false,
         reason: 'disconnected',
+        // 7.9 — it says the look was NOT changed, because now it was not. The old sentence
+        // ("the look was recorded but the live sources were not moved") described the very
+        // half-state this method no longer leaves behind.
         message:
-          'Not connected to CasparCG — the look was recorded but the live sources were not ' +
-          'moved. Reissue it once the server is back.',
+          'Not connected to CasparCG — the look was not changed, and nothing was queued. ' +
+          'Reissue it once the server is back.',
       };
     }
-    const reconciled = await this.reconcileLivePlates(itemId, this.#desiredPlateRects(itemId), {
-      mode: 'live',
-    });
+    /*
+      The PROSPECTIVE look, passed explicitly rather than read back out of a map this method
+      has deliberately not written (7.9). The rects the reconcile seats and the id the page is
+      told below are now the same `look` object travelling through one call, which is what
+      `design.md` §6/§12.2 asks for and what routing them through shared mutable state was
+      quietly costing.
+    */
+    const reconciled = await this.reconcileLivePlates(
+      itemId,
+      this.#desiredPlateRects(itemId, look),
+      { mode: 'live' },
+    );
     if (!reconciled.ok) {
       return {
         ok: false,
@@ -3965,23 +4079,30 @@ export class CasparRuntime {
 
       ⚠ Bounded by the same B-070 rule `update()` states: `CG UPDATE` needs a live PRODUCER,
       and real CasparCG 403s it on an empty layer. A row whose template producer was destroyed
-      has nothing to tell; the look is already recorded, and the next take's re-ADD path
-      re-asserts it.
+      has nothing to tell — case 2 of {@link #recordActiveLook} — so the look is recorded here
+      and the next take's re-ADD path carries it into the rebuilt page.
     */
-    if (!this.#loaded.has(itemId)) return { ok: true };
-    const told = await this.#send(
-      this.#builder.updateLook(slot, lookId),
-      this.#nextSeq(),
-      'urgent',
-    );
+    if (!this.#loaded.has(itemId)) {
+      this.#recordActiveLook(itemId, lookId);
+      return { ok: true };
+    }
+    const told = await this.#tellPageLook(itemId, slot, lookId);
     if (told.ok) return { ok: true };
     return {
       ok: false,
       reason: told.errorCode ?? 'amcp-error',
+      /*
+        7.9 — the LAST sentence is the one that changed, and it is a statement about state
+        rather than a nicety. The fills did move; the holes did not; and the row stays
+        RECORDED on the look the page is actually punching, so the next ordinary reconcile
+        (a source swap, a re-take) pulls the fills back to it instead of spreading the
+        half-switch. The picture is wrong until the operator re-issues, and it converges on
+        its own rather than waiting for them to.
+      */
       message:
         `the live sources moved to look "${lookId}", but CasparCG refused the command that ` +
-        `tells the graphic to switch — its holes are still on the previous look. Re-issue the ` +
-        `switch.`,
+        `tells the graphic to switch — its holes are still on the previous look, and the row ` +
+        `is still recorded on it. Re-issue the switch.`,
     };
   }
 
@@ -4635,6 +4756,30 @@ export class CasparRuntime {
     if (Object.keys(next).length === 0) this.#sourceOverrides.delete(itemId);
     else this.#sourceOverrides.set(itemId, next);
 
+    /*
+      🔴 **`tasks.md` 7.9 — THIS CALL IS WHERE THE DEFECT SURFACED, AND IT IS DELIBERATELY
+      UNCHANGED. Do not add an `updateLook` here.**
+
+      The reported shape was: a refused look switch left an intent behind, and this reconcile
+      — resolving from the same `#desiredPlateRects` — completed it, seating the new look's
+      fills while the page went on punching the old look's holes. The obvious repair is to
+      make the swap carry the look too, so both halves always move together. It was
+      considered and REJECTED, for two reasons:
+
+        - It treats the symptom. The divergence was created by `setActiveLook` recording a
+          look the page had not been given; with that write fused to the successful telling
+          (see {@link #tellPageLook}), `#activeLooks` names the look the page is punching at
+          all times, so this reconcile resolving from it is not merely safe — it is the only
+          thing that could be right.
+        - It would put a NEW failure mode on the emergency verb. R-048 exists for 20:59, one
+          input dead, one plate to repoint. A `CG UPDATE` appended to that would have to
+          either fail a swap that actually succeeded, or be ignored — and an ignored send is
+          the seed of the next divergence. The swap earns its coherence by reading state that
+          cannot be wrong, not by sending a second command to correct state that can.
+
+      So R-048's on-air behaviour is UNCHANGED by 7.9: a swap still sends exactly its own
+      producer's `PLAY` + `MIXER`, and still tells the page nothing.
+    */
     const reconciled = await this.reconcileLivePlates(itemId, this.#desiredPlateRects(itemId), {
       // The row is ON AIR — this method's whole reason for existing. A failure must not
       // black the plates that are working; see {@link reconcileLivePlates}.

@@ -36,9 +36,11 @@ import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
  *
  * **The PAGE's half of the switch.** A look switch is two mutations on two machines: the
  * bridge moves the producers' geometry (here) and the page flips which look's instance is
- * visible and re-punches its holes (`@cg/template-runtime`'s `setActiveLook`). There is no
- * transport between them yet — see `CasparRuntime.setActiveLook`'s note — so nothing in
- * this file asserts a punched hole. The bridge's own half of the mask IS asserted: `MIXER
+ * visible and re-punches its holes (`@cg/template-runtime`'s `setActiveLook`). The transport
+ * between them exists (`tasks.md` 6.7 — the look id on a `CG UPDATE`'s reserved key) and is
+ * asserted here as a COMMAND, but a command is not a hole: what a real page does with that
+ * payload is `looks-switch.test.ts`'s, and nothing in this file asserts a punched hole. The
+ * bridge's own half of the mask IS asserted: `MIXER
  * … CLIP` is the layer's mask, emitted from the same geometry as `FILL`, and every switch
  * test below asserts BOTH where the plate is SEATED (its layer, and whether a `PLAY` was
  * issued) and where its MASK is (the `CLIP` rect) — the two axes `tasks.md` 3.3 requires,
@@ -141,7 +143,9 @@ function look(id: string, rects: Record<string, LiveSourceRect>): TemplateLook {
  * them. `sources[].rect` is the source's rect in the DEFAULT look, which is what
  * `collectLookCarrier` emits and what a bridge that has not learned looks would seat.
  */
-function sixBoxTemplate(over: { looks?: TemplateLook[]; sources?: readonly string[] } = {}) {
+function sixBoxTemplate(
+  over: { looks?: TemplateLook[]; sources?: readonly string[]; defaultLookId?: string } = {},
+) {
   const keys = over.sources ?? ROUTE_KEYS;
   return {
     templateId: 'debate',
@@ -163,7 +167,7 @@ function sixBoxTemplate(over: { looks?: TemplateLook[]; sources?: readonly strin
         look('resized', RESIZED),
         look('empty', {}),
       ],
-      defaultLookId: 'six',
+      defaultLookId: over.defaultLookId ?? 'six',
     },
   } satisfies TemplateInfo;
 }
@@ -736,8 +740,19 @@ it('🔴 a failure mid-SWITCH blacks nothing that was working — only the faili
   // ledger: a `PLAY` that left this process may have made a producer, and a ledger that
   // did not name it would leave a live picture nobody owns.
   expect(recordOf(r, 'live-2')).toBeUndefined();
-  // …and the look stands, so the next take enters what the operator asked for.
-  expect(r.activeLookId('item-1')).toBe('both');
+  /*
+    🔴 **SUPERSEDED BY `tasks.md` 7.9 — this line used to assert `'both'`**, on the reasoning
+    that "the look stands, so the next take enters what the operator asked for". It does not
+    stand any more, and the reversal is the whole of 7.9: `#activeLooks` is what
+    `#desiredPlateRects` resolves from, so a look left recorded after a refusal is not a note
+    about the operator's wish — it is the geometry the NEXT reconcile will seat, from any
+    caller, including a `swapLiveSource` that never mentioned looks.
+
+    The page was never told `'both'` (the switch died before the `CG UPDATE`), so `'six'` is
+    the look whose holes are on air, and it is the only answer that keeps the fills and the
+    holes resolvable from one fact.
+  */
+  expect(r.activeLookId('item-1'), 'the page was never told "both"').toBe('six');
 });
 
 it('🔴 the TAKE keeps its all-or-nothing rollback — the graphic never plays half-placed', async () => {
@@ -1054,4 +1069,253 @@ it('🔴 the CG ADD payload carries the look too — a re-take cannot diverge fr
     readCgControl(dataArgOf(add as string, 'ADD'))?.look,
     'the page must enter the look the bridge seated',
   ).toBe('solo');
+});
+
+// ───────────── `tasks.md` 7.9 — A REFUSED SWITCH LEAVES NOTHING BEHIND ─────────────
+//
+// The defect, exactly: `setActiveLook` used to record the look BEFORE the reconcile and
+// KEEP it through every refusal. `#activeLooks` is what `#desiredPlateRects` resolves
+// from, and `swapLiveSource` reconciles against `#desiredPlateRects` and sends no
+// `updateLook` — so a refused switch armed the next, unrelated source swap to seat the NEW
+// look's fills behind the OLD look's holes. Nobody asked for a look change; the boxes moved
+// anyway, into the wrong holes.
+//
+// ⚠ **These boots go through `boot()`, which awaits `awaitChannelModeRead(r)`** before any
+// baseline is taken — flake family 3, and not optional: every "only its own work" assertion
+// below is an empty-slice assertion on the wire, which is vacuous from a wire that has not
+// been proven quiescent.
+//
+// 🔴 What these CANNOT prove is the same thing the file header already says: no unit test
+// photographs the SDI output. The claim proven here is the COMMAND SEQUENCE — which
+// producers moved, which geometry they took, and which look the page was told.
+
+/** A template whose second box can never play, so a switch to `both` refuses deterministically. */
+const brokenSecondBox = () =>
+  sixBoxTemplate({
+    sources: ['live-1', 'live-2'],
+    looks: [
+      look('six', { 'live-1': GRID['live-1'] as LiveSourceRect }),
+      look('both', {
+        // 🔴 `live-1` MOVES between the looks. Without that the defect is invisible: the
+        // wrong desired-set would resolve to the same geometry and nothing would be seen to
+        // go to the wrong place.
+        'live-1': GRID['live-3'] as LiveSourceRect,
+        'live-2': GRID['live-2'] as LiveSourceRect,
+      }),
+    ],
+  });
+
+const BROKEN_PAIR = assign([
+  ['live-1', 'src-1'],
+  ['live-2', 'src-bad'],
+]);
+
+/**
+ * The look the PAGE is punching: the last look id the bridge actually put on the wire,
+ * across `CG ADD` (the build's entry look) and `CG UPDATE` (a switch) alike.
+ *
+ * Read from the TRACE rather than from any bridge state on purpose — it is the independent
+ * half of the invariant, and a helper that consulted `activeLookId()` would make the whole
+ * assertion tautological.
+ */
+async function lookOnThePage(): Promise<string | undefined> {
+  const told = (await recvLines())
+    .filter((l) => /^CG \d+-\d+ (ADD|UPDATE) /.test(l))
+    .map((l) => readCgControl(dataArgOf(l, l.includes(' ADD ') ? 'ADD' : 'UPDATE'))?.look)
+    .filter((v): v is string => typeof v === 'string');
+  return told.at(-1);
+}
+
+it('🔴 7.9 — a REFUSED switch leaves no intent, and the next swap does ONLY its own work', async () => {
+  const r = await boot({ template: brokenSecondBox(), assignments: BROKEN_PAIR });
+  await onAir(r);
+  const soloLayer = layerOf(r, 'live-1');
+  // The hole `six` puts live-1 in. `both` puts it somewhere else entirely, which is how the
+  // wrong desired-set becomes visible on the wire.
+  const sixFill = recordOf(r, 'live-1')?.fill;
+
+  expect((await r.setActiveLook('item-1', 'both')).ok, 'src-bad cannot play').toBe(false);
+  expect(r.activeLookId('item-1'), 'the page was never told "both"').toBe('six');
+
+  /*
+    ── the UNRELATED action, at a time when the operator has forgotten the refusal ──
+
+    `src-3` and not the 4:3 `src-sd`, deliberately: crop-to-fill re-derives the FILL from the
+    SOURCE's aspect as well as the hole, so a format change would move the fill legitimately
+    and the "did it move?" assertion below could no longer tell the two causes apart. Same
+    format, same hole ⇒ any movement is the defect and nothing else.
+  */
+  const before = (await recvLines()).length;
+  expect(await r.swapLiveSource('item-1', 'live-1', 'src-3')).toEqual({ ok: true });
+  const lines = await since(before);
+
+  // ONE producer changed, and it is the one the operator named.
+  expect(playsIn(lines)).toEqual([`PLAY 1-${String(soloLayer)} "route://4"`]);
+  // The plate only `both` shows was never attempted — under the defect this reconcile
+  // resolved from `both`, so it tried to seat `src-bad` and the swap FAILED outright.
+  expect(
+    lines.some((l) => l.includes('bogus://')),
+    'live-2 is not in the six look',
+  ).toBe(false);
+  // …and the fill landed on the hole the page is punching, not the refused look's. Asserted
+  // against the geometry the row was ON before the refusal rather than a literal, so the
+  // claim is "it did not move" rather than a re-statement of the fit arithmetic.
+  expect(lines.some((l) => l.startsWith(`MIXER 1-${String(soloLayer)} FILL `))).toBe(true);
+  expect(recordOf(r, 'live-1')?.fill, 'the swap must not move the box').toEqual(sixFill);
+  // R-048 is UNCHANGED by 7.9: a swap still tells the page nothing, and does not need to.
+  expect(updateLines(lines), 'the swap sends no look, by design').toEqual([]);
+});
+
+it('🔴 7.9 — the FILLS and the HOLES never disagree across refuse → swap → switch → swap', async () => {
+  /*
+    The invariant in its decisive form: the look the bridge RESOLVES ITS RECTS FROM and the
+    look the page was TOLD are one fact, at every step of a sequence that mixes refusals,
+    swaps and switches. It is asserted between every pair of actions rather than at the end,
+    because the defect this replaces was a LATENT one — the two agreed before the swap and
+    after it the fills had moved, so an end-state check would have missed it entirely.
+  */
+  const r = await boot({
+    template: sixBoxTemplate({
+      sources: ['live-1', 'live-2'],
+      looks: [
+        look('six', { 'live-1': GRID['live-1'] as LiveSourceRect }),
+        look('both', {
+          'live-1': GRID['live-3'] as LiveSourceRect,
+          'live-2': GRID['live-2'] as LiveSourceRect,
+        }),
+        // A REACHABLE second look, so the sequence contains a switch that succeeds.
+        look('moved', { 'live-1': GRID['live-4'] as LiveSourceRect }),
+      ],
+    }),
+    assignments: BROKEN_PAIR,
+  });
+  const agree = async (step: string): Promise<void> => {
+    expect(r.activeLookId('item-1'), `${step}: the bridge and the page name ONE look`).toBe(
+      await lookOnThePage(),
+    );
+  };
+
+  await onAir(r);
+  await agree('the take');
+
+  expect((await r.setActiveLook('item-1', 'both')).ok).toBe(false);
+  await agree('a refused switch');
+
+  expect(await r.swapLiveSource('item-1', 'live-1', 'src-sd')).toEqual({ ok: true });
+  await agree('a swap after the refusal');
+
+  expect((await r.setActiveLook('item-1', 'moved')).ok).toBe(true);
+  await agree('a switch that succeeds');
+
+  expect(await r.swapLiveSource('item-1', 'live-1', null)).toEqual({ ok: true });
+  await agree('a swap that clears the override');
+
+  /*
+    🔴 AND THE GEOMETRY HAS CONVERGED, which is the half an id comparison cannot show.
+    Re-asserting the look the row is already on must move NOTHING: no `PLAY`, no `MIXER
+    FILL`/`CLIP`. That is only true if the fills genuinely sit at that look's rects — so it
+    is the probe for "the refused switch's half-moved fill was pulled back", and it is the
+    operator's own remedy path (`Re-issue the switch`) run as an assertion.
+  */
+  const before = (await recvLines()).length;
+  expect((await r.setActiveLook('item-1', 'moved')).ok).toBe(true);
+  const lines = await since(before);
+  expect(playsIn(lines), 'nothing re-seated').toEqual([]);
+  expect(
+    lines.filter((l) => /^MIXER 1-\d+ (FILL|CLIP) /.test(l)),
+    'the fills already sit where the holes are',
+  ).toEqual([]);
+});
+
+it('🔴 7.9 — DISJOINT membership survives a refusal: {A,B} → {C,D} with nothing left over', async () => {
+  /*
+    The shape that hid the held-layer bug, kept because it costs nothing to keep asserting:
+    the outgoing pair and the incoming pair share no member, so every release and every seat
+    is exercised at once and a rule that only handles the overlap case cannot pass. Run here
+    AFTER a refused switch, which is 7.9's addition — the disjoint switch must resolve from
+    the look the page is on, not from an intent left behind by the refusal.
+  */
+  const r = await boot({
+    template: sixBoxTemplate({
+      sources: ['live-1', 'live-2', 'live-3', 'live-4', 'live-5'],
+      looks: [
+        look('ab', {
+          'live-1': GRID['live-1'] as LiveSourceRect,
+          'live-2': GRID['live-2'] as LiveSourceRect,
+        }),
+        look('cd', {
+          'live-3': GRID['live-3'] as LiveSourceRect,
+          'live-4': GRID['live-4'] as LiveSourceRect,
+        }),
+        // Unreachable: `live-5` is the broken source, so this switch always refuses.
+        look('bad', {
+          'live-1': GRID['live-4'] as LiveSourceRect,
+          'live-5': GRID['live-5'] as LiveSourceRect,
+        }),
+      ],
+      defaultLookId: 'ab',
+    }),
+    assignments: assign([
+      ['live-1', 'src-1'],
+      ['live-2', 'src-2'],
+      ['live-3', 'src-3'],
+      ['live-4', 'src-4'],
+      ['live-5', 'src-bad'],
+    ]),
+  });
+  await onAir(r);
+  const seatedBefore = layerSet(r);
+
+  expect((await r.setActiveLook('item-1', 'bad')).ok).toBe(false);
+  expect(r.activeLookId('item-1'), 'the refusal left nothing recorded').toBe('ab');
+
+  const before = (await recvLines()).length;
+  expect((await r.setActiveLook('item-1', 'cd')).ok).toBe(true);
+  const lines = await since(before);
+
+  // The outgoing pair is HELD — seated, muted, idle (§12.4) — not torn down.
+  for (const plate of ['live-1', 'live-2']) {
+    expect(recordOf(r, plate)?.held, `${plate} is held`).toBe(true);
+    expect(lines).toContain(`MIXER 1-${String(layerOf(r, plate))} VOLUME 0`);
+  }
+  // The incoming pair is showing, and neither is held.
+  for (const plate of ['live-3', 'live-4']) {
+    expect(recordOf(r, plate)?.held ?? false, `${plate} is live`).toBe(false);
+  }
+  /*
+    ⚠ THIS switch DOES issue producers, and the reason is worth stating rather than
+    asserting around: a declaration ABSENT from the look a row was taken on is never seated
+    in the first place (`ab` shows two of five), so `live-3`/`live-4` have no producer to
+    re-fit. "A switch re-seats nothing" is a claim about plates that are already seated —
+    it is asserted on the RETURN trip below, where it is a real claim.
+  */
+  expect(playsIn(lines).length, 'exactly the two boxes that had no producer').toBe(2);
+  for (const plate of ['live-1', 'live-2']) {
+    expect(
+      playsIn(lines).some((l) => l.startsWith(`PLAY 1-${String(layerOf(r, plate))} `)),
+      `${plate} keeps its producer`,
+    ).toBe(false);
+  }
+  expect(r.activeLookId('item-1')).toBe('cd');
+  expect(await lookOnThePage()).toBe('cd');
+  // Four seats now: the held pair plus the pair this switch created.
+  const seatedOnCd = layerSet(r);
+  expect(seatedOnCd).toEqual([...seatedBefore, ...seatedOnCd.slice(seatedBefore.length)]);
+
+  // ── AND BACK. Every member of both pairs is seated now, so the return trip is the
+  // "geometry moves, producers do not" claim in its honest form — on a disjoint pair.
+  const back = (await recvLines()).length;
+  expect((await r.setActiveLook('item-1', 'ab')).ok).toBe(true);
+  const returned = await since(back);
+
+  expect(playsIn(returned), 'a switch between seated looks moves no producer').toEqual([]);
+  expect(layerSet(r), 'the layer set is invariant across the round trip').toEqual(seatedOnCd);
+  for (const plate of ['live-1', 'live-2']) {
+    expect(recordOf(r, plate)?.held ?? false, `${plate} is back`).toBe(false);
+  }
+  for (const plate of ['live-3', 'live-4']) {
+    expect(recordOf(r, plate)?.held, `${plate} is held now`).toBe(true);
+  }
+  expect(r.activeLookId('item-1')).toBe('ab');
+  expect(await lookOnThePage()).toBe('ab');
 });

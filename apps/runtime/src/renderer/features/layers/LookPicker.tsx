@@ -163,16 +163,22 @@ export function LookPicker({ looks, activeId, refusal, onPick, rowName }: Props)
                   🔴 **A RE-PRESS IS SENT, and an earlier version of this dropped it.**
 
                   The tempting guard is `if (!live)`: re-issuing the look already showing
-                  would run a reconcile and a CG UPDATE for an unchanged picture. But the look
-                  is RECORDED BEFORE the reconcile and stays recorded even when the reconcile
-                  or the CG UPDATE is refused — so after a half-failed switch the segment is
-                  already marked while the fills or the holes did NOT move. That is exactly
-                  when the bridge’s own refusals say *“Re-issue it once the server is back”*
-                  and *“Re-issue the switch”* — and the guard would have made the one remedy
-                  they name unreachable, on the control they name it about.
+                  would run a reconcile and a CG UPDATE for an unchanged picture. It is
+                  refused for one reason, and `tasks.md` 7.9 SHARPENED that reason rather than
+                  retiring it.
 
-                  A redundant re-assert of an unchanged picture is cheap. A dead escape from a
-                  half-failed switch is not.
+                  A marked segment now means the page was genuinely told this look (7.9 fused
+                  the bridge’s record to the successful telling), so it can no longer be
+                  marked while nothing moved. What it CAN be is marked while the FILLS sat
+                  elsewhere: a switch whose reconcile landed and whose `CG UPDATE` did not
+                  leaves the producers on the new geometry and the row recorded on the look
+                  the page is still punching. The bridge’s own refusal says exactly that —
+                  *“its holes are still on the previous look… Re-issue the switch”* — and the
+                  segment it points the operator at is the one already marked live.
+
+                  So a re-press is not a redundant re-assert. It is the repair: it reconciles
+                  the fills back onto the look the holes are on. A guard would have made the
+                  one remedy the bridge names unreachable, on the control it names it about.
                 */
                 onPick(look.id);
               }}
