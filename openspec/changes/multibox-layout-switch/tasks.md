@@ -158,11 +158,11 @@ plan.
 
 ## 1b. THE LOOKS PHASES (2026-08-19) — and phase 2's DELETION CLAUSE
 
-| Phase | What                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Session |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| **1** | Schema (`looks` group, sources-once, preflights), the LOOK carrier, the runtime switch (visibility + re-punch), the pin tests — ✅ LANDED (`b47f3eca`); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32278566981> (attempt 2, `success`, `E2E (Playwright)` RAN — attempt 1 was killed at `timeout-minutes: 20` by an apt-mirror stall BEFORE Playwright started; the suite never ran and was re-run, not weakened)   | **BA**  |
-| **2** | The Designer UI swap: toolbar icon, looks inspector, per-look canvas, look picker in the preview — **AND THE A′ DELETION (below)** — ✅ LANDED (session BB, `5d56c5a5`; A′ DISABLED not deleted, P2.DEL re-scoped below); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32292697141> (`success`, `E2E (Playwright)` RAN — the prior run on `2ee11fe5` was RED from two spec defects, fixed at the cause in `5d56c5a5`) | next    |
-| **3** | Stage D's reconcile (§4) on the look carrier — ✅ **LANDED (session BC)**: `reconcileLivePlates` is the ONE delta, the take and `swapLiveSource` are both callers, §12.4's hold/teardown policy is named and observable. 🔴 Stage E's operator surface stays BLOCKED — on 2.8 (B-145's display half) and now also on 6.7 (the bridge→page look transport, filed in Stage D)                                                                              | after 2 |
+| Phase | What                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Session |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| **1** | Schema (`looks` group, sources-once, preflights), the LOOK carrier, the runtime switch (visibility + re-punch), the pin tests — ✅ LANDED (`b47f3eca`); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32278566981> (attempt 2, `success`, `E2E (Playwright)` RAN — attempt 1 was killed at `timeout-minutes: 20` by an apt-mirror stall BEFORE Playwright started; the suite never ran and was re-run, not weakened)      | **BA**  |
+| **2** | The Designer UI swap: toolbar icon, looks inspector, per-look canvas, look picker in the preview — **AND THE A′ DELETION (below)** — ✅ LANDED (session BB, `5d56c5a5`; A′ DISABLED not deleted, P2.DEL re-scoped below); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32292697141> (`success`, `E2E (Playwright)` RAN — the prior run on `2ee11fe5` was RED from two spec defects, fixed at the cause in `5d56c5a5`)    | next    |
+| **3** | Stage D's reconcile (§4) on the look carrier — ✅ **LANDED (session BC)**: `reconcileLivePlates` is the ONE delta, the take and `swapLiveSource` are both callers, §12.4's hold/teardown policy is named and observable. 6.7's bridge→page look transport ✅ **LANDED (session BD)** — a switch is now correct END TO END on air (fills and holes driven off one look id). 🔴 Stage E's operator surface stays BLOCKED, on 2.8 (B-145's display half) alone | after 2 |
 
 🔴 **PHASE 2'S DELETION CLAUSE — the two-spellings window is ONE session, closed by this task,
 not by memory.** Phase 2 deletes, in the same session that swaps the UI: the arrangements schema
@@ -520,15 +520,54 @@ candidate shapes.
       (<https://github.com/yasermostafaee/cg/actions/runs/32323670161>) is real but it
       verified a tree carrying the held-layer defect — do not cite it as this stage's
       discharge.
-- [ ] 6.7 🔴 **NOT DONE, AND NAMED RATHER THAN ASSUMED — the bridge→page look transport.** A look
-      switch is TWO mutations on two machines: the bridge moves the producers' `MIXER FILL`/`CLIP`
-      (6.1, landed) and the PAGE flips which look's instance is visible and re-punches its holes
-      (`@cg/template-runtime`'s own `setActiveLook`, landed in phase 1D). **Nothing carries the
-      look id from one to the other** — the served page learns nothing from a `CG UPDATE` today —
-      so on the plant `CasparRuntime.setActiveLook` currently moves the fills while the page keeps
-      punching the outgoing look's holes. It needs its own decision (a reserved field in the update
-      payload, and what a page that ignores it should do) and it BLOCKS stage E's picker being
-      usable on air, though not stage E's UI work.
+- [x] 6.7 ✅ **DONE (session BD)** — the bridge→page look transport. **The gap it closed:** a look
+      switch is TWO mutations on two machines — the bridge moves the producers' `MIXER FILL`/`CLIP`
+      (6.1) and the PAGE flips which look's instance is visible and re-punches its holes
+      (`@cg/template-runtime`'s `setActiveLook`, phase 1D) — and NOTHING carried the look id
+      between them. On the plant a switch moved the FILLS while the page kept punching the
+      OUTGOING look's HOLES: fill at the new geometry, hole at the old. The DEFAULT look was fine
+      (page enters it at build, bridge seats it at take); the break was specific to a SWITCH.
+      **How:** the look id rides the same `CG <ch>-<layer> UPDATE 0 "<json>"` payload the author
+      fields already use — the one verb proven on 2.3.2 to deliver JSON to `window.update` intact
+      — under the reserved key `__cg` (`CG_CONTROL_KEY`, `@cg/shared-schema/control-payload.ts`).
+      ONE codec, imported by BOTH halves, so the fills and the holes are driven off the same id
+      and cannot diverge (§6/§12.2's rule applied to the switch).
+      **Collision-proof, because a field id is `z.string().min(1)` and the Designer only trims
+      what the author types — so there is no character class an author cannot reach.** It is made
+      true twice instead: the page STRIPS the key before anything applies field values (control
+      data can never become a field value, true even for a hand-edited scene), and the export
+      REFUSES a scene declaring that field id or namespace name (`reserved-control-key`, an
+      error, so it blocks). Unrepresentable rather than unlikely.
+      **The look id ALONE suffices — verified in the code, not assumed.** Under LOOKS a look's
+      titles/decor live inside its own composition INSTANCE, and `applyArrangementToNodes` sets
+      `display:none` on the whole instance node, so switching the look switches its titles for
+      free. The old A′ note that titles needed a per-source→cell mapping was true of ARRANGEMENTS
+      (repositioned instances sharing one title set); it does not carry over. No mapping is sent.
+      **Order:** fills first, then the page — and only on SUCCESS. A refused reconcile leaves the
+      fills where they were, so telling the page anyway would paint the new look's holes over
+      producers still at the old geometry, which nothing would repair. Both commands go
+      back-to-back on ONE connection in the urgent lane; the mismatch window is one AMCP
+      round-trip (`CG UPDATE` → `window.update` measured 2.2–8.3 ms, §9.2 — under a quarter of a
+      20 ms frame at 50i; the cut is ~0.20 frames, §9.3), and what shows through the mismatched
+      hole for that window is black.
+      **The same gap by a different verb, also closed:** the `CG ADD` payload carries the look at
+      the ONE `#sendAdd` chokepoint. A fresh build enters the AUTHORED DEFAULT synchronously,
+      page-side, while the bridge seats the RECORDED look — so a row switched to solo and then
+      re-taken (`out` destroys the producer; the take re-ADDs) came back with fills on solo and
+      holes on the default.
+      **Tests:** `packages/shared-schema/tests/control-payload.test.ts` (the codec round trip, and
+      that a malformed control object is tolerated rather than thrown on — a throw inside the
+      page's `update()` takes the graphic off air); `looks-switch.test.ts` §6.7 (the page applies
+      the payload; holes asserted POSITION AND SIZE together; a DISJOINT-membership switch where
+      the outgoing and incoming looks share no source; unknown/absent id leaves the look
+      standing); `live-look-reconcile.integration.test.ts` (the emitted payload PARSED off the
+      wire, not merely "a command was sent"; the fills-before-page order; a refused switch tells
+      the page nothing; the `CG ADD` payload); `exporter-vcg-preflight.test.ts` (the refusal).
+      ⚠ **What no test here covers:** a single-process true end-to-end. `@cg/template-runtime`
+      cannot import `tools/caspar-bridge` (packages must not depend on tools), so the two halves
+      are asserted separately — against the ONE shared codec, which is what makes divergence
+      impossible. The remaining seam is the plant's SDI output, a later measurement (`PRINT`
+      needs the plant's own disk, §9.3).
 
 ---
 

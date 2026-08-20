@@ -11,7 +11,7 @@ import type {
   TemplateInfo,
   TemplateLook,
 } from '@cg/shared-ipc';
-import type { LiveSourceRect } from '@cg/shared-schema';
+import { CG_CONTROL_KEY, readCgControl, type LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 
@@ -933,4 +933,125 @@ it('🔴 setLivePlateVolume does NOT put a HELD plate on air — the intent wait
   await r.setActiveLook('item-1', 'six');
   expect(await since(back)).toContain(`MIXER 1-${String(layer)} VOLUME 1`);
   expect(mock?.layerState({ channel: 1, layer })?.volume).toBe(1);
+});
+
+// ─────────────── tasks.md 6.7 — THE LOOK ID REACHES THE PAGE ───────────────
+
+/**
+ * The AMCP data argument of a `CG … UPDATE` line, back to the object the page will parse.
+ *
+ * The wire form carries the hardware-verified TWO-LAYER escape (B-041 take 2), so this undoes
+ * it rather than guessing: what comes out is what `JSON.parse` sees inside the template.
+ * Asserting the PAYLOAD — not merely that a command was sent — is the whole point of 6.7's
+ * test: a correctly-shaped command carrying the WRONG look id would move the fills and the
+ * holes to different looks, which is the defect itself.
+ */
+function dataArgOf(line: string, verb: 'UPDATE' | 'ADD'): Record<string, unknown> | undefined {
+  const re =
+    verb === 'UPDATE' ? /^CG \d+-\d+ UPDATE \d+ "(.*)"$/s : /^CG \d+-\d+ ADD \d+ ".*?" 0 "(.*)"$/s;
+  const m = re.exec(line);
+  if (m === null) return undefined;
+  const unescaped = (m[1] ?? '').replace(/\\(.)/g, '$1');
+  return JSON.parse(unescaped) as Record<string, unknown>;
+}
+
+const updateLines = (lines: readonly string[]): string[] =>
+  lines.filter((l) => /^CG \d+-\d+ UPDATE /.test(l));
+
+it('🔴 the switch tells the PAGE which look — the payload carries the id, beside the fills', async () => {
+  const r = await boot();
+  await onAir(r);
+  const before = (await recvLines()).length;
+
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+
+  const lines = await since(before);
+  const updates = updateLines(lines);
+  expect(updates, 'exactly one CG UPDATE — the page is told once').toHaveLength(1);
+  const payload = dataArgOf(updates[0] as string, 'UPDATE');
+  expect(payload?.[CG_CONTROL_KEY]).toEqual({ look: 'solo' });
+  // …read back through the SAME codec the page uses, so the two halves cannot drift.
+  expect(readCgControl(payload)?.look).toBe('solo');
+
+  /*
+    ORDER: the fills move FIRST, then the page is told. Between the two commands the fills and
+    the holes disagree and the mismatched hole shows black — bounded by one AMCP round-trip on
+    ONE connection in the urgent lane (`CG UPDATE` → `window.update` measured at 2.2–8.3 ms,
+    §9.2: under a quarter of a 20 ms frame at 50i; the cut itself is ~0.20 frames, §9.3).
+    Fills-first also means a lost `CG UPDATE` leaves the page on a coherent previous look
+    rather than on a new look whose boxes would never fill.
+  */
+  const lastFill = lines.map((l) => /^MIXER 1-\d+ FILL /.test(l)).lastIndexOf(true);
+  expect(lastFill, 'the fills must have moved').toBeGreaterThanOrEqual(0);
+  expect(lines.indexOf(updates[0] as string)).toBeGreaterThan(lastFill);
+});
+
+it('🔴 a REFUSED switch tells the page NOTHING — the old look stays whole', async () => {
+  /*
+    The decisive half of the ordering, and the reason it is "after AND only on success". A
+    refused reconcile leaves the fills where they were, so telling the page to switch anyway
+    would paint the NEW look's holes over producers still at the OLD geometry — a broken layout
+    nothing would repair. The old look, intact, is the honest outcome of a refused switch.
+  */
+  const r = await boot({
+    template: sixBoxTemplate({
+      sources: ['live-1', 'live-2'],
+      looks: [
+        look('six', { 'live-1': GRID['live-1'] as LiveSourceRect }),
+        look('both', {
+          'live-1': GRID['live-1'] as LiveSourceRect,
+          'live-2': GRID['live-2'] as LiveSourceRect,
+        }),
+      ],
+    }),
+    assignments: assign([
+      ['live-1', 'src-1'],
+      ['live-2', 'src-bad'],
+    ]),
+  });
+  await onAir(r);
+  const before = (await recvLines()).length;
+
+  expect((await r.setActiveLook('item-1', 'both')).ok).toBe(false);
+
+  expect(updateLines(await since(before)), 'the page must not be told').toEqual([]);
+});
+
+it('a switch whose PRODUCER is gone records the look and sends no UPDATE', async () => {
+  // B-070's rule, which this transport inherits: `CG UPDATE` needs a live PRODUCER and real
+  // CasparCG 403s it on an empty layer. There is nothing to tell; the next take re-asserts it
+  // through the `CG ADD` payload below.
+  const r = await boot();
+  await onAir(r);
+  await r.out('item-1');
+  const before = (await recvLines()).length;
+
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+
+  expect(updateLines(await since(before))).toEqual([]);
+  expect(r.activeLookId('item-1')).toBe('solo');
+});
+
+it('🔴 the CG ADD payload carries the look too — a re-take cannot diverge from the bridge', async () => {
+  /*
+    The same gap by a different verb. A fresh build enters the AUTHORED DEFAULT look, decided
+    page-side and synchronously, before anything can say otherwise — while the bridge seats
+    whatever look the row is RECORDED on. So a row switched to solo and then re-taken (`out`
+    destroys the producer; the next take re-ADDs) would come back with the FILLS on solo and
+    the HOLES on the default: this session's defect, arriving by the load path.
+  */
+  const r = await boot();
+  await onAir(r);
+  await r.setActiveLook('item-1', 'solo');
+  await r.out('item-1');
+  const before = (await recvLines()).length;
+
+  expect((await r.take('item-1')).accepted).toBe(true);
+
+  const add = (await since(before)).find((l) => /^CG \d+-\d+ ADD /.test(l));
+  expect(add, 'the re-take must re-ADD').toBeDefined();
+  expect(
+    readCgControl(dataArgOf(add as string, 'ADD'))?.look,
+    'the page must enter the look the bridge seated',
+  ).toBe('solo');
 });

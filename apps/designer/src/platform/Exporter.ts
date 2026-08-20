@@ -1,5 +1,7 @@
 import { pack, sha256Hex } from '@cg/vcg-format';
 import {
+  CG_CONTROL_KEY,
+  aggregateCompositionFields,
   isPathKeyframeValue,
   type AnchorPoint,
   type AssetEntry,
@@ -307,6 +309,44 @@ export class Exporter {
           fieldId: b.fieldId,
         });
       }
+    }
+
+    /*
+      `multibox-layout-switch` `tasks.md` 6.7 — **THE RESERVED CONTROL KEY IS NOT AN
+      AUTHORABLE NAME**, and this is what makes that claim provable rather than hopeful.
+
+      The bridge carries the active LOOK id to the page inside the `CG UPDATE` field payload,
+      under `CG_CONTROL_KEY`. A field id is `z.string().min(1)` and the Designer only trims
+      what the author types, so there is no character class that puts the key out of reach —
+      the collision has to be REFUSED instead. The page also strips the key before applying
+      values (so control data can never become a field value even in a hand-edited scene);
+      this is the other half, and it is the half that tells the AUTHOR, at the one moment they
+      can still rename it.
+
+      Both TOP-LEVEL payload shapes are checked, because both are top-level keys: a flat field
+      id, and a nested composition instance's namespace name.
+    */
+    const aggregate = aggregateCompositionFields(scene, scene);
+    for (const field of aggregate.fields) {
+      if (field.id !== CG_CONTROL_KEY) continue;
+      issues.push({
+        severity: 'error',
+        code: 'reserved-control-key',
+        message:
+          `Field "${field.id}" uses a name the runtime reserves for its own control data. ` +
+          `Rename it — a field with this name could never be updated on air.`,
+        fieldId: field.id,
+      });
+    }
+    for (const group of aggregate.groups) {
+      if (group.name !== CG_CONTROL_KEY) continue;
+      issues.push({
+        severity: 'error',
+        code: 'reserved-control-key',
+        message:
+          `Composition instance "${group.label ?? group.name}" uses a namespace name the ` +
+          `runtime reserves for its own control data. Rename the instance.`,
+      });
     }
 
     // D-137 — the four Live Source checks, ALL `severity: 'error'`: off-frame,

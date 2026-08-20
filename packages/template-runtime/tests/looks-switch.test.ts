@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Window } from 'happy-dom';
-import type { Element, Scene } from '@cg/shared-schema';
+import { CG_CONTROL_KEY, withCgControl, type Element, type Scene } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
 
 /**
@@ -258,5 +258,115 @@ describe('🔴 D.4 axes — the SAME source, one axis at a time (vs the 6-box ce
     const { runtime, root } = boot();
     runtime.setActiveLook('look-solo');
     expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+  });
+});
+
+describe('🔴 tasks.md 6.7 — the BRIDGE→PAGE control payload switches the look', () => {
+  /*
+    The gap this closes: phase 3 moved each plate's MIXER FILL per look on the BRIDGE, while
+    the page kept punching the OUTGOING look's holes — fill at the new geometry, hole at the
+    old. Nothing carried the look id between the two machines.
+
+    These tests drive the page through the exact payload the bridge sends, built by the SAME
+    `withCgControl` the bridge calls, so the two halves cannot drift apart.
+  */
+
+  it('an update carrying the look id moves the holes — POSITION and SIZE together', async () => {
+    const { runtime, root } = boot();
+    expect(holes(root)).toEqual(SIX_HOLES);
+
+    await runtime.update(withCgControl({}, { look: 'look-solo' }) as Record<string, never>);
+
+    expect(runtime.activeLookId()).toBe('look-solo');
+    // Both components, in one assertion — a rect is never checked one axis at a time.
+    expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+    expect(displayOf(root, 'inst-solo')).not.toBe('none');
+    expect(displayOf(root, 'inst-six')).toBe('none');
+  });
+
+  it('AXIS moved-only — the hole moves and does not resize', async () => {
+    const { runtime, root } = boot();
+    await runtime.update(withCgControl({}, { look: 'look-pair' }) as Record<string, never>);
+    // vs the 6-box cell 1 (0,0,640,540): x changed, w/h did not.
+    expect(holes(root)).toEqual([{ x: 640, y: 0, w: 640, h: 540 }]);
+  });
+
+  it('AXIS resized-only — the hole resizes in place', async () => {
+    const { runtime, root } = boot();
+    await runtime.update(withCgControl({}, { look: 'look-big' }) as Record<string, never>);
+    expect(holes(root)).toEqual([{ x: 0, y: 0, w: 1280, h: 1080 }]);
+  });
+
+  it('🔴 a DISJOINT switch — the outgoing look shares NO source with the incoming one', async () => {
+    /*
+      Not add-a-box or drop-a-box: the two looks have no source in common. `look-pair` shows
+      guest-1 alone; `look-fifth` shows guest-5 alone. Every plate the page was punching goes
+      away and a plate it has never punched arrives, in one switch — the membership shape a
+      grid-plus-solo fixture cannot produce, and the one where a stale hole would survive.
+    */
+    const s = scene();
+    const layer = s.layers[0] as { children: Element[] };
+    layer.children.push(instance('inst-fifth', 'comp-fifth'));
+    (s.compositions as unknown as ReturnType<typeof comp>[]).push(
+      comp('comp-fifth', [plate('fifth-p1', 'guest-5', 100, 60, 800, 450)]),
+    );
+    (s.lookGroups as unknown as { looks: unknown[] }[])[0]?.looks.push({
+      id: 'look-fifth',
+      name: 'Fifth',
+      instanceId: 'inst-fifth',
+      entered: cut,
+    });
+    const { runtime, root } = boot(s);
+
+    await runtime.update(withCgControl({}, { look: 'look-pair' }) as Record<string, never>);
+    expect(holes(root)).toEqual([{ x: 640, y: 0, w: 640, h: 540 }]);
+
+    await runtime.update(withCgControl({}, { look: 'look-fifth' }) as Record<string, never>);
+
+    // Exactly ONE hole, and it is the incoming look's — the outgoing plate's hole is gone
+    // rather than lingering beside it.
+    expect(runtime.activeLookId()).toBe('look-fifth');
+    expect(holes(root)).toEqual([{ x: 100, y: 60, w: 800, h: 450 }]);
+    expect(displayOf(root, 'inst-pair')).toBe('none');
+    expect(displayOf(root, 'inst-fifth')).not.toBe('none');
+  });
+
+  it('a payload with NO look id changes nothing about the look', async () => {
+    const { runtime, root } = boot();
+    await runtime.update(withCgControl({}, { look: 'look-solo' }) as Record<string, never>);
+    const before = holes(root);
+
+    await runtime.update({} as Record<string, never>);
+
+    expect(runtime.activeLookId()).toBe('look-solo');
+    expect(holes(root)).toEqual(before);
+  });
+
+  it('an UNKNOWN look id leaves the current look standing', async () => {
+    // A bridge that knows a look this template does not have is a version skew, not a
+    // licence to blank the graphic. The ordinary re-punch runs and the row stays as it is.
+    const { runtime, root } = boot();
+    await runtime.update(withCgControl({}, { look: 'look-solo' }) as Record<string, never>);
+
+    await runtime.update(withCgControl({}, { look: 'no-such-look' }) as Record<string, never>);
+
+    expect(runtime.activeLookId()).toBe('look-solo');
+    expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+  });
+
+  it('🔴 the reserved key is never applied as a FIELD VALUE, and travels beside real fields', async () => {
+    const { runtime, root } = boot();
+
+    // A field id the template does not declare would be ignored anyway; what matters is that
+    // the CONTROL key is stripped before the field machinery sees it, and that a real payload
+    // carrying both still switches.
+    await runtime.update(
+      withCgControl({ headline: 'Tehran' }, { look: 'look-solo' }) as Record<string, never>,
+    );
+
+    expect(runtime.activeLookId()).toBe('look-solo');
+    expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+    // Nothing anywhere in the rendered stage names the reserved key.
+    expect(root.innerHTML).not.toContain(CG_CONTROL_KEY);
   });
 });

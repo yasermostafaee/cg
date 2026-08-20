@@ -19,6 +19,8 @@ import {
   type ArrangementView,
   defaultLookOf,
   lookGroupOf,
+  readCgControl,
+  stripCgControl,
   type Look,
 } from '@cg/shared-schema';
 import {
@@ -502,6 +504,27 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     for (const l of lookGroup.looks) visibility[l.instanceId] = l.id === look.id;
     currentLookId = look.id;
     repunch({ visibility });
+  };
+  /**
+   * `tasks.md` 6.7 — ENTER A LOOK BY ID. **The one implementation, two entry points.**
+   *
+   * The public `setActiveLook` (the Designer preview's caller since phase 1) and the
+   * `CG UPDATE` control payload (the bridge's caller, on air) both come through here, so the
+   * page cannot grow a second answer to "which look is active" — the same one-predicate-two-
+   * doors shape the bridge's own exclusivity refusal uses. Returns whether the id named a
+   * real look, so a caller can tell "switched" from "there is no such look".
+   *
+   * An id equal to the current look is a NO-OP by way of `applyLook` being idempotent: it
+   * recomputes the same visibility map and re-punches the same holes. Deliberately not
+   * short-circuited — a re-punch is how the page RECOVERS if a previous one was lost, and the
+   * bridge re-asserts the look on a re-take for exactly that reason.
+   */
+  const enterLook = (lookId: string): boolean => {
+    if (lookGroup === undefined) return false;
+    const look = lookGroup.looks.find((l) => l.id === lookId);
+    if (look === undefined) return false;
+    applyLook(look);
+    return true;
   };
   {
     // A fresh build enters the DEFAULT look — "exactly one active" holds from the first
@@ -2242,11 +2265,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     setActiveLook(lookId: string): boolean {
       if (machine.state === 'removed') return false;
-      if (lookGroup === undefined) return false;
-      const look = lookGroup.looks.find((l) => l.id === lookId);
-      if (look === undefined) return false;
-      applyLook(look);
-      return true;
+      return enterLook(lookId);
     },
 
     activeLookId(): string | undefined {
@@ -2257,16 +2276,35 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       if (machine.state === 'removed') {
         throw new Error('Runtime removed; update() unavailable');
       }
+      /*
+        `tasks.md` 6.7 — THE BRIDGE→PAGE CONTROL PAYLOAD, lifted off BEFORE anything treats
+        this as field values.
+
+        Stripping first is half of the reserved key's collision proof (see `CG_CONTROL_KEY`):
+        control data can never reach `applyScopedFieldValues`, so it can never be written into
+        a field and a field can never be silently fed a look id — true even for a hand-edited
+        scene the export preflight never saw.
+      */
+      const control = readCgControl(data);
+      const values = stripCgControl(data as Record<string, unknown>);
       const mode = opts.mode ?? 'merge';
       if (mode === 'replace') {
-        currentValues = { ...(data as NestedFieldValues) };
+        currentValues = { ...(values as NestedFieldValues) };
       } else {
-        currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
+        currentValues = mergeNestedValues(currentValues, values as NestedFieldValues);
       }
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       reapplySequenceItemFields();
       reapplyClockTargets();
-      repunch(arrangementView);
+      /*
+        🔴 THE LOOK IS APPLIED INSTEAD OF the ordinary re-punch, never in addition to it.
+
+        `enterLook` re-punches with the NEW look's visibility, so re-punching the OUTGOING
+        view first would paint the old holes for one pass and then the new ones — work that
+        can only be seen if it goes wrong. When the payload names no look, or names one this
+        template does not have, the ordinary re-punch is what happens, exactly as before.
+      */
+      if (control?.look === undefined || !enterLook(control.look)) repunch(arrangementView);
       bus.emit('update');
     },
 

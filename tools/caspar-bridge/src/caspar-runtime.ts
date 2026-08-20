@@ -30,7 +30,7 @@ import type {
   RetainedStackItem,
   StackItemState,
 } from '@cg/shared-schema';
-import { isRetainedOnAir } from '@cg/shared-schema';
+import { isRetainedOnAir, withCgControl } from '@cg/shared-schema';
 import {
   isLayerVisible,
   // R-030 — the video-mode token map lives in shared-ipc, not caspar-client, so
@@ -3738,7 +3738,8 @@ export class CasparRuntime {
     lookId: string,
   ): Promise<{ ok: boolean; reason?: string; message?: string }> {
     const templateId = this.#reconciler.get(itemId)?.templateId;
-    if (templateId === undefined || this.#slots.get(itemId) === undefined) {
+    const slot = this.#slots.get(itemId);
+    if (templateId === undefined || slot === undefined) {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
     }
     const looks = this.#templates.get(templateId)?.liveSources?.looks ?? [];
@@ -3790,11 +3791,57 @@ export class CasparRuntime {
     const reconciled = await this.reconcileLivePlates(itemId, this.#desiredPlateRects(itemId), {
       mode: 'live',
     });
-    if (reconciled.ok) return { ok: true };
+    if (!reconciled.ok) {
+      return {
+        ok: false,
+        ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
+        ...(reconciled.message === undefined ? {} : { message: reconciled.message }),
+      };
+    }
+    /*
+      `tasks.md` 6.7 — TELL THE PAGE, and tell it LAST.
+
+      The fills have just moved; this is the command that moves the HOLES they sit behind.
+      Both halves are now driven off the SAME look id — `#desiredPlateRects` resolved the
+      rects from it and this sends it verbatim — so they cannot disagree about which look is
+      on air (`design.md` §6/§12.2: the hole the page punches and the hole the bridge fills
+      are ONE computation).
+
+      🔴 **AFTER the reconcile, and only on success** — this ordering is a decision, not an
+      accident:
+
+      - **Only on success** is the decisive half. A refused reconcile leaves the fills where
+        they were, so telling the page to switch anyway would paint the NEW look's holes over
+        producers still at the OLD geometry — a broken layout that nothing would repair. The
+        old look, intact, is the honest outcome of a refused switch.
+      - **After** is the smaller call, and both orders have the same sub-frame window: between
+        the two commands the fills and the holes disagree, and what shows through the
+        mismatched hole is black. `CG UPDATE` → `window.update` was measured at 2.2–8.3 ms
+        (median ≈5 ms, §9.2) — under a quarter of a 20 ms frame at 50i — and both commands go
+        out back-to-back on ONE connection in the urgent lane, so nothing queues between them.
+        The cut itself is ~0.20 frames (§9.3). Fills-first also means a lost `CG UPDATE`
+        leaves the page on a coherent previous look rather than on a new look whose boxes
+        would never fill.
+
+      ⚠ Bounded by the same B-070 rule `update()` states: `CG UPDATE` needs a live PRODUCER,
+      and real CasparCG 403s it on an empty layer. A row whose template producer was destroyed
+      has nothing to tell; the look is already recorded, and the next take's re-ADD path
+      re-asserts it.
+    */
+    if (!this.#loaded.has(itemId)) return { ok: true };
+    const told = await this.#send(
+      this.#builder.updateLook(slot, lookId),
+      this.#nextSeq(),
+      'urgent',
+    );
+    if (told.ok) return { ok: true };
     return {
       ok: false,
-      ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
-      ...(reconciled.message === undefined ? {} : { message: reconciled.message }),
+      reason: told.errorCode ?? 'amcp-error',
+      message:
+        `the live sources moved to look "${lookId}", but CasparCG refused the command that ` +
+        `tells the graphic to switch — its holes are still on the previous look. Re-issue the ` +
+        `switch.`,
     };
   }
 
@@ -6774,8 +6821,28 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, false, ADD_MUTE_FAILED);
       return { ok: false, errorCode: ADD_MUTE_FAILED };
     }
+    /*
+      `tasks.md` 6.7 — THE ACTIVE LOOK RIDES THE `CG ADD` PAYLOAD TOO, and this is the
+      second half of the same gap rather than a nicety.
+
+      A fresh build enters the template's AUTHORED DEFAULT look — the page decides that for
+      itself, synchronously, before anything can tell it otherwise. The bridge, meanwhile,
+      seats whatever look the row is RECORDED on (`#desiredPlateRects` → `#activeLookOf`),
+      which after a switch is not the default. So a row switched to a solo look and then
+      taken again — `out` destroys the producer, the next take re-ADDs — would come back with
+      the FILLS on solo and the HOLES on the default: the same divergence a switch used to
+      have, arriving by a different verb.
+
+      Attached at this ONE chokepoint, so the initial load and B-039's re-ADD cannot disagree,
+      and attached UNCONDITIONALLY for a template that has looks rather than only when the
+      look is non-default: "both halves driven off the same id" should be true of a plain take
+      as well, not merely of the cases we predicted.
+    */
+    const activeLook = this.#activeLookOf(itemId);
+    const addFields =
+      activeLook === undefined ? fields : withCgControl(fields, { look: activeLook.id });
     const { ok, errorCode } = await this.#send(
-      this.#builder.load(slot, templateArg, fields),
+      this.#builder.load(slot, templateArg, addFields),
       seq,
       'normal',
     );

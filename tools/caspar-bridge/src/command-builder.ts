@@ -1,6 +1,6 @@
 import { quote } from '@cg/caspar-client';
 import type { SourceProducer } from '@cg/shared-ipc';
-import type { FieldValues } from '@cg/shared-schema';
+import { withCgControl, type FieldValues } from '@cg/shared-schema';
 import type { NormalizedRect } from './live-layers.js';
 
 /** A CasparCG `(channel, layer)` coordinate. */
@@ -67,6 +67,27 @@ export class CommandBuilder {
   /** Push updated field values to the playing template on a slot. */
   update(slot: CommandSlot, fields: FieldValues): string {
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(serialize(fields))}`;
+  }
+
+  /**
+   * `multibox-layout-switch` `tasks.md` 6.7 — **tell the PAGE which LOOK is active.**
+   *
+   * The same `CG UPDATE` verb and the same escape chain as {@link update}; the look id rides
+   * the payload under the reserved key (`withCgControl`), which the page lifts off before the
+   * field machinery sees it. Deliberately NOT a new verb: `CG UPDATE` is the one form proven
+   * on 2.3.2 to deliver a JSON payload to `window.update` intact, and inventing a second
+   * transport would mean re-earning that proof (the `CALL` / `CG INVOKE` alternatives were
+   * measured and disproven — see this class's header).
+   *
+   * `fields` is normally EMPTY: a look switch changes no author value. It is a parameter
+   * rather than hard-coded because the payload merges page-side, and a caller that has fields
+   * to send anyway must be able to send both in ONE command rather than two — a second command
+   * is a second chance for the two to land apart.
+   */
+  updateLook(slot: CommandSlot, lookId: string, fields: FieldValues = {}): string {
+    return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
+      serialize(withCgControl(fields, { look: lookId })),
+    )}`;
   }
 
   /**
