@@ -90,7 +90,7 @@ export function releaseLivePlate(input: {
   offFrame?: boolean | undefined;
 }): LivePlateRelease {
   const { itemId, plateId } = input;
-  if (!input.stillDeclared || input.producer === undefined) {
+  if (!input.stillDeclared) {
     return {
       itemId,
       plateId,
@@ -98,6 +98,26 @@ export function releaseLivePlate(input: {
       reason:
         `plate "${plateId}" is no longer declared by this template, so there is no look ` +
         `that can bring it back — its producer was cleared rather than held`,
+    };
+  }
+  if (input.producer === undefined) {
+    /*
+      🔴 STILL DECLARED, BUT WE CANNOT SAY WHAT IS BEHIND IT — so we do the harmless thing.
+
+      Holdability is a property of the producer FORM, and an unresolvable assignment leaves
+      that unknown. Reading "unknown" as "tear it down" would destroy a working picture over
+      a missing fact — and the fact is routinely missing for perfectly healthy reasons (a
+      live action resolves only the plates going on screen). Holding costs a band layer and
+      is reversible; a teardown is not.
+    */
+    return {
+      itemId,
+      plateId,
+      disposition: 'held',
+      reason:
+        `plate "${plateId}" is not shown by the active look and its source could not be ` +
+        `resolved, so its producer was held rather than cleared — an unknown source form is ` +
+        `not a reason to destroy a picture that is working`,
     };
   }
   if (!canHoldLivePlate(input.producer)) {

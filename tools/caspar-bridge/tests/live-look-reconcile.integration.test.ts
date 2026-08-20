@@ -771,3 +771,166 @@ it('🔴 the TAKE keeps its all-or-nothing rollback — the graphic never plays 
   // …and the graphic itself never played.
   expect(lines.some((l) => l.startsWith('CG 1-') && l.includes('PLAY'))).toBe(false);
 });
+
+// ─────────── THE HELD LAYER IS NOT A FREE LAYER (regression, session BC review) ───────────
+
+it('🔴 a plate a look shows for the FIRST TIME never lands on a HELD layer', async () => {
+  /*
+    THE DEFECT THIS PINS, because it destroyed a producer on air and then hid itself.
+
+    `#planLiveSeating` used to report every layer in the item's ledger as available to that
+    item. Before LOOKS that was correct by accident: a take seated every declaration, so the
+    ledger and the desired set held the same plates. A HELD plate is in the ledger and NOT in
+    the desired set, so its layer was offered as free to a plate the new look shows for the
+    first time — which has no `preferred` layer of its own and takes the lowest free one.
+
+    The result was not a visible break. The fresh `PLAY` replaced the held producer with no
+    `CLEAR`, the ledger named one slot twice, and on the way BACK the stale held record still
+    matched layer+producer so `seatUnchanged` fired and nothing was re-played — leaving the
+    operator's box showing the wrong feed, wrongly cropped and silent, while the ledger and
+    the published state both named the right one. Only a re-take repaired it.
+  */
+  const r = await boot({
+    template: sixBoxTemplate({
+      sources: ['live-1', 'live-2', 'live-3'],
+      looks: [
+        // The default seats live-1 and live-2 only — live-3 has never been seated.
+        look('a', { 'live-1': GRID['live-1'], 'live-2': GRID['live-2'] }),
+        // …then live-2 is HELD, and live-3 arrives for the first time.
+        look('c', { 'live-1': GRID['live-1'], 'live-3': GRID['live-3'] }),
+      ],
+    }),
+    assignments: assign([
+      ['live-1', 'src-1'],
+      ['live-2', 'src-2'],
+      ['live-3', 'src-3'],
+    ]),
+  });
+  await onAir(r);
+  const heldLayer = layerOf(r, 'live-2');
+  const heldProducer = recordOf(r, 'live-2')?.producer;
+  expect(heldLayer).toBe(BAND.start + 1);
+
+  const arrival = (await recvLines()).length;
+  await r.setActiveLook('item-1', 'c');
+  const arrivalLines = await since(arrival);
+
+  const arriving = layerOf(r, 'live-3');
+  // 🔴 THE DEFECT, DIRECTLY: nothing may be PLAYed onto the held plate's layer.
+  expect(arrivalLines.some((l) => l.startsWith(`PLAY 1-${String(heldLayer)} `))).toBe(false);
+  // 🔴 THE ASSERTION. The arriving plate takes a genuinely free layer, never the held one.
+  expect(arriving).not.toBe(heldLayer);
+  expect(arriving).toBeGreaterThanOrEqual(BAND.start);
+  // The held producer is untouched and still named by the ledger, on its own layer.
+  expect(recordOf(r, 'live-2')?.held).toBe(true);
+  expect(recordOf(r, 'live-2')?.producer).toBe(heldProducer);
+  expect(layerOf(r, 'live-2')).toBe(heldLayer);
+  // …and no two records share a slot — the ledger cannot lie about who owns what.
+  const slots = (r.liveLayers().get('item-1') ?? []).map((x) => x.slot.layer);
+  expect(new Set(slots).size, 'one record per slot').toBe(slots.length);
+
+  // Switching BACK really re-shows live-2, which is the half the stale record used to eat.
+  const before = (await recvLines()).length;
+  await r.setActiveLook('item-1', 'a');
+  const lines = await since(before);
+  expect(recordOf(r, 'live-2')?.held ?? false).toBe(false);
+  expect(recordOf(r, 'live-2')?.producer).toBe(heldProducer);
+  /*
+    It was held, not destroyed, so coming back is never a re-seat. Its rect is the SAME in
+    look 'a' as it was when it was seated, so no `FILL`/`CLIP` is due either — the geometry
+    genuinely did not move, and re-emitting it would be noise. What IS due is the volume: the
+    hold muted it, so the plate's intent has to be re-asserted or a deliberately-raised source
+    comes back silent.
+  */
+  expect(playsIn(lines)).toEqual([]);
+  expect(lines).toContain(`MIXER 1-${String(heldLayer)} VOLUME 0`);
+  expect(lines.some((l) => l.startsWith(`MIXER 1-${String(heldLayer)} FILL `))).toBe(false);
+});
+
+// ───────── REVIEW REGRESSIONS (session BC adversarial review) ─────────
+
+it('🔴 an ON-AIR row with an EMPTY ledger still reconciles — status, not seat count', async () => {
+  /*
+    `setActiveLook` tested "the ledger is empty" and called it "nothing is seated, so
+    recording the look IS the whole action". An empty ledger is a different fact:
+    `registerLiveLayers` DELETES an item's entry when its record list is empty, and a row
+    taken on the EMPTY look (valid — background alone) is on air with no records at all.
+
+    Under the old spelling that row was told `ok` while NOTHING was sent: every hole in the
+    look it switched to stayed dark, and only a re-take — a cut — repaired it.
+  */
+  const r = await boot({
+    template: sixBoxTemplate({
+      sources: ['live-1', 'live-2'],
+      looks: [
+        look('empty', {}),
+        look('two', { 'live-1': GRID['live-1'], 'live-2': GRID['live-2'] }),
+      ],
+    }),
+    assignments: assign([
+      ['live-1', 'src-1'],
+      ['live-2', 'src-2'],
+    ]),
+  });
+  await r.load('item-1', 'debate', {});
+  expect((await r.take('item-1')).accepted).toBe(true);
+  // On air, and the ledger names nothing — the state the old guard mistook for "not on air".
+  expect(r.liveLayers().has('item-1')).toBe(false);
+  expect(r.activeLookId('item-1')).toBe('empty');
+  const before = (await recvLines()).length;
+
+  expect(await r.setActiveLook('item-1', 'two')).toEqual({ ok: true });
+
+  const lines = await since(before);
+  expect(playsIn(lines), 'both plates must actually be seated').toHaveLength(2);
+  expect(layerSet(r)).toEqual([BAND.start, BAND.start + 1]);
+  expect(recordOf(r, 'live-1')?.held ?? false).toBe(false);
+});
+
+it('🔴 an emergency swap is NOT refused because an UNRELATED plate lost its assignment', async () => {
+  /*
+    The reconcile resolves ALL declarations at TAKE — a plate one picker click from being on
+    screen must not refuse mid-switch. Applying that same all-or-nothing rule to a LIVE action
+    bricked the repair verb: an operator swapping a dead feed at 20:59 was refused because a
+    DIFFERENT plate, one this look does not even show, had lost its assignment.
+  */
+  const r = await boot();
+  await onAir(r);
+  const layer = layerOf(r, 'live-1');
+
+  // live-6's assignment disappears (a catalog edit, a cascade) while the row is on air.
+  r.setSourceAssignments(assign(ROUTE_KEYS.slice(0, 5).map((k, i) => [k, `src-${String(i + 1)}`])));
+
+  const before = (await recvLines()).length;
+  const verdict = await r.swapLiveSource('item-1', 'live-1', 'src-sd');
+
+  expect(verdict, 'the repair verb must still work').toEqual({ ok: true });
+  expect(playsIn(await since(before))).toEqual([`PLAY 1-${String(layer)} "route://9"`]);
+  // …and the unrelated plate is HELD, not destroyed: an unknown source form is not a reason
+  // to tear down a picture that is working.
+  expect(recordOf(r, 'live-6')).toBeDefined();
+});
+
+it('🔴 setLivePlateVolume does NOT put a HELD plate on air — the intent waits for the look', async () => {
+  const r = await boot();
+  await onAir(r);
+  await r.setActiveLook('item-1', 'solo');
+  const layer = layerOf(r, 'live-2');
+  expect(recordOf(r, 'live-2')?.held).toBe(true);
+  const before = (await recvLines()).length;
+
+  expect(await r.setLivePlateVolume('item-1', 'live-2', 1)).toEqual({ ok: true });
+
+  /*
+    A held plate is seated but off-screen. Asserting a raise onto it would put a VOICE on air
+    from a box nobody can see — and the hold's mute is a one-shot, so nothing would ever take
+    it back down. The intent is recorded and applied when a look brings the plate back.
+  */
+  expect(await since(before)).toEqual([]);
+  expect(mock?.layerState({ channel: 1, layer })?.volume).toBe(0);
+
+  const back = (await recvLines()).length;
+  await r.setActiveLook('item-1', 'six');
+  expect(await since(back)).toContain(`MIXER 1-${String(layer)} VOLUME 1`);
+  expect(mock?.layerState({ channel: 1, layer })?.volume).toBe(1);
+});

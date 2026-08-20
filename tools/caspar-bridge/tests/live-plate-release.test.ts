@@ -68,14 +68,25 @@ describe('releaseLivePlate', () => {
     expect(r.reason).toContain('no longer declared');
   });
 
-  it('an unresolvable producer is treated as undeclared rather than assumed holdable', () => {
+  it('🔴 an unresolvable producer that is STILL DECLARED is held, not destroyed', () => {
+    /*
+      CHANGED DELIBERATELY (session BC review). This asserted 'torn-down'.
+
+      Holdability is a property of the producer FORM, and an unresolvable assignment leaves
+      that unknown. Reading "unknown" as "tear it down" destroys a working picture over a
+      MISSING FACT — and the fact is routinely missing for a healthy reason: a live switch or
+      swap resolves only the plates going on screen, so a held plate is normally absent from
+      the resolution. The two axes are independent, and `stillDeclared` is the one that
+      answers "can any look bring this back".
+    */
     const r = releaseLivePlate({
       itemId: 'item-1',
       plateId: 'live-6',
       producer: undefined,
       stillDeclared: true,
     });
-    expect(r.disposition).toBe('torn-down');
+    expect(r.disposition).toBe('held');
+    expect(r.reason).toContain('could not be resolved');
   });
 
   it('OFF-FRAME is still HELD, but gets its own sentence — the row moved, not the look', () => {
