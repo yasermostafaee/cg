@@ -44,6 +44,7 @@ import {
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackSetActiveLookChannel,
   StackSetPlateVolumeChannel,
   StackSetPositionChannel,
   StackSwapLiveSourceChannel,
@@ -839,6 +840,12 @@ export function buildRoutes(
       StackSwapLiveSourceChannel,
       (r: { itemId: string; plateId: string; sourceId: string | null }) =>
         b.swapLiveSource(r.itemId, r.plateId, r.sourceId),
+    ),
+    // §14 (LOOKS) Stage E — the operator picks a look on the row. ONE seam: the bridge
+    // records it, reconciles the FILLS, then tells the page on the CG UPDATE payload so it
+    // moves the HOLES. Both halves off the same look id; nothing else switches a look.
+    route(StackSetActiveLookChannel, (r: { itemId: string; lookId: string }) =>
+      b.setActiveLook(r.itemId, r.lookId),
     ),
     // C-015 (6.5f) — the explicit recorded intent that raises a plate's audio.
     route(StackSetPlateVolumeChannel, (r: { itemId: string; plateId: string; volume: number }) =>

@@ -90,7 +90,12 @@ function stubBridge(
 ): { remove: ReturnType<typeof vi.fn> } {
   const remove = vi.fn(() => Promise.resolve(removeResult));
   const stub = {
-    link: { status: () => link, onStatusChanged: () => () => undefined },
+    link: {
+      status: () => link,
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub(reach),
     stack: { remove },
     liveLayers: {
@@ -111,6 +116,7 @@ async function render(
   stackReady = true,
   stackHasRows = true,
   ledgerReady = true,
+  deliveryPending = false,
 ): Promise<{
   el: HTMLDivElement;
   remove: ReturnType<typeof vi.fn>;
@@ -118,7 +124,12 @@ async function render(
 }> {
   const { remove } = stubBridge(link, removeResult, reach);
   const onSelectOwner = vi.fn();
-  const blind = liveLayerBlindness(link === 'disconnected', stackReady, stackHasRows);
+  const blind = liveLayerBlindness(
+    link === 'disconnected',
+    stackReady,
+    stackHasRows,
+    deliveryPending,
+  );
   const rows = liveLayerRows(layers, labelFor, blind);
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -418,39 +429,43 @@ describe('🔴 THE STACK HAS NOT ARRIVED — the absence that is not an absence'
     expect(liveLayerBlindness(true, true, true)).toBe('link-down');
     expect(liveLayerBlindness(true, false, true)).toBe('link-down');
     expect(liveLayerBlindness(false, false, true)).toBe('stack-not-arrived');
-    expect(liveLayerBlindness(false, true, true)).toBeNull();
+    expect(liveLayerBlindness(false, true, true, false)).toBeNull();
   });
 
   it('once the stack HAS arrived, a genuinely stranded layer is still caught', () => {
     // The guard must not be a blanket suppression: the alarm this surface exists to
     // raise has to survive it.
-    const [row] = liveLayerRows([layer()], STRANDED, liveLayerBlindness(false, true, true));
+    const [row] = liveLayerRows([layer()], STRANDED, liveLayerBlindness(false, true, true, false));
     expect(row?.releasable).toBe(true);
     expect(row?.needsAttention).toBe(true);
   });
 });
 
-describe('🔴 THE RECONNECT WINDOW — an empty stack is evidence of nothing', () => {
+describe('🔴 THE RECONNECT WINDOW — an empty stack is an answer ONLY when delivery has settled', () => {
   /*
-    ── THE SECOND DEFECT REVIEW FOUND IN THIS CHANGE, AND THE WORSE OF THE TWO ────
+    ── SUPERSEDES THE FIRST RULE, ON THE OWNER'S DECISION (2026-08-20) ────────────
 
-    The first fix read `stackReady`. That is not enough, because `useBridgeSnapshot`'s
-    `ready` flag *"latches on the FIRST arrival and never clears"* — so after the very
-    first stack lands it reads `true` forever, including through every reconnect.
+    STRANDED is decided by an item's ABSENCE from the stack. Session BG found that
+    reading `stackReady` was not enough — it *"latches on the FIRST arrival and never
+    clears"*, so after a reconnect it stays true while the stack is `[]` and a restarted
+    bridge is already serving its FULL adopted ledger. Every seated layer would have read
+    STRANDED with RELEASE armed, in exactly the bridge-restart case B-145 exists for.
 
-    And the reconnect is exactly the B-145 scenario: a restarted bridge ADOPTS its
-    persisted ledger at boot (`adoptLiveLayers(loaded.ledger, () => 'unknown')`) before
-    any socket exists, so it serves the FULL ledger on the first `liveLayers.state()`
-    it answers — while its reconciler stack is still empty, because the browser has not
-    re-delivered yet (B-092). For that whole window: link is live, `stackReady` is a
-    latched true, `items` is `[]`, and the ledger is full.
+    BG's fix suppressed the alarm for EVERY empty stack. That was safe and it cost a true
+    positive: an operator who removed every row and stranded a producer got no warning.
+    The owner asked for the sharper line, and it turned out to be a FACT rather than an
+    inference — `WebSocketRuntime` has always tracked `#resyncing`, it simply never left
+    that class. It is now `link.resyncing()` on the bridge contract.
 
-    Read naively that is EVERY seated layer reading "Stranded" with RELEASE armed, in
-    the one situation this feature was built for. An empty stack cannot tell "not
-    delivered yet" from "genuinely nothing", so it is evidence of neither.
+    So: empty + delivery pending → blind. Empty + settled → that IS the answer, and a
+    seated layer whose owner is absent from it is genuinely stranded.
+
+    ⚠ The residual, tested nowhere because it is undecidable here: one bridge serves many
+    browsers, and this browser cannot know another is about to restore the rows. See the
+    `LiveLayerBlindness` doc.
   */
 
-  it('🔴 a live link with a latched-ready but EMPTY stack does not strand anything', async () => {
+  it('🔴 empty AND still delivering: no strand, no control', async () => {
     const { el } = await render(
       [layer()],
       STRANDED,
@@ -459,6 +474,8 @@ describe('🔴 THE RECONNECT WINDOW — an empty stack is evidence of nothing', 
       'both-up',
       true,
       false,
+      true,
+      true,
     );
 
     const row = rowFor(el, '1-10');
@@ -469,38 +486,65 @@ describe('🔴 THE RECONNECT WINDOW — an empty stack is evidence of nothing', 
     expect(buttonIn(row, 'RELEASE')).toBeUndefined();
   });
 
-  it('the precedence covers all three blind facts, in one place', () => {
-    expect(liveLayerBlindness(true, true, true)).toBe('link-down');
-    expect(liveLayerBlindness(true, false, false)).toBe('link-down');
-    expect(liveLayerBlindness(false, false, true)).toBe('stack-not-arrived');
-    expect(liveLayerBlindness(false, true, false)).toBe('stack-empty');
-    expect(liveLayerBlindness(false, true, true)).toBeNull();
+  it('🔴 empty AND settled: the alarm is BACK — this is what the owner asked for', async () => {
+    const { el } = await render(
+      [layer()],
+      STRANDED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      false,
+      true,
+      false,
+    );
+
+    const row = rowFor(el, '1-10');
+    expect(row?.textContent).toContain('Stranded');
+    expect(buttonIn(row, 'RELEASE'), 'and it is actionable again').toBeDefined();
   });
 
-  it('…and the three say DIFFERENT things, so the console never implies it looked', () => {
-    const detail = (b: 'link-down' | 'stack-not-arrived' | 'stack-empty'): string =>
+  it('the precedence covers all four facts, in one place', () => {
+    // link-down outranks everything: with the link down the ledger itself is stale, so the
+    // stack's state is beside the point.
+    expect(liveLayerBlindness(true, true, true, false)).toBe('link-down');
+    expect(liveLayerBlindness(true, false, false, true)).toBe('link-down');
+    expect(liveLayerBlindness(false, false, true, false)).toBe('stack-not-arrived');
+    expect(liveLayerBlindness(false, true, false, true)).toBe('stack-delivery-pending');
+    // …and the two that are NOT blindness.
+    expect(liveLayerBlindness(false, true, false, false), 'settled-empty is an answer').toBeNull();
+    expect(liveLayerBlindness(false, true, true, false)).toBeNull();
+  });
+
+  it('🔴 a pending delivery does NOT mask a stack that has rows', () => {
+    /*
+      The guard is scoped to the EMPTY case on purpose. A stack that already carries rows
+      can bear witness that a particular itemId is not among them, whether or not more are
+      still arriving — and suppressing the alarm through every resync would be BG's
+      over-suppression back again under a new name.
+    */
+    const oneOtherRow = ownerLabelFor([item('item-other')], () => 'Something Else');
+    const [row] = liveLayerRows(
+      [layer()],
+      oneOtherRow,
+      liveLayerBlindness(false, true, true, true),
+    );
+
+    expect(row?.releasable).toBe(true);
+    expect(row?.needsAttention).toBe(true);
+  });
+
+  it('…and the three blind states say DIFFERENT things, so the console never implies it looked', () => {
+    const detail = (b: 'link-down' | 'stack-not-arrived' | 'stack-delivery-pending'): string =>
       liveLayerRows([layer()], STRANDED, b)[0]?.detail ?? '';
 
     expect(detail('link-down')).toContain('Not connected');
     expect(detail('stack-not-arrived')).toContain('has not arrived');
-    expect(detail('stack-empty')).toContain('no rows');
-    // None of them is an alarm: not knowing is not a claim that anything is wrong.
-    for (const b of ['link-down', 'stack-not-arrived', 'stack-empty'] as const) {
+    expect(detail('stack-delivery-pending')).toContain('still receiving');
+    // None is an alarm: not knowing is not a claim that anything is wrong.
+    for (const b of ['link-down', 'stack-not-arrived', 'stack-delivery-pending'] as const) {
       expect(liveLayerRows([layer()], STRANDED, b)[0]?.needsAttention).toBe(false);
     }
-  });
-
-  it('a NON-empty stack still catches a genuine strand — the guard is not a blanket', () => {
-    /*
-      The cost of the `stack-empty` rule is one true positive: an operator who removes
-      EVERY row gets no alarm. Every other strand is still caught, and that is what
-      makes the trade acceptable rather than a silent disabling of the feature.
-    */
-    const oneOtherRow = ownerLabelFor([item('item-other')], () => 'Something Else');
-    const [row] = liveLayerRows([layer()], oneOtherRow, liveLayerBlindness(false, true, true));
-
-    expect(row?.releasable).toBe(true);
-    expect(row?.needsAttention).toBe(true);
   });
 });
 

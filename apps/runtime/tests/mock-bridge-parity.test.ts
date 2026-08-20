@@ -90,7 +90,8 @@ const BRIDGE_SURFACE: {
 } = {
   methods: ['getAppInfo'],
   groups: {
-    link: ['status', 'onStatusChanged'],
+    // §4 — `resyncing` says whether an EMPTY stack is an answer or a not-yet.
+    link: ['status', 'onStatusChanged', 'resyncing', 'onResyncingChanged'],
     stack: [
       'load',
       'take',
@@ -107,6 +108,8 @@ const BRIDGE_SURFACE: {
       // contract; the wire half is integration-tested bridge-side, which is the
       // only place a REPLACE on an occupied layer can be observed at all.
       'swapLiveSource',
+      // §14 (LOOKS) Stage E — the row’s look picker.
+      'setActiveLook',
       // C-015 (6.5f) — the per-plate audio intent. The mock has no producers, so it
       // models the INTENT half only (record + publish) and answers the same
       // contract; the wire assertion is integration-tested bridge-side.

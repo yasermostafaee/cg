@@ -39,6 +39,7 @@ import type {
   StackRemoveChannel,
   StackSetPlateVolumeChannel,
   StackSetPositionChannel,
+  StackSetActiveLookChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
   StackStopAllChannel,
@@ -110,6 +111,24 @@ export interface RuntimeBridge {
   link: {
     status(): BridgeLinkStatus;
     onStatusChanged(handler: (status: BridgeLinkStatus) => void): Unsubscribe;
+    /**
+     * 🔴 **Is a STACK DELIVERY in flight?** — `true` from the moment a (re)connect starts
+     * its resync until the stack has been re-delivered and re-pulled.
+     *
+     * It exists on this contract for ONE consumer and one question: whether an EMPTY stack
+     * is the answer or a not-yet. `useBridgeSnapshot`’s `ready` cannot answer it — it
+     * latches on the first arrival and never clears — so after a reconnect a browser sees a
+     * live link, a latched-ready stack of `[]`, and a bridge already serving its full
+     * adopted live-layer ledger. Read without this, every seated layer would look STRANDED
+     * with a control armed to cut it.
+     *
+     * ⚠ **It closes the SELF race, not the multi-browser one.** One bridge serves many
+     * browsers; this browser cannot know that ANOTHER console is about to restore the rows
+     * that would explain a layer. That residual is genuinely undecidable from here and
+     * would need a bridge-side “every client has re-delivered” fact, which does not exist.
+     */
+    resyncing(): boolean;
+    onResyncingChanged(handler: (value: boolean) => void): Unsubscribe;
   };
 
   stack: {
@@ -160,6 +179,19 @@ export interface RuntimeBridge {
     swapLiveSource(
       req: ChannelRequest<typeof StackSwapLiveSourceChannel>,
     ): Promise<ChannelResponse<typeof StackSwapLiveSourceChannel>>;
+    /**
+     * §14 (LOOKS) Stage E — **switch ONE row to another authored LOOK.**
+     *
+     * The look picker on the row sends this and nothing else does. It drives the one
+     * shipped seam: record the look → `reconcileLivePlates` moves the FILLS → the page is
+     * told on the `CG UPDATE` payload so it moves the HOLES, both off the same look id.
+     *
+     * ⚠ **The switch IS the cut** — v1 parks every other transition mode — so there is no
+     * mode to pick and none to escape. Taking the row off air stays STOP/CLEAR’s job.
+     */
+    setActiveLook(
+      req: ChannelRequest<typeof StackSetActiveLookChannel>,
+    ): Promise<ChannelResponse<typeof StackSetActiveLookChannel>>;
     /**
      * C-015 phase 6 (6.5f) — raise or mute ONE plate's audio. The EXPLICIT
      * RECORDED INTENT the mute rule defers to, and the only thing that may make a

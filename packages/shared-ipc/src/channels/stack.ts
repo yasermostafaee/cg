@@ -170,6 +170,37 @@ export const StackSetPositionChannel = defineChannel(
  * them here would be a second copy of a vocabulary that already has an owner. The
  * `message` is what the operator reads; the reason is for logs and tests.
  */
+/**
+ * `multibox-layout-switch` §14 (LOOKS) Stage E — **SWITCH ONE ROW TO ANOTHER LOOK.**
+ *
+ * The operator picks a look on the row and this is what that click sends. It drives the
+ * ONE shipped seam and adds nothing beside it: the bridge records the look, runs
+ * `reconcileLivePlates` to move the FILLS, then tells the page on the `CG UPDATE`
+ * payload so it moves the HOLES — both halves driven off the same look id, which is why
+ * they cannot disagree about which look is on air (`design.md` §6/§12.2).
+ *
+ * ⚠ **The switch is a CUT.** v1 parks every other transition mode (§14.4), so there is no
+ * mode to choose and none to escape from: the command the operator sends IS the immediate
+ * one. Taking the row OFF air remains the STOP/CLEAR verbs’ job, unchanged.
+ *
+ * `reason` is an OPEN string for `swapLiveSource`’s reason: the refusals compose from the
+ * item, the look, reachability and whatever AMCP says, and re-listing them here would be a
+ * second copy of a vocabulary that already has an owner. The `message` is what the operator
+ * reads; the reason is for logs, tests and the fallback wording.
+ */
+export const StackSetActiveLookChannel = defineChannel(
+  'stack.set-active-look',
+  z.object({
+    itemId: IdSchema,
+    /** A look id the template AUTHORS. The bridge refuses `unknown-look` otherwise. */
+    lookId: z.string().min(1),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.string().optional(),
+    message: z.string().optional(),
+  }),
+);
 export const StackSwapLiveSourceChannel = defineChannel(
   'stack.swap-live-source',
   z.object({

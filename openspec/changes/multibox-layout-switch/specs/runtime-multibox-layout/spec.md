@@ -420,6 +420,97 @@ that no live source is on air.
 - **WHEN** a plate is seated, released or held
 - **THEN** the list changes without the console asking again
 
+### Requirement: The operator switches a running row's look from a picker that IS the on-air readout
+
+A row whose template authors looks SHALL carry an always-visible control that both STATES which
+look is on air and SWITCHES it, in one action. The two SHALL be the same object: a readout that
+could disagree with the control is the mistake the operator must not be able to make.
+
+The control SHALL offer only AUTHORED looks and SHALL mark exactly one, so an invalid combination
+is unrepresentable rather than defended against. It SHALL NOT offer an "off" entry — taking the row
+off air remains the stop and clear verbs' job.
+
+A row whose template authors NO looks SHALL carry no such control, and SHALL NOT be refused
+anything on that account. A template that has a look group authoring ZERO looks is a different case
+and SHALL be refused at the take, naming what is missing: it resolves no geometry, so every box
+would go to air empty. **Having no look group and having a group with no looks SHALL be
+distinguishable**, because the first describes every template authored before looks existed and
+refusing those would take an installation's whole existing rundown off air.
+
+Switching SHALL drive one path: the look is recorded, the seated live sources are reconciled
+against that look's geometry, and the page is told which look on the same payload that carries its
+data — so the holes it punches and the fills behind them are one computation. The page SHALL be
+told only after the reconcile succeeds, so a refused switch leaves the previous look intact rather
+than painting new holes over producers at the old geometry.
+
+The switch SHALL be a cut, and therefore SHALL itself be the immediate action: v1 offers no other
+transition mode, so there is no mode to choose and none to escape.
+
+**Preset-then-take.** The operator SHALL be able to re-point a source BEFORE switching to the look
+that shows it. A source with no place in the active look is held, so re-pointing it records the
+change without moving anything on air, and it becomes visible at the moment of the switch. A source
+that IS in the active look SHALL move immediately — that is the live repoint, and the two SHALL NOT
+be conflated.
+
+Where the operator cannot reach the playout server, the control SHALL remain PRESENT and become
+disabled with the reason, never disappear: its absence means "this template has no looks", a
+permanent fact, while unreachability is transient. It SHALL continue to show which look is live
+while it cannot switch.
+
+**An active per-row source override SHALL be visible wherever the surface states a plate's source.**
+A surface that says when an assignment takes effect while showing the wrong current source is a
+half-repair; the surface that carries the assignment SHALL also name the live path for changing what
+is on air now.
+
+#### Scenario: The picker states the live look before anyone has touched it
+
+- **GIVEN** a row on air whose template authors several looks
+- **WHEN** the operator looks at the row
+- **THEN** the control marks the authored default, which is the look the take entered
+
+#### Scenario: One action switches, and the readout follows
+
+- **WHEN** the operator picks a different look
+- **THEN** the live sources move to that look's geometry, the page is told which look, and the
+  control marks the new look
+
+#### Scenario: A switch between looks sharing no sources
+
+- **GIVEN** one look showing two sources and another showing two entirely different ones
+- **WHEN** the operator switches between them
+- **THEN** the departing sources are held and the arriving ones are shown, each on its own layer
+
+#### Scenario: A preset applies on the switch, not before
+
+- **GIVEN** a source with no place in the active look
+- **WHEN** the operator points it at a different input
+- **THEN** nothing on air changes, and the new input is showing once the operator switches to a look
+  that includes that source
+
+#### Scenario: A template with no looks authored is refused at the take
+
+- **GIVEN** a template whose look group authors no looks
+- **WHEN** the operator takes it
+- **THEN** it is refused, naming that the template has no looks rather than failing silently
+
+#### Scenario: A template predating looks is unaffected
+
+- **GIVEN** a template authored without a look group
+- **WHEN** the operator takes it
+- **THEN** it goes to air as before and carries no look control
+
+#### Scenario: An unreachable server disables the picker rather than removing it
+
+- **GIVEN** a row with looks and no route to the playout server
+- **WHEN** the operator looks at the row
+- **THEN** the control is still there, still shows which look is live, and says why it cannot switch
+
+#### Scenario: A patched row says so where its source is stated
+
+- **GIVEN** a row whose plate has been pointed at a different source than its template assignment
+- **WHEN** the operator opens the panel that states that plate's source
+- **THEN** it shows what is actually on air and that this row is patched
+
 ### Requirement: The operator's primitive is ONE TOGGLE PER DECLARED SOURCE; the COUNT is derived
 
 The row's always-visible control SHALL be **one toggle per declared source**, and **which toggles are

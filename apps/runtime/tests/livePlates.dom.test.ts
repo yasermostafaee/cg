@@ -97,7 +97,12 @@ afterEach(() => {
 
 function bridgeStub(templates: readonly TemplateInfo[], info: TemplateInfo | null) {
   const stub = {
-    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    link: {
+      status: () => linkFor('both-up'),
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
     templates: {
       get: vi.fn(() => Promise.resolve(info)),

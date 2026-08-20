@@ -40,7 +40,12 @@ function stubBridge(
     // §1 — this Clear emits AMCP, so the banner reads BOTH hops and the stub owes
     // both channels. Adding `useCasparReach` anywhere pulls `useLink` in
     // transitively (health rides `useBridgeSnapshot`, which reads the link).
-    link: { status: () => link, onStatusChanged: () => () => undefined },
+    link: {
+      status: () => link,
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub(reach),
     layers: { clear },
   };

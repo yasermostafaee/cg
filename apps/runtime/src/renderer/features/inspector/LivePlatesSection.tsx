@@ -16,7 +16,7 @@ import {
   stagePlateSource,
   subscribeDrafts,
 } from './draftStore.js';
-import { appliedPlateSources } from './livePlates.js';
+import { appliedPlateSources, onAirPlateSource } from './livePlates.js';
 
 /**
  * D-137 / C-015 — bind each of THIS template's live plates to one of the
@@ -92,6 +92,16 @@ const styles = {
     margin: '0 0 var(--r-space-3)',
   },
   empty: { color: colors.textMuted, fontSize: 'var(--r-text-sm)', margin: 0 },
+  /**
+   * The ON-AIR line for a plate the operator has patched on THIS row.
+   *
+   * `pending` (amber), whose documented meaning in this palette is ATTENTION —
+   * "OCCUPIED, UNKNOWN, UNCONFIRMED". A row running on an emergency patch is exactly
+   * something to go and look at: it diverges from the template every other row uses,
+   * and nothing else on this panel says so. NOT green — green is the layer table’s ON
+   * AIR mark and this is a statement about WHICH source, not about being on air.
+   */
+  patched: { color: colors.pending, fontSize: '0.72rem', fontWeight: 700 },
 } as const;
 
 export function LivePlatesSection({
@@ -141,6 +151,12 @@ export function LivePlatesSection({
         const appliedSource = applied.get(plate.sourceId) ?? null;
         const value = effectivePlateSource(item.itemId, plate.sourceId, appliedSource);
         const dirty = isPlateDirty(item.itemId, plate.sourceId, appliedSource);
+        // R-048 — the per-ROW patch, folded in through the ONE join that reads it.
+        const onAir = onAirPlateSource(item, plate.sourceId, appliedSource);
+        const onAirName =
+          catalog.sources.find((src) => src.id === onAir.sourceId)?.name ??
+          onAir.sourceId ??
+          'nothing';
         return (
           <div key={plate.elementId} style={styles.row}>
             <span style={styles.plate}>{plate.sourceId}</span>
@@ -163,6 +179,30 @@ export function LivePlatesSection({
                 needs a source
               </span>
             )}
+            {/*
+              🔴 §12.5 / `tasks.md` 7.8 — WHAT IS ACTUALLY ON AIR, when it is not this.
+
+              The picker above shows the TEMPLATE ASSIGNMENT (draft-or-applied). If this
+              ROW has been patched with `swapLiveSource`, that assignment is not what is
+              composited — and until this line existed the panel said nothing, so the
+              operator read the assignment as the truth. §12.5 refused to ship its
+              "takes effect at the next take" wording without this, because telling
+              someone when a change lands while showing them the wrong current value is
+              a half-repair.
+            */}
+            {onAir.overridden && (
+              <span
+                style={styles.patched}
+                data-plate-overridden={plate.sourceId}
+                title={
+                  `This row is patched onto "${onAirName}" and ignores the assignment ` +
+                  `above. Change it with the row’s SOURCE verb; the assignment here is ` +
+                  `what a fresh take would use.`
+                }
+              >
+                on air: {onAirName} (patched on this row)
+              </span>
+            )}
             {dirty && <DraftChip label="unapplied" />}
           </div>
         );
@@ -179,7 +219,7 @@ export function LivePlatesSection({
       {staged.length > 0 && (
         <p style={styles.timing} data-plate-timing="">
           {item.status === 'on-air'
-            ? 'This item is ON AIR — Update saves the change, and it takes effect at its next take.'
+            ? 'This item is ON AIR — Update saves the change, and it takes effect at its next take. To change what this row is showing NOW, use the row’s SOURCE verb: it patches this row only, and leaves the assignment here alone.'
             : 'Takes effect at the next take, not on the graphic currently composited.'}
         </p>
       )}

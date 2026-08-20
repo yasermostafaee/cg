@@ -47,7 +47,12 @@ function stubBridge(reach: Reachability): void {
       state: () => Promise.resolve({ engaged: false }),
       onStateChanged: () => () => undefined,
     },
-    link: { status: () => linkFor(reach), onStatusChanged: () => () => undefined },
+    link: {
+      status: () => linkFor(reach),
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
 }

@@ -63,7 +63,12 @@ function stubBridge(
 } {
   const clear = vi.fn(() => Promise.resolve(clearResult));
   const stub = {
-    link: { status: () => link, onStatusChanged: () => () => undefined },
+    link: {
+      status: () => link,
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     // §1 — the panel reads the SECOND hop now, so the stub must answer it. A stub
     // that omits a channel does not fail where it is written; it fails in
     // whichever spec first renders a component that reaches for it.

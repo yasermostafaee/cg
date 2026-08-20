@@ -54,7 +54,12 @@ const SLOTS: FixedSlotState[] = [
 
 function stubBridge(skips: RestoreSkip[]): void {
   const stub = {
-    link: { status: () => 'live', onStatusChanged: () => () => undefined },
+    link: {
+      status: () => 'live',
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     fixedLayers: {

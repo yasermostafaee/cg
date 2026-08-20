@@ -111,24 +111,43 @@ export interface LiveLayerRowView {
  * - `stack-not-arrived` — the stack snapshot has not landed yet. The ledger and the
  *   stack are two INDEPENDENT snapshots that land separately, and the ledger can
  *   arrive first.
- * - `stack-empty` — 🔴 **the one a first cut of this file missed, and the one that
- *   matters most.** `useBridgeSnapshot`'s `ready` flag *"latches on the FIRST arrival
- *   and never clears"*, so after a reconnect it still reads `true` while the stack is
- *   `[]` — and a restarted bridge serves its FULL adopted ledger before the browser
- *   has re-delivered a single row (`B-092`). Read naively, **every seated layer would
- *   read STRANDED with RELEASE armed, in exactly the bridge-restart scenario `B-145`
- *   exists for.** An empty stack cannot tell "not delivered yet" from "genuinely
- *   nothing", so it is evidence of neither.
+ * - `stack-delivery-pending` — 🔴 **the one a first cut of this file missed, and the one
+ *   that matters most.** `useBridgeSnapshot`’s `ready` flag *“latches on the FIRST arrival
+ *   and never clears”*, so after a reconnect it still reads `true` while the stack is `[]` —
+ *   and a restarted bridge serves its FULL adopted ledger before the browser has
+ *   re-delivered a single row (`B-092`). Read naively, **every seated layer would read
+ *   STRANDED with RELEASE armed, in exactly the bridge-restart scenario `B-145` exists
+ *   for.**
  *
- * ⚠ **The `stack-empty` rule costs one true positive, and that trade is deliberate.**
- * An operator who removes EVERY row and strands a producer gets no alarm here.
- * Failing to raise an alarm is recoverable — the producer is still reachable by
- * re-adding the row, and the orphan surfaces still exist — while arming a control
- * that cuts a live guest on a guess is not. Every other strand is still caught,
- * because a non-empty stack CAN bear witness that a particular `itemId` is not among
- * its rows.
+ * ⭐ **AN EMPTY STACK IS NOT, BY ITSELF, BLINDNESS — owner decision, 2026-08-20.** The first
+ * fix suppressed the alarm for EVERY empty stack, which traded a true positive for safety: an
+ * operator who removed every row and stranded a producer got no warning. The owner asked for
+ * the sharper distinction, and it turned out to be available rather than inferable. The
+ * transport already tracks “a stack delivery is in flight” (`WebSocketRuntime`’s `#resyncing`,
+ * set before the first await of a resync and cleared on every exit path); it simply never left
+ * that class. It is now on the bridge contract as `link.resyncing()`, so:
+ *
+ * - empty **and delivery pending** → blind, no alarm, no control;
+ * - empty **and settled** → that IS the answer, and a seated layer whose owner is absent from
+ *   it is genuinely stranded. The alarm is restored for that case.
+ *
+ * 🔴 **This is an exposed FACT, not an inferred one, and the difference is the whole point.**
+ * The rejected alternative was “retention says N rows, the bridge says 0” — a correlated
+ * question, not this one, and it fails in both directions: a restore that THREW leaves
+ * retention at N forever (false pending, alarm suppressed permanently), and a browser with
+ * empty retention reconnecting to a restarted bridge reads “genuinely empty” while another
+ * console is 200 ms from restoring exactly those rows. Arming a control that cuts a live guest
+ * on a derived neighbour of the real fact is what `B-101` is about.
+ *
+ * ⚠ **THE RESIDUAL, stated rather than papered over.** This closes the SELF race completely.
+ * It does not close the MULTI-BROWSER one: one bridge serves many browsers, and this browser
+ * cannot know that another is about to restore the rows that would explain a layer. That is
+ * genuinely undecidable from here and would need a bridge-side “every client has re-delivered”
+ * fact, which does not exist. So a second console CAN still see a transient stranded verdict
+ * during another console’s restore — the confirm dialog remains the last guard, and it names
+ * the plate and producer for that reason.
  */
-export type LiveLayerBlindness = 'link-down' | 'stack-not-arrived' | 'stack-empty';
+export type LiveLayerBlindness = 'link-down' | 'stack-not-arrived' | 'stack-delivery-pending';
 
 /**
  * Can the owner verdict be trusted at all? **THE ONE PLACE THIS PRECEDENCE LIVES.**
@@ -142,10 +161,11 @@ export function liveLayerBlindness(
   linkDown: boolean,
   stackReady: boolean,
   stackHasRows: boolean,
+  deliveryPending: boolean,
 ): LiveLayerBlindness | null {
   if (linkDown) return 'link-down';
   if (!stackReady) return 'stack-not-arrived';
-  if (!stackHasRows) return 'stack-empty';
+  if (!stackHasRows && deliveryPending) return 'stack-delivery-pending';
   return null;
 }
 
@@ -156,10 +176,9 @@ const BLIND_DETAIL: Record<LiveLayerBlindness, string> = {
   'stack-not-arrived':
     'The stack has not arrived yet, so which row owns this layer is not known. It fills in as ' +
     'soon as the console answers.',
-  'stack-empty':
-    'This console is carrying no rows, so which row owns this layer cannot be established — an ' +
-    'empty stack cannot tell "not delivered yet" from "nothing here". It resolves as soon as the ' +
-    'rows arrive.',
+  'stack-delivery-pending':
+    'The console is still receiving its rows, so which row owns this layer is not established ' +
+    'yet. It resolves as soon as the delivery finishes.',
 };
 
 /** The coordinate as an operator reads it on a CasparCG channel: `1-10`. */

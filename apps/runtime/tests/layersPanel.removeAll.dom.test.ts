@@ -44,7 +44,12 @@ function stubBridge(
   const reach: Reachability = 'both-up';
   const stub = {
     // R-006 — StackRow + the header bulk actions mirror the connection refusal.
-    link: { status: () => link, onStatusChanged: () => () => undefined },
+    link: {
+      status: () => link,
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub(reach),
     // R-004 — the panel joins each row against the registry to label its template.
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
@@ -198,6 +203,8 @@ describe('StackPanel Remove-All — R-010', () => {
           listeners.add(h);
           return () => listeners.delete(h);
         },
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
       },
       // §0a — the second hop, selected BY NAME (support/reachability.ts).
       connections: connectionsStub(reach),

@@ -50,7 +50,12 @@ function stubBridge(link: Link, primary: ServerHealth, backup?: ServerHealth): v
     strategy: 'mirror-sync',
   };
   const stub = {
-    link: { status: () => link, onStatusChanged: () => () => undefined },
+    link: {
+      status: () => link,
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: {
       health: () => Promise.resolve(health),
       onHealthChanged: () => () => undefined,

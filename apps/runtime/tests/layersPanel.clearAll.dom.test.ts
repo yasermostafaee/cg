@@ -60,7 +60,12 @@ function stubBridge(
   );
   const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: stack.length }));
   const stub = {
-    link: { status: () => link, onStatusChanged: () => () => undefined },
+    link: {
+      status: () => link,
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub(reach),
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     // R-028 — the merged panel also reads the declared layers and the playout tab.
@@ -362,6 +367,8 @@ describe('StackPanel Clear-All', () => {
           listeners.add(h);
           return () => listeners.delete(h);
         },
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
       },
       // §0a — the second hop, selected BY NAME (support/reachability.ts).
       connections: connectionsStub(reach),

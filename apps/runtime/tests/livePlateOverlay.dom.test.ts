@@ -158,7 +158,12 @@ function stubBridge(f: Fixture): void {
       assignments: () => Promise.resolve(f.assignments ?? { assignments: [] }),
       onAssignmentsChanged: noop,
     },
-    link: { status: () => 'live', onStatusChanged: noop },
+    link: {
+      status: () => 'live',
+      onStatusChanged: noop,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
   };
   (window as unknown as { cg: unknown }).cg = stub;
 }

@@ -86,6 +86,8 @@ function stubBridge(link: 'live' | 'disconnected' = 'live'): {
         listeners.add(h);
         return () => listeners.delete(h);
       },
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
     },
     connections: connectionsStub('both-up'),
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },

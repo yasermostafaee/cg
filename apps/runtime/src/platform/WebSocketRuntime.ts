@@ -36,6 +36,7 @@ import {
   StackStopChannel,
   StackSetPlateVolumeChannel,
   StackSetPositionChannel,
+  StackSetActiveLookChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
   StackStateChangedChannel,
@@ -247,7 +248,23 @@ export class WebSocketRuntime implements RuntimeBridge {
    * connect. Outside this window an empty snapshot is a real one (Remove All)
    * and is mirrored normally.
    */
+  /**
+   * 🔴 **IS A STACK DELIVERY IN FLIGHT?** — the fact that decides whether an EMPTY stack
+   * is an answer or a not-yet.
+   *
+   * It has always existed here to suppress retention mirroring; what it did NOT do was
+   * leave this class. That absence is what forced the live-sources surface to treat every
+   * empty stack as blindness: `useBridgeSnapshot`'s `ready` latches on the first arrival
+   * and never clears, so after a reconnect it reads `true` while this window is open and
+   * the renderer had nothing else to ask.
+   *
+   * Every write goes through {@link #setResyncing} so the five sites cannot drift — the
+   * same shape as `#setStatus`, and for the same reason: a second, silently-diverging
+   * spelling of the same state is what golden rule 6 forbids.
+   */
   #resyncing = false;
+  /** Subscribers to {@link #resyncing}, so the renderer can stop guessing. */
+  readonly #resyncSubs = new Subs<boolean>();
 
   readonly #stackSubs = new Subs<readonly StackItemState[]>();
   /**
@@ -374,6 +391,18 @@ export class WebSocketRuntime implements RuntimeBridge {
     }
   }
 
+  /**
+   * THE ONE WRITE PATH for {@link #resyncing}, publishing on change.
+   *
+   * ⚠ Publishing on CHANGE rather than on every write is deliberate: `#resync` clears the
+   * flag on three separate exit paths, and two of them can run in sequence.
+   */
+  #setResyncing(value: boolean): void {
+    if (this.#resyncing === value) return;
+    this.#resyncing = value;
+    this.#resyncSubs.emit(value);
+  }
+
   #setStatus(status: BridgeLinkStatus): void {
     if (this.#status === status) return;
     this.#status = status;
@@ -413,7 +442,7 @@ export class WebSocketRuntime implements RuntimeBridge {
      * renderer issues during the resync resolves with the guard already up and
      * mirrors nothing. It is cleared on every exit path below, as before.
      */
-    this.#resyncing = true;
+    this.#setResyncing(true);
     // B-085 — reconcile the bridge to the browser-local library: deliver every
     // retained template FIRST, sourced from the persistent store.
     //
@@ -501,7 +530,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     // First connect: the renderer's `useBridgeSnapshot` pulls the initial
     // stack/health/lock, so only a RECONNECT re-pulls them here.
     if (!rePullSnapshots) {
-      this.#resyncing = false;
+      this.#setResyncing(false);
       return;
     }
     try {
@@ -516,11 +545,11 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#lockSubs.emit(lock);
       // Only a restore that actually succeeded may re-baseline the retention:
       // after a failure this snapshot may be the empty one that erases it.
-      this.#resyncing = false;
+      this.#setResyncing(false);
       if (restoreOk) this.#mirrorStack(stack);
     } catch {
       /* a fresh drop during resync will re-trigger reconnect */
-      this.#resyncing = false;
+      this.#setResyncing(false);
     }
   }
 
@@ -717,6 +746,10 @@ export class WebSocketRuntime implements RuntimeBridge {
     status: (): BridgeLinkStatus => this.#status,
     onStatusChanged: (handler: (status: BridgeLinkStatus) => void): Unsubscribe =>
       this.#statusSubs.add(handler),
+    // §4 — is a stack delivery in flight? See `#resyncing`.
+    resyncing: (): boolean => this.#resyncing,
+    onResyncingChanged: (handler: (value: boolean) => void): Unsubscribe =>
+      this.#resyncSubs.add(handler),
   };
 
   readonly stack = {
@@ -735,6 +768,11 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetPositionChannel, req),
     swapLiveSource: (req: ChannelRequest<typeof StackSwapLiveSourceChannel>) =>
       this.#invoke(StackSwapLiveSourceChannel, req),
+    // §14 (LOOKS) Stage E — the row’s look picker. Bridge-owned throughout: the look is
+    // recorded there and the reconcile that follows is AMCP, so a disconnected browser
+    // simply cannot reach it.
+    setActiveLook: (req: ChannelRequest<typeof StackSetActiveLookChannel>) =>
+      this.#invoke(StackSetActiveLookChannel, req),
     setPlateVolume: (req: ChannelRequest<typeof StackSetPlateVolumeChannel>) =>
       this.#invoke(StackSetPlateVolumeChannel, req),
     removeAll: () => this.#invoke(StackRemoveAllChannel, undefined),

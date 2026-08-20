@@ -164,7 +164,12 @@ describe('Inspector fields — R-020', () => {
     const stub = {
       // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
       // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
-      link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+      link: {
+        status: () => linkFor('both-up'),
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
       connections: connectionsStub('both-up'),
       templates: {
         list: vi.fn(() => Promise.resolve([])),
@@ -270,7 +275,12 @@ describe('ServerSettingsPanel ports — R-020 (B-077 interaction)', () => {
         snapshot: () => Promise.resolve([]),
         onStateChanged: () => () => undefined,
       },
-      link: { status: () => 'live' as const, onStatusChanged: () => () => undefined },
+      link: {
+        status: () => 'live' as const,
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
     };
     (window as unknown as { cg: typeof stub }).cg = stub;
     return { setConfig };
@@ -342,7 +352,12 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
         onStateChanged: () => () => undefined,
         engage,
       },
-      link: { status: () => 'live' as const, onStatusChanged: () => () => undefined },
+      link: {
+        status: () => 'live' as const,
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
     };
     (window as unknown as { cg: typeof stub }).cg = stub;
     const el = await render(createElement(StatusBar));

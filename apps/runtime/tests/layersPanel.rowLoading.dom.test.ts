@@ -109,7 +109,12 @@ function stubBridge(): {
   const stack = deferred<StackItemState[]>();
   const stackListeners = new Set<(items: StackItemState[]) => void>();
   const stub = {
-    link: { status: () => 'live', onStatusChanged: () => () => undefined },
+    link: {
+      status: () => 'live',
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     fixedLayers: {

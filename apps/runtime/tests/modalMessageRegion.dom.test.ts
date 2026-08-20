@@ -132,7 +132,12 @@ describe('the census — every Runtime dialog that can speak, speaks through the
       binding: null,
     }));
     const stub = {
-      link: { status: () => 'live', onStatusChanged: () => () => undefined },
+      link: {
+        status: () => 'live',
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
       stack: { snapshot: () => Promise.resolve([]), onStateChanged: () => () => undefined },
       fixedLayers: {
         setConfig: () =>
@@ -232,7 +237,12 @@ describe('the census — every Runtime dialog that can speak, speaks through the
           ]),
         onStateChanged: () => () => undefined,
       },
-      link: { status: () => 'live', onStatusChanged: () => () => undefined },
+      link: {
+        status: () => 'live',
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
     };
     (window as unknown as { cg: typeof stub }).cg = stub;
 

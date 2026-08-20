@@ -40,7 +40,12 @@ function stubLink(status: 'live' | 'disconnected' | 'offline-mock'): void {
   const reach: Reachability =
     status === 'offline-mock' ? 'test-mode' : status === 'disconnected' ? 'bridge-down' : 'both-up';
   const stub = {
-    link: { status: () => status, onStatusChanged: () => () => undefined },
+    link: {
+      status: () => status,
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub(reach),
     stack: { take: noopAsync, next: noopAsync, stop: noopAsync, out: noopAsync, remove: noopAsync },
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },

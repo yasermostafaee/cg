@@ -159,8 +159,16 @@ export class MockRuntime {
   /** R-022 parity — rows in REHEARSE, keyed by item id. Session state, like the bridge's. */
   readonly #rehearsing = new Map<string, Rehearsal>();
 
-  #stack: StackItemState[] = [...seedStack(), ...seedBlockedStackItem()];
-  #templates = new Map<string, TemplateInfo>(seedTemplates().map((t) => [t.templateId, t]));
+  #stack: StackItemState[] = [
+    ...seedStack(),
+    ...seedBlockedStackItem(),
+    // §14.5 Stage E — the look-bearing row (e2e-armed only).
+    ...seedLooksStackItem(),
+  ];
+  #templates = new Map<string, TemplateInfo>(
+    // §14.5 Stage E — the look-bearing template joins the starters when armed.
+    [...seedTemplates(), ...seedLooksTemplate()].map((t) => [t.templateId, t]),
+  );
   /** R-028 part B parity — ids removed here, so a re-delivery cannot revive them. */
   readonly #removedTemplateIds = new Set<string>();
   #config: ConnectionConfig = seedConfig();
@@ -179,6 +187,14 @@ export class MockRuntime {
   readonly #positions = new Map<string, Position>();
   // R-048 — per-item, per-plate live-source overrides (bridge parity).
   readonly #sourceOverrides = new Map<string, Record<string, string>>();
+  /**
+   * §14 (LOOKS) Stage E parity — itemId → the look the OPERATOR picked.
+   *
+   * Only explicit picks live here, exactly as on the bridge. What a row is SHOWING is a
+   * different question and is answered by {@link resolvedActiveLook}, so a never-switched
+   * row still publishes its authored default rather than nothing.
+   */
+  readonly #activeLooks = new Map<string, string>();
   // C-015 (6.5f) — per-item, per-plate AUDIO INTENT (bridge parity).
   readonly #plateVolumes = new Map<string, Record<string, number>>();
   // B-070 — producer-existence bookkeeping (bridge parity: the bridge's
@@ -208,11 +224,14 @@ export class MockRuntime {
       const position = this.#positions.get(i.itemId);
       const sourceOverride = this.#sourceOverrides.get(i.itemId);
       const plateVolumes = this.#plateVolumes.get(i.itemId);
+      // §14 (LOOKS) Stage E parity — through the RESOLVER, never the raw pick map.
+      const activeLookId = this.resolvedActiveLook(i.itemId);
       return {
         ...i,
         ...(position !== undefined && { position }),
         ...(sourceOverride !== undefined && { sourceOverride }),
         ...(plateVolumes !== undefined && { plateVolumes }),
+        ...(activeLookId !== undefined && { activeLookId }),
       };
     });
   }
@@ -362,6 +381,9 @@ export class MockRuntime {
     // C-015 parity — `#removeImpl` awaits `teardownLiveLayers` unconditionally on the
     // slot: an item whose slot was already released can still own live layers.
     this.#releaseLivePlates(itemId);
+    // §14 (LOOKS) parity — and the look, by the same rule: a re-used itemId must enter its
+    // template’s AUTHORED default, never the look some earlier row left behind.
+    this.#activeLooks.delete(itemId);
     // R-011 parity — the override dies with the item.
     this.#positions.delete(itemId);
     // B-070 parity — the producer dies with the item.
@@ -475,6 +497,57 @@ export class MockRuntime {
     // `sourceOverride: {}` and make a row back on its assignment look substituted.
     if (Object.keys(next).length === 0) this.#sourceOverrides.delete(itemId);
     else this.#sourceOverrides.set(itemId, next);
+    this.#emitStack();
+    return { ok: true };
+  }
+
+  /**
+   * §14 (LOOKS) Stage E parity — **the look this row is SHOWING**, resolved exactly as
+   * the bridge's `#activeLookOf` resolves it: the operator's pick, else the authored
+   * default, else the first look. `undefined` when the template authors no looks.
+   *
+   * 🔴 The same three-step chain in the same order, deliberately. A mock that resolved it
+   * differently would put a different look in the picker from the one a take enters, and
+   * test mode would be rehearsing a switch the real console does not make.
+   */
+  resolvedActiveLook(itemId: string): string | undefined {
+    const item = this.#find(itemId);
+    if (item === null) return undefined;
+    const live = this.#templates.get(item.templateId)?.liveSources;
+    const looks = live?.looks ?? [];
+    if (looks.length === 0) return undefined;
+    const wanted = this.#activeLooks.get(itemId);
+    return (
+      looks.find((l) => l.id === wanted)?.id ??
+      looks.find((l) => l.id === live?.defaultLookId)?.id ??
+      looks[0]?.id
+    );
+  }
+
+  /**
+   * §14 (LOOKS) Stage E parity — switch this row to another AUTHORED look.
+   *
+   * The refusals mirror the bridge because the picker is built against them: an item the
+   * stack does not carry, and a look the template does not author. A mock that accepted
+   * either would teach the surface that any string is a look.
+   */
+  setActiveLook(
+    itemId: string,
+    lookId: string,
+  ): { ok: boolean; reason?: string; message?: string } {
+    const item = this.#find(itemId);
+    if (item === null) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    const looks = this.#templates.get(item.templateId)?.liveSources?.looks ?? [];
+    if (!looks.some((l) => l.id === lookId)) {
+      return {
+        ok: false,
+        reason: 'unknown-look',
+        message: `This template has no look called "${lookId}".`,
+      };
+    }
+    this.#activeLooks.set(itemId, lookId);
     this.#emitStack();
     return { ok: true };
   }
@@ -1595,13 +1668,19 @@ function seedFixedBank(): FixedLayerBank | null {
         // needs its own row because every other case is already spoken for, and
         // because the property under test is a BOUND row over a FOREIGN producer —
         // which none of 70–87 models (71 is foreign but unbound).
-        count: 19,
+        // §14.5 Stage E — TWENTY. Layer 89 carries the LOOK-BEARING row, and it needs
+        // its own for the same reason 88 did: the property under test is a row whose
+        // template AUTHORS LOOKS, and no other seeded row has one, so the picker would
+        // have nowhere to render. It is also why 70 must stay look-less — the spec that
+        // proves a picker is ABSENT where there are no looks reads that row.
+        count: 20,
         aliases: {
           '70': 'CLOCK',
           '71': 'LOWER THIRD',
           '86': 'TICKER',
           '87': 'LOGO BUG',
           '88': 'STUDIO FEED',
+          '89': 'DEBATE',
         },
       }
     : null;
@@ -1772,6 +1851,86 @@ export function seedBlockedStackItem(): StackItemState[] {
   ];
 }
 
+/**
+ * §14.5 Stage E — an e2e-only LOOK-BEARING template and the row that carries it.
+ *
+ * Armed by the SAME flag as the bank and the live-layer ledger, and for the same reason
+ * `BLOCKED_SEED` gives: this is not the offline mock’s ordinary furniture, and an extra
+ * row would change what every user sees with no flag set. Armed, it is the only way
+ * Playwright can drive the picker at all — no starter template authors looks.
+ *
+ * THREE looks with DISJOINT membership between two of them (`left` {1,2} vs `right`
+ * {3,4}), because that is the switch shape that actually exercises release-and-seat in
+ * one reconcile; a subset pair would let a broken switch look fine.
+ */
+const LOOKS_SEED = {
+  layer: 89,
+  itemId: 'item-looks',
+  templateId: 'e2e-looks',
+  templateType: 'custom',
+} as const;
+
+const LOOKS_BOX = (x: number, y: number) => ({ x, y, width: 480, height: 270 });
+
+/** The look-bearing template, or [] when the seed is not armed. */
+export function seedLooksTemplate(): TemplateInfo[] {
+  if (!fixedBankSeedArmed()) return [];
+  const keys = ['live-1', 'live-2', 'live-3', 'live-4'];
+  const all = Object.fromEntries(
+    keys.map((k, i) => [k, LOOKS_BOX((i % 2) * 480, Math.floor(i / 2) * 270)]),
+  );
+  const pick = (ks: string[]) => Object.fromEntries(ks.map((k) => [k, all[k]]));
+  return [
+    {
+      templateId: LOOKS_SEED.templateId,
+      name: 'Debate — 4 box',
+      templateType: LOOKS_SEED.templateType,
+      fields: [],
+      liveSources: {
+        resolution: { width: 1920, height: 1080 },
+        defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+        sources: keys.map((k) => ({
+          elementId: `el-${k}`,
+          sourceId: k,
+          rect: all[k],
+          dynamic: false,
+        })),
+        looks: [
+          {
+            id: 'left',
+            name: 'Left pair',
+            entered: { mode: 'cut' },
+            rects: pick(['live-1', 'live-2']),
+          },
+          {
+            id: 'right',
+            name: 'Right pair',
+            entered: { mode: 'cut' },
+            rects: pick(['live-3', 'live-4']),
+          },
+          { id: 'all', name: 'All four', entered: { mode: 'cut' }, rects: all },
+        ],
+        defaultLookId: 'left',
+      },
+    } as TemplateInfo,
+  ];
+}
+
+/** The look-bearing row’s stack item, or [] when the seed is not armed. */
+export function seedLooksStackItem(): StackItemState[] {
+  if (!fixedBankSeedArmed()) return [];
+  return [
+    {
+      itemId: LOOKS_SEED.itemId,
+      templateId: LOOKS_SEED.templateId,
+      fields: {},
+      status: 'on-air',
+      pending: false,
+      slot: { channel: 1, layer: LOOKS_SEED.layer, server: 'primary' },
+    },
+  ];
+}
+
 function seedFixedBindings(): [
   number,
   { itemId: string; templateType: string; templateId: string },
@@ -1789,6 +1948,17 @@ function seedFixedBindings(): [
       layers[i] ?? 89 + i,
       { itemId: item.itemId, templateType: types[i] ?? 'custom', templateId: item.templateId },
     ]);
+  // §14.5 Stage E — and the look-bearing row, so the picker has somewhere to render.
+  for (const item of seedLooksStackItem()) {
+    bindings.push([
+      LOOKS_SEED.layer,
+      {
+        itemId: item.itemId,
+        templateType: LOOKS_SEED.templateType,
+        templateId: item.templateId,
+      },
+    ]);
+  }
   // R-021 stage 4 — and the blocked row, bound over a foreign producer.
   for (const item of seedBlockedStackItem()) {
     bindings.push([

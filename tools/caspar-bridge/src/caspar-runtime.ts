@@ -1339,13 +1339,26 @@ export class CasparRuntime {
       // is the one property of a graphic an operator cannot see, so a console that
       // cannot read this back cannot tell a live guest from a silent one.
       const plateVolumes = this.#plateVolumes.get(item.itemId);
-      if (position === undefined && sourceOverride === undefined && plateVolumes === undefined)
+      // §14 (LOOKS) Stage E — and the ACTIVE LOOK, through the ONE resolver rather than
+      // off `#activeLooks` directly. The map holds only what an operator explicitly
+      // picked; `activeLookId()` answers what the row is actually SHOWING (the pick, else
+      // the authored default, else the first look) — the question the picker asks and the
+      // look a take would enter. Publishing the raw map would leave a never-switched row
+      // with no look on the wire while it is plainly showing one.
+      const activeLookId = this.activeLookId(item.itemId);
+      if (
+        position === undefined &&
+        sourceOverride === undefined &&
+        plateVolumes === undefined &&
+        activeLookId === undefined
+      )
         return item;
       return {
         ...item,
         ...(position !== undefined && { position }),
         ...(sourceOverride !== undefined && { sourceOverride }),
         ...(plateVolumes !== undefined && { plateVolumes }),
+        ...(activeLookId !== undefined && { activeLookId }),
       };
     });
   }
@@ -2299,6 +2312,21 @@ export class CasparRuntime {
 `,
       );
       return { accepted: false, ...exclusivity };
+    }
+
+    /*
+      §14.5 / `tasks.md` 7.5 — the LOOKS refusal, at the same door and for the same kind of
+      reason: a state the operator cannot fix from the console, named before anything
+      reaches the wire. AFTER exclusivity, because that one is about the on-air SET while
+      this is about THIS template — the narrower answer must not mask the broader one.
+    */
+    const noLooks = this.#refuseNoLooksAuthored(this.#reconciler.get(itemId)?.templateId ?? itemId);
+    if (noLooks !== null) {
+      process.stderr.write(
+        `[caspar-bridge] take refused for ${itemId}: ${noLooks.message}
+`,
+      );
+      return { accepted: false, ...noLooks };
     }
 
     /*
@@ -3380,6 +3408,42 @@ export class CasparRuntime {
    * because a refusal that names neither is a dead end at the moment the operator is under
    * time pressure.
    */
+  /**
+   * 🔴 **§14.5 / `tasks.md` 7.5 — THE ONE REFUSAL TRIGGER LOOKS HAS: A LOOK GROUP THAT
+   * AUTHORS ZERO LOOKS.**
+   *
+   * §12.9.1's count-shaped triggers — over-lit, absent-count, all-off — did not move here;
+   * they RETIRED. The picker offers only authored looks and always marks exactly one, so
+   * each of those states became unrepresentable rather than defended against. What remains
+   * is the state the operator cannot get out of because the AUTHOR never put anything in: a
+   * group with no looks resolves NO rects, so no plate has geometry, nothing seats, and the
+   * row goes to air as the background alone behind a designed layout of holes that will
+   * never fill.
+   *
+   * 🔴 **ABSENT IS NOT EMPTY, AND CONFUSING THEM WOULD BREAK EVERY PRE-LOOKS TEMPLATE.**
+   * `buildTemplateLiveSources` spreads `looks` only when the scene HAS a look group
+   * (`collectLookCarrier` returns `null` otherwise), so `undefined` means "authored before
+   * LOOKS, or against the arrangement carrier" — a template that works perfectly and must
+   * never be refused. `[]` is the positive statement "this group authors none". Gating on
+   * `.length === 0` alone would take a station’s whole pre-carrier rundown off air on
+   * upgrade, the same trap `#multiBoxCount`’s own header warns about.
+   *
+   * Deliberately NOT gated on the source count either: a one-source group with no looks is
+   * broken for the identical reason, and a `> 1` test would make the refusal depend on a
+   * fact that has nothing to do with why it refuses.
+   */
+  #refuseNoLooksAuthored(templateId: string): { errorCode: string; message: string } | null {
+    const looks = this.#templates.get(templateId)?.liveSources?.looks;
+    if (looks === undefined || looks.length > 0) return null;
+    return {
+      errorCode: 'looks-none-authored',
+      message:
+        `"${templateId}" declares live sources in a multi-frame group but authors no looks, ` +
+        `so no plate has any geometry and every box would go to air empty — open it in the ` +
+        `Designer and add at least one look`,
+    };
+  }
+
   #refuseSecondMultiBox(
     itemId: string,
     templateId: string,

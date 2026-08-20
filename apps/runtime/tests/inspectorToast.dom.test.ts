@@ -51,10 +51,20 @@ function itemWith(status: StackItemState['status'] = 'on-air'): StackItemState {
 /** The slice of `window.cg` these panels touch. */
 function stubBridge(over: Record<string, unknown> = {}): void {
   const stub = {
-    link: { status: () => 'live', onStatusChanged: () => () => undefined },
+    link: {
+      status: () => 'live',
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
     // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
-    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    link: {
+      status: () => linkFor('both-up'),
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
     templates: { get: () => Promise.resolve(null), list: () => Promise.resolve([]) },
     stack: {

@@ -36,6 +36,8 @@ interface Bridge {
   link: {
     status: () => BridgeLinkStatus;
     onStatusChanged: (h: (next: BridgeLinkStatus) => void) => () => void;
+    resyncing: () => boolean;
+    onResyncingChanged: (h: (v: boolean) => void) => () => void;
   };
 }
 
@@ -110,6 +112,8 @@ function stubBridge(initial: BridgeLinkStatus): Harness {
         linkSubs.add(h);
         return () => linkSubs.delete(h);
       },
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
     },
   };
   (window as unknown as { cg: Bridge }).cg = bridge;

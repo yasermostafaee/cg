@@ -646,39 +646,79 @@ candidate shapes.
 > reversal). What §12.8 decided UNDERNEATH both reversals still binds: always visible,
 > state-carrying, no menu, placement (ii), survives density.
 
-- [ ] 7.1 🔴 **ONE LOOK PICKER on the row, always visible — the picker IS the on-air readout.**
-      One-of-N by construction: over-lit, absent-count and all-off are UNREPRESENTABLE, and taking
-      the row off air stays the STOP verb's job alone.
-      **Files:** `apps/runtime/src/renderer/features/layers/` — §12.8's verb-grid collisions still
-      bound the surface, shrunk to one control.
-      **Done when:** a row whose template authors N looks shows the picker with N entries, and
-      picking one changes what is on air through stage D's reconcile.
-      **Visual:** ⭐ **the primary visual check of the whole feature** — open the Runtime layer
-      list on a multi-box row.
-- [ ] 7.2 **Placement (ii): a second line on the row, outside the verb block.** It leaves
-      `VERB_COUNT = 6` (`apps/runtime/src/renderer/features/layers/layerTable.ts:75`) and the header
-      word alignment untouched — the invariant with the recorded on-air failure behind it.
-      ⚠ **Must survive density** (`gridTemplateColumns(density)`, `layerTable.ts:225`) — one
-      picker is narrower than N toggles, and the rule still holds at the tightest density.
-- [ ] 7.3 **Preset-then-take:** the operator may re-point any declared source BEFORE switching,
-      through the existing staged-assignment machinery (`B-139`'s chip semantics; `R-048`'s swap is
-      the live path; §12.5's surface-only rule names it).
-- [ ] 7.4 **The default look:** a fresh take enters the authored default look; the picker shows it.
-- [ ] 7.5 🔴 **THE REFUSAL FAMILY — ONE trigger in v1: NO LOOKS AUTHORED** (a multi-box template
-      whose group authors zero looks refuses the take, naming what is missing). The count-shaped
-      triggers (§12.9.1 Q3/Q4, all-off) are retired UNREPRESENTABLE, not moved.
-      **Done when:** one refusal function, one trigger, one test — and a test that the picker
-      cannot express all-off.
-- [ ] 7.6 ~~D3's immediate-CUT escape~~ **RETIRED (2026-08-19):** v1 is cut-only (§14.4 parks D2's
+- [x] 7.1 ✅ **LANDED 2026-08-21 (session BH) — THE LOOK PICKER IS ON THE ROW.**
+      `LookPicker.tsx`: one segment per authored look, exactly one marked `aria-pressed`,
+      one press to switch. It IS the readout and the switch in one object, so there is no
+      third state in which they could disagree. One-of-N by construction — no "none"
+      entry, so all-off stays STOP/CLEAR’s job and is unrepresentable here.
+      **The seam:** the segment sends `stack.set-active-look` (new channel) → the bridge’s
+      `setActiveLook` → `reconcileLivePlates` moves the FILLS → the page is told on the
+      `CG UPDATE` payload so it moves the HOLES. Nothing else switches a look.
+      **The readout:** `StackItemState.activeLookId`, published through the bridge’s ONE
+      resolver (`activeLookId()` → pick, else authored default, else first look), so the
+      picker shows what the bridge would actually enter rather than a second derivation.
+
+- [x] 7.2 ✅ **LANDED — placement (ii), a second line spanning `1 / -1`.**
+      `gridColumn: 1 / -1` and never a numeric end: the column COUNT changes with density
+      (the template column drops at compact/tight). Because a spanning child adds no
+      column, `VERB_COUNT` stays 6, `gridTemplateColumns(density)` is untouched,
+      `minWidthFor` sums the same columns, and the header words stay above their own
+      glyphs. The strip itself is `overflow-x: auto; min-width: 0`, so an unusually long
+      look list scrolls INSIDE the line instead of widening the grid and clipping a verb.
+      ⚠ **The SHAPE RULE does not govern it, and that is stated rather than implied:** the
+      rule is about the verb block, and the picker is outside it. It IS conditional (only
+      look-bearing rows have one), which a reader assuming the rule applied would call a
+      violation.
+
+- [x] 7.3 ✅ **LANDED — preset-then-take, composed from shipped pieces rather than a second path.**
+      The mechanism was already there and §14.2 named it: a source ABSENT from the active
+      look is HELD (§12.4), so pointing it at a different feed with `swapLiveSource`
+      records the override and **sends nothing** — there is no visible plate to move. It
+      goes live at the moment of the switch, carrying the preset source. That is
+      preset-then-take, and it needed no new deferral machinery.
+      Pinned both ways in `look-picker-operator.integration.test.ts`: a preset on a HELD
+      plate reaches an empty wire; a preset on a VISIBLE plate moves immediately (that one
+      is `R-048`’s live path, and conflating them would have been the error).
+
+- [x] 7.4 ✅ **LANDED — a fresh take enters the authored default and the picker says so.**
+      `#published()` publishes the RESOLVED look, not the raw pick map, so a row nobody has
+      switched still shows its default rather than leaving the picker with nothing marked —
+      which is most rows, most of the time.
+
+- [x] 7.5 ✅ **LANDED — ONE trigger: `looks-none-authored`.**
+      `#refuseNoLooksAuthored` at the take door, beside `#refuseSecondMultiBox`. A group
+      that authors zero looks resolves NO rects, so nothing seats and the row would go to
+      air as the background alone behind holes that never fill.
+      🔴 **ABSENT IS NOT EMPTY, and the distinction is real rather than assumed:**
+      `buildTemplateLiveSources` spreads `looks` only when the scene HAS a look group
+      (`collectLookCarrier` returns `null` otherwise). So `undefined` = pre-LOOKS or the
+      arrangement carrier — never refused — and `[]` = a group authoring none. Gating on
+      length alone would have taken every pre-carrier rundown off air on upgrade. Both
+      directions are tested.
+      §12.6’s exclusivity refusal also reaches the operator legibly now: it had NO sentence
+      in `errorCodeMessage` and surfaced as `Not accepted (multibox-already-on-air).`
+
+- [x] 7.6 ~~D3's immediate-CUT escape~~ **RETIRED (2026-08-19), and CONFIRMED still retired
+      2026-08-21 (session BH):** the switch itself IS the immediate action — asserted, not
+      assumed, in `look-picker-operator.integration.test.ts` (“THE CUT IS THE ONLY MODE”: every
+      fill a switch emits carries no duration and no tween). Taking the row OFF air stays the
+      STOP/CLEAR verbs’, always present in the verb block. v1 is cut-only (§14.4 parks D2's
       other modes), so there is no mode to escape to. Returns with the animated phase if it returns
       at all.
-- [ ] 7.7 **The Inspector's on-air behaviour (§12.5, `B-146`):** surface only — the edit saves, the
-      surface says "takes effect at the next take" and **names the row's SOURCE swap as the live
-      path**.
-- [ ] 7.8 **Make an active `sourceOverride` VISIBLE outside the swap dialog** — today it appears in
-      exactly one place (`apps/runtime/src/renderer/features/layers/LiveSourceSwapDialog.tsx:80`), so
-      the Inspector confidently shows a source that is not on air. **Ships WITH 7.7 or the repair is
-      a half-repair.**
+- [x] 7.7 ✅ **LANDED — the Inspector names the LIVE PATH.**
+      The "takes effect at the next take" sentence existed; what §12.5 also required was
+      naming where the live control is. It now says to use the row’s SOURCE verb, and that
+      it patches this row only.
+
+- [x] 7.8 ✅ **LANDED — an active `sourceOverride` is visible outside the swap dialog.**
+      `onAirPlateSource` in `livePlates.ts` — beside `appliedPlateSources` and deliberately
+      NOT folded into it: that one answers "what is this template CONFIGURED to use" and is
+      the baseline a draft is dirty against, so folding the override in would make a patched
+      row read as permanently dirty against its own template. Two questions, two functions,
+      each doc’d with which is which.
+      The LIVE PLATES row now shows `on air: <source> (patched on this row)` in the ATTENTION
+      amber. §12.5 refused to ship its wording without this: telling an operator when a
+      change lands while showing them the wrong current value is a half-repair.
 
 ---
 

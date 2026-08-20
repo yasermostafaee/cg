@@ -77,6 +77,24 @@ export const StackItemStateSchema = z.object({
    * missing key.
    */
   plateVolumes: LivePlateVolumesSchema.optional(),
+  /**
+   * `multibox-layout-switch` §14 (LOOKS) Stage E — **which LOOK this row is showing**,
+   * published for the same reason `position` and `sourceOverride` are: the operator
+   * surface has to be able to SAY what is on air, not guess it.
+   *
+   * 🔴 **It is the RESOLVED look, not the raw operator choice.** The bridge answers it
+   * through the one resolver every other consumer uses (`activeLookId()` →
+   * `#activeLookOf`: the operator’s pick, else the authored default, else the first
+   * look), so the picker on the row and the look the bridge would actually enter cannot
+   * disagree. A row that has never been switched still publishes its authored default —
+   * which is exactly what a fresh take enters, so the picker is right before anyone has
+   * touched it.
+   *
+   * ABSENT means the template authors no looks at all. That is the positive statement
+   * "there is nothing to pick", and it is what keeps the picker off a row that has no
+   * looks rather than requiring the renderer to re-derive the same question.
+   */
+  activeLookId: z.string().min(1).optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;
 

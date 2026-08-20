@@ -235,7 +235,12 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
 
   function stubBridge(): void {
     const stub = {
-      link: { status: () => 'live', onStatusChanged: () => () => undefined },
+      link: {
+        status: () => 'live',
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
       stack: { snapshot: () => Promise.resolve([]), onStateChanged: () => () => undefined },
       fixedLayers: {
         // The refusal the owner hit: a row far down the list is occupied.

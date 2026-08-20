@@ -95,7 +95,12 @@ const ITEM: StackItemState = {
 
 function stubBridge(): void {
   const stub = {
-    link: { status: () => 'live', onStatusChanged: () => () => undefined },
+    link: {
+      status: () => 'live',
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
     templates: { list: () => Promise.resolve([TEMPLATE]), onChanged: () => () => undefined },
     fixedLayers: {

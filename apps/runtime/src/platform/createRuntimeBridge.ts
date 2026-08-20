@@ -118,6 +118,12 @@ export function createMockBridge(): RuntimeBridge {
       status: () => OFFLINE,
       // Constant mode — never changes, so nothing to emit; the unsubscribe is a noop.
       onStatusChanged: () => () => undefined,
+      // §4 — the offline mock never resyncs: there is no socket and no re-delivery, so its
+      // stack is ALWAYS the settled answer. Constant `false` is the honest value here, not a
+      // stub — a mock that reported a delivery in flight would suppress an alarm test mode
+      // is genuinely entitled to raise.
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
     },
 
     stack: {
@@ -136,6 +142,8 @@ export function createMockBridge(): RuntimeBridge {
       // R-048 — the per-plate live-source swap.
       swapLiveSource: (req) =>
         Promise.resolve(mock.swapLiveSource(req.itemId, req.plateId, req.sourceId)),
+      // §14 (LOOKS) Stage E — the row’s look picker.
+      setActiveLook: (req) => Promise.resolve(mock.setActiveLook(req.itemId, req.lookId)),
       removeAll: () => Promise.resolve(mock.removeAll()),
       clearAll: () => Promise.resolve(mock.clearAll()),
       stopAll: () => Promise.resolve(mock.stopAll()),

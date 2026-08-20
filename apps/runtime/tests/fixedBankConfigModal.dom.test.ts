@@ -61,6 +61,8 @@ function stubBridge(
     link: {
       status: () => 'live',
       onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
     },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;

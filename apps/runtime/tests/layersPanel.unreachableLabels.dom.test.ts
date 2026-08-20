@@ -81,7 +81,12 @@ const STACK: StackItemState[] = [
 
 function stubBridge(reach: Reachability): void {
   const stub = {
-    link: { status: () => linkFor(reach), onStatusChanged: () => () => undefined },
+    link: {
+      status: () => linkFor(reach),
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub(reach),
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     fixedLayers: {

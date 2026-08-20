@@ -27,7 +27,14 @@ afterEach(() => {
 });
 
 async function renderBanner(link: 'disconnected' | 'offline-mock'): Promise<HTMLDivElement> {
-  const stub = { link: { status: () => link, onStatusChanged: () => () => undefined } };
+  const stub = {
+    link: {
+      status: () => link,
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
+  };
   (window as unknown as { cg: typeof stub }).cg = stub;
   container = document.createElement('div');
   document.body.appendChild(container);

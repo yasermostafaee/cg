@@ -48,7 +48,12 @@ async function renderWithGet(get: () => Promise<unknown>): Promise<HTMLDivElemen
   const stub = {
     // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
     // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
-    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    link: {
+      status: () => linkFor('both-up'),
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
     templates: { get: vi.fn(get), list: vi.fn(() => Promise.resolve([])) },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },

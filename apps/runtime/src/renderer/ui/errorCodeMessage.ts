@@ -98,6 +98,20 @@ const MESSAGES: Readonly<Record<string, string>> = {
     Four codes rather than one, because the four remedies are in four different
     places: assign a source, correct a format, declare a band, free a layer.
   */
+  /*
+    §12.6 / §14.5 — THE TWO MULTI-BOX REFUSALS, which had no sentence at all and so reached
+    the operator as `Not accepted (multibox-already-on-air).` — a quotable code, which is the
+    B-070 floor, but not an explanation.
+
+    Both are FALLBACKS: the bridge sends its own sentence with each, naming which template is
+    already on air and with how many boxes, and `asyncResultMessage` prefers that. These are
+    what an operator sees if the message is ever absent, so each names the remedy rather than
+    restating the rule.
+  */
+  'multibox-already-on-air':
+    'Another multi-box graphic is already on air on this channel, and only one may be. Take that row off air first — this is a crosstalk guard, not a layer shortage.',
+  'looks-none-authored':
+    'This template has a multi-frame group but no looks authored in it, so every box would go to air empty. It has to be opened in the Designer and given at least one look.',
   'live-source-unassigned':
     'This template has a live plate with no source assigned, so it would go to air empty. Assign it in CG Control → Sources, then take again.',
   'live-source-aspect-mismatch':

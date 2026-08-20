@@ -97,7 +97,12 @@ function deferred<T>(): Deferred<T> {
 function stubBridge(slots: FixedSlotState[] = SLOTS): { stack: Deferred<StackItemState[]> } {
   const stack = deferred<StackItemState[]>();
   const stub = {
-    link: { status: () => 'live', onStatusChanged: () => () => undefined },
+    link: {
+      status: () => 'live',
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     fixedLayers: {

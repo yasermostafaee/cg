@@ -115,7 +115,12 @@ function stubBridge(f: Fixture): void {
       list: () => Promise.resolve(f.templates ?? []),
       onChanged: noop,
     },
-    link: { status: () => 'live', onStatusChanged: noop },
+    link: {
+      status: () => 'live',
+      onStatusChanged: noop,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
   };
   (window as unknown as { cg: unknown }).cg = stub;
 }

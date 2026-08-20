@@ -12,6 +12,7 @@ import { DraftChip } from '../../ui/DraftChip.js';
 import { pickFile } from '../../ui/pickFile.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
+import { casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { displayLabel } from '../library/templateName.js';
 import { isOnAir } from '../stack/onAir.js';
@@ -22,6 +23,8 @@ import {
 import { useTemplatePicker } from '../fixedLayers/useTemplatePicker.js';
 import { layerRowActions, MISSING_TEMPLATE_REASON } from './layerRowActions.js';
 import { LiveSourceSwapDialog } from './LiveSourceSwapDialog.js';
+import { LookPicker, lookOptionsOf } from './LookPicker.js';
+import { lookSwitchRefusal } from './lookSwitch.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import { rowState, type RowBinding } from './rowState.js';
 import {
@@ -94,6 +97,9 @@ const styles = {
     display: 'grid',
     alignItems: 'center',
     columnGap: ROW_GEOMETRY.columnGap,
+    // The gap between the main line and the LOOK line. Inert until Stage E: every
+    // row before it was a single grid row, so this adds nothing to any other row.
+    rowGap: '0.4rem',
     padding: ROW_GEOMETRY.padding,
     minHeight: `${String(VERB_TARGET_PX + 10)}px`,
     borderBottom: `1px solid ${colors.border}`,
@@ -284,6 +290,34 @@ export function LayerRow({
    * name while actually being wire vocabulary, and now contradicts the `#` column.
    */
   const rowName = slot.alias ?? `Layer ${String(bankPosition)}`;
+
+  /*
+    §14.5 / `tasks.md` 7.1 — THE LOOK PICKER’S THREE FACTS.
+
+    `looks` is `null` for BOTH “no look group” and “a group authoring zero looks” —
+    `lookOptionsOf` collapses them once so no call site has to remember which emptiness
+    is which. The zero-look case is a broken template and is refused at the TAKE door
+    (`looks-none-authored`); it is not this control’s job to explain it.
+  */
+  const looks = lookOptionsOf(template);
+  // The SAME helper every other AMCP-emitting verb on this row uses. Not a look-specific
+  // rule: with either hop down the switch cannot leave the browser, so an enabled picker
+  // would be the appearance of a capability rather than one (see `lookSwitch.ts`).
+  const lookRefusal = casparRefusalReason(linkDown, casparReach);
+  /**
+   * Send the switch, and report a refusal where the operator is looking.
+   *
+   * 🔴 ONE SEAM. This is `stack.set-active-look` and nothing else: the bridge records the
+   * look, `reconcileLivePlates` moves the FILLS, and the page is told on the `CG UPDATE`
+   * payload so it moves the HOLES. There is deliberately no second path here — no local
+   * optimistic state, no direct plate call — because the picker reads `item.activeLookId`
+   * straight back off the published stack, so what it shows is what the bridge did.
+   */
+  const switchLook = async (itemId: string, lookId: string): Promise<void> => {
+    const res = await window.cg.stack.setActiveLook({ itemId, lookId });
+    if (!res.ok) reportCommandError(lookSwitchRefusal(res.reason, res.message));
+  };
+
   const templateLabel =
     template !== null
       ? (displayLabel(template) ?? template.templateId)
@@ -769,6 +803,37 @@ export function LayerRow({
           </AsyncButton>
         ))}
       </span>
+      {/*
+        🔴 §14.5 / `tasks.md` 7.2 — THE LOOK PICKER, ON A SECOND LINE OUTSIDE THE VERB BLOCK.
+
+        ── WHY HERE, AND WHY THE SHAPE RULE DOES NOT GOVERN IT ────────────────────────
+
+        The SHAPE RULE is a rule about the VERB BLOCK — *“every row declares the SAME verbs
+        in the SAME order, always”* — and it exists because a verb that appears and vanishes
+        moves its neighbours under a hand already reaching for one. This control is not a
+        verb and is not in that block, so the rule does not reach it; it is stated rather
+        than implied because the picker IS conditional (only look-bearing rows have one) and
+        a reader who assumed the rule applied would call that a violation.
+
+        What it must not disturb is the COLUMN model, and it does not: `gridColumn: 1 / -1`
+        adds no column, so `VERB_COUNT` stays 6, `gridTemplateColumns(density)` is untouched,
+        `minWidthFor` still sums the same columns, and the header's words stay above their
+        own glyphs — the invariant with a recorded on-air failure behind it (`VERB_COUNT`).
+
+        DENSITY: the line spans whatever columns exist, so it is correct at all three; and
+        it can never widen the row, because the strip scrolls inside itself instead.
+      */}
+      {looks !== null && item !== null && (
+        <LookPicker
+          looks={looks}
+          activeId={item.activeLookId}
+          refusal={lookRefusal}
+          rowName={rowName}
+          onPick={(lookId) => {
+            void switchLook(item.itemId, lookId);
+          }}
+        />
+      )}
       <input
         ref={fileRef}
         type="file"
