@@ -33,6 +33,8 @@ import {
   PlayoutLayersClearChannel,
   PlayoutLayersStateChangedChannel,
   PlayoutLayersStateChannel,
+  LiveLayersStateChangedChannel,
+  LiveLayersStateChannel,
   StackLoadChannel,
   StackNextChannel,
   StackRestoreChannel,
@@ -101,6 +103,7 @@ import {
 } from './fixed-layers-store.js';
 import { loadReservedLayers } from './reserved-layers-store.js';
 import { loadPersistedLiveLayers, savePersistedLiveLayers } from './live-layers-store.js';
+import { projectLiveLayers } from './live-layers.js';
 import {
   resolveSourceCatalog,
   saveSourceCatalog,
@@ -724,6 +727,14 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.templatesChanged.subscribe((t) => push(TemplatesChangedChannel, t)),
     // R-028 part B — the declared playout layers' occupancy.
     backing.playoutStateChanged.subscribe((s) => push(PlayoutLayersStateChangedChannel, s)),
+    // B-145 (2.8) — the ledger, projected through the SAME projectLiveLayers the
+    // pull uses. It rides the emitter the ledger's ONE write path already fires,
+    // so the persister and the browser learn of a change from the same call — a
+    // surface that polled instead would be free to disagree with the file about
+    // what is on air.
+    backing.liveLayersChanged.subscribe((l) =>
+      push(LiveLayersStateChangedChannel, projectLiveLayers(l)),
+    ),
     // R-034 — the shared delimiter list.
     backing.delimitersChanged.subscribe((d) => push(DelimitersChangedChannel, d)),
     // R-030 — the per-channel raster + the configured-vs-real mode reading.
@@ -901,6 +912,14 @@ export function buildRoutes(
     route(PlayoutLayersClearChannel, (r: { channel: number; layer: number }) =>
       b.playoutClear(r.channel, r.layer),
     ),
+
+    // B-145 acceptance 1, display half (tasks.md 2.8) — the bridge's OWN Live
+    // Source ledger. A READ and nothing else: the sanctioned verbs for a seated
+    // layer are item-scoped and already routed (stack.swap-live-source,
+    // stack.set-plate-volume, stack.out / stack.remove), and layers.clear refuses
+    // a live-source coordinate BY NAME. This channel exists so the operator can
+    // SEE which row owns a lit layer, never to add a fourth way to cut one.
+    route(LiveLayersStateChannel, () => b.liveLayersState()),
 
     route(LockEngageChannel, (r: { pin: string }) => b.engage(r.pin)),
     route(LockReleaseChannel, (r: { pin: string }) => b.release(r.pin)),

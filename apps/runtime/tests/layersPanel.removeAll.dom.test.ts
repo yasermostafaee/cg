@@ -68,6 +68,10 @@ function stubBridge(
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
     stack: {
       snapshot: () => Promise.resolve(stack),
       onStateChanged: () => () => undefined,
@@ -214,6 +218,10 @@ describe('StackPanel Remove-All — R-010', () => {
       playoutLayers: {
         state: () => Promise.resolve([]),
         clear: () => Promise.resolve({ ok: true }),
+        onStateChanged: () => () => undefined,
+      },
+      liveLayers: {
+        state: () => Promise.resolve([]),
         onStateChanged: () => () => undefined,
       },
       stack: {

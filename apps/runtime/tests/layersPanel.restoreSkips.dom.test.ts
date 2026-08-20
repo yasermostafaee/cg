@@ -69,6 +69,10 @@ function stubBridge(skips: RestoreSkip[]): void {
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
     stack: {
       snapshot: () => Promise.resolve([]),
       onStateChanged: () => () => undefined,

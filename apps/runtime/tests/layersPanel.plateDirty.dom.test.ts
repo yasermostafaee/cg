@@ -119,6 +119,10 @@ function stubBridge(): void {
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
     sources: {
       config: () => Promise.resolve(CATALOG),
       assignments: () => Promise.resolve(ASSIGNMENTS),

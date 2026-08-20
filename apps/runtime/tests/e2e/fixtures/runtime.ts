@@ -89,6 +89,18 @@ export class RuntimeApp {
   get playoutTab(): Locator {
     return this.page.getByRole('tab', { name: /^STATION LAYERS/ });
   }
+  /**
+   * B-145 (2.8) — the LIVE SOURCES tab: the layers the BRIDGE seated for a
+   * template’s Live Source plates. A THIRD ownership class, beside our own rows
+   * and the station’s.
+   */
+  get liveSourcesTab(): Locator {
+    return this.page.getByRole('tab', { name: /^LIVE SOURCES/ });
+  }
+  /** One seated live-source row, anchored on its stable coordinate attribute. */
+  liveSourceRow(coordinate: string): Locator {
+    return this.layers.locator(`[data-live-layer="${coordinate}"]`);
+  }
   get inspector(): Locator {
     return this.page.getByRole('complementary', { name: 'Inspector' });
   }

@@ -285,6 +285,78 @@ fault in the switch.
 - **THEN** the live input is held while the clip is torn down and announced with its reason, because
   a clip held across a look runs to its end and would come back black
 
+### Requirement: The seated live-source layers are VISIBLE, and an adopted one is distinguishable from a stranded one
+
+The layers the bridge itself has seated to composite live sources SHALL be **listed on an operator
+surface**, and each row SHALL name the coordinate, the symbolic plate, the producer actually sent,
+and **the stack item that owns it**.
+
+This is `B-145` acceptance 1's first half. Its second half — that those layers are controllable —
+is satisfied by the ITEM-scoped verbs that already reach a seated layer by `itemId`; the listing is
+what makes them reachable, because an operator who cannot see which row owns a lit layer cannot use
+them. A ledger that survives a restart while remaining invisible leaves a live face on air with no
+handle to it, which is the defect the item describes.
+
+The surface SHALL be **distinct from the surface that lists the station's own reserved layers**, and
+the band SHALL NOT be surfaced by adding it to the reserved set. The two make opposite claims about
+ownership — one says _these are not ours to touch_, the other says _we put that producer there_ —
+and the reserved set additionally fences a layer out of placement, reservation and clearing, so a
+band inside it would be unplaceable by the very allocator that must place it.
+
+A live layer whose owning item the stack still carries SHALL offer **no destructive control on this
+surface**; its verbs are its row's, and the operator-facing layer clear SHALL continue to refuse a
+live-source coordinate by name. A live layer whose owning item the stack NO LONGER carries — a
+**stranded** layer — SHALL be distinguishable at a glance and SHALL be releasable, through the same
+item-scoped teardown rather than through a new coordinate-addressed clear.
+
+The list SHALL be **pushed when the ledger changes** rather than polled, from the same single write
+path that persists it, so a seat, a release, a hold and the boot adoption reach the surface by the
+call that records them.
+
+Where the link to the bridge is down the rows SHALL read as **unknown** and offer nothing: the
+ledger and the stack are then both frozen snapshots, and a stranded verdict computed from two stale
+facts would present a guess as an alarm.
+
+#### Scenario: A seated live layer appears in a layer list
+
+- **GIVEN** a row on air whose template declares live-source plates
+- **WHEN** the operator opens the live-sources surface
+- **THEN** each seated layer is listed with its coordinate, its plate, its producer and the row that
+  owns it
+
+#### Scenario: An adopted layer survives a bridge restart visibly
+
+- **GIVEN** live plates seated and the bridge restarted
+- **WHEN** the ledger is rebuilt from the persisted claim, corrected by the server
+- **THEN** the adopted layers are listed and remain controllable through their owning row, rather
+  than being invisible to every code path
+
+#### Scenario: A producer that vanished server-side is not listed as seated
+
+- **GIVEN** a persisted record whose layer the server reports as empty at boot
+- **WHEN** the ledger is rebuilt
+- **THEN** that layer does not appear in the list, because the server is the authority on what is on
+  it
+
+#### Scenario: A layer whose row is gone is shown as stranded and can be released
+
+- **GIVEN** a seated layer whose owning item the stack no longer carries
+- **WHEN** the operator opens the live-sources surface
+- **THEN** the layer reads as stranded, and releasing it clears the layer through the item-scoped
+  teardown
+
+#### Scenario: A layer whose row exists offers no clear here
+
+- **GIVEN** a seated layer whose owning item is on the stack
+- **WHEN** the operator opens the live-sources surface
+- **THEN** no clear is offered for it, and the row that owns it is named and reachable instead
+
+#### Scenario: The list moves with the ledger
+
+- **GIVEN** a console already showing the live-sources surface
+- **WHEN** a plate is seated, released or held
+- **THEN** the list changes without the console asking again
+
 ### Requirement: The operator's primitive is ONE TOGGLE PER DECLARED SOURCE; the COUNT is derived
 
 The row's always-visible control SHALL be **one toggle per declared source**, and **which toggles are

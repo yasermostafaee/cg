@@ -45,8 +45,10 @@ import type {
   StackTakeChannel,
   StackUpdateChannel,
   PlayoutLayerState,
+  LiveLayerState,
   PlayoutLayersClearChannel,
   PlayoutLayersStateChannel,
+  LiveLayersStateChannel,
   StackNextChannel,
   TemplateInfo,
   TemplatesGetChannel,
@@ -308,6 +310,24 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof PlayoutLayersClearChannel>,
     ): Promise<ChannelResponse<typeof PlayoutLayersClearChannel>>;
     onStateChanged(handler: (state: PlayoutLayerState[]) => void): Unsubscribe;
+  };
+  /**
+   * `B-145` acceptance 1, display half (2.8) — the layers the BRIDGE ITSELF has
+   * seated for a template's Live Source plates: the third declared layer class,
+   * beside `layers` (unowned orphans the app may reclaim) and `playoutLayers`
+   * (the station's own).
+   *
+   * READ-ONLY, and deliberately so. Every verb that can act on a seated layer is
+   * ITEM-scoped and already on this contract — `stack.swapLiveSource` to repoint,
+   * `stack.setPlateVolume` for audio, `stack.out` / `stack.remove` to take it off
+   * air — while `layers.clear` refuses a live-source coordinate BY NAME, having
+   * weighed and rejected an exemption. This surface exists so the operator can SEE
+   * which row owns a lit layer and so reach those verbs; it is not a fourth way to
+   * cut a guest off air.
+   */
+  liveLayers: {
+    state(): Promise<ChannelResponse<typeof LiveLayersStateChannel>>;
+    onStateChanged(handler: (state: LiveLayerState[]) => void): Unsubscribe;
   };
 
   templates: {

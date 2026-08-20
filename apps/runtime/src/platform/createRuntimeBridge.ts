@@ -201,6 +201,14 @@ export function createMockBridge(): RuntimeBridge {
       onStateChanged: (handler) => mock.playoutStateChanged.subscribe(handler),
     },
 
+    // B-145 (2.8) — the bridge-owned Live Source ledger (offline: e2e-seeded, else
+    // empty, because the mock has seated nothing). No clear verb: the sanctioned
+    // ones are item-scoped and already on `stack`.
+    liveLayers: {
+      state: () => Promise.resolve(mock.liveLayersState()),
+      onStateChanged: (handler) => mock.liveLayersChanged.subscribe(handler),
+    },
+
     lock: {
       engage: (req) => mock.engage(req.pin),
       release: (req) => mock.release(req.pin),

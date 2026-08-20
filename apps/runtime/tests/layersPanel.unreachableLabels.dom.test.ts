@@ -96,6 +96,10 @@ function stubBridge(reach: Reachability): void {
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
     stack: {
       snapshot: () => Promise.resolve(STACK),
       onStateChanged: () => () => undefined,

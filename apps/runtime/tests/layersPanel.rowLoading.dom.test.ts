@@ -124,6 +124,10 @@ function stubBridge(): {
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
     stack: {
       snapshot: () => stack.promise,
       onStateChanged: (h: (items: StackItemState[]) => void) => {

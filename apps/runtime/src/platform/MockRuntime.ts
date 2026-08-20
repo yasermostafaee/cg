@@ -12,6 +12,7 @@ import type {
   PendingUpdate,
   PLAYOUT_CLEAR_REASONS,
   PlayoutLayerState,
+  LiveLayerState,
   Settings,
   TemplateInfo,
   DelimiterOption,
@@ -143,6 +144,8 @@ export class MockRuntime {
   readonly templatesChanged = new Emitter<TemplateInfo[]>();
   // R-028 part B — the declared playout layers' occupancy.
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
+  // B-145 (2.8) parity — the bridge's OWN Live Source ledger, pushed on change.
+  readonly liveLayersChanged = new Emitter<LiveLayerState[]>();
   // R-034 parity — the shared delimiter list.
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
   // D-137 / C-015 parity — the installation's Live Source mapping.
@@ -574,6 +577,8 @@ export class MockRuntime {
 
   // R-028 part B — the declared playout layers, test-seeded like the bank.
   readonly #playoutObservations = seedPlayoutLayers();
+  // B-145 (2.8) parity — the seated Live Source layers, e2e-seeded like the bank.
+  readonly #liveLayerSeed = seedLiveLayers();
 
   fixedLayersConfig(): FixedLayerBank | null {
     return this.#fixedBank;
@@ -584,6 +589,22 @@ export class MockRuntime {
     return [...this.#playoutObservations.entries()]
       .sort(([a], [b]) => a - b)
       .map(([layer, observed]) => ({ channel: 1, layer, observed }));
+  }
+  /**
+   * `B-145` acceptance 1, display half (2.8) parity — the Live Source layers the
+   * mock believes it has seated.
+   *
+   * ⚠ **FILTERED BY THE STACK, so the seed cannot outlive its row.** On air a
+   * live layer is released when its item is stopped or removed, so a mock ledger
+   * that stayed put after the operator removed the row would show a seated layer
+   * with no owner — i.e. it would fake the STRANDED state, the one thing in this
+   * list that means an emergency. Deriving presence from `#stack` makes release
+   * fall out of the model instead of needing its own verb, and keeps the offline
+   * console incapable of showing an alarm it cannot really be in.
+   */
+  liveLayersState(): LiveLayerState[] {
+    const present = new Set(this.#stack.map((i) => i.itemId));
+    return this.#liveLayerSeed.filter((r) => present.has(r.itemId));
   }
 
   /**
@@ -1439,6 +1460,10 @@ export class MockRuntime {
 
   #emitStack(): void {
     this.stackChanged.emit(this.stackSnapshot());
+    // B-145 (2.8) — the mock's ledger is DERIVED from the stack, so the two change
+    // together by construction. Emitting here rather than from a second seam is what
+    // keeps that true: there is no state to forget to publish.
+    this.liveLayersChanged.emit(this.liveLayersState());
   }
 }
 
@@ -1605,6 +1630,56 @@ function seedPlayoutLayers(): Map<number, FixedSlotObservation> {
         [63, { kind: 'empty' }],
       ])
     : new Map();
+}
+/**
+ * `B-145` (2.8) — e2e-only Live Source ledger seed, armed by the SAME flag as the
+ * fixed bank and for the same reason.
+ *
+ * UNSEEDED the offline mock's ledger is EMPTY, and that is the honest state rather
+ * than a gap: the mock has no CasparCG, its source catalog starts empty on purpose
+ * (`sourceCatalog()` — *"a seeded CATALOG… would show sources this plant does not
+ * have"*), and it declares no layer band, so it has seated nothing. This mirrors
+ * `seedPlayoutLayers` exactly, whose own note says the bridge-side truth is
+ * integration-tested in `tools/caspar-bridge` rather than faked here.
+ *
+ * ARMED, it seats two plates for the seeded news row so Playwright can drive the
+ * visible flow — a multi-box carrier with one plate ON SCREEN and one HELD, which
+ * are the two dispositions §12.4 defines and the only pair whose difference the
+ * list has to make legible.
+ *
+ * 🔴 **Both rows name `item-irib-news`, an item `seedStack()` actually carries.**
+ * A seed whose `itemId` matched no row would render as STRANDED — the one state
+ * that means "a live face is on air and no row can reach it" — and test mode would
+ * teach an alarm that is not true of it. The mock cannot strand a layer, and it
+ * must not appear to.
+ *
+ * The band is 10–11, inside `SUGGESTED_LIVE_SOURCE_LAYER_RANGE` (10–59) and
+ * disjoint from the seeded fixed bank at 70+, exactly as a real install's
+ * validator requires.
+ */
+function seedLiveLayers(): LiveLayerState[] {
+  return fixedBankSeedArmed()
+    ? [
+        {
+          channel: 1,
+          layer: 10,
+          itemId: 'item-irib-news',
+          sourceId: 'guest-1',
+          role: 'fill',
+          producer: 'route://1-1',
+          held: false,
+        },
+        {
+          channel: 1,
+          layer: 11,
+          itemId: 'item-irib-news',
+          sourceId: 'guest-2',
+          role: 'fill',
+          producer: 'route://1-2',
+          held: true,
+        },
+      ]
+    : [];
 }
 
 /**

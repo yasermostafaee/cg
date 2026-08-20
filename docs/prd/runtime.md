@@ -3120,7 +3120,7 @@ it is persisted on every change and ADOPTED at boot, corrected against what the 
 (`INFO` supplies the truth about occupancy; the file supplies the `itemId` / `sourceId` / `role` the
 server was never told). That mattered here because the switch seats and releases plates continuously
 rather than once per take, so a stranded producer under it would be a live guest on air that no code
-path could reach. ⚠ Its DISPLAY half (change `tasks.md` 2.8) is still owed before the picker ships.
+path could reach. ✅ Its DISPLAY half (change `tasks.md` 2.8) landed 2026-08-20 as the `LIVE SOURCES` tab, so the picker has no remaining blocker.
 
 **Refusals — ONE trigger in v1** (`design.md` §14.5; supersedes the three count-shaped triggers of
 2026-08-18, which are retired UNREPRESENTABLE rather than moved):
@@ -3151,7 +3151,7 @@ path could reach. ⚠ Its DISPLAY half (change `tasks.md` 2.8) is still owed bef
   server both use `linear`, so the hole and the picture stay together
 
 - **Cross-refs:** [[D-152]] (the AUTHORING half — looks, declared sources, titles; read both),
-  [[B-145]] (landed; its display half still owed), [[B-146]] (the Inspector surface, same row),
+  [[B-145]] (landed in full, display half 2026-08-20), [[B-146]] (the Inspector surface, same row),
   [[R-048]] (the source swap this reconcile absorbs), [[C-015]] (Live Source routing and seating),
   [[C-023]] (the confidence thumbnails — with six live inputs nothing here detects a dead one),
   [[D-137]] (the Live Source element), [[R-028]] (the declared-rows model the control lives in).

@@ -3850,7 +3850,7 @@ general mechanism for the UI to do so.
   [[B-143]] (the honesty half never built), [[B-139]] / [[R-053]] (the row-level home three
   per-plate facts already want — a per-row warning surface should be built once, not four times).
 
-## [~] B-145 — the bridge's live-layer ledger does not survive a restart: seated producers are stranded on air, unreachable by any code path — **PERSISTENCE DONE (sessions AS + AT); the DISPLAY half of acceptance 1 is still open** ⟨priority: high — a live face on air with no handle to it⟩
+## [x] B-145 — the bridge's live-layer ledger does not survive a restart: seated producers are stranded on air, unreachable by any code path — **DONE: persistence (sessions AS + AT) and the DISPLAY half of acceptance 1 (session BG, 2026-08-20)** ⟨priority: high — a live face on air with no handle to it⟩
 
 **What:** `#liveLayers` is a `Map` in the bridge process (`tools/caspar-bridge/src/caspar-runtime.ts`,
 `readonly #liveLayers: LiveLayerLedger = new Map()`). It is the only record of which band layers
@@ -3922,6 +3922,60 @@ cannot answer a question AMCP answers, and this item's boot adoption is precisel
 occupancy reading that would have gone without. The tap's own justification (passive, costs no
 commands) is unaffected and is now what the comment says.
 
+### ✅ CLOSED 2026-08-20 (session BG) — the DISPLAY half landed, and acceptance 1 is met in full
+
+Acceptance 1 reads _"those layers **appear in the layer list** and are controllable"_. The control
+half had held since persistence landed; the display half did not exist, and that is what closed.
+
+**The surface.** A third tab — **`LIVE SOURCES`**, beside `LAYERS` and `STATION LAYERS`
+(`apps/runtime/src/renderer/features/layers/LiveSourcesPanel.tsx`) — listing every seated layer with
+its coordinate, its symbolic plate, the producer actually sent, and **the row that owns it**.
+
+**Why a third tab and not a widened `playoutLayersState()`**, which is the obvious-looking fix and is
+wrong: the Live Source band's exclusion from `#reservedLayers` is LOAD-BEARING, not an oversight.
+`reservedLayers` is a fence AWAY from a foreign owner, so a band inside it becomes unplaceable
+(`allocate()` skips reserved layers), unreservable (`reserve()` refuses them) and unclearable
+(`clearLayer` refuses them as `reserved`) — the bridge would fence off the very layers it is about to
+composite a guest onto. The bridge already enumerates THREE declared ownership classes in one place
+(`#declaredLayerClass`); the console had a surface for two of them. This is the third.
+
+**The wire.** `packages/shared-ipc/src/channels/liveLayers.ts` — `liveLayers.state` plus
+`liveLayers.state-changed`, pushed from the `liveLayersChanged` emitter this item already fires from
+the ledger's ONE write path, so a seat, a release, a hold and the boot adoption reach a browser by
+the same call that persists them. One projection (`projectLiveLayers`) serves both the pull and the
+push, so the two cannot disagree about a row's shape or the list's order.
+
+**`liveLayers()` has a production caller now**, which is the point rather than a detail:
+`LiveSourcesPanel` → `useLiveLayers` → `liveLayers.state` → `bridge.ts` → `liveLayersState()` →
+`liveLayers()`. Its doc comment used to say _"for tests and for phase 6's re-emission"_ and that was
+true for long enough to be the defect — the written-but-unreachable class filed here four times.
+
+**ADOPTED vs STRANDED**, which is what task 2.8's "done when" actually asked for:
+
+- a layer whose owning item the stack still carries is shown, named with its template, and offers
+  `OPEN ROW` — but **no destructive control**. Its verbs are its row's, and `layers.clear` refuses a
+  live-source coordinate BY NAME after explicitly weighing and rejecting an exemption; a clear here
+  would re-open that door from a second surface.
+- a layer whose owner is GONE reads **Stranded**, raises the tab's dot, is the only row on the
+  surface that wears a colour (amber = ATTENTION; green stays the layer table's ON AIR mark), and
+  offers `RELEASE` — which calls the EXISTING `stack.remove`. Its `teardownLiveLayers` is documented
+  as unconditional on `slot` precisely for this case: _"an item whose slot was already released can
+  still own live layers, and those are precisely the ones nothing else would ever reach."_ The door
+  already worked; what was missing was a surface that knew the `itemId` to hand it. **No new
+  coordinate-addressed clear was added.**
+
+With the link down every row reads `Unknown` and offers nothing: the ledger and the stack are then
+both frozen snapshots ([[B-087]]), and a stranded verdict computed from two stale facts would present
+a guess as an alarm.
+
+**Tests:** `tools/caspar-bridge/tests/live-layers-wire.test.ts` (17, including an end-to-end boot that
+adopts a persisted ledger and serves it over the WebSocket, and the acceptance-3 drop) and
+`apps/runtime/tests/liveSourcesPanel.dom.test.ts` (18). E2E:
+`apps/runtime/tests/e2e/live-source-layers.spec.ts`. Six mutations were checked and each reddens the
+tests that name it.
+
+**[[R-057]] Stage E (the operator surface) is UNBLOCKED** — 2.8 was its last blocker.
+
 ### 🔴 RE-OPENED 2026-08-19 (session AU) — it was ticked with half of acceptance 1 unmet
 
 **What is DONE:** the ledger is persisted, adopted at boot against the server, and persistence is ON
@@ -3938,7 +3992,7 @@ only — a band the Live Source layers are deliberately kept OUT of.
 🔴 **Tracked as task 2.8 in `openspec/changes/multibox-layout-switch/tasks.md`, and NOT split into a
 second number.** The blocking relation to [[R-057]] is already recorded here, and splitting one
 acceptance list across two items is exactly the churn `docs/prd/b-number-registry.md` exists to
-avoid. This item is `[~]`, not `[x]`, until 2.8 lands.
+avoid. This item was `[~]`, not `[x]`, until 2.8 landed — see the CLOSED section below.
 
 ⏱ **WHEN it must land: before STAGE E**, the operator surface (`tasks.md` section 6). Not before
 that, and the reason is specific rather than a preference — Stage E is where the band's state becomes

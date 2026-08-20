@@ -152,6 +152,11 @@ const BRIDGE_SURFACE: {
       'onStateChanged',
     ],
     playoutLayers: ['state', 'clear', 'onStateChanged'],
+    // B-145 (2.8) — the bridge-owned Live Source ledger. READ-ONLY by design: the
+    // verbs that reach a seated layer are item-scoped and already on `stack`, and
+    // `layers.clear` refuses a live-source coordinate by name. A `clear` appearing
+    // here later would be that refusal being re-opened from a different surface.
+    liveLayers: ['state', 'onStateChanged'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
     // R-028 (o1) — `onChanged`: the bridge-owned catalogue push.
     // R-022 — `html` is the RETAINED self-contained page for a template, read from

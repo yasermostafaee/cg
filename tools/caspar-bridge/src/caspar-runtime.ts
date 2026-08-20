@@ -43,6 +43,7 @@ import {
   type RestoreSkip,
   type RestoreSkipReason,
   type PlayoutLayerState,
+  type LiveLayerState,
   type DelimiterOption,
   type ChannelResponse,
   type ConnectionConfig,
@@ -88,6 +89,7 @@ import {
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
 import {
+  projectLiveLayers,
   reconcileLiveLayers,
   type LiveLayerAdoption,
   type LiveLayerLedger,
@@ -4802,9 +4804,44 @@ export class CasparRuntime {
     return adoption;
   }
 
-  /** The ledger, for tests and for phase 6's re-emission of `FILL`/`CLIP`. */
+  /**
+   * The ledger itself, as a defensive copy.
+   *
+   * ⚠ **ITS DOC USED TO SAY "for tests and for phase 6's re-emission", AND THAT
+   * WAS TRUE FOR LONG ENOUGH TO BE A DEFECT.** For the whole of `B-145`'s
+   * persistence work this accessor had no production caller at all: the ledger
+   * survived a restart, every teardown and repoint door read it by `itemId` — and
+   * nothing could SHOW it, so an adopted layer was controllable but invisible, and
+   * `B-145` acceptance 1 was half unmet with the item ticked. That is the
+   * written-but-unreachable class this repo has now filed four times.
+   *
+   * It has a production caller: {@link liveLayersState}, which projects it onto
+   * `liveLayers.state` for the operator's LIVE SOURCES list. Keep one.
+   */
   liveLayers(): ReadonlyMap<string, readonly LiveLayerRecord[]> {
     return new Map([...this.#liveLayers].map(([id, rs]) => [id, [...rs]]));
+  }
+
+  /**
+   * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **the ledger as the
+   * operator's LIVE SOURCES list.**
+   *
+   * Reads through the public {@link liveLayers} rather than walking `#liveLayers`,
+   * and projects through the ONE `projectLiveLayers`, which is also what the push
+   * path in `bridge.ts` calls. So the pull and the push cannot disagree about the
+   * shape or the order of a row, and this method adds no second flattening of its
+   * own — it is the wire's name for a fact that already had exactly one.
+   *
+   * ⚠ **NOT `playoutLayersState`'s shape, and the difference is the point.** That
+   * one reports what the OSC tap OBSERVES on somebody else's reserved layers, with
+   * an honest `unknown` arm, because observation is the only access we have to
+   * them. These layers are OURS: the ledger is what this bridge seated, already
+   * resolved against the server's `INFO` at boot. There is nothing to observe and
+   * no `unknown` to report — a coordinate the server contradicted was DROPPED and
+   * never reaches here.
+   */
+  liveLayersState(): LiveLayerState[] {
+    return projectLiveLayers(this.liveLayers());
   }
 
   /**

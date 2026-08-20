@@ -25,6 +25,7 @@ import { useStackSnapshot } from '../../hooks/useStack.js';
 import { restoreSkipReason, useRestoreSkips } from '../../hooks/useRestoreSkips.js';
 import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { useStationLayers } from '../../hooks/useStationLayers.js';
+import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { bankPosition, isLayerVisible, isRehearsing } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
@@ -37,6 +38,8 @@ import { resolveRowBinding } from './rowState.js';
 import { LayerTableHeader } from './LayerTableHeader.js';
 import { resolveDensity } from './layerTable.js';
 import { StationLayersPanel } from './StationLayersPanel.js';
+import { LiveSourcesPanel } from './LiveSourcesPanel.js';
+import { hasStrandedLiveLayer, liveLayerRows, ownerLabelFor } from './liveLayerRows.js';
 import { hasStationLayerOccupant } from './stationLayerOccupancy.js';
 import { FixedBankConfigModal } from '../fixedLayers/FixedBankConfigModal.js';
 
@@ -176,6 +179,8 @@ export function LayersPanel({
   // R-022 — ONE rehearse snapshot for the whole table, from the bridge.
   const rehearsals = useRehearse();
   const playout = useStationLayers();
+  // B-145 (2.8) — the layers the BRIDGE seated for Live Source plates.
+  const live = useLiveLayers();
   /**
    * THE STACK, WITH ITS READINESS — and this is the THIRD snapshot, which is the
    * bug the `listReady` guard above did not reach.
@@ -424,8 +429,41 @@ export function LayersPanel({
   }, [confirm, items.length]);
 
   const playoutOccupied = hasStationLayerOccupant(playout);
+  /*
+    B-145 (2.8) — the live rows, resolved ONCE here and handed to the tab.
+
+    The tab dot and the list must never be able to disagree about whether anything is
+    stranded, so they are not two passes over the payload: this array IS both. The
+    owner label is the TEMPLATE name the operator already reads in the row’s own
+    template column, joined through the index this panel has anyway.
+  */
+  const liveRows = liveLayerRows(
+    live,
+    ownerLabelFor(items, (id) => templates.get(id)?.name),
+    linkDown,
+  );
+  const liveStranded = hasStrandedLiveLayer(liveRows);
   const tabs: TabSpec[] = [
     { id: 'layers', label: 'LAYERS' },
+    {
+      id: 'live-sources',
+      label: 'LIVE SOURCES',
+      /*
+        The dot means a live producer is lit with NO ROW THAT CAN REACH IT — the
+        emergency this whole item exists for. It is deliberately NOT raised for an
+        ordinary seated layer: those are normal, they belong to a row, and a dot that
+        lit whenever a guest was on air would be noise the operator learns to ignore
+        before the one day it means something.
+
+        Not masked on `linkDown` the way the station dot is, because it does not need
+        to be: with the link down every row resolves to `Unknown` and none is stranded,
+        so the dot is already dark by the rows’ own reckoning rather than by a second
+        rule.
+      */
+      ...(liveStranded
+        ? { badge: { tone: 'warn' as const, label: 'A live layer has no row that can reach it' } }
+        : {}),
+    },
     {
       id: 'station-layers',
       label: 'STATION LAYERS',
@@ -789,6 +827,21 @@ export function LayersPanel({
               </div>
             </>
           )
+        ) : activeTab === 'live-sources' ? (
+          <LiveSourcesPanel
+            rows={liveRows}
+            /*
+              OPEN ROW means OPEN THE ROW, so it selects the item AND returns to the
+              list the row lives on. Selecting alone would leave the operator looking
+              at the same live-layer list wondering whether the click did anything —
+              and the point of the control is to hand them the verbs, which are over
+              there.
+            */
+            onSelectOwner={(itemId) => {
+              onSelectionChange(itemId);
+              setActiveTab('layers');
+            }}
+          />
         ) : (
           <StationLayersPanel layers={playout} />
         )}

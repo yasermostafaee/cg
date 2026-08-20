@@ -50,6 +50,10 @@ export * from './channels/updates.js';
 export * from './channels/settings.js';
 export * from './channels/fixedLayers.js';
 export * from './channels/playoutLayers.js';
+// B-145 acceptance 1 (display half) — the bridge's OWN Live Source ledger, the
+// third declared layer class. Deliberately its own channel and not a wider
+// playoutLayers: see the header of channels/liveLayers.ts.
+export * from './channels/liveLayers.js';
 export * from './channels/delimiters.js';
 // R-030 — the per-channel output raster (bridge-owned) + the configured-vs-real
 // video-mode verdict.

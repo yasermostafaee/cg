@@ -101,6 +101,10 @@ function stubBridge(link: 'live' | 'disconnected' = 'live'): {
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
     stack: {
       snapshot: () => Promise.resolve([]),
       onStateChanged: () => () => undefined,

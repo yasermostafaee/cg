@@ -141,15 +141,15 @@
 below is **taken from `design.md`'s own ordering statements**, not from section numbering, and where
 the design says something different from the obvious reading it is called out.
 
-| #              | Stage                                                  | Why it is here, in the design's own words                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| -------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A** ⚠ PARTLY | **`B-145` — the ledger survives a bridge restart**     | §12.7: filed as a SEPARATE item that **must land BEFORE the switch ships**. It is also what makes stage D's reconcile trustworthy — a reconcile against a ledger that a restart silently emptied is a reconcile against a lie. **Persistence landed 2026-08-18 and defaulted ON 2026-08-19. ⚠ Its DISPLAY half (task 2.8) is still open and is due before STAGE E** — `B-145` is back to `[~]` for that reason                                                                                                                     |
-| **B** ✅ DONE  | **§12.6's exclusivity refusal**                        | ⚠ **NOT where the obvious reading puts it.** §12.1 says the two measured crosstalk symptoms are closed by exclusivity, but that §8's two doors — `take()` and `restore()` seating a SECOND multi-box template — _"are a different reachability and are closed by §12.6's refusal, **not by this phasing**"_. **It depends on nothing else in this file**: it is a predicate in two call sites. It is the cheapest closure of a measured on-air failure mode in the whole plan, so it goes early rather than waiting for the switch |
-| **C**          | **UNIT B′ + the per-arrangement carrier, INTERLEAVED** | §6b: UNIT B′ is _"this feature's PREREQUISITE, not latent cleanup"_. §12.1: phase one _"must already build the per-arrangement geometry carrier (§7) and the mask recompute (UNIT B′, §6b)"_. ⚠ **They are one stage, not two:** 2.1 (resolved visibility) needs no carrier, while 2.2 (current geometry) cannot be written until the carrier exists to be read                                                                                                                                                                    |
-| **D**          | **The reconcile (§4)**                                 | §4: ONE `reconcileLivePlates`, with `swapLiveSource` becoming a **caller** rather than a peer. Needs C's carrier to compute a desired set                                                                                                                                                                                                                                                                                                                                                                                          |
-| **E**          | **The operator surface (§12.8)**                       | The toggles are what drives D. Needs D to have something to call                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **F**          | ⭐ **THE CUT SHIPS**                                   | §12.1: cut first, animation second. A–E is the whole of phase one                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **G**          | **The transition modes (§13.5)**                       | Phase two. §12.1: _"phase two then adds only the tween and its curve contract"_                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| #             | Stage                                                  | Why it is here, in the design's own words                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A** ✅ DONE | **`B-145` — the ledger survives a bridge restart**     | §12.7: filed as a SEPARATE item that **must land BEFORE the switch ships**. It is also what makes stage D's reconcile trustworthy — a reconcile against a ledger that a restart silently emptied is a reconcile against a lie. **Persistence landed 2026-08-18 and defaulted ON 2026-08-19; its DISPLAY half (task 2.8) landed 2026-08-20 as the `LIVE SOURCES` tab** — `B-145` is `[x]`, and Stage E is unblocked                                                                                                                 |
+| **B** ✅ DONE | **§12.6's exclusivity refusal**                        | ⚠ **NOT where the obvious reading puts it.** §12.1 says the two measured crosstalk symptoms are closed by exclusivity, but that §8's two doors — `take()` and `restore()` seating a SECOND multi-box template — _"are a different reachability and are closed by §12.6's refusal, **not by this phasing**"_. **It depends on nothing else in this file**: it is a predicate in two call sites. It is the cheapest closure of a measured on-air failure mode in the whole plan, so it goes early rather than waiting for the switch |
+| **C**         | **UNIT B′ + the per-arrangement carrier, INTERLEAVED** | §6b: UNIT B′ is _"this feature's PREREQUISITE, not latent cleanup"_. §12.1: phase one _"must already build the per-arrangement geometry carrier (§7) and the mask recompute (UNIT B′, §6b)"_. ⚠ **They are one stage, not two:** 2.1 (resolved visibility) needs no carrier, while 2.2 (current geometry) cannot be written until the carrier exists to be read                                                                                                                                                                    |
+| **D**         | **The reconcile (§4)**                                 | §4: ONE `reconcileLivePlates`, with `swapLiveSource` becoming a **caller** rather than a peer. Needs C's carrier to compute a desired set                                                                                                                                                                                                                                                                                                                                                                                          |
+| **E**         | **The operator surface (§12.8)**                       | The toggles are what drives D. Needs D to have something to call                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **F**         | ⭐ **THE CUT SHIPS**                                   | §12.1: cut first, animation second. A–E is the whole of phase one                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **G**         | **The transition modes (§13.5)**                       | Phase two. §12.1: _"phase two then adds only the tween and its curve contract"_                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ⭐ **RE-KEYED 2026-08-19 — LOOKS adopted (`design.md` §14).** The stages stand, their subjects
 change: C's carrier work is superseded by the LOOK carrier (phase 1), D's desired set becomes the
@@ -158,11 +158,11 @@ plan.
 
 ## 1b. THE LOOKS PHASES (2026-08-19) — and phase 2's DELETION CLAUSE
 
-| Phase | What                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Session |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| **1** | Schema (`looks` group, sources-once, preflights), the LOOK carrier, the runtime switch (visibility + re-punch), the pin tests — ✅ LANDED (`b47f3eca`); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32278566981> (attempt 2, `success`, `E2E (Playwright)` RAN — attempt 1 was killed at `timeout-minutes: 20` by an apt-mirror stall BEFORE Playwright started; the suite never ran and was re-run, not weakened)      | **BA**  |
-| **2** | The Designer UI swap: toolbar icon, looks inspector, per-look canvas, look picker in the preview — **AND THE A′ DELETION (below)** — ✅ LANDED (session BB, `5d56c5a5`; A′ DISABLED not deleted, P2.DEL re-scoped below); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32292697141> (`success`, `E2E (Playwright)` RAN — the prior run on `2ee11fe5` was RED from two spec defects, fixed at the cause in `5d56c5a5`)    | next    |
-| **3** | Stage D's reconcile (§4) on the look carrier — ✅ **LANDED (session BC)**: `reconcileLivePlates` is the ONE delta, the take and `swapLiveSource` are both callers, §12.4's hold/teardown policy is named and observable. 6.7's bridge→page look transport ✅ **LANDED (session BD)** — a switch is now correct END TO END on air (fills and holes driven off one look id). 🔴 Stage E's operator surface stays BLOCKED, on 2.8 (B-145's display half) alone | after 2 |
+| Phase | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Session |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| **1** | Schema (`looks` group, sources-once, preflights), the LOOK carrier, the runtime switch (visibility + re-punch), the pin tests — ✅ LANDED (`b47f3eca`); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32278566981> (attempt 2, `success`, `E2E (Playwright)` RAN — attempt 1 was killed at `timeout-minutes: 20` by an apt-mirror stall BEFORE Playwright started; the suite never ran and was re-run, not weakened)                  | **BA**  |
+| **2** | The Designer UI swap: toolbar icon, looks inspector, per-look canvas, look picker in the preview — **AND THE A′ DELETION (below)** — ✅ LANDED (session BB, `5d56c5a5`; A′ DISABLED not deleted, P2.DEL re-scoped below); Linux `gate:e2e` DISCHARGED: <https://github.com/yasermostafaee/cg/actions/runs/32292697141> (`success`, `E2E (Playwright)` RAN — the prior run on `2ee11fe5` was RED from two spec defects, fixed at the cause in `5d56c5a5`)                | next    |
+| **3** | Stage D's reconcile (§4) on the look carrier — ✅ **LANDED (session BC)**: `reconcileLivePlates` is the ONE delta, the take and `swapLiveSource` are both callers, §12.4's hold/teardown policy is named and observable. 6.7's bridge→page look transport ✅ **LANDED (session BD)** — a switch is now correct END TO END on air (fills and holes driven off one look id). ✅ Stage E's operator surface is UNBLOCKED — 2.8 (B-145's display half) landed in session BG | after 2 |
 
 🔴 **PHASE 2'S DELETION CLAUSE — the two-spellings window is ONE session, closed by this task,
 not by memory.** Phase 2 deletes, in the same session that swaps the UI: the arrangements schema
@@ -250,35 +250,53 @@ candidate shapes.
       states the station is in, because a bridge that adopted nothing and a bridge that is not
       persisting at all otherwise look identical from every screen.
 
-- [ ] 2.8 🔴 **THE DISPLAY HALF OF `B-145` ACCEPTANCE 1 IS NOT MET — an adopted layer is
-      CONTROLLABLE but INVISIBLE.** Traced 2026-08-19 (session AT); **written down, deliberately not
-      fixed there.**
-      **What holds already (no work needed):** the browser retains the stack intent and re-delivers
+- [x] 2.8 ✅ **LANDED 2026-08-20 (session BG) — `B-145` ACCEPTANCE 1'S DISPLAY HALF IS MET: the
+      seated live layers are VISIBLE.** Traced 2026-08-19 (session AT), written down and deliberately
+      not fixed there; fixed here.
+      **What held already (no work needed):** the browser retains the stack intent and re-delivers
       it on every connect (`B-092`), so the row and its `itemId` survive the restart; the ledger is
       keyed by `itemId` (`tools/caspar-bridge/src/live-layers.ts:107`); and every teardown/repoint
-      door reads `#liveLayers` by that key — `teardownLiveLayers`
-      (`tools/caspar-bridge/src/caspar-runtime.ts:3802`), the swap paths at `:3461` and `:3639`. So
-      the row's existing verbs DO reach the adopted records.
-      **What is missing:** nothing displays the seated layers AS layers.
-      `CasparRuntime.liveLayers()` (`caspar-runtime.ts:3849`) has **no production caller** — its own
-      comment says _"for tests and for phase 6's re-emission"_ — and no `@cg/shared-ipc` channel
-      carries the ledger, so it never crosses the wire. The only panel that lists station layers is
-      the PLAYOUT tab, and `playoutLayersState()` (`caspar-runtime.ts:4064`) enumerates
-      **`#reservedLayers` only**; the Live Source band is deliberately NOT reserved (`live-layers.ts:20-26`
-      — reserving it would make it unplaceable, unreservable and unclearable), so it can never appear
-      there, and `stationLayerOccupancy` would refuse the clear anyway because it offers one only for
-      producer kind exactly `html` while a plate is a `route`. The Inspector's plate rows read
-      `currentSourceAssignments()` (`apps/runtime/src/renderer/features/inspector/livePlates.ts:23`)
-      — the ASSIGNMENT config, i.e. what a plate _should_ use, never what is seated.
-      **Done when:** a surface exists that lists the layers the bridge itself has seated, and an
-      operator can tell an adopted layer from a stranded one. **Needs a channel and a panel decision,
-      which is why it is its own item and not a patch to stage A.**
-      ⏱ 🔴 **DUE BEFORE STAGE F/G — specifically before STAGE E (section 6), and not before that.**
-      Stage E is where the band's state becomes something the operator is EXPECTED to read, so an
-      invisible seated layer stops being a diagnostic gap there and becomes a lie on the surface they
-      act from. Stages C and D touch neither the list nor the band's visibility and are NOT blocked
-      on it. Recorded 2026-08-19 (session AU), which also moved `B-145` back to `[~]` — it had been
-      ticked with this half of its acceptance 1 unmet.
+      door reads `#liveLayers` by that key — `teardownLiveLayers`, the swap paths. So the row's
+      existing verbs DO reach the adopted records.
+      **What was missing, and what closed it.** Nothing displayed the seated layers AS layers:
+      `CasparRuntime.liveLayers()` had **no production caller** and no `@cg/shared-ipc` channel
+      carried the ledger. Now:
+      **(a) a channel of its own** — `packages/shared-ipc/src/channels/liveLayers.ts`
+      (`liveLayers.state` + `liveLayers.state-changed`). ⚠ NOT a widened `playoutLayersState()`:
+      the band's exclusion from `#reservedLayers` is LOAD-BEARING, not an oversight
+      (`live-layers.ts:18-26` — a reserved band is unplaceable, unreservable and unclearable), so
+      the third ownership class got the third channel its own class list already implies.
+      **(b) ONE projection** — `projectLiveLayers` in `live-layers.ts`, called by BOTH the pull
+      (`CasparRuntime.liveLayersState()`) and the push, so the two cannot disagree about a row's
+      shape or the list's order.
+      **(c) push, not poll** — the `liveLayersChanged` emitter `B-145` already fires from the
+      ledger's ONE write path now feeds `wirePublishes`; a seat, a release, a hold and the boot
+      adoption all reach the browser by the call that persists them.
+      **(d) the production caller, named:** `LiveSourcesPanel` →
+      `apps/runtime/src/renderer/hooks/useLiveLayers.ts` → `liveLayers.state` → `bridge.ts:901` →
+      `CasparRuntime.liveLayersState()` → `liveLayers()`. The accessor is no longer
+      written-but-unreachable, and its doc comment says so.
+      **(e) a THIRD TAB, not more rows in either existing one** — `LIVE SOURCES` beside `LAYERS` and
+      `STATION LAYERS` (`LayersPanel.tsx`). Folding these into the station tab would have been the
+      worst option available: its premise is "these are NOT our layers" and its clear is gated on a
+      producer kind of exactly `html`, while a live plate is a `route`.
+      **ADOPTED vs STRANDED — the distinction 2.8 asked for.** A row whose owning item the stack
+      still carries is shown, NAMED with its template, and offers `OPEN ROW` (select + return to the
+      list) — but no destructive control, because `layers.clear` refuses a live-source coordinate by
+      name having weighed and rejected an exemption. A row whose owner is GONE reads **Stranded**,
+      is the only row that wears a colour (amber = ATTENTION; green stays the layer table's ON AIR),
+      raises the tab's dot, and offers `RELEASE` — which calls the EXISTING `stack.remove`, whose
+      `teardownLiveLayers` is documented as unconditional on `slot` for precisely this case. No new
+      coordinate-addressed clear was added.
+      **Tests:** `tools/caspar-bridge/tests/live-layers-wire.test.ts` (17 — projection, ordering,
+      push on seat/release/hold/adoption, the vanished-producer drop, and an END-TO-END boot that
+      adopts a persisted ledger and serves it over the WebSocket) and
+      `apps/runtime/tests/liveSourcesPanel.dom.test.ts` (18 — the gate both ways, the confirm, the
+      link-down mask, and the tab dot reading the same rows the list renders). E2E:
+      `apps/runtime/tests/e2e/live-source-layers.spec.ts`. Mutation-checked: dropping the sort, the
+      `held` resolve, the push subscription, the link-down mask, the owned-row gate and
+      `liveLayersState()` each redden the tests that name them.
+      ⏱ Was DUE BEFORE STAGE E (section 6). 🔴 **STAGE E IS NO LONGER BLOCKED.**
 
 ---
 

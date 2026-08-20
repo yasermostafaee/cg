@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { LiveLayerState } from '@cg/shared-ipc';
 import type { CommandSlot } from './command-builder.js';
 
 /**
@@ -245,4 +246,52 @@ export function reconcileLiveLayers(input: {
     if (keep.length > 0) adopted.set(itemId, keep);
   }
   return { adopted, dropped, unverified };
+}
+
+// ───────────────── B-145 acceptance 1 (display half) — THE WIRE PROJECTION ─────────────────
+
+/**
+ * 🔴 **THE ONE PROJECTION of the ledger onto the wire** (`tasks.md` 2.8).
+ *
+ * Both directions the ledger reaches a browser go through this function — the PULL
+ * (`CasparRuntime.liveLayersState()`, behind `liveLayers.state`) and the PUSH (the
+ * `liveLayersChanged` subscription in `bridge.ts`). They are two callers of one
+ * spelling rather than two flattenings, deliberately: a pull and a push that
+ * disagreed about the shape of a record would make the list flicker between two
+ * truths on every seat, and the operator would have no way to tell which one is on
+ * air. Golden rule 6, applied to a projection rather than to a predicate.
+ *
+ * ── WHY FLAT, AND WHY SORTED HERE ───────────────────────────────────────────
+ *
+ * The ledger is keyed by `itemId` because every VERB that reaches a live layer is
+ * item-scoped. The surface that reads it is a LAYER LIST, whose question is
+ * ordered by coordinate. Flattening at the seam — rather than in the renderer —
+ * keeps the ordering a property of the payload: two browsers, and the same browser
+ * across a push and a pull, then show the same list in the same order. A renderer
+ * that sorted for itself would be one more place for that order to drift.
+ *
+ * ⚠ **`held` is RESOLVED here, not forwarded.** The record's field is optional
+ * because it is additive to the persisted form (a ledger written before looks
+ * existed parses unchanged and means "on screen"). That is a persistence concern,
+ * and it is answered exactly once — here — so no consumer re-decides what an
+ * absent flag meant.
+ */
+export function projectLiveLayers(
+  ledger: ReadonlyMap<string, readonly LiveLayerRecord[]>,
+): LiveLayerState[] {
+  const rows: LiveLayerState[] = [];
+  for (const [itemId, records] of ledger) {
+    for (const record of records) {
+      rows.push({
+        channel: record.slot.channel,
+        layer: record.slot.layer,
+        itemId,
+        sourceId: record.sourceId,
+        role: record.role,
+        producer: record.producer,
+        held: record.held === true,
+      });
+    }
+  }
+  return rows.sort((a, b) => a.channel - b.channel || a.layer - b.layer);
 }

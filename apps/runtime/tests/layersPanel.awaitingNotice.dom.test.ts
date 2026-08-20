@@ -112,6 +112,10 @@ function stubBridge(slots: FixedSlotState[] = SLOTS): { stack: Deferred<StackIte
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
     stack: {
       snapshot: () => stack.promise,
       onStateChanged: () => () => undefined,

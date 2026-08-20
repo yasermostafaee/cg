@@ -23,6 +23,8 @@ import {
   PlayoutLayersClearChannel,
   PlayoutLayersStateChangedChannel,
   PlayoutLayersStateChannel,
+  LiveLayersStateChannel,
+  LiveLayersStateChangedChannel,
   StackLoadChannel,
   StackNextChannel,
   StackOutChannel,
@@ -90,6 +92,7 @@ import {
   type OwnedOccupancyWarning,
   type PendingUpdate,
   type PlayoutLayerState,
+  type LiveLayerState,
   type RestoreSkip,
   type Settings,
   type TemplateInfo,
@@ -282,6 +285,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #templatesSubs = new Subs<TemplateInfo[]>();
   // R-028 part B — the declared playout layers' occupancy push.
   readonly #playoutSubs = new Subs<PlayoutLayerState[]>();
+  // B-145 (2.8) — the bridge-owned Live Source ledger push.
+  readonly #liveLayerSubs = new Subs<LiveLayerState[]>();
 
   #readyResolve: (() => void) | null = null;
   #readyReject: ((err: Error) => void) | null = null;
@@ -612,6 +617,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#playoutSubs.emit(p.data);
         break;
       }
+      case LiveLayersStateChangedChannel.name: {
+        const p = LiveLayersStateChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#liveLayerSubs.emit(p.data);
+        break;
+      }
       case LockStateChangedChannel.name: {
         const p = LockStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#lockSubs.emit(p.data);
@@ -871,6 +881,14 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(PlayoutLayersClearChannel, req),
     onStateChanged: (handler: (state: PlayoutLayerState[]) => void) =>
       this.#playoutSubs.add(handler),
+  };
+
+  // B-145 (2.8) — the bridge-owned Live Source ledger. READ-ONLY on purpose: the
+  // verbs that reach a seated layer are item-scoped and live on `stack`.
+  readonly liveLayers = {
+    state: () => this.#invoke(LiveLayersStateChannel, undefined),
+    onStateChanged: (handler: (state: LiveLayerState[]) => void) =>
+      this.#liveLayerSubs.add(handler),
   };
 
   readonly lock = {
