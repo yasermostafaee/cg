@@ -6,6 +6,15 @@
 ## THE STATE, first (read this cold)
 
 - **Pushed SHA:** see §8 — verified against `git ls-remote origin dev`. **Safe to pull.**
+- ⚠ **THERE WERE TWO PUSHES, NOT ONE, AND THE SECOND IS THE IMPORTANT ONE.** Reviewing my own change
+  turned up **five** real defects in it — one found by hand, four by an adversarial pass — of which
+  two would have offered to cut a live guest on a guess and two made the console assert things it had
+  not read. Shipping any of them quietly to preserve a one-push tidiness would have been the wrong
+  trade. All are fixed at the cause, pinned by tests, and written up in §4b and §4c.
+
+  🔴 **Read §4c (i) if you read nothing else:** my own first fix was INSUFFICIENT, and the case it
+  missed is precisely the bridge-restart scenario `B-145` exists for.
+
 - 🔴 **`tasks.md` 2.8 is DONE, and it was Stage E's last blocker.** The operator surface (the look
   picker) is no longer blocked on anything.
 - 🔴 **`B-145` is `[x]`.** Acceptance 1 read _"those layers **appear in the layer list** and are
@@ -91,6 +100,74 @@ layer table's sacred ON AIR mark, and an on-screen plate borrowing it would put 
 air claim on a different surface. Stranded is amber (`pending`), whose documented meaning in this
 palette is exactly ATTENTION.
 
+## 4b. 🔴 A defect in THIS work, found by reviewing it — and it was the dangerous one
+
+Worth reading even if you skip the rest, because it is this repo’s most-repeated class and it
+nearly shipped inside the very change that closes a bug about honesty.
+
+**What it was.** The first cut decided STRANDED from the stack `items` alone, ignoring `stackReady`.
+The ledger and the stack are **two independent snapshots that land separately**, so at mount — and
+again on every reconnect — the ledger can arrive first. In that window `items` is `[]` because
+nothing has been delivered, every seated layer finds no owner, and the list would have shown **every
+live plate as “Stranded — no row owns this” with a RELEASE button beside it.** An operator acting
+on that cuts a guest who is perfectly well owned by a row that had simply not arrived yet.
+
+**Why it is not a fresh mistake.** `useBridgeSnapshot` already names three victims of the identical
+error — the b2 density bug, PVW’s white page, and `pruneDrafts` deleting every staged edit on
+remount — and states the rule: _“any consumer that ACTS on the absence of an item must read this
+form and do nothing while `ready` is false.”_ This surface acts on that absence, and the act is
+taking a live source off air. `LayersPanel` even carries a comment about the same trap three
+snapshots up.
+
+**Fixed at the cause**, not by a guard at the call site: blindness is now a FIRST-CLASS state.
+`liveLayerBlindness(linkDown, stackReady)` is the ONE place that precedence lives (link-down
+outranks — a frozen ledger makes the stack’s readiness beside the point), the two blind states say
+DIFFERENT things so the console never claims it looked when it did not, and neither raises
+attention: not knowing is not a claim that anything is wrong. Five tests pin it; reverting the guard
+reddens three.
+
+## 4c. …and four MORE, from a second review pass. One pattern, not four bugs
+
+Every one is the same shape as §4b: **a fact the console did not have, presented as a fact it
+did** — inside the very change that closes a bug about exactly that.
+
+**(i) The reconnect window — worse than §4b, and it is §4b’s own fix being insufficient.**
+`useBridgeSnapshot`’s `ready` flag _"latches on the FIRST arrival and never clears"_. So reading it
+covers the bootstrap and nothing else: after any reconnect it stays `true` while `items` is `[]`,
+and a restarted bridge serves its FULL adopted ledger before the browser re-delivers a single row.
+That is every seated layer reading STRANDED with RELEASE armed, **in exactly the bridge-restart
+scenario `B-145` exists for**. Fixed by making an EMPTY stack its own blind state — it cannot tell
+"not delivered yet" from "nothing here", so it is evidence of neither. ⚠ This costs one true
+positive: an operator who removes EVERY row gets no alarm. That is the right way to be wrong —
+failing to raise an alarm is recoverable, arming a control that cuts a live guest on a guess is
+not.
+
+**(ii) The empty list claimed "no live sources seated"** with no readiness or link input at all.
+The per-row masking rides on ROWS, and an empty ledger has none — so the one branch that speaks
+for the WHOLE list was the one that guessed. With the link down the hook never pulls, so an
+operator whose bridge is dead was told, definitely, that no guest was composited while two faces
+were on air. Fixed with the ledger’s own `ready` flag and an explicit empty view.
+
+**(iii) RELEASE cut more than it named.** `teardownLiveLayers` loops over EVERY record the item
+owns, so releasing `1-10` also cleared `1-11` while the confirm, the button label and the toast
+all said one coordinate. The wording now names the whole set from one computation. The stranded
+verdict is also RE-READ after the confirm’s unbounded await: an operator can leave the dialog open
+while the stack arrives, and a verdict that expired in the meantime must not authorise a teardown.
+
+**(iv) The payload had no `unverified` arm, and my own header argued for that from a false
+premise.** It said the ledger is _"resolved at boot against the server’s `INFO`"_. The shipped
+bridge adopts with occupancy hard-coded to `unknown` — correctly, since no session exists yet and
+dropping an unverifiable record would strand the very producer the item protects — so nothing is
+ever dropped and **every** adopted record is unconfirmed. The omission was the one distinction
+that is always true after a restart, and the surface stated a file claim in the present tense.
+The wire now carries `unverified`, marked from the adoption’s own result and cleared on a
+first-hand write (a take, a reconcile, a swap — things that send real AMCP), and the row reads
+**"Adopted — not confirmed"** instead of "On screen".
+
+**Plus a mock divergence:** it released plates only on `remove`, while the bridge tears them down
+on `stop` and `out` too — so test mode reported a guest "On screen" after a STOP. It now hooks the
+same three verbs the bridge does.
+
 ## 5. ⭐ The visual check — three steps, and you can do all of them
 
 Take a row whose template declares Live Source plates, then open **LAYERS → LIVE SOURCES**.
@@ -138,14 +215,17 @@ outside this codebase. Not chased in this session.
 ## 8. Gate, E2E and the push
 
 - `pnpm gate` green **uncached** — see §9 for the figures.
-- **Tests added:** `tools/caspar-bridge/tests/live-layers-wire.test.ts` (17),
-  `apps/runtime/tests/liveSourcesPanel.dom.test.ts` (18),
+- **Tests added:** `tools/caspar-bridge/tests/live-layers-wire.test.ts` (23),
+  `apps/runtime/tests/liveSourcesPanel.dom.test.ts` (40), eight in
+  `apps/runtime/tests/MockRuntime.test.ts`,
   `apps/runtime/tests/e2e/live-source-layers.spec.ts` (1). Eleven `window.cg` stubs in existing
   layer-panel DOM tests gained the new channel — a stub that omits one fails in whichever OTHER spec
   first renders a component reaching for it, which is how these surfaced.
-- **Mutation-checked, six ways**, each reddening the tests that name it: dropping the coordinate
+- **Mutation-checked, eleven ways**, each reddening the tests that name it: dropping the coordinate
   sort; forcing `held` false; deleting the push subscription; removing the link-down mask; making an
-  owned row releasable; and `liveLayersState()` returning `[]`.
+  owned row releasable; `liveLayersState()` returning `[]`; making `liveLayerBlindness` ignore
+  `stackReady` (§4b) and ignore an empty stack (§4c i); removing the unverified demotion; never
+  recording the unverified marks; and stopping the mock releasing on STOP.
 - ⚠ **`awaitChannelModeRead` (flake family 3) deliberately NOT added, and that is a statement about
   these tests rather than a convenience:** the helper is required of a boot whose tests baseline the
   wire and assert the slice is empty. **No test here takes a silence baseline** — the ledger is
