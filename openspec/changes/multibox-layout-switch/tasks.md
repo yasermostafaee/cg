@@ -490,6 +490,29 @@ candidate shapes.
       axis trio. 🔴 The bridge cannot assert a PUNCHED hole (that is the page's half and the
       transport is not wired — see 6.7 below); what it asserts is the layer's own mask —
       `MIXER … CLIP` — which comes from the same geometry as `FILL`.
+      **Linux `gate:e2e` DISCHARGED:** <https://github.com/yasermostafaee/cg/actions/runs/32323670161>
+      — commit `1f76edb0` (the commit carrying Stage D), `completed` + `success`, and the
+      `E2E (Playwright)` job RAN (02:10:21 → 02:19:03 UTC, its `E2E` step `success`; the only
+      skipped step is the browser install, a cache hit). The classifier scored this diff
+      `kind=code needsE2e=true` — `tools/caspar-bridge/**` is not on the known-non-render
+      list, so it falls to the safe direction and the debt was owed and paid rather than
+      argued away.
+- [x] 6.8 **THE ADVERSARIAL REVIEW OF STAGE D, and the defects it found.** ✅ **Session BC**
+      (`868a8cfc`). Five independent lenses over the diff, then two skeptics per finding; 1
+      critical + 11 major/minor survived refutation and were fixed at the cause, each with the
+      reproduction turned into a test.
+      🔴 **The one worth remembering: a HELD plate's layer was offered as a FREE layer.**
+      Before LOOKS, "every layer this item's ledger names" and "the layers this plan is
+      re-seating" were the SAME SET — a take seated every declaration — so the cheaper
+      spelling was correct by accident. Holding a record broke that invariant silently, and
+      the symptom hid itself: the arriving plate's `PLAY` destroyed the held producer, and on
+      the way back the stale record still matched layer+producer so `seatUnchanged` fired and
+      nothing was re-played. **An invariant that is true by accident is the thing to write
+      down, because the change that breaks it will not look like it is touching it.**
+      The other cluster was one root cause seven times over: the `'live'` failure branch
+      decided from "did this PLATE have a prior record" rather than from what actually reached
+      the SLOT. Both axes it needed — same-slot, and did-the-`PLAY`-land — are now single
+      evaluations gating both the destructive step and the ledger entry.
 - [ ] 6.7 🔴 **NOT DONE, AND NAMED RATHER THAN ASSUMED — the bridge→page look transport.** A look
       switch is TWO mutations on two machines: the bridge moves the producers' `MIXER FILL`/`CLIP`
       (6.1, landed) and the PAGE flips which look's instance is visible and re-punches its holes
