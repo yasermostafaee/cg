@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
 
 describe('MockRuntime stack', () => {
@@ -188,5 +188,90 @@ describe('MockRuntime position read-back (B-072 parity)', () => {
     expect(rt.stackSnapshot().find((i) => i.itemId === id)).toBeUndefined();
     rt.load(id, 'tpl-1', {});
     expect(rt.stackSnapshot().find((i) => i.itemId === id)?.position).toBeUndefined();
+  });
+});
+
+describe('🔴 B-145 (2.8) — the mock releases live plates on the SAME verbs the bridge does', () => {
+  /*
+    ── THE PARITY THAT WAS WRONG, AND WHY A MOCK BUG IS WORTH A TEST ─────────────
+
+    A first cut filtered the seeded ledger by STACK MEMBERSHIP. That looks like
+    release, but it models only `remove`. On air `teardownLiveLayers` is awaited by
+    THREE call sites: `#stopItemImpl` ("the plates come down WITH the graphic"),
+    `#outImpl` ("THE LIVE LAYERS COME DOWN FIRST, THEN THE GRAPHIC") and `#removeImpl`.
+
+    So after a STOP or an OUT the real console shows nothing on those layers, while the
+    mock went on reporting a guest "On screen". `playoutClear`'s own parity note is the
+    rule: a mock that teaches a different — and more dangerous — mental model than air
+    is worse than no mock.
+  */
+
+  const armed = (): MockRuntime => {
+    (globalThis as { CG_E2E_FIXED_BANK?: boolean }).CG_E2E_FIXED_BANK = true;
+    return new MockRuntime();
+  };
+
+  afterEach(() => {
+    delete (globalThis as { CG_E2E_FIXED_BANK?: boolean }).CG_E2E_FIXED_BANK;
+  });
+
+  it('the armed seed starts seated — a console attaching to a bridge that already has plates', () => {
+    const rt = armed();
+    expect(rt.liveLayersState().map((r) => r.layer)).toEqual([10, 11]);
+  });
+
+  it('UNARMED it is empty, because the offline mock has seated nothing', () => {
+    // Honest rather than a gap: no CasparCG, an empty source catalog by design, and no
+    // declared band. `seedPlayoutLayers` makes the same choice for the same reason.
+    expect(new MockRuntime().liveLayersState()).toEqual([]);
+  });
+
+  it('🔴 STOP releases the plates, though the template producer survives', () => {
+    const rt = armed();
+    rt.stop('item-irib-news');
+    expect(rt.liveLayersState()).toEqual([]);
+  });
+
+  it('🔴 OUT releases the plates', () => {
+    const rt = armed();
+    rt.out('item-irib-news');
+    expect(rt.liveLayersState()).toEqual([]);
+  });
+
+  it('REMOVE releases the plates', () => {
+    const rt = armed();
+    rt.remove('item-irib-news');
+    expect(rt.liveLayersState()).toEqual([]);
+  });
+
+  it('a TAKE seats them again — the verb that seats on air seats here', () => {
+    const rt = armed();
+    rt.out('item-irib-news');
+    expect(rt.liveLayersState()).toEqual([]);
+
+    rt.take('item-irib-news');
+
+    expect(rt.liveLayersState().map((r) => r.layer)).toEqual([10, 11]);
+  });
+
+  it('every one of those transitions PUBLISHES, so a console never has to poll', () => {
+    const rt = armed();
+    const seen: number[][] = [];
+    rt.liveLayersChanged.subscribe((s) => seen.push(s.map((r) => r.layer)));
+
+    rt.out('item-irib-news');
+    rt.take('item-irib-news');
+
+    expect(seen).toEqual([[], [10, 11]]);
+  });
+
+  it('the seed is never `unverified` — the mock has no file to adopt from', () => {
+    // A demotion test mode can never really be in would teach an alarm that is not true
+    // of it, which is the same rule that keeps the mock from faking a STRANDED row.
+    expect(
+      armed()
+        .liveLayersState()
+        .every((r) => !r.unverified),
+    ).toBe(true);
   });
 });

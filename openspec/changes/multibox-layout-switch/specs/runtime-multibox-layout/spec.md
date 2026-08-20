@@ -313,9 +313,72 @@ The list SHALL be **pushed when the ledger changes** rather than polled, from th
 path that persists it, so a seat, a release, a hold and the boot adoption reach the surface by the
 call that records them.
 
-Where the link to the bridge is down the rows SHALL read as **unknown** and offer nothing: the
-ledger and the stack are then both frozen snapshots, and a stranded verdict computed from two stale
-facts would present a guess as an alarm.
+🔴 **The stranded verdict SHALL be withheld whenever the stack is not KNOWN, and not merely
+whenever it is empty.** "Stranded" is decided by an item being ABSENT from the stack, and the ledger
+and the stack are two independent snapshots that land separately — so a surface reading the stack
+before it has arrived would report EVERY seated layer as stranded and offer to cut a guest who is
+perfectly well owned. Not-yet-arrived and genuinely-absent are opposite statements about our
+knowledge, and the surface SHALL say which it is.
+
+Where the link to the bridge is down, or the stack has not yet arrived, the rows SHALL read as
+**unknown** and offer nothing, and SHALL NOT raise attention: not knowing is not a claim that
+anything is wrong. The precedence between those two conditions SHALL have ONE implementation, so two
+surfaces cannot order them differently.
+
+🔴 **A record ADOPTED from the persisted ledger SHALL be shown as unconfirmed until the bridge
+itself writes it again.** The boot adoption reconciles against occupancy that is not knowable at
+that moment — no session exists — so after a restart every record is a file claim and the server
+may have come back black. Presenting one in the present tense would be the surface asserting an
+on-air fact it cannot back, which is the demotion rule the stack status already obeys. The mark
+SHALL clear on a first-hand write (a take, a look reconcile, a swap), not on a second reading of
+occupancy, so the ledger keeps exactly one authority.
+
+🔴 **A release offered here SHALL name every layer it will clear.** The teardown it invokes is
+ITEM-scoped and an item may own several layers, so a control that named one coordinate while
+clearing two would take a second source off air without telling the operator.
+
+The stranded verdict SHALL be re-read at the moment the destructive step is taken, not only when
+the control was drawn: an operator may leave a confirmation open, and a verdict that expired in
+the meantime must not authorise a teardown.
+
+An EMPTY list SHALL distinguish "nothing is seated" from "nothing has been read yet". The
+per-row masking above cannot speak for an empty list, and a console that has never received the
+ledger — because the link is down, or because the first read has not returned — must not report
+that no live source is on air.
+
+#### Scenario: An unarrived stack is not read as a stranded layer
+
+- **GIVEN** seated live layers whose ledger has arrived and a stack snapshot that has not
+- **WHEN** the operator opens the live-sources surface
+- **THEN** the rows read as unknown and offer no release, rather than reading as stranded
+
+#### Scenario: A reconnect does not strand everything
+
+- **GIVEN** a restarted bridge serving its adopted ledger before the console has re-delivered its
+  stack
+- **WHEN** the operator opens the live-sources surface
+- **THEN** no row reads as stranded and no release is offered, because an empty stack cannot
+  distinguish "not delivered yet" from "nothing here"
+
+#### Scenario: An adopted record is not asserted as on air
+
+- **GIVEN** a bridge that has restarted and adopted its persisted ledger
+- **WHEN** the operator opens the live-sources surface
+- **THEN** each adopted row is shown as unconfirmed rather than as on screen, and says that
+  taking its row again confirms it
+
+#### Scenario: A release names every layer it clears
+
+- **GIVEN** a stranded item owning two seated layers
+- **WHEN** the operator releases one of them
+- **THEN** the confirmation names both layers and states that releasing one releases both
+
+#### Scenario: An empty list does not claim nothing is on air
+
+- **GIVEN** a console whose link to the bridge is down, so the ledger has never been read
+- **WHEN** the operator opens the live-sources surface
+- **THEN** it says the state cannot be checked, rather than reporting that no live source is
+  seated
 
 #### Scenario: A seated live layer appears in a layer list
 

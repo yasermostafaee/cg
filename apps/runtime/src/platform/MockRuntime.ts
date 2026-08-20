@@ -244,6 +244,8 @@ export class MockRuntime {
     this.#settleSlotObservation(itemId, 'producer');
     this.#transition(itemId, 'playing', true);
     this.#audit.unshift(auditEntry('take', { itemId, templateId: item.templateId }));
+    // C-015 parity — the take is what SEATS the plates.
+    this.#seatLivePlates(itemId);
     this.#settle(itemId, 'on-air');
     return { accepted: true };
   }
@@ -303,6 +305,9 @@ export class MockRuntime {
     if (item === null) return { accepted: false };
     this.#transition(itemId, 'exiting', true);
     this.#audit.unshift(auditEntry('stop', { itemId, templateId: item.templateId }));
+    // C-015 parity — `#stopItemImpl` awaits `teardownLiveLayers`, so the plates come
+    // down WITH the graphic even though the template producer survives below.
+    this.#releaseLivePlates(itemId);
     // The producer survives, so `#loaded` is deliberately NOT cleared.
     this.#settle(itemId, 'loaded');
     return { accepted: true };
@@ -337,6 +342,8 @@ export class MockRuntime {
     this.#loaded.delete(itemId);
     this.#settleSlotObservation(itemId, 'empty');
     this.#audit.unshift(auditEntry('out', { itemId, templateId: item.templateId }));
+    // C-015 parity — `#outImpl` takes the live layers down FIRST, then the graphic.
+    this.#releaseLivePlates(itemId);
     this.#settle(itemId, 'idle');
     // B-056 parity — the mock's simulated servers are healthy, so an out's
     // CLEAR "lands on the primary": the item's warning provably resolves.
@@ -352,6 +359,9 @@ export class MockRuntime {
     this.#emitStack();
     // B-056 parity — the item is gone / its layer deallocated.
     this.#resolveOwnedOccupancy(itemId);
+    // C-015 parity — `#removeImpl` awaits `teardownLiveLayers` unconditionally on the
+    // slot: an item whose slot was already released can still own live layers.
+    this.#releaseLivePlates(itemId);
     // R-011 parity — the override dies with the item.
     this.#positions.delete(itemId);
     // B-070 parity — the producer dies with the item.
@@ -579,6 +589,14 @@ export class MockRuntime {
   readonly #playoutObservations = seedPlayoutLayers();
   // B-145 (2.8) parity — the seated Live Source layers, e2e-seeded like the bank.
   readonly #liveLayerSeed = seedLiveLayers();
+  /**
+   * Which items currently have their plates SEATED.
+   *
+   * Seeded from the catalogue at construction, which models the real `B-145` case: a
+   * console attaching to a bridge that already has plates on air. From then on it is
+   * driven by the SAME verbs the bridge hooks — see the note on `#seatLivePlates`.
+   */
+  #liveSeatedItems = new Set(seedLiveLayers().map((r) => r.itemId));
 
   fixedLayersConfig(): FixedLayerBank | null {
     return this.#fixedBank;
@@ -603,8 +621,31 @@ export class MockRuntime {
    * console incapable of showing an alarm it cannot really be in.
    */
   liveLayersState(): LiveLayerState[] {
-    const present = new Set(this.#stack.map((i) => i.itemId));
-    return this.#liveLayerSeed.filter((r) => present.has(r.itemId));
+    return this.#liveLayerSeed.filter((r) => this.#liveSeatedItems.has(r.itemId));
+  }
+
+  /**
+   * 🔴 **THE MOCK RELEASES ON THE SAME THREE VERBS THE BRIDGE DOES, AND THAT LIST IS
+   * THE WHOLE POINT.**
+   *
+   * A first cut filtered the seed by STACK MEMBERSHIP, which looks like release but
+   * models only `remove`. On air `teardownLiveLayers` is awaited by `#stopItemImpl`
+   * (*"the plates come down WITH the graphic"*) and by `#outImpl` (*"THE LIVE LAYERS
+   * COME DOWN FIRST, THEN THE GRAPHIC"*) as well — so after a STOP or an OUT the real
+   * console shows nothing on those layers while the mock went on reporting a guest
+   * "On screen". A mock that teaches a different — and more dangerous — mental model
+   * than air is precisely what `playoutClear`’s parity note forbids.
+   */
+  #seatLivePlates(itemId: string): void {
+    if (!this.#liveLayerSeed.some((r) => r.itemId === itemId)) return;
+    if (this.#liveSeatedItems.has(itemId)) return;
+    this.#liveSeatedItems.add(itemId);
+    this.liveLayersChanged.emit(this.liveLayersState());
+  }
+
+  #releaseLivePlates(itemId: string): void {
+    if (!this.#liveSeatedItems.delete(itemId)) return;
+    this.liveLayersChanged.emit(this.liveLayersState());
   }
 
   /**
@@ -1460,10 +1501,6 @@ export class MockRuntime {
 
   #emitStack(): void {
     this.stackChanged.emit(this.stackSnapshot());
-    // B-145 (2.8) — the mock's ledger is DERIVED from the stack, so the two change
-    // together by construction. Emitting here rather than from a second seam is what
-    // keeps that true: there is no state to forget to publish.
-    this.liveLayersChanged.emit(this.liveLayersState());
   }
 }
 
@@ -1653,6 +1690,10 @@ function seedPlayoutLayers(): Map<number, FixedSlotObservation> {
  * teach an alarm that is not true of it. The mock cannot strand a layer, and it
  * must not appear to.
  *
+ * Both rows are `unverified: false`: the mock never restarts and never adopts a file,
+ * so it has no unconfirmed records to model. A seed that claimed otherwise would put a
+ * demotion on screen that test mode can never actually be in.
+ *
  * The band is 10–11, inside `SUGGESTED_LIVE_SOURCE_LAYER_RANGE` (10–59) and
  * disjoint from the seeded fixed bank at 70+, exactly as a real install's
  * validator requires.
@@ -1668,6 +1709,7 @@ function seedLiveLayers(): LiveLayerState[] {
           role: 'fill',
           producer: 'route://1-1',
           held: false,
+          unverified: false,
         },
         {
           channel: 1,
@@ -1677,6 +1719,7 @@ function seedLiveLayers(): LiveLayerState[] {
           role: 'fill',
           producer: 'route://1-2',
           held: true,
+          unverified: false,
         },
       ]
     : [];

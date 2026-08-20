@@ -39,7 +39,12 @@ import { LayerTableHeader } from './LayerTableHeader.js';
 import { resolveDensity } from './layerTable.js';
 import { StationLayersPanel } from './StationLayersPanel.js';
 import { LiveSourcesPanel } from './LiveSourcesPanel.js';
-import { hasStrandedLiveLayer, liveLayerRows, ownerLabelFor } from './liveLayerRows.js';
+import {
+  hasStrandedLiveLayer,
+  liveLayerBlindness,
+  liveLayerRows,
+  ownerLabelFor,
+} from './liveLayerRows.js';
 import { hasStationLayerOccupant } from './stationLayerOccupancy.js';
 import { FixedBankConfigModal } from '../fixedLayers/FixedBankConfigModal.js';
 
@@ -179,8 +184,10 @@ export function LayersPanel({
   // R-022 — ONE rehearse snapshot for the whole table, from the bridge.
   const rehearsals = useRehearse();
   const playout = useStationLayers();
-  // B-145 (2.8) — the layers the BRIDGE seated for Live Source plates.
-  const live = useLiveLayers();
+  // B-145 (2.8) — the layers the BRIDGE seated for Live Source plates, WITH their
+  // readiness: the zero-row case has no row to carry a blindness state, so the panel
+  // needs the ledger's own arrival flag to avoid asserting that nothing is on air.
+  const { value: live, ready: ledgerReady } = useLiveLayers();
   /**
    * THE STACK, WITH ITS READINESS — and this is the THIRD snapshot, which is the
    * bug the `listReady` guard above did not reach.
@@ -437,10 +444,18 @@ export function LayersPanel({
     owner label is the TEMPLATE name the operator already reads in the row’s own
     template column, joined through the index this panel has anyway.
   */
+  const liveBlind = liveLayerBlindness(linkDown, stackReady, items.length > 0);
   const liveRows = liveLayerRows(
     live,
     ownerLabelFor(items, (id) => templates.get(id)?.name),
-    linkDown,
+    /*
+      🔴 BOTH facts, through the ONE precedence helper. `stackReady` is not optional
+      here and not belt-and-braces: STRANDED is decided by an item being ABSENT from
+      the stack, and the stack is a separate snapshot that can land AFTER the ledger.
+      Read without it, every seated layer would read stranded at mount and on every
+      reconnect — and offer to cut a guest who is perfectly well owned.
+    */
+    liveBlind,
   );
   const liveStranded = hasStrandedLiveLayer(liveRows);
   const tabs: TabSpec[] = [
@@ -830,6 +845,8 @@ export function LayersPanel({
         ) : activeTab === 'live-sources' ? (
           <LiveSourcesPanel
             rows={liveRows}
+            ledgerReady={ledgerReady}
+            blind={liveBlind}
             /*
               OPEN ROW means OPEN THE ROW, so it selects the item AND returns to the
               list the row lives on. Selecting alone would leave the operator looking

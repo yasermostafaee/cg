@@ -296,6 +296,48 @@ candidate shapes.
       `apps/runtime/tests/e2e/live-source-layers.spec.ts`. Mutation-checked: dropping the sort, the
       `held` resolve, the push subscription, the link-down mask, the owned-row gate and
       `liveLayersState()` each redden the tests that name them.
+      🔴 **ONE DEFECT WAS FOUND IN THIS WORK BY ITS OWN REVIEW, AND IT WAS THE DANGEROUS ONE.** The
+      first cut decided STRANDED from `items` alone, ignoring `stackReady`. The ledger and the stack
+      are two INDEPENDENT snapshots that land separately, so at mount and on every reconnect the
+      ledger can arrive first — and every seated layer would have read _"Stranded — no row owns
+      this"_ with a RELEASE button beside it, inviting the operator to cut a guest who was perfectly
+      well owned by a row that had not been delivered yet. This renderer has paid for that exact
+      class three times (`useBridgeSnapshot` names the b2 density bug, PVW’s white page, and
+      `pruneDrafts` deleting every staged edit on remount) and its rule is explicit: _"any consumer
+      that ACTS on the absence of an item must read this form and do nothing while `ready` is
+      false."_ Fixed at the cause: blindness is a FIRST-CLASS state (`liveLayerBlindness` — the ONE
+      place the link-down / stack-not-arrived precedence lives), the two blind states say different
+      things, and neither raises attention. Pinned by five tests; reverting the guard reddens three.
+      🔴 **A SECOND REVIEW PASS FOUND FOUR MORE, AND THEY ARE RECORDED BECAUSE THE PATTERN IS ONE
+      PATTERN.** Every one is the same class as the first: a fact the console did not have,
+      presented as a fact it did.
+      **(i) The reconnect window — worse than the original.** `useBridgeSnapshot`’s `ready`
+      _"latches on the FIRST arrival and never clears"_, so reading it was not enough: after any
+      reconnect it stays `true` while the stack is `[]`, and a restarted bridge serves its FULL
+      adopted ledger before the browser re-delivers a row. That is every layer STRANDED with
+      RELEASE armed, in exactly the bridge-restart case this item exists for. Fixed by making an
+      EMPTY stack its own blind state: it cannot tell "not delivered yet" from "nothing here", so
+      it is evidence of neither. Costs one true positive (an operator who removes every row),
+      which is the right way to be wrong.
+      **(ii) The empty list asserted "no live sources seated"** with no readiness or link input —
+      the one branch that speaks for the WHOLE list was the one that guessed. With the link down
+      the hook never pulls, so a console with a dead bridge told the operator, definitely, that no
+      guest was composited. Fixed with the ledger’s own `ready` flag and an explicit empty view.
+      **(iii) RELEASE cleared EVERY layer the item owned while the confirm named one coordinate.**
+      `teardownLiveLayers` loops over all of an item’s records, so releasing `1-10` also cut
+      `1-11`. The confirm, the accessible name and the toast now all name the set `releaseScopeOf`
+      returns; and the stranded verdict is RE-READ after the confirm’s unbounded await, so a
+      verdict that expired while the operator was reading cannot authorise a teardown.
+      **(iv) No `unverified` arm on the payload.** The channel header argued the shape from _"the
+      ledger is resolved at boot against the server’s `INFO`"_ — false in the shipped bridge,
+      which adopts with occupancy hard-coded to `unknown`. Nothing is ever dropped and EVERY
+      adopted record is unconfirmed, so the omission was the one distinction that is always true
+      after a restart, and the surface stated a file claim in the present tense. The wire now
+      carries `unverified`, marked from the adoption’s own result and cleared on a first-hand
+      write; the row reads _"Adopted — not confirmed"_ rather than _"On screen"_.
+      ⚠ The mock also diverged: it released plates only on `remove`, while the bridge tears them
+      down on `stop` and `out` as well — so test mode reported a guest on screen after a STOP.
+      It now hooks the same three verbs.
       ⏱ Was DUE BEFORE STAGE E (section 6). 🔴 **STAGE E IS NO LONGER BLOCKED.**
 
 ---

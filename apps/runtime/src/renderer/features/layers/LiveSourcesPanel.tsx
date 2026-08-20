@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
@@ -6,7 +7,12 @@ import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
-import type { LiveLayerRowView } from './liveLayerRows.js';
+import {
+  liveLayerEmptyView,
+  releaseScopeOf,
+  type LiveLayerBlindness,
+  type LiveLayerRowView,
+} from './liveLayerRows.js';
 
 interface Props {
   /**
@@ -17,6 +23,14 @@ interface Props {
    * that could disagree about whether anything is stranded.
    */
   rows: readonly LiveLayerRowView[];
+  /**
+   * Whether the LEDGER snapshot itself has arrived — distinct from the rows, and
+   * required, because an empty ledger produces no rows to carry a blindness state and
+   * the zero-row branch would otherwise assert that nothing is on air (B-094).
+   */
+  ledgerReady: boolean;
+  /** Why the owner verdict cannot be trusted, if it cannot. Shapes the empty state. */
+  blind: LiveLayerBlindness | null;
   /** Select the owning row, so its verbs are one click away. */
   onSelectOwner: (itemId: string) => void;
 }
@@ -48,7 +62,16 @@ const styles = {
   headline: { fontSize: '0.9rem', fontWeight: 700 },
   plate: { fontSize: '0.78rem', color: colors.textMuted },
   detail: { fontSize: '0.78rem', color: colors.textMuted },
-  empty: { padding: '1rem', fontSize: '0.85rem', color: colors.textMuted },
+  empty: {
+    padding: '1rem',
+    fontSize: '0.85rem',
+    color: colors.textMuted,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.35rem',
+    lineHeight: 1.5,
+  },
+  emptyHeadline: { fontWeight: 700, color: colors.text },
 } as const;
 
 /**
@@ -87,7 +110,7 @@ const styles = {
  * The one exception is a STRANDED layer, and it is the reason the item was filed:
  * see `liveLayerRows.ts`, which holds that rule and its evidence.
  */
-export function LiveSourcesPanel({ rows, onSelectOwner }: Props): JSX.Element {
+export function LiveSourcesPanel({ rows, ledgerReady, blind, onSelectOwner }: Props): JSX.Element {
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
@@ -103,7 +126,25 @@ export function LiveSourcesPanel({ rows, onSelectOwner }: Props): JSX.Element {
   const releaseRefusal = casparRefusalReason(linkDown, casparReach);
 
   /**
-   * Release ONE stranded layer.
+   * 🔴 **THE ROWS AS OF NOW, not as of the render that drew the button.**
+   *
+   * The confirm below is an UNBOUNDED await: the operator may read it, look at a
+   * monitor, and press Release seconds later. In that gap the stack can arrive, a
+   * reconnect can complete, or the row can stop being stranded — and the closure that
+   * fired still holds the STALE verdict that armed the button. Sending a teardown on
+   * a verdict that is no longer true is the shape golden rule 7 exists for: the
+   * condition that gates a destructive step must be the one in force when the step
+   * happens, not one captured earlier.
+   *
+   * A ref rather than the prop, deliberately: React hands a re-render NEW props, but
+   * an in-flight async closure keeps the old ones. The ref is the only thing in scope
+   * that both survives the await and tracks the latest render.
+   */
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
+  /**
+   * Release a stranded item's layers.
    *
    * 🔴 **`stack.remove`, NOT a new per-layer clear.** `remove(itemId)` calls
    * `teardownLiveLayers(itemId)` unconditionally on `slot`, and its own comment says
@@ -114,6 +155,12 @@ export function LiveSourcesPanel({ rows, onSelectOwner }: Props): JSX.Element {
    * instead would have been a fourth way to cut a guest off air, and a second spelling
    * of a teardown the bridge already owns.
    *
+   * 🔴 **AND IT IS ITEM-SCOPED, WHICH THE WORDING MUST SAY.** `teardownLiveLayers`
+   * loops over EVERY record the item owns, so releasing `1-10` also clears `1-11` when
+   * both belong to it. The confirm, the accessible name and the toast all name the set
+   * `releaseScopeOf` returns, so none of the three can describe a different scope from
+   * the one the wire will actually clear.
+   *
    * The refusal is reported HERE and returned as `cancelled`, for the station tab's
    * reason: a plain `accepted: false` routes to `AsyncButton`'s `onError`, whose
    * generic toast would overwrite this specific one a fraction of a second later.
@@ -121,32 +168,66 @@ export function LiveSourcesPanel({ rows, onSelectOwner }: Props): JSX.Element {
   const releaseStranded = async (
     row: LiveLayerRowView,
   ): Promise<{ accepted: boolean; cancelled?: boolean }> => {
+    const scope = releaseScopeOf(rowsRef.current, row.itemId);
+    const names = scope.map((r) => r.coordinate).join(', ');
+    const many = scope.length > 1;
     const ok = await confirm({
-      title: `Release stranded layer ${row.coordinate}?`,
+      title: many
+        ? `Release ${String(scope.length)} stranded layers (${names})?`
+        : `Release stranded layer ${row.coordinate}?`,
       body:
-        `This layer carries "${row.plate}" (${row.producer}) and no row on the stack owns it. ` +
-        `Releasing clears the layer — whatever it is showing leaves air immediately, with no ` +
-        `outro — and forgets the bridge's record of it. If a guest is on this layer, they go ` +
-        `to black.`,
-      confirmLabel: `Release ${row.coordinate}`,
+        (many
+          ? `These ${String(scope.length)} layers — ${names} — were all seated for the same item, ` +
+            `and clearing is item-scoped: releasing one releases them all. They carry ` +
+            `${scope.map((r) => `"${r.plate}" (${r.producer})`).join(', ')}. `
+          : `This layer carries "${row.plate}" (${row.producer}). `) +
+        `No row on the stack owns ${many ? 'them' : 'it'}, so nothing else in the console can ` +
+        `reach ${many ? 'them' : 'it'}. Releasing clears the ` +
+        `layer${many ? 's' : ''} — whatever ${many ? 'they are' : 'it is'} showing leaves air ` +
+        `immediately, with no outro — and forgets the bridge's record. If a guest is on ` +
+        `${many ? 'one of these layers' : 'this layer'}, they go to black.`,
+      confirmLabel: many ? `Release ${String(scope.length)} layers` : `Release ${row.coordinate}`,
     });
     if (!ok) return { accepted: false, cancelled: true };
-    const res = await window.cg.stack.remove({ itemId: row.itemId });
-    if (!res.accepted) {
+
+    /*
+      RE-READ AFTER THE AWAIT. If the stack arrived while the dialog was open, this
+      item is no longer stranded — its row is back, its own verbs reach these layers,
+      and a teardown here would take a guest off air on a verdict that expired while
+      the operator was reading. Refuse and say why.
+    */
+    const stillStranded = releaseScopeOf(rowsRef.current, row.itemId).some((r) => r.releasable);
+    if (!stillStranded) {
       reportCommandError(
-        `The release of ${row.coordinate} was not accepted — it may still be on air.`,
+        `Nothing was sent — ${row.itemId} is no longer stranded. Its row is back on the stack, ` +
+          `so use that row's own verbs.`,
       );
       return { accepted: false, cancelled: true };
     }
-    reportCommandSuccess(`Released ${row.coordinate}.`);
+
+    const res = await window.cg.stack.remove({ itemId: row.itemId });
+    if (!res.accepted) {
+      reportCommandError(
+        `The release of ${names} was not accepted — ${many ? 'they' : 'it'} may still be on air.`,
+      );
+      return { accepted: false, cancelled: true };
+    }
+    reportCommandSuccess(`Released ${names}.`);
     return { accepted: true, cancelled: true };
   };
 
   if (rows.length === 0) {
+    /*
+      🔴 The one branch that speaks for the WHOLE list, and so the one that must not
+      guess. An empty ledger carries no row to hold a blindness state, so this branch
+      takes the facts directly: with the link down, or before the ledger has arrived,
+      "nothing is seated" is not something the console knows (B-094).
+    */
+    const empty = liveLayerEmptyView(blind, ledgerReady);
     return (
-      <div style={styles.empty}>
-        The bridge has no live sources seated. Layers appear here when a row whose template declares
-        Live Source plates goes on air.
+      <div style={styles.empty} data-live-layers-known={empty.known ? 'true' : 'false'}>
+        <div style={styles.emptyHeadline}>{empty.headline}</div>
+        <div>{empty.detail}</div>
       </div>
     );
   }
@@ -181,7 +262,7 @@ export function LiveSourcesPanel({ rows, onSelectOwner }: Props): JSX.Element {
                 onError={reportCommandError}
                 disabled={releaseRefusal !== undefined}
                 {...(releaseRefusal !== undefined ? { title: releaseRefusal } : {})}
-                aria-label={`Release stranded live layer ${row.coordinate}`}
+                aria-label={releaseLabel(rows, row)}
               >
                 RELEASE
               </AsyncButton>
@@ -196,8 +277,8 @@ export function LiveSourcesPanel({ rows, onSelectOwner }: Props): JSX.Element {
                 OPEN ROW
               </Button>
             ) : (
-              // Link down: no owner resolved and no control, because neither the stranded
-              // verdict nor the release could be trusted. The row says so in words.
+              // Blind: no owner resolved and no control, because neither the stranded
+              // verdict nor the release could be trusted. The row says which blindness.
               <span aria-hidden="true" />
             )}
           </div>
@@ -206,4 +287,19 @@ export function LiveSourcesPanel({ rows, onSelectOwner }: Props): JSX.Element {
       {confirmDialog}
     </>
   );
+}
+
+/**
+ * The RELEASE control's accessible name, which must state the SAME scope the confirm
+ * and the toast will. A screen-reader user pressing "Release stranded live layer 1-10"
+ * and losing 1-11 as well would have been told the wrong thing by the one label they
+ * had.
+ */
+function releaseLabel(rows: readonly LiveLayerRowView[], row: LiveLayerRowView): string {
+  const scope = releaseScopeOf(rows, row.itemId);
+  return scope.length > 1
+    ? `Release ${String(scope.length)} stranded live layers (${scope
+        .map((r) => r.coordinate)
+        .join(', ')})`
+    : `Release stranded live layer ${row.coordinate}`;
 }

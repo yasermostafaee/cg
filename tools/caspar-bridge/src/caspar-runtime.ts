@@ -617,6 +617,23 @@ export class CasparRuntime {
    */
   readonly #liveLayers: LiveLayerLedger = new Map();
   /**
+   * 🔴 **The ADOPTED coordinates nothing has confirmed since the restart.**
+   *
+   * `bridge.ts` adopts the persisted ledger with occupancy hard-coded to `unknown` —
+   * no session exists at that point, and dropping an unverifiable record would strand
+   * exactly the producer `B-145` protects. So after a restart EVERY record is a file
+   * claim, and without this set a row the bridge seated seconds ago and a row read out
+   * of a file with CasparCG possibly black would be indistinguishable on the wire.
+   *
+   * Membership is by coordinate (`adoptionKey`), and it is CLEARED whenever the bridge
+   * itself writes that item's records: a take, a look reconcile, a swap. Those send real
+   * AMCP, so what they record is first-hand. That is the whole clearing rule — there is
+   * deliberately no occupancy-based un-marking, because reading the tap would be a
+   * SECOND authority over the ledger and `reconcileLiveLayers` exists to keep there
+   * being exactly one.
+   */
+  #unverifiedLive = new Set<string>();
+  /**
    * `multibox-layout-switch` §14 (LOOKS) phase 3 — **itemId → the id of the look that
    * item is currently showing.**
    *
@@ -4691,6 +4708,10 @@ export class CasparRuntime {
    * item owns rather than accumulating stale coordinates.
    */
   registerLiveLayers(itemId: string, records: readonly LiveLayerRecord[]): void {
+    // FIRST-HAND: this call records what the bridge itself just sent, so whatever this
+    // item's coordinates were adopted-unconfirmed, they are confirmed now. Cleared for
+    // the RELEASE case too — a forgotten record cannot be unverified.
+    this.#clearUnverified(itemId);
     if (records.length === 0) {
       this.#liveLayers.delete(itemId);
       this.#publishLiveLayers();
@@ -4698,6 +4719,12 @@ export class CasparRuntime {
     }
     this.#liveLayers.set(itemId, [...records]);
     this.#publishLiveLayers();
+  }
+
+  /** Drop every unverified mark this item holds. See {@link #unverifiedLive}. */
+  #clearUnverified(itemId: string): void {
+    for (const record of this.#liveLayers.get(itemId) ?? [])
+      this.#unverifiedLive.delete(adoptionKey(record.slot));
   }
 
   /**
@@ -4800,6 +4827,10 @@ export class CasparRuntime {
     const adoption = reconcileLiveLayers({ persisted, observe });
     this.#liveLayers.clear();
     for (const [itemId, records] of adoption.adopted) this.#liveLayers.set(itemId, [...records]);
+    // The adoption already computed WHICH records it could not confirm; recorded here
+    // rather than re-derived, so the wire and the boot banner cannot disagree about how
+    // much of the ledger is a file claim.
+    this.#unverifiedLive = new Set(adoption.unverified.map((r) => adoptionKey(r.slot)));
     this.#publishLiveLayers();
     return adoption;
   }
@@ -4841,7 +4872,9 @@ export class CasparRuntime {
    * never reaches here.
    */
   liveLayersState(): LiveLayerState[] {
-    return projectLiveLayers(this.liveLayers());
+    return projectLiveLayers(this.liveLayers(), (_itemId, record) =>
+      this.#unverifiedLive.has(adoptionKey(record.slot)),
+    );
   }
 
   /**

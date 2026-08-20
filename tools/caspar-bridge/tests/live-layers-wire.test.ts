@@ -80,6 +80,13 @@ function record(layer: number, sourceId: string, held?: boolean): LiveLayerRecor
 
 const ledgerOf = (entries: [string, LiveLayerRecord[]][]): LiveLayerLedger => new Map(entries);
 
+/**
+ * The projection with NOTHING marked unverified — the ordinary in-session case, where
+ * every record was written first-hand by a seat the bridge itself sent.
+ */
+const projectSeated = (l: LiveLayerLedger | ReadonlyMap<string, readonly LiveLayerRecord[]>) =>
+  projectLiveLayers(l, () => false);
+
 /** A runtime with no sockets — enough for bookkeeping, per the note above. */
 const bookkeepingRuntime = (): CasparRuntime => new CasparRuntime(deadConnection());
 
@@ -88,12 +95,12 @@ describe('4.1 — the seated layers are projected onto the wire', () => {
     // The panel's "nothing seated" state has to be reachable, and it has to mean
     // exactly that: no band declared / nothing taken. A projection that invented a
     // row here would put a layer on screen that is not on air.
-    expect(projectLiveLayers(new Map())).toEqual([]);
+    expect(projectSeated(new Map())).toEqual([]);
     expect(bookkeepingRuntime().liveLayersState()).toEqual([]);
   });
 
   it('every record becomes one row carrying the plate, the producer and its owner', () => {
-    const rows = projectLiveLayers(ledgerOf([['item-a', [record(10, 'guest-1')]]]));
+    const rows = projectSeated(ledgerOf([['item-a', [record(10, 'guest-1')]]]));
 
     expect(rows).toEqual([
       {
@@ -104,6 +111,7 @@ describe('4.1 — the seated layers are projected onto the wire', () => {
         role: 'fill',
         producer: 'route://1-10',
         held: false,
+        unverified: false,
       },
     ]);
   });
@@ -115,7 +123,7 @@ describe('4.1 — the seated layers are projected onto the wire', () => {
       the key would show the operator a lit layer and no way to reach it — which is
       the defect, restated on a different surface.
     */
-    const rows = projectLiveLayers(
+    const rows = projectSeated(
       ledgerOf([
         ['item-a', [record(10, 'guest-1'), record(11, 'guest-2')]],
         ['item-b', [record(12, 'guest-1')]],
@@ -132,7 +140,7 @@ describe('4.1 — the seated layers are projected onto the wire', () => {
       renderer keeps the order a property of the payload, so two browsers — and the
       same browser across a pull and a push — cannot show the list differently.
     */
-    const rows = projectLiveLayers(
+    const rows = projectSeated(
       ledgerOf([
         ['item-b', [record(30, 'guest-1'), record(12, 'guest-2')]],
         ['item-a', [record(20, 'guest-1')]],
@@ -149,7 +157,7 @@ describe('4.1 — the seated layers are projected onto the wire', () => {
       was on screen. That ambiguity is a persistence concern and is answered here, so
       no consumer re-decides what a missing flag meant.
     */
-    const rows = projectLiveLayers(
+    const rows = projectSeated(
       ledgerOf([['item-a', [record(10, 'guest-1'), record(11, 'guest-2', true)]]]),
     );
 
@@ -163,7 +171,7 @@ describe('4.1 — the seated layers are projected onto the wire', () => {
     const r = bookkeepingRuntime();
     r.registerLiveLayers('item-a', [record(11, 'guest-2'), record(10, 'guest-1')]);
 
-    expect(r.liveLayersState()).toEqual(projectLiveLayers(r.liveLayers()));
+    expect(r.liveLayersState()).toEqual(projectSeated(r.liveLayers()));
   });
 });
 
@@ -171,7 +179,7 @@ describe('4.2 — the list is PUSHED when the ledger changes, never polled', () 
   it('a SEAT publishes the new ledger', () => {
     const r = bookkeepingRuntime();
     const seen: number[][] = [];
-    r.liveLayersChanged.subscribe((l) => seen.push(projectLiveLayers(l).map((x) => x.layer)));
+    r.liveLayersChanged.subscribe((l) => seen.push(projectSeated(l).map((x) => x.layer)));
 
     r.registerLiveLayers('item-a', [record(10, 'guest-1')]);
 
@@ -182,7 +190,7 @@ describe('4.2 — the list is PUSHED when the ledger changes, never polled', () 
     const r = bookkeepingRuntime();
     r.registerLiveLayers('item-a', [record(10, 'guest-1')]);
     const seen: number[][] = [];
-    r.liveLayersChanged.subscribe((l) => seen.push(projectLiveLayers(l).map((x) => x.layer)));
+    r.liveLayersChanged.subscribe((l) => seen.push(projectSeated(l).map((x) => x.layer)));
 
     // `registerLiveLayers` with no records IS the release — it deletes the entry.
     r.registerLiveLayers('item-a', []);
@@ -199,7 +207,7 @@ describe('4.2 — the list is PUSHED when the ledger changes, never polled', () 
     const r = bookkeepingRuntime();
     r.registerLiveLayers('item-a', [record(10, 'guest-1')]);
     const seen: boolean[][] = [];
-    r.liveLayersChanged.subscribe((l) => seen.push(projectLiveLayers(l).map((x) => x.held)));
+    r.liveLayersChanged.subscribe((l) => seen.push(projectSeated(l).map((x) => x.held)));
 
     r.registerLiveLayers('item-a', [record(10, 'guest-1', true)]);
 
@@ -212,7 +220,7 @@ describe('4.2 — the list is PUSHED when the ledger changes, never polled', () 
     // otherwise leave that console showing an empty list over a lit band.
     const r = bookkeepingRuntime();
     const seen: number[][] = [];
-    r.liveLayersChanged.subscribe((l) => seen.push(projectLiveLayers(l).map((x) => x.layer)));
+    r.liveLayersChanged.subscribe((l) => seen.push(projectSeated(l).map((x) => x.layer)));
 
     r.adoptLiveLayers(ledgerOf([['item-a', [record(10, 'guest-1')]]]), () => 'occupied');
 
@@ -290,6 +298,92 @@ describe('4.3 / 4.4 — the RESTART case, which is the one that matters', () => 
   });
 });
 
+describe('🔴 UNVERIFIED — an adopted file claim is not a present-tense fact about air', () => {
+  /*
+    ── THE THIRD DEFECT REVIEW FOUND IN THIS CHANGE ──────────────────────────────
+
+    The channel header used to argue that this payload needed no "unknown" arm because
+    the ledger is "resolved at boot against the server's INFO". That premise is FALSE
+    in the shipped bridge: the one production call is
+    `adoptLiveLayers(loaded.ledger, () => 'unknown')` — no session exists at that point,
+    and dropping an unverifiable record would strand exactly the producer B-145 exists
+    to protect. So `reconcileLiveLayers` drops nothing and marks EVERY record
+    unverified, and the omission was the one distinction that is ALWAYS true after a
+    restart.
+
+    A row the bridge seated thirty seconds ago and a row read out of a file after a
+    reboot — with CasparCG possibly black — were indistinguishable on the wire, and the
+    surface stated the second in the present tense.
+  */
+
+  it('🔴 a boot adoption marks every record unverified', () => {
+    const r = bookkeepingRuntime();
+    r.adoptLiveLayers(ledgerOf([['item-a', [record(10, 'guest-1')]]]), () => 'unknown');
+
+    expect(r.liveLayersState().map((x) => x.unverified)).toEqual([true]);
+  });
+
+  it('a record the server CONFIRMED at boot is not marked', () => {
+    // The mark tracks what could not be checked, not merely what was adopted.
+    const r = bookkeepingRuntime();
+    r.adoptLiveLayers(ledgerOf([['item-a', [record(10, 'guest-1')]]]), () => 'occupied');
+
+    expect(r.liveLayersState().map((x) => x.unverified)).toEqual([false]);
+  });
+
+  it('an ordinary in-session seat is FIRST-HAND and never marked', () => {
+    const r = bookkeepingRuntime();
+    r.registerLiveLayers('item-a', [record(10, 'guest-1')]);
+
+    expect(r.liveLayersState().map((x) => x.unverified)).toEqual([false]);
+  });
+
+  it('🔴 the mark CLEARS when the bridge next writes that item — a re-take confirms it', () => {
+    /*
+      The clearing rule is "the bridge itself wrote these records", because a take, a
+      look reconcile and a swap all send real AMCP and so are first-hand knowledge.
+      Deliberately NOT an occupancy read: consulting the tap would make it a SECOND
+      authority over the ledger, and `reconcileLiveLayers` exists to keep there being
+      exactly one.
+    */
+    const r = bookkeepingRuntime();
+    r.adoptLiveLayers(ledgerOf([['item-a', [record(10, 'guest-1')]]]), () => 'unknown');
+    expect(r.liveLayersState()[0]?.unverified).toBe(true);
+
+    r.registerLiveLayers('item-a', [record(10, 'guest-1')]);
+
+    expect(r.liveLayersState()[0]?.unverified).toBe(false);
+  });
+
+  it('clearing is PER ITEM — another item’s adopted records stay unconfirmed', () => {
+    const r = bookkeepingRuntime();
+    r.adoptLiveLayers(
+      ledgerOf([
+        ['item-a', [record(10, 'guest-1')]],
+        ['item-b', [record(20, 'guest-1')]],
+      ]),
+      () => 'unknown',
+    );
+
+    r.registerLiveLayers('item-a', [record(10, 'guest-1')]);
+
+    const byLayer = new Map(r.liveLayersState().map((x) => [x.layer, x.unverified]));
+    expect(byLayer.get(10)).toBe(false);
+    expect(byLayer.get(20)).toBe(true);
+  });
+
+  it('a RELEASE forgets the mark too — a dropped record cannot be unverified', () => {
+    const r = bookkeepingRuntime();
+    r.adoptLiveLayers(ledgerOf([['item-a', [record(10, 'guest-1')]]]), () => 'unknown');
+
+    r.registerLiveLayers('item-a', []);
+    // …and if the same coordinate is seated again later, it is first-hand.
+    r.registerLiveLayers('item-a', [record(10, 'guest-1')]);
+
+    expect(r.liveLayersState()[0]?.unverified).toBe(false);
+  });
+});
+
 describe('the WIRE — the channel a browser actually reads', () => {
   const connect = async (url: string): Promise<WebSocket> => {
     const ws = new WebSocket(url);
@@ -362,6 +456,7 @@ describe('the WIRE — the channel a browser actually reads', () => {
         role: 'fill',
         producer: 'route://1-10',
         held: false,
+        unverified: false,
       },
     ]);
     ws.close();
@@ -419,6 +514,7 @@ describe('the WIRE — the channel a browser actually reads', () => {
       layer: number;
       itemId: string;
       held: boolean;
+      unverified: boolean;
     }[];
     // LISTED — the half that was missing.
     expect(rows.map((r) => r.layer)).toEqual([10, 11]);
@@ -429,6 +525,12 @@ describe('the WIRE — the channel a browser actually reads', () => {
     // The held disposition survives the round trip too — a restart must not silently
     // promote a held plate to "on screen".
     expect(rows.map((r) => r.held)).toEqual([false, true]);
+    // 🔴 …and every row arrives DEMOTED. This is the assertion that stops the surface
+    // stating a file claim in the present tense: production adopts with occupancy
+    // `unknown`, so after a restart nothing here has been confirmed and CasparCG may be
+    // black. A payload without this field made a re-read record indistinguishable from
+    // one the bridge seated seconds ago.
+    expect(rows.map((r) => r.unverified)).toEqual([true, true]);
     ws.close();
   });
 });

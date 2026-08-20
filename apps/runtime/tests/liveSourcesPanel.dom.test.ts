@@ -8,8 +8,11 @@ import type { StackItemState } from '@cg/shared-schema';
 import { LiveSourcesPanel } from '../src/renderer/features/layers/LiveSourcesPanel.js';
 import {
   hasStrandedLiveLayer,
+  liveLayerBlindness,
+  liveLayerEmptyView,
   liveLayerRows,
   ownerLabelFor,
+  releaseScopeOf,
 } from '../src/renderer/features/layers/liveLayerRows.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 import { connectionsStub, type Reachability } from './support/reachability.js';
@@ -62,6 +65,7 @@ const layer = (over: Partial<LiveLayerState> = {}): LiveLayerState => ({
   role: 'fill',
   producer: 'route://1-1',
   held: false,
+  unverified: false,
   ...over,
 });
 
@@ -104,6 +108,9 @@ async function render(
   link: 'live' | 'disconnected' = 'live',
   removeResult: unknown = { accepted: true },
   reach: Reachability = 'both-up',
+  stackReady = true,
+  stackHasRows = true,
+  ledgerReady = true,
 ): Promise<{
   el: HTMLDivElement;
   remove: ReturnType<typeof vi.fn>;
@@ -111,14 +118,19 @@ async function render(
 }> {
   const { remove } = stubBridge(link, removeResult, reach);
   const onSelectOwner = vi.fn();
-  const rows = liveLayerRows(layers, labelFor, link === 'disconnected');
+  const blind = liveLayerBlindness(link === 'disconnected', stackReady, stackHasRows);
+  const rows = liveLayerRows(layers, labelFor, blind);
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
   const r = root;
   await act(async () => {
     r.render(
-      createElement(StrictMode, null, createElement(LiveSourcesPanel, { rows, onSelectOwner })),
+      createElement(
+        StrictMode,
+        null,
+        createElement(LiveSourcesPanel, { rows, ledgerReady, blind, onSelectOwner }),
+      ),
     );
   });
   return { el: container, remove, onSelectOwner };
@@ -276,6 +288,324 @@ describe('🔴 the gate — a STRANDED layer is the one that gets a control', ()
   });
 });
 
+describe('🔴 UNVERIFIED — the surface must not state a file claim in the present tense', () => {
+  /*
+    After a bridge restart EVERY row is a file claim: `bridge.ts` adopts with occupancy
+    hard-coded to `unknown`, so `reconcileLiveLayers` drops nothing and marks the lot.
+    CasparCG may be black. "On screen" is a present-tense assertion about air and would
+    be the console lying on the one surface built to stop it — the B-086 demotion rule,
+    which `StackItemStatus` already carries an `unverified` member for.
+  */
+
+  it('🔴 an unverified row does NOT read "On screen"', async () => {
+    const { el } = await render([layer({ unverified: true })]);
+
+    const row = rowFor(el, '1-10');
+    expect(row?.textContent).toContain('Adopted — not confirmed');
+    expect(row?.textContent).not.toContain('On screen');
+  });
+
+  it('an unverified HELD row is not asserted as held-and-lit either', async () => {
+    const { el } = await render([layer({ unverified: true, held: true })]);
+
+    const row = rowFor(el, '1-10');
+    expect(row?.textContent).toContain('Adopted — not confirmed');
+    expect(
+      row?.textContent,
+      'the look state is still mentioned, just not asserted as air',
+    ).toContain('the current look does not show it');
+  });
+
+  it('it still names the owner, and still points at the row', async () => {
+    // Unconfirmed is a knowledge gap, not a loss of the handle: the row that owns it is
+    // exactly what re-takes and so CONFIRMS it.
+    const { el } = await render([layer({ unverified: true })]);
+
+    expect(rowFor(el, '1-10')?.textContent).toContain('IRIB News');
+    expect(buttonIn(rowFor(el, '1-10'), 'OPEN ROW')).toBeDefined();
+  });
+
+  it('it is NOT coloured and does NOT raise the tab dot', () => {
+    // A gap in knowledge is not something wrong, and this palette reserves colour for
+    // attention. The word carries it instead.
+    const [row] = liveLayerRows([layer({ unverified: true })], OWNED, null);
+    expect(row?.needsAttention).toBe(false);
+    expect(hasStrandedLiveLayer(liveLayerRows([layer({ unverified: true })], OWNED, null))).toBe(
+      false,
+    );
+  });
+
+  it('an unverified STRANDED row says the layer may already be empty', async () => {
+    /*
+      The two facts compose, and the wording has to carry both: nothing can reach it AND
+      nothing has confirmed it is there. Telling the operator only the first would have
+      them cutting a layer that may have been black since the reboot — harmless, but the
+      confidence would be unearned.
+    */
+    const { el } = await render([layer({ unverified: true })], STRANDED);
+
+    const row = rowFor(el, '1-10');
+    expect(row?.textContent).toContain('Stranded');
+    expect(row?.textContent).toContain('may already be empty');
+    expect(
+      buttonIn(row, 'RELEASE'),
+      'and it is still releasable — that is the remedy',
+    ).toBeDefined();
+  });
+});
+
+describe('🔴 THE STACK HAS NOT ARRIVED — the absence that is not an absence', () => {
+  /*
+    ── THE DEFECT THIS BLOCK EXISTS FOR, FOUND IN REVIEW OF THIS VERY CHANGE ──────
+
+    STRANDED is decided by an item being ABSENT from the stack. The ledger and the
+    stack are TWO INDEPENDENT SNAPSHOTS that land separately, and the ledger can
+    arrive first — at mount, and again on every reconnect.
+
+    The first cut of this surface read `items` without its `ready` flag. In that
+    window the stack is `[]` because nothing has been delivered, every seated layer
+    finds no owner, and the list would have shown EVERY live plate as *"Stranded — no
+    row owns this"* with a RELEASE button beside it. An operator acting on that would
+    cut a guest who is perfectly well owned by a row that simply had not arrived.
+
+    This renderer has paid for that mistake three times already — `useBridgeSnapshot`
+    names the b2 density bug, PVW's white page, and `pruneDrafts` deleting every
+    staged edit on remount — and states the rule: *"any consumer that ACTS on the
+    absence of an item must read this form and do nothing while `ready` is false."*
+    This surface acts on that absence, and the act is taking a live source off air.
+  */
+
+  it('🔴 an unarrived stack reads UNKNOWN, never STRANDED', async () => {
+    const { el } = await render([layer()], STRANDED, 'live', { accepted: true }, 'both-up', false);
+
+    const row = rowFor(el, '1-10');
+    expect(row?.textContent).toContain('Unknown');
+    expect(
+      row?.textContent,
+      'the alarm must not fire on an absence that has not landed',
+    ).not.toContain('Stranded');
+  });
+
+  it('🔴 …and offers NO release, so the guest cannot be cut on a guess', async () => {
+    const { el } = await render([layer()], STRANDED, 'live', { accepted: true }, 'both-up', false);
+
+    expect(buttonIn(rowFor(el, '1-10'), 'RELEASE')).toBeUndefined();
+    expect(rowFor(el, '1-10')?.getAttribute('data-live-layer-stranded')).toBe('false');
+  });
+
+  it('the two blind states say DIFFERENT things — the console never claims it looked', () => {
+    // "I am not connected" and "the list has not come yet" are different facts about
+    // our knowledge, and telling the operator the wrong one is the B-094 honesty class.
+    const [down] = liveLayerRows([layer()], STRANDED, 'link-down');
+    const [waiting] = liveLayerRows([layer()], STRANDED, 'stack-not-arrived');
+
+    expect(down?.detail).toContain('Not connected');
+    expect(waiting?.detail).toContain('stack has not arrived');
+    expect(down?.releasable).toBe(false);
+    expect(waiting?.releasable).toBe(false);
+    expect(waiting?.needsAttention, 'not knowing is not a claim that anything is wrong').toBe(
+      false,
+    );
+  });
+
+  it('🔴 the precedence lives in ONE place, and link-down outranks', () => {
+    /*
+      With the link down the ledger itself is frozen, so the stack's readiness is
+      beside the point. Callers pass the two facts and never order them: a second
+      caller ordering them differently is how one surface comes to offer a control
+      another refuses.
+    */
+    expect(liveLayerBlindness(true, true, true)).toBe('link-down');
+    expect(liveLayerBlindness(true, false, true)).toBe('link-down');
+    expect(liveLayerBlindness(false, false, true)).toBe('stack-not-arrived');
+    expect(liveLayerBlindness(false, true, true)).toBeNull();
+  });
+
+  it('once the stack HAS arrived, a genuinely stranded layer is still caught', () => {
+    // The guard must not be a blanket suppression: the alarm this surface exists to
+    // raise has to survive it.
+    const [row] = liveLayerRows([layer()], STRANDED, liveLayerBlindness(false, true, true));
+    expect(row?.releasable).toBe(true);
+    expect(row?.needsAttention).toBe(true);
+  });
+});
+
+describe('🔴 THE RECONNECT WINDOW — an empty stack is evidence of nothing', () => {
+  /*
+    ── THE SECOND DEFECT REVIEW FOUND IN THIS CHANGE, AND THE WORSE OF THE TWO ────
+
+    The first fix read `stackReady`. That is not enough, because `useBridgeSnapshot`'s
+    `ready` flag *"latches on the FIRST arrival and never clears"* — so after the very
+    first stack lands it reads `true` forever, including through every reconnect.
+
+    And the reconnect is exactly the B-145 scenario: a restarted bridge ADOPTS its
+    persisted ledger at boot (`adoptLiveLayers(loaded.ledger, () => 'unknown')`) before
+    any socket exists, so it serves the FULL ledger on the first `liveLayers.state()`
+    it answers — while its reconciler stack is still empty, because the browser has not
+    re-delivered yet (B-092). For that whole window: link is live, `stackReady` is a
+    latched true, `items` is `[]`, and the ledger is full.
+
+    Read naively that is EVERY seated layer reading "Stranded" with RELEASE armed, in
+    the one situation this feature was built for. An empty stack cannot tell "not
+    delivered yet" from "genuinely nothing", so it is evidence of neither.
+  */
+
+  it('🔴 a live link with a latched-ready but EMPTY stack does not strand anything', async () => {
+    const { el } = await render(
+      [layer()],
+      STRANDED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      false,
+    );
+
+    const row = rowFor(el, '1-10');
+    expect(row?.textContent).toContain('Unknown');
+    expect(row?.textContent, 'the reconnect window must not read as an emergency').not.toContain(
+      'Stranded',
+    );
+    expect(buttonIn(row, 'RELEASE')).toBeUndefined();
+  });
+
+  it('the precedence covers all three blind facts, in one place', () => {
+    expect(liveLayerBlindness(true, true, true)).toBe('link-down');
+    expect(liveLayerBlindness(true, false, false)).toBe('link-down');
+    expect(liveLayerBlindness(false, false, true)).toBe('stack-not-arrived');
+    expect(liveLayerBlindness(false, true, false)).toBe('stack-empty');
+    expect(liveLayerBlindness(false, true, true)).toBeNull();
+  });
+
+  it('…and the three say DIFFERENT things, so the console never implies it looked', () => {
+    const detail = (b: 'link-down' | 'stack-not-arrived' | 'stack-empty'): string =>
+      liveLayerRows([layer()], STRANDED, b)[0]?.detail ?? '';
+
+    expect(detail('link-down')).toContain('Not connected');
+    expect(detail('stack-not-arrived')).toContain('has not arrived');
+    expect(detail('stack-empty')).toContain('no rows');
+    // None of them is an alarm: not knowing is not a claim that anything is wrong.
+    for (const b of ['link-down', 'stack-not-arrived', 'stack-empty'] as const) {
+      expect(liveLayerRows([layer()], STRANDED, b)[0]?.needsAttention).toBe(false);
+    }
+  });
+
+  it('a NON-empty stack still catches a genuine strand — the guard is not a blanket', () => {
+    /*
+      The cost of the `stack-empty` rule is one true positive: an operator who removes
+      EVERY row gets no alarm. Every other strand is still caught, and that is what
+      makes the trade acceptable rather than a silent disabling of the feature.
+    */
+    const oneOtherRow = ownerLabelFor([item('item-other')], () => 'Something Else');
+    const [row] = liveLayerRows([layer()], oneOtherRow, liveLayerBlindness(false, true, true));
+
+    expect(row?.releasable).toBe(true);
+    expect(row?.needsAttention).toBe(true);
+  });
+});
+
+describe('🔴 THE EMPTY LIST — "I have not looked" is not "nothing is there" (B-094)', () => {
+  /*
+    The per-row masking rides on ROWS, and an empty ledger produces no rows to carry
+    it. So the one branch that speaks for the WHOLE list was the one branch that
+    guessed. With the link down `useLiveLayers` never pulls — it keeps the default
+    `pullWhileDisconnected: false` — so the value sits at the module-level EMPTY, and
+    the panel would have told an operator with a dead bridge, definitely, that no guest
+    is composited. That is the exact lie this whole tab exists to end.
+  */
+
+  it('🔴 with the link DOWN it refuses to claim nothing is seated', async () => {
+    const { el } = await render([], STRANDED, 'disconnected');
+
+    expect(el.textContent).toContain('Not connected');
+    expect(el.textContent).not.toContain('has no live sources seated');
+    expect(el.querySelector('[data-live-layers-known="false"]')).not.toBeNull();
+  });
+
+  it('🔴 before the ledger ARRIVES it says so, rather than showing an empty list', async () => {
+    const { el } = await render(
+      [],
+      OWNED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      false,
+    );
+
+    expect(el.textContent).toContain('has not arrived');
+    expect(el.textContent).not.toContain('has no live sources seated');
+    expect(el.querySelector('[data-live-layers-known="false"]')).not.toBeNull();
+  });
+
+  it('an ARRIVED and genuinely empty ledger DOES report nothing seated', async () => {
+    // The guard must not swallow the real answer — otherwise the tab could never say
+    // the true and useful thing.
+    const { el } = await render([]);
+
+    expect(el.textContent).toContain('no live sources seated');
+    expect(el.querySelector('[data-live-layers-known="true"]')).not.toBeNull();
+  });
+
+  it('the empty view is decided by the LEDGER’s readiness, not the stack’s', () => {
+    expect(liveLayerEmptyView(null, true).known).toBe(true);
+    expect(liveLayerEmptyView(null, false).known).toBe(false);
+    expect(liveLayerEmptyView('link-down', true).known).toBe(false);
+    // A blind STACK says nothing about whether the ledger is empty.
+    expect(liveLayerEmptyView('stack-empty', true).known).toBe(true);
+  });
+});
+
+describe('🔴 RELEASE IS ITEM-SCOPED — the wording must not name one layer and cut two', () => {
+  /*
+    `stack.remove(itemId)` reaches `teardownLiveLayers`, which loops over EVERY record
+    the item owns, sending `out` + `mixerClear` for each. So releasing 1-10 also clears
+    1-11 when both belong to the same stranded item. A confirm naming one coordinate
+    while cutting two is the product lying about the scope of its most destructive
+    control — a second guest goes to black with no warning.
+  */
+  const twoLayers = [
+    layer({ layer: 10, sourceId: 'guest-1' }),
+    layer({ layer: 11, sourceId: 'guest-2' }),
+  ];
+
+  it('releaseScopeOf returns every layer the item owns', () => {
+    const rows = liveLayerRows(twoLayers, STRANDED, null);
+    expect(releaseScopeOf(rows, 'item-a').map((r) => r.coordinate)).toEqual(['1-10', '1-11']);
+  });
+
+  it('🔴 the confirm names BOTH coordinates and both plates', async () => {
+    const { el } = await render(twoLayers, STRANDED);
+
+    await act(async () => {
+      buttonIn(rowFor(el, '1-10'), 'RELEASE')?.click();
+      await Promise.resolve();
+    });
+
+    const dialog = openDialog();
+    expect(dialog?.textContent).toContain('1-10');
+    expect(dialog?.textContent).toContain('1-11');
+    expect(dialog?.textContent).toContain('guest-1');
+    expect(dialog?.textContent).toContain('guest-2');
+    expect(dialog?.textContent, 'and says plainly that one release takes both').toContain(
+      'releasing one releases them all',
+    );
+  });
+
+  it('the accessible name states the same scope the confirm will', async () => {
+    const { el } = await render(twoLayers, STRANDED);
+    const btn = buttonIn(rowFor(el, '1-10'), 'RELEASE');
+    expect(btn?.getAttribute('aria-label')).toContain('1-10, 1-11');
+  });
+
+  it('a single-layer item keeps the singular wording', async () => {
+    const { el } = await render([layer()], STRANDED);
+    const btn = buttonIn(rowFor(el, '1-10'), 'RELEASE');
+    expect(btn?.getAttribute('aria-label')).toBe('Release stranded live layer 1-10');
+  });
+});
+
 describe('the link is down — a frozen ledger is not evidence', () => {
   it('🔴 every row reads UNKNOWN and NOTHING is offered', async () => {
     /*
@@ -298,28 +628,28 @@ describe('the link is down — a frozen ledger is not evidence', () => {
 
 describe('liveLayerRows — the gate as pure functions', () => {
   it('an owner on the stack is never releasable and never raises attention', () => {
-    const [row] = liveLayerRows([layer()], OWNED, false);
+    const [row] = liveLayerRows([layer()], OWNED, null);
     expect(row?.releasable).toBe(false);
     expect(row?.needsAttention).toBe(false);
     expect(row?.ownerLabel).toBe('IRIB News');
   });
 
   it('an owner the stack does not carry is releasable AND raises attention', () => {
-    const [row] = liveLayerRows([layer()], STRANDED, false);
+    const [row] = liveLayerRows([layer()], STRANDED, null);
     expect(row?.releasable).toBe(true);
     expect(row?.needsAttention).toBe(true);
     expect(row?.ownerLabel).toBeNull();
   });
 
   it('🔴 linkDown is checked FIRST — it masks the stranded verdict, not the other way round', () => {
-    const [row] = liveLayerRows([layer()], STRANDED, true);
+    const [row] = liveLayerRows([layer()], STRANDED, 'link-down');
     expect(row?.headline).toBe('Unknown');
     expect(row?.releasable).toBe(false);
     expect(row?.needsAttention).toBe(false);
   });
 
   it('a HELD plate keeps its owner and stays non-actionable', () => {
-    const [row] = liveLayerRows([layer({ held: true })], OWNED, false);
+    const [row] = liveLayerRows([layer({ held: true })], OWNED, null);
     expect(row?.headline).toContain('Held');
     expect(row?.releasable).toBe(false);
     expect(row?.needsAttention).toBe(false);
@@ -332,10 +662,10 @@ describe('liveLayerRows — the gate as pure functions', () => {
       every row beneath it — raised over a list that shows nothing wrong, or dark over one
       that does.
     */
-    expect(hasStrandedLiveLayer(liveLayerRows([layer()], OWNED, false))).toBe(false);
-    expect(hasStrandedLiveLayer(liveLayerRows([layer()], STRANDED, false))).toBe(true);
+    expect(hasStrandedLiveLayer(liveLayerRows([layer()], OWNED, null))).toBe(false);
+    expect(hasStrandedLiveLayer(liveLayerRows([layer()], STRANDED, null))).toBe(true);
     // …and it goes dark with the link, because every row does.
-    expect(hasStrandedLiveLayer(liveLayerRows([layer()], STRANDED, true))).toBe(false);
+    expect(hasStrandedLiveLayer(liveLayerRows([layer()], STRANDED, 'link-down'))).toBe(false);
   });
 
   it('ownerLabelFor answers null for an item the stack has dropped — the only stranded test', () => {

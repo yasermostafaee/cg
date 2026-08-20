@@ -270,6 +270,12 @@ export function reconcileLiveLayers(input: {
  * across a push and a pull, then show the same list in the same order. A renderer
  * that sorted for itself would be one more place for that order to drift.
  *
+ * ⚠ **`isUnverified` is INJECTED rather than read here**, mirroring `reconcileLiveLayers`’s
+ * own `observe`: the ledger module owns the SHAPE of a row, while which records are still
+ * unconfirmed is runtime state belonging to `CasparRuntime`. Keeping it a parameter is
+ * what lets the rule be unit-tested without a runtime, and stops this module growing a
+ * second opinion about what "confirmed" means.
+ *
  * ⚠ **`held` is RESOLVED here, not forwarded.** The record's field is optional
  * because it is additive to the persisted form (a ledger written before looks
  * existed parses unchanged and means "on screen"). That is a persistence concern,
@@ -278,6 +284,7 @@ export function reconcileLiveLayers(input: {
  */
 export function projectLiveLayers(
   ledger: ReadonlyMap<string, readonly LiveLayerRecord[]>,
+  isUnverified: (itemId: string, record: LiveLayerRecord) => boolean,
 ): LiveLayerState[] {
   const rows: LiveLayerState[] = [];
   for (const [itemId, records] of ledger) {
@@ -290,6 +297,7 @@ export function projectLiveLayers(
         role: record.role,
         producer: record.producer,
         held: record.held === true,
+        unverified: isUnverified(itemId, record),
       });
     }
   }

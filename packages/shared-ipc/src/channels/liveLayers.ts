@@ -41,12 +41,20 @@ import { definePublishChannel } from '../publish.js';
  *
  * `playoutLayers.state` reports what the OSC tap OBSERVES, because those layers
  * belong to someone else and observation is the only access we have. These layers
- * are OURS: the ledger is the record of what this bridge itself seated, resolved
- * at boot against the server's `INFO` (`reconcileLiveLayers` — the file knows the
- * NAMES, the server knows the TRUTH, and their reconciliation IS the ledger). So
- * there is no `observed` union here and no `unknown` arm. A row in this list means
- * "the bridge's single authority says this coordinate carries this plate"; a
- * coordinate the server contradicted at boot was DROPPED and never appears.
+ * are OURS: the ledger is the record of what this bridge itself seated, reconciled
+ * at boot against whatever the server can be made to say (`reconcileLiveLayers` —
+ * the file knows the NAMES, the server knows the TRUTH). So there is no `observed`
+ * union here: this is not a tap reading somebody else’s layer.
+ *
+ * 🔴 **BUT IT IS NOT ALL FIRST-HAND, AND THE PAYLOAD SAYS WHICH.** An earlier draft
+ * of this header argued from "resolved at boot against the server's INFO" to "so no
+ * `unknown` arm is needed" — and the premise is false in the shipped bridge. The one
+ * production call adopts with occupancy hard-coded to `unknown` (`bridge.ts`: no
+ * session has connected at that point, and dropping an unverifiable record would
+ * strand exactly the producer `B-145` exists to protect), so nothing is ever dropped
+ * and EVERY adopted record is unverified. That made the omission the one distinction
+ * that is always true after a restart. See {@link LiveLayerStateSchema}’s
+ * `unverified`.
  */
 
 /**
@@ -96,6 +104,20 @@ export const LiveLayerStateSchema = z.object({
    * a question the projection already answered.
    */
   held: z.boolean(),
+  /**
+   * 🔴 **The record was ADOPTED FROM THE FILE at boot and nothing has confirmed it
+   * since.**
+   *
+   * Without this, a row the bridge seated thirty seconds ago and a row read out of a
+   * file after a reboot — with CasparCG possibly black — are indistinguishable, and a
+   * surface would state the second in the present tense. `StackItemStatus` already
+   * carries an `unverified` member for exactly this reason (`B-086`): an on-air claim
+   * the bridge cannot back is DEMOTED, never asserted.
+   *
+   * It clears when the bridge itself next writes that item’s records — a take, a look
+   * reconcile, a swap — because those send real AMCP and are therefore first-hand.
+   */
+  unverified: z.boolean(),
 });
 
 export type LiveLayerState = z.infer<typeof LiveLayerStateSchema>;

@@ -1,6 +1,6 @@
 import type { LiveLayerState } from '@cg/shared-ipc';
 import type { Unsubscribe } from '../../shared/runtime-bridge.js';
-import { useBridgeSnapshot } from './useBridgeSnapshot.js';
+import { useBridgeSnapshotState, type BridgeSnapshot } from './useBridgeSnapshot.js';
 
 const EMPTY: LiveLayerState[] = [];
 
@@ -25,7 +25,17 @@ const subscribeLiveLayers = (handler: (next: LiveLayerState[]) => void): Unsubsc
  * emitter that `B-145` already fires from the ledger's ONE write path, so a seat, a
  * release, a hold and the boot adoption all reach the list by the same call that
  * persists them to disk.
+ *
+ * 🔴 **THE `{ value, ready }` FORM, NOT THE PLAIN VALUE, AND THAT IS LOAD-BEARING.**
+ *
+ * With the link down this hook never pulls (see above), so the value sits at the
+ * module-level `EMPTY` — indistinguishable, from the value alone, from a bridge that
+ * really has nothing seated. The panel’s zero-row branch is the one place that speaks
+ * for the WHOLE list, and reading the plain value there let it print a confident
+ * *“the bridge has no live sources seated”* while two guests were composited on air
+ * and the persisted ledger knew their coordinates. `ready` is what keeps that branch
+ * honest (`B-094`).
  */
-export function useLiveLayers(): LiveLayerState[] {
-  return useBridgeSnapshot(fetchLiveLayers, subscribeLiveLayers, EMPTY);
+export function useLiveLayers(): BridgeSnapshot<LiveLayerState[]> {
+  return useBridgeSnapshotState(fetchLiveLayers, subscribeLiveLayers, EMPTY);
 }

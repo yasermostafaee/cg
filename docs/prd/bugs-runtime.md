@@ -3974,6 +3974,39 @@ adopts a persisted ledger and serves it over the WebSocket, and the acceptance-3
 `apps/runtime/tests/e2e/live-source-layers.spec.ts`. Six mutations were checked and each reddens the
 tests that name it.
 
+🔴 **One defect was found in this very work by its own review, and it is worth recording because it
+is this repo’s most-repeated class.** The first cut decided STRANDED from the stack items alone,
+ignoring `stackReady`. The ledger and the stack are two INDEPENDENT snapshots that land separately,
+so at mount and on every reconnect the ledger can arrive first — and every seated layer would have
+read _"Stranded"_ with a RELEASE button, inviting the operator to cut a guest owned by a row that had
+simply not been delivered yet. `useBridgeSnapshot` already names three victims of the same mistake
+(the b2 density bug, PVW’s white page, `pruneDrafts` deleting every staged edit on remount) and
+states the rule this violated: _"any consumer that ACTS on the absence of an item must read this form
+and do nothing while `ready` is false."_ Fixed at the cause — blindness is now a first-class state
+with ONE precedence helper, and reverting it reddens three tests.
+
+🔴 **Four MORE were found by a second review pass, and they are one pattern, not four bugs.** Every
+one is a fact the console did not have, presented as a fact it did — which is the same class as
+the defect this item is about:
+
+1. **The reconnect window** — reading `stackReady` was not enough, because that flag _"latches on
+   the FIRST arrival and never clears"_. After any reconnect it stays true while the stack is
+   empty, and a restarted bridge serves its FULL adopted ledger first. Every layer would have read
+   STRANDED with RELEASE armed, in exactly this item’s own scenario. An EMPTY stack is now its own
+   blind state: it cannot tell "not delivered yet" from "nothing here".
+2. **The empty list** asserted "no live sources seated" with no readiness or link input, so a
+   console with a dead bridge denied, definitely, that any guest was composited ([[B-094]]).
+3. **RELEASE was item-scoped while its wording was coordinate-scoped** — `teardownLiveLayers`
+   loops over every record the item owns, so releasing `1-10` also cut `1-11` with no warning. The
+   verdict is also re-read after the confirm, so one that expired while the operator was reading
+   cannot authorise a teardown.
+4. **No `unverified` arm.** The channel argued its shape from "the ledger is resolved at boot
+   against the server’s `INFO`" — false in the shipped bridge, which adopts with occupancy
+   hard-coded to `unknown`. Nothing is ever dropped and every adopted record is unconfirmed, so
+   the omission was the one distinction that is ALWAYS true after a restart, and the surface
+   stated a file claim in the present tense. The wire now carries it and the row reads _"Adopted —
+   not confirmed"_. Same demotion rule as [[B-086]]’s `unverified` stack status.
+
 **[[R-057]] Stage E (the operator surface) is UNBLOCKED** — 2.8 was its last blocker.
 
 ### 🔴 RE-OPENED 2026-08-19 (session AU) — it was ticked with half of acceptance 1 unmet

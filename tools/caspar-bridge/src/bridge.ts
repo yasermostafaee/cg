@@ -103,7 +103,6 @@ import {
 } from './fixed-layers-store.js';
 import { loadReservedLayers } from './reserved-layers-store.js';
 import { loadPersistedLiveLayers, savePersistedLiveLayers } from './live-layers-store.js';
-import { projectLiveLayers } from './live-layers.js';
 import {
   resolveSourceCatalog,
   saveSourceCatalog,
@@ -732,8 +731,12 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     // so the persister and the browser learn of a change from the same call — a
     // surface that polled instead would be free to disagree with the file about
     // what is on air.
-    backing.liveLayersChanged.subscribe((l) =>
-      push(LiveLayersStateChangedChannel, projectLiveLayers(l)),
+    // 🔴 The emitter is the SIGNAL; the payload comes from the runtime’s own
+    // `liveLayersState()`, which is now the single caller of `projectLiveLayers`. It
+    // holds the unverified marks, so projecting the emitted ledger here instead would
+    // be a second projection missing the one field that is always true after a restart.
+    backing.liveLayersChanged.subscribe(() =>
+      push(LiveLayersStateChangedChannel, backing.liveLayersState()),
     ),
     // R-034 — the shared delimiter list.
     backing.delimitersChanged.subscribe((d) => push(DelimitersChangedChannel, d)),
