@@ -58,7 +58,7 @@ test('the picker sits OUTSIDE the verb block and leaves the six-verb grid alone'
 
   // …and the row still carries its full verb block. A picker that had become a COLUMN
   // would have pushed one of these out of the grid.
-  const verbs = row.getByRole('button').filter({ hasNotText: /^[123]$/ });
+  const verbs = row.getByRole('button').filter({ hasNotText: /^(Left pair|Right pair|All four)$/ });
   expect(await verbs.count()).toBeGreaterThanOrEqual(6);
 });
 

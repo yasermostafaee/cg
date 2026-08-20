@@ -2,7 +2,7 @@ import { test, expect, buildValidVcg } from './fixtures/runtime.js';
 
 /**
  * R-021 → R-028 part B — the declared-layer rows, driven against the offline
- * MockRuntime's CG_E2E_FIXED_BANK seed (channel 1, layers 70–88; 70–73 are the
+ * MockRuntime's CG_E2E_FIXED_BANK seed (channel 1, layers 70–89; 70–73 are the
  * four display cases html / ffmpeg / empty / unknown, and 88 is R-021 stage 4's
  * `restore-blocked` row — bound, over a producer that is not ours). The bridge-side truth —
  * real OSC tap + sweep + the exact-slot load — is integration-tested in
@@ -45,7 +45,13 @@ test('a seeded bank renders permanent rows with aliases and honest occupancy', a
   // 19 since R-021 stage 4 added the blocked row (88) — every other case was
   // already spoken for, and none of 70–87 models a BOUND row over a FOREIGN
   // producer (71 is foreign but unbound).
-  await expect(app.layers.locator('[data-layer]')).toHaveCount(19);
+  //
+  // 20 since §14.5 Stage E added the LOOK-BEARING row (89): no other seeded row
+  // has a template that authors looks, so the picker would have had nowhere to
+  // render. This assertion is the reason that seed cannot be added quietly — it
+  // pins that the bank renders EXACTLY its declared rows, which is the property
+  // R-021 exists to guarantee.
+  await expect(app.layers.locator('[data-layer]')).toHaveCount(20);
 
   // The ALIAS is the row's primary label.
   await expect(app.layerRow(70)).toContainText('CLOCK');

@@ -17,6 +17,7 @@ import {
   subscribeDrafts,
 } from './draftStore.js';
 import { appliedPlateSources, onAirPlateSource } from './livePlates.js';
+import { isOnAir } from '../stack/onAir.js';
 
 /**
  * D-137 / C-015 — bind each of THIS template's live plates to one of the
@@ -120,6 +121,14 @@ export function LivePlatesSection({
   // question the operator did not ask, on the panel they use most.
   if (plates.length === 0) return null;
 
+  /*
+    🔴 “ON AIR” IS ONLY SAID OF A ROW THAT IS. The patch line below states what is
+    composited, which is not a claim an idle or loaded row can back — and an unbacked air
+    claim on the panel the operator reads most is the one thing this surface must not do.
+    The override still EXISTS on such a row and still takes effect at its next take; that is
+    what the timing sentence at the bottom is for.
+  */
+  const rowIsOnAir = isOnAir(item);
   const applied = appliedPlateSources(item.templateId, plates);
   const staged = plates.filter((p) =>
     isPlateDirty(item.itemId, p.sourceId, applied.get(p.sourceId) ?? null),
@@ -190,7 +199,7 @@ export function LivePlatesSection({
               someone when a change lands while showing them the wrong current value is
               a half-repair.
             */}
-            {onAir.overridden && (
+            {onAir.overridden && rowIsOnAir && (
               <span
                 style={styles.patched}
                 data-plate-overridden={plate.sourceId}

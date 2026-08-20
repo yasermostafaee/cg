@@ -722,6 +722,27 @@ candidate shapes.
 
 ---
 
+- [ ] 7.9 🔴 **OPEN — A REFUSED SWITCH LEAVES AN INTENT THAT A LATER SWAP COMPLETES WITHOUT
+      TELLING THE PAGE.** Found by reviewing Stage E (session BH), **not fixed there**, and
+      flagged rather than changed because the fix alters an ON-AIR verb (`R-048`).
+      **The mechanism, exactly.** `setActiveLook` records the look BEFORE the reconcile and
+      KEEPS it when the reconcile refuses — BC’s deliberate decision, and a defensible one:
+      _“the look is what the operator asked this row to show; a failed AMCP send is a fact
+      about the wire.”_ But `swapLiveSource` then reconciles against
+      `#desiredPlateRects(itemId)`, which resolves from that SAME recorded look — and
+      `swapLiveSource` never sends `updateLook`. So: a switch is refused (disconnected, say),
+      the operator is told; later they swap one source; the FILLS move to the new look while
+      the page is still punching the OLD look’s holes. A designed layout with the boxes in the
+      wrong holes, arriving from an action that never mentioned looks.
+      **Why it is Stage E’s to file.** The sequence was unreachable before the picker:
+      `setActiveLook` had no operator caller at all, so no one could refuse a switch and then
+      swap. The picker makes it reachable.
+      **The shape of the fix, for the owner to rule on.** §6/§12.2 already states the rule this
+      breaks — _the hole the page punches and the hole the bridge fills are ONE computation_ —
+      so the candidate is: any reconcile that resolves against the active look also tells the
+      page that look, which would make `swapLiveSource` carry an `updateLook` too. That is a
+      change to a shipped on-air verb and wants a deliberate decision, not a session-end patch.
+
 ## 7. STAGE F — the CUT ships. STAGE G — the transition modes (§13.5)
 
 - [ ] 8.1 **KEEP the v1 `live-source-animated` refusal** and pin it with a test that a runtime

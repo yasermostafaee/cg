@@ -314,8 +314,23 @@ export function LayerRow({
    * straight back off the published stack, so what it shows is what the bridge did.
    */
   const switchLook = async (itemId: string, lookId: string): Promise<void> => {
-    const res = await window.cg.stack.setActiveLook({ itemId, lookId });
-    if (!res.ok) reportCommandError(lookSwitchRefusal(res.reason, res.message));
+    /*
+      🔴 THE REJECTION IS CAUGHT, not only the `ok: false`.
+
+      A refused-by-the-bridge switch answers `{ ok: false }`; a switch that cannot BE MADE
+      throws. `#invoke` rejects on a disconnected socket (R-006 refuses every request by
+      design) and on a bridge whose build disagrees about this channel’s shape. Awaiting it
+      without a catch meant an unhandled rejection and — worse — an operator who pressed a
+      look, saw the segment move, and was told nothing at all.
+    */
+    try {
+      const res = await window.cg.stack.setActiveLook({ itemId, lookId });
+      if (!res.ok) reportCommandError(lookSwitchRefusal(res.reason, res.message));
+    } catch (err) {
+      reportCommandError(
+        lookSwitchRefusal(undefined, err instanceof Error ? err.message : undefined),
+      );
+    }
   };
 
   const templateLabel =

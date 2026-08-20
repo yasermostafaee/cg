@@ -70,12 +70,20 @@ export interface LookOption {
 export function lookOptionsOf(template: TemplateInfo | null): LookOption[] | null {
   const looks = template?.liveSources?.looks;
   if (looks === undefined || looks.length === 0) return null;
-  return looks.map((l, i) => ({
+  return looks.map((l) => ({
     id: l.id,
-    // The carrier holds ids, not display names. An ordinal is a stable, glanceable
-    // label an operator can call over talkback ("go to look 2"), and the id rides the
-    // accessible name and the tooltip for anyone who needs the authored handle.
-    label: `${String(i + 1)}`,
+    /*
+      🔴 THE AUTHORED NAME. An earlier version labelled these by ORDINAL on the stated
+      premise that “the carrier holds ids, not display names” — **which is false**:
+      `TemplateLookSchema.name` is `z.string().min(1)`, REQUIRED, and it is what the author
+      typed in the Designer. Numbering them threw away the one label that already means
+      something to the operator (“WIDE”, “SOLO”) and replaced it with a position they would
+      have to learn. The id still rides the tooltip and the accessible name for anyone who
+      needs the authored handle.
+
+      A long name widens the strip rather than the row: the line scrolls inside itself.
+    */
+    label: l.name,
   }));
 }
 
@@ -127,19 +135,46 @@ export function LookPicker({ looks, activeId, refusal, onPick, rowName }: Props)
           return (
             <Button
               key={look.id}
-              variant="verb"
+              /*
+                🔴 `neutral`, NOT `verb`. `.cg-btn--verb` sets `width: 100%` — COLUMN geometry,
+                sized by the header so a verb’s word sits over its glyph — and the `icon`
+                variant exists precisely because that “stretches anything that is not in a
+                sized column”. These segments are in a flex strip, not a column. `neutral` is
+                the documented contract for a TEXT button and carries no accent, which is what
+                the row wants: the row’s STATE owns colour, and selection is painted by
+                `.cg-look-cell[aria-pressed]` instead.
+              */
+              variant="neutral"
               className="cg-look-cell"
               // The CSS keys on this, so the paint and the announcement are one fact.
               aria-pressed={live}
               disabled={refusal !== undefined}
               {...(refusal !== undefined ? { title: refusal } : { title: look.id })}
-              aria-label={`Look ${look.label} (${look.id})${live ? ' — on air' : ''}`}
+              /*
+                🔴 “CURRENT”, never “on air”. The picker says which LOOK is selected; whether
+                the row is on air is the state cell’s claim and its alone. An off-air row’s
+                picker announcing “on air” would be a second, unbacked air claim on the same
+                row — the same reason the segments do not wear green.
+              */
+              aria-label={`Look ${look.label} (${look.id})${live ? ' — current' : ''}`}
               data-look-id={look.id}
               onClick={() => {
-                // A no-op re-press is dropped here rather than sent: re-issuing the look
-                // already on air would run a reconcile and a CG UPDATE for nothing, and
-                // on a cut that is a visible re-assert of an unchanged picture.
-                if (!live) onPick(look.id);
+                /*
+                  🔴 **A RE-PRESS IS SENT, and an earlier version of this dropped it.**
+
+                  The tempting guard is `if (!live)`: re-issuing the look already showing
+                  would run a reconcile and a CG UPDATE for an unchanged picture. But the look
+                  is RECORDED BEFORE the reconcile and stays recorded even when the reconcile
+                  or the CG UPDATE is refused — so after a half-failed switch the segment is
+                  already marked while the fills or the holes did NOT move. That is exactly
+                  when the bridge’s own refusals say *“Re-issue it once the server is back”*
+                  and *“Re-issue the switch”* — and the guard would have made the one remedy
+                  they name unreachable, on the control they name it about.
+
+                  A redundant re-assert of an unchanged picture is cheap. A dead escape from a
+                  half-failed switch is not.
+                */
+                onPick(look.id);
               }}
             >
               {look.label}

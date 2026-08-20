@@ -468,3 +468,139 @@ it('5.4 — THE CUT IS THE ONLY MODE, so the switch itself is the immediate acti
     );
   }
 });
+
+it('🔴 5.4 — the RESTORE door refuses it too: a template can change under a retained row', async () => {
+  /*
+    The take refuses a zero-look template, so it LOOKS impossible for one to be retained on
+    air — and that reading is what would leave this door uncovered. It is not impossible: the
+    TEMPLATE changes under the row. The operator takes a template that has looks, re-imports
+    it with the group emptied, and a reconnect restores the on-air row against the NEW
+    definition — seating nothing and putting a designed layout of empty holes on air,
+    silently, on a link that just came back.
+
+    Restore never passes through `take()`, which is exactly why §12.6's exclusivity refusal
+    is at both doors. One predicate, two sites.
+  */
+  const r = await boot();
+  /*
+    The row became retained-on-air in a PREVIOUS process, back when the template still had
+    looks; what this process boots into is the re-imported, emptied definition. No incumbent
+    is taken here on purpose — §12.6’s exclusivity refusal is checked FIRST (it is about the
+    on-air SET, and the narrower answer must not mask the broader one), so a row already on
+    air would win the race and this door would go untested.
+  */
+  r.templateImport(template({ looks: [] }), '<!doctype html><html></html>');
+
+  const res = await r.restore([
+    { itemId: 'item-1', templateId: 'debate', fields: {}, state: 'on-air' },
+  ]);
+
+  expect(res.skipped.map((s2) => s2.reason)).toContain('looks-none-authored');
+  expect(res.skipped[0]?.detail, 'and it says WHICH template and what to do').toMatch(/Designer/);
+});
+
+it('🔴 a RESTORE re-applies the operator’s look, so the picker does not lie after a blip', async () => {
+  /*
+    THE DIVERGENCE STAGE E CREATED, AND THEREFORE OWES A FIX.
+
+    The bridge’s `#activeLooks` is process memory. Before this session nothing DISPLAYED the
+    look, so losing it across a bridge blip was invisible; the picker turns it into a false
+    readout — an adopted row would publish the AUTHORED DEFAULT while the page is still
+    showing the look the operator chose.
+
+    Retention already carries `sourceOverride` and `plateVolumes` for exactly this reason
+    (B-107 / B-109: retention dropping state it did not model), and the look now travels the
+    same way. ⚠ This does NOT persist `#activeLooks` on the BRIDGE — that is still BC’s
+    deferred finding — it closes the gap from the side that already has a durable store.
+  */
+  const r = await boot();
+
+  await r.restore([
+    {
+      itemId: 'item-1',
+      templateId: 'debate',
+      fields: {},
+      state: 'on-air',
+      activeLookId: 'right',
+    },
+  ]);
+
+  expect(publishedLook(r), 'the row comes back on the look it was on').toBe('right');
+});
+
+it('a restore with NO look recorded still resolves to the authored default', async () => {
+  // The pre-Stage-E retained shape, and every row nobody ever switched. Absent must mean
+  // “nothing was chosen”, not “no look” — or the picker would have nothing marked.
+  const r = await boot();
+
+  await r.restore([{ itemId: 'item-1', templateId: 'debate', fields: {}, state: 'on-air' }]);
+
+  expect(publishedLook(r)).toBe('left');
+});
+
+it('🔴 5.1 — the switch PUBLISHES the stack, so a live console actually learns the new look', async () => {
+  /*
+    THE DEFECT THIS PINS, AND WHY THE FIRST VERSION OF THIS FILE MISSED IT.
+
+    `#published()` recomputes the look on every read, so `stackSnapshot()` was ALWAYS right —
+    and the test above that reads it passed while a real console would have been stuck. A
+    browser learns item state only from the `stackChanged` push, and `#markDirty` is the one
+    thing that emits it. Without it the operator presses a look, the fills move on air, and
+    the picker goes on marking the OLD one until something unrelated publishes.
+
+    ⚠ The offline mock had it right from the start, which inverted the usual risk: the mock
+    was MORE correct than the bridge, so the E2E passed too. Asserting the PUSH — not the
+    snapshot — is the only thing that separates them.
+  */
+  const r = await boot();
+  /*
+    🔴 OFF AIR, and that is the whole sharpness of this test.
+
+    On an ON-AIR row the reconcile’s own AMCP produces acks that move the reconciler, which
+    marks the item dirty and publishes ANYWAY — so the push happens by a neighbouring
+    mechanism rather than because this code says so, and removing the publish still passes.
+    That is accidental correctness, and it evaporates in the one case the picker explicitly
+    supports: an OFF-AIR row, where `setActiveLook` records the look and sends NOTHING (there
+    is nothing seated to reconcile). No send, no ack, no incidental publish — so if the switch
+    does not publish for itself, the picker never moves.
+  */
+  await r.load('item-1', 'debate', {});
+  // …and let the LOAD’s own coalesced flush drain before subscribing. Without this the
+  // switch rides a publish somebody else scheduled, which is the same accidental
+  // correctness one level down.
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  const pushed: (string | undefined)[] = [];
+  r.stackChanged.subscribe((items) => {
+    pushed.push(items.find((i) => i.itemId === 'item-1')?.activeLookId);
+  });
+
+  expect((await r.setActiveLook('item-1', 'right')).ok).toBe(true);
+  // `#markDirty` coalesces, so give the flush its beat.
+  await new Promise((resolve) => setTimeout(resolve, 120));
+
+  expect(pushed, 'a push carrying the new look reached the console').toContain('right');
+});
+
+it('🔴 5.4 — a re-issue of the CURRENT look is accepted, because that is the documented remedy', async () => {
+  /*
+    The look is recorded BEFORE the reconcile and stays recorded when the reconcile or the
+    CG UPDATE is refused — so after a half-failed switch the row already reads as the new
+    look while the fills or the holes did not move. The bridge’s own refusals then say
+    “Re-issue it once the server is back” and “Re-issue the switch”, so re-sending the
+    CURRENT look has to work. A UI that dropped it as a no-op would make the one remedy the
+    bridge names unreachable.
+  */
+  const r = await boot();
+  await onAir(r);
+  await r.setActiveLook('item-1', 'right');
+  const before = (await recvLines()).length;
+
+  expect((await r.setActiveLook('item-1', 'right')).ok, 'accepted, not refused as a no-op').toBe(
+    true,
+  );
+
+  // …and it really re-asserted: the page is told again, which is the half a lost CG UPDATE
+  // would have dropped.
+  expect((await since(before)).some((l) => l.startsWith('CG '))).toBe(true);
+});

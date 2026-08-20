@@ -124,5 +124,10 @@ function toRetained(item: StackItemState): RetainedStackItem {
     // the audio rule is nothing but memory, so losing the memory IS losing the
     // feature (B-107 / B-109).
     ...(item.plateVolumes !== undefined && { plateVolumes: item.plateVolumes }),
+    // §14 (LOOKS) Stage E — and the ACTIVE LOOK. The bridge’s own map is process memory,
+    // so this is the only thing that carries the operator’s choice across a blip. Dropped,
+    // an adopted row leaves the picker asserting a look that is not on air, and a re-ADDed
+    // one silently reverts to the authored default (B-107 / B-109).
+    ...(item.activeLookId !== undefined && { activeLookId: item.activeLookId }),
   };
 }

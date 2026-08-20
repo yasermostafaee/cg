@@ -170,6 +170,22 @@ export const StackSetPositionChannel = defineChannel(
  * them here would be a second copy of a vocabulary that already has an owner. The
  * `message` is what the operator reads; the reason is for logs and tests.
  */
+export const StackSwapLiveSourceChannel = defineChannel(
+  'stack.swap-live-source',
+  z.object({
+    itemId: IdSchema,
+    /** The SCENE's handle for the hole (`guest-1`), never a catalog id. */
+    plateId: z.string().min(1),
+    /** A catalog entry's id, or `null` to revert to the template's assignment. */
+    sourceId: z.string().min(1).nullable(),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.string().optional(),
+    message: z.string().optional(),
+  }),
+);
+
 /**
  * `multibox-layout-switch` §14 (LOOKS) Stage E — **SWITCH ONE ROW TO ANOTHER LOOK.**
  *
@@ -194,21 +210,6 @@ export const StackSetActiveLookChannel = defineChannel(
     itemId: IdSchema,
     /** A look id the template AUTHORS. The bridge refuses `unknown-look` otherwise. */
     lookId: z.string().min(1),
-  }),
-  z.object({
-    ok: z.boolean(),
-    reason: z.string().optional(),
-    message: z.string().optional(),
-  }),
-);
-export const StackSwapLiveSourceChannel = defineChannel(
-  'stack.swap-live-source',
-  z.object({
-    itemId: IdSchema,
-    /** The SCENE's handle for the hole (`guest-1`), never a catalog id. */
-    plateId: z.string().min(1),
-    /** A catalog entry's id, or `null` to revert to the template's assignment. */
-    sourceId: z.string().min(1).nullable(),
   }),
   z.object({
     ok: z.boolean(),
@@ -382,6 +383,19 @@ export const RestoreSkipReasonSchema = z.enum([
    * re-seats the very pair a take refuses — silently, on a link that just came back.
    */
   'multibox-already-on-air',
+  /**
+   * `multibox-layout-switch` §14.5 — the template’s look group authors NO looks, so no
+   * plate has geometry and the row would come back as the background alone behind holes
+   * that never fill.
+   *
+   * 🔴 **HERE AS WELL AS AT THE TAKE, because a restore is the door with no other cover.**
+   * The take refuses this, so the obvious reading is that a zero-look row can never BE
+   * retained on air — but the template can CHANGE underneath a retained row: the operator
+   * takes a template that has looks, re-imports it with the group emptied, and a reconnect
+   * then restores an on-air row against the new, broken definition. One predicate, two
+   * sites — the same rule `multibox-already-on-air` above is here for.
+   */
+  'looks-none-authored',
 ]);
 export type RestoreSkipReason = z.infer<typeof RestoreSkipReasonSchema>;
 

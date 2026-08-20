@@ -2057,6 +2057,10 @@ input[type='checkbox']:disabled:checked {
  */
 .cg-btn.cg-look-cell {
   flex: 0 0 auto;
+  /* Explicit, because a variant that sets `width: 100%` (the VERB column geometry) would
+     otherwise stretch every segment to the strip. Stated here rather than relied on from
+     the variant, so a future variant change cannot silently reflow the strip. */
+  width: auto;
   min-width: 2.4ch;
   padding: 0.15rem 0.5rem;
   font-size: 0.72rem;

@@ -311,5 +311,26 @@ export const RetainedStackItemSchema = z.object({
    * the one property of a graphic nobody can see.
    */
   plateVolumes: LivePlateVolumesSchema.optional(),
+  /**
+   * `multibox-layout-switch` §14 (LOOKS) Stage E — the LOOK the operator put this row on,
+   * on the OPEN axis beside `sourceOverride` and for the identical reason.
+   *
+   * 🔴 **WITHOUT THIS, THE PICKER LIES AFTER A BRIDGE BLIP.** The bridge's `#activeLooks`
+   * is process memory and dies with it. A restore then resolves the row to its AUTHORED
+   * DEFAULT, and both outcomes are wrong in a way somebody sees:
+   *
+   * - the producer survived and was ADOPTED — the page is still showing the look the
+   *   operator chose, while the row now publishes the default, so the picker asserts a
+   *   look that is not on air. Before Stage E nothing displayed the look and the
+   *   divergence was invisible; the picker is what turns it into a false readout.
+   * - the producer was gone and the row RE-ADDed — the page enters the default, and the
+   *   operator’s choice is silently undone on air.
+   *
+   * That is the `B-107` / `B-109` class stated on `sourceOverride` above: retention
+   * dropping state it did not model. ⚠ It does NOT close the bridge-side gap (`#activeLooks`
+   * is still not persisted BY the bridge) — it closes it from the side that already has a
+   * durable store and already re-delivers.
+   */
+  activeLookId: z.string().min(1).optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;

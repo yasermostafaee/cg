@@ -1778,6 +1778,29 @@ export class CasparRuntime {
           });
           continue;
         }
+        /*
+          §14.5 — and the LOOKS refusal, at this door too.
+
+          🔴 The take refuses a zero-look template, so it looks impossible for one to be
+          RETAINED on air. It is not: the TEMPLATE can change under a retained row. The
+          operator takes a template that has looks, re-imports it with the group emptied,
+          and a reconnect restores an on-air row against the new definition — seating
+          nothing and putting a designed layout of empty holes on air, silently, on a link
+          that just came back. That is the same reasoning `multibox-already-on-air` is at
+          both doors for: restore never passes through `take()`.
+        */
+        const noLooksRestore = this.#refuseNoLooksAuthored(item.templateId);
+        if (noLooksRestore !== null) {
+          // B-114 — release by the SAME door the slot was taken through.
+          if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
+          else this.#layers.deallocate(slot);
+          skipped.push({
+            itemId: item.itemId,
+            reason: 'looks-none-authored',
+            detail: noLooksRestore.message,
+          });
+          continue;
+        }
       }
       if (
         this.#reconciler.restoreItem({
@@ -1823,6 +1846,21 @@ export class CasparRuntime {
       // somebody sees; a dropped volume shows the right picture in silence.
       if (item.plateVolumes !== undefined) {
         this.#plateVolumes.set(item.itemId, item.plateVolumes);
+      }
+      /*
+        §14 (LOOKS) Stage E — and the ACTIVE LOOK, re-applied HERE for the same reason as
+        its three neighbours: BEFORE any adopt-vs-re-ADD decision runs, so whatever this
+        restore goes on to do carries it.
+
+        🔴 It matters to BOTH outcomes, differently. A RE-ADD reads the look straight off
+        `#activeLookOf` into the `CG ADD` payload, so without this the page enters the
+        authored default and the operator’s choice is undone on air. An ADOPTED row keeps
+        whatever the page is already showing, so without this the row would publish the
+        default while the page shows the chosen look — the picker asserting something that
+        is not on air.
+      */
+      if (item.activeLookId !== undefined) {
+        this.#activeLooks.set(item.itemId, item.activeLookId);
       }
       /*
        * 🔴 B-109 / B-107 — THE PENDING RESTORE IS THE LICENCE TO TOUCH THE LAYER, and
@@ -3839,6 +3877,25 @@ export class CasparRuntime {
     // about the wire. Rolling the intent back would leave the next take entering the OLD
     // look with nothing anywhere saying why.
     this.#activeLooks.set(itemId, lookId);
+    /*
+      🔴 **PUBLISH IT. `stackSnapshot()` being correct is NOT the same as a browser knowing.**
+
+      `#published()` recomputes the look on every read, so a PULL was always right — which is
+      exactly why this was easy to miss and why the test that first covered it (reading
+      `stackSnapshot()`) passed while the console would have been stuck. The browser learns
+      about item state ONLY from `stackChanged`, and `#markDirty` is the one thing that emits
+      it. Without this line an operator presses a look, the fills move on air, and the picker
+      goes on marking the OLD one until some unrelated change happens to publish.
+
+      ⚠ The offline mock had it right from the start (`setActiveLook` → `#emitStack()`), which
+      inverted the usual risk: the mock was MORE correct than the bridge, so the E2E passed too.
+      A parity test is not a substitute for asking whether the real path publishes.
+
+      Recorded-then-published BEFORE the reconcile, deliberately: the picker should show what
+      the operator asked for the instant they ask, and the refusal below arrives as a toast if
+      the wire disagrees.
+    */
+    this.#markDirty(itemId);
     /*
       🔴 "IS THIS ROW ON AIR" IS ASKED OF THE STATUS, NOT OF THE LEDGER.
 

@@ -112,6 +112,84 @@ bridge-side "every client has re-delivered" fact, which does not exist. It is wr
 - The screenshots are from the offline mock's e2e-armed seed (a 4-box template with three looks, two
   of them disjoint), not from a plant.
 
+## 6b. 🔴 Two defects found by reviewing this change, both fixed before the tip settled
+
+Both are the same shape: **the picker is a new READOUT, and a readout makes previously-invisible
+divergence into a visible lie.**
+
+**(i) The refusal was at the TAKE door only.** §12.6’s exclusivity refusal is at BOTH the take and
+the restore, and its own comment says why — _“restore is the door with no other cover”_, it never
+passes through `take()`. Mine was not. The path is narrow but real: the TEMPLATE changes under a
+retained row — the operator takes a template that has looks, re-imports it with the group emptied,
+and a reconnect restores an on-air row against the new definition, seating nothing and putting a
+designed layout of empty holes on air, silently, on a link that just came back. `looks-none-authored`
+is now a `RestoreSkipReason` with its own operator wording. One predicate, two sites.
+
+**(ii) The picker would have LIED after a bridge blip.** `#activeLooks` is process memory, so a
+restore resolved the row to its AUTHORED DEFAULT — and both outcomes are wrong in a way somebody
+sees. If the producer survived and was ADOPTED, the page is still showing the operator’s look while
+the row publishes the default: **the picker asserts a look that is not on air.** If the row was
+RE-ADDed, the page enters the default and the operator’s choice is silently undone.
+
+Before this session nothing displayed the look, so the divergence was invisible — which is precisely
+why it was never caught. Fixed the way its three neighbours already are: `activeLookId` on
+`RetainedStackItem`, carried by `StackRetentionStore.toRetained`, re-applied on restore BEFORE any
+adopt-vs-re-ADD decision. That is the `B-107`/`B-109` class the retention doc already names.
+
+⚠ **This does NOT close BC’s deferred finding.** `#activeLooks` is still not persisted BY the
+bridge; the gap is closed from the side that already has a durable store and already re-delivers.
+A bridge restarted with NO browser attached still loses the look. That item stays open.
+
+## 6c. 🔴 And three more, one of them caught by CI rather than by me
+
+**(iii) CI WENT RED, and this is the one to read.** The Linux `e2e` job failed on `c1abfd4b`:
+`fixed-layers.spec.ts` asserts the seeded bank renders exactly **19** rows, and adding the
+look-bearing row made it 20. **My Windows run passed because I ran the new spec, not the suite** —
+the precise mistake the authoritative-Linux rule exists to catch, and I made it. The assertion is
+right and was doing its job: it pins that the bank renders EXACTLY its declared rows, which is what
+R-021 exists to guarantee, so a seed cannot be added quietly. Count updated with the reason beside
+it, and the full runtime E2E suite run locally before the next push rather than one spec.
+
+**(iv) The picker segments used `variant="verb"`, which is COLUMN geometry.** `.cg-btn--verb` sets
+`width: 100%` so a verb fills the column the header sized — and the `icon` variant exists precisely
+because that _“stretches anything that is not in a sized column”_. These sit in a flex strip. Now
+`neutral` (the documented contract for a TEXT button, and accent-free, which is what the row wants),
+with an explicit `width: auto` in `.cg-look-cell` so a future variant change cannot silently reflow
+the strip.
+
+**(v) The marked segment announced “— on air” regardless of the row’s state.** An off-air row’s
+picker would have told a screen-reader user a graphic was on air. It now says **“current”**: the
+picker’s claim is which LOOK is selected, and whether the row is on air belongs to the state cell
+alone — the same reason the segments do not wear green.
+
+## 6d. 🔴 Two more from the review — one fixed, one FILED FOR YOU rather than changed
+
+**(vi) FIXED — the switch did not publish the stack for itself.** `#markDirty` is the only thing
+that emits `stackChanged`, and `setActiveLook` never called it. ⚠ **The reviewer’s claim was that
+the picker would NEVER update; that was too strong and I checked rather than repeating it.** On an
+ON-AIR row the reconcile’s own AMCP produces acks that move the reconciler, which publishes anyway
+— so it worked, by a neighbouring mechanism rather than because the code said so. Where it genuinely
+failed is the OFF-AIR row, which the picker explicitly supports (pre-setting the look a take will
+enter): nothing is sent, so nothing acks, so the picker never moved. Fixed, and the test is written
+against the off-air case for exactly that reason — removing the publish leaves the on-air test green.
+⚠ The offline mock had this right from the start, so **the mock was MORE correct than the bridge and
+the E2E passed too.**
+
+**(vii) 🔴 FILED, NOT FIXED — `tasks.md` 7.9, and it needs your call because the fix changes an
+on-air verb.** `setActiveLook` records the look before the reconcile and keeps it on refusal (BC’s
+deliberate decision). `swapLiveSource` then reconciles against `#desiredPlateRects`, which resolves
+from that same recorded look — and never sends `updateLook`. So: a switch is refused, the operator
+is told, and a later unrelated source swap moves the FILLS to the new look while the page is still
+punching the OLD look’s holes. **A designed layout with its boxes in the wrong holes, arriving from
+an action that never mentioned looks.**
+
+It was unreachable before this session — `setActiveLook` had no operator caller — so the picker is
+what makes it reachable, which is why I am filing it rather than leaving it unsaid. §6/§12.2 already
+names the rule it breaks (_the hole the page punches and the hole the bridge fills are ONE
+computation_), so the candidate fix is to have any reconcile that resolves against the active look
+also tell the page. **I did not make that change:** it alters `R-048`’s shipped behaviour and belongs
+to a deliberate decision, not a session-end patch.
+
 ## 7. One correction to the prompt, and one judgement to check
 
 ⚠ **§3.6 asked for the immediate-CUT escape; `tasks.md` 7.6 RETIRED it on 2026-08-19.** These agree
@@ -120,10 +198,13 @@ and instead **asserted** the claim rather than assuming it: every fill a switch 
 duration or tween, and STOP/CLEAR stay in the verb block. If you did want a distinct control, say so
 and I will add one; I read the retirement as still correct.
 
-⚠ **The look segments are labelled by ORDINAL (`1 2 3`), not by the authored look name.** The
-carrier holds ids, not display names, and an ordinal is callable over talkback. The id rides the
-tooltip and the accessible name. If you would rather see the authored names, that is a small change
-and worth your call.
+⚠ **The look segments were labelled by ORDINAL, and the reason I gave for it was FALSE.** I wrote
+that “the carrier holds ids, not display names”. It does not: `TemplateLookSchema.name` is
+`z.string().min(1)` — REQUIRED, and it is what the author typed in the Designer. Numbering them
+threw away the one label that already means something to an operator (“WIDE”, “SOLO”) and replaced
+it with a position they would have to learn. **The segments now carry the authored name**, with the
+id still on the tooltip and the accessible name. This was a judgement I flagged for you to check and
+it turned out simply to be wrong, so it is corrected rather than left for you to arbitrate.
 
 ## 8. Gate, tests and the push
 

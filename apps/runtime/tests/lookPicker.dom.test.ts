@@ -50,9 +50,9 @@ afterEach(async () => {
 });
 
 const LOOKS = [
-  { id: 'left', label: '1' },
-  { id: 'right', label: '2' },
-  { id: 'all', label: '3' },
+  { id: 'left', label: 'Left pair' },
+  { id: 'right', label: 'Right pair' },
+  { id: 'all', label: 'All four' },
 ];
 
 async function render(
@@ -129,11 +129,20 @@ describe('7.1 — the picker IS the on-air readout', () => {
     expect(onPick).toHaveBeenCalledTimes(1);
   });
 
-  it('🔴 re-pressing the LIVE look sends nothing', async () => {
+  it('🔴 re-pressing the LIVE look IS sent — it is the remedy the bridge names', async () => {
     /*
-      A no-op re-press would run a reconcile and a CG UPDATE for a picture that is not
-      changing — and on a cut that is a visible re-assert. Dropped at the control rather
-      than at the bridge, so the wire never sees it at all.
+      ── REVERSED, AND THE FIRST VERSION OF THIS FILE HAD IT WRONG ──────────────
+
+      The tempting guard is to drop a press on the already-marked look: re-issuing it would
+      run a reconcile and a CG UPDATE for an unchanged picture. But the bridge RECORDS the
+      look before the reconcile and KEEPS it when the reconcile or the CG UPDATE is refused —
+      so after a half-failed switch the segment is already marked while the fills or the holes
+      did not move.
+
+      That is exactly when the bridge’s own refusals say “Re-issue it once the server is back”
+      and “Re-issue the switch”. The guard would have made the one remedy they name
+      unreachable, on the control they name it about. A redundant re-assert of an unchanged
+      picture is cheap; a dead escape from a half-failed switch is not.
     */
     const { el, onPick } = await render({ activeId: 'left' });
 
@@ -142,16 +151,16 @@ describe('7.1 — the picker IS the on-air readout', () => {
       await Promise.resolve();
     });
 
-    expect(onPick).not.toHaveBeenCalled();
+    expect(onPick).toHaveBeenCalledWith('left');
   });
 
-  it('the accessible name carries the look id AND says which is on air', async () => {
+  it('🔴 the accessible name carries the look id and says which is CURRENT — never “on air”', async () => {
     // The label is an ordinal an operator can call over talkback; the id is the authored
     // handle. Both are needed and neither belongs in the other's place.
     const { el } = await render({ activeId: 'right' });
 
-    expect(seg(el, 'right')?.getAttribute('aria-label')).toBe('Look 2 (right) — on air');
-    expect(seg(el, 'left')?.getAttribute('aria-label')).toBe('Look 1 (left)');
+    expect(seg(el, 'right')?.getAttribute('aria-label')).toBe('Look Right pair (right) — current');
+    expect(seg(el, 'left')?.getAttribute('aria-label')).toBe('Look Left pair (left)');
   });
 
   it('an unresolved active look marks nothing rather than guessing', async () => {
@@ -248,8 +257,8 @@ describe('🔴 whether a picker exists at all — absent is NOT empty', () => {
       }),
     );
     expect(opts).toEqual([
-      { id: 'a', label: '1' },
-      { id: 'b', label: '2' },
+      { id: 'a', label: 'A' },
+      { id: 'b', label: 'B' },
     ]);
   });
 

@@ -56,6 +56,13 @@ export function restoreSkipReason(skip: RestoreSkip): string {
      * a specific row the operator can go and look at. A declared item is never
      * re-homed onto a dynamic layer, so this row genuinely did not come back.
      */
+    /*
+     * §14.5 — the template has a look group with no looks in it. Named separately from
+     * `unknown-template` because the remedy is different and specific: the template IS
+     * registered, it is just not authored to a state that can go to air.
+     */
+    case 'looks-none-authored':
+      return 'its template has no looks authored, so every box would be empty — open it in the Designer and add one';
     case 'fixed-slot-taken':
       return 'its operator row was already taken by another item — load it onto a row again';
     /*
