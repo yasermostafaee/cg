@@ -905,18 +905,60 @@ candidate shapes.
       guest is not. That does not contradict `B-126`, whose case is the opposite trade (a dead feed
       vs black, where black is worse).
 
-- [ ] 7.16 🔴 **The LOOK press is still a SECOND APPLY PATH for the template assignment — NOT DONE.**
-      The two BINDING writers were collapsed onto ONE function, `#applyBindingTransaction`
-      (`update` and `swapLiveSource` are its only callers, verified by sweep). The assignment was
-      not: `setSourceAssignments` writes without reconciling and `setActiveLook` reaches
-      `reconcileLivePlates` directly, so a look press still applies a lurking assignment.
-      ⚠ **The repair is to COLLAPSE, never to make two paths agree** — the same class as this
-      change's own four-level precedence, which was implemented twice and survived review precisely
-      because the two copies agreed. Two candidate collapses, neither costed yet: reconcile the
-      affected rows at `setSourceAssignments` (template-wide blast radius, on-air), or stop the
-      Inspector staging assignment edits for a row that has looks, so the on-air panel writes only
-      per-row state. **Deciding between them is an on-air behaviour change and deserves its own
-      session.**
+- [ ] 7.16 🔴 **THE ASSIGNMENT COLLAPSE — STILL OPEN. Session BO built the owner's chosen option
+      and REVERTED it under §8's stop rule, because it takes away the only door.**
+      The decision (owner, 2026-08-21) was the second candidate: _the Inspector must not stage
+      template-assignment edits for a row whose template HAS LOOKS._ The reasoning holds and is
+      recorded in `LivePlatesSection`'s header — an installation-level edit was riding an on-air
+      action, and `setSourceAssignments` does not reconcile, so it lurked until a look press
+      applied it mid-switch.
+      🔴 **WHAT THE SWEEP FOUND, and why it was not shipped:** `LivePlatesSection` is the **only**
+      surface in the product that binds a plate to a source. `SourcesModal` DEFINES the station's
+      sources and merely LISTS which plates reference one (for its delete warning) — it has no
+      picker. Removing the editor for looks templates therefore leaves the template-level default
+      with **no editing surface at all**, and §8 is explicit that taking away the only door is a
+      regression rather than a collapse.
+      **The cost is concrete:** without a template assignment every FRESH row starts unbound and
+      its take is refused (`live-source-unassigned`) until the operator sets a per-look binding for
+      every plate of every look, by hand, per row — which is exactly what a template-level default
+      exists to prevent.
+      **Three options, for the owner to choose — none picked here:**
+      **(a)** move the assignment editor to a config surface (the Live sources modal), so the
+      collapse completes AND the door exists. Most work; the coherent version of the decision.
+      **(b)** the rejected candidate — reconcile inside `setSourceAssignments`. Removes the lurk,
+      but applies a template-wide change to every row on air.
+      **(c)** keep the editor where it is but DISABLE it while the row is ON AIR. The lurk needs a
+      live row, so this closes it; the door survives; an off-air edit lands at the next take, which
+      is what the panel already promises. Cheapest, and the smallest change to what operators know.
+      ⚠ Whichever is chosen, **`R-048`'s emergency is a different channel** (`stack.swap-live-source`)
+      and must stay one action from the row. "Stop the panel writing source state" is the sentence
+      that would remove it by accident.
+
+- [x] 7.18 ✅ **LANDED 2026-08-21 (session BO) — `B-156`, and the seams three defects came through.**
+      The LOOK INPUTS badge said `ON AIR NOW` for a row the layer table called `READY`; it now names
+      three states from IMPORTED predicates (`isOnAir`, and `isRehearsing` threaded as a prop from
+      the caller that already derives it for the row picker). §3d's default is named inside the
+      control that inherits it. Plus the two guards the seam needed:
+      **the panel → bridge → published-state → panel round trip** (`lookBindingsRoundTrip.test.ts`),
+      and **a schema-derived shim field-parity guard** (`mockShimFieldParity.test.ts`) —
+      mutation-checked, it reddens naming the dropped field. `mock-bridge-parity.test.ts` compares
+      METHOD TREES and cannot see a dropped FIELD, which is how the same class reached three
+      instances.
+      **And the first E2E this feature has had** (`e2e/look-inputs.spec.ts`) — BM-2 shipped none
+      and said so.
+
+- [ ] 7.19 🔴 **§3c — "UPDATE sends the values back to template default" is NOT REPRODUCED, and the
+      negative is worth as much as a fix would be.** Ruled out BY EXECUTION, each: the write path
+      (`applyDraft`, `buildLookBindingsPayload`, the draft store); the bridge STORING it; the bridge
+      PUBLISHING it; BOTH read schemas (`StackItemStateSchema` on the push and `StackSnapshotChannel`
+      on the pull); the retention schema; the mock shim; a LOADED-not-taken row specifically (the
+      state `B-156`'s screenshot shows the owner in); and a stale `item` prop (it is a `useMemo` over
+      the live `items`). It round-trips on BOTH backends.
+      **The one axis that cannot be tested from a dev machine: a SKEWED SPA BUILD.** A Runtime page
+      older than the bridge strips `lookSourceOverride` in its own zod parse and shows exactly this
+      symptom with the bridge perfectly correct — which is `B-153`'s subject, and looks identical to
+      the operator. **Needs the owner's build/refresh state**, or a repro on a page hard-reloaded
+      against the current bridge.
 
 - [ ] 7.17 **The stale TITLE binding — DEFERRED by BM-2's patch §C, which is explicit that the flash
       outranks it.** Everything `tasks.md` 7.13 records still stands: deferring costs no re-authoring

@@ -13,7 +13,9 @@ import {
   stageLookBinding,
   subscribeDrafts,
 } from './draftStore.js';
+import { appliedPlateSources } from './livePlates.js';
 import { reportCommandError } from '../status/commandFeedback.js';
+import { isOnAir } from '../stack/onAir.js';
 
 /**
  * ⭐ **SESSION BM-2 (`design.md` §12.9.1b) — WHAT THIS ROW SHOWS IN EACH LOOK.**
@@ -63,7 +65,7 @@ const styles = {
   },
   lookName: { fontWeight: 700, fontSize: 'var(--r-text-sm)' },
   /**
-   * The LIVE look.
+   * The badge on the look this row is SET TO.
    *
    * 🔴 NOT GREEN. Green is the layer table's ON AIR mark and means "this row is playing";
    * this says "of this row's looks, THIS is the one composited". Borrowing green would put a
@@ -71,8 +73,24 @@ const styles = {
    * ATTENTION role and is right here for the reason §3.2 gives: the operator is editing an
    * on-air look and an off-air look in the same panel, and confusing them puts the wrong feed
    * up — so the on-air one is the thing that needs attention.
+   *
+   * 🔴 **`B-156` — AND THE TEXT USED TO IGNORE THE VERY DISTINCTION THIS COMMENT DRAWS.** It
+   * said `ON AIR NOW` whenever `activeLookOf` picked the look — and `activeLookOf` answers
+   * *which look this ROW is set to*, never *whether the row is playing*. So a merely LOADED
+   * row claimed air. The colour was chosen carefully to keep the two meanings apart and then
+   * the words asserted the meaning the comment says this badge does not have. Golden rule 6,
+   * on a label: the WORDS state a condition, so something must test THAT condition — and
+   * reuse the one canonical predicate rather than re-derive it here, which is exactly how the
+   * name came to lie. See {@link badgeFor}.
    */
   live: { color: colors.pending, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em' },
+  /** The same badge for a row that is NOT on air — muted, because nothing needs attention. */
+  selected: {
+    color: colors.textMuted,
+    fontSize: '0.7rem',
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+  },
   row: {
     display: 'flex',
     gap: 'var(--r-space-2)',
@@ -87,6 +105,37 @@ const styles = {
   empty: { color: colors.textMuted, fontSize: 'var(--r-text-sm)', margin: 0 },
 } as const;
 
+/**
+ * 🔴 **`B-156` — WHAT THE BADGE MAY SAY, DECIDED FROM PREDICATES THIS FILE DOES NOT OWN.**
+ *
+ * Three row states, three truthful words. The badge always marks the SAME look — the one
+ * `activeLookOf` resolves — because which look is selected is one question; what that
+ * selection MEANS for air is a different one, and only the second varies:
+ *
+ * | row state | what is true of this look |
+ * | --- | --- |
+ * | on air | it is what the programme is showing |
+ * | rehearsing | it is what PVW is showing — `R-022` keeps the row off air |
+ * | loaded / idle | it is what a TAKE would show. Not air. |
+ *
+ * ⚠ **Both predicates are IMPORTED.** `isOnAir` is the layer table's own (the section above
+ * already calls it); `isRehearsing` is `@cg/shared-ipc`'s, the one `LayersPanel` reads for the
+ * row picker's `PVW LOOK` / `LOOK` label. Session BL shipped that distinction on the row and
+ * this section never learned it — the `B-151` shape, one surface knowing a state and its
+ * neighbour not. Re-deriving either here would be the defect, not the fix.
+ *
+ * ⚠ **REHEARSING is checked FIRST, and the order is safe rather than lucky.** A row cannot be
+ * rehearsing AND on air: `R-022`'s interlock refuses a rehearse for an on-air row and a take
+ * for a rehearsing one, which `live-look-reconcile.integration.test.ts` pins on the wire
+ * rather than assuming. If that interlock ever went, this order would decide an ambiguity
+ * instead of reporting one — so the interlock is asserted beside this, not trusted.
+ */
+function badgeFor(onAir: boolean, rehearsing: boolean): { text: string; live: boolean } {
+  if (rehearsing) return { text: 'SHOWING IN PVW', live: false };
+  if (onAir) return { text: 'ON AIR NOW', live: true };
+  return { text: 'SELECTED — A TAKE SHOWS THIS', live: false };
+}
+
 /** The name this station shows for a catalog id, or the id when it names nothing. */
 function sourceName(id: string | undefined): string {
   if (id === undefined || id === '') return 'the template default';
@@ -96,9 +145,20 @@ function sourceName(id: string | undefined): string {
 export function LooksBindingsSection({
   item,
   info,
+  rehearsing = false,
 }: {
   item: StackItemState;
   info: TemplateInfo | null;
+  /**
+   * 🔴 A PROP, not a subscription — and that is deliberate (`B-156`).
+   *
+   * The caller already reads the canonical `isRehearsing(rehearsals, itemId)` from
+   * `@cg/shared-ipc`, exactly as `LayersPanel` does for the row picker's `PVW LOOK` label.
+   * Subscribing again HERE would put a second reader of the same fact in a leaf component —
+   * the re-derivation golden rule 6 forbids — and would couple a presentational section to
+   * the bridge, which is what made it untestable the first time this was tried.
+   */
+  rehearsing?: boolean | undefined;
 }): JSX.Element | null {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -109,15 +169,26 @@ export function LooksBindingsSection({
   if (carrier === undefined || looks.length === 0) return null;
 
   const liveLookId = activeLookOf(carrier, item.activeLookId)?.id;
+  const badge = badgeFor(isOnAir(item), rehearsing);
+  const defaults = appliedPlateSources(item.templateId, carrier.sources ?? []);
   const patches = item.sourceOverride ?? {};
   const bound = item.lookSourceOverride ?? {};
 
   return (
     <div className="cg-inspector-section" aria-label="Look inputs">
       <h2>LOOK INPUTS</h2>
+      {/*
+        🔴 **§3d — "above" USED TO POINT AT THE LIVE PLATES SECTION, WHICH IS NOW GONE HERE.**
+
+        This read _"Blank takes the template default above."_ Once the template-assignment
+        editor stops rendering for a looks template (§1's collapse), "above" points at
+        nothing — on a control whose entire semantics are *blank = the default*. A default the
+        operator cannot see is a value they cannot reason about, so the default moved INTO the
+        control: each blank option names the value it inherits.
+      */}
       <p style={styles.scope}>
-        Set for THIS row — each look can show a different input. Blank takes the template default
-        above.
+        Set for THIS row — each look can show a different input. Blank takes the template&rsquo;s
+        own default, named in each list.
       </p>
       {looks.map((look) => {
         const rects = look.rects;
@@ -128,14 +199,28 @@ export function LooksBindingsSection({
             <div style={styles.lookHead}>
               <span style={styles.lookName}>{look.name}</span>
               {isLive && (
-                <span style={styles.live} data-look-live={look.id}>
-                  ON AIR NOW
+                <span
+                  style={badge.live ? styles.live : styles.selected}
+                  data-look-live={look.id}
+                  data-look-badge={badge.live ? 'on-air' : 'not-on-air'}
+                >
+                  {badge.text}
                 </span>
               )}
             </div>
             {plates.length === 0 && <p style={styles.empty}>No frames in this look.</p>}
             {plates.map((plate) => {
               const applied = bound[look.id]?.[plate.sourceId];
+              /*
+                §3d — THE DEFAULT, NAMED IN THE CONTROL THAT INHERITS IT. `appliedPlateSources`
+                is the SAME join the LIVE PLATES section uses for a no-looks template, so the
+                two surfaces cannot disagree about what "the default" is.
+              */
+              const templateDefault = defaults.get(plate.sourceId) ?? null;
+              const defaultLabel =
+                templateDefault === null
+                  ? '— template default (none set) —'
+                  : `— template default (${sourceName(templateDefault)}) —`;
               const value = effectiveLookBinding(item.itemId, look.id, plate.sourceId, applied);
               const dirty = isLookBindingDirty(item.itemId, look.id, plate.sourceId, applied);
               // §2 — level 4 masks level 3, for THIS plate, in EVERY look.
@@ -161,7 +246,7 @@ export function LooksBindingsSection({
                       stageLookBinding(item.itemId, look.id, plate.sourceId, e.target.value)
                     }
                   >
-                    <option value="">— template default —</option>
+                    <option value="">{defaultLabel}</option>
                     {currentSourceCatalog().sources.map((source) => (
                       <option key={source.id} value={source.id}>
                         {source.name}

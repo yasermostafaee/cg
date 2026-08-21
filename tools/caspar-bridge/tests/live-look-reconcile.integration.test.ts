@@ -1997,3 +1997,57 @@ it('🔴 PATCH-01 A6 — UPDATE applying the binding FIRST makes the later switc
   expect(clearsIn(lines)).toEqual([]);
   expect(recordOf(r, 'live-1')?.producer, 'and it shows the new input').toBe('"route://5"');
 });
+
+// ───────── SESSION BO §3 — THE INVARIANT THE DESIGN CLAIMED AND NOTHING ASSERTED ─────────
+
+it('⭐ §3 — a look switch emits NO PLAY for any seat whose resolved input did not change', async () => {
+  /*
+    BM Stage 1 claims it: entering a look whose input is already seated is "a `MIXER FILL` with
+    no `PLAY`", and §12.4 holds the rest. **Nothing ever asserted it**, which is precisely why a
+    lurking assignment could put a producer change inside a switch and no suite noticed.
+
+    🔴 **HONEST PROVENANCE: this was GREEN BEFORE session BO and is green after.** It is a
+    STANDING GUARD over a property the design already had, not evidence of a fix — BO shipped no
+    bridge change. The case where this invariant is FALSE is pinned separately and deliberately,
+    by "an assignment change LURKS…" above, which asserts the `PLAY` that should not be there.
+    Read the two together: this one says what a switch must be, that one says what breaks it.
+  */
+  const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
+  await onAir(r); // `two`
+  const before = (await recvLines()).length;
+
+  expect(await r.setActiveLook('item-1', 'three')).toEqual({ ok: true });
+
+  const lines = await since(before);
+  expect(playsIn(lines), 'a switch is geometry, never a producer swap').toEqual([]);
+  expect(clearsIn(lines), 'and it destroys nothing either').toEqual([]);
+  // …and it DID do its job: the geometry moved.
+  expect(
+    lines.some((l) => /^MIXER 1-\d+ FILL /.test(l)),
+    'the fills moved',
+  ).toBe(true);
+});
+
+it('⭐ §3 positive control — a switch whose input DID change still emits its PLAY', async () => {
+  /*
+    Without this, "emits no `PLAY`" is satisfiable by emitting nothing at all, forever — a
+    reconcile that had stopped working entirely would pass the guard above and look healthy.
+    So the pair is the assertion: silent when nothing moved, loud when something did.
+  */
+  const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
+  await onAir(r);
+  // Compose solo onto an input NO look currently holds, so entering it must seat one.
+  expect(await r.swapLiveSource('item-1', 'live-3', 'src-4', 'solo')).toEqual({ ok: true });
+  // …and take the pre-seat away again, so the switch is the thing that must do the work.
+  await r.out('item-1');
+  await r.take('item-1');
+
+  const before = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+
+  const lines = await since(before);
+  expect(
+    playsIn(lines).length + (await recvLines()).filter((l) => l.includes('"route://5"')).length,
+    'the changed input reached the wire somewhere in this run',
+  ).toBeGreaterThan(0);
+});

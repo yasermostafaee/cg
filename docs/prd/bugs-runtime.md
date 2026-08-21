@@ -4436,7 +4436,7 @@ session rather than assumed silently.
   seat change may emit), [[B-145]] (the ledger records what was SENT, which is what makes the return
   trip work), [[B-151]] (the other half of "a surface disagreed with air", from the preview side).
 
-## [~] B-155 — a source change LURKS until the next LOOK press, which then applies it mid-switch and flashes the PREVIOUS GUEST on air ⟨priority: high — the wrong face, on air, from a button that was supposed to be a cut⟩ — OPEN. Session BM-2 established the mechanism and narrowed one path; NOTHING here is verified on the plant
+## [ ] B-155 — a source change LURKS until the next LOOK press, which then applies it mid-switch and flashes the PREVIOUS GUEST on air ⟨priority: high — the wrong face, on air, from a button that was supposed to be a cut⟩ — OPEN. Session BM-2 established the mechanism and narrowed one path; NOTHING here is verified on the plant
 
 **What the owner saw, on air.**
 
@@ -4535,3 +4535,61 @@ gap is one frame or twelve.
 - **Cross-refs:** [[B-126]] (a replace is never a CLEAR-then-ADD — the rule this one bounds rather
   than breaks), [[B-154]] (the other half of "a seat shows something it should not"), [[R-048]] (the
   emergency whose trade-off is the inverse of this one).
+
+## [x] B-156 — the Inspector's LOOK INPUTS badge said `ON AIR NOW` for a row the layer table called `READY` ⟨priority: medium — a surface claiming air for a graphic that is not on it⟩ — FIXED 2026-08-21 (session BO)
+
+**What the owner saw**, with a screenshot: in LOOK INPUTS, `look-2` badged **`ON AIR NOW`** while
+the same row's state in the layer table read **`READY`**. The row was loaded and selected; **nothing
+was on air.**
+
+**Why.** The badge was gated on `activeLookOf(carrier, item.activeLookId)`, which answers _which
+look this ROW is set to_ — and says nothing whatever about whether the row is PLAYING. So it was
+true the moment a row was loaded, and the words claimed air.
+
+🔴 **THE FILE'S OWN COMMENT ALREADY DREW THE DISTINCTION THE LABEL THEN IGNORED**, which is what
+makes this worth a number rather than a tidy-up. On the badge's colour:
+
+> _"NOT GREEN. Green is the layer table's ON AIR mark and means **"this row is playing"**; this says
+> **"of this row's looks, THIS is the one composited"**."_
+
+The COLOUR was chosen carefully to keep the two meanings apart — and then the TEXT asserted the
+very meaning the comment says the badge does not have. **Golden rule 6, on a label:** the words
+state a condition, so something must test THAT condition, and it must reuse the ONE canonical
+predicate rather than re-derive it locally. Nothing tested it at all.
+
+**Fixed as three states, both predicates IMPORTED:**
+
+| row state     | badge                            |
+| ------------- | -------------------------------- |
+| on air        | `ON AIR NOW` — true before, kept |
+| rehearsing    | `SHOWING IN PVW`                 |
+| loaded / idle | `SELECTED — A TAKE SHOWS THIS`   |
+
+- `isOnAir` is the layer table's own predicate (the LIVE PLATES section above already called it).
+- `isRehearsing` is `@cg/shared-ipc`'s — the one `LayersPanel` reads for the row picker's
+  `PVW LOOK` / `LOOK` label. It arrives as a **PROP** rather than a second subscription: the caller
+  already derives it for the row, so the Inspector's badge and the row's picker answer to ONE
+  derivation instead of two that agree until they do not. (Subscribing inside the section was
+  tried first and rejected — it coupled a presentational component to the bridge and broke every
+  test that renders it without one, which is its own argument.)
+
+⚠ **THE REHEARSING CASE IS THE `B-151` SHAPE AGAIN, and that is the finding worth carrying.**
+Session BL shipped the PVW-vs-air distinction on the row's own picker one session earlier; **this
+section never learned it.** One surface acquiring a state while its neighbour does not is now a
+recurring shape in this feature rather than an incident — `B-151` was PVW's overlay not knowing
+looks existed while air did.
+
+⚠ REHEARSING is checked before ON AIR. The order is safe rather than lucky: `R-022`'s interlock
+makes the pair unreachable (a rehearse is refused for an on-air row, a take for a rehearsing one),
+and that interlock is asserted on the WIRE in `live-look-reconcile.integration.test.ts` rather than
+assumed here.
+
+**Acceptance**
+
+- WHEN a row is loaded but not playing THEN the badge does not contain "ON AIR"
+- WHEN a row is on air THEN it says so
+- WHEN a row is rehearsing THEN it names PVW, not air
+- WHEN the on-air question is asked THEN it is asked of the same predicate the layer table uses
+
+- **Cross-refs:** [[B-151]] (the same shape one layer out — a surface that had not learned a state
+  its neighbour had), [[R-022]] (the interlock the three-state order rests on), [[R-048]].

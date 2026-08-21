@@ -122,6 +122,30 @@ export function LivePlatesSection({
   if (plates.length === 0) return null;
 
   /*
+    🔴 **SESSION BO §1 — THE COLLAPSE WAS NOT SHIPPED, AND §8's STOP RULE IS WHY.**
+
+    The owner decided that the Inspector must stop staging template-assignment edits for a row
+    whose template HAS LOOKS, so the on-air panel writes only per-row state. That removes
+    `B-155`'s cause at the panel, and the reasoning is sound: an installation-level edit was
+    riding an on-air action, and a look press was applying it mid-switch.
+
+    It was built and then REVERTED, because of what a sweep found: **this section is the ONLY
+    surface in the product that binds a plate to a source.** `SourcesModal` defines the
+    station's sources and merely LISTS which plates reference one (for its delete warning); it
+    has no picker. So removing this editor for looks templates leaves the template-level
+    default with **no door at all** — and §8 is explicit that taking away the only door is a
+    regression rather than a collapse.
+
+    The cost is not theoretical. Without a template assignment, every FRESH row carrying that
+    template starts with nothing bound, and its take is refused (`live-source-unassigned`)
+    until the operator sets a per-look binding for every plate of every look, by hand, per row.
+    That is exactly what a template-level default exists to prevent.
+
+    **Brought back to the owner with three options rather than chosen for him** — see the
+    handoff and `tasks.md` 7.16. In the meantime the defect is UNCHANGED and `B-155` stays
+    open: nothing here got worse, and nothing got better.
+  */
+  /*
     🔴 “ON AIR” IS ONLY SAID OF A ROW THAT IS. The patch line below states what is
     composited, which is not a claim an idle or loaded row can back — and an unbacked air
     claim on the panel the operator reads most is the one thing this surface must not do.

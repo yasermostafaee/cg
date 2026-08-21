@@ -100,6 +100,13 @@ interface Props {
    * rather than hiding a still-selected row — the two can never disagree.
    */
   onClose?: (() => void) | undefined;
+  /**
+   * `B-156` — is this row REHEARSING? Threaded from the caller, which already reads the
+   * canonical `isRehearsing(rehearsals, itemId)` for the row's own picker, so the Inspector's
+   * look badge and the row's `PVW LOOK` label answer to ONE derivation rather than two that
+   * agree until they do not.
+   */
+  rehearsing?: boolean | undefined;
 }
 
 const styles = {
@@ -302,7 +309,7 @@ function MetaChip({
  * registry doesn't know the template we fall back to type inference so the
  * inspector is never empty.
  */
-export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Element {
+export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Props): JSX.Element {
   const [info, setInfo] = useState<TemplateInfo | null>(null);
   /**
    * Every template this browser holds — read ONLY to answer "does another
@@ -462,7 +469,7 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
         <LivePlatesSection item={item} info={info} />
         {/* BM-2 — the per-look inputs sit BELOW the default they fall back to, so the two
             levels read top-down in the order they resolve. */}
-        <LooksBindingsSection item={item} info={info} />
+        <LooksBindingsSection item={item} info={info} rehearsing={rehearsing} />
         {/* `cg-inspector-section` carries the shared rhythm — the heading's rule,
             its tracking, and the largest gap in the gradient beneath it. Same
             class as POSITION, so the two sections cannot drift apart. */}

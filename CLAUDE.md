@@ -40,6 +40,15 @@ Persian / RTL is a core requirement.
    channel as death on another is what destroyed a working socket every ~13 s on
    every OSC-less install (see `B-101`, and `B-100` one layer up).
 
+9. **When the deliverable is a STRING, the compiler cannot help you.** Changing user-facing
+   wording obliges a tree-wide `git grep` for the OLD text — tests, docs, task lists and spec
+   files — BEFORE the commit, because the only thing that fails on a stale copy is a suite that
+   does not run locally. Session BM-2 changed one sentence in the Inspector, fixed the one unit
+   test that reddened, and pushed a red `e2e`: `pnpm gate` does not run Playwright (`P-028`), so
+   nothing local could catch it — **one grep would have**, and the same sweep also found a
+   `tasks.md` still quoting the old sentence as shipped fact. The rule is the sweep, not "run the
+   E2E": the E2E is slow and non-authoritative here, while the grep is cheap and total.
+
 ## Where features go
 
 | Feature kind                                    | Location                                                                                                                                                                                                                                                                                                                           |

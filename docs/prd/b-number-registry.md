@@ -1009,7 +1009,7 @@ direction — where a narrower grep missed two headings and nearly shipped a col
 **Verified free by the documented heading sweep, run immediately before the heading was written**
 over `docs/prd/*.md` excluding `README.md` and this file: `git grep "^## \[.\] B-15"` returned
 `B-150`…`B-153` and no `B-154`. `B-` stays contiguous `B-001` … `B-154`, **no gaps**.
-**Next free: `B-155`.** — CLAIMED by session BM-2 (the LOOK-press flash). **Next free: `B-156`.**
+**Next free: `B-155`.**
 
 ⚠ **The sweep for `B-154` ran while the number was ALREADY in this session's working tree** — in
 the fix's own code comments and test names, written before the heading. `git grep "B-154"` therefore
@@ -1017,3 +1017,26 @@ returned six hits, none of them a claim. That is the same shape as the previous 
 pointers, met from a third direction: **the occurrence count is never the answer; the heading sweep
 is.** A session that renumbers on a raw count would have skipped a free number here and left a gap
 behind it.
+
+## 2026-08-21 — `B-155` given the entry BM-2 never wrote, and `B-156` claimed (session BO)
+
+⚠ **`B-155` IS RECORDED HERE RETROSPECTIVELY, AND THAT IS THE POINT OF THE ENTRY.** Session BM-2
+claimed it by APPENDING a line inside the previous session's `B-154` section — _"**Next free:
+`B-155`.** — CLAIMED by session BM-2 … **Next free: `B-156`.**"_ — instead of opening its own dated
+section. Session BO restored `B-154`'s section to what that session actually wrote and moved the
+claim here. **A registry whose records are edited in place cannot be the audit trail it exists to
+be:** the value of every other entry is that it says what was true when it was written, and one
+in-place edit makes every entry a maybe.
+
+| Prefix | Claimed | Item                                                                | File                               |
+| ------ | ------- | ------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-155` | a source change lurks until the next LOOK press, and flashes on air | [bugs-runtime.md](bugs-runtime.md) |
+| `B-`   | `B-156` | the LOOK INPUTS badge said `ON AIR NOW` for a row that was READY    | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the documented heading sweep, run immediately before the heading was written**
+over `docs/prd/*.md` excluding `README.md` and this file: `git grep "^## \[.\] B-1"` reported
+`B-153`, `B-154`, `B-155` as the highest headings and no `B-156`. The only other occurrence of
+`B-156` in the tree was the "next free" POINTER on the line above — a pointer, not a claim, which is
+the distinction this registry has now recorded from four directions. `B-` stays contiguous
+`B-001` … `B-156`, **no gaps**.
+**Next free: `B-157`.**

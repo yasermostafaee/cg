@@ -83,7 +83,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function render(over: Parameters<typeof itemWith>[1] = {}): Promise<HTMLElement> {
+async function render(
+  over: Parameters<typeof itemWith>[1] = {},
+  props: { rehearsing?: boolean } = {},
+): Promise<HTMLElement> {
   initSources({
     sources: {
       config: () => Promise.resolve(CATALOG),
@@ -100,7 +103,7 @@ async function render(over: Parameters<typeof itemWith>[1] = {}): Promise<HTMLEl
   root = createRoot(host);
   const item = itemWith('on-air', { activeLookId: 'two', ...over });
   await act(async () => {
-    root?.render(createElement(LooksBindingsSection, { item, info: TEMPLATE }));
+    root?.render(createElement(LooksBindingsSection, { item, info: TEMPLATE, ...props }));
   });
   return host;
 }
@@ -217,4 +220,52 @@ it('🔴 §2.3 — editing a MASKED binding is ACCEPTED and staged, and says it 
   // accessible name only (`DraftChip` renders fixed text and carries its label on aria).
   expect(el.querySelector('[data-look-binding-waiting="l-1"]')).not.toBeNull();
   expect(el.textContent).toContain('takes effect when the patch is cleared');
+});
+
+// ───────── `B-156` — THE BADGE SAYS WHAT IS TRUE, IN EACH OF THE THREE ROW STATES ─────────
+
+/**
+ * The label used to read `ON AIR NOW` whenever `activeLookOf` picked the look — and that
+ * function answers *which look the ROW is set to*, never *whether the row is playing*. So a
+ * merely LOADED row claimed air, which the owner met with a screenshot: `ON AIR NOW` in the
+ * Inspector beside `READY` in the layer table.
+ *
+ * One test per state, because the defect was that two of the three were never distinguished.
+ */
+it('🔴 B-156 — a LOADED row does NOT claim air: the badge says a take would show it', async () => {
+  const el = await render({ status: 'loaded' });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge, 'the selected look is still marked').not.toBeNull();
+  expect(badge?.textContent, 'but it must not claim air').not.toContain('ON AIR');
+  expect(badge?.textContent).toContain('TAKE');
+  expect(badge?.getAttribute('data-look-badge')).toBe('not-on-air');
+});
+
+it('B-156 — an ON-AIR row DOES say so, which is the state the label was right about', async () => {
+  const el = await render({ status: 'on-air' });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge?.textContent).toContain('ON AIR NOW');
+  expect(badge?.getAttribute('data-look-badge')).toBe('on-air');
+});
+
+it('🔴 B-156 — a REHEARSING row says PVW, the distinction session BL shipped on the row', async () => {
+  /*
+    BL gave the row's own picker `PVW LOOK` vs `LOOK`, decided from `rehearsing`; this section
+    never learned it — the `B-151` shape, one surface knowing a state and its neighbour not.
+    `rehearsing` arrives as a PROP from the caller, which reads the canonical
+    `isRehearsing(rehearsals, itemId)`, so the badge and the row picker answer to ONE
+    derivation rather than two that agree until they do not.
+  */
+  const el = await render({ status: 'on-air' }, { rehearsing: true });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge?.textContent).toContain('PVW');
+  expect(badge?.textContent).not.toContain('ON AIR');
+  /*
+    ⚠ REHEARSING WINS OVER ON-AIR HERE, and that ordering is safe because `R-022`'s interlock
+    makes the pair unreachable — a rehearse is refused for an on-air row and a take for a
+    rehearsing one. The interlock itself is asserted on the WIRE in
+    `live-look-reconcile.integration.test.ts`; this asserts only what the badge does with the
+    answer, rather than assuming the pair cannot occur.
+  */
+  expect(badge?.getAttribute('data-look-badge')).toBe('not-on-air');
 });

@@ -30,6 +30,8 @@ import { useLock } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
 import { useOwnedOccupancy } from './hooks/useOwnedOccupancy.js';
 import { useStack } from './hooks/useStack.js';
+import { useRehearse } from './hooks/useRehearse.js';
+import { isRehearsing } from '@cg/shared-ipc';
 import { appShell } from './layout.js';
 
 declare global {
@@ -76,6 +78,8 @@ export function isEditable(target: EventTarget | null): boolean {
 
 export function App(): JSX.Element {
   const items = useStack();
+  // B-156 — read ONCE here and threaded to both the layer table and the Inspector.
+  const rehearsals = useRehearse();
   const lock = useLock();
   const health = useConnections();
   const link = useLink();
@@ -321,6 +325,8 @@ export function App(): JSX.Element {
               <Inspector
                 onClose={closeInspector}
                 item={selected}
+                // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.
+                rehearsing={selected !== null && isRehearsing(rehearsals, selected.itemId)}
                 onApply={(id) => {
                   const target = items.find((i) => i.itemId === id);
                   return target !== undefined
@@ -373,6 +379,8 @@ export function App(): JSX.Element {
               <Inspector
                 onClose={closeInspector}
                 item={selected}
+                // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.
+                rehearsing={selected !== null && isRehearsing(rehearsals, selected.itemId)}
                 onApply={(id) => {
                   const target = items.find((i) => i.itemId === id);
                   return target !== undefined
