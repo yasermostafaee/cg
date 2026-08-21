@@ -90,6 +90,13 @@ createRuntime (runtime.ts)  ─ the orchestrator
  ├─ RepeaterDriver (repeater-driver.ts)   one per repeater element: stamps a
  │      ROW SUBTREE per data item through wireScopeSubtree (count at play,
  │      values live); not a content source
+ ├─ LookMediaPark (look-media.ts)         LOOKS: content inside a look that is
+ │      NOT on screen is SILENCED (unconditional) and PAUSED (the policy half),
+ │      revived in place on the switch back. Membership is asked of the DOM
+ │      (Element.contains), never of a parallel table. Registered from each
+ │      driver build site; re-asserted after every path that starts content.
+ │      Never parks a HOLD-GATING driver (it would never complete, so the
+ │      graphic would never exit) and never parks a CLOCK at all — B-150
  ├─ LifecycleStateMachine (lifecycle.ts)  pending→playing→on-air→exiting→stopped
  │      plus exiting→playing: a play() SUPERSEDES an in-flight exit (the exit can
  │      last the whole background OUT segment). stop()/out() are guarded on
@@ -906,6 +913,14 @@ payloads are dropped silently (a broadcast frame can't write logs).
    countdown clock). If it creates SCOPES at runtime, stamp them through
    `wireScopeSubtree` and attach under the hosting `ScopeNode` (cf. the
    repeater).
+   3b. 🔴 **If the element RUNS (a playhead, a treadmill, a decoder), enrol it in the
+   `LookMediaPark`** beside the driver you just built (`look-media.ts`, `B-150`). Under
+   LOOKS every look a template authors is built and running while only one is visible, so a
+   new running kind that skips this quietly spends the frame budget on a picture nobody can
+   see. Register with the node whose look membership decides its fate, and with `parkable`
+   read from the SAME `drivesHold` the hold arrays use — a driver that gates a hold must
+   never be paused, or the graphic never comes off air. **A kind that must keep tracking real
+   time (the clock) is deliberately not enrolled**; if yours is like that, say so at the site.
 4. **Designer UI** — the canvas/inspector to author it (`apps/designer`).
 5. If it can be **animated/bound**, make sure `applyBaseStyles` / `animation-applier`
    / `bindings` handle its target properties (see below).

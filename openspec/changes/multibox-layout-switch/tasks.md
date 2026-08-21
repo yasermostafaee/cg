@@ -787,6 +787,22 @@ candidate shapes.
       `setActiveLook` had no operator caller at all, so no one could refuse a switch and then
       swap. The picker made it reachable.
 
+- [ ] 7.10 **The OPERATOR TOGGLE over the hidden-look pause policy — the half `B-150` deliberately
+      did NOT build.** The owner wants pausing a hidden look's media to be operator-selectable;
+      `B-150` implemented the BEHAVIOUR (silence unconditionally, pause on leave, resume in place)
+      and factored the seam, but added no policy field, config key or API, because an option
+      nothing reads is the written-but-unreachable class this repo has filed repeatedly.
+      **The seam, named so this does not have to be rediscovered:** `LookMediaPark` in
+      `packages/template-runtime/src/look-media.ts`. The toggle becomes a constructor option there
+      and governs the PAUSE half of `#park` alone.
+      🔴 **The SILENCE half is not a policy and must not become one.** It is a separate act from
+      the pause precisely so that an installation that opts to keep hidden looks DECODING still
+      emits no audio from a picture that is off screen. A toggle that reached the mute would be the
+      one change here that can put sound on air.
+      ⚠ And it must not reach the two exclusions either: content that gates a HOLD is never paused
+      (a paused driver never completes, so the graphic would never come off air), and clocks are
+      never parked at all. Both are correctness, not preference.
+
 ## 7. STAGE F — the CUT ships. STAGE G — the transition modes (§13.5)
 
 - [ ] 8.1 **KEEP the v1 `live-source-animated` refusal** and pin it with a test that a runtime
@@ -835,7 +851,35 @@ candidate shapes.
       reaches SDI needs a channel-side capture, and `PRINT` writes to the plant's own disk.
 - [ ] 9.2 Whether a **1-box arrangement LETTERBOXES** — the plant trace shows `FILL` ≡ `CLIP` for a
       1280×536 `AMB.mkv`, i.e. crop-to-fill is not being applied.
-- [ ] 9.3 🔴 Whether a **hidden `<video>` keeps DECODING** in CEF. Nothing in the tree pauses one — a
+- [x] 9.3 ✅ **CLOSED as a DEFECT, filed and fixed as `B-150` (2026-08-21, session BI) — and its
+      AUDIO half is SUPERSEDED, not delivered.** This was written as a measurement still owed; it
+      turned out to be a confirmed defect, so it is closed by the fix rather than by a number.
+      **What was true:** nothing stopped the content inside a hidden look. A hidden look's
+      `<video>` kept decoding, its Lottie kept computing a frame per tick, its crawl kept crawling
+      and its sequence kept advancing past items nobody saw. Fixed by ONE seam —
+      `LookMediaPark` (`packages/template-runtime/src/look-media.ts`) — which silences and pauses
+      content inside a look that is not on screen and revives it IN PLACE (`VideoDriver.resume()`
+      re-anchors to the media's actual position without seeking, so a switch back is seamless).
+      🔴 **What was NOT true — the paragraph below claimed the audio half was "the severe part".
+      IT IS NOT REACHABLE, on two independent grounds, both verified by sweep:** every imported
+      video has its audio track STRIPPED at conversion (`-an`, decision (h),
+      `video-convert-args.ts`), and every `<video>` the scene builder creates is `muted = true`
+      with **no unmute path anywhere in the tree** (`git grep "\.muted"` over `packages`, `apps`,
+      `tools` returns writes of `true` and nothing else; there is no `.volume =` write at all). So
+      the severity is a FRAME-BUDGET one, not a sound-on-air one — which also re-confirms, from a
+      second direction, that this was never the cause of the unexplained on-air "2×".
+      **The park still silences a hidden look unconditionally**, as a guarantee that survives the
+      operator toggle (7.10) rather than as a fix for a reachable fault.
+      **Two exclusions, both correctness:** content that GATES A HOLD is silenced but never paused
+      (a paused driver never completes, so the graphic would never come off air), and CLOCKS are
+      never parked — `ClockDriver.resume()` accrues the paused interval, so a parked duration
+      countdown would come back claiming time it does not have.
+      ⚠ **The decode LOAD itself is still unmeasured** and the suite says so: happy-dom has no
+      decoder, so the tests assert the API facts (`paused`, `muted`, `currentTime` not rewound) and
+      the step to "the decoder stopped spending frames" is the browser's contract. A real number
+      belongs on the plant's CEF beside §9.6f's own.
+      **The original text, kept because it is what was believed and half of it was wrong:**
+- [ ] ~~9.3~~ 🔴 Whether a **hidden `<video>` keeps DECODING** in CEF. Nothing in the tree pauses one — a
       `visible` binding writes `style.display` and the video driver is lifecycle-driven — so under A′
       every arrangement's background video may decode for as long as the row is up. §9.6f shows the
       frame budget is already the tight resource.

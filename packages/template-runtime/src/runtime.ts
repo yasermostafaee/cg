@@ -31,6 +31,7 @@ import {
 import { applyScopedFieldValues, isNamespace, type FieldDocLite } from './bindings.js';
 import { applyArrangementToNodes, liveArrangementView } from './arrangement-view.js';
 import { repunchLiveSourceHoles } from './live-source-punch.js';
+import { LookMediaPark } from './look-media.js';
 
 /**
  * Deep-merge a nested field-value patch into the current values. Plain objects
@@ -498,12 +499,25 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // `setArrangementView(undefined)` clears the look state too. No template authors both.
   const lookGroup = lookGroupOf(scene);
   let currentLookId: string | undefined;
+  /**
+   * `B-150` — content inside a look that is not on screen is PARKED. See `look-media.ts`
+   * for the whole argument; what belongs here is the wiring: the park learns which look
+   * instances are hidden from the same `visibility` map the punch is computed from, so the
+   * boxes that go dark and the drivers that go quiet can never be decided from two facts.
+   */
+  const lookMediaPark = new LookMediaPark();
   const applyLook = (look: Look): void => {
     if (lookGroup === undefined) return;
     const visibility: Record<string, boolean> = {};
     for (const l of lookGroup.looks) visibility[l.instanceId] = l.id === look.id;
     currentLookId = look.id;
     repunch({ visibility });
+    lookMediaPark.setHiddenRoots(
+      lookGroup.looks
+        .filter((l) => l.id !== look.id)
+        .map((l) => built.elementMap.get(l.instanceId))
+        .filter((n): n is HTMLElement => n !== undefined),
+    );
   };
   /**
    * `tasks.md` 6.7 — ENTER A LOOK BY ID. **The one implementation, two entry points.**
@@ -748,6 +762,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-105 — mark the content root so the coordinated exit (out/stop) can fade/hide it.
         t.band.dataset['cgContent'] = 'ticker';
         tickers.push(driver);
+        /*
+          `B-150` — a crawl still crawling in a hidden look is the same defect in a different
+          hat: the treadmill runs, the transform is recomputed every tick, and nobody sees it.
+
+          🔴 The `parkable` test INVERTS here, and the inversion is the whole reason this is
+          not a copy of the video line: a ticker's `drivesHold` is OPT-OUT (absent ⇒ it DOES
+          gate the hold), so most crawls are NOT parkable and are only silenced — which for a
+          soundless kind means nothing happens at all. Parking one that gates the hold would
+          keep the graphic on air forever (see `look-media.ts`). Read `!== false` here and
+          `!== true` there, exactly as the hold arrays do.
+        */
+        lookMediaPark.register({
+          node: t.band,
+          driver,
+          parkable: t.element.drivesHold === false,
+        });
         // B-034 — a HIDDEN content element (`visible: false`) is fully inert: it NEVER drives the
         // hold (its own or a parent's, regardless of `drivesHold` / `holdOverrides`), so it is
         // excluded from BOTH the own-hold array AND `contentDrivers` (no override can force it in).
@@ -949,6 +979,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         s.host.dataset['cgSequenceRepeat'] = String(effSeqRepeat);
         s.host.dataset['cgSequenceDwell'] = String(effDwellMs ?? s.element.defaultDwellMs);
         sequences.push(driver);
+        // `B-150` — a sequence rotating inside a hidden look is worse than wasted ticks: it
+        // advances past items nobody saw, so the operator returns to the look and finds it on
+        // item 7 instead of item 3. Same OPT-OUT hold rule as the ticker above.
+        lookMediaPark.register({
+          node: s.host,
+          driver,
+          parkable: s.element.drivesHold === false,
+        });
         // B-034 — a HIDDEN sequence is fully inert (never drives the hold, own or via an override).
         if (s.element.visible !== false) {
           // D-107 — joins the hold wait unless explicitly excluded.
@@ -1135,6 +1173,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         driver.poster();
         scopeLotties.push(driver);
         lotties.push(driver);
+        // `B-150` — a Lottie is a DRIVEN-FRAME renderer: hidden, it goes on computing a
+        // frame per tick and pushing `goToAndStop` into a node nobody can see. No audio, so
+        // no `audio` member — the silence half has nothing to act on here. `drivesHold` is
+        // OPT-IN for this kind too (D-125 §D2.1).
+        lookMediaPark.register({
+          node: l.container,
+          driver,
+          parkable: l.element.drivesHold !== true,
+        });
         // D-105 — mark the content root so the coordinated exit can select it.
         l.container.dataset['cgContent'] = 'lottie';
         // §D6.2 — a Lottie that OWNS an outro animates ITSELF off; guard it from the
@@ -1371,6 +1418,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         });
         scopeVideos.push(driver);
         videos.push(driver);
+        /*
+          `B-150` — the video joins the look park. The ONE kind with sound, so it is the one
+          that passes an `audio` element; `media` is both the node whose look membership is
+          asked and the thing to silence, which is what makes the two answers impossible to
+          split. Registered UNCONDITIONALLY, including a `visible: false` video: a member
+          outside every look instance is never parked, so this costs an authored-hidden
+          element nothing, while one hidden INSIDE a hidden look is parked correctly.
+        */
+        lookMediaPark.register({
+          node: media,
+          driver,
+          // OPT-IN, matching the hold arrays below. A video that gates the hold is silenced
+          // but never paused — a paused driver never completes (see `look-media.ts`).
+          parkable: el.drivesHold !== true,
+          audio: media,
+        });
         // media-phases-follow-composition — the at-rest poster shows the derived H (the held
         // look). The scene-builder wrote `holdAt ?? midpoint` (it has no comp anchors); the
         // runtime REFINES it here, before the host's poster seek reads the dataset.
@@ -1423,6 +1486,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           s.reset();
           s.start();
         }
+        // `B-150` — CONTENT-START CALLER 1 of 3. This just started every time-driven driver
+        // in the scope regardless of which look it sits in, so the park has to be re-asserted
+        // or a hidden look's crawl would run from here to the end of the graphic.
+        lookMediaPark.reassert();
       };
       const ownContentWait = (): Promise<void> | null =>
         holdTickers.length > 0 ||
@@ -1680,6 +1747,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             v.reset();
             v.start();
           }
+          // `B-150` — CONTENT-START CALLER 2 of 3: a loop-cycle boundary re-arms this scope's
+          // own media, which un-pauses whatever the park had frozen.
+          lookMediaPark.reassert();
         },
         clock: options.clock,
       });
@@ -2253,6 +2323,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           v.reset();
           v.start();
         }
+      /*
+        `B-150` — CONTENT-START CALLER 3 of 3, and the one that matters most: a run's `play()`
+        resets and starts EVERY driver in EVERY subtree, in every look, because the lifecycle
+        knows nothing about looks. Without this line the whole park would be undone at the
+        moment the graphic goes to air — which is precisely when it is worth having.
+      */
+      lookMediaPark.reassert();
       // Play the IN once and hold (no full-range loop, no auto-outro by default);
       // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
       // Absent lifecycle: the whole timeline is the entrance and the hold is its

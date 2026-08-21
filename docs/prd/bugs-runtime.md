@@ -4162,3 +4162,79 @@ confusion with another.
   One root cause with two spellings must not get two fixes — the same discipline the
   B-140 / Splitter cross-reference in `bugs-designer.md` records, in the other direction.
 -->
+
+## [x] B-150 — a look that is not on screen keeps decoding, crawling and rotating: nothing stops the content inside a hidden look ⟨priority: medium — a frame budget spent on pictures nobody can see; the AUDIO half of the original report is NOT reachable, see below⟩ — FIXED 2026-08-21 (session BI)
+
+**What.** `applyLook` shows exactly one look's composition instance and hides the rest with
+`display: none`. Hiding a node does not stop what is inside it, and nothing else did: a hidden
+look's `<video>` went on decoding, its Lottie went on computing a frame per tick and pushing
+`goToAndStop`, its crawl went on crawling and its sequence went on advancing past items nobody
+saw. Under LOOKS this is not an exotic case — every look a template authors is built and running,
+and only one of them is visible — while `design.md` §9.6f measured the frame budget as the tight
+resource (−4 % for interpolating holes, −10 % for a backdrop crossfade). A four-look template
+therefore paid for four pictures to put one on air.
+
+🔴 **The AUDIO half of the original report is NOT reachable, and this correction matters more
+than the fix.** `tasks.md` 9.3 raised this as _"a hidden look's `<video>` keeps PLAYING ITS
+AUDIO… the audio half is the severe part"_, and briefly made it a candidate for the owner's
+unexplained on-air "2×" report. It cannot happen, on two independent grounds, both verified by
+sweep rather than assumed:
+
+1. **Every imported video has its audio track STRIPPED at conversion** — `-an`, decision (h), in
+   `apps/designer/src/renderer/features/assets/video-convert-args.ts`.
+2. **Every `<video>` the scene builder creates is muted** (`scene-builder.ts`, `el.muted = true`)
+   and **nothing in the tree ever unmutes one**: `git grep "\.muted"` over `packages`, `apps` and
+   `tools` returns writes of `true` and nothing else, and there is no `.volume =` write at all.
+
+So the severity of this bug is a FRAME BUDGET one, not a sound-on-air one. 9.3's audio claim is
+superseded by this entry. The unexplained "2×" remains unexplained and this was never its cause.
+
+**Why it was worth fixing anyway.** The decode half is real and measurable on the plant, and it
+scales with the number of looks an author writes — the one axis this feature exists to let them
+increase.
+
+**Fixed by** `packages/template-runtime/src/look-media.ts` — one seam (`LookMediaPark`), which
+learns which look instances are hidden from the same `visibility` map the mask punch is computed
+from, and per member SILENCES it (unconditionally) and PAUSES it (the policy half). Membership is
+asked of the DOM (`Element.contains`), because `display: none` is a fact about the DOM and a
+parallel table could disagree with what is on screen. Revive uses each driver's own `resume()`,
+which for `VideoDriver` re-anchors its clock to the media's actual position without seeking — so a
+switch back is seamless rather than a jump to the top of the clip.
+
+**Two things are deliberately NOT parked, and both are load-bearing:**
+
+- **Content that gates a HOLD.** A paused driver never completes, and a content-driven hold waits
+  for completion — so parking a hold-gating driver inside a hidden look would keep the graphic on
+  air forever, which is far worse than a decoding video. The rule reads the same `drivesHold` the
+  hold arrays are built from. ⚠ Its bound: `D-112` lets a parent instance re-filter a child's hold
+  participation, so a member registered parkable can still be pulled into a parent's aggregation.
+- **Clocks, at all.** `ClockDriver.resume()` accrues the paused interval into `pausedAccumMs`,
+  which `activeElapsedMs()` subtracts — a parked duration countdown would come back claiming the
+  hidden interval as time it still has, and (a countdown being an opt-OUT hold driver) would
+  extend the graphic's life by the time it spent hidden. A clock tracks time that passes whether
+  or not anyone is looking.
+
+**Acceptance**
+
+- WHEN a look is not on screen THEN its `<video>` is paused and silent, and its crawl and sequence
+  are frozen
+- WHEN the operator switches back to a look THEN its clip continues from where it was rather than
+  restarting
+- WHEN a run's `play()`, a hold entry or a loop-cycle boundary restarts every driver THEN the park
+  still holds — those paths know nothing about looks
+- WHEN content inside a hidden look gates the hold THEN it is silenced but left running, so the
+  graphic still comes off air
+- WHEN a clock sits inside a hidden look THEN it keeps tracking the real time
+
+**What the tests do NOT cover.** happy-dom has no decoder, so the decode LOAD — the thing that
+makes this worth fixing — is unmeasurable in the suite and is not measured. The tests assert the
+API facts the claim rests on (`paused`, `muted`, `currentTime` not rewound); the step from "the
+element is paused" to "the decoder stopped spending frames" is the browser's contract. A real
+number belongs on the plant's CEF beside §9.6f's own.
+
+- **Cross-refs:** [[R-057]] (the arrangement/look switch this arises in — the operator half),
+  [[B-149]] (the other on-air defect the same feature introduced, and the same lesson: the thing
+  that hides a box must also govern what is behind it), [[D-128]] (the video lifecycle and its
+  pause/resume contract), [[D-125]] (the Lottie driver, the same duck-typed seam). Supersedes the
+  audio half of `multibox-layout-switch` `tasks.md` 9.3 and closes its decode half; the operator
+  toggle over the pause policy is recorded as that change's task 7.10.

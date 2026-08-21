@@ -956,3 +956,26 @@ five times, and the reason the rule is "highest HEADING", not "any occurrence". 
 contiguous `B-001` … `B-144`, **no gaps. Next free: `B-145`.**
 
 The owner supplied the number and the sweep agreed, so nothing was minted here.
+
+## 2026-08-21 — one number claimed (`B-150`)
+
+| Prefix | Claimed | Item                                                                    | File                               |
+| ------ | ------- | ----------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-150` | content inside a look that is not on screen keeps decoding and crawling | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the documented heading sweep, run immediately before the heading was written**
+over `docs/prd/*.md` excluding `README.md` and this file: the highest `B-` heading was `B-149`
+(in [bugs-designer.md](bugs-designer.md)), and `git grep -c "B-150" -- docs` returned no match at
+all (exit 1). `B-` stays contiguous `B-001` … `B-150`, **no gaps**. **Next free: `B-151`.** ⚠ That
+pointer is a record of this sweep, not a licence — the next filing sweeps again, per the doctrine
+recorded above.
+
+🔴 **A COLLISION WAS CAUGHT BY THIS SWEEP, and it is the reason the rule reads "sweep before AND
+after".** The session had already written `B-148` into `look-media.ts`, `runtime.ts` and its test
+file, on a number derived from a partial scan that matched only list-item forms in `docs/prd/` and
+therefore missed both `B-148` and `B-149` — which are HEADINGS in
+[bugs-designer.md](bugs-designer.md). Ten occurrences across three files were renumbered to
+`B-150` before the heading was written, so nothing shipped under the wrong id. The lesson is the
+one this registry keeps re-learning from a new direction: **a number is free because a sweep of
+the HEADINGS says so** — a narrower grep that "looks like" the sweep is not the sweep, and a
+forward reference written before the heading exists is exactly where the wrong number hides.

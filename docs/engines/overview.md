@@ -111,6 +111,17 @@ the editor UI and the runtime renderer (the "Where features go" map in
   whose `playOutro()` never settles would otherwise strand the exit — and, because
   `stop()`/`out()` are guarded on the lifecycle state, take every later operator command
   with it — so the bound fires an `error` event and lets the exit proceed,
+- **parks the content of a LOOK that is not on screen** — `B-150`: a look switch shows one
+  composition instance and hides the rest with `display: none`, and hiding a node stops
+  nothing inside it. `LookMediaPark` (`look-media.ts`) SILENCES hidden content
+  unconditionally and PAUSES it as the policy half, reviving it IN PLACE — `VideoDriver`
+  re-anchors to the media position rather than seeking, so a switch back is seamless.
+  Membership is asked of the DOM (`Element.contains`) because `display: none` is a DOM fact
+  and a parallel table could disagree with what is on screen. 🔴 Two things are deliberately
+  never parked: content that GATES A HOLD (a paused driver never completes, so the graphic
+  would never come off air) and CLOCKS (a parked countdown returns claiming time it does not
+  have). ⚠ The pause is the half a future operator toggle governs; the silence is not a
+  policy and must not become one,
 - cascades all of the above through **nested composition instances**.
 
 The renderer talks to its "backend" only through the typed `window.cg` bridge; the
