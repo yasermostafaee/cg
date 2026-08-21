@@ -4208,6 +4208,12 @@ switch back is seamless rather than a jump to the top of the clip.
   air forever, which is far worse than a decoding video. The rule reads the same `drivesHold` the
   hold arrays are built from. ⚠ Its bound: `D-112` lets a parent instance re-filter a child's hold
   participation, so a member registered parkable can still be pulled into a parent's aggregation.
+  🔴 **And the practical consequence, because the rule above flatters itself:** video and Lottie
+  have an OPT-IN `drivesHold`, so they are parked by DEFAULT and the media half of this bug is
+  fully covered. Ticker and sequence have the INVERSE default (absent ⇒ they gate the hold), so an
+  ORDINARY CRAWL IN A HIDDEN LOOK IS STILL CRAWLING — only one the author explicitly excluded from
+  the hold is frozen. Closing that means making hold membership follow visibility at RUNTIME, which
+  changes when a graphic comes off air; it is deliberately not folded in here.
 - **Clocks, at all.** `ClockDriver.resume()` accrues the paused interval into `pausedAccumMs`,
   which `activeElapsedMs()` subtracts — a parked duration countdown would come back claiming the
   hidden interval as time it still has, and (a countdown being an opt-OUT hold driver) would

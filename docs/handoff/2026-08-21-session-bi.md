@@ -13,7 +13,9 @@
 | Tip read at start        | `50dd8b5d` — one commit ahead of the prompt's expected `0b6da499`, and that commit is session BH's own docs push (the `gate:e2e` discharge + the flake record). Named rather than assumed.  |
 | CI verdict on `0b6da499` | ✅ run [32424237246](https://github.com/yasermostafaee/cg/actions/runs/32424237246) — `completed` + `success`, **`E2E (Playwright)` RAN** and passed. Part one was built on a verified tip. |
 | Part one pushed          | `c3425891` — `fix(bridge): a refused look switch leaves nothing a later swap can act on`                                                                                                    |
-| Part two pushed          | **see §7** — the final SHA and its `gate:e2e` run                                                                                                                                           |
+| Part two pushed          | `e04760e0`, then two prompt-cadence fixes superseding my own just-pushed defects: `69ec3a14` (§2e) and `9d2d23a6` (§2f)                                                                     |
+| **Final tip**            | **`9d2d23a6`** — `git ls-remote origin dev` = local = `9d2d23a61958425934a5f4828767fc33babc4f69`, tree clean                                                                                |
+| **Linux `gate:e2e`**     | ✅ **DISCHARGED** — [run 32433581571](https://github.com/yasermostafaee/cg/actions/runs/32433581571) on `9d2d23a6`, `completed` + `success`, **`E2E (Playwright)` RAN** and passed          |
 | `@cg/template-runtime`   | **CHANGED** — so the `prebuild` bundle ships the page half, verified in §6                                                                                                                  |
 
 ## 1. Part one — `tasks.md` 7.9, fixed at cause
@@ -95,6 +97,15 @@ exactly that reason.
 | Repeater       | its own `pause()`/`resume()` are explicit no-ops                    | n/a — its ROWS wire through the same path and are covered by containment |
 | **Clock**      | keeps ticking                                                       | 🔴 **deliberately NOT parked** — see below                               |
 
+🔴 **What that means in practice, stated plainly because the table flatters it.** Video and Lottie
+have an OPT-IN `drivesHold`, so they are parked **by default** — the media half of BF is fully
+covered. Ticker and sequence have the INVERSE default (absent ⇒ they gate the hold), so an ordinary
+crawl in a hidden look is **still crawling**, and only one the author explicitly excluded from the
+hold is frozen. That is not a gap left by accident: parking a hold-gating driver would keep the
+graphic on air forever, which is worse than the load it saves. Making hold membership follow
+visibility at runtime would close it and is a real change to when a graphic comes off air — not
+this one's.
+
 🔴 **Two exclusions, both correctness rather than preference:**
 
 - **Content that gates a HOLD is never paused.** A paused driver never completes and a
@@ -150,6 +161,16 @@ reproduces the bug exactly and reddens it. Narrow in practice (the A′ path is 
 template authors both), but it is the same principle as part one — one derivation, one seam — so it
 was fixed rather than documented.
 
+### 2f. And a `parkedCount()` accessor, removed unused
+
+`LookMediaPark` shipped with a "test/diagnostic surface" nothing called — the
+written-but-unreachable class §4.3 of the prompt names, and the same rule that kept a policy field
+out of this change. Removed in `9d2d23a6`, with a note left where it stood: the tests assert what
+the OPERATOR would see (`paused`, `muted`, a crawl's transform), and an accessor reporting this
+class's own bookkeeping would have let a test pass while the DOM said otherwise — the exact failure
+the DOM-containment membership test exists to rule out. If a future change needs to observe the
+park, observe its EFFECT.
+
 ## 3. Filing
 
 - **`B-150`** in `docs/prd/bugs-runtime.md`, cross-referenced to `R-057`, `B-149`, `D-128`, `D-125`.
@@ -199,9 +220,12 @@ banned modern built-in entered the on-air page.
   `@cg/single-file-export` and `@cg/soak-runner` for the bundle scan and the number audit — plus
   `pnpm gate`, which runs everything. ⚠ Session BH's CI red was a row-count assertion in an
   existing spec that a spec-only run never touched; that is why this is stated explicitly.
-- **`gate:e2e` is OWED** — part two changes `@cg/template-runtime`, i.e. what renders. The run URL
-  and conclusion are in §0 once CI completes; a green run predating the last fix does not discharge
-  it.
+- **`gate:e2e` — OWED and DISCHARGED.** Part two changes `@cg/template-runtime`, i.e. what renders.
+  [Run 32433581571](https://github.com/yasermostafaee/cg/actions/runs/32433581571) on **`9d2d23a6`**
+  is `completed` + `success` with the **`E2E (Playwright)` job RUN** (not skipped). ⚠ Three earlier
+  runs this session are also green with E2E run — `c3425891`, `e04760e0`, `69ec3a14` — and **none of
+  them discharges it**, because each predates a later fix. The cited run is the one on the tip that
+  carries every change.
 
 ## 8. What the tests do NOT cover
 

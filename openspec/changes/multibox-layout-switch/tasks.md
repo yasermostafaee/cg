@@ -900,6 +900,17 @@ candidate shapes.
       and resuming on re-entry is §12.4's "held" shape applied to media, and it has to answer
       whether a returning clip RESUMES or RESTARTS. That belongs with the operator surface, not
       folded silently into a bug hunt.
+
+  > ✅ **Linux `gate:e2e` DISCHARGED for 7.9, 7.10's filing and 9.3 / `B-150` (session BI):**
+  > <https://github.com/yasermostafaee/cg/actions/runs/32433581571> — head `9d2d23a6`, the tip
+  > carrying every change of the session, `completed` + `success`, and the **`E2E (Playwright)` job
+  > RAN** (not skipped).
+  >
+  > ⚠ **Three EARLIER runs this session are also green with the e2e job run — `c3425891`,
+  > `e04760e0`, `69ec3a14` — and NONE of them discharges the debt**, because each predates a later
+  > fix. Recorded rather than omitted, so the next reader can see that the cited run was chosen by
+  > the rule and not by whichever green run came to hand first.
+
 - [ ] 9.4 The pixel confirmation that a **`LOADBG` background producer is NOT composited**. ⚠ It
       **cannot change §12.9.6's verdict on D** — D loses under both branches — so this is
       completeness, not a blocker.
