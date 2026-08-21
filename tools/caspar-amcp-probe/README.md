@@ -279,3 +279,99 @@ readable, so `live-probe-lib.mjs`'s capture half went unused and every reading a
 command- or renderer-side. The `mask-luminance` transfer curve is read through an
 **SVG-mask → canvas proxy** in the same engine, and is labelled as a proxy wherever it is
 cited.
+
+---
+
+# The confidence-grab measurement kit — `bin/confidence-probe.mjs` (C-016 · C-023)
+
+**For an installer at any station, not only the one this was written at.**
+
+`C-016` (an operator PGM confidence view) requires that the capture mechanism's **cost on the
+playout machine has been MEASURED on real hardware BEFORE the mechanism is fixed**. This is the
+instrument that obtains those numbers. `C-023` (a confidence thumbnail per live source) rides the
+same grab path deliberately rather than forking its own, so §3.4 below is its whole question.
+
+It **chooses nothing and fixes nothing.** Every line it prints is a measurement or a verbatim
+server reply.
+
+## Why it is a committed tool rather than a session's scratch script
+
+Owner constraint, 2026-08-21: _"This product is not only for one particular network. It may be sold
+to different networks, each of which has different facilities."_ A station with a monitor wall and a
+station with none are both targets, so the deliverable could not be "the answer for this plant". If
+you are installing at a different box — different channel format, weaker playout machine — **run
+this and get your own numbers**; do not inherit ours.
+
+## Safety, because this runs against a machine that may be on air
+
+- It **never `PLAY`s anything on the channel it is measuring.** A grab is a read.
+- It **never sends a bare channel-wide `CLEAR`.** Every clear names a layer.
+- §3.4 **refuses** to run without a `--probe-channel` that differs from `--channel`, because both
+  of its paths `PLAY` a producer. No probe channel ⇒ that phase records itself SKIPPED with the
+  reason. This is a branch in the code, not a rule you have to remember.
+
+## 🔴 It does not know a grab verb, and that is the point
+
+The verb is **discovered**: it asks the server (`VERSION`, then `HELP`), filters the server's own
+enumeration for grab-shaped tokens, and tries **only tokens the server printed**, in their narrowest
+form. If nothing matches, it emits a FINDING and stops.
+
+**A build with no grab command is a real result for C-016.** Guessing an AMCP verb into a procedure
+somebody pastes at a live plant is the worst available outcome, so this will not do it — and the
+test suite pins that behaviour rather than trusting the comment.
+
+The same discipline covers the **dropped-frame counter**: nothing here knows what one is called on
+your build, so it captures `INFO` verbatim plus every OSC address your channel emits, before and
+after each phase, and prints the addresses whose value **changed**. A counter gets found, not
+assumed.
+
+## Run it
+
+```
+pnpm --filter @cg/caspar-amcp-probe build
+node tools\caspar-amcp-probe\bin\confidence-probe.mjs --help
+```
+
+```
+node tools\caspar-amcp-probe\bin\confidence-probe.mjs --caspar-host 127.0.0.1 --caspar-port 5250 --channel 1 --probe-channel 2 --media-root "D:\casparcg\media" --out C:\cg-recon\confidence.json
+```
+
+| flag                  | meaning                                                                     |
+| --------------------- | --------------------------------------------------------------------------- |
+| `--channel`           | the channel to MEASURE, normally programme. Never played onto.              |
+| `--probe-channel`     | a channel carrying NO air. Needed for the under-load case and for §3.4.     |
+| `--route-from-layer`  | the air layer §3.4(a) routes FROM. Omit to skip that path.                  |
+| `--input-arg`         | a producer argument for §3.4(b) — the physical input, opened a second time. |
+| `--load-template-url` | an html URL to animate for the under-load case. Omit to skip it honestly.   |
+| `--cadence-ms`        | default 300000. **Do not shorten it** — see below.                          |
+| `--media-root`        | semicolon-separated dirs to look for the produced artifact in.              |
+| `--out`               | where to write the machine-readable JSON.                                   |
+
+## What each number means, and what a bad one implies
+
+- **§3.1 ACCEPTED verb.** `NONE` means this build has no grab command the server will admit to.
+  C-016 cannot be built on this box as specified; that is a finding, not a bug in the kit.
+- **§3.2 latency, at rest vs under load.** How long one grab blocks. If the under-load figure is
+  much worse than the at-rest one, a grab competes with rendering and the cadence bar is at risk.
+- **§3.2 / §3.3 "OSC addresses that CHANGED".** This is where a dropped-frame counter shows up. **A
+  counter that moves during a grab means the grab costs frames on air** — the thing C-016's
+  RECON-FIRST clause exists to catch before a mechanism is chosen.
+- **§3.3 first-half vs last-half latency, and whether a drop count GROWS.** This decides whether
+  C-016's "~1 s" bar is affordable **at all**, which is why the default duration is five minutes.
+  A cost that is flat for thirty seconds and climbs at four minutes is the failure mode a short run
+  cannot see. **Shortening this measurement destroys its only purpose.**
+- **§3.4(b) verdict.** Whether this hardware will open one physical input a SECOND time. It answers
+  a question left open since session BM — and it decides whether the `live-source-duplicate`
+  refusal is a **hardware fact** or a **policy choice**. A refusal here is as valuable as a success;
+  record the verbatim reply either way.
+- **§3.5 artifact.** Format, dimensions, bytes. ⚠ And a finding read from the code rather than
+  measured: **the bridge's HTTP server has no filesystem root** — `template-http-server.ts` serves
+  only `/template/<id>` from memory — so wherever the grab lands, C-016 needs a route that does not
+  exist yet.
+
+## The runbook
+
+`docs/recon/2026-08-22-confidence-grab-measurement.md` is the form to fill in at the box, and it
+carries two more sections this kit does not drive: the **2× discriminator** (§B) and the **AMCP
+probes the repo already owes** (§C — `DEFER`/`COMMIT` scope, `PLAY`-on-occupied, the `CLIP`
+intersection probe, and `B-155`'s frame count).
