@@ -176,9 +176,15 @@ export class LookMediaPark {
     // visible jump to the top of the clip.
     member.driver.resume();
   }
-
-  /** Test/diagnostic surface: how many members are parked right now. */
-  parkedCount(): number {
-    return this.#paused.size;
-  }
 }
+
+/*
+  ⚠ **A `parkedCount()` "test/diagnostic surface" was written here and REMOVED, unused.**
+  Noted rather than silently deleted, because the pull towards it is real and the next reader
+  will feel it too. Nothing called it: the tests assert what the operator would see — a
+  `<video>`'s `paused`/`muted`, a crawl's transform — and an accessor reporting this class's
+  own bookkeeping would have let a test pass while the DOM said otherwise, which is the exact
+  failure the DOM-containment membership test exists to rule out. It is also the
+  written-but-unreachable class this repo has filed repeatedly. If a future change needs to
+  observe the park, observe its EFFECT.
+*/
