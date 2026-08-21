@@ -190,6 +190,18 @@ export class MockRuntime {
   /** Session BM — the per-look composition, mirroring the bridge. */
   readonly #lookSourceBindings = new Map<string, Record<string, Record<string, string>>>();
   /**
+   * 🔴 **SESSION BP parity — the template assignment this row FROZE at take (level 2).**
+   *
+   * The mock seats no producers, so it cannot demonstrate the freeze on a wire it does not
+   * have. What it MUST model is the published FIELD and its lifetime — written at take,
+   * thawed at a landed `out`/`stop`, dropped at `remove` — because the Inspector reads that
+   * field to say which plates of an on-air row are resolving something other than the live
+   * template default. A mock that never published it would leave the offline Runtime showing
+   * the LIVE default for a frozen row: the surface-is-confidently-wrong outcome, reached in
+   * test mode only, which is the precise mistake `B-070`'s note above is about.
+   */
+  readonly #frozenAssignments = new Map<string, Record<string, string>>();
+  /**
    * §14 (LOOKS) Stage E parity — itemId → the look the OPERATOR picked.
    *
    * Only explicit picks live here, exactly as on the bridge. What a row is SHOWING is a
@@ -229,11 +241,14 @@ export class MockRuntime {
       const plateVolumes = this.#plateVolumes.get(i.itemId);
       // §14 (LOOKS) Stage E parity — through the RESOLVER, never the raw pick map.
       const activeLookId = this.resolvedActiveLook(i.itemId);
+      // Session BP parity — the FROZEN level 2, so the Inspector can name it offline too.
+      const frozenAssignment = this.#frozenAssignments.get(i.itemId);
       return {
         ...i,
         ...(position !== undefined && { position }),
         ...(sourceOverride !== undefined && { sourceOverride }),
         ...(lookSourceOverride !== undefined && { lookSourceOverride }),
+        ...(frozenAssignment !== undefined && { frozenAssignment }),
         ...(plateVolumes !== undefined && { plateVolumes }),
         ...(activeLookId !== undefined && { activeLookId }),
       };
@@ -267,6 +282,11 @@ export class MockRuntime {
     this.#settleSlotObservation(itemId, 'producer');
     this.#transition(itemId, 'playing', true);
     this.#audit.unshift(auditEntry('take', { itemId, templateId: item.templateId }));
+    // 🔴 SESSION BP parity — THE TAKE PINS LEVEL 2. A row that is on air does not change its
+    // picture because somebody edited configuration, and the take is the only writer.
+    // Deliberately a SET rather than set-if-absent: a re-take re-freezes, which is the
+    // operator's way to adopt an edited default.
+    this.#frozenAssignments.set(itemId, this.#assignmentMapFor(item.templateId));
     // C-015 parity — the take is what SEATS the plates.
     this.#seatLivePlates(itemId);
     this.#settle(itemId, 'on-air');
@@ -349,6 +369,9 @@ export class MockRuntime {
     // C-015 parity — `#stopItemImpl` awaits `teardownLiveLayers`, so the plates come
     // down WITH the graphic even though the template producer survives below.
     this.#releaseLivePlates(itemId);
+    // SESSION BP parity — off air, so level 2 thaws. The resident producer is beside the
+    // point: what the freeze protects is the PICTURE, and there is no longer one.
+    this.#thawAssignment(itemId);
     // The producer survives, so `#loaded` is deliberately NOT cleared.
     this.#settle(itemId, 'loaded');
     return { accepted: true };
@@ -385,6 +408,9 @@ export class MockRuntime {
     this.#audit.unshift(auditEntry('out', { itemId, templateId: item.templateId }));
     // C-015 parity — `#outImpl` takes the live layers down FIRST, then the graphic.
     this.#releaseLivePlates(itemId);
+    // SESSION BP parity — and level 2 thaws: an assignment edit now lands at the next take,
+    // which is what the Inspector has always promised for an off-air row.
+    this.#thawAssignment(itemId);
     this.#settle(itemId, 'idle');
     // B-056 parity — the mock's simulated servers are healthy, so an out's
     // CLEAR "lands on the primary": the item's warning provably resolves.
@@ -397,6 +423,9 @@ export class MockRuntime {
     this.#stack = this.#stack.filter((i) => i.itemId !== itemId);
     if (item !== null)
       this.#audit.unshift(auditEntry('remove', { itemId, templateId: item.templateId }));
+    // SESSION BP parity — the frozen level 2 dies with the item, so a re-used itemId never
+    // inherits a retired show's assignment.
+    this.#frozenAssignments.delete(itemId);
     this.#emitStack();
     // B-056 parity — the item is gone / its layer deallocated.
     this.#resolveOwnedOccupancy(itemId);
@@ -756,6 +785,30 @@ export class MockRuntime {
    * "On screen". A mock that teaches a different — and more dangerous — mental model
    * than air is precisely what `playoutClear`’s parity note forbids.
    */
+  /**
+   * SESSION BP parity — the template's `{plate → catalog id}` as the store has it NOW.
+   *
+   * Read through `sourceAssignments()`, which prunes against the catalog in force, so the
+   * snapshot a mock take freezes is the same answer a mock read would have given — never a
+   * raw `localStorage` peek that could pin a plate the catalog has already retired.
+   */
+  #assignmentMapFor(templateId: string): Record<string, string> {
+    const map: Record<string, string> = {};
+    for (const a of this.sourceAssignments().assignments) {
+      if (a.templateId === templateId) map[a.plateId] = a.sourceId;
+    }
+    return map;
+  }
+
+  /**
+   * SESSION BP parity — off air, so level 2 resolves live again. ONE method for both verbs
+   * that take a row off, exactly as the bridge's `#thawAssignment` is; the mock's sends
+   * always land, so there is no failure branch to mirror here.
+   */
+  #thawAssignment(itemId: string): void {
+    this.#frozenAssignments.delete(itemId);
+  }
+
   #seatLivePlates(itemId: string): void {
     if (!this.#liveLayerSeed.some((r) => r.itemId === itemId)) return;
     if (this.#liveSeatedItems.has(itemId)) return;

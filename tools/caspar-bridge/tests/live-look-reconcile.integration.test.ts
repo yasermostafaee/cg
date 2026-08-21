@@ -983,21 +983,60 @@ it('🔴 an ON-AIR row with an EMPTY ledger still reconciles — status, not sea
   // On air, and the ledger names nothing — the state the old guard mistook for "not on air".
   expect(r.liveLayers().has('item-1')).toBe(false);
   expect(r.activeLookId('item-1')).toBe('empty');
-  // The assignments arrive after the take — a catalog edit while the row is up.
+  /*
+    🔴 **SESSION BP REBUILT THIS FIXTURE, AND THE SUBJECT IS UNCHANGED. Read this before
+    "restoring" the old shape.**
+
+    It used to assign the plates HERE, after the take, and prove the switch reconciled by
+    counting the two `PLAY`s that followed. That fixture depended on the very mechanism `BP`
+    abolished: an assignment edited while the row is on air reaching that row's next
+    reconcile. The row now FREEZES level 2 at its take — it was taken with nothing assigned,
+    so nothing is assigned for this run, and the edit below lands at its NEXT take.
+
+    The subject of this test is not the assignment. It is that `setActiveLook` decides
+    "is this row on air" from its STATUS and not from an empty ledger. That is asserted more
+    sharply now than by counting sends: a short-circuit returns `{ok: true}` having sent
+    NOTHING, so a REFUSAL naming the unassigned plates is positive proof the plan was built
+    and evaluated. The old spelling could not tell "reconciled and seated" from "reconciled
+    and refused"; this can, and both are correct outcomes for a row that reached the planner.
+  */
+  const before = (await recvLines()).length;
+
+  const refused = await r.setActiveLook('item-1', 'two');
+  expect(refused.ok, 'the reconcile RAN — a short-circuit would have said ok').toBe(false);
+  expect(refused.reason).toBe('live-source-unassigned');
+  expect(playsIn(await since(before)), 'and a refused switch seats nothing').toEqual([]);
+  // 🔴 …and the row did NOT move: a refused switch records nothing (`tasks.md` 7.9).
+  expect(r.activeLookId('item-1')).toBe('empty');
+
+  /*
+    THE POSITIVE CONTROL — the same row, the same switch, once the assignment is in force for
+    it. This is where the two `PLAY`s the old spelling counted still get counted; what changed
+    is only WHEN the assignment becomes this row's, which is now its own take.
+  */
   r.setSourceAssignments(
     assign([
       ['live-1', 'src-1'],
       ['live-2', 'src-2'],
     ]),
   );
-  const before = (await recvLines()).length;
-
+  const beforeRetake = (await recvLines()).length;
+  expect((await r.take('item-1')).accepted).toBe(true);
   expect(await r.setActiveLook('item-1', 'two')).toEqual({ ok: true });
 
-  const lines = await since(before);
+  /*
+    ⚠ THE TWO `PLAY`s LAND ON THE RE-TAKE, NOT ON THE SWITCH, and that is (B′) working
+    rather than a weaker assertion. The seat set is the union over EVERY look, so re-taking
+    on `empty` seats both of `two`'s plates PARKED — and the switch that follows is then the
+    pure `MIXER FILL` a switch is supposed to be. Baselining across both is what makes the
+    count independent of which of the two actions does the seating.
+  */
+  const lines = await since(beforeRetake);
   expect(playsIn(lines), 'both plates must actually be seated').toHaveLength(2);
   expect(layerSet(r)).toEqual([BAND.start, BAND.start + 1]);
+  // …and they are PUNCHED after the switch, not left parked.
   expect(recordOf(r, 'live-1')?.held ?? false).toBe(false);
+  expect(recordOf(r, 'live-2')?.held ?? false).toBe(false);
 });
 
 it('🔴 an emergency swap is NOT refused because an UNRELATED plate lost its assignment', async () => {
@@ -1884,26 +1923,40 @@ it('🔴 §6.7 — a DISJOINT switch with per-look bindings AND an emergency ove
 
 // ───────── PATCH 01 — THE FLASH, AND THE LOOK BUTTON AS A SECOND APPLY PATH ─────────
 
-it('🔴 B-155 — an assignment change LURKS, and the next look press applies it MID-SWITCH', async () => {
+it('🔴 B-155 — the assignment change no longer LURKS: the look press is a pure cut', async () => {
   /*
     🔴 THE OWNER, ON AIR: _"If I change the sources and press UPDATE, nothing happens — but
     pressing the LOOK buttons performs a take again. If I'm on 2-box, change `l-1`'s source
     and press look-1, then when we go to solo it shows the OLD source for a moment and then
     switches to the new one."_
 
-    This pins the MECHANISM, which is one defect seen from two ends:
+    The MECHANISM was one defect seen from two ends:
 
     - `setSourceAssignments` writes the map and emits. It does NOT reconcile. So the change
-      reaches nothing until the NEXT reconcile from ANY cause — and a look press is one. That
-      is the second apply path: the LOOK button performs an apply nobody designed it to do.
-    - And because the change lands DURING the switch, the seat's producer changes INSIDE the
+      reached nothing until the NEXT reconcile from ANY cause — and a look press is one. That
+      was the second apply path: the LOOK button performing an apply nobody designed it to do.
+    - And because the change landed DURING the switch, the seat's producer changed INSIDE the
       switch: a `PLAY` (a replace, `B-126`) with the hole moving on top of it. An ordinary
-      (B′) switch is pure `MIXER FILL` and cannot flash — the flash needs a producer change
-      in the same action, which is exactly what the lurking assignment creates.
+      (B′) switch is pure `MIXER FILL` and cannot flash — the flash needs a producer change in
+      the same action, which is exactly what the lurking assignment created.
 
-    ⚠ **WHAT THIS TEST DOES NOT PROVE: how many FRAMES the flash lasts.** That is a property
-    of the server's `PLAY`-as-replace timing, and the mock models the replace as instant. The
-    frame count is a PLANT measurement and is owed — see `B-155`.
+    ── 🔴 SESSION BP INVERTED THIS TEST, AND THAT IS WHY IT READS AS IT DOES ────
+
+    It asserted the DEFECT — that the look press issued a `PLAY` carrying the edited source —
+    which was the right shape while nothing had been fixed and the repro had to be pinned
+    before the cause could be removed. The cause is now removed: the row FREEZES level 2 at
+    its take, so the edit below reaches this row at its next take and never inside a switch.
+    Leaving the old assertion would have left a test demanding the flash, which is how a
+    superseded requirement quietly becomes the specification again.
+
+    The BEFORE half is kept verbatim, because it is still true and still the owner's words:
+    `setSourceAssignments` reconciles nothing and the row does not move. What changed is only
+    the SECOND half — the look press. `assignment-freeze.integration.test.ts` owns the freeze
+    in full (the exemptions, the re-take, the multi-row case, the blip); this file keeps the
+    owner's own sequence, end to end, where the defect was reported.
+
+    ⚠ **WHAT THIS TEST STILL DOES NOT PROVE: that the plant no longer flashes.** It removes
+    the cause on the wire. The frame count is a PLANT measurement and is owed — see `B-155`.
   */
   const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
   await onAir(r); // `two` — live-1 and live-2 are punched, live-3 is parked for solo.
@@ -1918,29 +1971,40 @@ it('🔴 B-155 — an assignment change LURKS, and the next look press applies i
     ]),
   );
 
-  // 🔴 NOTHING HAPPENS — the owner's words exactly. The change is in force and unapplied.
+  // 🔴 NOTHING HAPPENS — the owner's words exactly, and still exactly right.
   expect(await since(quiet), 'the assignment reaches no wire of its own').toEqual([]);
   expect(recordOf(r, 'live-1')?.producer, 'and the layer still carries the OLD source').toBe(
     '"route://2"',
   );
 
-  // 2. …then a LOOK press. It re-resolves, and the lurking change lands here.
+  // 2. …then a LOOK press.
   const press = (await recvLines()).length;
   expect(await r.setActiveLook('item-1', 'three')).toEqual({ ok: true });
   const lines = await since(press);
 
   /*
-    🔴 THE DEFECT, ON THE WIRE: a look switch issued a `PLAY`. A switch is supposed to move
-    geometry and nothing else — that is what makes it a cut — and this one replaced a
-    producer on a layer whose hole the page is about to open.
+    🔴 THE FIX, ON THE WIRE: the switch issues NO `PLAY` at all. A switch moves geometry and
+    nothing else — that is what makes it a cut — and the producer under the hole the page is
+    about to open does not change while it opens.
   */
-  const play = lines.find((l) => l.startsWith(`PLAY 1-${String(layerOf(r, 'live-1'))} `));
-  expect(play, 'the look press applied the assignment').toBeDefined();
-  expect(play).toContain('"route://5"');
-  // …and the page was told to move the holes in the SAME action, after that replace.
+  expect(playsIn(lines), 'a look press must not apply an assignment').toEqual([]);
+  expect(recordOf(r, 'live-1')?.producer, 'the row is on what its take froze').toBe('"route://2"');
+  // …and the page was still told to move the holes: the switch itself is unimpaired.
   expect(
     lines.some((l) => /^CG 1-\d+ UPDATE /.test(l)),
-    'the holes moved too',
+    'the holes moved',
+  ).toBe(true);
+
+  /*
+    THE POSITIVE CONTROL, in the owner's own sequence: a RE-TAKE adopts the edit. Without
+    this the test above is satisfied by an assignment editor that never works at all.
+  */
+  expect((await r.out('item-1')).accepted).toBe(true);
+  const retake = (await recvLines()).length;
+  expect((await r.take('item-1')).accepted).toBe(true);
+  expect(
+    (await since(retake)).some((l) => l.includes('"route://5"')),
+    'the edit lands at the next take',
   ).toBe(true);
 });
 
@@ -1949,9 +2013,14 @@ it('🔴 PATCH-01 B4 — a STAGED edit reaches no wire on a look press: staged i
     B1's rule, asserted from the bridge's side. A staged Inspector edit lives in the
     RENDERER's draft store and has never been sent, so there is nothing here for a look press
     to pick up — the bridge cannot apply what it has not been told. What the owner met was
-    not a staged edit leaking: it was an APPLIED assignment lurking, which the test above
-    pins. The distinction is the whole of B1, and it is worth an assertion because "the look
-    button applied my edit" is true of one and false of the other.
+    not a staged edit leaking: it was an APPLIED assignment lurking, and the test above walks
+    that same sequence (asserting, since session BP, that it no longer lands mid-switch). The
+    distinction is the whole of B1, and it is worth an assertion because "the look button
+    applied my edit" was true of one and false of the other.
+
+    ⚠ **This test's own subject is UNAFFECTED by the freeze and stays exactly as it was.** It is
+    about the RENDERER/bridge boundary — what was never sent cannot be applied — which is true
+    whatever level 2 resolves from.
   */
   const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
   await onAir(r);
@@ -2006,11 +2075,16 @@ it('⭐ §3 — a look switch emits NO PLAY for any seat whose resolved input di
     no `PLAY`", and §12.4 holds the rest. **Nothing ever asserted it**, which is precisely why a
     lurking assignment could put a producer change inside a switch and no suite noticed.
 
-    🔴 **HONEST PROVENANCE: this was GREEN BEFORE session BO and is green after.** It is a
-    STANDING GUARD over a property the design already had, not evidence of a fix — BO shipped no
-    bridge change. The case where this invariant is FALSE is pinned separately and deliberately,
-    by "an assignment change LURKS…" above, which asserts the `PLAY` that should not be there.
-    Read the two together: this one says what a switch must be, that one says what breaks it.
+    🔴 **HONEST PROVENANCE: this was GREEN BEFORE session BO and is green after, and session BP
+    did not change that either.** It is a STANDING GUARD over a property the design already had,
+    not evidence of any fix. Do not cite it as one.
+
+    ⚠ **SESSION BP — WHERE THE FALSE CASE LIVES NOW.** This note used to point at "an assignment
+    change LURKS…" above as the test asserting the `PLAY` that should not be there. That test is
+    INVERTED: the cause was removed (the row freezes level 2 at its take), so it now asserts the
+    switch is a pure cut, and nothing in this file demands the defect any more. The
+    RED-BEFORE-GREEN-AFTER evidence for the freeze is `assignment-freeze.integration.test.ts`,
+    which was mutation-checked — three of its nine tests redden when the pin is bypassed.
   */
   const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
   await onAir(r); // `two`

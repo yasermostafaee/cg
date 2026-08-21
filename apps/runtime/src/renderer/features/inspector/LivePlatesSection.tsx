@@ -16,7 +16,7 @@ import {
   stagePlateSource,
   subscribeDrafts,
 } from './draftStore.js';
-import { appliedPlateSources, onAirPlateSource } from './livePlates.js';
+import { appliedPlateSources, frozenPlateSource, onAirPlateSource } from './livePlates.js';
 import { isOnAir } from '../stack/onAir.js';
 
 /**
@@ -122,28 +122,35 @@ export function LivePlatesSection({
   if (plates.length === 0) return null;
 
   /*
-    🔴 **SESSION BO §1 — THE COLLAPSE WAS NOT SHIPPED, AND §8's STOP RULE IS WHY.**
+    🔴 **SESSION BP — WHY THIS EDITOR IS STILL HERE, AND WHY THAT IS NOW SAFE.**
 
-    The owner decided that the Inspector must stop staging template-assignment edits for a row
-    whose template HAS LOOKS, so the on-air panel writes only per-row state. That removes
-    `B-155`'s cause at the panel, and the reasoning is sound: an installation-level edit was
-    riding an on-air action, and a look press was applying it mid-switch.
+    ⚠ **SESSION BO's note here said the opposite conclusion was pending, and it is REPLACED
+    rather than left standing.** BO built the owner's then-decision — that the Inspector must
+    stop staging template-assignment edits for a looks template — and reverted it under its
+    stop rule, because a sweep found this section is the ONLY surface in the product that binds
+    a plate to a source (`SourcesModal` DEFINES the station's sources and merely lists which
+    plates reference one; it has no picker). Removing the editor left the template-level default
+    with no door at all, and every FRESH row would start unbound with its take refused
+    (`live-source-unassigned`). That finding stands. What changed is that it is no longer the
+    thing holding `B-155` open.
 
-    It was built and then REVERTED, because of what a sweep found: **this section is the ONLY
-    surface in the product that binds a plate to a source.** `SourcesModal` defines the
-    station's sources and merely LISTS which plates reference one (for its delete warning); it
-    has no picker. So removing this editor for looks templates leaves the template-level
-    default with **no door at all** — and §8 is explicit that taking away the only door is a
-    regression rather than a collapse.
+    **The cause was removed one level down instead: a row FREEZES its template assignment at
+    TAKE** (`caspar-runtime.ts` `#frozenAssignments`). An edit made here while a row is on air
+    reaches that row at its NEXT TAKE and never inside a switch — and, crucially, that is true
+    whoever makes the edit. Disabling this control would only have narrowed WHO can reach the
+    mechanism: the assignment is template-wide and installation-wide, so another row on the
+    same template, or another station's Runtime against the same bridge, could still write it.
 
-    The cost is not theoretical. Without a template assignment, every FRESH row carrying that
-    template starts with nothing bound, and its take is refused (`live-source-unassigned`)
-    until the operator sets a per-look binding for every plate of every look, by hand, per row.
-    That is exactly what a template-level default exists to prevent.
+    ⭐ So WHERE this control lives stopped being a correctness question and became a question of
+    where an operator expects to find it. The direction is recorded in `tasks.md` 7.16b — the
+    template's own entry, NOT the Live sources modal, which is about defining the INPUTS and
+    has nothing to do with any particular template — and it is deliberately not this session's
+    work.
 
-    **Brought back to the owner with three options rather than chosen for him** — see the
-    handoff and `tasks.md` 7.16. In the meantime the defect is UNCHANGED and `B-155` stays
-    open: nothing here got worse, and nothing got better.
+    🔴 **What this section DOES owe the freeze is honesty**, and that is the per-plate line
+    below: the picker keeps showing the LIVE assignment (it is the control for that value, and
+    the baseline a staged draft is dirty against), so on a frozen row it shows something the row
+    is not resolving. Unsaid, that is a surface that is confidently wrong.
   */
   /*
     🔴 “ON AIR” IS ONLY SAID OF A ROW THAT IS. The patch line below states what is
@@ -204,6 +211,13 @@ export function LivePlatesSection({
           catalog.sources.find((src) => src.id === onAir.sourceId)?.name ??
           onAir.sourceId ??
           'nothing';
+        // SESSION BP — what LEVEL 2 resolves to on this row, which for a row on air is the
+        // snapshot its take froze rather than the value in the picker above.
+        const frozen = frozenPlateSource(item, plate.sourceId, appliedSource);
+        const frozenName =
+          catalog.sources.find((src) => src.id === frozen.sourceId)?.name ??
+          frozen.sourceId ??
+          'nothing';
         return (
           <div key={plate.elementId} style={styles.row}>
             <span style={styles.plate}>{plate.sourceId}</span>
@@ -248,6 +262,43 @@ export function LivePlatesSection({
                 }
               >
                 on air: {onAirName} (patched on this row)
+              </span>
+            )}
+            {/*
+              🔴 **SESSION BP — THE ROW HAS FROZEN THIS ASSIGNMENT, AND THE PICKER ABOVE
+              WOULD OTHERWISE LIE ABOUT IT.**
+
+              A row freezes level 2 at its take, so an edit made while it is on air changes
+              the value in this picker and changes NOTHING the row resolves. Left unsaid,
+              that is the confidently-wrong surface: the operator edits the default, the
+              panel agrees, air does not move, and there is nothing anywhere to explain the
+              gap. The timing line at the bottom says WHEN it lands; this says what the row
+              is on until then, per plate, because only the divergent plates need saying.
+
+              ⚠ It speaks about the ASSIGNMENT, never about air — levels 3 and 4 are not
+              frozen and can still change what this plate shows. The patch line above is the
+              one entitled to say "on air", and it wins here: an emergency patch outranks
+              level 2 entirely, so naming a frozen value beside it would be two answers to
+              one question.
+
+              🔴 **GATED ON `patched`, NOT ON `overridden`, and the difference is a false
+              sentence.** `overridden` means the patch DIVERGES FROM THE PICKER — it reads
+              false for a patch that happens to equal the live default. Such a patch is still
+              in force and still outranks the pin, so gating on `overridden` would let this
+              line announce the frozen source as what the row is on while the patch had it
+              somewhere else. See {@link onAirPlateSource}.
+            */}
+            {!onAir.patched && frozen.diverged && rowIsOnAir && (
+              <span
+                style={styles.patched}
+                data-plate-frozen={plate.sourceId}
+                title={
+                  `This row froze the template assignment when it was taken, so it is on ` +
+                  `"${frozenName}" and the edit above does not reach it. Take the row again ` +
+                  `to adopt it, or set this look's input below to change it now.`
+                }
+              >
+                this row: {frozenName} (frozen at take)
               </span>
             )}
             {dirty && <DraftChip label="unapplied" />}

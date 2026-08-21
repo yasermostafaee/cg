@@ -65,28 +65,57 @@ const styles = {
   },
   lookName: { fontWeight: 700, fontSize: 'var(--r-text-sm)' },
   /**
-   * The badge on the look this row is SET TO.
+   * 🔴 **SESSION BP — THE BADGE WEARS THE STATE'S OWN COLOUR, and the argument that said it
+   * must not is now FALSE and has been REPLACED rather than left standing.**
    *
-   * 🔴 NOT GREEN. Green is the layer table's ON AIR mark and means "this row is playing";
-   * this says "of this row's looks, THIS is the one composited". Borrowing green would put a
-   * second meaning on the one colour an operator reads fastest. Amber is this palette's
-   * ATTENTION role and is right here for the reason §3.2 gives: the operator is editing an
-   * on-air look and an off-air look in the same panel, and confusing them puts the wrong feed
-   * up — so the on-air one is the thing that needs attention.
+   * ── WHAT THE OLD COMMENT ARGUED, AND WHY IT STOPPED BEING TRUE ──────────────
    *
-   * 🔴 **`B-156` — AND THE TEXT USED TO IGNORE THE VERY DISTINCTION THIS COMMENT DRAWS.** It
-   * said `ON AIR NOW` whenever `activeLookOf` picked the look — and `activeLookOf` answers
-   * *which look this ROW is set to*, never *whether the row is playing*. So a merely LOADED
-   * row claimed air. The colour was chosen carefully to keep the two meanings apart and then
-   * the words asserted the meaning the comment says this badge does not have. Golden rule 6,
-   * on a label: the WORDS state a condition, so something must test THAT condition — and
-   * reuse the one canonical predicate rather than re-derive it here, which is exactly how the
-   * name came to lie. See {@link badgeFor}.
+   * It read: _"NOT GREEN. Green is the layer table's ON AIR mark and means 'this row is
+   * playing'; this says 'of this row's looks, THIS is the one composited'. Borrowing green
+   * would put a second meaning on the one colour an operator reads fastest."_
+   *
+   * **That was correct while the badge lied.** It was gated on `activeLookOf` — *which look
+   * this ROW is set to* — which is true the moment a row is loaded, so the badge genuinely
+   * did mean something other than "playing", and green would have been a second meaning on
+   * the sacred hue. `B-156` rewired it to {@link isOnAir}, the layer table's OWN predicate,
+   * and the two meanings MERGED: when this badge says `ON AIR NOW` it is the same claim the
+   * row's green mark is making, from the same derivation.
+   *
+   * 🔴 **The comment is replaced, not merely overridden, because a warning that outlives its
+   * premise is how amber gets "restored" by a later reader citing a fact that is no longer
+   * true.** This repo has been bitten by that shape before. If the badge is ever ungated from
+   * `isOnAir` again, the green must go with it.
+   *
+   * ── THE THREE HUES ARE THE THREE STATES' OWN, TAKEN AS TOKENS ───────────────
+   *
+   * Owner's decision, 2026-08-21: green for on air, violet for PVW, blue for the normal
+   * state. Every one of them already exists and already means exactly that — `colors.onAir`
+   * is the sacred ON AIR green, `colors.rehearsing` is `R-022`'s violet as worn by the row's
+   * own REHEARSING mark, and `colors.ready` is the READY sky, which is precisely the row
+   * state the third badge describes.
+   *
+   * 🔴 **TOKENS, NEVER THE HEX.** Same discipline `B-156` applied to the predicate: the badge
+   * and the row's marks must be INCAPABLE of disagreeing, so they read one token as well as
+   * one predicate. ⚠ `colors.ready` and `--r-accent` are the same value (`#38BDF8`) and are
+   * NOT interchangeable — the accent's own comment says it is not a state colour and must not
+   * become one. Taking the wrong one compiles, looks identical today, and drifts the day
+   * either is retuned.
+   *
+   * ⚠ **THE WORDS STAY.** Colour here is redundant reinforcement, not the channel: each badge
+   * says what it means in text, so an operator who cannot separate the hues loses nothing.
+   * Do not shorten the labels to lean on the colour.
    */
-  live: { color: colors.pending, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em' },
-  /** The same badge for a row that is NOT on air — muted, because nothing needs attention. */
+  live: { color: colors.onAir, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em' },
+  /** The same badge while the row is REHEARSING — `R-022`'s violet, as worn by its own mark. */
+  rehearsing: {
+    color: colors.rehearsing,
+    fontSize: '0.7rem',
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+  },
+  /** …and for a row merely SELECTED — the READY sky, which is the state it is describing. */
   selected: {
-    color: colors.textMuted,
+    color: colors.ready,
     fontSize: '0.7rem',
     fontWeight: 700,
     letterSpacing: '0.04em',
@@ -129,11 +158,22 @@ const styles = {
  * for a rehearsing one, which `live-look-reconcile.integration.test.ts` pins on the wire
  * rather than assuming. If that interlock ever went, this order would decide an ambiguity
  * instead of reporting one — so the interlock is asserted beside this, not trusted.
+ *
+ * 🔴 **SESSION BP — IT NOW RETURNS THE COLOUR TOO, and that is the point of returning it at
+ * all.** The words, the machine-readable `tone` and the hue are three readings of ONE
+ * decision, produced together. They were a `live: boolean` fanned out into two ternaries at
+ * the render site — which is two places for the badge to describe a different state from the
+ * one this function chose, on a surface whose entire job is to not do that. The colours are
+ * `theme.ts` TOKENS (see `styles` above for why never the hex).
  */
-function badgeFor(onAir: boolean, rehearsing: boolean): { text: string; live: boolean } {
-  if (rehearsing) return { text: 'SHOWING IN PVW', live: false };
-  if (onAir) return { text: 'ON AIR NOW', live: true };
-  return { text: 'SELECTED — A TAKE SHOWS THIS', live: false };
+export function badgeFor(
+  onAir: boolean,
+  rehearsing: boolean,
+): { text: string; tone: 'on-air' | 'rehearsing' | 'not-on-air'; color: string } {
+  if (rehearsing)
+    return { text: 'SHOWING IN PVW', tone: 'rehearsing', color: styles.rehearsing.color };
+  if (onAir) return { text: 'ON AIR NOW', tone: 'on-air', color: styles.live.color };
+  return { text: 'SELECTED — A TAKE SHOWS THIS', tone: 'not-on-air', color: styles.selected.color };
 }
 
 /** The name this station shows for a catalog id, or the id when it names nothing. */
@@ -200,9 +240,16 @@ export function LooksBindingsSection({
               <span style={styles.lookName}>{look.name}</span>
               {isLive && (
                 <span
-                  style={badge.live ? styles.live : styles.selected}
+                  /*
+                    SESSION BP — ONE decision, read three ways. `badgeFor` returns the words,
+                    the machine-readable tone and the token colour together, so the style, the
+                    attribute and the text cannot describe different states. They were a
+                    boolean and two ternaries, which is two chances to disagree with the
+                    predicate they both claim to be reporting.
+                  */
+                  style={{ ...styles.selected, color: badge.color }}
                   data-look-live={look.id}
-                  data-look-badge={badge.live ? 'on-air' : 'not-on-air'}
+                  data-look-badge={badge.tone}
                 >
                   {badge.text}
                 </span>

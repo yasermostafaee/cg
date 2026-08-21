@@ -248,8 +248,45 @@ type LiveSeatingPlan =
        * picture that was working.
        */
       readonly unresolved: ReadonlySet<string>;
+      /**
+       * 🔴 **SESSION BP — THE LEVEL-2 ANSWER THIS PLAN ACTUALLY RESOLVED AGAINST**, as
+       * `{plate → catalog id}` for this item's template.
+       *
+       * Returned rather than re-read by the caller because the TAKE has to freeze exactly
+       * what it seated. A second read of the assignment store would be a second evaluation
+       * of the same question with the take's `await`s available to interleave between them,
+       * and the row would then be pinned to an assignment its own plan never saw — golden
+       * rule 7's shape, on a value instead of a boolean.
+       *
+       * ⚠ It is whatever this plan's {@link LevelTwoSource} said to use — the LIVE store for
+       * a take, the row's existing pin for everything else. Only the take writes it back, so
+       * a live reconcile can never re-freeze a row to something new, and a RE-TAKE always
+       * adopts the assignment in force (§5.3), which is the operator's way to take up an
+       * edited default.
+       */
+      readonly resolvedFrom: Readonly<Record<string, string>>;
     }
   | { readonly ok: false; readonly errorCode: string; readonly message: string };
+
+/**
+ * 🔴 **SESSION BP — WHERE A PLAN GETS LEVEL 2 FROM, and the whole freeze is this one word.**
+ *
+ * - **`'fresh'` — THE TAKE, and only the take.** It resolves the template assignment from the
+ *   live store, ignoring any pin the row already has, and PINS what it resolved. That is what
+ *   makes a re-take the operator's way to adopt an edited default (§5.3), and it is why the
+ *   answer cannot simply be "echo the pin if there is one": a re-taken row would then be
+ *   permanently welded to its first take and the assignment editor would be inert for it.
+ * - **`'pinned'` — EVERYTHING ELSE.** A look switch, an `R-048` swap, an UPDATE, a reconcile
+ *   after a blip: all resolve from the row's frozen snapshot, so no edit to configuration can
+ *   reach a row that is on air.
+ *
+ * ⚠ **A SEPARATE PARAMETER FROM `scope`, deliberately, even though the two happen to agree
+ * today.** `scope` says WHICH FRAMES MAY REFUSE this action; this says WHERE LEVEL 2 COMES
+ * FROM. They are different questions with the same current answer, and a name is a contract
+ * (golden rule 6) — reading freshness off a refusal-breadth flag is exactly how a name comes
+ * to mean two things and then to lie about one of them.
+ */
+type LevelTwoSource = 'fresh' | 'pinned';
 
 /** R-028 part B — a refused deliberate playout clear. */
 type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
@@ -772,6 +809,35 @@ export class CasparRuntime {
    * and outranks this one everywhere.
    */
   readonly #lookSourceBindings = new Map<string, LookSourceBindings>();
+  /**
+   * 🔴 **SESSION BP — THE ROW'S FROZEN LEVEL 2: the template assignment as it stood at the
+   * moment of THIS row's take.**
+   *
+   * **A ROW THAT IS ON AIR DOES NOT CHANGE ITS PICTURE BECAUSE SOMEBODY EDITED
+   * CONFIGURATION.** `LiveSourceFrozenAssignmentSchema` carries the full argument, the three
+   * exemptions and the ABSENT-vs-EMPTY rule; what belongs HERE is the lifetime and the two
+   * places the ordering matters:
+   *
+   *   - **WRITTEN by the take**, from the value {@link #planLiveSeating} actually resolved
+   *     against ({@link LiveSeatingPlan.resolvedFrom}) rather than by a second read of the
+   *     store. One evaluation, two uses — golden rule 7's shape, on a value instead of a
+   *     boolean. A second read could sit on the far side of an `await` and pin an assignment
+   *     the plan never saw.
+   *   - **DELETED by `out` and by `remove`.** A row that is not on air resolves LIVE, which
+   *     is what the Inspector has always promised: _"an off-air edit lands at the next
+   *     take."_ Presence of a key here is therefore also the answer to "is this row's level 2
+   *     pinned", and nothing derives that from the row's status a second way.
+   *
+   * ⚠ **`.has()`, NEVER emptiness.** An empty record is a real freeze — the template had no
+   * assignment at take. Do NOT copy `#applyBindingMaps`'s delete-when-empty idiom here; it is
+   * right for an override (nothing to override IS no override) and wrong for this.
+   *
+   * Process memory like its three neighbours, carried across a bridge restart by the
+   * browser's retention (`RetainedStackItem.frozenAssignment`) — without which a blip THAWS
+   * every on-air row and the edits made during the show land at the first reconcile after the
+   * reconnect.
+   */
+  readonly #frozenAssignments = new Map<string, Record<string, string>>();
   /**
    * C-015 phase 6 (6.5f) — itemId → plateId → the volume that PLATE is intended to
    * have. **THE single source of the audio intent.**
@@ -1405,9 +1471,26 @@ export class CasparRuntime {
       // look a take would enter. Publishing the raw map would leave a never-switched row
       // with no look on the wire while it is plainly showing one.
       const activeLookId = this.activeLookId(item.itemId);
+      // SESSION BP — the FROZEN level 2, published because a surface that shows the LIVE
+      // template default for a row resolving a frozen one is confidently wrong, which is the
+      // worst class of defect this product has. The Inspector names it on any plate where the
+      // two disagree, and it cannot do that unless it can read it.
+      const frozenAssignment = this.#frozenAssignments.get(item.itemId);
+      /*
+        ⚠ **EVERY OPTIONAL FIELD BELOW MUST BE NAMED IN THIS GUARD.** It is the
+        "nothing to join, return the identical object" fast path, and a field it does not
+        list is a field this method silently DROPS for an item that has only that one.
+        `lookSourceOverride` was missing here from the day it was added — reachable only
+        through a narrow window (a bound row whose template is no longer registered, so
+        `activeLookId` answers `undefined` too), which is precisely why nothing caught it.
+        `mockShimFieldParity`'s schema-derived guard covers the shim; this list is the same
+        class of hazard one layer over, and it is checked by hand.
+      */
       if (
         position === undefined &&
         sourceOverride === undefined &&
+        lookSourceOverride === undefined &&
+        frozenAssignment === undefined &&
         plateVolumes === undefined &&
         activeLookId === undefined
       )
@@ -1417,6 +1500,7 @@ export class CasparRuntime {
         ...(position !== undefined && { position }),
         ...(sourceOverride !== undefined && { sourceOverride }),
         ...(lookSourceOverride !== undefined && { lookSourceOverride }),
+        ...(frozenAssignment !== undefined && { frozenAssignment }),
         ...(plateVolumes !== undefined && { plateVolumes }),
         ...(activeLookId !== undefined && { activeLookId }),
       };
@@ -1905,6 +1989,23 @@ export class CasparRuntime {
       // losing it would silently put every look back on the template assignment.
       if (item.lookSourceOverride !== undefined) {
         this.#lookSourceBindings.set(item.itemId, item.lookSourceOverride);
+      }
+      /*
+        🔴 SESSION BP — and the FROZEN level 2, re-applied HERE, before any adopt-vs-re-ADD
+        decision, for a reason sharper than either of the two above.
+
+        The bridge's freeze is PROCESS memory. Without this line a momentary blip THAWS every
+        on-air row: the restore re-resolves level 2 from the live store, and whatever
+        configuration was edited during the show lands on air at the first reconcile after the
+        reconnect. That is `B-155`'s mechanism arriving through the one door nobody was
+        watching — the freeze would look present, be tested, and be gone exactly when a plant
+        needed it.
+
+        ⚠ `!== undefined`, never a truthiness or emptiness test: an EMPTY record is a real
+        freeze (the template had no assignment at take) and must be restored as one.
+      */
+      if (item.frozenAssignment !== undefined) {
+        this.#frozenAssignments.set(item.itemId, { ...item.frozenAssignment });
       }
       // 6.5f — and the audio intent, for the same reason and with a failure that is
       // HARDER to notice: a dropped source override shows the wrong picture, which
@@ -2448,14 +2549,52 @@ export class CasparRuntime {
       re-taking a row does not silently return it to the default look while the operator is
       watching the one they chose.
     */
-    const plan = this.#planLiveSeating(itemId, slot, this.activeLookId(itemId), 'entering-look');
+    const plan = this.#planLiveSeating(
+      itemId,
+      slot,
+      this.activeLookId(itemId),
+      'entering-look',
+      // SESSION BP — THE TAKE IS THE ONE ACTION THAT RESOLVES LEVEL 2 AFRESH, and pins what
+      // it resolved. See `LevelTwoSource`.
+      'fresh',
+    );
     if (!plan.ok) {
+      // A refused take mutates NOTHING — and the freeze below is the newest thing that would
+      // break that, so it is written on the far side of this return rather than before the
+      // plan (`tasks.md` 7.9's rule, met by a fourth writer).
       process.stderr.write(`[caspar-bridge] take refused for ${itemId}: ${plan.message}\n`);
       // The MESSAGE rides out with the code. Which PLATE is unassigned, and which
       // two aspects disagree, are the facts that make these refusals actionable,
       // and no fixed code can carry them — see `StackTakeChannel`.
       return { accepted: false, errorCode: plan.errorCode, message: plan.message };
     }
+
+    /*
+      🔴 **SESSION BP — THE FREEZE. THE TAKE PINS LEVEL 2, AND THIS IS THE ONLY PLACE IT IS
+      WRITTEN.**
+
+      **A row that is on air does not change its picture because somebody edited
+      configuration.** From here until this row's `out`, every resolution on it — a look
+      switch, an `R-048` swap, an UPDATE, a reconcile after a blip — reads this snapshot
+      instead of the assignment store. `B-155`'s mechanism (an edit LURKS in
+      `setSourceAssignments` and the next look press applies it mid-switch, flashing the
+      previous guest) is closed from every direction at once, including the two a rule about
+      WHO MAY EDIT cannot reach: another row carrying the same template, and another
+      station's Runtime against the same bridge.
+
+      🔴 **`plan.resolvedFrom`, NOT A SECOND READ OF THE STORE.** One evaluation, two uses —
+      golden rule 7's shape on a value rather than a boolean. A re-read here would sit on the
+      near side of this method's `await`s with `setSourceAssignments` free to land between
+      them, and the row would be pinned to an assignment its own plan never saw: the exact
+      divergence the freeze exists to abolish, manufactured by the freeze.
+
+      ⚠ **SET, not "set if absent", and the plan above resolved `'fresh'` for the same
+      reason.** A RE-TAKE re-freezes to what is in force NOW — §5.3, the operator's way to
+      adopt an edited default. A take that echoed an existing pin would weld a re-taken row to
+      its first take for ever and make the assignment editor inert for it, which is a worse
+      product than the defect this closes.
+    */
+    this.#frozenAssignments.set(itemId, { ...plan.resolvedFrom });
 
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'take', itemId }, seq);
@@ -2995,6 +3134,10 @@ export class CasparRuntime {
     // — the operator told that a graphic did not come off air, and nothing about
     // whether the command reached CasparCG at all.
     const { ok, errorCode } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
+    // SESSION BP — a landed STOP is off air too, so level 2 thaws here for the same reason
+    // and through the same method as `out`'s. The producer staying resident is beside the
+    // point: what the freeze protects is the PICTURE, and there is no longer one.
+    this.#thawAssignment(itemId, ok);
     return { accepted: ok, ...(!ok && errorCode !== undefined && { errorCode }) };
   }
 
@@ -3074,6 +3217,10 @@ export class CasparRuntime {
     // The slot stays RESERVED (the item is still on the stack, idle) until remove —
     // retake re-ADDs onto the same slot; OSC interest stays put so idle confirms.
     this.#loaded.delete(itemId);
+    // SESSION BP — and the row's level 2 thaws with it: off air, so an assignment edit lands
+    // at the next take exactly as the Inspector has always promised. See `#thawAssignment`
+    // for why a FAILED clear deliberately keeps the pin.
+    this.#thawAssignment(itemId, ok);
     // A CLEAR executed on the CURRENT PRIMARY counts as adoption — the layer's
     // state is known there (a backup-only ack proves nothing about the primary)
     // — and provably resolves any B-056 owned-slot warning; a backup-only out
@@ -3691,6 +3838,11 @@ export class CasparRuntime {
      * that is ALREADY ON SCREEN.
      */
     scope: 'entering-look' | 'already-live',
+    /**
+     * SESSION BP — where LEVEL 2 comes from. See {@link LevelTwoSource}, including why this
+     * is a parameter of its own rather than read off `scope`.
+     */
+    levelTwo: LevelTwoSource,
   ): LiveSeatingPlan {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     const template = this.#templates.get(templateId);
@@ -3708,6 +3860,10 @@ export class CasparRuntime {
         offFrame: new Set(),
         declared: new Set(),
         unresolved: new Set(),
+        // A template with no live-source carrier has no level 2 to freeze. `{}` here is the
+        // EMPTY freeze, not the absent one, and it is the honest answer: this row's level 2
+        // is "nothing", permanently, and pinning it costs nothing.
+        resolvedFrom: {},
       };
 
     /*
@@ -3717,10 +3873,16 @@ export class CasparRuntime {
       the band arithmetic below are questions about the same union. Asking a second time,
       per look, is how the four levels would come to be applied in two orders.
     */
+    /*
+      SESSION BP — level 2 comes from `#assignmentsFor`, which answers the FROZEN snapshot
+      for a row that has one. The seat set, the collisions and the band arithmetic below are
+      all questions about the same union, so they must all be asked of the same level 2.
+    */
+    const resolvedFrom = this.#assignmentMapFor(itemId, templateId, levelTwo);
     const bindings = resolveLookBindings({
       templateId,
       carrier,
-      assignments: this.#sourceAssignments.assignments,
+      assignments: this.#assignmentsFor(itemId, templateId, levelTwo).assignments,
       catalog: this.#sourceCatalog,
       bindings: this.#lookSourceBindings.get(itemId),
       overrides: this.#sourceOverrides.get(itemId),
@@ -3757,7 +3919,10 @@ export class CasparRuntime {
       const refusal = resolvePlateAssignments({
         templateId,
         declarations: mustResolve,
-        assignments: this.#sourceAssignments,
+        // SESSION BP — the SAME level 2 the resolver above used, or the refusal would name
+        // a plate as unassigned that the plan resolved (or, worse, stay silent about one it
+        // did not). `#assignmentsFor` is the one door.
+        assignments: this.#assignmentsFor(itemId, templateId, levelTwo),
         catalog: this.#sourceCatalog,
         overrides: this.#effectiveOverridesFor(itemId, lookId),
       });
@@ -3890,7 +4055,16 @@ export class CasparRuntime {
     // the policy in `#applyLivePlates`, which is the difference between a look with no plates
     // and a template with none.
     if (seated.length === 0)
-      return { ok: true, placements: [], parked: [], resolved, offFrame, declared, unresolved };
+      return {
+        ok: true,
+        placements: [],
+        parked: [],
+        resolved,
+        offFrame,
+        declared,
+        unresolved,
+        resolvedFrom,
+      };
 
     const range = this.#sourceCatalog.layerRange;
     if (range === undefined) {
@@ -4002,6 +4176,7 @@ export class CasparRuntime {
       unresolved,
       placements: allocated.filter((p) => !p.held),
       parked: allocated.filter((p) => p.held),
+      resolvedFrom,
     };
   }
 
@@ -4041,7 +4216,11 @@ export class CasparRuntime {
     const prospective = resolveLookBindings({
       templateId,
       carrier,
-      assignments: this.#sourceAssignments.assignments,
+      // SESSION BP — the FROZEN level 2 for a row that has one. A prospective plan built on
+      // the live store would refuse (or accept) a binding change against an assignment the
+      // row is not resolving from, which is the collision check answering about a different
+      // seat set than the reconcile below it will build.
+      assignments: this.#assignmentsFor(itemId, templateId, 'pinned').assignments,
       catalog: this.#sourceCatalog,
       bindings: next.bindings,
       overrides: next.overrides,
@@ -4060,7 +4239,13 @@ export class CasparRuntime {
     const restoreOverrides = this.#sourceOverrides.get(itemId);
     const restoreBindings = this.#lookSourceBindings.get(itemId);
     this.#applyBindingMaps(itemId, next.overrides, next.bindings);
-    const plan = this.#planLiveSeating(itemId, slot, this.activeLookId(itemId), 'already-live');
+    const plan = this.#planLiveSeating(
+      itemId,
+      slot,
+      this.activeLookId(itemId),
+      'already-live',
+      'pinned',
+    );
     this.#applyBindingMaps(itemId, restoreOverrides, restoreBindings);
     if (!plan.ok && plan.errorCode === LIVE_PLATE_NO_LAYER) {
       const range = this.#sourceCatalog.layerRange;
@@ -4158,6 +4343,74 @@ export class CasparRuntime {
    * cannot disagree about which of them wins — the emergency patch does, everywhere
    * (`live-look-bindings.ts` carries the argument).
    */
+  /**
+   * 🔴 **SESSION BP — THE ONE PLACE LEVEL 2 IS READ FOR A ROW: its frozen snapshot if it
+   * has one, the live store if it does not.**
+   *
+   * Every resolver that needs the template assignment for a specific ITEM comes through
+   * here — the seating plan, the refusal path's `resolvePlateAssignments`, and the
+   * prospective plan `#refuseBindingChange` builds. `this.#sourceAssignments` is read
+   * directly ONLY by the store's own accessors (`sourceAssignments()` /
+   * `setSourceAssignments`), which are answering a question about the INSTALLATION rather
+   * than about a row.
+   *
+   * ⚠ **A second reader is how the freeze would come to be half-applied**, and §6's stop
+   * rule names that outcome as worse than today's single consistent wrong answer: some
+   * switches resolving frozen and others live is a row whose picture depends on which verb
+   * the operator happened to press.
+   *
+   * The frozen map is STRICT and complete for level 2 — a plate absent from it is
+   * unassigned for this run and does NOT fall through to the live store. See the schema for
+   * why a partial freeze would reopen the multi-station case for exactly those plates.
+   */
+  #assignmentsFor(itemId: string, templateId: string, levelTwo: LevelTwoSource): SourceAssignments {
+    const frozen = levelTwo === 'fresh' ? undefined : this.#frozenAssignments.get(itemId);
+    if (frozen === undefined) return this.#sourceAssignments;
+    return {
+      assignments: Object.entries(frozen).map(([plateId, sourceId]) => ({
+        templateId,
+        plateId,
+        sourceId,
+      })),
+    };
+  }
+
+  /**
+   * 🔴 **SESSION BP — THE THAW: this row is off air, so level 2 resolves LIVE again.**
+   *
+   * ONE method, called by the two verbs that take a row off air and bring its plates down —
+   * `out` (CLEAR, producer destroyed) and `stopItem` (outro, producer resident). They are
+   * two spellings of the same fact and a second inline `delete` in either is how the rule
+   * would come to differ between them (golden rule 6). `remove` deletes it with everything
+   * else the item owns, in the one place that already does that.
+   *
+   * 🔴 **ONLY WHEN THE COMMAND LANDED.** A refused or failed teardown means the graphic may
+   * still be ON AIR, and thawing there would hand `B-155` back the exact window this feature
+   * closes: an edit lands in the store, the operator's next look press applies it, and the
+   * previous guest flashes on a row nobody believes is live. Keeping the pin while we cannot
+   * prove the row is off is the conservative direction, and it costs nothing — the next
+   * successful `take` re-freezes, and the next successful `out` thaws.
+   */
+  #thawAssignment(itemId: string, landed: boolean): void {
+    if (!landed) return;
+    this.#frozenAssignments.delete(itemId);
+  }
+
+  /** The level-2 answer in force for one item, flattened to `{plate → catalog id}`. */
+  #assignmentMapFor(
+    itemId: string,
+    templateId: string,
+    levelTwo: LevelTwoSource,
+  ): Record<string, string> {
+    const frozen = levelTwo === 'fresh' ? undefined : this.#frozenAssignments.get(itemId);
+    if (frozen !== undefined) return { ...frozen };
+    const map: Record<string, string> = {};
+    for (const a of this.#sourceAssignments.assignments) {
+      if (a.templateId === templateId) map[a.plateId] = a.sourceId;
+    }
+    return map;
+  }
+
   #effectiveOverridesFor(
     itemId: string,
     lookId: string | undefined,
@@ -4575,6 +4828,8 @@ export class CasparRuntime {
       slot,
       opts.lookId ?? this.activeLookId(itemId),
       opts.mode === 'take' ? 'entering-look' : 'already-live',
+      // SESSION BP — a take resolves level 2 afresh; every other reconcile reads the pin.
+      opts.mode === 'take' ? 'fresh' : 'pinned',
     );
     if (!plan.ok) return { ok: false, errorCode: plan.errorCode, message: plan.message };
     return this.#applyLivePlates(itemId, plan, opts.mode);
@@ -6475,6 +6730,10 @@ export class CasparRuntime {
     // Session BM — and the per-look composition, by the identical rule. A re-used itemId
     // inheriting one would put a previous show's inputs behind this show's looks.
     this.#lookSourceBindings.delete(itemId);
+    // SESSION BP — and the FROZEN level 2, by the same rule. A re-used itemId inheriting one
+    // would resolve a brand-new row against a retired show's assignment, and the take that
+    // should have re-frozen it would instead find the pin already there.
+    this.#frozenAssignments.delete(itemId);
     // 6.5f — and the audio intent. A re-used itemId inheriting a RAISED plate is
     // the worst of the three: it puts a microphone on air that nobody asked for.
     this.#plateVolumes.delete(itemId);

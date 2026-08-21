@@ -120,7 +120,9 @@ export type LiveSourceDeclaration = z.infer<typeof LiveSourceDeclarationSchema>;
  *   1. **The installation's CATALOG** — what lives this station has. Global.
  *   2. **The template's ASSIGNMENT** — which catalog entry each plate uses by
  *      default. TEMPLATE-LEVEL: shared by every row carrying that template, and the
- *      default for EVERY LOOK.
+ *      default for EVERY LOOK. ⚠ **Session BP — this level FREEZES AT TAKE**: a row that
+ *      is on air resolves it from {@link LiveSourceFrozenAssignmentSchema}, the snapshot
+ *      its own take captured, not from the live store. Levels 1, 3 and 4 do not freeze.
  *   3. **The row's PER-LOOK composition** — {@link LiveSourceLookOverrideSchema}, added by
  *      session BM: what this row shows in one named look.
  *   4. **THIS override** — one row's substitution, on top of all three, in EVERY look.
@@ -171,6 +173,71 @@ export const LiveSourceOverrideSchema = z.record(LiveSourceIdSchema, z.string().
 export const LiveSourceLookOverrideSchema = z.record(z.string().min(1), LiveSourceOverrideSchema);
 export type LiveSourceOverride = z.infer<typeof LiveSourceOverrideSchema>;
 export type LiveSourceLookOverride = z.infer<typeof LiveSourceLookOverrideSchema>;
+
+/**
+ * 🔴 **SESSION BP — THE ROW'S FROZEN LEVEL 2: the template assignment as it stood at TAKE.**
+ *
+ * ── THE ONE SENTENCE ────────────────────────────────────────────────────────
+ *
+ * **A ROW THAT IS ON AIR DOES NOT CHANGE ITS PICTURE BECAUSE SOMEBODY EDITED
+ * CONFIGURATION.** The take captures the template's `{plate → catalog id}` answer and every
+ * later resolution on that row — a look switch, a source swap, an UPDATE, a reconcile after
+ * a blip — reads THIS, never the live assignment store.
+ *
+ * ── WHY IT IS A STORED VALUE AND NOT A RULE ABOUT WHO MAY EDIT ──────────────
+ *
+ * `B-155`: `setSourceAssignments` writes without reconciling, so an edit LURKS until the
+ * next reconcile applies it — and the next reconcile is usually a look press, which then
+ * carries a producer change into the middle of a switch and flashes the previous guest.
+ * Two narrower answers were considered and are not enough:
+ *
+ *   - **disabling the editor on an on-air row** narrows WHO can reach the mechanism but
+ *     leaves it intact. The assignment is TEMPLATE-wide and INSTALLATION-wide: another row
+ *     carrying the same template, or **another station's Runtime against the same bridge**,
+ *     can write it while this row is live. That configuration is not hypothetical — it is
+ *     the one the DEFER/COMMIT ban already exists for.
+ *   - **reconciling inside `setSourceAssignments`** removes the lurk by applying a
+ *     template-wide edit to every row that is on air, which is the same accident arriving
+ *     on time instead of late.
+ *
+ * Freezing closes it from every direction at once, and it is the semantically right rule
+ * rather than a guard bolted onto a surface.
+ *
+ * ── 🔴 WHAT IS **NOT** FROZEN — three exemptions, each with its own test ────
+ *
+ *   - **`R-048`'s emergency swap (level 4)** applies immediately, on air, by design. It is
+ *     the operator's 20:59 tool and the outermost precedence level.
+ *   - **The row's per-look bindings (level 3)** reach air now, through the one binding
+ *     transaction. That is what session BM built and this must not undo.
+ *   - **The CATALOG (level 1)** — what a source IS. A frozen row holds a catalog *id*; if
+ *     the installation re-points or retires that entry, the row follows, because the frozen
+ *     fact is *which entry this plate uses*, never *what that entry resolves to*.
+ *
+ * The sentence "freeze the row's sources at take" would take all three away by accident.
+ * **Only level 2 freezes.**
+ *
+ * ── ⚠ ABSENT vs EMPTY, AND THEY ARE DIFFERENT ──────────────────────────────
+ *
+ * **ABSENT** means NOT FROZEN — the row is off air, or was taken by a build that predates
+ * this field, and resolves from the live store exactly as it always did. **An EMPTY record
+ * is a real freeze to nothing**: the template had no assignment at take, and that answer is
+ * pinned like any other. Every read tests presence, never emptiness — the `plateVolumes`
+ * lesson (a falsy value that is a real intent), met on a different axis.
+ *
+ * ⚠ **STRICT: the frozen map is the row's COMPLETE answer for level 2.** A plate absent
+ * from it is UNASSIGNED for this run, and does not fall through to the live store. A
+ * partial freeze would leave "…except for plates that had no assignment" as a caveat, and
+ * would reopen the multi-station case for exactly those plates. The operator's live door
+ * for such a plate is its per-look binding (level 3), which is not frozen; the permanent
+ * one is a re-take.
+ *
+ * Shape-identical to {@link LiveSourceOverrideSchema} and deliberately ALIASED to it rather
+ * than re-declared, so the two cannot drift in what they accept. The MEANING is different
+ * and this doc is where that is recorded: an override is a row's substitution ON TOP of
+ * level 2; this IS level 2, held still.
+ */
+export const LiveSourceFrozenAssignmentSchema = LiveSourceOverrideSchema;
+export type LiveSourceFrozenAssignment = z.infer<typeof LiveSourceFrozenAssignmentSchema>;
 
 /**
  * C-015 phase 6 (6.5f) — **HOW LOUD EACH PLATE IS INTENDED TO BE, for this run.**

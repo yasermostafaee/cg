@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import type { SourceAssignments, SourceCatalog } from '@cg/shared-ipc';
 import { LooksBindingsSection } from '../src/renderer/features/inspector/LooksBindingsSection.js';
+import { colors } from '../src/renderer/theme.js';
 import {
   __resetSourcesForTest,
   initSources,
@@ -225,6 +226,23 @@ it('🔴 §2.3 — editing a MASKED binding is ACCEPTED and staged, and says it 
 // ───────── `B-156` — THE BADGE SAYS WHAT IS TRUE, IN EACH OF THE THREE ROW STATES ─────────
 
 /**
+ * 🔴 **SESSION BP §2.3 — THE EXPECTED COLOUR, PUT THROUGH THE SAME NORMALISER THE DOM USES.**
+ *
+ * The assertion has to name the TOKEN (`colors.onAir`), never the hex, or the test pins a
+ * literal and goes on passing while the badge and the row's own mark drift apart — which is
+ * the exact failure `B-156` was, one layer down, on a predicate instead of a colour. But
+ * `HTMLElement.style.color` reads back in the browser's canonical form (`rgb(44, 255, 122)`),
+ * so comparing a raw token string to it fails for reasons that have nothing to do with the
+ * badge. Running the token through a scratch element normalises both sides identically, and
+ * the assertion still names the token.
+ */
+function asRendered(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = token;
+  return probe.style.color;
+}
+
+/**
  * The label used to read `ON AIR NOW` whenever `activeLookOf` picked the look — and that
  * function answers *which look the ROW is set to*, never *whether the row is playing*. So a
  * merely LOADED row claimed air, which the owner met with a screenshot: `ON AIR NOW` in the
@@ -239,6 +257,12 @@ it('🔴 B-156 — a LOADED row does NOT claim air: the badge says a take would 
   expect(badge?.textContent, 'but it must not claim air').not.toContain('ON AIR');
   expect(badge?.textContent).toContain('TAKE');
   expect(badge?.getAttribute('data-look-badge')).toBe('not-on-air');
+  /*
+    🔴 SESSION BP §1.3 — …and it wears READY's own sky, because READY is precisely the row
+    state this badge is describing. ⚠ `colors.ready`, NOT `--r-accent`: identical value,
+    opposite rule (the accent is explicitly not a state colour). See `theme.ts`.
+  */
+  expect((badge as HTMLElement | null)?.style.color).toBe(asRendered(colors.ready));
 });
 
 it('B-156 — an ON-AIR row DOES say so, which is the state the label was right about', async () => {
@@ -246,6 +270,14 @@ it('B-156 — an ON-AIR row DOES say so, which is the state the label was right 
   const badge = el.querySelector('[data-look-live="two"]');
   expect(badge?.textContent).toContain('ON AIR NOW');
   expect(badge?.getAttribute('data-look-badge')).toBe('on-air');
+  /*
+    🔴 SESSION BP §1.3 — GREEN, and this reverses a decision the file shipped with. Amber was
+    right while the badge was gated on `activeLookOf` and therefore meant something other than
+    "playing"; `B-156` rewired it to `isOnAir`, the layer table's own predicate, and the two
+    meanings merged. The badge and the row's green mark now make ONE claim from ONE derivation
+    in ONE colour, which is the whole argument for taking the sacred hue here.
+  */
+  expect((badge as HTMLElement | null)?.style.color).toBe(asRendered(colors.onAir));
 });
 
 it('🔴 B-156 — a REHEARSING row says PVW, the distinction session BL shipped on the row', async () => {
@@ -266,6 +298,19 @@ it('🔴 B-156 — a REHEARSING row says PVW, the distinction session BL shipped
     rehearsing one. The interlock itself is asserted on the WIRE in
     `live-look-reconcile.integration.test.ts`; this asserts only what the badge does with the
     answer, rather than assuming the pair cannot occur.
+
+    🔴 **SESSION BP — THE TONE IS NOW ITS OWN VALUE, `rehearsing`, NOT `not-on-air`.** Two
+    states sharing one attribute value was the same collapse `B-156` fixed in the WORDS: a
+    reader (or a test, or a screenshot diff) could not tell a rehearsing row from a merely
+    loaded one, which is precisely the distinction session BL shipped on the row and this
+    section was missing. The attribute now carries all three.
   */
-  expect(badge?.getAttribute('data-look-badge')).toBe('not-on-air');
+  expect(badge?.getAttribute('data-look-badge')).toBe('rehearsing');
+  /*
+    🔴 SESSION BP §1.3 — `R-022`'s violet, the same hue the row's own REHEARSING mark wears,
+    so the two cannot disagree about which row is rehearsing. The token's rule in `theme.ts`
+    was widened for this deliberately: it bans CONTROLS that advertise availability, and a
+    badge naming the mode is a state INDICATOR in the same category as that mark.
+  */
+  expect((badge as HTMLElement | null)?.style.color).toBe(asRendered(colors.rehearsing));
 });

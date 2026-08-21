@@ -173,6 +173,19 @@ export const cssVars = {
   '--r-danger-strong': '#B91C1C',
   '--r-success': '#10B981', // ack / healthy
   '--r-dirty': '#F59E0B',
+  /**
+   * READY — the state a row is in when it is loaded and selected and not playing.
+   *
+   * 🔴 **IDENTICAL IN VALUE TO `--r-accent` (`#38BDF8`) AND OPPOSITE IN RULE, which is
+   * exactly why the choice has to be made deliberately rather than by whichever name comes
+   * to hand.** `--r-accent` is the INTERACTIVE sky and its own comment says it _"IS NOT A
+   * STATE COLOUR AND MUST NOT BECOME ONE"_. This one IS the state colour. Anything saying
+   * "this row is ready / selected, not playing" takes THIS token; anything saying "this is
+   * interactive" takes the accent. Picking the wrong one compiles, looks identical today,
+   * and silently drifts the day either is retuned — the failure has no moment at which it
+   * announces itself, so the only defence is naming the rule where both are declared.
+   * (Session BP, on the Inspector's LOOK INPUTS badge.)
+   */
   '--r-ready': colors.ready,
   '--r-idle': colors.idle,
   '--r-offline': colors.offline,
@@ -191,6 +204,20 @@ export const cssVars = {
    * what drowned the state signal across thirty rows), and this says a MODE IS ON
    * — the same thing the row's own state mark says, in the same colour, so the two
    * cannot disagree about which row is rehearsing.
+   *
+   * 🔴 **SESSION BP — THE RULE IS ABOUT CONTROLS, AND IT IS WIDENED HERE DELIBERATELY
+   * RATHER THAN QUIETLY OVERRIDDEN.** Owner's decision, 2026-08-21: the Inspector's LOOK
+   * INPUTS badge reads `SHOWING IN PVW` while the row is rehearsing, and wears this hue.
+   *
+   * Read the justification above and it already licenses that: the ban is on colour that
+   * advertises AVAILABILITY, and what this hue is FOR is saying a mode is on, _"the same
+   * thing the row's own state mark says, in the same colour, so the two cannot disagree"_.
+   * A badge naming the rehearse mode is a STATE INDICATOR in exactly that category — the
+   * row's REHEARSING mark already wears it — not a control offering an action.
+   *
+   * **So: STATE INDICATORS that name the rehearse mode may wear this. CONTROLS still may
+   * not, with the REHEARSE toggle-while-engaged the one exception, for the reason above.**
+   * The distinction that matters is indicator-vs-control, never which component it is in.
    */
   '--r-rehearsing': colors.rehearsing,
   '--r-rehearsing-strong': '#7C3AED',

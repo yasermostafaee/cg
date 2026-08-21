@@ -325,3 +325,105 @@ describe('two templates with the same name are told apart in the heading', () =>
     expect(el.querySelector('h3')?.querySelector('[data-template-stub]')).toBeNull();
   });
 });
+
+// ───────── SESSION BP — THE PICKER MUST NOT LIE ABOUT A ROW THAT FROZE ITS ASSIGNMENT ─────────
+
+/**
+ * 🔴 **THE FREEZE MAKES THE LIVE ASSIGNMENT STOP BEING WHAT AN ON-AIR ROW RESOLVES, AND THIS
+ * SECTION SHOWS THE LIVE ASSIGNMENT.**
+ *
+ * A row pins level 2 at its take, so an edit made while it is on air changes the value in
+ * this picker and changes NOTHING the row is resolving. Unsaid, that is the surface that is
+ * confidently wrong: the operator edits the default, the panel agrees, air does not move, and
+ * there is nothing anywhere to explain the gap — worse than the freeze not existing, because
+ * they would have no reason to look.
+ *
+ * ⚠ **The picker itself deliberately keeps showing the LIVE value.** It is the control for
+ * the TEMPLATE assignment, and it is also the baseline a staged draft is dirty against — an
+ * on-air row would read as permanently dirty against its own template if it showed the pin.
+ * So the pin is stated BESIDE it, per plate, and only where the two actually disagree.
+ */
+describe('BP — a frozen row says what it is on', () => {
+  const onAirItem = (frozen?: Record<string, string>): StackItemState =>
+    ({
+      itemId: 'item-1',
+      templateId: 'tpl-two-box',
+      fields: {},
+      status: 'on-air',
+      pending: false,
+      ...(frozen !== undefined && { frozenAssignment: frozen }),
+    }) as StackItemState;
+
+  it('🔴 names the FROZEN source on a plate whose live default has since been edited', async () => {
+    stored = {
+      assignments: [{ templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-bbb' }],
+    };
+    // The row was taken while `guest-1` was Studio A; the default is now Baku.
+    const el = await renderInspector(onAirItem({ 'guest-1': 'src-aaa' }), TWO_BOX);
+
+    const said = el.querySelector('[data-plate-frozen="guest-1"]');
+    expect(said, 'the divergence must be stated').not.toBeNull();
+    expect(said?.textContent).toContain('Studio A');
+    expect(said?.textContent).toContain('frozen at take');
+    // …and the picker still shows the TEMPLATE's current value, which is what it edits.
+    expect(
+      el.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]')?.value,
+    ).toBe('src-bbb');
+  });
+
+  it('says NOTHING when the pin and the default agree — silence is the common case', async () => {
+    stored = {
+      assignments: [{ templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' }],
+    };
+    const el = await renderInspector(onAirItem({ 'guest-1': 'src-aaa' }), TWO_BOX);
+    expect(el.querySelector('[data-plate-frozen="guest-1"]')).toBeNull();
+  });
+
+  it('says nothing on an OFF-AIR row, which has no pin and no picture to protect', async () => {
+    stored = {
+      assignments: [{ templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-bbb' }],
+    };
+    // No `frozenAssignment` — the bridge publishes none for a row that is not on air.
+    const el = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
+    expect(el.querySelector('[data-plate-frozen="guest-1"]')).toBeNull();
+  });
+
+  it('🔴 an `R-048` PATCH suppresses it: two answers to one question would be worse than none', async () => {
+    /*
+      Level 4 outranks level 2 entirely, so a plate carrying an emergency patch is not on its
+      frozen source. Naming both would put two "what is this plate on" claims side by side and
+      make the operator supply the precedence rule to read the panel.
+    */
+    stored = {
+      assignments: [{ templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-bbb' }],
+    };
+    const patched = {
+      ...onAirItem({ 'guest-1': 'src-aaa' }),
+      sourceOverride: { 'guest-1': 'src-aaa' },
+    } as StackItemState;
+    const el = await renderInspector(patched, TWO_BOX);
+    expect(el.querySelector('[data-plate-overridden="guest-1"]')).not.toBeNull();
+    expect(el.querySelector('[data-plate-frozen="guest-1"]')).toBeNull();
+  });
+
+  it('🔴 …including a patch that happens to EQUAL the live default, which reads as no divergence', async () => {
+    /*
+      🔴 **THE CASE THAT CAUGHT A FALSE SENTENCE.** `onAirPlateSource.overridden` means "the
+      patch diverges from the PICKER", and it is FALSE here — the patch and the live default
+      are the same value. But the patch is still in force and still outranks the pin, so a
+      frozen line gated on `overridden` would have announced Studio A as what this row is on
+      while the patch had it on Baku. Gating on `patched` is what makes the panel silent, and
+      silence is right: the picker already shows what is composited.
+    */
+    stored = {
+      assignments: [{ templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-bbb' }],
+    };
+    const patched = {
+      ...onAirItem({ 'guest-1': 'src-aaa' }),
+      sourceOverride: { 'guest-1': 'src-bbb' },
+    } as StackItemState;
+    const el = await renderInspector(patched, TWO_BOX);
+    expect(el.querySelector('[data-plate-frozen="guest-1"]'), 'no false claim').toBeNull();
+    expect(el.querySelector('[data-plate-overridden="guest-1"]'), 'and no noise').toBeNull();
+  });
+});

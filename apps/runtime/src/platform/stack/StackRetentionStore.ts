@@ -122,6 +122,12 @@ function toRetained(item: StackItemState): RetainedStackItem {
     // somebody SWITCHES: the look on air keeps working, and the look the operator composed
     // silently reverts to the template assignment the moment they cut to it.
     ...(item.lookSourceOverride !== undefined && { lookSourceOverride: item.lookSourceOverride }),
+    // 🔴 SESSION BP — and the FROZEN level 2, whose loss is the most consequential of the
+    // six, because losing it does not merely revert a value: it re-arms the mechanism the
+    // freeze exists to disable. A blip that dropped this THAWS every on-air row, and every
+    // assignment edited during the show lands on air at the first reconcile after the
+    // reconnect — `B-155` through the one door nobody is watching.
+    ...(item.frozenAssignment !== undefined && { frozenAssignment: item.frozenAssignment }),
     // C-015 phase 6 (6.5f) — and the per-plate AUDIO INTENT, which needs this more
     // than either neighbour. A dropped position or source override shows the wrong
     // PICTURE, and somebody sees it; a dropped volume shows the RIGHT picture in

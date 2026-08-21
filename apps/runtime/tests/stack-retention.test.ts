@@ -747,7 +747,41 @@ it('🔴 every OPEN-AXIS field a published row carries survives toRetained — d
     plateVolumes: { 'l-1': 1 },
     activeLookId: 'solo',
     lookSourceOverride: { solo: { 'l-1': 'studio-3' } },
+    frozenAssignment: { 'l-1': 'studio-1' },
   } as unknown as StackItemState;
+
+  /*
+    🔴 **SESSION BP — THE HOLE IN THIS GUARD, CLOSED. The KEYS were derived; the FIXTURE was
+    not, and that is where a new field slipped past.**
+
+    `dropped` below only ever looks at fields `populated` actually sets. So a seventh field
+    added to both schemas and forgotten in `toRetained` produced NO failure here — it was
+    `undefined` on the row, therefore never a candidate for having been dropped. The guard
+    read as complete and would have passed on the exact omission it exists to catch, which
+    is the `mock-bridge-parity` shape again: a check that answers a narrower question than
+    its name.
+
+    So the fixture's own completeness is now asserted from the same derived list. A field
+    added to both schemas reddens THIS line first, which forces the fixture up to date, which
+    is what makes `dropped` meaningful.
+
+    Two fields are named exceptions rather than filtered by a predicate, because a predicate
+    would silently absorb the next one:
+      - `status`  — retention carries `state`, DERIVED from it by `retainedStateFor`.
+      - `errorCode` — carried CONDITIONALLY (only an `error` row's own code travels, so
+        B-093's `osc-unverifiable` on an `unverified` row does not masquerade as a failure).
+        Populating it on this `on-air` row would assert the opposite of that rule; the
+        condition has its own test.
+  */
+  const fixtureExempt = new Set(['status', 'errorCode']);
+  const uncovered = carried.filter(
+    (k) =>
+      !fixtureExempt.has(k) && (populated as unknown as Record<string, unknown>)[k] === undefined,
+  );
+  expect(
+    uncovered,
+    'the fixture must populate every carriable field, or the assertion below passes vacuously',
+  ).toEqual([]);
 
   await store.mirror([populated]);
   const retained = store.items()[0];

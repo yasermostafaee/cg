@@ -593,7 +593,18 @@ export function validateSourceAssignments(
   const known = new Set(options.catalog.sources.map((s) => s.id));
   const seen = new Set<string>();
   for (const assignment of value.assignments) {
-    const key = `${assignment.templateId} ${assignment.plateId}`;
+    /*
+      ⚠ **THE SEPARATOR IS AN ESCAPE, NEVER A RAW BYTE (session BP).** This line carried a
+      literal NUL byte until BP, and the resulting string is identical either way — what
+      differed is that a file containing one reads as BINARY to `grep -r` and to ripgrep, so
+      every tree-wide sweep skipped this module in silence. Golden rule 9 makes `git grep` the
+      instrument that catches a string change the compiler cannot, so a file the sweep cannot
+      read is a hole in it — and this module, which owns `SourceAssignments`, is one of the
+      likelier things to be swept for. (`git grep` itself was not blind here: it samples only
+      the first 8000 bytes for binary detection and the NUL sat past that, which is exactly the
+      sort of accident that makes a hole look closed.)
+    */
+    const key = `${assignment.templateId}\u0000${assignment.plateId}`;
     if (seen.has(key)) {
       throw new SourceAssignmentsConfigError(
         'duplicate-plate',

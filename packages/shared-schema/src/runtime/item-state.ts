@@ -4,6 +4,7 @@ import { FieldValuesSchema } from '../fields.js';
 import { PositionSchema } from '../scene.js';
 import {
   LivePlateVolumesSchema,
+  LiveSourceFrozenAssignmentSchema,
   LiveSourceLookOverrideSchema,
   LiveSourceOverrideSchema,
 } from '../live-source.js';
@@ -76,6 +77,21 @@ export const StackItemStateSchema = z.object({
    * normal — the B-107 / B-109 class, which is why it is retained rather than assumed.
    */
   lookSourceOverride: LiveSourceLookOverrideSchema.optional(),
+  /**
+   * 🔴 **Session BP — THE TEMPLATE ASSIGNMENT THIS ROW FROZE AT TAKE (level 2, held
+   * still).** See {@link LiveSourceFrozenAssignmentSchema} for the rule and the three
+   * exemptions.
+   *
+   * Published for a reason the other two do not have: without it the Inspector's LIVE
+   * PLATES section would go on showing the LIVE template default for a row that is on air
+   * resolving a different one — a surface that is confidently wrong, which is the worst
+   * class of defect this product has. The section names the frozen value on any plate where
+   * the two disagree, and it can only do that if it can read it.
+   *
+   * ABSENT means NOT FROZEN (off air, or taken by a build predating the field). An EMPTY
+   * record is a real freeze to nothing — see the schema's ABSENT-vs-EMPTY note.
+   */
+  frozenAssignment: LiveSourceFrozenAssignmentSchema.optional(),
   /**
    * C-015 phase 6 (6.5f) — how loud each plate is INTENDED to be on this row,
    * published so the console can show it and so the browser's retention can carry
@@ -324,6 +340,21 @@ export const RetainedStackItemSchema = z.object({
    * normal — the B-107 / B-109 class, which is why it is retained rather than assumed.
    */
   lookSourceOverride: LiveSourceLookOverrideSchema.optional(),
+  /**
+   * 🔴 **Session BP — the FROZEN template assignment, on the OPEN axis beside
+   * {@link sourceOverride} and for a sharper version of the same reason.**
+   *
+   * The bridge's freeze is PROCESS memory. Without this field a momentary blip THAWS every
+   * on-air row: the restore re-resolves level 2 from the live store, and whatever
+   * configuration was edited during the show lands on air at the first reconcile after the
+   * reconnect — which is precisely the `B-155` mechanism this feature exists to close,
+   * arriving through the one door nobody was watching. `B-107` / `B-109` again.
+   *
+   * ⚠ ABSENT here means the row was not frozen, which for a restored ON-AIR row is the
+   * pre-BP behaviour rather than an error: it resolves live, as it always did. That is a
+   * graceful degradation for retention written by an older build, not a second rule.
+   */
+  frozenAssignment: LiveSourceFrozenAssignmentSchema.optional(),
   /**
    * C-015 phase 6 (6.5f) — the per-plate audio intent, on the OPEN axis beside
    * `sourceOverride` and for the identical reason.
