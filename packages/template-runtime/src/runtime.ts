@@ -483,6 +483,31 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     arrangementView = view;
     const live = liveArrangementView(scene, built.elementMap, view);
     repunchLiveSourceHoles(built.punchTargets, sceneMaskHoles(scene, live));
+    /*
+      🔴 `B-150` — THE MEDIA PARK IS DERIVED FROM THE SAME `view`, HERE, and not at
+      `applyLook`. Both statements of visibility flow through this one function — the look
+      flip and the A′ `setArrangementView` — so deriving the park anywhere else would give it
+      a second, narrower idea of what is on screen than the mask has. The case that proves
+      it: `setArrangementView(undefined)` un-hides every look instance (its own header calls
+      that out), and a park updated only by `applyLook` would go on holding those instances'
+      media frozen while they were visible on the canvas.
+
+      One derivation, one `view`. A member is hidden exactly when this view says its look
+      instance is — never `!== true`, because an ABSENT entry means "this view does not speak
+      about it" and must leave the member live, which is what makes the `undefined` view
+      revive everything by construction rather than by a special case.
+
+      Late-bound on purpose (`lookGroup` / `lookMediaPark` are declared below): this closure
+      runs long after wiring, the same shape `arrangementView` above already relies on.
+    */
+    if (lookGroup !== undefined) {
+      lookMediaPark.setHiddenRoots(
+        lookGroup.looks
+          .filter((l) => view?.visibility?.[l.instanceId] === false)
+          .map((l) => built.elementMap.get(l.instanceId))
+          .filter((n): n is HTMLElement => n !== undefined),
+      );
+    }
   };
   let arrangementView: ArrangementView | undefined;
 
@@ -511,13 +536,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const visibility: Record<string, boolean> = {};
     for (const l of lookGroup.looks) visibility[l.instanceId] = l.id === look.id;
     currentLookId = look.id;
+    // The park follows from INSIDE `repunch`, off this same `visibility` map — see the note
+    // there for why it cannot be done at this line without acquiring a second answer.
     repunch({ visibility });
-    lookMediaPark.setHiddenRoots(
-      lookGroup.looks
-        .filter((l) => l.id !== look.id)
-        .map((l) => built.elementMap.get(l.instanceId))
-        .filter((n): n is HTMLElement => n !== undefined),
-    );
   };
   /**
    * `tasks.md` 6.7 — ENTER A LOOK BY ID. **The one implementation, two entry points.**

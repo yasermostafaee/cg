@@ -134,6 +134,22 @@ necessity (each labelled `CONTENT-START CALLER n of 3` at the site). `looks-medi
 therefore ENUMERATES them — the same technique `live-add-mute` uses bridge-side, and for the same
 reason.
 
+### 2e. A defect I found in my own pushed commit, and fixed promptly
+
+The first version derived the park's hidden set **at `applyLook`**. That is a second, narrower
+answer to "what is on screen" than the mask has: `setArrangementView` reaches the same visibility
+through `repunch` WITHOUT going through `applyLook`, and `setArrangementView(undefined)` un-hides
+every look instance — so the park went on holding those instances' media frozen while they were
+visible. It now derives from the `view` **inside `repunch`**, the one function both statements of
+visibility flow through, keyed on `visibility[instanceId] === false` — never `!== true`, because an
+ABSENT entry means "this view does not speak about it" and must leave the member live. That is what
+makes the `undefined` view revive everything by construction instead of by a special case.
+
+Pinned by its own test, mutation-checked: restricting the derivation to a defined `view`
+reproduces the bug exactly and reddens it. Narrow in practice (the A′ path is Designer-side and no
+template authors both), but it is the same principle as part one — one derivation, one seam — so it
+was fixed rather than documented.
+
 ## 3. Filing
 
 - **`B-150`** in `docs/prd/bugs-runtime.md`, cross-referenced to `R-057`, `B-149`, `D-128`, `D-125`.

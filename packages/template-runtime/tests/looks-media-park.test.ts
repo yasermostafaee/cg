@@ -284,6 +284,29 @@ describe('a hidden look is parked; the visible one is not', () => {
     expect(vid('vid-b').paused).toBe(true);
     r.remove();
   });
+
+  it('🔴 the park follows the ARRANGEMENT VIEW too — un-hiding a look revives its media', async () => {
+    /*
+      Both statements of visibility flow through ONE `repunch`: the look flip and the A′
+      `setArrangementView`. `setArrangementView(undefined)` un-hides every look instance —
+      that seam's own header says so — so a park derived at `applyLook` instead would go on
+      holding those instances' media frozen while they were visible. Deriving it from the
+      `view` inside `repunch` makes that impossible rather than merely handled: an ABSENT
+      visibility entry means "this view does not speak about it" and leaves the member live.
+    */
+    const { r, clock } = boot([video('vid-a')], [video('vid-b')]);
+    trackHeads();
+    await r.play({});
+    await run(clock, 300);
+    expect(vid('vid-b').paused, 'parked while its look is hidden').toBe(true);
+
+    r.setArrangementView(undefined);
+    await run(clock, 200);
+
+    expect(vid('vid-b').paused, 'visible again ⇒ running again').toBe(false);
+    expect(vid('vid-a').paused).toBe(false);
+    r.remove();
+  });
 });
 
 // ───────────────── 6.2 — enter → leave → re-enter RESUMES IN PLACE ──────────────────
