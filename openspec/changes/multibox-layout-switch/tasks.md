@@ -872,6 +872,7 @@ candidate shapes.
       is the strongest argument for building it sooner rather than later.
 
 - [~] 7.14 **STAGE 2 — the Inspector's per-look inputs, and ONE atomic UPDATE (session BM-2).**
+  **Linux `gate:e2e` DISCHARGED** — [run 32496318429](https://github.com/yasermostafaee/cg/actions/runs/32496318429) on `721d5078`, `success`, `E2E (Playwright)` **RUN**. ⚠ The run on `3e5acf66` was RED (a stale assertion on the sentence §3.4 reworded); `721d5078` is the fix.
   `LOOK INPUTS` lists each look with its own per-plate input, the LIVE look marked, sitting under
   the template DEFAULT it falls back to. `stack.update` gained `lookBindings` — the row's
   COMPLETE map — so one press carries the texts AND the inputs and the bridge applies bindings →
