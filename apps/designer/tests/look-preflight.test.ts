@@ -11,8 +11,15 @@ import { editSceneOf } from '../src/renderer/state/scene-doc.js';
  * single-group refusal, B.4 the stamped-scope refusal reaching inside a look.
  *
  * ⭐ The cases that must be ACCEPTED matter as much as the refusals: the same source in
- * DIFFERENT looks is the identity mechanism, and the same screen area in different looks
- * is the normal case — each has a positive test below.
+ * DIFFERENT looks is legitimate, and the same screen area in different looks is the normal
+ * case — each has a positive test below.
+ *
+ * ⚠ **Session BM reworded this file's prose, and NONE of its assertions moved.** It used to
+ * say the across-looks case "is the identity mechanism", i.e. one declaration guaranteed one
+ * seat. It no longer does: the operator can point either look's frame at a different input, so
+ * a shared `routeKey` supplies the same DEFAULT and nothing more. The REFUSAL is unchanged —
+ * two frames of one look on one source is still ambiguous — which is why every expectation
+ * below still reads exactly as it did.
  */
 
 const baseElProps = { opacity: 1, visible: true, locked: false, zIndex: 0 };
@@ -161,7 +168,7 @@ describe('B.1 — a plate referencing an UNDECLARED source is refused, naming it
   });
 });
 
-describe('B.2 — the same source twice in ONE look is refused; across looks it is the identity mechanism', () => {
+describe('B.2 — the same source twice in ONE look is refused; across looks it is legitimate', () => {
   it('🔴 twice within one look → error against BOTH plates, and the message teaches the across-looks case', () => {
     const s = twoLookScene({
       lookAChildren: [plate('a-1', 'guest-1', 0, 0), plate('a-dup', 'guest-1', 960, 0)],
@@ -171,7 +178,7 @@ describe('B.2 — the same source twice in ONE look is refused; across looks it 
     expect(issues[0]?.message).toContain('DIFFERENT looks is fine');
   });
 
-  it('⭐ the SAME source in TWO looks is ACCEPTED — one seat, held across the switch', () => {
+  it('⭐ the SAME source in TWO looks is ACCEPTED — they start on the same input', () => {
     // guest-1 is in look A AND look B by default in this fixture.
     expect(codesOf(twoLookScene({}))).toEqual([]);
   });
