@@ -2439,3 +2439,66 @@ was allowed to be cheap.
   document's own level.
 - **A look's instance is a DIRECT child of a scene layer in v1** (the runtime's DOM read-back is
   root-scope only); the constraint is written at the schema, not scattered.
+
+### 14.10 🔴 THE ASSIGNMENT FREEZE (session BP) — level 2 is captured at TAKE
+
+`B-155` had one mechanism: `setSourceAssignments` writes without reconciling, so an edit LURKS in
+the store until the next reconcile from any cause applies it — and the commonest cause is a look
+press, which then carries a producer change into the middle of a switch. That is what flashed.
+
+**The rule adopted (owner, 2026-08-21):** _a row that is on air does not change its picture because
+somebody edited configuration._ The take captures the template's `{plate → catalog entry}` and every
+later resolution on that row reads the snapshot. It thaws at a landed `out`/`stop`, dies at
+`remove`, and a re-take re-captures.
+
+**Why not the two narrower answers.** Session BO had framed the choice as three options; both of the
+plausible ones leave the mechanism intact and only narrow who can reach it:
+
+- **"disable the editor while the row is on air"** — the assignment is TEMPLATE-wide and
+  INSTALLATION-wide, so the writer need not be this row's panel: another row carrying the same
+  template, or **another station's Runtime against the same bridge**, can write it while this row is
+  live. That is the configuration the DEFER/COMMIT ban already exists for, and it is asserted on the
+  wire: two rows of one template on air at once, resolving different level-2 answers, each pinned by
+  its own take. No rule about one panel produces that.
+- **"reconcile inside `setSourceAssignments`"** — removes the lurk by applying a template-wide edit
+  to every row on air. The same accident, arriving on time instead of late.
+
+**Only level 2 freezes, and the three exemptions each have their own test.** The CATALOG (level 1)
+is not frozen — the snapshot names which ENTRY a plate uses, never what that entry resolves to. The
+row's PER-LOOK BINDINGS (level 3) still reach air in one action. `R-048`'s EMERGENCY OVERRIDE
+(level 4) still reaches air in one action and still never writes back. The sentence _"freeze the
+row's sources at take"_ would take all three away by accident, which is why the rule is stated as
+**level 2 alone** wherever it appears.
+
+**Two structural decisions worth keeping.**
+
+1. **The take resolves level 2 `'fresh'` and pins what it resolved; everything else resolves
+   `'pinned'`.** This is a parameter of its own (`LevelTwoSource`) rather than read off the existing
+   `scope` flag, even though the two agree today: `scope` says WHICH FRAMES MAY REFUSE, this says
+   WHERE LEVEL 2 COMES FROM, and a name is a contract. It also has to be `'fresh'` rather than
+   "echo the pin if there is one" — otherwise a re-taken row is welded to its first take for ever
+   and the assignment editor is inert for it, which is a worse product than the defect.
+2. **The pin is what the plan RESOLVED, returned by the planner (`LiveSeatingPlan.resolvedFrom`),
+   never a second read of the store.** One evaluation, two uses — golden rule 7's shape on a value
+   instead of a boolean. A second read would sit on the near side of the take's `await`s with
+   `setSourceAssignments` free to land between them, and the row would be pinned to an assignment
+   its own plan never saw: the exact divergence the freeze abolishes, manufactured by the freeze.
+
+**And the surface, because the freeze creates a NEW way to be confidently wrong.** The LIVE PLATES
+picker shows the template's CURRENT assignment — it must, because it is the control for that value
+and the baseline a staged draft is dirty against. On a frozen row it therefore shows something the
+row is not resolving. It now names the captured source beside the picker on any plate where the two
+disagree, phrased as a statement about the ASSIGNMENT rather than about air (levels 3 and 4 can
+still move the picture), and suppressed entirely where an emergency patch is in force — gated on
+whether a patch EXISTS, not on whether it diverges from the picker, because a patch equal to the
+live default reads as no divergence while still outranking the pin.
+
+**⚠ One consequence, stated rather than discovered later.** A plate that resolved to NOTHING at take
+is unassigned for that run: the snapshot is the row's COMPLETE level-2 answer and a plate absent
+from it does not fall through to the live store. A partial freeze would leave "…except for plates
+that had no assignment" as a caveat and would reopen the multi-station case for exactly those
+plates. The operator's live door for such a plate is its per-look binding; the permanent one is a
+re-take. This changed one existing test's FIXTURE (`an ON-AIR row with an EMPTY ledger still
+reconciles`), which had arranged its state through the lurk; its subject — that `setActiveLook`
+decides "on air" from the STATUS and not from an empty ledger — is unchanged and now asserted more
+sharply, because a refusal naming the unassigned plates is positive proof the plan was built.

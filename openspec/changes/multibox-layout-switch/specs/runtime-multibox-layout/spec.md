@@ -115,6 +115,84 @@ the same screen area necessarily overlap, and overlapping holes are an export-bl
 - **THEN** the two surviving boxes still show the sources they showed before, and the dropped box's
   source is not reassigned onto either of them
 
+### Requirement: A row FREEZES its template assignment at TAKE
+
+A row that is ON AIR SHALL NOT change what any of its plates shows because the TEMPLATE ASSIGNMENT
+was edited. The take SHALL capture the template's `{plate → catalog entry}` answer, and every later
+resolution on that row — a look switch, an emergency source swap, a field UPDATE, a reconcile after
+a bridge restart — SHALL resolve that level from the captured snapshot rather than from the live
+assignment store.
+
+The snapshot SHALL be released when the row goes off air by a landed `out` or `stop`, and SHALL be
+dropped when the row is removed. A subsequent take SHALL capture the assignment then in force, so
+re-taking a row is how an operator adopts an edited default.
+
+A failed or refused teardown SHALL NOT release the snapshot: the graphic may still be on air, and
+a row whose state cannot be established SHALL stay pinned.
+
+The snapshot SHALL survive a bridge restart, carried by the browser's retention alongside the row's
+other operator intent. A restored row with no snapshot SHALL resolve from the live store, which is
+the behaviour of a row that was never pinned.
+
+Three levels SHALL NOT be frozen, and each SHALL remain in force on a pinned row:
+
+- the installation's **CATALOG** — the snapshot names which catalog ENTRY a plate uses, never what
+  that entry resolves to, so re-pointing or retiring an entry still reaches the row;
+- the row's **PER-LOOK BINDINGS**, which SHALL continue to reach air in one action;
+- the row's **PER-PLATE EMERGENCY OVERRIDE**, which SHALL continue to reach air in one action and
+  SHALL continue not to write back to the template assignment.
+
+The operator surface that edits the template assignment SHALL state, per plate and only where the
+two disagree, that a row on air is resolving the captured value rather than the one displayed. That
+statement SHALL be suppressed where an emergency override is in force for that plate, because the
+override outranks the assignment and two answers to one question are worse than none.
+
+#### Scenario: An assignment edited during a show does not reach the row on air
+
+- **GIVEN** a row is on air, with a plate showing the source its take resolved
+- **WHEN** the template's assignment for that plate is changed, from any surface
+- **AND** the operator switches the row to another look
+- **THEN** no producer change is issued for that plate, and the switch is a geometry move alone
+
+#### Scenario: A re-take adopts the edited assignment
+
+- **GIVEN** a row is on air and its template's assignment has since been changed
+- **WHEN** the operator takes the row again
+- **THEN** the plate is seated on the new source, and the row's snapshot is the new assignment
+
+#### Scenario: A second row of the same template is pinned by its own take
+
+- **GIVEN** a row of a template is on air, and the template's assignment is then changed
+- **WHEN** a second row of the same template is taken
+- **THEN** the second row resolves the new assignment and the first still resolves its own, with
+  both on air at the same time
+
+#### Scenario: An off-air row is not pinned
+
+- **GIVEN** a row is loaded but not on air
+- **WHEN** the template's assignment is changed
+- **THEN** the row's next take uses the new assignment
+
+#### Scenario: The emergency swap still reaches air on a pinned row
+
+- **GIVEN** a row is on air and pinned to the assignment its take captured
+- **WHEN** the operator points one of its plates at a different source as an emergency substitution
+- **THEN** the substitution is on air in one action, and the row's snapshot is unchanged
+
+#### Scenario: A bridge restart does not thaw a row that is on air
+
+- **GIVEN** a row is on air and pinned, and the assignment has since been edited
+- **WHEN** the bridge restarts and the row is restored from the browser's retention
+- **THEN** the row still resolves the assignment its take captured, and the edit does not arrive
+
+#### Scenario: The assignment editor says what a pinned row is actually on
+
+- **GIVEN** a row is on air and the template's assignment for one of its plates has since changed
+- **WHEN** the operator looks at that template's plate list
+- **THEN** the picker shows the current assignment, and beside it the plate names the captured
+  source and says it was frozen at take
+- **AND** no such statement appears for a plate whose captured source and current assignment agree
+
 ### Requirement: The layout switch and the live-source change are ONE mechanism
 
 A layout switch and a source change SHALL be served by a **single** reconcile. Changing which plates

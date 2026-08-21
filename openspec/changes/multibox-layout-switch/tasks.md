@@ -892,6 +892,11 @@ candidate shapes.
       _"an assignment change LURKS…"_): `setSourceAssignments` does not reconcile, so the change
       lands at the next reconcile from any cause — a look press — which puts a producer change
       INSIDE a switch, and that is what flashes.
+      ⭐ **THE CAUSE IS REMOVED (session BP, 7.16) AND THIS ITEM STAYS OPEN ANYWAY.** The row now
+      freezes level 2 at its take, so a look press can no longer carry a producer change: that
+      file's `B-155` test is INVERTED and asserts the switch issues no `PLAY` at all. What is
+      still owed is a MEASUREMENT, not a fix — see the rule below and the two probes. Ticking this
+      on a green suite is the precise thing the next paragraph forbids.
       🔴 **DO NOT READ THE GREEN SUITE AS A FIX.** `@cg/amcp-mock` models `PLAY` on an occupied layer
       as an in-place replace, which `swapLiveSource`'s own doc marks **UNVERIFIED on 2.3.2 (task
       6.9a)** — the flash IS that replace's timing, so the mock cannot see it. And whether `FILL` and
@@ -905,34 +910,63 @@ candidate shapes.
       guest is not. That does not contradict `B-126`, whose case is the opposite trade (a dead feed
       vs black, where black is worse).
 
-- [ ] 7.16 🔴 **THE ASSIGNMENT COLLAPSE — STILL OPEN. Session BO built the owner's chosen option
-      and REVERTED it under §8's stop rule, because it takes away the only door.**
-      The decision (owner, 2026-08-21) was the second candidate: _the Inspector must not stage
-      template-assignment edits for a row whose template HAS LOOKS._ The reasoning holds and is
-      recorded in `LivePlatesSection`'s header — an installation-level edit was riding an on-air
-      action, and `setSourceAssignments` does not reconcile, so it lurked until a look press
-      applied it mid-switch.
-      🔴 **WHAT THE SWEEP FOUND, and why it was not shipped:** `LivePlatesSection` is the **only**
-      surface in the product that binds a plate to a source. `SourcesModal` DEFINES the station's
-      sources and merely LISTS which plates reference one (for its delete warning) — it has no
-      picker. Removing the editor for looks templates therefore leaves the template-level default
-      with **no editing surface at all**, and §8 is explicit that taking away the only door is a
-      regression rather than a collapse.
-      **The cost is concrete:** without a template assignment every FRESH row starts unbound and
-      its take is refused (`live-source-unassigned`) until the operator sets a per-look binding for
-      every plate of every look, by hand, per row — which is exactly what a template-level default
-      exists to prevent.
-      **Three options, for the owner to choose — none picked here:**
-      **(a)** move the assignment editor to a config surface (the Live sources modal), so the
-      collapse completes AND the door exists. Most work; the coherent version of the decision.
-      **(b)** the rejected candidate — reconcile inside `setSourceAssignments`. Removes the lurk,
-      but applies a template-wide change to every row on air.
-      **(c)** keep the editor where it is but DISABLE it while the row is ON AIR. The lurk needs a
-      live row, so this closes it; the door survives; an off-air edit lands at the next take, which
-      is what the panel already promises. Cheapest, and the smallest change to what operators know.
-      ⚠ Whichever is chosen, **`R-048`'s emergency is a different channel** (`stack.swap-live-source`)
-      and must stay one action from the row. "Stop the panel writing source state" is the sentence
-      that would remove it by accident.
+- [x] 7.16 ✅ **RESOLVED 2026-08-21 (session BP) — THE ROW FREEZES ITS TEMPLATE ASSIGNMENT AT
+      TAKE. Neither (a) nor (c); a different answer that makes the placement question stop being
+      a correctness question at all.**
+      **The rule:** _a row that is ON AIR does not change its picture because somebody edited
+      configuration._ The take captures level 2 — the template's `{plate → catalog id}` — and every
+      later resolution on that row (a look switch, an `R-048` swap, an UPDATE, a reconcile after a
+      blip) reads the snapshot. It thaws at a landed `out`/`stop` and dies at `remove`; a re-take
+      re-freezes, which is how an operator adopts an edited default.
+      🔴 **WHY NOT (c) — "disable the editor on an on-air row".** It narrows WHO can reach the
+      mechanism and leaves the mechanism intact. The assignment is TEMPLATE-wide and
+      INSTALLATION-wide, so the writer need not be this row's panel at all: another row carrying
+      the same template, or **another station's Runtime against the same bridge**, can write it
+      while this row is live — the configuration the DEFER/COMMIT ban already exists for.
+      Asserted, on the wire: two rows of one template on air at the same moment, resolving
+      DIFFERENT level-2 answers, each pinned by its own take. No rule about one panel produces
+      that.
+      🔴 **WHY NOT (b) — "reconcile inside `setSourceAssignments`".** It removes the lurk by
+      applying a template-wide edit to every row on air, which is the same accident arriving on
+      time instead of late.
+      **WHAT IS NOT FROZEN — three exemptions, one test each, because the sentence "freeze the
+      row's sources at take" would take all three away by accident:** `R-048`'s emergency swap
+      (level 4, immediate, on air, the operator's 20:59 tool) · the row's PER-LOOK bindings
+      (level 3, what session BM built) · the CATALOG (level 1 — the frozen fact is which ENTRY a
+      plate uses, never what that entry resolves to).
+      **AND THE SURFACE, because the freeze creates a new way to be confidently wrong.** The LIVE
+      PLATES picker shows the template's CURRENT assignment, so on a frozen row it shows a value
+      the row is not resolving. It now names the frozen source beside the picker on any plate
+      where the two disagree — per plate, only where they disagree, and suppressed entirely by an
+      `R-048` patch (which outranks level 2, so two claims would be worse than none).
+      **Where:** `LiveSourceFrozenAssignmentSchema` (`@cg/shared-schema`) · `#frozenAssignments` /
+      `#assignmentsFor` / `#thawAssignment` / `LevelTwoSource` (`caspar-runtime.ts`) ·
+      `frozenPlateSource` + the line in `LivePlatesSection` · `MockRuntime` parity ·
+      `StackRetentionStore` · `assignment-freeze.integration.test.ts` (9) ·
+      `e2e/assignment-freeze.spec.ts` (2).
+
+- [ ] 7.16b **WHERE THE TEMPLATE-ASSIGNMENT EDITOR SHOULD EVENTUALLY LIVE — direction recorded,
+      NOT this session's work, and §1.1's freeze is what makes that safe.**
+      Owner, 2026-08-21, correcting his own first answer: _"The Live sources modal is about
+      defining the INPUTS themselves. It should have nothing to do with any particular
+      template."_ That is the right reading of that surface, and it rules out BO's option (a).
+      The assignment is keyed by **(template, plate)** — not a property of a source and not a
+      property of a row — so its natural home is **the template's own entry**, wherever templates
+      are managed.
+      ⭐ **This is no longer a correctness question.** Once a live row resolves from a frozen
+      snapshot, an assignment edit cannot reach anything on air from any surface at any time. Where
+      the control lives is now only a question of where an operator expects to find it, and it can
+      take as long as it needs.
+      **Does a host exist?** ⚠ **Narrowly, yes — and it is not obviously the right one.**
+      `useTemplatePicker` (`features/fixedLayers/useTemplatePicker.tsx`) is, by its own header,
+      _"the ONLY template list in the product"_: it lists what this browser holds, carries R-005's
+      template removal, and ALREADY reads assignments (it shows unassigned plates and calls
+      `forgetTemplateAssignments` on removal). So the data and the list are both there. Against it:
+      it is a MODAL reached from a row's `LOAD` button, i.e. an in-the-moment playout affordance,
+      and hanging installation configuration off it makes a config editor reachable only by
+      starting an action the operator may not want to finish. `features/library/` is logic only —
+      import, delivery, naming — with no panel at all. So this is plausibly a NEW surface rather
+      than a move, and it is its own session.
 
 - [x] 7.18 ✅ **LANDED 2026-08-21 (session BO) — `B-156`, and the seams three defects came through.**
       The LOOK INPUTS badge said `ON AIR NOW` for a row the layer table called `READY`; it now names
@@ -947,6 +981,12 @@ candidate shapes.
       **And the first E2E this feature has had** (`e2e/look-inputs.spec.ts`) — BM-2 shipped none
       and said so.
 
+  > ✅ **Linux `gate:e2e` DISCHARGED for 7.18 (session BO), confirmed by session BP:**
+  > <https://github.com/yasermostafaee/cg/actions/runs/32506793703> — head `0ed9be81`, BO's tip,
+  > `completed` + `success`, and the **`E2E (Playwright)` job RAN** (17:11:00Z → 17:19:49Z), not
+  > skipped. BO could not cite it: the run had not completed when that session ended, and its
+  > handoff said _"see §0 for the URL once it lands"_ rather than claiming the discharge.
+
 - [ ] 7.19 🔴 **§3c — "UPDATE sends the values back to template default" is NOT REPRODUCED, and the
       negative is worth as much as a fix would be.** Ruled out BY EXECUTION, each: the write path
       (`applyDraft`, `buildLookBindingsPayload`, the draft store); the bridge STORING it; the bridge
@@ -959,6 +999,55 @@ candidate shapes.
       symptom with the bridge perfectly correct — which is `B-153`'s subject, and looks identical to
       the operator. **Needs the owner's build/refresh state**, or a repro on a page hard-reloaded
       against the current bridge.
+
+- [x] 7.20 ✅ **LANDED 2026-08-21 (session BP) — the LOOK INPUTS badge wears the THREE STATES' OWN
+      COLOURS, and three comments that forbade it are replaced rather than overridden.**
+      Owner, 2026-08-21: _"The `ON AIR NOW` / selected / `SHOWING IN PVW` colours should follow the
+      states' own colours — green for on air, violet for PVW, and blue for the normal state."_ All
+      three tokens already existed and already meant exactly those states (`colors.onAir`,
+      `colors.rehearsing`, `colors.ready`), so this is the badge speaking the palette the rest of
+      the surface speaks.
+      🔴 **The three blockers, each handled explicitly:**
+      **(1)** `styles.live`'s _"NOT GREEN"_ argument is now FALSE and is REPLACED. It was right
+      while the badge was gated on `activeLookOf` and therefore meant something other than
+      "playing"; `B-156` rewired it to `isOnAir` — the layer table's OWN predicate — and the two
+      meanings MERGED. Left standing, the next reader "restores" amber citing a premise that no
+      longer holds: the _warning that outlives its truth_ class.
+      **(2)** `--r-rehearsing`'s rule is WIDENED in wording, not silently broken: it bans CONTROLS
+      that advertise availability, and a badge naming the rehearse mode is a state INDICATOR in the
+      same category as the row's own REHEARSING mark, which already wears it.
+      **(3)** `--r-accent` is the same hex (`#38BDF8`) and the WRONG token — its own comment says it
+      is not a state colour. `--r-ready` now carries a note naming the trap where both are declared.
+      **Asserted against the TOKEN, never a hex literal** (`lookBindings.dom.test.ts`, three states,
+      normalised through a scratch element so jsdom's `rgb()` form does not become the assertion).
+      `data-look-badge` gained a third value, `rehearsing` — two states sharing `not-on-air` was the
+      same collapse `B-156` fixed in the words. **The WORDS are unchanged**: colour is redundant
+      reinforcement here, not the channel.
+
+- [x] 7.21 ✅ **FILED 2026-08-21 (session BP) — `B-153`'s skew handshake CANNOT SEE the skew that
+      would cause 7.19, and that is a coverage gap worth writing down rather than a reason to
+      reopen the design.**
+      The handshake compares the ROUTES the bridge wired, by design — BL rejected a version compare
+      for reasons that still hold. So a Runtime bundle that is STALE but calls the same routes
+      produces NO banner, while its own zod parse silently strips a field the bridge is sending.
+      That is exactly the shape 7.19 names as the one untestable axis behind §3c: **the guard cannot
+      see the skew that would cause it.** Filed against `B-153` with the reason the route
+      comparison cannot cover it and what a cheap fix would look like (a build stamp reported
+      alongside the route set is the obvious candidate — NOT built here, and NOT a version compare).
+
+- [x] 7.22 ✅ **FIXED 2026-08-21 (session BP) — a raw NUL byte in `@cg/shared-ipc`'s
+      `channels/sources.ts` made the module invisible to `grep -r` and to ripgrep.**
+      One line — `validateSourceAssignments`'s dedupe key used a literal NUL as its separator
+      instead of the `\u0000` escape. Identical string at runtime; what differed is that a file
+      containing one reads as BINARY to those tools, so every tree-wide sweep skipped the module
+      that owns `SourceAssignments` — in a session whose subject is that very type.
+      ⚠ **`git grep` was NOT blind here**, because it samples only the first 8000 bytes for binary
+      detection and the NUL sat past that. That is what made the hole look closed: CLAUDE.md's
+      golden rule 9 makes `git grep` the sweep instrument, and it happened to work, so nothing ever
+      reported the gap. Fixed to the escape, with the reason recorded at the line.
+      **A tree-wide sweep found a SECOND file** — `tools/caspar-amcp-probe/src/lifecycle-probe.ts`,
+      four of them in an OSC packet parser. Both fixed; all 2399 text-ish tracked files are now
+      NUL-free and the 113 remaining hits are genuine binaries.
 
 - [ ] 7.17 **The stale TITLE binding — DEFERRED by BM-2's patch §C, which is explicit that the flash
       outranks it.** Everything `tasks.md` 7.13 records still stands: deferring costs no re-authoring

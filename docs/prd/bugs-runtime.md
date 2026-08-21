@@ -4374,8 +4374,30 @@ guard passing while the run-time one used a narrower rule would put a skew banne
 pair and train operators to ignore it. A real-bridge test asserts that a matched pair reports no
 skew, which is what would catch that rot.
 
+🔴 **A COVERAGE GAP IN THIS GUARD, FILED 2026-08-21 (session BP). It does NOT reopen the design
+decision — read the second paragraph before proposing a version compare.**
+
+The handshake compares **the ROUTES the bridge wired**. So it catches the skew that MOTIVATED it —
+a Runtime calling a route the bridge does not serve — and it cannot see the skew where **the route
+set is identical and the PAYLOAD SHAPE is not**. A Runtime bundle that is stale but calls the same
+routes produces **no banner at all**, while its own zod parse silently strips a field the bridge is
+sending. The operator sees a value that will not stick, with every surface reporting normal.
+
+That is not hypothetical: it is the one axis session BO could not rule out behind the `§3c` report
+(`tasks.md` 7.19 — _"UPDATE sends the values back to template default"_, not reproduced on either
+backend, and indistinguishable from this at the console). **The guard cannot see the skew that
+would cause the report it was built after.**
+
+⚠ **The version compare stays rejected.** BL ruled it out for reasons that still hold, and this is a
+statement about what the route comparison COVERS, not an argument for replacing it. The cheap
+candidate is additive: **a BUILD STAMP reported alongside the route set**, compared only for
+equality and surfaced as information rather than as a refusal — the bridge already answers a
+handshake, so the field costs one string. Not built here; recorded so the next reader is choosing
+rather than rediscovering.
+
 - **Cross-refs:** [[B-152]] (the same incident's other half), [[B-074]] (the build-time route
-  coverage this is the run-time counterpart to).
+  coverage this is the run-time counterpart to), [[B-155]] (whose sibling report `§3c` is the shape
+  this gap would explain).
 
 ## [x] B-154 — a HELD live plate kept rendering: five feeds from the look you LEFT, tiled inside the look you switched TO ⟨priority: high — the wrong guests on air, from a switch that reported success⟩ — FIXED 2026-08-21 (session BM)
 
@@ -4436,7 +4458,7 @@ session rather than assumed silently.
   seat change may emit), [[B-145]] (the ledger records what was SENT, which is what makes the return
   trip work), [[B-151]] (the other half of "a surface disagreed with air", from the preview side).
 
-## [ ] B-155 — a source change LURKS until the next LOOK press, which then applies it mid-switch and flashes the PREVIOUS GUEST on air ⟨priority: high — the wrong face, on air, from a button that was supposed to be a cut⟩ — OPEN. Session BM-2 established the mechanism and narrowed one path; NOTHING here is verified on the plant
+## [ ] B-155 — a source change LURKS until the next LOOK press, which then applies it mid-switch and flashes the PREVIOUS GUEST on air ⟨priority: high — the wrong face, on air, from a button that was supposed to be a cut⟩ — OPEN. The CAUSE was removed 2026-08-21 (session BP: the row freezes its assignment at take); the PLANT MEASUREMENT is still owed and nothing here is verified on air
 
 **What the owner saw, on air.**
 
@@ -4487,11 +4509,30 @@ against `@cg/amcp-mock`, and the mock is precisely the thing that models the beh
 **So the probes this waits on are named: `6.9a` and `§3b`.** Until both are answered on the plant,
 neither the narrowing above nor any candidate below may be reported as having removed the flash.
 
-🔴 **AND THE OTHER HALF IS NOT DONE AT ALL.** The two BINDING writers were collapsed onto one function
-(`#applyBindingTransaction` — `update` and `swapLiveSource` are its only callers). The **template
-assignment** was not: `setSourceAssignments` still writes without reconciling, and `setActiveLook`
-still reaches `reconcileLivePlates` directly, so a look press still applies a lurking ASSIGNMENT. That
-is the owner's original complaint, and it stands.
+⭐ **THE OTHER HALF IS NOW DONE — THE CAUSE IS REMOVED (2026-08-21, session BP) — AND THIS ITEM
+STAYS OPEN, DELIBERATELY.** Read both halves of that sentence before ticking anything.
+
+**What changed.** A row now **FREEZES its template assignment (level 2) at TAKE**: it captures the
+`{plate → catalog entry}` in force and every later resolution on that row — a look switch, an
+`R-048` swap, an UPDATE, a reconcile after a bridge restart — reads that snapshot. `setActiveLook`
+therefore cannot apply a lurking assignment, because there is no longer anything for it to pick up:
+the wire assertion in `live-look-reconcile.integration.test.ts` is **inverted** and now demands the
+switch issue no `PLAY` at all. It thaws at a landed `out`/`stop`, dies at `remove`, and a re-take
+re-captures — which is how an operator adopts an edited default.
+
+⚠ **Two narrower fixes were considered and rejected, and the reasons are worth keeping.** Disabling
+the Inspector's editor on an on-air row narrows WHO can reach the mechanism and leaves it intact:
+the assignment is template-wide and installation-wide, so another row on the same template — or
+**another station's Runtime against the same bridge** — can write it while this row is live.
+Reconciling inside `setSourceAssignments` removes the lurk by applying a template-wide edit to every
+row on air, which is the same accident arriving on time.
+
+🔴 **WHY THIS ITEM IS STILL OPEN.** What is closed is the CAUSE, asserted on the AMCP wire. What was
+never in question on the wire, and is still owed, is the **plant measurement**: `6.9a`, `§3b`, and
+the frame count at 25 fps reproduced twice with the channel read EMPTY before and after. The
+paragraphs above say a green suite is not evidence that the flash is gone; that remains true of THIS
+change too, and it is exactly the mistake ticking this box would make. **Nobody may report the plant
+as fixed until it has been watched.**
 
 🔴 **WHAT IS STILL OPEN — the general gap (patch A6).** Any action that changes a seat's producer
 while its hole moves reaches the same window: a re-point landing in the same action as a switch, or a

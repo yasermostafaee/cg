@@ -113,5 +113,9 @@ that choice: `B-155` cannot close until the lurk does.
 
 - `pnpm gate` — green, **uncached** (`0 cached, 89 total`; openspec 58/58).
 - `@cg/runtime` 97 files, `@cg/caspar-bridge` 77 — full suites.
-- The new E2E ran locally, 2/2. **A Linux `gate:e2e` is OWED** and is discharged only by a COMPLETED
-  run whose `E2E (Playwright)` job RAN — see §0 for the URL once it lands.
+- The new E2E ran locally, 2/2. **A Linux `gate:e2e` was OWED** and is discharged only by a COMPLETED
+  run whose `E2E (Playwright)` job RAN.
+  > ✅ **DISCHARGED, confirmed by session BP** (the run had not completed when this session ended):
+  > <https://github.com/yasermostafaee/cg/actions/runs/32506793703> — head `0ed9be81`, this
+  > session's tip, `completed` + `success`, `E2E (Playwright)` **RAN** (17:11:00Z → 17:19:49Z).
+  > Also written beside `tasks.md` 7.18, where the next reader will look for it.
