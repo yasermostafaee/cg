@@ -49,6 +49,19 @@ Persian / RTL is a core requirement.
    `tasks.md` still quoting the old sentence as shipped fact. The rule is the sweep, not "run the
    E2E": the E2E is slow and non-authoritative here, while the grep is cheap and total.
 
+   ⚠ **`git grep`, NOT `grep -r` and NOT ripgrep — a sweep whose tool can go blind is not a
+   sweep.** A file containing a **NUL byte** reads as BINARY to those two and is skipped **in
+   silence**: no warning, no non-zero exit, just a match count that is quietly short. The sweep
+   then looks clean, which is worse than not running it. Two such files sat in the tree until
+   session BP found them — one in `@cg/shared-ipc`'s `channels/sources.ts` (the module that owns
+   `SourceAssignments`, invisible during a session whose whole subject was that type) and four
+   occurrences in the OSC probe — each a separator written as a literal byte instead of its
+   escape. **`git grep` was not blind only because it samples the first 8000 bytes for binary
+   detection and both NULs happened to sit past that**, which is precisely what kept the hole
+   looking closed. Write separators as escapes, never as literal bytes; and if you have just
+   written a file that talks about NUL bytes, scan it — `node -e "…readFileSync(p).indexOf(0)"` is
+   the whole check, and BP wrote one into its own handoff that way.
+
 ## Where features go
 
 | Feature kind                                    | Location                                                                                                                                                                                                                                                                                                                           |
