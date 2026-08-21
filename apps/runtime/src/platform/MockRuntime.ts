@@ -288,9 +288,27 @@ export class MockRuntime {
     itemId: string,
     fields: FieldValues,
     mergeMode: 'merge' | 'replace',
+    /**
+     * Session BM-2 — the row's COMPLETE per-look input map, applied with the fields.
+     *
+     * ⚠ Applied BEFORE the merge below, mirroring the bridge's order: the bindings move the
+     * fills and the page is told afterwards. The mock has no fills to move, so what parity
+     * requires of it is only that ONE call carries both halves and that the map REPLACES
+     * rather than merges — a mock that merged would let a test pass while the real bridge
+     * cleared a binding the test thought it had removed.
+     */
+    lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>>,
   ): { accepted: boolean; errorCode?: string } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    if (lookBindings !== undefined) {
+      if (Object.keys(lookBindings).length === 0) this.#lookSourceBindings.delete(itemId);
+      else
+        this.#lookSourceBindings.set(
+          itemId,
+          lookBindings as Record<string, Record<string, string>>,
+        );
+    }
     const merged = mergeMode === 'merge' ? { ...item.fields, ...fields } : fields;
 
     // No producer on the slot ⇒ commit only, nothing "sent", intent settled

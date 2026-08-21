@@ -1726,3 +1726,274 @@ it('🔴 §8.8 — a hole in a look you are NOT showing does not refuse the take
   expect(r.activeLookId('item-1'), 'the row stays where it was').toBe('two');
   expect(playsIn(await since(before))).toEqual([]);
 });
+
+// ───────── SESSION BM-2 — ONE ATOMIC UPDATE: the texts and the bindings together ─────────
+
+/** The owner's template again, with a text field so an UPDATE has both halves to carry. */
+function ownersTemplateWithField() {
+  return { ...ownersTemplate(), fields: [{ id: 'title', label: 'Title', type: 'text' as const }] };
+}
+
+it('🔴 §6.1 — ONE update carries the text AND the per-look binding, and both land', async () => {
+  const r = await boot({
+    template: ownersTemplateWithField(),
+    assignments: OWNERS_ASSIGNMENTS,
+  });
+  await r.load('item-1', 'debate', { title: 'before' });
+  expect((await r.take('item-1')).accepted).toBe(true);
+  const l1 = layerOf(r, 'live-1');
+  const before = (await recvLines()).length;
+
+  // The owner's walk step 1: change 2-box's right cell AND edit a text, one press.
+  const res = await r.update('item-1', { title: 'after' }, 'merge', { two: { 'live-2': 'src-4' } });
+
+  expect(res.accepted).toBe(true);
+  const lines = await since(before);
+  /*
+    🔴 THE ORDER IS THE ASSERTION, not merely the presence of both (BD / §4.3). The fills move
+    FIRST and the page is told LAST — a `CG UPDATE` that landed before the producers moved
+    would paint the new caption over feeds still showing the old inputs, which is the
+    half-applied state on air that one atomic call exists to make unreachable.
+  */
+  const play = lines.findIndex((l) => l.includes('"route://5"'));
+  const cgUpdate = lines.findIndex((l) => /^CG 1-\d+ UPDATE /.test(l));
+  expect(play, 'the binding reached the wire').toBeGreaterThanOrEqual(0);
+  expect(cgUpdate, 'the page was told').toBeGreaterThanOrEqual(0);
+  expect(play, 'fills first, page last').toBeLessThan(cgUpdate);
+  // The text landed too, in that same CG UPDATE.
+  expect(lines[cgUpdate]).toContain('after');
+  // …and only THAT frame moved: the neighbour's layer is named by nothing.
+  expect(lines.some((l) => l.startsWith(`PLAY 1-${String(l1)} `))).toBe(false);
+  expect(r.stackSnapshot().find((i) => i.itemId === 'item-1')?.lookSourceOverride).toEqual({
+    two: { 'live-2': 'src-4' },
+  });
+});
+
+it('🔴 §6.2 — a REFUSED batch lands NOTHING: not the texts, not the bindings, no residue', async () => {
+  const r = await boot({
+    template: ownersTemplateWithField(),
+    assignments: OWNERS_ASSIGNMENTS,
+  });
+  await r.load('item-1', 'debate', { title: 'before' });
+  expect((await r.take('item-1')).accepted).toBe(true);
+  const before = (await recvLines()).length;
+
+  /*
+    A REAL cause, not a stub (§6.2): both of 2-box's frames pointed at one input is §6.2's
+    collision — one seat, so one frame would go to air empty — and it is refused at the
+    binding door before anything is sent.
+  */
+  const res = await r.update('item-1', { title: 'after' }, 'merge', {
+    two: { 'live-1': 'src-1', 'live-2': 'src-1' },
+  });
+
+  expect(res.accepted).toBe(false);
+  expect(res.errorCode).toBe('live-source-duplicate');
+  expect(res.message).toContain('"live-1"');
+  // 🔴 NOTHING REACHED THE WIRE — no producer moved, and the page was never told.
+  expect(await since(before), 'a refused batch sends nothing at all').toEqual([]);
+  // 🔴 AND NOTHING WAS RECORDED — the TEXT did not land either, which is the half a
+  // two-call apply would have got wrong.
+  const item = r.stackSnapshot().find((i) => i.itemId === 'item-1');
+  expect(item?.fields.title, 'the text must not land when the binding was refused').toBe('before');
+  expect(item?.lookSourceOverride, 'and no binding residue').toBeUndefined();
+});
+
+it('🔴 §6.2 — a batch refused by the BAND leaves the texts alone too', async () => {
+  const r = await boot({
+    template: ownersTemplateWithField(),
+    assignments: OWNERS_ASSIGNMENTS,
+  });
+  r.setSourceCatalog({ ...catalog(), layerRange: { start: BAND.start, end: BAND.start + 2 } });
+  await r.load('item-1', 'debate', { title: 'before' });
+  expect((await r.take('item-1')).accepted).toBe(true);
+  const before = (await recvLines()).length;
+
+  // A fourth distinct input needs a fourth layer, and the band holds three.
+  const res = await r.update('item-1', { title: 'after' }, 'merge', {
+    solo: { 'live-3': 'src-4' },
+  });
+
+  expect(res.accepted).toBe(false);
+  expect(res.errorCode).toBe('live-source-no-layer');
+  expect(await since(before)).toEqual([]);
+  expect(r.stackSnapshot().find((i) => i.itemId === 'item-1')?.fields.title).toBe('before');
+});
+
+it('an update with NO bindings leaves the row composition untouched', async () => {
+  /*
+    ⚠ ABSENT is not EMPTY. A field-only update from any other surface — the row's own
+    controls, a from-file reload — must not silently drop a composition the operator built
+    on the Inspector. The empty map is the one that clears it, and that is reachable only by
+    sending one.
+  */
+  const r = await boot({
+    template: ownersTemplateWithField(),
+    assignments: OWNERS_ASSIGNMENTS,
+  });
+  await r.load('item-1', 'debate', { title: 'before' });
+  expect((await r.take('item-1')).accepted).toBe(true);
+  await r.update('item-1', {}, 'merge', { solo: { 'live-3': 'src-1' } });
+  expect(r.stackSnapshot().find((i) => i.itemId === 'item-1')?.lookSourceOverride).toEqual({
+    solo: { 'live-3': 'src-1' },
+  });
+
+  expect((await r.update('item-1', { title: 'after' }, 'merge')).accepted).toBe(true);
+
+  const item = r.stackSnapshot().find((i) => i.itemId === 'item-1');
+  expect(item?.fields.title).toBe('after');
+  expect(item?.lookSourceOverride, 'absent means: not part of this update').toEqual({
+    solo: { 'live-3': 'src-1' },
+  });
+});
+
+it('🔴 §6.7 — a DISJOINT switch with per-look bindings AND an emergency override in force', async () => {
+  /*
+    Rule 9 and `B-154` both lived in a delta an easy fixture cannot produce; the override
+    adds a third axis to the same space. What is asserted here is the PRECEDENCE holding
+    through a switch: the emergency is in force in EVERY look, so the look the operator
+    composed must NOT come back on the cut — and when the patch is cleared, it must.
+  */
+  const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
+  await onAir(r); // `two`
+  // Compose solo, then patch the same plate in an emergency.
+  expect(await r.swapLiveSource('item-1', 'live-3', 'src-4', 'solo')).toEqual({ ok: true });
+  expect(await r.swapLiveSource('item-1', 'live-3', 'src-5')).toEqual({ ok: true });
+
+  const before = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+  await since(before);
+
+  // 🔴 THE EMERGENCY WINS, in the look that was composed for something else.
+  expect(recordOf(r, 'live-3')?.producer, 'the patch is in force in solo too').toBe('"route://6"');
+
+  // …and clearing it returns the COMPOSED binding to force, in one action, on air.
+  const cleared = (await recvLines()).length;
+  expect(await r.swapLiveSource('item-1', 'live-3', null)).toEqual({ ok: true });
+  const back = await since(cleared);
+  expect(recordOf(r, 'live-3')?.producer, 'the per-look binding is back').toBe('"route://5"');
+  expect(
+    back.some((l) => l.includes('"route://5"')),
+    'it reached the wire',
+  ).toBe(true);
+  expect(
+    r.stackSnapshot().find((i) => i.itemId === 'item-1')?.sourceOverride,
+    'and the patch is gone',
+  ).toBeUndefined();
+});
+
+// ───────── PATCH 01 — THE FLASH, AND THE LOOK BUTTON AS A SECOND APPLY PATH ─────────
+
+it('🔴 B-155 — an assignment change LURKS, and the next look press applies it MID-SWITCH', async () => {
+  /*
+    🔴 THE OWNER, ON AIR: _"If I change the sources and press UPDATE, nothing happens — but
+    pressing the LOOK buttons performs a take again. If I'm on 2-box, change `l-1`'s source
+    and press look-1, then when we go to solo it shows the OLD source for a moment and then
+    switches to the new one."_
+
+    This pins the MECHANISM, which is one defect seen from two ends:
+
+    - `setSourceAssignments` writes the map and emits. It does NOT reconcile. So the change
+      reaches nothing until the NEXT reconcile from ANY cause — and a look press is one. That
+      is the second apply path: the LOOK button performs an apply nobody designed it to do.
+    - And because the change lands DURING the switch, the seat's producer changes INSIDE the
+      switch: a `PLAY` (a replace, `B-126`) with the hole moving on top of it. An ordinary
+      (B′) switch is pure `MIXER FILL` and cannot flash — the flash needs a producer change
+      in the same action, which is exactly what the lurking assignment creates.
+
+    ⚠ **WHAT THIS TEST DOES NOT PROVE: how many FRAMES the flash lasts.** That is a property
+    of the server's `PLAY`-as-replace timing, and the mock models the replace as instant. The
+    frame count is a PLANT measurement and is owed — see `B-155`.
+  */
+  const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
+  await onAir(r); // `two` — live-1 and live-2 are punched, live-3 is parked for solo.
+  const quiet = (await recvLines()).length;
+
+  // 1. The operator changes `live-1`'s source in the Inspector and presses UPDATE.
+  r.setSourceAssignments(
+    assign([
+      ['live-1', 'src-4'],
+      ['live-2', 'src-2'],
+      ['live-3', 'src-3'],
+    ]),
+  );
+
+  // 🔴 NOTHING HAPPENS — the owner's words exactly. The change is in force and unapplied.
+  expect(await since(quiet), 'the assignment reaches no wire of its own').toEqual([]);
+  expect(recordOf(r, 'live-1')?.producer, 'and the layer still carries the OLD source').toBe(
+    '"route://2"',
+  );
+
+  // 2. …then a LOOK press. It re-resolves, and the lurking change lands here.
+  const press = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'three')).toEqual({ ok: true });
+  const lines = await since(press);
+
+  /*
+    🔴 THE DEFECT, ON THE WIRE: a look switch issued a `PLAY`. A switch is supposed to move
+    geometry and nothing else — that is what makes it a cut — and this one replaced a
+    producer on a layer whose hole the page is about to open.
+  */
+  const play = lines.find((l) => l.startsWith(`PLAY 1-${String(layerOf(r, 'live-1'))} `));
+  expect(play, 'the look press applied the assignment').toBeDefined();
+  expect(play).toContain('"route://5"');
+  // …and the page was told to move the holes in the SAME action, after that replace.
+  expect(
+    lines.some((l) => /^CG 1-\d+ UPDATE /.test(l)),
+    'the holes moved too',
+  ).toBe(true);
+});
+
+it('🔴 PATCH-01 B4 — a STAGED edit reaches no wire on a look press: staged is not in force', async () => {
+  /*
+    B1's rule, asserted from the bridge's side. A staged Inspector edit lives in the
+    RENDERER's draft store and has never been sent, so there is nothing here for a look press
+    to pick up — the bridge cannot apply what it has not been told. What the owner met was
+    not a staged edit leaking: it was an APPLIED assignment lurking, which the test above
+    pins. The distinction is the whole of B1, and it is worth an assertion because "the look
+    button applied my edit" is true of one and false of the other.
+  */
+  const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
+  await onAir(r);
+  const before = (await recvLines()).length;
+
+  // Nothing is sent to the bridge — this is what "staged" means.
+  expect(await r.setActiveLook('item-1', 'three')).toEqual({ ok: true });
+
+  const lines = await since(before);
+  expect(playsIn(lines), 'a switch with nothing applied moves no producer').toEqual([]);
+  expect(recordOf(r, 'live-1')?.producer).toBe('"route://2"');
+});
+
+it('🔴 PATCH-01 A6 — UPDATE applying the binding FIRST makes the later switch pure geometry', async () => {
+  /*
+    The repair for the owner's path, asserted as the property that makes it a repair: once the
+    change lands where the operator pressed it, the switch that follows has no producer to
+    replace, so the gap the flash lives in does not exist in that action at all.
+
+    ⚠ This removes the COMMON case, not the general one — a re-point landing in the SAME
+    action as a switch still changes a producer while a hole moves. `B-155` carries that.
+  */
+  const r = await boot({
+    template: { ...ownersTemplate(), fields: [{ id: 'title', label: 'T', type: 'text' as const }] },
+    assignments: OWNERS_ASSIGNMENTS,
+  });
+  await r.load('item-1', 'debate', { title: 'a' });
+  expect((await r.take('item-1')).accepted).toBe(true);
+
+  // ONE press of UPDATE: the binding for the look we are ABOUT to enter, plus a text.
+  const applied = (await recvLines()).length;
+  expect(
+    (await r.update('item-1', { title: 'b' }, 'merge', { three: { 'live-1': 'src-4' } })).accepted,
+  ).toBe(true);
+  // It lands NOW, where the operator pressed it — the "nothing happens" complaint answered.
+  expect(await since(applied), 'UPDATE reaches the wire').not.toEqual([]);
+
+  // …and the switch that follows moves geometry only.
+  const press = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'three')).toEqual({ ok: true });
+  const lines = await since(press);
+  expect(playsIn(lines), 'no producer changes inside the switch').toEqual([]);
+  expect(clearsIn(lines)).toEqual([]);
+  expect(recordOf(r, 'live-1')?.producer, 'and it shows the new input').toBe('"route://5"');
+});

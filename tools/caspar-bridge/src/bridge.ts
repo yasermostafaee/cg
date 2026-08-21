@@ -820,10 +820,15 @@ export function buildRoutes(
       b.load(r.itemId, r.templateId, r.fields),
     ),
     route(StackTakeChannel, (r: { itemId: string }) => b.take(r.itemId)),
+    // Session BM-2 — the texts AND the row's per-look inputs, in ONE atomic call.
     route(
       StackUpdateChannel,
-      (r: { itemId: string; fields: never; mergeMode: 'merge' | 'replace' }) =>
-        b.update(r.itemId, r.fields, r.mergeMode),
+      (r: {
+        itemId: string;
+        fields: never;
+        mergeMode: 'merge' | 'replace';
+        lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+      }) => b.update(r.itemId, r.fields, r.mergeMode, r.lookBindings),
     ),
     // C-012 — the graceful stop (outro runs, producer stays resident).
     route(StackStopChannel, (r: { itemId: string }) => b.stopItem(r.itemId)),

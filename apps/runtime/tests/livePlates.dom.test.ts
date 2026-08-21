@@ -213,9 +213,17 @@ describe('the Inspector binds THIS template plates', () => {
     // A freshly imported template has ALL of its plates unassigned, which is the
     // ordinary state and is named rather than left blank.
     expect(section?.querySelectorAll('[data-plate-unassigned]').length).toBe(2);
-    // The SCOPE is stated in the section, not hidden in a tooltip: this is the
-    // template's default, so editing it here changes every row using it.
-    expect(section?.textContent).toContain('Set for the template, not this row');
+    /*
+      The SCOPE is stated in the section, not hidden in a tooltip: this is the template's
+      default, so editing it here changes every row using it.
+
+      ⚠ REWORDED BY SESSION BM-2, and the old sentence is kept here because the change is a
+      correction rather than a polish. It read _"Set for the template, not this row — every
+      row using it takes the same sources."_ True of a flat map; a LIE about the four-level
+      model, because it says "not this row" while two of the four levels ARE this row's. What
+      is asserted is unchanged: that the section says which level its own control is on.
+    */
+    expect(section?.textContent).toContain('DEFAULT every row using this template starts from');
   });
 
   it('renders NO section for a template that declares no live plates', async () => {

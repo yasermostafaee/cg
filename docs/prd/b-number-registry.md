@@ -1009,7 +1009,7 @@ direction — where a narrower grep missed two headings and nearly shipped a col
 **Verified free by the documented heading sweep, run immediately before the heading was written**
 over `docs/prd/*.md` excluding `README.md` and this file: `git grep "^## \[.\] B-15"` returned
 `B-150`…`B-153` and no `B-154`. `B-` stays contiguous `B-001` … `B-154`, **no gaps**.
-**Next free: `B-155`.**
+**Next free: `B-155`.** — CLAIMED by session BM-2 (the LOOK-press flash). **Next free: `B-156`.**
 
 ⚠ **The sweep for `B-154` ran while the number was ALREADY in this session's working tree** — in
 the fix's own code comments and test names, written before the heading. `git grep "B-154"` therefore

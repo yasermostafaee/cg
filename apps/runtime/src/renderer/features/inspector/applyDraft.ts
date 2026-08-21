@@ -4,11 +4,14 @@ import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { commitSourceAssignments, currentSourceAssignments } from '../sources/sourceStore.js';
 import {
   buildApplyPayload,
+  buildLookBindingsPayload,
   buildOverlayPayload,
+  clearStagedLookBindingsMatching,
   clearStagedMatching,
   clearStagedPlatesMatching,
   singleFieldOverlay,
   snapshotDraft,
+  snapshotLookBindingDraft,
   snapshotPlateDraft,
   stageField,
   type FieldPath,
@@ -29,8 +32,35 @@ export function applyDraft(
 ): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
   const sent = snapshotDraft(item.itemId);
   const plates = snapshotPlateDraft(item.itemId);
+  /*
+    🔴 **BM-2 §4.1 — THE PER-LOOK BINDINGS RIDE THE FIELD UPDATE, IN ONE CALL.**
+
+    They are not a second write and must never become one. The operator's action is one press
+    carrying both halves — change `l-2`'s input AND fix its caption — and the bridge applies
+    the bindings, reconciles the fills and only then tells the page, so a refused binding
+    refuses the whole update. Looping the per-plate writer (`swapLiveSource`) over the staged
+    set is what this replaces: it could land three texts and not the fourth input, which is a
+    wrong graphic on air that nothing reports.
+
+    ⚠ **The TEMPLATE ASSIGNMENT below is still its own call, and that is not a hole in the
+    atomicity.** It is a different LEVEL with a different blast radius — every row using the
+    template — and a different timing, and folding a template-wide edit into one row's update
+    would be the scope confusion §3.4 exists to stop. What §4.1 requires to be atomic is what
+    reaches AIR on THIS row, and that is exactly what travels in the one call.
+  */
+  const lookBindings = snapshotLookBindingDraft(item.itemId);
+  const bindingsPayload =
+    lookBindings.size === 0
+      ? undefined
+      : buildLookBindingsPayload(item.itemId, item.lookSourceOverride);
   const fields = (): Promise<{ accepted: boolean; errorCode?: string | undefined }> =>
-    sendUpdate(item, sent, buildApplyPayload(item.itemId, item.fields));
+    sendUpdate(
+      item,
+      sent,
+      buildApplyPayload(item.itemId, item.fields),
+      bindingsPayload,
+      lookBindings,
+    );
   if (plates.size === 0) return fields();
   // PLATES FIRST, and it is not arbitrary: the assignment reaches NOTHING on air
   // (it is read at the next take), while `stack.update` reaches the graphic that
@@ -104,19 +134,41 @@ function sendUpdate(
   item: StackItemState,
   sent: FieldValues,
   fields: FieldValues,
+  lookBindings?: Record<string, Record<string, string>> | undefined,
+  sentBindings?: ReadonlyMap<string, ReadonlyMap<string, string>> | undefined,
 ): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
-  return window.cg.stack.update({ itemId: item.itemId, fields, mergeMode: 'merge' }).then(
-    (res) => {
-      if (res.accepted) clearStagedMatching(item.itemId, sent);
-      // B-070 — say WHY. An update onto a producerless slot is no longer
-      // refused at all (the bridge commits it), so a refusal that reaches here
-      // is a real one and must name its cause, not just "not accepted".
-      else reportCommandError(errorCodeMessage(res.errorCode) ?? 'Update was not accepted.');
-      return res;
-    },
-    (err: unknown) => {
-      reportCommandError(err instanceof Error ? err.message : 'Update failed.');
-      throw err instanceof Error ? err : new Error('Update failed.');
-    },
-  );
+  return window.cg.stack
+    .update({
+      itemId: item.itemId,
+      fields,
+      mergeMode: 'merge',
+      ...(lookBindings !== undefined && { lookBindings }),
+    })
+    .then(
+      (res) => {
+        if (res.accepted) clearStagedMatching(item.itemId, sent);
+        /*
+        🔴 §4.4 — CLEARED ONLY ON ACCEPTANCE, and only what was actually sent. A refused batch
+        leaves EVERY staged edit staged: the operator's composition is still theirs to retry,
+        and the dirty chip still says so. Clearing on refusal is how an unapplied edit becomes
+        an edit nobody knows was lost.
+      */
+        if (res.accepted && sentBindings !== undefined)
+          clearStagedLookBindingsMatching(item.itemId, sentBindings);
+        // B-070 — say WHY. An update onto a producerless slot is no longer
+        // refused at all (the bridge commits it), so a refusal that reaches here
+        // is a real one and must name its cause, not just "not accepted".
+        // BM-2 — the refusal's OWN sentence wins when it has one: a binding refusal names the
+        // two frames and the look, and no fixed code can carry that.
+        else
+          reportCommandError(
+            res.message ?? errorCodeMessage(res.errorCode) ?? 'Update was not accepted.',
+          );
+        return res;
+      },
+      (err: unknown) => {
+        reportCommandError(err instanceof Error ? err.message : 'Update failed.');
+        throw err instanceof Error ? err : new Error('Update failed.');
+      },
+    );
 }

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   FieldValuesSchema,
   IdSchema,
+  LiveSourceLookOverrideSchema,
   PositionSchema,
   RetainedStackItemSchema,
   StackItemStateSchema,
@@ -78,8 +79,29 @@ export const StackUpdateChannel = defineChannel(
     itemId: IdSchema,
     fields: FieldValuesSchema,
     mergeMode: z.enum(['merge', 'replace']),
+    /**
+     * 🔴 **Session BM-2 — the row's COMPLETE per-look input map, carried by the SAME call as
+     * the fields so ONE press of UPDATE is ONE atomic operator action.**
+     *
+     * The operator changes a frame's input and fixes its caption together. Two verbs cannot
+     * promise those land together: whichever went second could be refused, leaving a caption
+     * describing a feed that never moved. The bridge applies the bindings, reconciles the
+     * fills, and only then tells the page — BD's order — so a refused binding refuses the
+     * whole update rather than half of it.
+     *
+     * ⚠ **COMPLETE, not a delta.** It replaces the item's map, like `sources.set-assignments`
+     * does, so "remove this binding" is expressible at all — a merge-only payload can add and
+     * change but never clear. ABSENT means "not part of this update": a field-only update from
+     * any other surface must not silently drop a row's composition.
+     */
+    lookBindings: LiveSourceLookOverrideSchema.optional(),
   }),
-  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
+  z.object({
+    accepted: z.boolean(),
+    errorCode: z.string().optional(),
+    /** The refusal's own sentence, when it has one the operator can act on. */
+    message: z.string().optional(),
+  }),
 );
 
 /**

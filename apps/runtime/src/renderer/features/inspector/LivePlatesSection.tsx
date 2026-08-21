@@ -137,9 +137,23 @@ export function LivePlatesSection({
   return (
     <div className="cg-inspector-section" aria-label="Live plates">
       <h2>LIVE PLATES</h2>
-      {/* The scope, said once and in the section rather than in a tooltip. */}
+      {/*
+        🔴 **BM-2 §3.4 — THE SCOPE, NARROWED TO THE LEVEL THIS SECTION IS ACTUALLY ON.**
+
+        It read _"Set for the template, not this row — every row using it takes the same
+        sources."_ That was true of a flat map and is a LIE about a four-level one: it says
+        "not this row" while two of the four levels ARE this row's, and an operator reading it
+        would conclude the panel cannot express what it plainly can.
+
+        §3.4 also requires the levels to read WITHOUT a paragraph. So neither this line nor
+        the one in LOOK INPUTS explains the model: each says only what ITS OWN control does,
+        and the two sit in resolution order down the panel. A patch, being the level that
+        overrides the others, announces itself on the rows it masks rather than in a legend
+        nobody reads under pressure.
+      */}
       <p style={styles.scope}>
-        Set for the template, not this row — every row using it takes the same sources.
+        The DEFAULT every row using this template starts from. A row can show something else per
+        look, below.
       </p>
       {/*
         A9 — a re-import KEEPS the bindings, and it has to SAY so. The owner met

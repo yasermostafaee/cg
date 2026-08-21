@@ -871,6 +871,58 @@ candidate shapes.
       7.11 makes that observable. Until 7.13 lands, that is a real and un-mitigated hazard, and it
       is the strongest argument for building it sooner rather than later.
 
+- [~] 7.14 **STAGE 2 — the Inspector's per-look inputs, and ONE atomic UPDATE (session BM-2).**
+  `LOOK INPUTS` lists each look with its own per-plate input, the LIVE look marked, sitting under
+  the template DEFAULT it falls back to. `stack.update` gained `lookBindings` — the row's
+  COMPLETE map — so one press carries the texts AND the inputs and the bridge applies bindings →
+  reconciles fills → tells the page, refusing the WHOLE update if the bindings are refused.
+  **§2's masking hazard is closed:** an emergency patch is named on every row it masks, the
+  masked value is struck through and labelled _"not in force"_ (never greyed — grey reads as
+  disabled), the control stays editable and says what it waits for, and CLEAR PATCH sits on the
+  row that shows the patch.
+  ⚠ **The template ASSIGNMENT is deliberately still its own call.** It is a different level with
+  a template-wide blast radius; folding it into one row's update would be the scope confusion the
+  panel's wording exists to prevent. What is atomic is what reaches AIR on THIS row.
+
+- [ ] 7.15 🔴 **`B-155` — THE SWITCH FLASH. OPEN, AND NOTHING ABOUT IT IS VERIFIED ON THE PLANT.**
+      The owner, on air: _"change `l-1`'s source and press look-1, then when we go to solo it shows
+      the OLD source for a moment and then switches to the new one."_
+      **The mechanism is established from the code and pinned on the wire** (`live-look-reconcile`,
+      _"an assignment change LURKS…"_): `setSourceAssignments` does not reconcile, so the change
+      lands at the next reconcile from any cause — a look press — which puts a producer change
+      INSIDE a switch, and that is what flashes.
+      🔴 **DO NOT READ THE GREEN SUITE AS A FIX.** `@cg/amcp-mock` models `PLAY` on an occupied layer
+      as an in-place replace, which `swapLiveSource`'s own doc marks **UNVERIFIED on 2.3.2 (task
+      6.9a)** — the flash IS that replace's timing, so the mock cannot see it. And whether `FILL` and
+      `CLIP` land on the SAME FRAME is open (`design.md` **§3b**: `MIXER … DEFER` + a channel-scoped
+      `COMMIT`, forbidden until the COMMIT-scope question is answered).
+      **The probes this waits on: `6.9a` and `§3b`.** Also owed: the FRAME COUNT at 25 fps,
+      reproduced twice, channel read EMPTY before and after — a plant measurement this session could
+      not take.
+      **The rule, decided so it is not re-litigated:** the new look's hole must NEVER show the
+      previous source; if the incoming producer is not ready, BLACK is acceptable and the previous
+      guest is not. That does not contradict `B-126`, whose case is the opposite trade (a dead feed
+      vs black, where black is worse).
+
+- [ ] 7.16 🔴 **The LOOK press is still a SECOND APPLY PATH for the template assignment — NOT DONE.**
+      The two BINDING writers were collapsed onto ONE function, `#applyBindingTransaction`
+      (`update` and `swapLiveSource` are its only callers, verified by sweep). The assignment was
+      not: `setSourceAssignments` writes without reconciling and `setActiveLook` reaches
+      `reconcileLivePlates` directly, so a look press still applies a lurking assignment.
+      ⚠ **The repair is to COLLAPSE, never to make two paths agree** — the same class as this
+      change's own four-level precedence, which was implemented twice and survived review precisely
+      because the two copies agreed. Two candidate collapses, neither costed yet: reconcile the
+      affected rows at `setSourceAssignments` (template-wide blast radius, on-air), or stop the
+      Inspector staging assignment edits for a row that has looks, so the on-air panel writes only
+      per-row state. **Deciding between them is an on-air behaviour change and deserves its own
+      session.**
+
+- [ ] 7.17 **The stale TITLE binding — DEFERRED by BM-2's patch §C, which is explicit that the flash
+      outranks it.** Everything `tasks.md` 7.13 records still stands: deferring costs no re-authoring
+      (`BindingTargetSchema` is a discriminated union; `live-source-id` is the precedent for a target
+      resolving outside the DOM), and the exposure it leaves is unchanged — a per-look re-point is a
+      new way to make a hand-typed caption wrong, and nothing yet makes that observable.
+
 ## 7. STAGE F — the CUT ships. STAGE G — the transition modes (§13.5)
 
 - [ ] 8.1 **KEEP the v1 `live-source-animated` refusal** and pin it with a test that a runtime

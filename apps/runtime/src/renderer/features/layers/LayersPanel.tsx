@@ -829,6 +829,7 @@ export function LayersPanel({
                             item.templateId,
                             template?.liveSources?.sources ?? [],
                           ),
+                          item.lookSourceOverride,
                         )
                       }
                       // R-022 — read through the canonical `isRehearsing`, never a

@@ -4435,3 +4435,103 @@ session rather than assumed silently.
 - **Cross-refs:** [[B-126]] (a replace is never a CLEAR-then-ADD — the sibling rule about what a
   seat change may emit), [[B-145]] (the ledger records what was SENT, which is what makes the return
   trip work), [[B-151]] (the other half of "a surface disagreed with air", from the preview side).
+
+## [~] B-155 — a source change LURKS until the next LOOK press, which then applies it mid-switch and flashes the PREVIOUS GUEST on air ⟨priority: high — the wrong face, on air, from a button that was supposed to be a cut⟩ — OPEN. Session BM-2 established the mechanism and narrowed one path; NOTHING here is verified on the plant
+
+**What the owner saw, on air.**
+
+> _"If I change the sources and press UPDATE, nothing happens — but pressing the LOOK buttons performs
+> a take again. If I'm on 2-box, change `l-1`'s source and press look-1, then when we go to solo **it
+> shows the OLD source for a moment and then switches to the new one.**"_
+
+🔴 **TWO COMPLAINTS, ONE DEFECT, AND THAT IS THE FINDING.** They read as separate bugs — a dead
+button and a video glitch — and they are the same mechanism seen from each end.
+
+**The mechanism, established from the code and pinned on the wire**
+(`live-look-reconcile.integration.test.ts`, _"an assignment change LURKS…"_):
+
+1. `setSourceAssignments` writes the map and emits. **It does not reconcile.** So an assignment
+   change reaches nothing at the moment it is made — the operator's _"nothing happens"_ is the
+   product working as built.
+2. It then lands at the **next reconcile from ANY cause**, and a look press is one. That is the
+   second apply path: **the LOOK button performs an apply nobody designed it to do.** Two live paths
+   to one operation is the defect this project keeps paying for — `patch-BL-01` removed exactly this
+   shape from the PVW panel one session earlier.
+3. And because the change lands **during** the switch, the seat's producer changes **inside** it: a
+   `PLAY` (a replace, `B-126`) on a layer whose hole the page is moving on top of. **That is the
+   flash.** An ordinary (B′) switch is pure `MIXER FILL` and cannot flash — the flash REQUIRES a
+   producer change in the same action, and the lurking assignment is what puts one there.
+
+⚠ **`STAGED` was never the leak, and the distinction matters.** A staged Inspector edit lives in the
+renderer's draft store and has never been sent; the bridge cannot apply what it was not told. What
+lurks is an **APPLIED** assignment. Both are asserted, because _"the look button applied my edit"_ is
+true of one and false of the other.
+
+**What session BM-2 did: narrowed ONE path, and verified NOTHING on the plant.** The Inspector's
+per-look binding is applied by `UPDATE` in one atomic call that reconciles immediately, so THAT change
+lands where the operator pressed it and the switch that follows has no producer to replace. Asserted
+as that property, not as an absence.
+
+🔴 **THIS IS NOT A FIX, AND A GREEN SUITE IS NOT EVIDENCE THAT IT IS.** Every assertion behind it runs
+against `@cg/amcp-mock`, and the mock is precisely the thing that models the behaviour in question:
+
+- **`PLAY` on an occupied layer as an in-place replace** — which `caspar-runtime.ts`'s own
+  `swapLiveSource` doc already marks **UNVERIFIED on the plant's 2.3.2 (task 6.9a)**: _"the mock models
+  `PLAY` on an occupied layer as a replace, so the tests prove this code is self-consistent and prove
+  NOTHING about the server."_ The flash IS the replace's timing, so the mock cannot see it by
+  construction.
+- **Whether `FILL` and `CLIP` land on the SAME FRAME** — an open question (`design.md` §3b:
+  `MIXER … DEFER` + a channel-scoped `COMMIT`, forbidden here until the COMMIT-scope question is
+  answered). A hole that opens a frame before its mask is another way to reveal the wrong picture.
+
+**So the probes this waits on are named: `6.9a` and `§3b`.** Until both are answered on the plant,
+neither the narrowing above nor any candidate below may be reported as having removed the flash.
+
+🔴 **AND THE OTHER HALF IS NOT DONE AT ALL.** The two BINDING writers were collapsed onto one function
+(`#applyBindingTransaction` — `update` and `swapLiveSource` are its only callers). The **template
+assignment** was not: `setSourceAssignments` still writes without reconciling, and `setActiveLook`
+still reaches `reconcileLivePlates` directly, so a look press still applies a lurking ASSIGNMENT. That
+is the owner's original complaint, and it stands.
+
+🔴 **WHAT IS STILL OPEN — the general gap (patch A6).** Any action that changes a seat's producer
+while its hole moves reaches the same window: a re-point landing in the same action as a switch, or a
+look whose preset was never seated. The repair removes the path the owner walked, **not the gap**.
+
+### 🔴 THE RULE FOR THE GENERAL FIX, decided so the next session does not re-litigate it
+
+**The new look's hole must NEVER show the previous source. If the incoming producer is not ready,
+BLACK is acceptable and the previous guest is not.** An ugly frame is a blemish; the wrong face under
+a caption is a broadcast error.
+
+⚠ **This does NOT contradict `B-126`, and the difference is the situation, not the principle.**
+`B-126` forbids a `CLEAR` before a `PLAY` on the EMERGENCY REPAIR of a dead feed, where the choice is
+between a merely-dead picture and black, and black is worse. Here the choice is between the WRONG
+GUEST and black. Same reasoning, opposite answer, because the alternative to black is different.
+
+### The candidates, priced — and the measurement that decides
+
+| Candidate                                 | Cost                          | Why not yet                                                                                                               |
+| ----------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| ⭐ `LOADBG` then `PLAY`                   | one extra command per re-seat | AMCP's own answer to exactly this; **`LOADBG` is not in this bridge's vocabulary and is unmeasured on the plant's 2.3.2** |
+| Hold at `MIXER OPACITY 0` until confirmed | needs a readiness signal      | `OPACITY` unmeasured here, and "confirmed" has no source yet                                                              |
+| Targeted `INFO` before punching           | a round-trip per switch       | turns a cut into a round-trip; likely worse than the flash                                                                |
+| Bounded frame deferral                    | none on the wire              | a guess dressed as a fix, and it must never expire into "show the old one"                                                |
+
+🔴 **What is OWED and cannot be done from a dev machine: the frame count.** Patch A1 asks for a
+reading at 25 fps, reproduced twice, with the channel read EMPTY before and after. **This session had
+no plant access, so the number is not in this entry.** The MECHANISM needed no hardware and is
+established; the CHOICE between the candidates needs the measurement, because it decides whether the
+gap is one frame or twelve.
+
+**Acceptance**
+
+- WHEN a source is changed and applied THEN it reaches the wire at that moment, not at the next
+  unrelated action
+- WHEN a look is pressed THEN it moves geometry, and applies nothing
+- WHEN a seat's producer must change while its hole moves THEN the hole never reveals the previous
+  producer — black is the permitted worst case
+- WHEN a bounded wait expires THEN it does not resolve to showing the old source
+
+- **Cross-refs:** [[B-126]] (a replace is never a CLEAR-then-ADD — the rule this one bounds rather
+  than breaks), [[B-154]] (the other half of "a seat shows something it should not"), [[R-048]] (the
+  emergency whose trade-off is the inverse of this one).

@@ -25,6 +25,7 @@ import { layerDetail } from '../stack/layerLabel.js';
 import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
+import { LooksBindingsSection } from './LooksBindingsSection.js';
 import { appliedPlateSources } from './livePlates.js';
 import { PositionPicker } from './PositionPicker.js';
 import {
@@ -402,6 +403,8 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
     itemId,
     item.fields,
     appliedPlateSources(item.templateId, info?.liveSources?.sources ?? []),
+    // BM-2 — and the per-look composition, which stages here too and is the SAME fact.
+    item.lookSourceOverride,
   );
   const isEmpty = rootFields.length === 0 && groups.length === 0;
 
@@ -457,6 +460,9 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
         {/* D-137 / C-015 — bind this template's live plates. Renders nothing at
             all for a template that declares none, which is most of them. */}
         <LivePlatesSection item={item} info={info} />
+        {/* BM-2 — the per-look inputs sit BELOW the default they fall back to, so the two
+            levels read top-down in the order they resolve. */}
+        <LooksBindingsSection item={item} info={info} />
         {/* `cg-inspector-section` carries the shared rhythm — the heading's rule,
             its tracking, and the largest gap in the gradient beneath it. Same
             class as POSITION, so the two sections cannot drift apart. */}

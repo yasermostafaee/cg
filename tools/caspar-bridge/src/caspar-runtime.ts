@@ -2841,9 +2841,31 @@ export class CasparRuntime {
     itemId: string,
     fields: FieldValues,
     mergeMode: 'merge' | 'replace',
-  ): Promise<{ accepted: boolean; errorCode?: string }> {
+    /**
+     * 🔴 **SESSION BM-2 — the row's COMPLETE per-look input map, applied in the SAME call
+     * as the texts.**
+     *
+     * ── WHY IT RIDES `update` RATHER THAN GETTING ITS OWN VERB ──────────────────
+     *
+     * The operator's action is ONE press of UPDATE carrying both halves — *"change `l-2` to
+     * studio-3 AND fix the caption"* — and the two must land together or not at all. Two
+     * verbs make that impossible to promise: whichever went second could be refused, leaving
+     * a caption describing a feed that did not move, or a feed with no caption for it. That
+     * is a wrong graphic on air that nothing reports, and it is exactly what the renderer
+     * looping the per-plate writer would have produced.
+     *
+     * ⚠ **COMPLETE, NOT A DELTA.** It replaces the item's map wholesale, the same shape
+     * `sources.set-assignments` uses, so "remove this binding" is expressible at all — a
+     * merge-only payload can add and change but never clear. The renderer sends
+     * applied-with-drafts-overlaid, which is what it already does for fields.
+     *
+     * `undefined` means "not part of this update" and leaves the map untouched: an ordinary
+     * field-only update from any other surface must not silently drop a row's composition.
+     */
+    lookBindings?: LookSourceBindings,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
     return this.#audited('update', this.#itemDetail(itemId), () =>
-      this.#updateImpl(itemId, fields, mergeMode),
+      this.#updateImpl(itemId, fields, mergeMode, lookBindings),
     );
   }
 
@@ -2851,13 +2873,42 @@ export class CasparRuntime {
     itemId: string,
     fields: FieldValues,
     mergeMode: 'merge' | 'replace',
-  ): Promise<{ accepted: boolean; errorCode?: string }> {
+    lookBindings?: LookSourceBindings,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     // R-006 — see #noServerReachable(): refuse before the intent exists.
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    /*
+      🔴 **BM-2 §4.3 — THE BINDINGS MOVE THE FILLS FIRST, AND THE PAGE IS TOLD LAST AND ONLY
+      ON SUCCESS (BD).**
+
+      Ordered here, before the intent is even recorded, for two reasons that pull the same
+      way. **On air:** telling the page new text over feeds that did not move paints a caption
+      onto the wrong picture — the exact half-applied state §4.1 forbids. **In the ledger:** a
+      refused binding must leave nothing staged or recorded (`tasks.md` 7.9), and the only way
+      to promise that is to refuse before anything else in this method has happened.
+
+      So a refused binding refuses the WHOLE update: no intent, no `CG UPDATE`, no field
+      change. The texts and the inputs land together or neither does, which is what makes one
+      press of UPDATE an atomic operator action rather than two commands sharing a button.
+    */
+    if (lookBindings !== undefined) {
+      const applied = await this.#applyBindingTransaction(itemId, slot, {
+        overrides: this.#sourceOverrides.get(itemId),
+        bindings: lookBindings,
+      });
+      if (!applied.ok) {
+        return {
+          accepted: false,
+          errorCode: applied.reason ?? 'amcp-error',
+          ...(applied.message !== undefined && { message: applied.message }),
+        };
+      }
+    }
+
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
 
@@ -4027,6 +4078,62 @@ export class CasparRuntime {
       };
     }
     return null;
+  }
+
+  /**
+   * 🔴 **SESSION BM-2 — THE ONE TRANSACTION THAT MOVES A ROW'S INPUT BINDINGS.**
+   *
+   * Refuse → write → reconcile → roll back on failure → publish. Both writers call it:
+   * `swapLiveSource` (one plate, one scope) and `update` (the operator's whole staged set,
+   * with the texts). They were one method's worth of ordering that the second writer would
+   * have had to reproduce, and the ordering is not incidental — every step exists because
+   * getting it wrong puts a wrong picture on air:
+   *
+   *   - **REFUSE FIRST, from PROSPECTIVE maps.** Nothing is written and nothing is sent, so
+   *     a refused change records nothing (`tasks.md` 7.9's rule, which this is the second
+   *     writer into).
+   *   - **WRITE BEFORE RECONCILING.** The planner resolves from these maps, so the
+   *     prospective value has to be in place for the reconcile to see it.
+   *   - **ROLL BACK THE MAPS, NOT THE WIRE, ON FAILURE.** `#applyLivePlates` already leaves
+   *     the layers in their honest state and says so; what must not survive is a RECORDED
+   *     binding the plant never took.
+   *   - **PUBLISH LAST.** A row must never announce a binding that did not land.
+   *
+   * ⚠ It does NOT tell the page. That is the caller's, and it is where the two differ:
+   * `swapLiveSource` deliberately tells it nothing (`R-048` sends only its own producer's
+   * commands), while `update` sends the `CG UPDATE` **after** this returns ok — BD's
+   * fills-first-page-last-and-only-on-success, which is why the page half cannot live here.
+   */
+  async #applyBindingTransaction(
+    itemId: string,
+    slot: CommandSlot,
+    next: {
+      overrides: Record<string, string> | undefined;
+      bindings: LookSourceBindings | undefined;
+    },
+  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+    const refusal = this.#refuseBindingChange(itemId, slot, next);
+    if (refusal !== null) return { ok: false, ...refusal };
+
+    const restoreOverrides = this.#sourceOverrides.get(itemId);
+    const restoreBindings = this.#lookSourceBindings.get(itemId);
+    this.#applyBindingMaps(itemId, next.overrides, next.bindings);
+
+    const reconciled = await this.reconcileLivePlates(itemId, {
+      // The row may be ON AIR. A failure must not black the plates that are working; see
+      // {@link reconcileLivePlates}.
+      mode: 'live',
+    });
+    if (!reconciled.ok) {
+      this.#applyBindingMaps(itemId, restoreOverrides, restoreBindings);
+      return {
+        ok: false,
+        ...(reconciled.errorCode !== undefined && { reason: reconciled.errorCode }),
+        ...(reconciled.message !== undefined && { message: reconciled.message }),
+      };
+    }
+    this.#applySourceOverride(itemId, next.overrides ?? {}, next.bindings);
+    return { ok: true };
   }
 
   /** Set or clear both binding maps for one item, without publishing. */
@@ -5207,6 +5314,15 @@ export class CasparRuntime {
       bindings: nextBindings,
     });
     if (refusal !== null) return { ok: false, ...refusal };
+    /*
+      ⚠ `#applyBindingTransaction` asks this again, and that is not golden rule 7's hazard.
+      Rule 7 is about a condition read TWICE WITH AN AWAIT BETWEEN, where the second read can
+      disagree with the first and a destructive step has already run on the first. Here both
+      reads are synchronous, over the same immutable inputs, with nothing mutated between —
+      and the check has to live in the transaction regardless, because its OTHER caller
+      (`update`) has no earlier door. What this one buys is the RECORD-ONLY path below, which
+      never reaches the transaction at all and must still be refused.
+    */
 
     const seatedAnything = (this.#liveLayers.get(itemId) ?? []).length > 0;
     if (!seatedAnything) {
@@ -5252,9 +5368,7 @@ export class CasparRuntime {
       swap records nothing. Written through the raw map rather than `#applySourceOverride`
       so a refusal never publishes a substitution that did not happen.
     */
-    const restore = this.#sourceOverrides.get(itemId);
-    const restoreBindings = this.#lookSourceBindings.get(itemId);
-    this.#applyBindingMaps(itemId, next, nextBindings);
+    // THE ORDERING LIVES IN ONE PLACE — see {@link #applyBindingTransaction}.
 
     /*
       🔴 **`tasks.md` 7.9 — THIS CALL IS WHERE THE DEFECT SURFACED, AND IT IS DELIBERATELY
@@ -5280,24 +5394,19 @@ export class CasparRuntime {
       So R-048's on-air behaviour is UNCHANGED by 7.9: a swap still sends exactly its own
       producer's `PLAY` + `MIXER`, and still tells the page nothing.
     */
-    const reconciled = await this.reconcileLivePlates(itemId, {
-      // The row is ON AIR — this method's whole reason for existing. A failure must not
-      // black the plates that are working; see {@link reconcileLivePlates}.
-      mode: 'live',
+    const applied = await this.#applyBindingTransaction(itemId, itemSlot, {
+      overrides: next,
+      bindings: nextBindings,
     });
-    if (!reconciled.ok) {
-      this.#applyBindingMaps(itemId, restore, restoreBindings);
-      return {
-        ok: false,
-        reason: reconciled.errorCode ?? 'amcp-error',
-        message:
-          reconciled.message ??
-          `CasparCG refused the substitution, so plate "${plateId}" is still on its previous ` +
-            `source. Nothing was cleared.`,
-      };
-    }
-    this.#applySourceOverride(itemId, next, nextBindings);
-    return { ok: true };
+    if (applied.ok) return { ok: true };
+    return {
+      ok: false,
+      reason: applied.reason ?? 'amcp-error',
+      message:
+        applied.message ??
+        `CasparCG refused the substitution, so plate "${plateId}" is still on its previous ` +
+          `source. Nothing was cleared.`,
+    };
   }
 
   /**

@@ -61,6 +61,148 @@ const drafts = new Map<string, FieldValues>();
  * make it indistinguishable from never having touched the control.
  */
 const plateDrafts = new Map<string, Map<string, string>>();
+
+/**
+ * 🔴 **Session BM-2 — staged PER-LOOK input bindings, per item: `(look, plate) → sourceId`.**
+ *
+ * ── WHY A SECOND MAP AND NOT A WIDER `plateDrafts` ──────────────────────────
+ *
+ * They are edits at DIFFERENT LEVELS of the four, and conflating them would make the panel
+ * lie about scope. `plateDrafts` stages the TEMPLATE ASSIGNMENT — shared by every row using
+ * the template, applied through `sources.set-assignments`, and read at the next take. This
+ * stages THIS ROW's composition — applied with the texts through `stack.update`, and on air
+ * the moment it lands. One map would have to carry which level each entry belongs to, and
+ * the first reader to forget would write a row's emergency composition into every other
+ * row's configuration.
+ *
+ * ⚠ **`''` IS A VALUE HERE TOO, and it means something different from `plateDrafts`'s.**
+ * There it stages "not assigned". Here it stages **"no per-look binding — fall back to the
+ * template assignment"**, which is how a composition is UNDONE. Both are real edits and
+ * neither is an absence; the recurring error this repo tracks is reading either as falsy.
+ *
+ * ⚠ **NESTED, not keyed by a composite string.** `itemId → lookId → plateId`. The obvious
+ * alternative is a `${look}<sep>${plate}` key, and this repo already has one of those in
+ * `channels/sources.ts` — where the separator is a literal NUL, which makes `git grep` call
+ * that file BINARY and refuse to show a match inside it. That cost this very session real
+ * time. Nesting needs no separator, cannot collide whatever ids arrive, and is the shape the
+ * wire already uses (`StackItemState.lookSourceOverride`), so the writer copies rather than
+ * parses.
+ */
+const lookBindingDrafts = new Map<string, Map<string, Map<string, string>>>();
+
+/** The staged value for one `(look, plate)`, or `undefined` when nothing is staged. */
+function stagedLookBinding(itemId: string, lookId: string, plateId: string): string | undefined {
+  return lookBindingDrafts.get(itemId)?.get(lookId)?.get(plateId);
+}
+
+/**
+ * Stage one look's input for one plate.
+ *
+ * `''` stages "no per-look binding" — the composition undone, falling back to the template
+ * assignment. It is a real edit, so it is RECORDED rather than deleted: an absent entry means
+ * "never touched", and the two must stay distinguishable or Discard cannot restore what the
+ * operator started from.
+ */
+export function stageLookBinding(
+  itemId: string,
+  lookId: string,
+  plateId: string,
+  sourceId: string,
+): void {
+  const item = lookBindingDrafts.get(itemId) ?? new Map<string, Map<string, string>>();
+  const look = item.get(lookId) ?? new Map<string, string>();
+  look.set(plateId, sourceId);
+  item.set(lookId, look);
+  lookBindingDrafts.set(itemId, item);
+  bump();
+}
+
+/** The value to render: the draft when staged, else what the row currently has bound. */
+export function effectiveLookBinding(
+  itemId: string,
+  lookId: string,
+  plateId: string,
+  applied: string | undefined,
+): string {
+  return stagedLookBinding(itemId, lookId, plateId) ?? applied ?? PLATE_UNASSIGNED;
+}
+
+/** True iff this `(look, plate)` is staged AND different from what the row has bound. */
+export function isLookBindingDirty(
+  itemId: string,
+  lookId: string,
+  plateId: string,
+  applied: string | undefined,
+): boolean {
+  const staged = stagedLookBinding(itemId, lookId, plateId);
+  return staged !== undefined && staged !== (applied ?? PLATE_UNASSIGNED);
+}
+
+/**
+ * 🔴 **THE COMPLETE MAP AN APPLY WILL SEND — applied, with the staged edits overlaid.**
+ *
+ * `stack.update`'s `lookBindings` REPLACES the row's map rather than merging it, because a
+ * merge-only payload can add and change but never CLEAR — and clearing is how a composition
+ * is undone. So the payload has to be the whole intended map, not the delta, exactly as the
+ * field payload is (`buildApplyPayload`).
+ *
+ * A staged `''` therefore DROPS the entry here: "no per-look binding" is expressed by the
+ * plate's absence from the map, which is what the resolver reads as "fall through to the
+ * template assignment".
+ */
+export function buildLookBindingsPayload(
+  itemId: string,
+  applied: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined,
+): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  for (const [lookId, plates] of Object.entries(applied ?? {})) out[lookId] = { ...plates };
+  for (const [lookId, plates] of lookBindingDrafts.get(itemId) ?? []) {
+    for (const [plateId, sourceId] of plates) {
+      const look = (out[lookId] ??= {});
+      if (sourceId === PLATE_UNASSIGNED) delete look[plateId];
+      else look[plateId] = sourceId;
+    }
+    if (Object.keys(out[lookId] ?? {}).length === 0) delete out[lookId];
+  }
+  return out;
+}
+
+/** A copy of the item's staged per-look edits (what an apply is about to send). */
+export function snapshotLookBindingDraft(
+  itemId: string,
+): ReadonlyMap<string, ReadonlyMap<string, string>> {
+  const out = new Map<string, ReadonlyMap<string, string>>();
+  for (const [lookId, plates] of lookBindingDrafts.get(itemId) ?? [])
+    out.set(lookId, new Map(plates));
+  return out;
+}
+
+/**
+ * Clear ONLY the staged bindings whose value still equals the snapshot — the
+ * `clearStagedMatching` rule, for the same reason: an input the operator re-picked DURING
+ * the in-flight round-trip must survive rather than be silently dropped.
+ */
+export function clearStagedLookBindingsMatching(
+  itemId: string,
+  snapshot: ReadonlyMap<string, ReadonlyMap<string, string>>,
+): void {
+  const item = lookBindingDrafts.get(itemId);
+  if (item === undefined) return;
+  let changed = false;
+  for (const [lookId, plates] of snapshot) {
+    const look = item.get(lookId);
+    if (look === undefined) continue;
+    for (const [plateId, value] of plates) {
+      if (look.get(plateId) !== value) continue;
+      look.delete(plateId);
+      changed = true;
+    }
+    if (look.size === 0) item.delete(lookId);
+  }
+  if (item.size === 0) lookBindingDrafts.delete(itemId);
+  if (changed) bump();
+}
+
 let version = 0;
 const listeners = new Set<() => void>();
 
@@ -292,6 +434,8 @@ export function isItemDirty(
   itemId: string,
   applied: FieldValues,
   appliedPlates: ReadonlyMap<string, string | null>,
+  /** Session BM-2 — the row's applied per-look map, from `StackItemState.lookSourceOverride`. */
+  appliedLookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined,
 ): boolean {
   const item = drafts.get(itemId);
   if (item !== undefined) {
@@ -303,6 +447,23 @@ export function isItemDirty(
   if (plates !== undefined) {
     for (const [plateId, value] of plates) {
       if (value !== plateValue(appliedPlates.get(plateId))) return true;
+    }
+  }
+  /*
+    🔴 **BM-2 §3.3 — THE PER-LOOK COMPOSITION IS THE SAME FACT, not a second one.**
+
+    The dirty chip and the enabled UPDATE verb both read this one function, so a third kind
+    of staged edit has to be answered here or the panel says "clean" while UPDATE has work to
+    do — an operator would press nothing and lose the composition to the next Discard.
+    `appliedLookBindings` is passed in for the same reason `appliedPlates` is: this module
+    stages edits and does not know what is applied.
+  */
+  const looks = lookBindingDrafts.get(itemId);
+  if (looks !== undefined) {
+    for (const [lookId, plates2] of looks) {
+      for (const [plateId, value] of plates2) {
+        if (value !== (appliedLookBindings?.[lookId]?.[plateId] ?? PLATE_UNASSIGNED)) return true;
+      }
     }
   }
   return false;
@@ -346,7 +507,10 @@ export function buildOverlayPayload(applied: FieldValues, overlay: FieldValues):
 export function clearDraft(itemId: string): void {
   const hadFields = drafts.delete(itemId);
   const hadPlates = plateDrafts.delete(itemId);
-  if (hadFields || hadPlates) bump();
+  // Session BM-2 — and the per-look composition. A Discard that left one behind would be an
+  // unapplied edit the operator can no longer see, on a panel reporting itself clean.
+  const hadLooks = lookBindingDrafts.delete(itemId);
+  if (hadFields || hadPlates || hadLooks) bump();
 }
 
 /** A deep copy of the item's current draft (the fields an apply will send). */
@@ -416,9 +580,9 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
   if (!snapshot.ready) return;
   const live = snapshot.liveItemIds;
   let changed = false;
-  // BOTH maps, from the one guard. A plate draft that outlived this sweep would
-  // be an unapplied edit the operator can no longer see or reach.
-  for (const map of [drafts, plateDrafts] as {
+  // EVERY map, from the one guard. A draft of any kind that outlived this sweep would be an
+  // unapplied edit the operator can no longer see or reach.
+  for (const map of [drafts, plateDrafts, lookBindingDrafts] as {
     delete: (k: string) => boolean;
     keys: () => IterableIterator<string>;
   }[]) {
@@ -436,6 +600,7 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
 export function __resetDraftsForTest(): void {
   drafts.clear();
   plateDrafts.clear();
+  lookBindingDrafts.clear();
   bump();
 }
 
