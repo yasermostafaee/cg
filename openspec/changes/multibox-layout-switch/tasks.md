@@ -804,7 +804,12 @@ candidate shapes.
       never parked at all. Both are correctness, not preference.
 
 - [x] 7.11 ✅ **LANDED 2026-08-21 (session BM) — PER-LOOK INPUT BINDING, AND THE SEAT MOVED ONTO THE
-      INPUT (`design.md` §12.9.1b, reversing Q2).** A seat is now one producer per DISTINCT RESOLVED
+      INPUT (`design.md` §12.9.1b, reversing Q2).**
+      **Linux `gate:e2e` DISCHARGED** — completed, green, `E2E (Playwright)` RUN (not skipped) on
+      every commit that carries the change:
+      [`84a19d1f`](https://github.com/yasermostafaee/cg/actions/runs/32472531598) ·
+      [`2715fd07`](https://github.com/yasermostafaee/cg/actions/runs/32478994421) ·
+      [`37d19591`](https://github.com/yasermostafaee/cg/actions/runs/32481985379). A seat is now one producer per DISTINCT RESOLVED
       INPUT per item, resolved for EVERY look by `tools/caspar-bridge/src/live-look-bindings.ts`;
       the seat set is the union across looks, so an input bound only to a look nobody is showing is
       seated, muted and PARKED, and entering that look is a `MIXER FILL` with no `PLAY`.

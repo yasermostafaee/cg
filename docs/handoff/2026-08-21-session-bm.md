@@ -1,20 +1,21 @@
 # Session BM — per-look input assignment: the seat becomes the INPUT
 
-> **Safe to pull.** Everything below is on `dev` at **`2715fd07`**; the tree is clean and
+> **Safe to pull.** Everything below is on `dev`; the model lands at **`2715fd07`** and the
+> session ends at **`203c325b`**. The tree is clean and
 > `pnpm gate` is green uncached (`0 cached, 89 total`).
 >
 > **Handoff letter/date:** `BM`, 2026-08-21.
 
 ## 0. State
 
-| Fact                    | Value                                                                                                                                                                                                                                                                                                                 |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tip read at start       | `81a8d218` — exactly the expected tip, containing BL's work; no delta                                                                                                                                                                                                                                                 |
-| **Pushed (fix)**        | **`84a19d1f`** — `B-154`, pushed promptly because it fixes shipped on-air behaviour                                                                                                                                                                                                                                   |
-| **Pushed (Stage 1)**    | **`2715fd07`** — `git ls-remote origin dev` = local, tree clean                                                                                                                                                                                                                                                       |
-| **Linux `gate:e2e`**    | ✅ **DISCHARGED for both** — `84a19d1f`: [run 32472531598](https://github.com/yasermostafaee/cg/actions/runs/32472531598); `2715fd07`: [run 32478994421](https://github.com/yasermostafaee/cg/actions/runs/32478994421). Both `success` with **`E2E (Playwright)` RUN**, not skipped. A third commit follows — see §8 |
-| Filed                   | `B-154` (a held plate kept rendering); `tasks.md` 7.11 landed, 7.12 / 7.13 deferred with what they need                                                                                                                                                                                                               |
-| **Stage 2 (Inspector)** | 🔴 **DEFERRED** under the prompt's own §4.3 stop rule — see §6                                                                                                                                                                                                                                                        |
+| Fact                    | Value                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tip read at start       | `81a8d218` — exactly the expected tip, containing BL's work; no delta                                                                                                                                                                                                                                                                                                             |
+| **Pushed (fix)**        | **`84a19d1f`** — `B-154`, pushed promptly because it fixes shipped on-air behaviour                                                                                                                                                                                                                                                                                               |
+| **Pushed (Stage 1)**    | **`2715fd07`** — the model; then `37d19591` (review fixes) and `203c325b` (prose). `git ls-remote origin dev` = local, tree clean                                                                                                                                                                                                                                                 |
+| **Linux `gate:e2e`**    | ✅ **DISCHARGED on all three code commits** — [84a19d1f](https://github.com/yasermostafaee/cg/actions/runs/32472531598) · [2715fd07](https://github.com/yasermostafaee/cg/actions/runs/32478994421) · [37d19591](https://github.com/yasermostafaee/cg/actions/runs/32481985379), each `success` with **`E2E (Playwright)` RUN**, not skipped. Also written beside `tasks.md` 7.11 |
+| Filed                   | `B-154` (a held plate kept rendering); `tasks.md` 7.11 landed, 7.12 / 7.13 deferred with what they need                                                                                                                                                                                                                                                                           |
+| **Stage 2 (Inspector)** | 🔴 **DEFERRED** under the prompt's own §4.3 stop rule — see §6                                                                                                                                                                                                                                                                                                                    |
 
 ## 1. 🔴 (B′) HELD — with four corrections, and one of them matters
 
@@ -192,10 +193,15 @@ path.
   - `84a19d1f` → [run 32472531598](https://github.com/yasermostafaee/cg/actions/runs/32472531598)
   - `2715fd07` → [run 32478994421](https://github.com/yasermostafaee/cg/actions/runs/32478994421)
 
-  🔴 **The review-fix commit that carries this handoff is a THIRD push and needs its own run.**
-  Its URL is not in this file, because the run did not exist when the file was written — read it
-  on `dev` before calling the session verified. It touches `StackRetentionStore.ts`, so it is a
-  code diff and CI will classify it as owing the suite.
+  - `37d19591` → [run 32481985379](https://github.com/yasermostafaee/cg/actions/runs/32481985379)
+
+  All three are `completed` + `success` with the `E2E (Playwright)` job RUN, which is the
+  condition that matters. The same three URLs are written beside `tasks.md` 7.11, so the
+  evidence outlives this session.
+
+  ⚠ Two later commits are docs/prose only — `203c325b` (the preflight test's wording) and the
+  one carrying this line. Neither changes behaviour; `203c325b` went through the full gate
+  because it touches a `.test.ts`.
 
 ## 9. If you touch this next
 
