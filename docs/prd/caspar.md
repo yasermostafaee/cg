@@ -585,6 +585,43 @@ Later-phase full-motion options recorded here so they are not re-derived: STREAM
 local relay transcode → browser — latency and encode load on the playout box are the recorded
 trade-offs. Cross-ref [[C-015]] (a Live-Source-heavy composite raises the value of a PGM view).
 
+**⭐ THE RECON KIT EXISTS (session BN, 2026-08-22). The item stays `[ ]` — nothing is implemented,
+no mechanism is chosen, and no `design.md` was written.** What exists is the instrument this item's
+third acceptance bullet demands, and the form to fill in at the box:
+
+- **The kit** — `tools/caspar-amcp-probe/bin/confidence-probe.mjs` (source `src/confidence-probe.ts`,
+  README section at the end of that package's README, written for an installer at ANOTHER station).
+  It drives a real CasparCG over AMCP, prints a human summary and writes machine-readable JSON.
+- **The runbook** — `docs/recon/2026-08-22-confidence-grab-measurement.md`, a FORM with empty tables:
+  §A this item, §B the 2× discriminator, §C the AMCP probes the repo already owes.
+
+**What it will answer:** which grab verb this build actually has (discovered from the server's own
+enumeration — it refuses to guess one); the latency of one grab at rest and under load; whether the
+channel's own counters move during a grab; whether that cost is flat over a ≥5-minute 1 Hz run (the
+measurement that decides whether the "~1 s" bar is affordable at all); whether the path generalises
+beyond the programme channel ([[C-023]]'s whole ride, both candidate paths distinguished); and what
+the produced artifact is.
+
+🔴 **TWO FINDINGS ALREADY, both read from the code rather than measured, and both are design work
+for this item's session rather than defects:**
+
+1. **The bridge's HTTP server has NO filesystem root.** `tools/caspar-bridge/src/template-http-server.ts`
+   serves exactly one route — `/template/<id>` — out of an in-memory map, and 404s everything else.
+   So "served over the bridge's HTTP server" needs a route that **does not exist yet**, wherever the
+   grab lands on disk.
+2. **`Add / ChannelSnapshot` in `docs/recon/ciab-client-tools.json` is NOT evidence of a server
+   verb.** That file is the CIAB **client's** tool list; its own README says the `Add` folder holds
+   that product's own tools and that a client tool must never be read as a server capability. It is
+   a hint about where to look, and the kit will not accept it in place of the server's own answer.
+
+⚠ **The owner constraint that frames the whole design, recorded 2026-08-21:** _"This product is not
+only for one particular network. It may be sold to different networks, each of which has different
+facilities."_ So this item may not be scoped, justified or dropped by reference to THIS plant's
+facilities — a station with a monitor wall and a station with none are both targets, and
+**"the operator can already see it on the multiviewer" is not an argument available to this
+design.** That is why the acceptance bullet about being OFF by default and toggleable stops being a
+nicety: it is the mechanism by which one product serves both. Do not quietly design it away.
+
 ## [ ] C-017 — auto-clear a layer when a finite template run completes: the served template pings its own origin, the bridge CLEARs ⟨priority: medium⟩
 
 **What:** A finite graphic (e.g. a ticker with a set repeat count) should leave air by itself:

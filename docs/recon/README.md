@@ -6,6 +6,12 @@ be checked against the thing itself instead of trusted as prose.
 - [2026-07-28-casparcg-250-validation.md](2026-07-28-casparcg-250-validation.md) — C-018 CasparCG
   2.5.0 Stable hardware validation.
 - [d-086-export-scoping.md](d-086-export-scoping.md) — D-086 export-scoping recon.
+- [2026-08-22-confidence-grab-measurement.md](2026-08-22-confidence-grab-measurement.md) — the
+  C-016 / C-023 confidence-grab measurement runbook (§A), the 2× discriminator (§B) and the AMCP
+  probes the repo already owes (§C). **A FORM, not a report** — its tables are empty until the box
+  fills them. Driven by `tools/caspar-amcp-probe/bin/confidence-probe.mjs`.
+- [2x-live-source-plant-check.md](2x-live-source-plant-check.md) — the six values that decide
+  whether the on-air 2× is a `cg` defect at all. Reproduced as §B above so one visit serves both.
 - **`ciab-client-tools.json`** — the tool definitions of the plant's **CIAB client**, a **MODIFIED
   CasparCG Client**, not stock CasparCG and **not a description of the CasparCG SERVER**. Its
   `Matrix / Route` tool drives an external Samim or BlackMagic VideoHub over IP and is not AMCP at
