@@ -1,4 +1,4 @@
-import type { TemplateInfo } from '@cg/shared-ipc';
+import type { TemplateLiveSources } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { colors } from '../../theme.js';
 
@@ -67,8 +67,8 @@ export interface LookOption {
  * Returning `null` for the first two collapses them HERE, once, so no call site has to
  * remember which emptiness is which.
  */
-export function lookOptionsOf(template: TemplateInfo | null): LookOption[] | null {
-  const looks = template?.liveSources?.looks;
+export function lookOptionsOf(live: TemplateLiveSources | undefined): LookOption[] | null {
+  const looks = live?.looks;
   if (looks === undefined || looks.length === 0) return null;
   return looks.map((l) => ({
     id: l.id,
@@ -123,12 +123,52 @@ interface Props {
   onPick: (lookId: string) => void;
   /** For the accessible name — the operator's word for this row. */
   rowName: string;
+  /**
+   * 🔴 **WHAT THIS PRESS CHANGES — the PREVIEW, or AIR.** (`B-151`, owner patch 2026-08-21.)
+   *
+   * There is ONE control and one call: `stack.set-active-look`, whose effect follows the
+   * ROW's state — a rehearsing row is off air, so the bridge records the look and sends
+   * nothing; an on-air row gets the cut. A duplicate picker above PVW was built and removed
+   * on the owner's correction, because _"the same LOOK buttons on the row already worked for
+   * PVW too"_ and two controls for one operation is this repo's two-spellings defect.
+   *
+   * ⚠ But a control whose effect depends on state is only safe if the operator can READ that
+   * state, and the client's requirement is that they cannot be mistaken. The row's state cell
+   * already says REHEARSING or ON AIR; this makes the picker say the same thing about
+   * ITSELF, at the point of action, so the answer is in the control the hand is on rather
+   * than in a cell three columns away.
+   *
+   * ⚠ These two are MUTUALLY EXCLUSIVE by the R-022 interlock — rehearse is refused for an
+   * on-air row and a take is refused for a rehearsing one — so there is no third state where
+   * the label would have to hedge.
+   */
+  target: 'air' | 'preview';
 }
 
-export function LookPicker({ looks, activeId, refusal, onPick, rowName }: Props): JSX.Element {
+export function LookPicker({
+  looks,
+  activeId,
+  refusal,
+  onPick,
+  rowName,
+  target,
+}: Props): JSX.Element {
+  const preview = target === 'preview';
   return (
-    <div style={styles.line} data-look-picker="" role="group" aria-label={`Look for ${rowName}`}>
-      <span style={styles.label}>LOOK</span>
+    <div
+      style={styles.line}
+      data-look-picker=""
+      data-look-target={target}
+      role="group"
+      aria-label={preview ? `Preview look for ${rowName}` : `Look for ${rowName}`}
+    >
+      {/*
+        The label IS the target statement. `PVW LOOK` rather than a badge or a colour: this
+        row already spends its colour vocabulary on air state, and a new hue here would be a
+        second thing to learn. The word the operator already reads on the PVW panel is the
+        word that appears on the control that drives it.
+      */}
+      <span style={styles.label}>{preview ? 'PVW LOOK' : 'LOOK'}</span>
       <span style={styles.strip}>
         {looks.map((look) => {
           const live = look.id === activeId;
@@ -156,7 +196,12 @@ export function LookPicker({ looks, activeId, refusal, onPick, rowName }: Props)
                 picker announcing “on air” would be a second, unbacked air claim on the same
                 row — the same reason the segments do not wear green.
               */
-              aria-label={`Look ${look.label} (${look.id})${live ? ' — current' : ''}`}
+              // `B-151` — and the TARGET, so a screen reader gets the same answer the label
+              // gives sighted operators: this press changes the preview, or it changes air.
+              aria-label={
+                `${preview ? 'Preview look' : 'Look'} ${look.label} (${look.id})` +
+                `${live ? ' — current' : ''}`
+              }
               data-look-id={look.id}
               onClick={() => {
                 /*

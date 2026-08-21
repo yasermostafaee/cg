@@ -19,42 +19,16 @@ import { CasparRuntime } from '../src/caspar-runtime.js';
  * now fails here, and adding a runtime channel without routing it fails here too.
  */
 
-/** A request/response channel — `definePublishChannel` products have `payload`, not `request`. */
-interface RequestChannel {
-  readonly name: string;
-  readonly request: unknown;
-  readonly response: unknown;
-}
+/*
+  🔴 `B-153` — THE DERIVATION MOVED TO `@cg/shared-ipc` (`runtimeRequestChannelNames`), and
+  this test now CALLS it rather than carrying its own copy.
 
-function isRequestChannel(value: unknown): value is RequestChannel {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'name' in value &&
-    typeof (value as { name: unknown }).name === 'string' &&
-    'request' in value &&
-    'response' in value
-  );
-}
-
-/**
- * Namespaces the DESIGNER owns. `@cg/shared-ipc` is shared by both SPAs, so these
- * channels are exported here but are deliberately not part of the playout bridge.
- *
- * This is a default-DENY list: anything outside it is required to be routed. A new
- * runtime channel is therefore covered the moment it is exported — the author has to
- * either route it or consciously declare it Designer-only.
- */
-const DESIGNER_ONLY_NAMESPACES = ['projects.', 'assets.', 'sharedImages.', 'export.', 'preview.'];
-
-const isDesignerOnly = (name: string): boolean =>
-  DESIGNER_ONLY_NAMESPACES.some((ns) => name.startsWith(ns));
-
-const exportedRequestChannels = Object.values(ipc)
-  .filter(isRequestChannel)
-  .map((c) => c.name)
-  .sort();
-
+  The reason is the whole point of that function: the Runtime asks the RUNNING bridge the
+  same question at connect (the capability handshake), and a build-time guard that passed
+  while the run-time one used a narrower rule would be worse than having neither — every
+  operator would see a skew banner on a perfectly matched pair, and would learn to ignore
+  it. Two lists, one question, is how that happens. There is one list.
+*/
 const routedNames = (): string[] => {
   // buildRoutes() only wires handlers onto the backing runtime — it neither connects
   // nor binds anything, so an unstarted CasparRuntime is enough and this test opens
@@ -70,7 +44,7 @@ const routedNames = (): string[] => {
 describe('bridge route coverage (B-074)', () => {
   it('routes EVERY runtime channel exported from @cg/shared-ipc', () => {
     const routed = new Set(routedNames());
-    const runtimeChannels = exportedRequestChannels.filter((n) => !isDesignerOnly(n));
+    const runtimeChannels = ipc.runtimeRequestChannelNames(ipc);
 
     const unrouted = runtimeChannels.filter((n) => !routed.has(n));
 
@@ -95,15 +69,38 @@ describe('bridge route coverage (B-074)', () => {
   it('every route the bridge declares corresponds to a real exported channel', () => {
     // The other direction: a route keyed on a name no channel exports is dead code
     // (a typo'd or renamed channel), and the caller would still get `unknown channel`.
-    const exported = new Set(exportedRequestChannels);
+    // Every EXPORTED request channel, runtime and Designer alike — this direction asks
+    // whether a route names something real, which the Designer split has no bearing on.
+    const exported = new Set(
+      Object.values(ipc)
+        .filter(
+          (v): v is { name: string } =>
+            typeof v === 'object' && v !== null && 'name' in v && 'request' in v,
+        )
+        .map((c) => c.name),
+    );
     expect(routedNames().filter((n) => !exported.has(n))).toEqual([]);
   });
 
   it('the Designer-only exemption list is honest — every namespace still exists', () => {
     // Stops the allowlist from silently growing stale and exempting channels that were
     // since deleted (or, worse, moved into the runtime).
-    for (const ns of DESIGNER_ONLY_NAMESPACES) {
-      expect(exportedRequestChannels.some((n) => n.startsWith(ns))).toBe(true);
+    const runtimeOwned = new Set(ipc.runtimeRequestChannelNames(ipc));
+    for (const ns of ipc.DESIGNER_ONLY_NAMESPACES) {
+      // The namespace still exists as an EXPORTED channel, and the filter still excludes it.
+      const inNamespace = Object.values(ipc).filter(
+        (v): v is { name: string } =>
+          typeof v === 'object' &&
+          v !== null &&
+          'name' in v &&
+          'request' in v &&
+          (v as { name: string }).name.startsWith(ns),
+      );
+      expect(inNamespace.length, ns).toBeGreaterThan(0);
+      expect(
+        inNamespace.every((c) => !runtimeOwned.has(c.name)),
+        ns,
+      ).toBe(true);
     }
   });
 });

@@ -110,6 +110,8 @@ export function PreviewPanel(): JSX.Element {
           // would send.
           fields: buildApplyPayload(item.itemId, item.fields),
           liveSources: live,
+          // `B-151` — the bridge's published look drives BOTH halves of the preview.
+          activeLookId: item.activeLookId,
           /**
            * 🔴 THE APPLIED BINDING, NOT THE DRAFT — and this is the ONE place
            * this panel deliberately diverges from the "show what the operator

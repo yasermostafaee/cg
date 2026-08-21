@@ -64,7 +64,9 @@ import {
   EMPTY_SOURCE_CATALOG,
   checkSourceAssignments,
   checkSourceCatalog,
+  activeLookOf,
   liveSourceCarrierState,
+  lookPlateRects,
   pruneAssignmentsForCatalog,
   type SourceAssignments,
   type SourceCatalog,
@@ -3796,17 +3798,19 @@ export class CasparRuntime {
   #activeLookOf(itemId: string): TemplateLook | undefined {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     const carrier = this.#templates.get(templateId)?.liveSources;
-    const looks = carrier?.looks;
-    if (looks === undefined || looks.length === 0) return undefined;
-    // A recorded id that names nothing is STALE (the template was re-imported with different
-    // looks), and the honest fallback is the template's AUTHORED default — never array order,
-    // which is what a fresh take would enter and what the operator expects to see.
-    const wanted = this.#activeLooks.get(itemId) ?? carrier?.defaultLookId;
-    return (
-      looks.find((l) => l.id === wanted) ??
-      looks.find((l) => l.id === carrier?.defaultLookId) ??
-      looks[0]
-    );
+    if (carrier === undefined) return undefined;
+    /*
+      🔴 `B-151` — THE FALLBACK CHAIN MOVED TO `@cg/shared-ipc`'s `activeLookOf`, and this
+      method is now the bridge's ITEM-KEYED door onto it rather than a second copy of it.
+
+      It read exactly right and was still a liability: PVW's placeholder overlay needed the
+      same answer, could not call a private method on a process it does not run in, and so
+      grew its own idea of the layout — which was to draw every declared source at once.
+      Putting the rule on the CARRIER means the bridge, the page and the console all resolve
+      the look from one function. What stays here is the only part that is genuinely the
+      bridge's: which item, and what this bridge has recorded for it.
+    */
+    return activeLookOf(carrier, this.#activeLooks.get(itemId));
   }
 
   /** §14 phase 3 — the look this item is showing, for a caller that only needs the id. */
@@ -3842,8 +3846,11 @@ export class CasparRuntime {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
     const carrier = this.#templates.get(templateId)?.liveSources;
     if (carrier === undefined) return {};
-    if (look !== undefined) return { ...look.rects };
-    return Object.fromEntries(carrier.sources.map((s) => [s.sourceId, s.rect] as const));
+    // `B-151` — the two-carriers-one-shape rule now lives on the carrier itself
+    // (`lookPlateRects`), so the console's PVW overlay resolves the SAME map from the SAME
+    // function. `look` is passed by id because that function's door is the id, and the
+    // prospective-look override above is the one caller that has a look and not an id.
+    return lookPlateRects(carrier, look?.id ?? this.#activeLooks.get(itemId));
   }
 
   /**

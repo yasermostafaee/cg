@@ -91,7 +91,8 @@ const BRIDGE_SURFACE: {
   methods: ['getAppInfo'],
   groups: {
     // §4 — `resyncing` says whether an EMPTY stack is an answer or a not-yet.
-    link: ['status', 'onStatusChanged', 'resyncing', 'onResyncingChanged'],
+    // `B-153` — `skew` names the channels the connected bridge PROCESS does not route.
+    link: ['status', 'onStatusChanged', 'resyncing', 'onResyncingChanged', 'skew', 'onSkewChanged'],
     stack: [
       'load',
       'take',

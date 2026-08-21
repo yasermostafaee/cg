@@ -342,6 +342,7 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
           raster,
           subject.position,
           (plateId) => subject.plateSourceNames.get(plateId) ?? null,
+          subject.activeLookId,
         ).map((p) => ({ ...p, elementId: `${subject.itemId}:${p.elementId}` }));
       }),
     [renderable, raster],
@@ -516,6 +517,7 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
             fields={subject.fields}
             position={subject.position}
             rowName={subject.rowName}
+            activeLookId={subject.activeLookId}
             onReadyChange={onReadyChange}
             handleRef={(handle) => {
               if (handle === null) handles.current.delete(subject.itemId);

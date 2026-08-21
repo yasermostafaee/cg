@@ -105,6 +105,8 @@ import type {
   RuntimeBridge,
   Unsubscribe,
 } from '../shared/runtime-bridge.js';
+import * as ipcChannels from '@cg/shared-ipc';
+import { bridgeErrorFrom, BridgeSkewError } from '../shared/bridgeSkew.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import { getOperatorName, operatorActorForWire, setOperatorName } from './operatorName.js';
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
@@ -263,8 +265,11 @@ export class WebSocketRuntime implements RuntimeBridge {
    * spelling of the same state is what golden rule 6 forbids.
    */
   #resyncing = false;
+  /** B-153 — channels this page needs that the connected bridge does not route. */
+  #skew: readonly string[] | null = null;
   /** Subscribers to {@link #resyncing}, so the renderer can stop guessing. */
   readonly #resyncSubs = new Subs<boolean>();
+  readonly #skewSubs = new Subs<readonly string[] | null>();
 
   readonly #stackSubs = new Subs<readonly StackItemState[]>();
   /**
@@ -351,6 +356,17 @@ export class WebSocketRuntime implements RuntimeBridge {
         this.#readySettled = true;
         this.#readyResolve?.();
       }
+      /*
+        🔴 `B-153` — THE CAPABILITY HANDSHAKE, ON EVERY CONNECT AND BEFORE ANYTHING ELSE
+        MATTERS. Not awaited: the resync below is what the station needs to come up, and a
+        guard that can delay or break the connect path is a guard that takes it off air.
+        `#checkSkew` never throws, and the banner it drives appears the moment the answer
+        lands — which is still long before an operator can find a button to press.
+
+        On EVERY connect, not only the first: the bridge is a separate process and the
+        common way skew arises is that IT restarted, not this page.
+      */
+      void this.#checkSkew();
       // B-085 — reconcile the browser-local library to the bridge on EVERY connect:
       // deliver the retained templates so the bridge can serve them. On the FIRST
       // connect this delivers a library imported while boot-disconnected (offline
@@ -401,6 +417,54 @@ export class WebSocketRuntime implements RuntimeBridge {
     if (this.#resyncing === value) return;
     this.#resyncing = value;
     this.#resyncSubs.emit(value);
+  }
+
+  #setSkew(value: readonly string[] | null): void {
+    this.#skew = value;
+    this.#skewSubs.emit(value);
+  }
+
+  /**
+   * 🔴 **`B-153` — ASK THE BRIDGE WHAT IT CAN DO, AT CONNECT.**
+   *
+   * `caspar-bridge` is a separate long-lived process and a browser reload updates only the
+   * SPA, so a page routinely talks to a bridge older than itself. Nothing checked, and the
+   * way an operator found out was a LOOK button answering `unknown channel:
+   * stack.set-active-look` in the middle of a live show.
+   *
+   * ⚠ **A bridge too old to answer this channel is the LOUDEST match, not a miss.** It
+   * replies `unknown channel: bridge.capabilities`, which `B-152` has already turned into a
+   * `BridgeSkewError` — so the catch below reports skew rather than swallowing it. There is
+   * no "too old to check" case that slips through.
+   *
+   * It REPORTS and does not refuse. A bridge missing one new channel still plays out through
+   * the twenty it routes, and taking a working station off air over a feature it never had
+   * would be a worse failure than the one this fixes. The missing commands refuse
+   * themselves, legibly.
+   *
+   * Never throws: a guard that can break the connect path is a guard that takes the station
+   * off air. Anything unexpected resolves to "no skew known".
+   */
+  async #checkSkew(): Promise<void> {
+    try {
+      const { channels } = await this.#invoke(ipcChannels.BridgeCapabilitiesChannel, {});
+      const routed = new Set(channels);
+      const missing = ipcChannels
+        .runtimeRequestChannelNames(ipcChannels)
+        .filter((n) => !routed.has(n));
+      this.#setSkew(missing.length === 0 ? null : missing);
+    } catch (err) {
+      if (err instanceof BridgeSkewError) {
+        // The bridge predates the handshake itself. It cannot tell us WHICH channels it
+        // lacks, so the honest answer names the channel that proved it rather than
+        // inventing a list.
+        this.#setSkew([ipcChannels.BridgeCapabilitiesChannel.name]);
+        return;
+      }
+      // A timeout, a disconnect mid-handshake, anything else: we do not KNOW there is skew,
+      // and claiming one would be its own false alarm on a healthy station.
+      this.#setSkew(null);
+    }
   }
 
   #setStatus(status: BridgeLinkStatus): void {
@@ -586,7 +650,14 @@ export class WebSocketRuntime implements RuntimeBridge {
       if (pending === undefined) return;
       this.#pending.delete(frame.id);
       clearTimeout(pending.timer);
-      if (frame.error !== undefined) pending.reject(new Error(frame.error.message));
+      /*
+        `B-152` — THE ONE PLACE A BRIDGE ERROR BECOMES AN `Error`, so it is the one place
+        that has to know a wire identifier must never reach a broadcast surface. Every
+        channel and every call site is covered from here, including ones not yet written —
+        which is the point, because the fourteen call sites that pass a caught `err.message`
+        to a toast will never all remember. See `bridgeSkew.ts`.
+      */
+      if (frame.error !== undefined) pending.reject(bridgeErrorFrom(frame.error.message));
       else pending.resolve(frame.payload);
       return;
     }
@@ -713,7 +784,31 @@ export class WebSocketRuntime implements RuntimeBridge {
         reject(new Error(`Bridge request timed out: ${channel.name}`));
       }, REQUEST_TIMEOUT_MS);
       this.#pending.set(id, {
-        resolve: (value) => resolve(channel.response.parse(value) as ChannelResponse<C>),
+        /*
+          🔴 `B-152` — A MALFORMED RESPONSE REJECTS ITS CALLER. It used to CRASH THE MESSAGE
+          PUMP.
+
+          `channel.response.parse` throws on a payload that does not match the contract, and
+          this callback is invoked from `#onMessage`, inside the socket's `message` listener.
+          An unguarded throw there does not reject the promise — it escapes the listener as
+          an UNCAUGHT EXCEPTION, so the caller hangs until its timeout while the error
+          surfaces somewhere with no connection to the command that caused it.
+
+          Found by `B-153`'s capability handshake, which is the first request issued on EVERY
+          connect: any harness or bridge that answers it with something unshaped turned a
+          contract mismatch into a process-level crash. The bug is older than that — it
+          applies to every channel — and it is exactly the disagreement `B-152` exists to
+          word, so it is answered in that vocabulary: `invalid response for <channel>` is one
+          of the three shapes `bridgeSkew.ts` already recognises, and the operator gets the
+          skew sentence rather than a Zod dump.
+        */
+        resolve: (value) => {
+          try {
+            resolve(channel.response.parse(value) as ChannelResponse<C>);
+          } catch {
+            reject(bridgeErrorFrom(`invalid response for ${channel.name}`));
+          }
+        },
         reject,
         timer,
       });
@@ -750,6 +845,10 @@ export class WebSocketRuntime implements RuntimeBridge {
     resyncing: (): boolean => this.#resyncing,
     onResyncingChanged: (handler: (value: boolean) => void): Unsubscribe =>
       this.#resyncSubs.add(handler),
+    // B-153 — see the contract note on runtime-bridge.ts.
+    skew: (): readonly string[] | null => this.#skew,
+    onSkewChanged: (handler: (missing: readonly string[] | null) => void): Unsubscribe =>
+      this.#skewSubs.add(handler),
   };
 
   readonly stack = {

@@ -10,6 +10,7 @@ import {
   PositionSchema,
   ResolutionSchema,
 } from '@cg/shared-schema';
+import type { LiveSourceRect } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -114,6 +115,63 @@ export const TemplateLiveSourcesSchema = z.object({
   defaultLookId: z.string().min(1).optional(),
 });
 export type TemplateLiveSources = z.infer<typeof TemplateLiveSourcesSchema>;
+
+/**
+ * 🔴 **`B-151` — THE ONE RESOLUTION of "which look is this row showing", for every consumer
+ * that has the carrier and an id.**
+ *
+ * It lives beside the carrier rather than inside any one consumer because there are now
+ * THREE surfaces that must agree about it — the bridge (which seats the producers), the
+ * served page (which punches the holes) and the Runtime's PVW overlay (which draws the
+ * placeholders) — and the third one got it wrong precisely by not having this to call.
+ *
+ * ⚠ **The fallback chain is not defensive noise; each link answers a real state.**
+ * `activeLookId` absent means "nobody has switched this row", which resolves to the AUTHORED
+ * default — not to array order, because that is what a fresh take enters and what the
+ * operator expects to see. A recorded id that names nothing is STALE (the template was
+ * re-imported with different looks) and falls back to the authored default in turn; a
+ * carrier whose `defaultLookId` names nothing is a broken import, and showing the first look
+ * is a better answer than showing none.
+ */
+export function activeLookOf(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): TemplateLook | undefined {
+  const looks = live.looks;
+  if (looks === undefined || looks.length === 0) return undefined;
+  const wanted = activeLookId ?? live.defaultLookId;
+  return (
+    looks.find((l) => l.id === wanted) ?? looks.find((l) => l.id === live.defaultLookId) ?? looks[0]
+  );
+}
+
+/**
+ * 🔴 **THE ONE ANSWER to "which rect does each of this template's plates have RIGHT NOW".**
+ *
+ * Two carriers, one shape. A LOOKS template answers from the active look's `rects`; a
+ * pre-LOOKS one answers from the declarations, whose `rect` is the only geometry it has.
+ * Every consumer downstream sees exactly one kind of input and none of them has to learn
+ * which carrier it is looking at.
+ *
+ * ⚠ **A source ABSENT from the returned map is absent from the look — that absence is the
+ * whole contract**, and `B-151` is what it costs to ignore it. PVW's placeholder overlay
+ * drew one box per entry in `sources`, which under LOOKS is the UNION of every look's
+ * members, each at its DEFAULT-look rect. So a template with a 1-box look and a 2-box look
+ * drew all of them at once, overlapping — while air, which resolves through this rule, drew
+ * one. The operator's preview and their output disagreed about what was on screen.
+ *
+ * 🔴 It is a FUNCTION OF THE CARRIER, not a method on any runtime, so the bridge cannot
+ * drift from the console: both call this. Do not add a local spelling of it — that is
+ * exactly how PVW came to have its own idea of the layout.
+ */
+export function lookPlateRects(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): Record<string, LiveSourceRect> {
+  const look = activeLookOf(live, activeLookId);
+  if (look !== undefined) return { ...look.rects };
+  return Object.fromEntries(live.sources.map((s) => [s.sourceId, s.rect] as const));
+}
 
 export const TemplateInfoSchema = z.object({
   templateId: IdSchema,

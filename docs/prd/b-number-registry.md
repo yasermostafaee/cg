@@ -979,3 +979,23 @@ therefore missed both `B-148` and `B-149` — which are HEADINGS in
 one this registry keeps re-learning from a new direction: **a number is free because a sweep of
 the HEADINGS says so** — a narrower grep that "looks like" the sweep is not the sweep, and a
 forward reference written before the heading exists is exactly where the wrong number hides.
+
+## 2026-08-21 — three numbers claimed in one filing session (`B-151`…`B-153`)
+
+| Prefix | Claimed | Item                                                                   | File                               |
+| ------ | ------- | ---------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-151` | PVW drew every look's plates at once while air drew one                | [bugs-runtime.md](bugs-runtime.md) |
+| `B-`   | `B-152` | a wire identifier (`unknown channel: …`) reached a broadcast surface   | [bugs-runtime.md](bugs-runtime.md) |
+| `B-`   | `B-153` | nothing guarded Runtime/bridge version skew until a button was pressed | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the documented heading sweep, run immediately before the headings were written**
+over `docs/prd/*.md` excluding `README.md` and this file: the highest `B-` heading was `B-150`, and
+`git grep "B-15[123]" -- docs` returned only the two "next free: `B-151`" POINTERS written by the
+previous session — no heading. `B-` stays contiguous `B-001` … `B-153`, **no gaps**.
+**Next free: `B-154`.**
+
+⚠ **The two `B-151` hits were pointers, not claims, and that distinction was checked rather than
+assumed.** The previous session's registry entry and handoff each say "next free: `B-151`", which a
+naive `grep -c` reports as the number being in use. The sweep that decides is the HEADING sweep;
+a plain occurrence count is not it. This is the same lesson the entry above records from the other
+direction — where a narrower grep missed two headings and nearly shipped a collision.

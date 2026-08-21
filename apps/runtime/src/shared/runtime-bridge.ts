@@ -129,6 +129,22 @@ export interface RuntimeBridge {
      */
     resyncing(): boolean;
     onResyncingChanged(handler: (value: boolean) => void): Unsubscribe;
+    /**
+     * 🔴 **`B-153` — WHICH CHANNELS THIS PAGE NEEDS THAT THE CONNECTED BRIDGE DOES NOT
+     * ROUTE.** `null` while the answer is unknown or the builds agree; a non-empty list is
+     * a live skew.
+     *
+     * Asked once at CONNECT, so the operator learns about it while nothing is at stake —
+     * rather than the way this was actually discovered, which was a LOOK button answering
+     * `unknown channel: stack.set-active-look` during a live show.
+     *
+     * ⚠ It reports; it does not REFUSE. A bridge missing one new channel still plays out
+     * perfectly well through the twenty it does route, and taking a working station off air
+     * over a feature it never had would be a far worse failure than the one being fixed.
+     * The commands that ARE missing refuse themselves, legibly, through `B-152`.
+     */
+    skew(): readonly string[] | null;
+    onSkewChanged(handler: (missing: readonly string[] | null) => void): Unsubscribe;
   };
 
   stack: {

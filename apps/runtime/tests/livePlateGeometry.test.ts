@@ -48,7 +48,7 @@ function liveSources(over: Partial<TemplateLiveSources> = {}): TemplateLiveSourc
 const named = (name: string | null) => () => name;
 
 function only(raster: ChannelRaster, live = liveSources(), position?: Position) {
-  const [placement] = platePlacements(live, raster, position, named('Studio A'));
+  const [placement] = platePlacements(live, raster, position, named('Studio A'), undefined);
   if (placement === undefined) throw new Error('expected one placement');
   return placement;
 }
@@ -194,8 +194,12 @@ describe('R-049 — what each placement carries', () => {
         },
       ],
     });
-    const placed = platePlacements(live, { width: 1920, height: 1080 }, undefined, (plateId) =>
-      plateId === 'guest-1' ? 'Studio A' : null,
+    const placed = platePlacements(
+      live,
+      { width: 1920, height: 1080 },
+      undefined,
+      (plateId) => (plateId === 'guest-1' ? 'Studio A' : null),
+      undefined,
     );
     expect(placed.map((p) => [p.plateId, p.sourceName])).toEqual([
       ['guest-1', 'Studio A'],
@@ -213,7 +217,95 @@ describe('R-049 — what each placement carries', () => {
         { width: 1920, height: 1080 },
         undefined,
         () => null,
+        undefined,
       ),
     ).toEqual([]);
+  });
+});
+
+// ───────────── `B-151` — PVW AND AIR AGREE ABOUT WHICH LOOK IS SHOWING ─────────────
+
+/**
+ * 🔴 The defect the owner met on the plant: PVW drew a 1-box look's plate and a 2-box
+ * look's plates at the same time, overlapping, while air drew one. A preview that shows a
+ * picture air never shows is worse than no preview — it is the operator's last chance to
+ * catch a mistake, manufacturing one.
+ *
+ * Two errors compounded, and each is asserted separately below:
+ *
+ *   1. MEMBERSHIP — `sources` is the UNION of every look's members, so every plate of every
+ *      look was drawn;
+ *   2. GEOMETRY — a declaration's `rect` is its DEFAULT-look rect, so even the plates that
+ *      did belong were placed by the wrong look after a switch.
+ */
+describe('B-151 — the overlay draws the ACTIVE look, and only it', () => {
+  const LEFT = { x: 0, y: 0, width: 480, height: 270 };
+  const RIGHT = { x: 480, y: 0, width: 480, height: 270 };
+  const FULL = { x: 0, y: 0, width: 960, height: 540 };
+
+  /** A 1-box look and a 2-box look over the same two declared sources. */
+  const twoLooks = (): TemplateLiveSources =>
+    liveSources({
+      sources: [
+        { elementId: 'el-1', sourceId: 'l-1', rect: LEFT, dynamic: false },
+        { elementId: 'el-2', sourceId: 'l-2', rect: RIGHT, dynamic: false },
+      ],
+      looks: [
+        {
+          id: 'pair',
+          name: 'Pair',
+          entered: { mode: 'cut' },
+          rects: { 'l-1': LEFT, 'l-2': RIGHT },
+        },
+        // SOLO shows one source, and at a DIFFERENT rect from its 2-box one — so a wrong
+        // answer is visible in the geometry as well as in the count.
+        { id: 'solo', name: 'Solo', entered: { mode: 'cut' }, rects: { 'l-1': FULL } },
+      ],
+      defaultLookId: 'pair',
+    });
+
+  const RASTER: ChannelRaster = { width: 1920, height: 1080 };
+  const place = (activeLookId: string | undefined) =>
+    platePlacements(twoLooks(), RASTER, undefined, () => 'Studio A', activeLookId);
+
+  it('🔴 4.2 — a hidden look’s plate has NO placement at all, not a covered one', () => {
+    /*
+      BB's lesson, and the reason this asserts ABSENCE rather than a zero size: the rehearsal
+      stage is transparent, so "hidden" and "absent" photograph identically. A zero-area
+      placement would still paint a frame and a label at the origin, and would still be
+      counted by anything that reads this list.
+    */
+    const solo = place('solo');
+    expect(solo.map((p) => p.plateId)).toEqual(['l-1']);
+    expect(solo.some((p) => p.plateId === 'l-2')).toBe(false);
+  });
+
+  it('🔴 4.1 — the geometry follows the ACTIVE look, not the declaration’s default rect', () => {
+    // `l-1` is LEFT in the pair look and FULL-frame in solo. The declaration carries LEFT,
+    // which is what the overlay used to draw in BOTH.
+    const [pair] = place('pair');
+    const [solo] = place('solo');
+    expect(pair?.width).toBeCloseTo(480, 6);
+    expect(solo?.width, 'solo re-places the same plate').toBeCloseTo(960, 6);
+    expect(solo?.width).not.toBeCloseTo(pair?.width ?? 0, 6);
+  });
+
+  it('4.1b — an UNSWITCHED row resolves to the AUTHORED DEFAULT, which is what a take enters', () => {
+    // `undefined` is "nobody has switched this row" — the ordinary state of a freshly loaded
+    // row — and it must mean the default look, never array order and never "all of them".
+    expect(place(undefined).map((p) => p.plateId)).toEqual(['l-1', 'l-2']);
+  });
+
+  it('4.1c — a STALE look id falls back to the authored default rather than drawing nothing', () => {
+    // The template was re-imported with different looks while a row still records an old id.
+    // Drawing nothing would read as "this template has no live plates", which is a lie.
+    expect(place('a-look-that-was-deleted').map((p) => p.plateId)).toEqual(['l-1', 'l-2']);
+  });
+
+  it('a PRE-LOOKS template is untouched — it keeps its declaration rects', () => {
+    // The absent-vs-empty rule at the overlay: a carrier with no `looks` predates LOOKS and
+    // its declarations ARE its geometry. Passing a look id it cannot honour must not empty it.
+    const placed = platePlacements(liveSources(), RASTER, undefined, () => null, 'solo');
+    expect(placed.map((p) => p.plateId)).toEqual(['guest-1']);
   });
 });

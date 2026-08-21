@@ -37,6 +37,7 @@ import {
   LiveLayersStateChannel,
   StackLoadChannel,
   StackNextChannel,
+  BridgeCapabilitiesChannel,
   StackRestoreChannel,
   StackStopAllChannel,
   StackStopChannel,
@@ -1006,5 +1007,23 @@ export function buildRoutes(
     route(SettingsSetChannel, (r: Partial<{ telemetry: never }>) => b.settingsSet(r)),
   ];
 
-  return new Map(entries.map((e) => [e.channel.name, e]));
+  const routes = new Map(entries.map((e) => [e.channel.name, e]));
+  /*
+    🔴 `B-153` — THE CAPABILITY HANDSHAKE, ANSWERED FROM THE MAP ITSELF.
+
+    Added AFTER the map is built and reading `routes.keys()` at CALL time, so what this
+    reports is what this process genuinely routes rather than a list somebody maintains
+    beside it. Delete a route above and it vanishes from here; add one and it appears. A
+    hand-written capability list would be the third thing that has to be remembered — and
+    the whole reason this channel exists is that the last thing needing to be remembered
+    was not, and an operator found out on air.
+
+    It includes ITSELF, which is correct: a bridge that can answer this question can, in
+    fact, answer this question.
+  */
+  const capabilities = route(BridgeCapabilitiesChannel, () => ({
+    channels: [...routes.keys()].sort(),
+  }));
+  routes.set(capabilities.channel.name, capabilities);
+  return routes;
 }

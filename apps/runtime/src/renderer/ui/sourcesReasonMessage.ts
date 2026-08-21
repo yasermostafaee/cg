@@ -1,4 +1,5 @@
 import type { SOURCES_SET_ASSIGNMENTS_REASONS, SOURCES_SET_CONFIG_REASONS } from '@cg/shared-ipc';
+import { BRIDGE_SKEW_MESSAGE, isBridgeSkewMessage } from '../../shared/bridgeSkew.js';
 
 /**
  * D-137 / C-015 — operator wording for a refused `sources.*` call, keyed off the
@@ -71,10 +72,17 @@ export function sourcesReasonMessage(reason: string | undefined): string | null 
  */
 export function sourcesTransportMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
-  if (/unknown channel|invalid (request|response) for/i.test(raw)) {
+  /*
+    `B-152` — THE SHAPE TEST HAS ONE OWNER NOW (`shared/bridgeSkew.ts`), and what stays here
+    is only the sentence that is genuinely THIS family's: what a skewed bridge costs a LIVE
+    PLATE. The regex used to be spelled here and again in `delimiterStore`, and every other
+    channel had neither — which is how `unknown channel: stack.set-active-look` reached an
+    operator mid-show. The transport now words itself at the throw site, so this branch is
+    reached only when something hands us a raw string rather than a caught bridge error.
+  */
+  if (isBridgeSkewMessage(raw)) {
     return (
-      'This bridge is running an older build than this page — restart the bridge with a matching ' +
-      'build and this will save. Until then a template with a live plate cannot be taken, ' +
+      `${BRIDGE_SKEW_MESSAGE} Until then a template with a live plate cannot be taken, ` +
       'because nothing here can tell the bridge which source that plate uses.'
     );
   }

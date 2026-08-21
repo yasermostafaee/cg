@@ -3,6 +3,7 @@ import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
 import { ConnectionBanner } from './features/status/ConnectionBanner.js';
+import { BridgeSkewBanner } from './features/status/BridgeSkewBanner.js';
 import { RasterMismatchBanner } from './features/status/RasterMismatchBanner.js';
 import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
 import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
@@ -185,6 +186,8 @@ export function App(): JSX.Element {
           not a pill: the pill lost to the green HEALTHY pill beside it, and the operator
           believed a graphic was on air. Renders nothing when the link is live. */}
         <ConnectionBanner />
+        {/* B-153 — the bridge PROCESS is older than this page. Reports, never gates. */}
+        <BridgeSkewBanner />
         {/* R-006 — the failover banner describes REAL servers. In test mode there are none,
           and the mock now honestly reports them `disconnected`, so it would shout
           "PRIMARY A unhealthy" about hardware that does not exist — new noise, and a fresh

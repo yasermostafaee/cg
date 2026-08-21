@@ -9,6 +9,7 @@
 // same program. The subpath keeps this app importing pure arithmetic and nothing
 // ambient.
 import { outputLetterbox, outputScale, outputTranslate } from '@cg/template-runtime/position';
+import { lookPlateRects } from '@cg/shared-ipc';
 import type { ChannelRaster, TemplateLiveSources } from '@cg/shared-ipc';
 import type { Position } from '@cg/shared-schema';
 
@@ -86,7 +87,16 @@ export interface PlatePlacement {
 }
 
 /**
- * Place every plate a template declares onto the channel raster.
+ * Place the plates the ACTIVE LOOK shows onto the channel raster.
+ *
+ * ⚠ Not "every plate a template declares", which is what this said and did before `B-151`.
+ * Under LOOKS the declaration list is the union of every look's members and each
+ * declaration carries only its DEFAULT-look rect, so both the membership and the geometry
+ * have to come from the look — see the note in the body.
+ *
+ * `activeLookId` is the row's look as the BRIDGE published it (`StackItemState.activeLookId`),
+ * or `undefined` for a row nobody has switched, which resolves to the authored default. A
+ * pre-LOOKS template ignores it entirely and keeps its declaration rects.
  *
  * `position` is the operator's APPLIED placement override (R-011) when the row has
  * one. Absent, the carried `defaultPosition` is used — the same
@@ -100,17 +110,45 @@ export function platePlacements(
   raster: ChannelRaster,
   position: Position | undefined,
   sourceNameOf: (plateId: string) => string | null,
+  activeLookId: string | undefined,
 ): PlatePlacement[] {
   const s = outputScale(raster);
   const pad = outputLetterbox(raster);
   const t = outputTranslate({ resolution: live.resolution }, position ?? live.defaultPosition);
-  return live.sources.map((plate) => ({
-    elementId: plate.elementId,
-    plateId: plate.sourceId,
-    sourceName: sourceNameOf(plate.sourceId),
-    x: pad.x + s * (t.x + plate.rect.x),
-    y: pad.y + s * (t.y + plate.rect.y),
-    width: s * plate.rect.width,
-    height: s * plate.rect.height,
-  }));
+  /*
+    🔴 `B-151` — THE ACTIVE LOOK'S RECTS, RESOLVED BY THE CARRIER'S OWN FUNCTION.
+
+    This used to map `live.sources` and read each declaration's `rect`. Under LOOKS that is
+    two errors at once, and together they are the defect the owner met on the plant:
+
+      - `sources` is the UNION of every look's members (source-keyed, deduped by routeKey),
+        so a template with a 1-box look and a 2-box look drew ALL of them;
+      - `rect` on a declaration is the plate's geometry in the DEFAULT look alone, so even
+        the members that did belong were placed by the wrong look after a switch.
+
+    PVW therefore showed a picture air never showed, which is the one thing a preview may
+    not do — the operator's last chance to catch a mistake was manufacturing one.
+
+    `lookPlateRects` is the SAME function the bridge resolves its desired set from
+    (`#desiredPlateRects`), so the boxes this overlay draws and the producers CasparCG seats
+    cannot disagree about the layout. ⚠ ABSENCE IS THE CONTRACT: a source with no entry is
+    not in this look and gets no placement — not a zero-area one, which would still paint a
+    frame and a label at the origin.
+  */
+  const rects = lookPlateRects(live, activeLookId);
+  return live.sources.flatMap((plate) => {
+    const rect = rects[plate.sourceId];
+    if (rect === undefined) return [];
+    return [
+      {
+        elementId: plate.elementId,
+        plateId: plate.sourceId,
+        sourceName: sourceNameOf(plate.sourceId),
+        x: pad.x + s * (t.x + rect.x),
+        y: pad.y + s * (t.y + rect.y),
+        width: s * rect.width,
+        height: s * rect.height,
+      },
+    ];
+  });
 }

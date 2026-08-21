@@ -124,6 +124,12 @@ export function createMockBridge(): RuntimeBridge {
       // is genuinely entitled to raise.
       resyncing: () => false,
       onResyncingChanged: () => () => undefined,
+      // `B-153` — there is no bridge PROCESS in test mode, so there is nothing this page
+      // could be skewed against. `null` is the honest answer and not a stub: a mock that
+      // reported skew would raise an alarm about a build that does not exist, and one that
+      // reported "checked, fine" would be a claim nobody made.
+      skew: () => null,
+      onSkewChanged: () => () => undefined,
     },
 
     stack: {

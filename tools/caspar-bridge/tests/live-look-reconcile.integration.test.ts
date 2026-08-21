@@ -1319,3 +1319,47 @@ it('🔴 7.9 — DISJOINT membership survives a refusal: {A,B} → {C,D} with no
   expect(r.activeLookId('item-1')).toBe('ab');
   expect(await lookOnThePage()).toBe('ab');
 });
+
+// ───────── `B-151` — A REHEARSING ROW'S LOOK SWITCH REACHES NO PLANT ─────────
+
+it('🔴 switching the look of a REHEARSING row sends NOTHING to CasparCG', async () => {
+  /*
+    The owner's correction to session BL: the row's existing LOOK buttons already drive PVW,
+    so a second control above the preview was removed. That leaves ONE control whose effect
+    follows the ROW's state — and the safety of that rests entirely on this being true.
+
+    🔴 An accidental on-air change from a rehearsal control is the worst outcome available in
+    this area, so it is asserted ON THE WIRE rather than reasoned about: not "the function
+    returned ok", but "the trace is empty".
+
+    The mechanism it rests on: R-022's interlock refuses rehearse for an ON-AIR row and
+    refuses a take for a REHEARSING one, so a rehearsing row is off air by construction — and
+    `setActiveLook` returns before any send when the row is off air with nothing seated.
+  */
+  const r = await boot();
+  await r.load('item-1', 'debate', {});
+  expect((await r.enterRehearse('item-1')).ok, 'a LOADED row can rehearse').toBe(true);
+
+  // Baselined AFTER entering rehearse: entry itself mutes the layer, which is its own traffic.
+  const before = (await recvLines()).length;
+
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+
+  expect(await since(before), 'not one command reached the plant').toEqual([]);
+  // …and the look IS recorded, which is what makes it the look the next take enters.
+  expect(r.activeLookId('item-1')).toBe('solo');
+});
+
+it('🔴 …and the R-022 INTERLOCK is what makes that safe — a rehearsing row cannot be taken', async () => {
+  /*
+    The premise the test above rests on, asserted rather than assumed. If a row could be
+    rehearsing AND on air at once, "switching the preview" and "switching air" would be the
+    same press with two effects, and the surface could not tell the operator which.
+  */
+  const r = await boot();
+  await r.load('item-1', 'debate', {});
+  await r.enterRehearse('item-1');
+
+  const verdict = await r.take('item-1');
+  expect(verdict.accepted, 'a rehearsing row is refused the take').toBe(false);
+});

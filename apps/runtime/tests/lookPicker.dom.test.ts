@@ -59,6 +59,7 @@ async function render(
   over: {
     activeId?: string | undefined;
     refusal?: string | undefined;
+    target?: 'air' | 'preview';
   } = {},
 ): Promise<{ el: HTMLDivElement; onPick: ReturnType<typeof vi.fn> }> {
   const onPick = vi.fn();
@@ -77,6 +78,7 @@ async function render(
           refusal: over.refusal,
           onPick,
           rowName: 'Layer 1',
+          target: over.target ?? 'air',
         }),
       ),
     );
@@ -207,8 +209,11 @@ describe('7.1 — an unreachable server DISABLES the picker; it never removes it
 // ── the absent-vs-empty rule ──────────────────────────────────────────────────
 
 describe('🔴 whether a picker exists at all — absent is NOT empty', () => {
-  const tpl = (liveSources: TemplateInfo['liveSources']): TemplateInfo =>
-    ({ templateId: 't', templateType: 'clock', fields: [], liveSources }) as TemplateInfo;
+  // `B-151` — `lookOptionsOf` takes the CARRIER now, not a whole `TemplateInfo`: PVW has
+  // the carrier and no TemplateInfo, and a sibling that read a different field would have
+  // been a second answer to "which looks does this template have".
+  const tpl = (liveSources: TemplateInfo['liveSources']): TemplateInfo['liveSources'] =>
+    liveSources;
 
   it('a template with NO look group gets no picker', () => {
     /*
@@ -243,7 +248,7 @@ describe('🔴 whether a picker exists at all — absent is NOT empty', () => {
     ).toBeNull();
   });
 
-  it('a group with looks gets one segment each, labelled by ordinal', () => {
+  it('a group with looks gets one segment each, labelled by the AUTHORED name', () => {
     const opts = lookOptionsOf(
       tpl({
         resolution: { width: 1920, height: 1080 },
@@ -262,8 +267,10 @@ describe('🔴 whether a picker exists at all — absent is NOT empty', () => {
     ]);
   });
 
-  it('a null template gets no picker', () => {
-    expect(lookOptionsOf(null)).toBeNull();
+  it('no carrier at all gets no picker', () => {
+    // A template the registry has not answered for yet, and one that declares no live
+    // sources, are the same answer here: nothing to pick.
+    expect(lookOptionsOf(undefined)).toBeNull();
   });
 });
 
@@ -358,5 +365,43 @@ describe('lookSwitchRefusal — the bridge’s sentence first', () => {
 
   it('and a refusal with neither still says something', () => {
     expect(lookSwitchRefusal(undefined, undefined)).toBe('The look switch was not accepted.');
+  });
+});
+
+// ── `B-151` — WHAT THIS PRESS CHANGES, said on the control itself ─────────────
+
+describe('B-151 — the picker names its TARGET, because one control serves two', () => {
+  /*
+    The owner's correction to session BL removed a duplicate picker above PVW: the row's LOOK
+    buttons already drove the preview, and two controls for one operation is this repo's
+    two-spellings defect. That leaves ONE control whose effect follows the ROW's state — the
+    preview while rehearsing, air otherwise — and the client's requirement is that the
+    operator cannot be mistaken about which.
+
+    The row's state cell already says REHEARSING or ON AIR. This puts the same answer on the
+    control the hand is on, so it is legible at the point of action rather than three columns
+    away.
+  */
+  it('🔴 an ON-AIR row’s picker says LOOK, and does not claim to be a preview', async () => {
+    const { el } = await render({ target: 'air' });
+    expect(el.textContent).toContain('LOOK');
+    expect(el.textContent).not.toContain('PVW LOOK');
+    expect(el.querySelector('[data-look-target="air"]')).not.toBeNull();
+  });
+
+  it('🔴 a REHEARSING row’s picker says PVW LOOK', async () => {
+    const { el } = await render({ target: 'preview' });
+    expect(el.textContent).toContain('PVW LOOK');
+    expect(el.querySelector('[data-look-target="preview"]')).not.toBeNull();
+  });
+
+  it('the ACCESSIBLE name carries the target too — the answer is not colour or layout', async () => {
+    // A sighted operator reads the label; a screen-reader operator must get the same fact,
+    // and neither should have to infer it from where the control sits.
+    const { el } = await render({ target: 'preview' });
+    expect(el.querySelector('[data-look-picker]')?.getAttribute('aria-label')).toBe(
+      'Preview look for Layer 1',
+    );
+    expect(seg(el, 'left')?.getAttribute('aria-label')).toContain('Preview look');
   });
 });

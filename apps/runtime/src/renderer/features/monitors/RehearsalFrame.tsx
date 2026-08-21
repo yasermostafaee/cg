@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { CSSProperties, Ref } from 'react';
 import type { FieldValues, Position } from '@cg/shared-schema';
-import { positionQuery } from '@cg/shared-schema';
+import { positionQuery, withCgControl } from '@cg/shared-schema';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { applyOperatorPosition, type PageRuntimeWindow } from './frameEnvironment.js';
 import { frameBox } from './rehearsalFrames.js';
@@ -116,6 +116,21 @@ interface Props {
   position: Position | undefined;
   /** Row label, for the accessible name. */
   rowName: string;
+  /**
+   * 🔴 `B-151` — WHICH LOOK THIS PAGE SHOULD SHOW, and the third consumer of a mechanism
+   * whose other two were each wired by hand.
+   *
+   * A look switch is two mutations on two machines, and the page's half arrives through the
+   * reserved `__cg` key on the payload (`tasks.md` 6.7). The plant gets it on `CG ADD` and
+   * `CG UPDATE`; the Designer's canvas gets it by `postMessage` → `setActiveLook`. PVW got
+   * NOTHING — so the page in the frame sat on the authored default from the first frame and
+   * stayed there through every switch, while air moved.
+   *
+   * It rides the SAME payload key rather than a preview-only call, so there is no third
+   * spelling of "tell the page which look": what PVW sends is byte-shaped like what CasparCG
+   * delivers, which is the whole fidelity claim rehearse is built on.
+   */
+  activeLookId: string | undefined;
   handleRef?: Ref<RehearsalFrameHandle>;
   /** Told whenever this frame's readiness flips, so the stage can gate its transport. */
   onReadyChange?: (itemId: string, ready: boolean) => void;
@@ -130,6 +145,7 @@ export function RehearsalFrame({
   fields,
   position,
   rowName,
+  activeLookId,
   handleRef,
   onReadyChange,
 }: Props): JSX.Element {
@@ -140,14 +156,32 @@ export function RehearsalFrame({
     return (frameRef.current?.contentWindow as TemplateWindow | null | undefined) ?? null;
   }, []);
 
+  /*
+    🔴 `B-151` — ONE PAYLOAD BUILDER for both entry points, carrying the look on the reserved
+    `__cg` key exactly as the bridge does.
+
+    `withCgControl` only when there IS a look: a pre-LOOKS template must receive the payload
+    it always received, byte for byte. An empty control block would be a difference between
+    what PVW sends and what CasparCG sends, on the one surface whose entire claim is that
+    there is no difference — and `CG_CONTROL_KEY`'s strip rule means the page would silently
+    tolerate it, so nothing would ever have told us.
+  */
+  const payload = useCallback(
+    (): string =>
+      JSON.stringify(
+        activeLookId === undefined ? fields : withCgControl(fields, { look: activeLookId }),
+      ),
+    [fields, activeLookId],
+  );
+
   useImperativeHandle(
     handleRef,
     () => ({
-      play: () => templateWindow()?.play?.(JSON.stringify(fields)),
+      play: () => templateWindow()?.play?.(payload()),
       next: () => templateWindow()?.next?.(),
       stop: () => templateWindow()?.stop?.(),
     }),
-    [templateWindow, fields],
+    [templateWindow, payload],
   );
 
   // Re-arm on a template change: a fresh document has not booted yet.
@@ -173,10 +207,15 @@ export function RehearsalFrame({
   // visible immediately — that responsiveness is most of what rehearse is for.
   // It goes through `window.update` with a JSON string, which is byte-for-byte
   // the payload shape `CG UPDATE` delivers on air.
+  //
+  // `B-151` — and whenever the LOOK changes, which is what makes a switch reach the page at
+  // all. `payload` closes over both, so this one effect carries the field edit and the look
+  // through the same call the plant makes; a separate look push would be a second transport
+  // and could land out of order with the values it belongs to.
   useEffect(() => {
     if (!ready) return;
-    templateWindow()?.update?.(JSON.stringify(fields));
-  }, [ready, fields, templateWindow]);
+    templateWindow()?.update?.(payload());
+  }, [ready, payload, templateWindow]);
 
   // THE POSITION EDIT REACHING THE PREVIEW. `ready` and the placement are BOTH
   // dependencies, and that pairing is what makes an Apply visible: `ready`

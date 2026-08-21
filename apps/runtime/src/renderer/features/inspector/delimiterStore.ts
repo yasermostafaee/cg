@@ -1,4 +1,5 @@
 import type { DelimiterOption } from '@cg/shared-ipc';
+import { BRIDGE_SKEW_MESSAGE, isBridgeSkewMessage } from '../../../shared/bridgeSkew.js';
 
 /**
  * R-034 — the renderer's view of the station's delimiter list.
@@ -161,11 +162,17 @@ async function commit(next: DelimiterOption[]): Promise<string | null> {
  */
 function describeCommitFailure(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
-  if (/unknown channel/i.test(message)) {
-    return (
-      'This bridge is older than the shared delimiter list — restart it with an up-to-date ' +
-      'build and the list will save. Until then delimiters can still be selected, but not changed.'
-    );
+  /*
+    `B-152` — the shape test was a SECOND copy of a rule that now has an owner
+    (`shared/bridgeSkew.ts`), and it tested only ONE of the three shapes: a bridge that knew
+    `delimiters.set` and disagreed about its payload answered `invalid request for
+    delimiters.set`, which fell straight through to the operator as written. Two spellings,
+    and the narrower one was the one that shipped here.
+
+    What stays is the sentence's own tail — what a skewed bridge costs THIS feature.
+  */
+  if (isBridgeSkewMessage(message)) {
+    return `${BRIDGE_SKEW_MESSAGE} Delimiters can still be selected, but not changed.`;
   }
   return message === '' ? 'The delimiter list could not be saved.' : message;
 }

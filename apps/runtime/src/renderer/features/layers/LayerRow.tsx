@@ -299,7 +299,7 @@ export function LayerRow({
     is which. The zero-look case is a broken template and is refused at the TAKE door
     (`looks-none-authored`); it is not this control’s job to explain it.
   */
-  const looks = lookOptionsOf(template);
+  const looks = lookOptionsOf(template?.liveSources);
   // The SAME helper every other AMCP-emitting verb on this row uses. Not a look-specific
   // rule: with either hop down the switch cannot leave the browser, so an enabled picker
   // would be the appearance of a capability rather than one (see `lookSwitch.ts`).
@@ -842,8 +842,21 @@ export function LayerRow({
         <LookPicker
           looks={looks}
           activeId={item.activeLookId}
-          refusal={lookRefusal}
+          /*
+            🔴 `B-151` — DISABLED ONLY WHEN THE TARGET IS AIR.
+
+            `casparRefusalReason` exists because an ON-AIR switch cannot leave the browser
+            with the link down, so an enabled control would be the appearance of a
+            capability. A REHEARSING row is off air: the bridge records the look and sends
+            nothing, so the server's reachability has no bearing on whether the press can be
+            done. Disabling it there would refuse a rehearsal for a reason that belongs to
+            air — and rehearsing with the plant unreachable is precisely when a preview is
+            most useful.
+          */
+          refusal={rehearsing ? undefined : lookRefusal}
           rowName={rowName}
+          // The row's own state decides what the press changes, and says so on the control.
+          target={rehearsing ? 'preview' : 'air'}
           onPick={(lookId) => {
             void switchLook(item.itemId, lookId);
           }}

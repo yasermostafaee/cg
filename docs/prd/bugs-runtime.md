@@ -4244,3 +4244,135 @@ number belongs on the plant's CEF beside §9.6f's own.
   pause/resume contract), [[D-125]] (the Lottie driver, the same duck-typed seam). Supersedes the
   audio half of `multibox-layout-switch` `tasks.md` 9.3 and closes its decode half; the operator
   toggle over the pause policy is recorded as that change's task 7.10.
+
+## [x] B-151 — PVW drew EVERY look's plates at once while air drew one: the preview overlay never learned that looks exist ⟨priority: high — the operator's last chance to catch a mistake was manufacturing one⟩ — FIXED 2026-08-21 (session BL)
+
+**What the owner saw.** A template with a 1-box look (`l-1`) and a 2-box look (`l-1`, `l-2`), a row
+in REHEARSE: **PVW drew both looks' plates simultaneously, overlapping.** On air, only the active
+look rendered — correctly. So the preview and the output disagreed about what was on screen.
+
+🔴 **The reading it was reported under was HALF WRONG, and the correction matters.** The relayed
+diagnosis was "the page renders in three places and the look state reaches only two — PVW's page was
+never wired". The second half is true and is fixed here. But it is **not what the owner saw**: the
+page inside the PVW frame enters the AUTHORED DEFAULT look at build, synchronously, and hides the
+other looks' instances — so the page was showing ONE look all along. **The overlapping boxes were the
+placeholder OVERLAY**, Runtime-side chrome drawn on top of the frame, which had nothing to do with
+the page's look state.
+
+**The overlay's two errors, compounding** (`livePlateGeometry.ts`, `platePlacements`):
+
+1. **MEMBERSHIP** — it mapped `live.sources`, which under LOOKS is the source-keyed UNION of every
+   look's members. So every plate of every look got a box.
+2. **GEOMETRY** — a declaration's `rect` is that plate's rect **in the default look only**, so even
+   the plates that did belong were placed by the wrong look after a switch.
+
+**Fixed by giving the resolution ONE owner.** `activeLookOf` + `lookPlateRects` now live on the
+CARRIER in `@cg/shared-ipc`, beside `TemplateLiveSources`. The bridge's `#activeLookOf` /
+`#desiredPlateRects` delegate to them and the overlay calls the same functions, so the boxes PVW
+draws and the producers CasparCG seats resolve from one rule. PVW could not have called a private
+method on a process it does not run in — which is exactly how it came to have its own idea of the
+layout.
+
+**And the page half, which WAS missing.** `RehearsalFrame` now carries the look on the reserved
+`__cg` key of its `play`/`update` payloads — the same transport `CG ADD`/`CG UPDATE` use — so the
+page in the preview follows a switch instead of sitting on the authored default forever.
+
+**Switching looks in PVW** (owner, same day): _"you must also be able to switch between looks in
+PVW."_ A look control was built on the PVW panel and then **REMOVED on the owner's correction**:
+_"the same LOOK buttons on the row already worked for PVW too."_ He is right — the row's picker
+drives `stack.set-active-look`, whose published `activeLookId` is what both halves of the preview
+read. Two controls for one operation is this repo's two-spellings defect; the seam survived the
+control's removal untouched.
+
+🔴 **One control, two targets, and the row's state decides which.** A REHEARSING row is off air by
+the R-022 interlock (rehearse is refused for an on-air row; a take is refused for a rehearsing one),
+so `setActiveLook` records the look and **sends no AMCP** — asserted on the wire, not reasoned
+about. An on-air row gets the cut. The picker names its own target (`PVW LOOK` vs `LOOK`, plus the
+accessible name and `data-look-target`), because a control whose effect depends on state is only
+safe if the operator can read that state at the point of action.
+
+**What a take then does: what you rehearsed is what you take.** The recorded look is what
+`#activeLookOf` resolves at the take and what rides the `CG ADD` payload unconditionally. No new
+mechanism — it is what the shipped take path already does with a recorded look.
+
+**Acceptance**
+
+- WHEN a row is on a look THEN PVW draws exactly that look's plates, at that look's rects
+- WHEN the operator switches look THEN PVW's overlay AND the page inside the frame both follow
+- WHEN a look hides a plate THEN that plate has NO placement in PVW — not a zero-area one
+- WHEN a rehearsing row's look is switched THEN nothing reaches CasparCG
+- WHEN a template predates LOOKS THEN nothing about it changes
+
+- **Cross-refs:** [[R-049]] (the placeholder overlay), [[R-022]] (rehearse and its interlock),
+  [[B-146]] (the same class — a surface showing something air does not).
+
+## [x] B-152 — a wire identifier reached a broadcast surface: `unknown channel: stack.set-active-look` in a red toast, mid-show ⟨priority: high — the operator can do nothing with it, and it names an internal id⟩ — FIXED 2026-08-21 (session BL)
+
+**What.** Pressing a LOOK button during a live show produced a toast reading exactly
+`unknown channel: stack.set-active-look`. That string is the BRIDGE's frame router
+(`bridge.ts`: `unknown channel: ${frame.channel}`). A developer string must never appear on a
+broadcast surface.
+
+🔴 **One instance is a bug; this was a PATTERN, and that is the finding.** The sweep: **fourteen**
+places in `apps/runtime/src/renderer` pass a caught `err.message` straight to a toast, and exactly
+**two** translated these shapes — `sourcesTransportMessage` and `delimiterStore`'s
+`describeCommitFailure`, each carrying its own copy of the regex. So the rule existed twice, was
+applied twice, and every other channel leaked. Worse, the two copies **disagreed**: the delimiter one
+tested only `unknown channel`, so a bridge that knew the channel and disagreed about its payload
+answered `invalid request for delimiters.set` and that fell through to the operator verbatim.
+
+**Fixed at the transport, not at the toast.** `shared/bridgeSkew.ts` owns the shape test and the
+sentence; `WebSocketRuntime.#onMessage` — the ONE line where every bridge error response becomes an
+`Error` — throws a `BridgeSkewError` whose message is already operator-legible. Every call site,
+including ones not yet written, is covered without knowing the file exists. Asking each surface to
+translate is the thing that just failed. The two existing translators now delegate, so the rule has
+one spelling.
+
+⚠ **A REFUSAL keeps the bridge's own sentence.** The bridge's refusals carry specifics this side
+cannot know (which template is already on air, how many boxes it has); swallowing those would trade
+one unhelpful message for another. Only the three TRANSPORT shapes are re-worded.
+
+**And a second defect the fix uncovered.** `#invoke`'s `resolve` called `channel.response.parse`
+inside the socket's `message` listener with no guard, so a malformed response **crashed the message
+pump as an uncaught exception** instead of rejecting its caller — the caller then hung to its
+timeout while the error surfaced with no connection to the command. Older than this session and true
+of every channel; `B-153`'s handshake, being the first request on every connect, is what made it
+reachable on every boot. It now rejects with the `invalid response for <channel>` shape, which this
+same vocabulary words.
+
+- **Cross-refs:** [[B-153]] (the connect-time guard — same incident, the other half), [[B-146]].
+
+## [x] B-153 — nothing guarded Runtime/bridge VERSION SKEW: the mismatch was discovered by pressing a button on air ⟨priority: high — it cost a live debugging session⟩ — FIXED 2026-08-21 (session BL)
+
+**What.** `caspar-bridge` is a separate long-lived process. A browser reload updates the SPA and NOT
+the bridge, so a page routinely talks to a bridge older than itself. Nothing checked. The way an
+operator found out was a LOOK button answering `unknown channel: stack.set-active-look` in the middle
+of a show.
+
+**A CAPABILITY HANDSHAKE, not a version compare — and the choice is the substance.** A version gate
+answers the wrong question: two builds can differ in ways that have nothing to do with the channels
+this page calls, so it either refuses working stations on any bump or needs a hand-maintained
+compatibility range — a number somebody must remember to bump, which is the class of guard that is
+already stale when it matters. The new `bridge.capabilities` channel reports the routes the bridge
+**actually wired** (read from its own route map, so a deleted route disappears by construction), and
+the SPA compares against `runtimeRequestChannelNames`, derived from what `@cg/shared-ipc` actually
+exports. Neither side maintains a list by hand and it cannot false-positive on a bump that changed
+nothing this page uses.
+
+⚠ **The bootstrap case is the answer, not a hole.** A bridge too old to route the handshake replies
+`unknown channel: bridge.capabilities` — which `B-152` has already classified — so it is read as the
+strongest possible evidence of skew. There is no "too old to check" state that slips past.
+
+🔴 **It REPORTS at connect; it does not REFUSE.** This is a deliberate reading of "fail at connect,
+visibly": a bridge missing one new channel still plays out through the twenty it routes, and
+refusing every command would convert a partial skew into a total outage — a worse failure than the
+one being fixed, on the same surface. So a persistent amber `role="alert"` banner names the count and
+the remedy at connect, the station keeps working, and the missing commands refuse themselves legibly.
+
+⚠ **The route-coverage test now calls the SAME derivation.** It carried its own copy; a build-time
+guard passing while the run-time one used a narrower rule would put a skew banner on every matched
+pair and train operators to ignore it. A real-bridge test asserts that a matched pair reports no
+skew, which is what would catch that rot.
+
+- **Cross-refs:** [[B-152]] (the same incident's other half), [[B-074]] (the build-time route
+  coverage this is the run-time counterpart to).

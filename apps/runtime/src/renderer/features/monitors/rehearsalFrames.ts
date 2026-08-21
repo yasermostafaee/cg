@@ -43,6 +43,22 @@ export interface RehearsalSubject {
    * only the Runtime holds the installation's binding for it.
    */
   plateSourceNames: ReadonlyMap<string, string | null>;
+  /**
+   * 🔴 `B-151` — WHICH LOOK THIS ROW IS SHOWING, as the BRIDGE published it
+   * (`StackItemState.activeLookId`), and `undefined` for a row nobody has switched.
+   *
+   * It is on the subject because BOTH halves of the preview need it and they must not
+   * answer it separately: the placeholder overlay resolves its rects from it, and the
+   * rehearsal frame tells the page the same id through the `__cg` payload key the plant
+   * uses. PVW used to have no idea a look existed, so it drew the union of every look's
+   * plates while the page inside it sat on the authored default.
+   *
+   * ⚠ Deliberately NOT a preview-local look state. Switching the previewed look goes
+   * through `stack.set-active-look` like every other switch — which on a rehearsing (off-air)
+   * row records the look and sends NOTHING to CasparCG — so one published fact drives the
+   * overlay, the page, the row's picker and the look the next take enters.
+   */
+  activeLookId: string | undefined;
 }
 
 /**
