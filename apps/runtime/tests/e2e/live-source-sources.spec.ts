@@ -145,9 +145,16 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   await app.selectLayerRow(first);
   const plates = app.inspector.locator('[aria-label="Live plates"]');
   await expect(plates).toBeVisible();
-  // The scope is STATED, because editing here changes every row using the
-  // template and an operator must not discover that by surprise.
-  await expect(plates).toContainText('Set for the template, not this row');
+  /*
+    The scope is STATED, because editing here changes every row using the template and an
+    operator must not discover that by surprise.
+
+    ⚠ REWORDED BY SESSION BM-2. It read _"Set for the template, not this row"_ — true of a
+    flat map, and a lie about the four-level model, because it says "not this row" while two
+    of the four levels ARE this row's. The CLAIM is unchanged: the section says which level
+    its own control is on. Only the sentence moved.
+  */
+  await expect(plates).toContainText('DEFAULT every row using this template starts from');
   await expect(plates.locator('[data-plate-unassigned]')).toHaveCount(2);
 
   // ── A8: EDIT-THEN-ABANDON ────────────────────────────────────────────────

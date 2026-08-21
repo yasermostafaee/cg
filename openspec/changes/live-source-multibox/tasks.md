@@ -744,10 +744,14 @@ was the thing the operator opened it to do.
       plate, its source picker, and its unassigned marker. Built on the panel's existing field
       patterns (`cg-inspector-section` + the `cg-field` select), no new control invented. A template
       that declares no plate renders NO section at all.
-- [x] 4b.3 **The TEMPLATE-LEVEL scope is stated in the section**, in one line and not a tooltip:
-      _"Set for the template, not this row — every row using it takes the same sources."_ Editing it
-      from one row changes what other rows carrying the same template will do, and an operator must
-      not discover that by surprise on air.
+- [x] 4b.3 **The TEMPLATE-LEVEL scope is stated in the section**, in one line and not a tooltip.
+      Editing it from one row changes what other rows carrying the same template will do, and an
+      operator must not discover that by surprise on air.
+      ⚠ **The SENTENCE was reworded by session BM-2; the requirement was not.** It read _"Set for
+      the template, not this row — every row using it takes the same sources."_ That was true of a
+      flat map and became a lie about the four-level model — it says "not this row" while two of
+      the four levels ARE this row's. It now reads _"The DEFAULT every row using this template
+      starts from. A row can show something else per look, below."_
 - [x] 4b.4 **A template not on a row cannot be assigned, and that is the DECISION** — recorded, not
       omitted. Under R-028 every template that will be used is on a declared row, so loading it is
       the natural first step, and the take would refuse an unassigned plate anyway.
