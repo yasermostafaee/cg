@@ -8,11 +8,12 @@
 
 ## 0. State
 
-| Fact              | Value                                                             |
-| ----------------- | ----------------------------------------------------------------- |
-| Tip read at start | `7a281396` — exactly the expected tip, no delta                   |
-| Pushed            | see §8                                                            |
-| Filed             | `B-151` (PVW), `B-152` (the identifier), `B-153` (the skew guard) |
+| Fact                 | Value                                                                                                                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tip read at start    | `7a281396` — exactly the expected tip, no delta                                                                                                                                    |
+| **Pushed**           | **`964afe72`** — `git ls-remote origin dev` = local, tree clean                                                                                                                    |
+| **Linux `gate:e2e`** | ✅ **DISCHARGED** — [run 32442480149](https://github.com/yasermostafaee/cg/actions/runs/32442480149) on `964afe72`, `completed` + `success`, **`E2E (Playwright)` RAN** and passed |
+| Filed                | `B-151` (PVW), `B-152` (the identifier), `B-153` (the skew guard)                                                                                                                  |
 
 ## 1. 🔴 Defect one — and HALF the reading it was reported under was wrong
 
@@ -148,4 +149,41 @@ AND on air at once, that derivation would be a lie — the R-022 interlock is wh
 - `pnpm gate` — green, uncached (`0 cached, 89 total`).
 - The SUITE, not just new specs: `@cg/runtime` 92 files / 856 tests, `@cg/caspar-bridge`,
   `@cg/shared-ipc`, `@cg/soak-runner`'s bug-number audit.
-- `gate:e2e` is OWED (`apps/runtime` UI changed). URL and conclusion below once CI completes.
+- **`gate:e2e` — OWED and DISCHARGED.** `apps/runtime`'s UI changed, so a Linux run was owed.
+  [Run 32442480149](https://github.com/yasermostafaee/cg/actions/runs/32442480149) on **`964afe72`**
+  — the commit carrying every change of this session — is `completed` + `success` with the
+  **`E2E (Playwright)` job RUN** (not skipped, which is the condition that matters).
+
+## 9. 🔴 What is NOT here — BM is BLOCKED on an owner decision
+
+The per-look source assignment session (BM) was started and **stopped at its own §2.1 verification**,
+before any code, because the model it specifies cannot be built as written:
+
+**Seating is keyed ONE LAYER PER DECLARED SOURCE** (`#planLiveSeating` iterates `carrier.sources`;
+`#liveLayers` holds one record per `sourceId`), and the identity rule — _"the same source in two
+looks is ONE seat held across the switch"_ — is stated in three places, one of them an author-facing
+export-preflight error message.
+
+So if solo's `l-1` and 2-box's `l-1` may name DIFFERENT inputs, they cannot share a seat:
+
+- **(A) keep `routeKey` identity** → the switch RE-SEATS that plate (`PLAY` + `MIXER VOLUME` +
+  `FILL`/`CLIP`, a replace with no `CLEAR`). BM §2.2's "a preset must pre-seat" is then IMPOSSIBLE
+  for a re-pointed cell — the layer is occupied by the live look's producer — and the owner's own
+  walk step 3 ("shows what you preset, instantly, with no re-seat") is false for it.
+- **(B) identity becomes `(look, plate)`** → the seated set really is the union of every look's
+  assignments, pre-seating works and §12.4 is intact — but the layer allocation grows from
+  `|plates|` to `Σ|look members|` against a declared band, and the ledger, the allocation, retention
+  and §12.6's exclusivity premise all move with it.
+
+**The owner's walk demands (B)**, which is a materially bigger session than "add per-look assignment
+to the Inspector". BM's own §9.5 says to bring exactly this kind of thing to him rather than let him
+find it in a diff.
+
+⚠ **Two BM answers that hold either way, so they are not blocked:** `#multiBoxCount` still counts
+the right thing (a box is a `routeKey`; per-look assignment changes what is BEHIND a box, not how
+many there are — session BC's anti-drift comment is intact and still correct), and BA's
+_within-a-look_ duplicate refusal still holds. What breaks is the ACROSS-looks half — _"that is the
+identity mechanism"_ — which is user-visible text in the preflight error and in the Looks section's
+summary.
+
+BM's §5 (the source-name binding's deferral cost) was **not** reached.
