@@ -211,6 +211,9 @@ const seated = (r: CasparRuntime, itemId = 'item-1'): string[] =>
 const producerOf = (r: CasparRuntime, plateId: string, itemId = 'item-1'): string | undefined =>
   (r.liveLayers().get(itemId) ?? []).find((rec) => rec.sourceId === plateId)?.producer;
 
+const layerOf = (r: CasparRuntime, plateId: string, itemId = 'item-1'): number =>
+  (r.liveLayers().get(itemId) ?? []).find((rec) => rec.sourceId === plateId)?.slot.layer ?? -1;
+
 /** The look this row publishes on its `StackItemState` — what the picker will render. */
 const publishedLook = (r: CasparRuntime, itemId = 'item-1'): string | undefined =>
   r.stackSnapshot().find((i) => i.itemId === itemId)?.activeLookId;
@@ -248,24 +251,26 @@ it('5.1 — the switch drives ONE path: fills move, THEN the page is told, and n
     'and it is told AFTER the fills moved',
   ).toBeLessThan(update);
   /*
-    🔴 THE PLAYs HERE ARE CORRECT, AND SAYING SO IS THE POINT.
+    🔴 THIS ASSERTION WAS INVERTED TWICE, AND BOTH TIMES FOR A REASON WORTH KEEPING.
 
-    `left` seated {1,2}; `all` adds {3,4}, which have never been seated at all — a plate
-    arriving for the FIRST time needs its producer. What must never re-PLAY is a plate that
-    was merely HELD, because that is a visible re-acquire of a producer that never left
-    (§12.4’s whole reason for holding a seat) — asserted on the round trip in 5.3.
+    Version one asserted ZERO plays and was wrong about the fixture. Version two — the one
+    this replaces — asserted exactly TWO, with the note: _"`left` seated {1,2}; `all` adds
+    {3,4}, which have never been seated at all — a plate arriving for the FIRST time needs
+    its producer."_ Right about the model as it then was, and it is the very sentence
+    session BM's (B′) exists to make false: the seat set is now the union over EVERY look,
+    so {3,4} were seated — parked, off screen — at the TAKE.
 
-    An earlier version of this test asserted zero PLAYs here and was simply wrong about the
-    fixture. The distinction is worth pinning rather than smoothing over: “never PLAY on a
-    switch” would be the wrong rule, and a test that enforced it would have blocked the
-    right behaviour.
+    So it is back to zero, by a different route, and the rule it pins is stronger than
+    either earlier version: **a look switch moves geometry and never a producer.** The
+    "never PLAY on a switch" rule that was wrong in version one is right now, because the
+    thing that made it wrong (a plate arriving with no seat) can no longer happen.
   */
-  const plays = lines.filter((l) => /^PLAY /.test(l));
-  expect(plays, 'exactly the two arriving plates').toHaveLength(2);
   expect(
-    lines.filter((l) => /^PLAY 1-30 |^PLAY 1-31 /.test(l)),
-    'and NOT the two already seated',
-  ).toHaveLength(0);
+    lines.filter((l) => /^PLAY /.test(l)),
+    'a switch moves no producer',
+  ).toEqual([]);
+  // All four were allocated by the take, and the switch changed none of that.
+  expect(seated(r)).toEqual(['live-1', 'live-2', 'live-3', 'live-4']);
 });
 
 it('5.1 — the page is told WHICH look, on the CG UPDATE payload', async () => {
@@ -346,12 +351,19 @@ it('🔴 5.3 — switching BACK re-shows the original pair with no PLAY at all',
 
 // ─────────────────── 5.2 — PRESET-THEN-TAKE ────────────────────────────────────────────
 
-it('🔴 5.2 — a preset on a source the CURRENT look does not show reaches no wire', async () => {
+it('🔴 5.2 — a preset is STAGED ON AIR: the producer is seated, muted and rendering nothing', async () => {
   /*
-    THE OPERATOR MODEL, in one assertion. `live-3` is not in LEFT, so it is held: pointing
-    it at a different feed records the intent and sends NOTHING, because there is no
-    visible plate to move. That is what makes "preset" a real thing rather than a wish —
-    the change is staged on air, not merely in a UI.
+    🔴 THIS ASSERTION WAS INVERTED BY SESSION BM, AND THE OLD COMMENT SAID WHY IT HAD TO BE.
+
+    It read _"a preset on a source the CURRENT look does not show reaches no wire"_, and
+    justified itself with: _"That is what makes 'preset' a real thing rather than a wish —
+    the change is staged on air, not merely in a UI."_ The claim was right and the
+    implementation did not meet it: nothing was staged on air at all, only an entry in an
+    override map, and the producer was created at the moment of the SWITCH — which is
+    exactly the visible re-acquire the operator was trying to avoid by presetting.
+
+    Under (B′) the sentence is finally true. The preset seats its producer NOW, off screen,
+    where a re-acquire costs nothing, and the switch that shows it moves a `MIXER FILL`.
   */
   const r = await boot();
   await onAir(r);
@@ -359,20 +371,33 @@ it('🔴 5.2 — a preset on a source the CURRENT look does not show reaches no 
 
   expect((await r.swapLiveSource('item-1', 'live-3', 'src-preset')).ok).toBe(true);
 
-  expect(await since(before), 'nothing moved — the plate is not on screen').toEqual([]);
+  const lines = await since(before);
+  // It reaches the wire — and everything it sends is about staying invisible.
+  expect(
+    lines.filter((l) => /^PLAY /.test(l)),
+    'the preset is seated now',
+  ).toHaveLength(1);
+  expect(producerOf(r, 'live-3')).toContain('9');
+  const layer = layerOf(r, 'live-3');
+  expect(lines).toContain(`MIXER 1-${String(layer)} VOLUME 0`);
+  expect(mock?.layerRenderedRect({ channel: 1, layer }), 'and it renders nothing').toBeNull();
 });
 
-it('🔴 5.2 — …and it goes live on the SWITCH, carrying the preset source', async () => {
+it('🔴 5.2 — …and the SWITCH that shows it is a cut: no producer moves', async () => {
   const r = await boot();
   await onAir(r);
   await r.swapLiveSource('item-1', 'live-3', 'src-preset');
+  const before = (await recvLines()).length;
 
   expect((await r.setActiveLook('item-1', 'right')).ok).toBe(true);
 
-  // `src-preset` is route channel 9 — the plate came up on the PRESET feed, not on its
-  // template assignment, and it did so at the moment of the switch.
+  // 🔴 THE PAYOFF — the owner's walk step 3. The preset feed appears with no `PLAY` at all.
+  expect(
+    (await since(before)).filter((l) => /^PLAY /.test(l)),
+    'the preset already had its producer',
+  ).toEqual([]);
   expect(producerOf(r, 'live-3')).toContain('9');
-  expect(seated(r)).toEqual(['live-3', 'live-4']);
+  expect(mock?.layerRenderedRect({ channel: 1, layer: layerOf(r, 'live-3') })).not.toBeNull();
 });
 
 it('5.2 — a preset on a VISIBLE plate is not deferred: that one is the live path', async () => {

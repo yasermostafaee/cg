@@ -254,10 +254,22 @@ async function onAir(r: CasparRuntime, itemId = 'item-1'): Promise<void> {
 }
 
 const layerOf = (r: CasparRuntime, plateId: string, itemId = 'item-1'): number =>
-  (r.liveLayers().get(itemId) ?? []).find((rec) => rec.sourceId === plateId)?.slot.layer ?? -1;
+  recordOf(r, plateId, itemId)?.slot.layer ?? -1;
 
-const recordOf = (r: CasparRuntime, plateId: string, itemId = 'item-1') =>
-  (r.liveLayers().get(itemId) ?? []).find((rec) => rec.sourceId === plateId);
+/**
+ * The record for the seat this plate PUNCHES, falling back to one it merely labels.
+ *
+ * ⚠ Session BM: a plate can label two records — the seat it shows in the active look, and a
+ * seat some other look binds its frame to. The on-screen one is what an assertion means, and
+ * it is the same preference `setLivePlateVolume` makes for the same reason.
+ */
+const recordOf = (r: CasparRuntime, plateId: string, itemId = 'item-1') => {
+  const records = r.liveLayers().get(itemId) ?? [];
+  return (
+    records.find((rec) => rec.sourceId === plateId && rec.held !== true) ??
+    records.find((rec) => rec.sourceId === plateId)
+  );
+};
 
 const layerSet = (r: CasparRuntime, itemId = 'item-1'): number[] =>
   (r.liveLayers().get(itemId) ?? []).map((rec) => rec.slot.layer).sort((a, b) => a - b);
@@ -661,7 +673,22 @@ it('🔴 swapLiveSource still replaces IN PLACE — one PLAY, neighbours untouch
   expect(fill?.height).toBeGreaterThan(clip?.height ?? 0);
 });
 
-it('🔴 a swap of a HELD plate costs the wire NOTHING, and lands when a look shows it', async () => {
+it('🔴 a swap of a HELD plate re-seats it OFF SCREEN, so the look that shows it is a CUT', async () => {
+  /*
+    🔴 THIS ASSERTION WAS INVERTED BY SESSION BM, AND THE INVERSION IS THE FEATURE.
+
+    It used to read _"a swap of a HELD plate costs the wire NOTHING, and lands when a look
+    shows it"_, on the reasoning that _"the active look has no rect for this plate, so the
+    desired set does not place it and there is no seat to change."_ Correct while a seat was
+    a plate the ACTIVE look showed — and it is exactly what made the owner's walk step 3
+    impossible: the re-seat was merely POSTPONED to the switch, so entering the look paid a
+    fresh `PLAY` and, on the plant, a visible re-acquire.
+
+    Under (B′) the seat set is the union over every look, so the substitution happens NOW,
+    off screen, where a re-acquire costs nothing — and the switch that shows it moves a
+    `MIXER FILL` and no producer. Same two commands, opposite order, and the order is the
+    whole point.
+  */
   const r = await boot();
   await onAir(r);
   await r.setActiveLook('item-1', 'solo');
@@ -671,27 +698,27 @@ it('🔴 a swap of a HELD plate costs the wire NOTHING, and lands when a look sh
 
   expect(await r.swapLiveSource('item-1', 'live-2', 'src-sd')).toEqual({ ok: true });
 
-  /*
-    🔴 NOTHING IS SENT, AND THAT FALLS OUT OF THE RECONCILE RATHER THAN BEING A CASE IN IT.
-    The active look has no rect for this plate, so the desired set does not place it and
-    there is no seat to change. Commanding an invisible producer would spend an on-air
-    action — and, for a source form that could not be held, a re-acquire — on a picture
-    nobody can see. The override is recorded either way, which is the whole point of the
-    swap being an EDIT the reconcile then honours.
-  */
-  expect(playsIn(await since(before))).toEqual([]);
-  expect(recordOf(r, 'live-2')?.held, 'still held, still seated on its own layer').toBe(true);
+  const lines = await since(before);
+  // The substitution happens off screen, IN PLACE on the layer the plate never left — the
+  // old producer is bound by no look any more, so its layer goes to what replaces it.
+  expect(playsIn(lines)).toEqual([`PLAY 1-${String(layer)} "route://9"`]);
+  expect(clearsIn(lines), 'a replace, not a CLEAR-then-ADD — B-126').toEqual([]);
   expect(layerOf(r, 'live-2')).toBe(layer);
+  expect(recordOf(r, 'live-2')?.producer).toBe('"route://9"');
+  // 🔴 …and it is INVISIBLE while it waits: parked, so the layer renders nothing at all.
+  expect(recordOf(r, 'live-2')?.held, 'seated, muted and off screen').toBe(true);
+  expect(mock?.layerRenderedRect({ channel: 1, layer })).toBeNull();
+  expect(lines).toContain(`MIXER 1-${String(layer)} VOLUME 0`);
 
   const back = (await recvLines()).length;
   await r.setActiveLook('item-1', 'six');
 
-  // Coming back, THIS plate's seat has changed (a different producer) so it — and only
-  // it — is re-seated, on the layer it never left.
-  expect(playsIn(await since(back))).toEqual([`PLAY 1-${String(layer)} "route://9"`]);
+  // 🔴 THE PAYOFF, AND THE OWNER'S WALK STEP 3: showing it costs NO producer at all.
+  expect(playsIn(await since(back)), 'the preset makes the switch a cut').toEqual([]);
   expect(recordOf(r, 'live-2')?.producer).toBe('"route://9"');
   expect(recordOf(r, 'live-2')?.held ?? false).toBe(false);
   expect(layerOf(r, 'live-2')).toBe(layer);
+  expect(mock?.layerRenderedRect({ channel: 1, layer }), 'and it is on screen').not.toBeNull();
 });
 
 // ─────────────────── §12.6 EXCLUSIVITY, RE-CONFIRMED UNDER LOOKS (2.6) ───────────────────
@@ -943,16 +970,26 @@ it('🔴 an ON-AIR row with an EMPTY ledger still reconciles — status, not sea
         look('two', { 'live-1': GRID['live-1'], 'live-2': GRID['live-2'] }),
       ],
     }),
-    assignments: assign([
-      ['live-1', 'src-1'],
-      ['live-2', 'src-2'],
-    ]),
+    // ⚠ NOTHING IS ASSIGNED AT TAKE, and under session BM that is what makes the ledger
+    // genuinely empty. The seat set is now the union over EVERY look, so a template whose
+    // OTHER look has resolvable plates pre-seats them and the row is never in the state this
+    // regression is about. An unassigned pair resolves to no seat anywhere, which reaches the
+    // same on-air-with-an-empty-ledger state the original fixture reached by a route that
+    // (B′) closed.
+    assignments: assign([]),
   });
   await r.load('item-1', 'debate', {});
   expect((await r.take('item-1')).accepted).toBe(true);
   // On air, and the ledger names nothing — the state the old guard mistook for "not on air".
   expect(r.liveLayers().has('item-1')).toBe(false);
   expect(r.activeLookId('item-1')).toBe('empty');
+  // The assignments arrive after the take — a catalog edit while the row is up.
+  r.setSourceAssignments(
+    assign([
+      ['live-1', 'src-1'],
+      ['live-2', 'src-2'],
+    ]),
+  );
   const before = (await recvLines()).length;
 
   expect(await r.setActiveLook('item-1', 'two')).toEqual({ ok: true });
@@ -1210,13 +1247,26 @@ it('🔴 7.9 — a REFUSED switch leaves no intent, and the next swap does ONLY 
   expect(await r.swapLiveSource('item-1', 'live-1', 'src-3')).toEqual({ ok: true });
   const lines = await since(before);
 
-  // ONE producer changed, and it is the one the operator named.
-  expect(playsIn(lines)).toEqual([`PLAY 1-${String(soloLayer)} "route://4"`]);
-  // The plate only `both` shows was never attempted — under the defect this reconcile
-  // resolved from `both`, so it tried to seat `src-bad` and the swap FAILED outright.
+  // The producer the operator NAMED changed, on the layer it was already on.
+  expect(playsIn(lines)).toContain(`PLAY 1-${String(soloLayer)} "route://4"`);
+  /*
+    🔴 THIS ASSERTION MOVED IN SESSION BM, AND WHAT IT PROVES IS SHARPER FOR IT.
+
+    It used to read: _"the plate only `both` shows was never attempted — under the defect this
+    reconcile resolved from `both`, so it tried to seat `src-bad` and the swap FAILED
+    outright."_ Under (B′) `both` BINDS `src-bad`, so a pre-seat of it is legitimate and
+    expected: the seat set is the union over every look, not the active look's membership.
+
+    So the attempt is no longer evidence of anything — but its CONSEQUENCES still are, and
+    they are the two that 7.9 was really about. A refused look must not (1) fail an unrelated
+    repair, or (2) move the geometry of a plate that is on air. Both are asserted below,
+    against the state the row was in BEFORE the refusal.
+  */
   expect(
-    lines.some((l) => l.includes('bogus://')),
-    'live-2 is not in the six look',
+    r
+      .liveLayers()
+      .get('item-1')
+      ?.some((x) => x.producer.includes('bogus://')),
   ).toBe(false);
   // …and the fill landed on the hole the page is punching, not the refused look's. Asserted
   // against the geometry the row was ON before the refusal rather than a literal, so the
@@ -1281,9 +1331,19 @@ it('🔴 7.9 — the FILLS and the HOLES never disagree across refuse → swap �
   const before = (await recvLines()).length;
   expect((await r.setActiveLook('item-1', 'moved')).ok).toBe(true);
   const lines = await since(before);
-  expect(playsIn(lines), 'nothing re-seated').toEqual([]);
+  /*
+    ⚠ `bogus://` is FILTERED OUT rather than asserted absent (session BM). The broken source
+    is bound by a look this template still has, so every reconcile re-attempts its pre-seat
+    and drops it — deliberately, so a preset can recover if its input comes back, and never
+    at the cost of the action in hand. It reaches neither the ledger nor any punched layer,
+    which is what the two claims below actually turn on.
+  */
   expect(
-    lines.filter((l) => /^MIXER 1-\d+ (FILL|CLIP) /.test(l)),
+    playsIn(lines).filter((l) => !l.includes('bogus://')),
+    'nothing re-seated',
+  ).toEqual([]);
+  expect(
+    lines.filter((l) => /^MIXER 1-\d+ (FILL|CLIP) /.test(l) && !l.includes(' 1-31 ')),
     'the fills already sit where the holes are',
   ).toEqual([]);
 });
@@ -1344,24 +1404,38 @@ it('🔴 7.9 — DISJOINT membership survives a refusal: {A,B} → {C,D} with no
     expect(recordOf(r, plate)?.held ?? false, `${plate} is live`).toBe(false);
   }
   /*
-    ⚠ THIS switch DOES issue producers, and the reason is worth stating rather than
-    asserting around: a declaration ABSENT from the look a row was taken on is never seated
-    in the first place (`ab` shows two of five), so `live-3`/`live-4` have no producer to
-    re-fit. "A switch re-seats nothing" is a claim about plates that are already seated —
-    it is asserted on the RETURN trip below, where it is a real claim.
+    🔴 THIS ASSERTION WAS INVERTED BY SESSION BM, AND IT IS THE OWNER'S WALK STEP 3 ON A
+    DISJOINT PAIR.
+
+    It used to read: _"THIS switch DOES issue producers … a declaration ABSENT from the look a
+    row was taken on is never seated in the first place (`ab` shows two of five), so
+    `live-3`/`live-4` have no producer to re-fit."_ That premise was true and is exactly what
+    (B′) reverses: the seat set is now the union over EVERY look, so `live-3`/`live-4` were
+    seated — parked, off screen — at the TAKE. Entering `cd` therefore moves geometry and
+    nothing else, which is the whole reason the model is worth building.
+
+    ⚠ The one `PLAY` that DOES appear is the pre-seat of `live-5` being retried: `bad` binds
+    it to a producer the mock refuses, and a preset that will not seat is dropped without
+    failing the action (it must never fail an action that was not about it). It is retried on
+    each reconcile, which is what lets it recover if the input comes back, and it never
+    reaches the ledger.
   */
-  expect(playsIn(lines).length, 'exactly the two boxes that had no producer').toBe(2);
-  for (const plate of ['live-1', 'live-2']) {
-    expect(
-      playsIn(lines).some((l) => l.startsWith(`PLAY 1-${String(layerOf(r, plate))} `)),
-      `${plate} keeps its producer`,
-    ).toBe(false);
-  }
+  expect(
+    playsIn(lines).filter((l) => !l.includes('bogus://')),
+    'a switch between pre-seated looks moves no producer at all',
+  ).toEqual([]);
+  expect(
+    r
+      .liveLayers()
+      .get('item-1')
+      ?.some((x) => x.producer.includes('bogus://')),
+  ).toBe(false);
   expect(r.activeLookId('item-1')).toBe('cd');
   expect(await lookOnThePage()).toBe('cd');
-  // Four seats now: the held pair plus the pair this switch created.
+  // FOUR seats, and they were all four there before this switch — the take made them.
   const seatedOnCd = layerSet(r);
-  expect(seatedOnCd).toEqual([...seatedBefore, ...seatedOnCd.slice(seatedBefore.length)]);
+  expect(seatedOnCd, 'the switch allocated nothing').toEqual(seatedBefore);
+  expect(seatedOnCd).toHaveLength(4);
 
   // ── AND BACK. Every member of both pairs is seated now, so the return trip is the
   // "geometry moves, producers do not" claim in its honest form — on a disjoint pair.
@@ -1369,7 +1443,10 @@ it('🔴 7.9 — DISJOINT membership survives a refusal: {A,B} → {C,D} with no
   expect((await r.setActiveLook('item-1', 'ab')).ok).toBe(true);
   const returned = await since(back);
 
-  expect(playsIn(returned), 'a switch between seated looks moves no producer').toEqual([]);
+  expect(
+    playsIn(returned).filter((l) => !l.includes('bogus://')),
+    'a switch between seated looks moves no producer',
+  ).toEqual([]);
   expect(layerSet(r), 'the layer set is invariant across the round trip').toEqual(seatedOnCd);
   for (const plate of ['live-1', 'live-2']) {
     expect(recordOf(r, plate)?.held ?? false, `${plate} is back`).toBe(false);
@@ -1423,4 +1500,229 @@ it('🔴 …and the R-022 INTERLOCK is what makes that safe — a rehearsing row
 
   const verdict = await r.take('item-1');
   expect(verdict.accepted, 'a rehearsing row is refused the take').toBe(false);
+});
+
+// ───────── SESSION BM — PER-LOOK INPUT BINDING (§8.1, §8.2, §8.4, §8.6, §8.7, §8.8) ─────────
+
+/**
+ * The owner's real template, in the fixture's vocabulary: a three-box, a two-box and a
+ * solo over three declared holes. Deliberately NOT the six-box grid — the arithmetic that
+ * matters here is "how many DISTINCT INPUTS", and three looks over three holes is where the
+ * union is smaller than the sum.
+ */
+function ownersTemplate() {
+  return sixBoxTemplate({
+    sources: ['live-1', 'live-2', 'live-3'],
+    looks: [
+      look('three', {
+        'live-1': GRID['live-1'] as LiveSourceRect,
+        'live-2': GRID['live-2'] as LiveSourceRect,
+        'live-3': GRID['live-3'] as LiveSourceRect,
+      }),
+      look('two', {
+        'live-1': GRID['live-1'] as LiveSourceRect,
+        'live-2': GRID['live-2'] as LiveSourceRect,
+      }),
+      look('solo', { 'live-3': SOLO['live-1'] as LiveSourceRect }),
+    ],
+    defaultLookId: 'two',
+  });
+}
+
+const OWNERS_ASSIGNMENTS = assign([
+  ['live-1', 'src-1'],
+  ['live-2', 'src-2'],
+  ['live-3', 'src-3'],
+]);
+
+it('🔴 §8.1 — a PER-LOOK binding moves ONE frame of ONE look, and nothing else', async () => {
+  const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
+  await onAir(r);
+  const l1 = layerOf(r, 'live-1');
+  const l2 = layerOf(r, 'live-2');
+  const before = (await recvLines()).length;
+
+  // "2-box's right cell shows studio-4 instead" — the owner's step 1, the binding half.
+  expect(await r.swapLiveSource('item-1', 'live-2', 'src-4', 'two')).toEqual({ ok: true });
+
+  const lines = await since(before);
+  /*
+    🔴 A SECOND SEAT, NOT A REPLACEMENT — and that IS the per-look model.
+
+    `three` still binds this same frame to studio-2, so studio-2 is still wanted and keeps
+    its producer and its layer. studio-4 is a genuinely new input and takes a layer of its
+    own. The two coexist, one punched and one parked, which is exactly what makes the switch
+    between the looks a cut rather than a re-acquire — and it is why §2.7's band refusal had
+    to exist: presetting is what raises the layer demand.
+  */
+  expect(playsIn(lines), 'the new input is seated').toHaveLength(1);
+  expect(playsIn(lines)[0]).toContain('"route://5"');
+  expect(clearsIn(lines), 'and nothing was cleared to make room').toEqual([]);
+  expect(recordOf(r, 'live-2')?.producer, 'the frame shows studio-4 now').toBe('"route://5"');
+  expect(layerOf(r, 'live-2')).not.toBe(l2);
+  // studio-2 is still seated for `three`, parked and rendering nothing.
+  const parked = (r.liveLayers().get('item-1') ?? []).find((x) => x.producer === '"route://3"');
+  expect(parked?.held, 'studio-2 waits for the look that still wants it').toBe(true);
+  expect(mock?.layerRenderedRect({ channel: 1, layer: parked?.slot.layer ?? -1 })).toBeNull();
+  // The neighbour in the same look is untouched — no command names its layer at all.
+  expect(lines.some((l) => l.includes(`1-${String(l1)} `))).toBe(false);
+  expect(recordOf(r, 'live-1')?.producer).toBe('"route://2"');
+  // 🔴 AND THE OTHER LOOK KEEPS ITS OWN ANSWER — the point of the whole session — and
+  // getting it back costs no producer at all, because it never left.
+  const back = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'three')).toEqual({ ok: true });
+  expect(playsIn(await since(back)), 'the other look is a cut').toEqual([]);
+  expect(recordOf(r, 'live-2')?.producer, 'three still shows studio-2').toBe('"route://3"');
+});
+
+it('🔴 §8.2/§8.4 — presetting a look nobody is showing stages it on air, and the switch is a cut', async () => {
+  const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
+  await onAir(r); // `two` — live-3 is bound but not shown, so it is already parked.
+  const before = (await recvLines()).length;
+
+  // "Decide what the SOLO will show, while still on 2-box." (walk step 2.)
+  expect(await r.swapLiveSource('item-1', 'live-3', 'src-4', 'solo')).toEqual({ ok: true });
+
+  const staged = await since(before);
+  // It reaches the wire — and everything it sends is about staying invisible.
+  expect(playsIn(staged), 'the preset is seated NOW').toEqual([
+    `PLAY 1-${String(layerOf(r, 'live-3'))} "route://5"`,
+  ]);
+  expect(recordOf(r, 'live-3')?.held, 'seated, muted, off screen').toBe(true);
+  expect(mock?.layerRenderedRect({ channel: 1, layer: layerOf(r, 'live-3') })).toBeNull();
+  // 🔴 …AND NOTHING THE OPERATOR CAN SEE MOVED (walk step 2's real claim).
+  for (const plate of ['live-1', 'live-2']) {
+    expect(
+      staged.some((l) => l.includes(`1-${String(layerOf(r, plate))} `)),
+      plate,
+    ).toBe(false);
+  }
+
+  // "Switch to solo → it shows what you preset, instantly, with no re-seat." (walk step 3.)
+  const cut = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+  const switched = await since(cut);
+  expect(playsIn(switched), 'a preset makes the switch a cut').toEqual([]);
+  expect(clearsIn(switched)).toEqual([]);
+  expect(recordOf(r, 'live-3')?.producer).toBe('"route://5"');
+  expect(mock?.layerRenderedRect({ channel: 1, layer: layerOf(r, 'live-3') })).not.toBeNull();
+});
+
+it('🔴 §8.3 — two looks bound to ONE input share ONE seat, held across the switch', async () => {
+  const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
+  await onAir(r);
+  /*
+    SOLO's only frame is pointed at the SAME input 2-box's LEFT cell shows. Two DIFFERENT
+    plates, two different looks, one physical input — which is the case the dedupe exists
+    for, and the one no plate-keyed model can express. (Pointing a frame of `three` at it
+    instead would be a §6.2 collision, because `three` already shows studio-1 in `live-1`.)
+  */
+  expect(await r.swapLiveSource('item-1', 'live-3', 'src-1', 'solo')).toEqual({ ok: true });
+
+  // 🔴 ONE producer on that route, punched from `two`/`live-1` and `solo`/`live-3` alike.
+  const producers = (r.liveLayers().get('item-1') ?? []).map((x) => x.producer);
+  expect(
+    producers.filter((p) => p === '"route://2"'),
+    'one producer per route',
+  ).toHaveLength(1);
+
+  const before = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+
+  // §2.4's FREE re-point: the input was already seated, so showing it in a DIFFERENT FRAME
+  // costs a MIXER FILL and no producer at all.
+  const lines = await since(before);
+  expect(playsIn(lines), 'the shared seat is never re-played').toEqual([]);
+  expect(clearsIn(lines)).toEqual([]);
+  expect(
+    lines.some((l) => /^MIXER 1-\d+ FILL /.test(l)),
+    'the geometry moved',
+  ).toBe(true);
+  // …and it is the SOLO rect it moved to — the full frame, not 2-box's left cell.
+  expect(recordOf(r, 'live-3')?.producer).toBe('"route://2"');
+  expect(recordOf(r, 'live-3')?.fill.width).toBeCloseTo(1, 5);
+});
+
+it('🔴 §8.6 — two frames of ONE look on ONE input is refused in CG Control, naming both', async () => {
+  const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });
+  await onAir(r);
+  const before = (await recvLines()).length;
+
+  // Both of 2-box's cells pointed at studio-1. One input is one seat, so one of the two
+  // frames would go to air empty — and the export preflight cannot see this, because the
+  // AUTHOR wrote two different holes and it is the OPERATOR who collided them.
+  const verdict = await r.swapLiveSource('item-1', 'live-2', 'src-1', 'two');
+
+  expect(verdict.ok).toBe(false);
+  expect(verdict.reason).toBe('live-source-duplicate');
+  // It NAMES both frames and the look — a refusal that named neither is a dead end.
+  expect(verdict.message).toContain('"live-1"');
+  expect(verdict.message).toContain('"live-2"');
+  expect(verdict.message).toContain('two');
+  // Refused means refused: nothing reached the wire and nothing was recorded.
+  expect(await since(before), 'nothing on air was disturbed').toEqual([]);
+  expect(recordOf(r, 'live-2')?.producer, 'the frame is on its own source still').toBe(
+    '"route://3"',
+  );
+  expect(
+    r.stackSnapshot().find((i) => i.itemId === 'item-1')?.lookSourceOverride,
+    'a refused binding records nothing',
+  ).toBeUndefined();
+});
+
+it('🔴 §8.7 — a preset that would exceed the band is refused at ASSIGNMENT, not at the take', async () => {
+  // A band with room for exactly the three inputs the template already needs.
+  const r = await boot({
+    template: ownersTemplate(),
+    assignments: OWNERS_ASSIGNMENTS,
+  });
+  r.setSourceCatalog({ ...catalog(), layerRange: { start: BAND.start, end: BAND.start + 2 } });
+  await onAir(r);
+  expect(layerSet(r)).toHaveLength(3);
+  const before = (await recvLines()).length;
+
+  // Pointing solo at a FOURTH input needs a fourth layer, and there is none.
+  const verdict = await r.swapLiveSource('item-1', 'live-3', 'src-4', 'solo');
+
+  expect(verdict.ok).toBe(false);
+  expect(verdict.reason).toBe('live-source-no-layer');
+  // The sentence explains the thing the operator cannot otherwise guess: why a PRESET needs
+  // a layer at all.
+  expect(verdict.message).toContain('no room');
+  expect(verdict.message).toContain("Every look's inputs are seated together");
+  // 🔴 REFUSED WHERE THEY ARE WATCHING — nothing on air moved, and the take still works.
+  expect(await since(before)).toEqual([]);
+  expect(layerSet(r)).toHaveLength(3);
+});
+
+it('🔴 §8.8 — a hole in a look you are NOT showing does not refuse the take', async () => {
+  /*
+    §2.9's rule, and the reason it changed. The take used to answer for every look the
+    template could reach, so that a plate one picker click from the screen could not refuse
+    mid-switch. `tasks.md` 7.9 removed that reason — a refused switch now leaves nothing
+    behind and the page was never told — so refusing a take over a look nobody is showing
+    would block air for a non-reason.
+  */
+  const r = await boot({
+    template: ownersTemplate(),
+    // `live-3` — the SOLO look's only plate — has no assignment at all.
+    assignments: assign([
+      ['live-1', 'src-1'],
+      ['live-2', 'src-2'],
+    ]),
+  });
+
+  // The take enters `two`, which shows live-1 and live-2 only. It must succeed.
+  await r.load('item-1', 'debate', {});
+  expect((await r.take('item-1')).accepted, 'the take is not blocked').toBe(true);
+  expect(layerSet(r)).toHaveLength(2);
+
+  // …and switching INTO the look with the hole refuses, legibly, naming the plate.
+  const before = (await recvLines()).length;
+  const verdict = await r.setActiveLook('item-1', 'solo');
+  expect(verdict.ok).toBe(false);
+  expect(verdict.message).toContain('live-3');
+  // 7.9's rule still holds through the new door: a refusal changes nothing.
+  expect(r.activeLookId('item-1'), 'the row stays where it was').toBe('two');
+  expect(playsIn(await since(before))).toEqual([]);
 });

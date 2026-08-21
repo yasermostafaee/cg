@@ -803,6 +803,69 @@ candidate shapes.
       (a paused driver never completes, so the graphic would never come off air), and clocks are
       never parked at all. Both are correctness, not preference.
 
+- [x] 7.11 ✅ **LANDED 2026-08-21 (session BM) — PER-LOOK INPUT BINDING, AND THE SEAT MOVED ONTO THE
+      INPUT (`design.md` §12.9.1b, reversing Q2).** A seat is now one producer per DISTINCT RESOLVED
+      INPUT per item, resolved for EVERY look by `tools/caspar-bridge/src/live-look-bindings.ts`;
+      the seat set is the union across looks, so an input bound only to a look nobody is showing is
+      seated, muted and PARKED, and entering that look is a `MIXER FILL` with no `PLAY`.
+      **The writer is `swapLiveSource` with an optional `lookId`** — absent is `R-048`'s emergency
+      patch (every look, and it outranks the per-look map, because a dead input is dead everywhere);
+      present is the deliberate composition. Two refusals at the assignment door: §6.2's
+      `live-source-duplicate` (two frames of one look on one input — which the export preflight
+      cannot see, and which the shipped code answered by seating one route TWICE) and §2.7's
+      `live-source-no-layer` (presetting now raises layer demand).
+      ⚠ **`#multiBoxCount` re-confirmed and deliberately NOT changed.** It counts DECLARATIONS
+      (`liveSources.sources.length`) and its own anti-drift comment says why exclusivity is a
+      property of what a template CAN put on a channel. It is **not** a layer-demand proxy, and
+      under (B′) it must never become one: seats can now EXCEED declarations (one hole bound to two
+      inputs in two looks is two seats).
+
+- [ ] 7.12 **STAGE 2 — the INSPECTOR's per-look input list, and the ATOMIC UPDATE. DEFERRED by
+      session BM under its own stop rule; the model beneath it is landed and green.** What is
+      missing is only the surface: the Inspector still shows ONE flat `{plate → source}` list, so
+      the per-look bindings 7.11 built are reachable from the bridge contract and from CG Control's
+      swap dialog, but not yet from a panel that shows 2-box's inputs and solo's inputs at once.
+      **What Stage 2 needs, so it is not re-derived:**
+      (a) the LOOKS LIST in the Inspector with a per-plate input row under each look, replacing the
+      flat list — `apps/runtime/src/renderer/features/inspector/livePlates.ts` is where the flat one
+      resolves today, and it already reads `sourceOverride`; the per-look map arrives beside it on
+      `StackItemState.lookSourceOverride`;
+      (b) the LIVE look made unmistakable in that list (the operator is editing an on-air look and
+      an off-air look in one panel), following the existing status-colour discipline — do NOT borrow
+      the layer table's green;
+      (c) dirty through `B-139`'s existing boolean, never a second one;
+      (d) the panel's _"Set for the template, not this row"_ wording corrected — it describes only
+      the DEFAULT column once the list is two-level;
+      (e) ONE `UPDATE` applying staged texts AND staged bindings, fills-first-page-last-and-only-on-
+      success (BD), with a failed reconcile leaving NO staged state behind (`tasks.md` 7.9's rule,
+      which this adds a second writer to).
+      🔴 **The atomicity is the part with a real trap in it.** The bridge's binding writer is
+      per-call today (one `swapLiveSource` per frame), so a panel that loops over staged edits would
+      apply them one at a time and could land half of them. Stage 2 needs either a batched channel
+      or an explicit statement that partial application is acceptable — it is NOT, on air.
+
+- [ ] 7.13 **The TITLE that travels with the INPUT — deferred, with the cost answered as a fact
+      rather than a feeling (`§7.1`).** The owner: _"later we also need the text tied to each to
+      move with the input, so the operator isn't constantly retyping."_
+      🔴 **Deferring costs NO re-authoring, and this was checked in the code, not assumed.**
+      `BindingTargetSchema` (`packages/shared-schema/src/bindings.ts`) is a
+      `z.discriminatedUnion('kind', …)`, so a new arm is purely additive — every authored template
+      parses unchanged, because no existing document carries the new `kind`. The precedent is
+      `live-source-id` itself: it was ADDED to this union and resolves entirely OUTSIDE the DOM (its
+      `applyOne` arm is a documented no-op, like `clock-target`), which is exactly the shape a
+      "show this input's name" target needs. So a title shipped now as a free-typed per-look text
+      element is upgraded later by adding ONE binding to ONE element — an author action per title,
+      never a re-authoring of the template, and nothing already built is invalidated.
+      ⚠ **What it needs when it is built:** a display name on the catalog entry (already there —
+      `SourceDefinition.name`), a new binding target kind, the Designer UI to author it, and
+      resolution per look in the runtime. That is a Designer + schema + runtime piece, which is why
+      it is not folded into 7.11.
+      🔴 **AND THE EXPOSURE THIS SESSION ADDS, stated plainly (`§7.3`).** Per-look binding is a NEW
+      way to make a hand-typed title wrong: an operator can now re-point a frame in one look without
+      touching the text under it, so a stale name can reach air under a guest's face. Nothing in
+      7.11 makes that observable. Until 7.13 lands, that is a real and un-mitigated hazard, and it
+      is the strongest argument for building it sooner rather than later.
+
 ## 7. STAGE F — the CUT ships. STAGE G — the transition modes (§13.5)
 
 - [ ] 8.1 **KEEP the v1 `live-source-animated` refusal** and pin it with a test that a runtime

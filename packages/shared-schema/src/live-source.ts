@@ -119,8 +119,16 @@ export type LiveSourceDeclaration = z.infer<typeof LiveSourceDeclarationSchema>;
  *
  *   1. **The installation's CATALOG** — what lives this station has. Global.
  *   2. **The template's ASSIGNMENT** — which catalog entry each plate uses by
- *      default. TEMPLATE-LEVEL: shared by every row carrying that template.
- *   3. **THIS override** — one row's substitution, on top of both.
+ *      default. TEMPLATE-LEVEL: shared by every row carrying that template, and the
+ *      default for EVERY LOOK.
+ *   3. **The row's PER-LOOK composition** — {@link LiveSourceLookOverrideSchema}, added by
+ *      session BM: what this row shows in one named look.
+ *   4. **THIS override** — one row's substitution, on top of all three, in EVERY look.
+ *
+ * ⚠ **THE LEVELS WERE THREE AND ARE NOW FOUR (session BM), and THIS one moved from the
+ * middle to the OUTSIDE.** It outranks the per-look composition deliberately: it exists
+ * because an INPUT IS DEAD, and a dead input is dead in every look. If a per-look binding
+ * won, switching look would put the dead feed straight back.
  *
  * 🔴 **IT DOES NOT WRITE BACK, and that is a safety property rather than a
  * simplification.** Editing the assignment would change every other row carrying
@@ -138,7 +146,31 @@ export type LiveSourceDeclaration = z.infer<typeof LiveSourceDeclarationSchema>;
  * not here, where the only available answer would be to drop it silently.
  */
 export const LiveSourceOverrideSchema = z.record(LiveSourceIdSchema, z.string().min(1).max(64));
+
+/**
+ * Session BM — **THE ROW'S PER-LOOK COMPOSITION: `lookId → plateId → catalog id`.**
+ *
+ * The operator building a rundown says _"solo will show studio-3, while 2-box keeps
+ * studio-1 and studio-2"_. That is a different statement from {@link LiveSourceOverrideSchema}
+ * above, and it is kept in a different map for a reason worth stating where both are
+ * defined:
+ *
+ * 🔴 **THE EMERGENCY PATCH IS NOT PER-LOOK, AND MAKING IT SO WOULD BREAK IT.** `R-048`'s
+ * override exists because an INPUT IS DEAD. A dead input is dead in every look, so that
+ * patch applies to all of them and outranks this map everywhere — otherwise switching look
+ * would put the dead feed straight back and the operator would have to re-patch, live, once
+ * per look, having already been told the substitution was applied.
+ *
+ * Both are per-ROW and neither writes back to the template's assignment, so the property
+ * that matters is unchanged: an emergency substitution never silently becomes the permanent
+ * configuration.
+ *
+ * ⚠ **ADDITIVE.** A row persisted before this existed simply has no entry, which reads as
+ * "every look on the template's assignment" — exactly what it was.
+ */
+export const LiveSourceLookOverrideSchema = z.record(z.string().min(1), LiveSourceOverrideSchema);
 export type LiveSourceOverride = z.infer<typeof LiveSourceOverrideSchema>;
+export type LiveSourceLookOverride = z.infer<typeof LiveSourceLookOverrideSchema>;
 
 /**
  * C-015 phase 6 (6.5f) — **HOW LOUD EACH PLATE IS INTENDED TO BE, for this run.**

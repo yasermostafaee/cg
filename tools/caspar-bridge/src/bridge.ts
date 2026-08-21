@@ -837,10 +837,12 @@ export function buildRoutes(
     ),
     // R-048 — the operator repoints ONE plate of ONE row, on air. A per-item
     // override: the template assignment and the installation catalog are untouched.
+    // Session BM — and, with a `lookId`, the DELIBERATE per-look composition. One verb, two
+    // scopes: absent is the emergency (every look), present is one look's binding.
     route(
       StackSwapLiveSourceChannel,
-      (r: { itemId: string; plateId: string; sourceId: string | null }) =>
-        b.swapLiveSource(r.itemId, r.plateId, r.sourceId),
+      (r: { itemId: string; plateId: string; sourceId: string | null; lookId?: string }) =>
+        b.swapLiveSource(r.itemId, r.plateId, r.sourceId, r.lookId),
     ),
     // §14 (LOOKS) Stage E — the operator picks a look on the row. ONE seam: the bridge
     // records it, reconciles the FILLS, then tells the page on the CG UPDATE payload so it

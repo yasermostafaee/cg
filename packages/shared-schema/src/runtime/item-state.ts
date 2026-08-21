@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { IdSchema, ISODateSchema } from '../primitives.js';
 import { FieldValuesSchema } from '../fields.js';
 import { PositionSchema } from '../scene.js';
-import { LivePlateVolumesSchema, LiveSourceOverrideSchema } from '../live-source.js';
+import {
+  LivePlateVolumesSchema,
+  LiveSourceLookOverrideSchema,
+  LiveSourceOverrideSchema,
+} from '../live-source.js';
 
 /** A CasparCG (channel, layer) coordinate plus which server it lives on. */
 export const LayerSlotSchema = z.object({
@@ -61,6 +65,17 @@ export const StackItemStateSchema = z.object({
    * never writes back. ABSENT means every plate is on its template assignment.
    */
   sourceOverride: LiveSourceOverrideSchema.optional(),
+  /**
+   * Session BM — the ROW's PER-LOOK input composition, on the OPEN axis beside
+   * {@link sourceOverride} and for the identical reason.
+   *
+   * 🔴 SEPARATE FROM IT, NOT A REPLACEMENT. The emergency patch applies to EVERY look (a
+   * dead input is dead in all of them) and outranks this map; this one is the deliberate
+   * composition the operator builds before air. Losing it across a blip would silently put
+   * every look back on the template assignment while the console still showed the row as
+   * normal — the B-107 / B-109 class, which is why it is retained rather than assumed.
+   */
+  lookSourceOverride: LiveSourceLookOverrideSchema.optional(),
   /**
    * C-015 phase 6 (6.5f) — how loud each plate is INTENDED to be on this row,
    * published so the console can show it and so the browser's retention can carry
@@ -298,6 +313,17 @@ export const RetainedStackItemSchema = z.object({
    * the CLOSED `state` axis changes and no consumer branches differently.
    */
   sourceOverride: LiveSourceOverrideSchema.optional(),
+  /**
+   * Session BM — the ROW's PER-LOOK input composition, on the OPEN axis beside
+   * {@link sourceOverride} and for the identical reason.
+   *
+   * 🔴 SEPARATE FROM IT, NOT A REPLACEMENT. The emergency patch applies to EVERY look (a
+   * dead input is dead in all of them) and outranks this map; this one is the deliberate
+   * composition the operator builds before air. Losing it across a blip would silently put
+   * every look back on the template assignment while the console still showed the row as
+   * normal — the B-107 / B-109 class, which is why it is retained rather than assumed.
+   */
+  lookSourceOverride: LiveSourceLookOverrideSchema.optional(),
   /**
    * C-015 phase 6 (6.5f) — the per-plate audio intent, on the OPEN axis beside
    * `sourceOverride` and for the identical reason.

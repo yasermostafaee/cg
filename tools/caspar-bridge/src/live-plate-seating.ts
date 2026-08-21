@@ -25,18 +25,59 @@ export const LIVE_PLATE_NO_RANGE = 'live-source-no-layer-range';
 /** A band is declared, and it cannot hold this template's plates. */
 export const LIVE_PLATE_NO_LAYER = 'live-source-no-layer';
 
+/**
+ * 🔴 **THE ONE SENTENCE FOR AN EXHAUSTED BAND, spoken at BOTH doors (§2.7).**
+ *
+ * Under session BM's model the demand is the number of DISTINCT INPUTS bound across the
+ * item's looks, and the operator raises it by PRESETTING — so the band can now be exhausted
+ * by an assignment, not only by a take. That door refuses in CG Control, where the operator
+ * is watching and nothing is on air; the take's door refuses as it always did.
+ *
+ * Both call this, because two doors describing one limit in two ways is how an operator
+ * comes to believe they are two different limits. `where` is the only thing that differs:
+ * what the operator was DOING when they met it.
+ */
+export function liveBandExhaustedMessage(input: {
+  readonly needed: number;
+  readonly range: LiveSourceLayerRange;
+  readonly channel: number;
+  /** What ran into the limit. Absent ⇒ the take. */
+  readonly where?: 'assignment' | undefined;
+}): string {
+  const band = `${String(input.range.start)}-${String(input.range.end)}`;
+  const room = `The Live Source layer band ${band} on channel ${String(input.channel)} has no room for ${String(input.needed)} live input(s)`;
+  const remedy =
+    `Clear a graphic that is holding live layers, or widen the band in CG Control's ` +
+    `source settings.`;
+  if (input.where === 'assignment') {
+    return (
+      `${room}. Every look's inputs are seated together so a switch is a cut, so choosing ` +
+      `an input no other look uses needs a layer of its own — and there is none free. ` +
+      `${remedy}`
+    );
+  }
+  return `${room}. ${remedy}`;
+}
+
 export interface LiveLayerAllocationInput {
   /** The declared band, INCLUSIVE on both ends. */
   readonly range: LiveSourceLayerRange;
   /**
-   * One entry per plate, in declaration order. A number is the layer that plate
-   * is ALREADY on (a re-take of an item that still owns its layers); `undefined`
-   * asks for a fresh one.
+   * One entry per SEAT this plan will place, in the caller's order. A number is the layer
+   * that seat is ALREADY on; `undefined` asks for a fresh one.
    *
-   * 🔴 **Honouring it is not an optimisation.** A re-take that moved a plate to a
+   * 🔴 **Honouring it is not an optimisation.** A re-take that moved a seat to a
    * different layer would leave the old layer's producer running with nobody's
    * name on it — a guest's picture on air that no teardown will ever reach,
    * because the ledger (which teardown walks) now names the NEW layer.
+   *
+   * ⚠ **"PER SEAT" REPLACES "one entry per plate, in declaration order" (session BM), and
+   * the old phrase had already drifted before it moved.** Even under the plate-keyed model
+   * the caller passed one entry per plate it was actually FITTING — the active look's
+   * on-frame members, a subset of the declarations — so "per plate, in declaration order"
+   * described neither the length nor, once looks existed, the key. Under (B′) the identity
+   * is the resolved INPUT: a seat, not a hole. What did not change is the sentence above it,
+   * which is the reason the parameter exists at all.
    */
   readonly preferred: readonly (number | undefined)[];
   /**

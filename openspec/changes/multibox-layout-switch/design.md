@@ -1269,6 +1269,123 @@ act, which is strictly better wording material:
 | the derived count has no authored arrangement       | **the count reached** and **which counts the template does author** |
 | 🔴 **ALL TOGGLES OFF (count 0)** — new under D1     | the same, for count 0 — see below                                   |
 
+#### 12.9.1b 🔴 **Q2 IS REVERSED (owner, 2026-08-21, from a live show) — PER-LOOK INPUT ASSIGNMENT SHIPS, AND THE SEAT MOVES ONTO THE INPUT**
+
+**Q2's original decision is kept verbatim in the table above and is NOT edited**, because a decision
+whose alternatives were deleted cannot be re-read. What changed is its premise: Q2 declined per-cell
+assignment on the ground that _"the need is unproven"_. **The need is now proven**, from a live show,
+in the owner's own words:
+
+> _"Say we're on 2-box: left cell `l-1` = studio-1, right cell `l-2` = studio-2. We must be able to
+> set `l-2` = studio-3 and have it change on UPDATE. … And the operator must be able to decide what
+> the SOLO will show while still on 2-box. So the Inspector should hold the LOOKS LIST and let us set
+> the inputs for each look separately — not one global `l-1 = studio-1`."_
+
+⚠ Q2 is also about a primitive that RETIRED: it answers "which source lands in which CELL of an
+ARRANGEMENT", and §14 replaced arrangements with looks. So this is a reversal of the DECISION rather
+than of the mechanism — the thing it declined (per-frame choice) is what ships; the thing it chose
+(declared order) has no arrangement left to order.
+
+##### The model: **(B′) — a seat is one producer per DISTINCT RESOLVED INPUT, per item**
+
+The framing that made this look expensive carried a hidden assumption: that a SEAT is keyed by an
+authored name. It never was. `resolvePlateAssignments` resolves a **plate id** (`l-1` — the scene's
+word for a HOLE) to a catalog `SourceDefinition` (`studio-1` — an INPUT), and both files say so
+outright: _"the SCENE's vocabulary for a hole in this template (`guest-1`), never a device and never a
+catalog id"_ (`live-plate-assignment.ts`) and _"the symbolic id a plate's `routeKey` references. Never
+a device string"_ (`looks.ts`). Once "which hole" and "which producer" stop being one question, the
+seat belongs to the input.
+
+Three candidates were considered and the alternatives are kept here for the same reason Q2 is:
+
+|                                         | (A) `routeKey` = seat | (B) `(look, plate)` = seat | ⭐ **(B′) input = seat**    |
+| --------------------------------------- | --------------------- | -------------------------- | --------------------------- |
+| preset-then-take is instant             | ❌ re-seats           | ✅                         | ✅                          |
+| §0.5's _never N producers on one route_ | ✅                    | ❌ **breaks it**           | ✅ **holds**                |
+| layers needed                           | `\|plates\|`          | `Σ\|look members\|`        | `\|distinct inputs bound\|` |
+| the owner's real template¹              | 3                     | 6                          | **3 — no growth**           |
+
+¹ 3-box `{s1,s2,s3}` + 2-box `{s1,s2}` + solo `{s3}` → union `{s1,s2,s3}` = **3**. Proven as an
+executable assertion, not an argument: `live-look-bindings.test.ts`, _"the seat count is the DISTINCT
+INPUTS across every look — not the sum of the looks' members"_.
+
+🔴 **(B) is not merely bigger — it is WRONG.** Seating `(look, plate)` opens the same physical input
+twice whenever two looks show it, which is the thing §0.5's third refusal ground exists to prevent and
+which may be refused outright by the DeckLink driver (unmeasured — session BN's §2.2).
+
+##### What the invariant's wording gets wrong now
+
+`looks.ts` read: _"the same source referenced in two looks is ONE declaration and ONE seat, held
+across switches — never N producers on one route."_ That is a **conjunction over a 1:1 that (B′)
+breaks in both directions**: one declaration bound differently in two looks is TWO seats, and two
+declarations bound alike are ONE. Only the final clause survives — and it survives _better_, because
+the dedupe now happens on the resolved WIRE ARGUMENT, where "one route" is a fact rather than a
+naming convention. The sentence was quoted in three places (`looks.ts`, `LooksSection.tsx`, and the
+author-facing `look-source-duplicate` preflight message) and all three were reworded.
+
+##### The resolution order is now FOUR levels, and the emergency moved OUTWARD
+
+1. the installation's **CATALOG** → 2. the template's **ASSIGNMENT** (per plate, the default for every
+   look) → 3. the row's **PER-LOOK binding** (new) → 4. the row's **PER-PLATE emergency override**
+   (`R-048`), which applies in **every** look and outranks 3.
+
+🔴 **Why the emergency is outermost.** `R-048` exists because an INPUT IS DEAD, and a dead input is
+dead in every look. If a per-look binding outranked it, switching look would put the dead feed
+straight back and the operator would have to re-patch, live, once per look — having already been told
+the substitution was applied. Neither level writes back to the template assignment, so the property
+that matters is untouched: an emergency never becomes tomorrow's configuration.
+
+##### Two refusals, both at the assignment door
+
+- **§6.2 (new)** — two frames of ONE look pointed at ONE input. The export preflight **cannot** catch
+  it: the author wrote two different holes, and it is the OPERATOR who collides them, after export.
+  One input is one seat, so one of the two frames would go to air empty with nothing complaining.
+  ⚠ **Measured on the shipped code before this refusal existed, the same configuration did something
+  worse** — it seated the same route TWICE, exactly what the invariant forbids, and two of this
+  repo's own tests were exercising it unnoticed.
+- **§2.7 (new trigger, old code)** — `LIVE_PLATE_NO_LAYER`. Demand is now the number of distinct
+  inputs bound across the item's looks, so PRESETTING raises it: the band can be exhausted by an
+  ASSIGNMENT, which it never could before. Refused in CG Control, never at the take and never on air.
+
+Both are decided from the same prospective plan, which mutates nothing — `tasks.md` 7.9's rule
+applied to a second writer in the same area.
+
+##### §2.9 — the take now refuses only on the look being ENTERED
+
+`#planLiveSeating`'s scope was `'all-declarations'`, and its reason was good: _"a plate that is one
+picker click from being on screen cannot refuse DURING a live switch with the previous look already
+leaving."_ **`tasks.md` 7.9 removed that reason** — a refused switch now leaves nothing behind and the
+page was never told, so the previous look is not leaving and the refusal is clean. Refusing a take
+over a hole in a look nobody is showing would block air for a non-reason. The scope values are renamed
+`'entering-look'` / `'already-live'` so the name cannot outlive the rule.
+
+##### What a re-point actually costs
+
+- **Input already seated** (bound by some other look): `MIXER FILL` + `CLIP`, and a `MIXER VOLUME` if
+  it was parked. **No `CG ADD`, no producer, no re-acquire.** This is the reason (B′) is worth
+  building.
+- **Input not seated**: one `PLAY` + `VOLUME` + fit, IN PLACE on the departing seat's layer when that
+  plate's old input is bound nowhere else — so `B-126`'s replace-never-clear survives.
+- **On-air flicker**: none is expected. The arriving producer is seated before the departing one is
+  swept, and a seat that is merely parked is masked rather than cleared. **Unproven on the plant** —
+  the mock models `PLAY`-on-occupied as a replace, so these tests prove self-consistency and nothing
+  about a 2.3.2 server.
+
+##### The ledger's key moved; its FIELD did not
+
+`LiveLayerRecord.sourceId` stays the operator-facing PLATE (`B-145` put it in front of the operator,
+and it is persisted). Identity moved onto the already-present `producer` — the wire argument, recorded
+as SENT — so there is **no persisted-file migration and no display change**. Shape (i) (re-key the
+record to the input) would have cost both; shape (ii) (several records sharing a layer) breaks
+`allocateLiveLayers`, whose `claimed` set would hand the second record a different layer, and collapses
+`bySlot` in the failure path.
+
+⚠ **The 1:1 sweep's result:** plate↔layer 1:1 is relied on by `swapLiveSource`, `setLivePlateVolume`
+and the operator's layer table, and it **still holds WITHIN a look** — which is precisely what §6.2's
+refusal buys. That refusal is therefore load-bearing rather than tidy. Across looks the ledger can hold
+two records labelled with one plate (one punched, one parked); every by-plate lookup now prefers the
+punched one, and the volume update is keyed by slot.
+
 #### 12.9.1a 🔴 THE ALL-OFF CASE (count 0) — decided, and it stays in the refusal family
 
 **D1's toggle primitive introduces a state the count primitive could not reach: every toggle off.** It

@@ -20,9 +20,19 @@ import * as cls from './LooksSection.css.js';
  *
  * ── SOURCES — DECLARED ONCE, the load-bearing half ──────────────────────────
  *
- * This list is the identity mechanism: a plate in any look REFERENCES one of these
- * declared sources through a picker, so the same source in two looks is ONE seat held
- * across the switch. The routeKey is FIXED at declaration (no in-place rename): a
+ * This list is the DECLARATION mechanism: a plate in any look REFERENCES one of these
+ * declared sources through a picker, so two looks referencing one source get the same
+ * DEFAULT input.
+ *
+ * 🔴 **REWORDED BY SESSION BM, and the old sentence is kept because it was load-bearing.**
+ * It said _"the same source in two looks is ONE seat held across the switch"_ — true while a
+ * plate's producer was a property of the plate. It no longer is: the operator may point one
+ * look's frame at a different input, so what a shared `routeKey` guarantees is the same
+ * default, not the same seat. Whether two looks share a producer is decided at RUNTIME, by
+ * the input each is bound to (`live-look-bindings.ts`), and this list is what supplies the
+ * starting point.
+ *
+ * The routeKey is FIXED at declaration (no in-place rename): a
  * rename would have to rewrite every referencing plate in every look, and a missed one
  * is a dangling reference that surfaces only at export. Removal is always allowed —
  * plates left referencing a removed source are named ONE BY ONE by the export
@@ -37,8 +47,9 @@ export function LooksSection({ scene }: { scene: Scene }): JSX.Element | null {
   return (
     <CollapseSection title="Looks" defaultExpanded>
       <p className={cls.summary}>
-        One multi-frame group: sources are declared ONCE here, and every look references them — the
-        same source in two looks is one seat, held across the switch.
+        One multi-frame group: sources are declared ONCE here, and every look references them — two
+        looks referencing the same source start on the same input, and the operator can point either
+        one elsewhere.
       </p>
       <IssuesPart scene={scene} />
       <SourcesPart sources={group.sources} />

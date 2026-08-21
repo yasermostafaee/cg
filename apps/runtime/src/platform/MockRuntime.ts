@@ -187,6 +187,8 @@ export class MockRuntime {
   readonly #positions = new Map<string, Position>();
   // R-048 — per-item, per-plate live-source overrides (bridge parity).
   readonly #sourceOverrides = new Map<string, Record<string, string>>();
+  /** Session BM — the per-look composition, mirroring the bridge. */
+  readonly #lookSourceBindings = new Map<string, Record<string, Record<string, string>>>();
   /**
    * §14 (LOOKS) Stage E parity — itemId → the look the OPERATOR picked.
    *
@@ -223,6 +225,7 @@ export class MockRuntime {
     return this.#stack.map((i) => {
       const position = this.#positions.get(i.itemId);
       const sourceOverride = this.#sourceOverrides.get(i.itemId);
+      const lookSourceOverride = this.#lookSourceBindings.get(i.itemId);
       const plateVolumes = this.#plateVolumes.get(i.itemId);
       // §14 (LOOKS) Stage E parity — through the RESOLVER, never the raw pick map.
       const activeLookId = this.resolvedActiveLook(i.itemId);
@@ -230,6 +233,7 @@ export class MockRuntime {
         ...i,
         ...(position !== undefined && { position }),
         ...(sourceOverride !== undefined && { sourceOverride }),
+        ...(lookSourceOverride !== undefined && { lookSourceOverride }),
         ...(plateVolumes !== undefined && { plateVolumes }),
         ...(activeLookId !== undefined && { activeLookId }),
       };
@@ -487,9 +491,25 @@ export class MockRuntime {
     itemId: string,
     plateId: string,
     sourceId: string | null,
+    /** Session BM — absent is the emergency patch (every look); present is one look's binding. */
+    lookId?: string,
   ): { ok: boolean; reason?: string; message?: string } {
     const item = this.#find(itemId);
     if (item === null) return { ok: false, reason: 'unknown-item' };
+    if (lookId !== undefined) {
+      const bindings: Record<string, Record<string, string>> = {
+        ...this.#lookSourceBindings.get(itemId),
+      };
+      const forLook: Record<string, string> = { ...bindings[lookId] };
+      if (sourceId === null) delete forLook[plateId];
+      else forLook[plateId] = sourceId;
+      if (Object.keys(forLook).length === 0) delete bindings[lookId];
+      else bindings[lookId] = forLook;
+      if (Object.keys(bindings).length === 0) this.#lookSourceBindings.delete(itemId);
+      else this.#lookSourceBindings.set(itemId, bindings);
+      this.#emitStack();
+      return { ok: true };
+    }
     const next: Record<string, string> = { ...this.#sourceOverrides.get(itemId) };
     if (sourceId === null) delete next[plateId];
     else next[plateId] = sourceId;

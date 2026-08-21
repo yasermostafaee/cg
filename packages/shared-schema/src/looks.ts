@@ -17,10 +17,25 @@ import { IdSchema } from './primitives.js';
  * A look's plate REFERENCES a declared source: the plate keeps its ordinary `routeKey`
  * field, and the reference is set-membership against {@link LookGroupSchema}'s `sources`
  * (enforced by the export preflight, tolerated at import). This is what dissolves §0.5's
- * third refusal ground: the same source referenced in two looks is ONE declaration and ONE
- * seat, held across switches — never N producers on one route. `expectedAspect` and
- * `dynamic` live on the DECLARATION, so two looks cannot disagree about them; disagreement
- * is unrepresentable rather than checked.
+ * third refusal ground: **never N producers on one route.**
+ *
+ * 🔴 **THAT CLAUSE SURVIVES SESSION BM; THE ONE IN FRONT OF IT DID NOT, AND THE OLD WORDING
+ * IS KEPT HERE BECAUSE IT IS QUOTED IN THREE PLACES.** It read: _"the same source referenced
+ * in two looks is ONE declaration and ONE seat, held across switches."_ That is a conjunction
+ * over a 1:1 between a declaration and a producer, and (B′) breaks it in BOTH directions:
+ * once the operator may bind each look's frame separately, one declaration bound differently
+ * in two looks is TWO seats, and two declarations bound alike are ONE. What a shared
+ * `routeKey` guarantees is the same DEFAULT binding, not the same seat.
+ *
+ * The anti-goal is untouched, and is in fact now enforced where it can actually be tested:
+ * seats dedupe on the resolved WIRE ARGUMENT (`live-look-bindings.ts`), so one route gets one
+ * producer however many frames point at it — and two frames of ONE look pointing at the same
+ * input is refused at the moment the operator does it.
+ *
+ * ⚠ `expectedAspect` and `dynamic` still live on the DECLARATION, so two looks cannot
+ * disagree about what a HOLE asserts. They can now disagree about what is BEHIND it: one
+ * input punched by two plates that assert different aspects is reachable, and it refuses the
+ * look that asserts the contradiction rather than the other.
  *
  * ── WHY `instanceId` AND NOT A CHILD LIST ──────────────────────────────────────
  *

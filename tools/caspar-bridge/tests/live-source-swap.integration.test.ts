@@ -100,6 +100,9 @@ const CATALOG: SourceCatalog = {
   sources: [
     { id: 'src-a', name: 'Studio A', format: '1080i5000', producer: { kind: 'route', channel: 2 } },
     { id: 'src-b', name: 'Baku', format: '1080i5000', producer: { kind: 'route', channel: 3 } },
+    // Session BM: a same-format source NO other plate is assigned, for the plain-substitution
+    // tests. `src-b` is guest-2's, so pointing guest-1 at it is a §6.2 collision now.
+    { id: 'src-c', name: 'Ganja', format: '1080i5000', producer: { kind: 'route', channel: 5 } },
     // A 4:3 source, so a swap onto it changes the CROP and 6.9b's refit is visible.
     { id: 'src-sd', name: 'Archive SD', format: 'PAL', producer: { kind: 'route', channel: 4 } },
     // A producer form the mock refuses, for the failure path.
@@ -204,7 +207,7 @@ it('🔴 6.9c — a deliberately RAISED plate is still audible after the swap', 
   expect(await r.setLivePlateVolume('item-1', 'guest-1', 1)).toEqual({ ok: true });
   expect(mock?.layerState({ channel: 1, layer })?.volume).toBe(1);
 
-  await r.swapLiveSource('item-1', 'guest-1', 'src-b');
+  await r.swapLiveSource('item-1', 'guest-1', 'src-c');
 
   // The NEW producer was born muted like every other; the swap re-asserts the
   // PLATE's intent onto it. A swap that silently muted a guest would be its own
@@ -254,19 +257,19 @@ it('the override is PER ITEM: the template assignment and the catalog are untouc
   const r = await boot();
   await onAir(r);
 
-  await r.swapLiveSource('item-1', 'guest-1', 'src-b');
+  await r.swapLiveSource('item-1', 'guest-1', 'src-c');
 
   expect(r.sourceAssignments()).toEqual(ASSIGNMENTS);
   expect(r.sourceCatalog()).toEqual(CATALOG);
   expect(r.stackSnapshot().find((i) => i.itemId === 'item-1')?.sourceOverride).toEqual({
-    'guest-1': 'src-b',
+    'guest-1': 'src-c',
   });
 });
 
 it('a null sourceId REVERTS the plate to its template assignment', async () => {
   const r = await boot();
   await onAir(r);
-  await r.swapLiveSource('item-1', 'guest-1', 'src-b');
+  await r.swapLiveSource('item-1', 'guest-1', 'src-c');
 
   expect(await r.swapLiveSource('item-1', 'guest-1', null)).toEqual({ ok: true });
 
@@ -346,7 +349,7 @@ it('a row that is not on air records the override and sends nothing', async () =
   await r.load('item-1', 'lower-third', {});
   const before = (await recvLines()).length;
 
-  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-b')).toEqual({ ok: true });
+  expect(await r.swapLiveSource('item-1', 'guest-1', 'src-c')).toEqual({ ok: true });
 
   // A list edit, exactly like setting a position on an idle row.
   expect((await recvLines()).slice(before)).toEqual([]);
@@ -357,5 +360,5 @@ it('a row that is not on air records the override and sends nothing', async () =
       .liveLayers()
       .get('item-1')
       ?.find((x) => x.sourceId === 'guest-1')?.producer,
-  ).toBe('"route://3"');
+  ).toBe('"route://5"');
 });

@@ -458,11 +458,21 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
         return owner === undefined || owner.id === look.id;
       });
 
-      // B.2 — the same source TWICE in one look's visible set is refused: two frames, one
-      // seat, and which frame shows the picture is an accident. ACROSS looks the same
-      // source is the point — one seat, held over the switch — and the message says so,
-      // because the author who hits this refusal is usually one edit away from the
-      // legitimate case.
+      /*
+        B.2 — the same source TWICE in one look's visible set is refused: two frames, one
+        seat, and which frame shows the picture is an accident. ACROSS looks it is fine, and
+        the message says so, because the author who hits this refusal is usually one edit
+        away from the legitimate case.
+
+        🔴 **THE ACROSS-LOOKS HALF WAS REWORDED BY SESSION BM, AND THE OLD WORDING IS KEPT
+        HERE BECAUSE IT WAS LOAD-BEARING.** It read: _"Referencing the same source from
+        DIFFERENT looks is fine — that is the identity mechanism, one seat held across the
+        switch."_ True while a plate's producer was a property of the plate. Under (B′) the
+        operator may point either look's frame somewhere else, so a shared `routeKey` is no
+        longer a promise of one seat — it supplies the same DEFAULT, and what the two looks
+        end up showing is the operator's to decide. The refusal itself is unchanged; only
+        the sentence explaining the legitimate neighbour case moved.
+      */
       const byRoute = new Map<string, FlatElement[]>();
       for (const f of visibleSet) {
         const routeKey = (f.element as { routeKey?: string }).routeKey ?? '';
@@ -478,8 +488,8 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
               `Source "${routeKey}" appears ${String(plates.length)} times when look ` +
               `"${look.name}" is active (a plate outside every look is on screen in EVERY ` +
               `look). One source is ONE seat, so only one frame can show it. Referencing ` +
-              `the same source from DIFFERENT looks is fine — that is the identity ` +
-              `mechanism, one seat held across the switch.`,
+              `the same source from DIFFERENT looks is fine — it gives them the same ` +
+              `default input, and the operator can point either look elsewhere.`,
             elementId: f.element.id,
           });
         }

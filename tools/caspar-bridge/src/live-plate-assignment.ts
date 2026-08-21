@@ -81,6 +81,14 @@ export function resolvePlateAssignments(input: {
    * R-048 / C-015 phase 6 (6.9) — this ROW's per-plate substitutions, which
    * outrank the template assignment for this run only.
    *
+   * ⚠ **SESSION BM: THIS IS NOW A FLATTENED VIEW OF TWO LEVELS, NOT ONE MAP.** The caller
+   * composes the row's per-LOOK composition and its per-PLATE emergency patch into a single
+   * `{plate → catalog id}` for the look being resolved (`#effectiveOverridesFor`), so this
+   * function's contract is unchanged and it still asks its question exactly once. The
+   * precedence between the two is decided there and NOT here — `live-look-bindings.ts`
+   * carries the argument — because a second place that ordered them could order them
+   * differently, which is the failure the note below is already about.
+   *
    * 🔴 **RESOLVED HERE RATHER THAN BY A SECOND PATH, and that is the point.** An
    * override is not a different KIND of thing from an assignment — it is the same
    * question ("which catalog entry does this plate use") answered by a higher

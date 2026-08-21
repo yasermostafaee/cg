@@ -178,6 +178,22 @@ export const StackSwapLiveSourceChannel = defineChannel(
     plateId: z.string().min(1),
     /** A catalog entry's id, or `null` to revert to the template's assignment. */
     sourceId: z.string().min(1).nullable(),
+    /**
+     * Session BM — **WHICH LOOK this binding is for. Absent means EVERY look.**
+     *
+     * 🔴 **The two meanings are different verbs wearing one channel, and the absent case is
+     * the older and more urgent of them.** Absent is `R-048`'s emergency substitution: an
+     * input is DEAD, and it is dead in every look, so the patch applies to all of them and
+     * outranks any per-look composition — a preset naming a dead feed must not come back on
+     * the next switch. Present is the deliberate composition the operator does while
+     * building a rundown: _"solo will show studio-3, 2-box keeps studio-1."_
+     *
+     * One channel rather than two because it is one question — which input does this frame
+     * show — asked at two scopes, and because a second verb would be a second path into the
+     * same reconcile. The bridge resolves both through one function
+     * (`live-look-bindings.ts`).
+     */
+    lookId: z.string().min(1).optional(),
   }),
   z.object({
     ok: z.boolean(),
