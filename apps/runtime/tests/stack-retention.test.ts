@@ -9,7 +9,12 @@ import {
   type RestoreSkip,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import type { RetainedAirState, StackItemState } from '@cg/shared-schema';
+import {
+  RetainedStackItemSchema,
+  StackItemStateSchema,
+  type RetainedAirState,
+  type StackItemState,
+} from '@cg/shared-schema';
 import type { BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
 import {
   BridgeDisconnectedError,
@@ -696,4 +701,67 @@ it('B-108: a mixed report keeps the losses and drops the benign one', async () =
     { itemId: 'no-room', reason: 'no-layer' },
   ]);
   expect(reportedSkips.at(-1)).toEqual([{ itemId: 'no-room', reason: 'no-layer' }]);
+});
+
+/**
+ * 🔴 **THE COPY LIST IS HAND-MAINTAINED, AND NOTHING ASSERTED IT WAS COMPLETE (session BM).**
+ *
+ * `toRetained` reduces a published row to intent by naming each carried field explicitly.
+ * That is the right shape — most of `StackItemState` is RECONCILED state which must not
+ * travel — but it means every new OPEN-AXIS field has to be added by hand, and forgetting is
+ * silent: the row restores, looks normal, and is missing one thing.
+ *
+ * That is the `B-107` / `B-109` class at its source, and it had FIVE fields riding on it with
+ * no test at all — `position`, `sourceOverride`, `plateVolumes`, `activeLookId`, and session
+ * BM's `lookSourceOverride`, which was in fact dropped here when it was added and caught only
+ * by reading the list.
+ *
+ * So this asserts the RULE rather than five values: **every field the retained schema accepts
+ * and the published schema also has must survive the round trip.** A sixth field added later
+ * fails here on the day it is added, which is the only moment the omission is cheap.
+ */
+it('🔴 every OPEN-AXIS field a published row carries survives toRetained — derived, not listed', async () => {
+  const store = new StackRetentionStore(new MemoryWorkspace());
+
+  /*
+    The keys are derived from the two SCHEMAS rather than typed out, so this test cannot
+    itself go stale. `RetainedStackItemSchema` is the target shape; `StackItemStateSchema` is
+    the source. Their intersection is exactly "things a published row has that retention is
+    allowed to keep".
+  */
+  const retainedKeys = new Set(Object.keys(RetainedStackItemSchema.shape));
+  const publishedKeys = new Set(Object.keys(StackItemStateSchema.shape));
+  const carried = [...retainedKeys].filter((k) => publishedKeys.has(k));
+  expect(carried.length, 'the two schemas must actually overlap').toBeGreaterThan(4);
+
+  // A row with EVERY carriable field populated, so a dropped one is visible as an absence.
+  const populated: StackItemState = {
+    itemId: 'item-1',
+    templateId: 'debate',
+    fields: { title: 'x' },
+    status: 'on-air',
+    pending: null,
+    slot: { channel: 1, layer: 10, server: 'primary' },
+    position: { anchor: 'center', offset: { x: 3, y: 4 } },
+    sourceOverride: { 'l-1': 'studio-9' },
+    plateVolumes: { 'l-1': 1 },
+    activeLookId: 'solo',
+    lookSourceOverride: { solo: { 'l-1': 'studio-3' } },
+  } as unknown as StackItemState;
+
+  await store.mirror([populated]);
+  const retained = store.items()[0];
+  expect(retained).toBeDefined();
+
+  const dropped = carried.filter(
+    (k) =>
+      (populated as unknown as Record<string, unknown>)[k] !== undefined &&
+      (retained as unknown as Record<string, unknown>)[k] === undefined,
+  );
+  /*
+    🔴 `status` is the one legitimate exception and it is named rather than filtered by a
+    predicate: retention carries `state`, which `retainedStateFor` DERIVES from `status`
+    (golden rule 6 — the map has one owner). Everything else present on the row must be here.
+  */
+  expect(dropped, 'these fields were published and did not survive retention').toEqual([]);
 });

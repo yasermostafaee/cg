@@ -117,6 +117,11 @@ function toRetained(item: StackItemState): RetainedStackItem {
     // showing the substitution. That is the B-107 / B-109 class exactly —
     // retention dropping state it did not model.
     ...(item.sourceOverride !== undefined && { sourceOverride: item.sourceOverride }),
+    // Session BM — and the PER-LOOK composition, which is the same class again and the
+    // easiest of the four to lose, because it is the only one whose loss is invisible until
+    // somebody SWITCHES: the look on air keeps working, and the look the operator composed
+    // silently reverts to the template assignment the moment they cut to it.
+    ...(item.lookSourceOverride !== undefined && { lookSourceOverride: item.lookSourceOverride }),
     // C-015 phase 6 (6.5f) — and the per-plate AUDIO INTENT, which needs this more
     // than either neighbour. A dropped position or source override shows the wrong
     // PICTURE, and somebody sees it; a dropped volume shows the RIGHT picture in

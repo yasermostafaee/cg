@@ -109,6 +109,7 @@ import {
   LIVE_PLATE_NO_RANGE,
 } from './live-plate-seating.js';
 import {
+  effectiveOverridesForLook,
   framesOfLook,
   resolveLookBindings,
   seatCollisionMessage,
@@ -4054,11 +4055,11 @@ export class CasparRuntime {
     itemId: string,
     lookId: string | undefined,
   ): Record<string, string> | undefined {
-    const perLook =
-      lookId === undefined ? undefined : this.#lookSourceBindings.get(itemId)?.[lookId];
-    const emergency = this.#sourceOverrides.get(itemId);
-    if (perLook === undefined) return emergency;
-    return { ...perLook, ...(emergency ?? {}) };
+    return effectiveOverridesForLook(
+      lookId,
+      this.#lookSourceBindings.get(itemId),
+      this.#sourceOverrides.get(itemId),
+    );
   }
 
   /**
@@ -5146,7 +5147,8 @@ export class CasparRuntime {
     lookId?: string,
   ): Promise<{ ok: boolean; reason?: string; message?: string }> {
     const templateId = this.#reconciler.get(itemId)?.templateId;
-    if (templateId === undefined || this.#slots.get(itemId) === undefined) {
+    const itemSlot = this.#slots.get(itemId);
+    if (templateId === undefined || itemSlot === undefined) {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
     }
     const template = this.#templates.get(templateId);
@@ -5177,8 +5179,8 @@ export class CasparRuntime {
     */
     const current = this.#sourceOverrides.get(itemId) ?? {};
     const currentBindings = this.#lookSourceBindings.get(itemId) ?? {};
-    let next: Record<string, string> = { ...current };
-    let nextBindings: Record<string, Record<string, string>> = { ...currentBindings };
+    const next: Record<string, string> = { ...current };
+    const nextBindings: Record<string, Record<string, string>> = { ...currentBindings };
     if (lookId === undefined) {
       if (sourceId === null) delete next[plateId];
       else next[plateId] = sourceId;
@@ -5190,9 +5192,7 @@ export class CasparRuntime {
       // map is: keeping one would publish a row as composed when it is back on its defaults.
       if (Object.keys(forLook).length === 0) delete nextBindings[lookId];
       else nextBindings[lookId] = forLook;
-      next = { ...current };
     }
-    nextBindings = { ...nextBindings };
 
     /*
       🔴 §6.2 / §2.7 — REFUSED HERE, BEFORE ANYTHING IS WRITTEN OR SENT.
@@ -5202,7 +5202,7 @@ export class CasparRuntime {
       take instead would refuse a graphic on the way to air over a choice made minutes
       earlier; reaching them during the reconcile would already have written the override.
     */
-    const refusal = this.#refuseBindingChange(itemId, this.#slots.get(itemId) as CommandSlot, {
+    const refusal = this.#refuseBindingChange(itemId, itemSlot, {
       overrides: next,
       bindings: nextBindings,
     });

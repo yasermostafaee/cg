@@ -62,6 +62,28 @@ export type LookSourceBindings = Readonly<Record<string, Readonly<Record<string,
 /** The row's per-plate emergency patch (level 4), applied to every look. */
 export type PlateSourceOverrides = Readonly<Record<string, string>>;
 
+/**
+ * 🔴 **THE ONE PLACE LEVELS 3 AND 4 ARE ORDERED — the row's per-look composition with its
+ * per-plate emergency patch on top, flattened for ONE look.**
+ *
+ * Both readers call this: the resolver below, and the runtime's refusal path (which has to
+ * hand `resolvePlateAssignments` a single `{plate → catalog id}` map). They were briefly two
+ * expressions that happened to agree, which is the two-spellings defect this repo keeps
+ * paying for — one of them would eventually have been "simplified" and the two would have
+ * disagreed about a plate that is on air.
+ *
+ * The emergency wins, in every look. See this module's header for why.
+ */
+export function effectiveOverridesForLook(
+  lookId: string | undefined,
+  bindings: LookSourceBindings | undefined,
+  overrides: PlateSourceOverrides | undefined,
+): Record<string, string> | undefined {
+  const perLook = lookId === undefined ? undefined : bindings?.[lookId];
+  if (perLook === undefined) return overrides === undefined ? undefined : { ...overrides };
+  return { ...perLook, ...(overrides ?? {}) };
+}
+
 /** One frame of one look, and the input it resolves to. */
 export interface ResolvedFrame {
   /** `undefined` for a pre-LOOKS carrier's single implicit look. */
@@ -141,7 +163,7 @@ export function resolveLookBindings(input: {
     // re-derivation of "which plates does this look show" (`B-151` is what a second copy of
     // that question cost).
     const rects = lookPlateRects(input.carrier, lookId);
-    const perLook = lookId === undefined ? undefined : input.bindings?.[lookId];
+    const effective = effectiveOverridesForLook(lookId, input.bindings, input.overrides);
     /** producerArg → the plates of THIS look already bound to it (§6.2's axis). */
     const inThisLook = new Map<string, string[]>();
 
@@ -150,7 +172,7 @@ export function resolveLookBindings(input: {
     for (const declaration of input.carrier.sources) {
       const plateId = declaration.sourceId;
       if (rects[plateId] === undefined) continue;
-      const catalogId = input.overrides?.[plateId] ?? perLook?.[plateId] ?? assigned.get(plateId);
+      const catalogId = effective?.[plateId] ?? assigned.get(plateId);
       const source = catalogId === undefined ? undefined : byCatalogId.get(catalogId);
       if (source === undefined) {
         unresolved.push({ lookId, plateId });
