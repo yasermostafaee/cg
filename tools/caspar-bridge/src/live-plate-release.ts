@@ -1,4 +1,5 @@
 import type { SourceProducer } from '@cg/shared-ipc';
+import type { NormalizedRect } from './live-layers.js';
 
 /**
  * `multibox-layout-switch` `design.md` §12.4 / `tasks.md` 6.5 — **what happens to a live
@@ -6,9 +7,15 @@ import type { SourceProducer } from '@cg/shared-ipc';
  *
  * §12.4 decided **B, held**: the producer stays seated on its band layer, muted and idle,
  * so switching back is instant — a re-`PLAY` costs a fresh producer, and on the plant that
- * is the difference between a cut and a visible re-acquire. The plate stops being VISIBLE
+ * is the difference between a cut and a visible re-acquire.
+ *
+ * 🔴 **CORRECTED BY `B-154`.** This header used to finish _"the plate stops being VISIBLE
  * because the page stops punching its hole; that is a different mutation on a different
- * machine, and this module is deliberately about the seat alone.
+ * machine, and this module is deliberately about the seat alone."_ The first clause is true
+ * about the plate's OWN cell and false about the frame — the page's holes are transparent to
+ * the WHOLE band, so a held producer still rendering shows through any hole the active look
+ * punches over it. Seat and punch remain separate mutations; what changed is that the SEAT
+ * has a visibility of its own and the hold must say so on the wire. See {@link parkedFit}.
  *
  * ── WHY THE FALLBACK EXISTS, AND WHY IT IS NAMED RATHER THAN IMPLICIT ────────────
  *
@@ -31,6 +38,90 @@ import type { SourceProducer } from '@cg/shared-ipc';
 
 /** What the reconcile does with a plate the target look has no rect for. */
 export type LivePlateDisposition = 'held' | 'torn-down';
+
+/**
+ * 🔴 **`B-154` — THE GEOMETRY A HELD SEAT IS GIVEN, so that "not shown" means RENDERS
+ * NOTHING and not merely "the page stopped punching its hole".**
+ *
+ * ── THE DEFECT THIS EXISTS TO CLOSE ─────────────────────────────────────────
+ *
+ * §12.4's hold used to mute the plate and stop there, resting on the sentence at the top of
+ * this file: _"the plate stops being VISIBLE because the page stops punching its hole"_.
+ * That sentence is true about the plate's OWN cell and false about the frame. CasparCG
+ * composites the whole band bottom-up and the page's hole is transparent to **all of it**,
+ * not to one layer — so a held producer still rendering into its old cell shows through
+ * **any** hole the ACTIVE look punches over that cell. Six-box → solo is the case in the
+ * shipped fixture: one full-frame hole over five held plates, and the operator saw the five
+ * feeds they had just left, tiled inside the solo box.
+ *
+ * Seat and punch are separate mutations (that decision stands). What was missing is that
+ * the SEAT has a visibility of its own, and holding it has to say so on the wire.
+ *
+ * ── WHY THE FILL MOVES AND THE CLIP DOES NOT ────────────────────────────────
+ *
+ * The pair could be made to render nothing from either end, and the choice is decided by
+ * what a HALF-APPLIED pair does. `mixerFit` emits `FILL` then `CLIP` on one connection, and
+ * either can be refused:
+ *
+ * - **Move the FILL off the raster, leave the CLIP at the full frame** (this). The fill box
+ *   is outside the visible raster, so it renders nothing on FILL alone — and a refused
+ *   `CLIP` after an acked `FILL` therefore still renders nothing, because an off-raster box
+ *   cannot intersect any mask window inside the raster. **The partial send is safe by
+ *   construction.**
+ * - **Leave the FILL, move the CLIP away.** A refused `CLIP` leaves the layer exactly as it
+ *   was — still rendering its old cell, i.e. the defect. And no in-raster rectangle is
+ *   disjoint from a FULL-FRAME fill at all, so that spelling cannot even be total: a plate
+ *   held after a solo look has nowhere to put the mask.
+ *
+ * ⚠ **What is measured and what is inferred.** That a fill box moved out from under its clip
+ * window renders nothing at all IS measured (design.md §3's last row, on 2.5.0 and
+ * re-confirmed on the plant's 2.3.2, quoted on `CommandBuilder.mixerFit`). That `MIXER FILL`
+ * accepts an origin outside `0..1` — an ordinary transform, and the basis of every
+ * animate-in — is NOT separately measured on the plant. It is filed for the hardware
+ * session rather than assumed silently.
+ */
+export const PARKED_FILL_ORIGIN = 2;
+
+/** The full raster: the identity mask, and what a parked seat's `CLIP` is set to. */
+const FULL_FRAME_CLIP: NormalizedRect = { x: 0, y: 0, width: 1, height: 1 };
+
+/**
+ * The fit for a seat the active look does not punch — see {@link PARKED_FILL_ORIGIN}.
+ *
+ * The box KEEPS ITS SIZE and only its origin moves, so the parked record still says how
+ * big the plate was and a reader can tell a parked seat from a corrupted one.
+ */
+export function parkedFit(size: { width: number; height: number }): {
+  fill: NormalizedRect;
+  clip: NormalizedRect;
+} {
+  return {
+    fill: {
+      x: PARKED_FILL_ORIGIN,
+      y: PARKED_FILL_ORIGIN,
+      width: size.width,
+      height: size.height,
+    },
+    clip: FULL_FRAME_CLIP,
+  };
+}
+
+/**
+ * Is this fit the parked one — i.e. is the seat already rendering nothing?
+ *
+ * 🔴 **A GEOMETRY TEST, DELIBERATELY, AND NOT `record.held`.** `held` latches the MUTE and
+ * under-claims when a `MIXER VOLUME` is refused, so a plate can be `held: false` with its
+ * fill already parked; keying the re-send off it would re-emit the park on every reconcile
+ * for such a plate. The two facts are separately observable and are therefore separately
+ * latched.
+ *
+ * It cannot false-positive on a real fit: a hole placed two full rasters out is entirely
+ * outside the frame, so `liveSourceFitFor` answers `clip: null` and `#planLiveSeating` seats
+ * no producer for it at all. An off-frame plate never reaches a fill.
+ */
+export function isParkedFit(fill: NormalizedRect): boolean {
+  return fill.x === PARKED_FILL_ORIGIN && fill.y === PARKED_FILL_ORIGIN;
+}
 
 export interface LivePlateRelease {
   /** The stack item whose plate this is. */

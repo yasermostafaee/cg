@@ -332,6 +332,57 @@ it('🔴 switching to a SOLO look RE-SEATS NOTHING — five plates HELD, one re-
   }
 });
 
+it('🔴 B-154 — a HELD plate must RENDER NOTHING, not keep its old clip under the new hole', async () => {
+  /*
+    THE DEFECT. §12.4's hold muted the plate and stopped the PAGE punching its hole — and
+    stopped there. The producer stayed seated with the `MIXER FILL`/`CLIP` it was given for
+    the look it left, so it went on rendering into its old cell.
+
+    That is invisible only while the page covers that cell. It does not, as soon as the
+    ACTIVE look punches a hole that overlaps it: CasparCG composites the band bottom-up and
+    the page's hole is transparent to ALL of it, not to one layer. SOLO is the case in this
+    very fixture — one full-frame hole over five held plates — so the operator switching a
+    6-box to a solo saw the five feeds they had just left, tiled inside the solo box.
+
+    🔴 The mask is the layer's OWN business, and this is the axis the phase-3 tests read as
+    covered: they assert the held plate keeps its LAYER and its PRODUCER and loses its
+    VOLUME. Nobody asked what it RENDERS.
+  */
+  const r = await boot();
+  await onAir(r);
+  const soloLayer = layerOf(r, 'live-1');
+  const before = (await recvLines()).length;
+
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+
+  const lines = await since(before);
+  // The hole SOLO punches is the whole raster, so every held plate's cell is inside it.
+  expect(mock?.layerRenderedRect({ channel: 1, layer: soloLayer })).toEqual({
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+  });
+
+  for (const key of ROUTE_KEYS.slice(1)) {
+    const layer = layerOf(r, key);
+    /*
+      🔴 THE ASSERTION, through the mock's OWN predicate rather than a second copy of it.
+      `layerRenderedRect` is `null` exactly when FILL and CLIP do not intersect — the
+      measured spelling of "renders nothing at all" (`command-builder.ts`'s `mixerFit`
+      note, design.md §3's last row). Asserting on `clip` alone cannot see this.
+    */
+    expect(mock?.layerRenderedRect({ channel: 1, layer }), `${key} still renders`).toBeNull();
+    // …and it got there by a command, in the same batch discipline as every other fit.
+    expect(lines.some((l) => l.startsWith(`MIXER 1-${String(layer)} FILL `))).toBe(true);
+    expect(lines.some((l) => l.startsWith(`MIXER 1-${String(layer)} CLIP `))).toBe(true);
+  }
+  // Still a HOLD, not a teardown: same layers, same producers, nothing cleared.
+  expect(playsIn(lines), 'blanking a held plate is not a re-seat').toEqual([]);
+  expect(clearsIn(lines), 'blanking a held plate is not a teardown').toEqual([]);
+  expect(r.liveLayers().get('item-1') ?? []).toHaveLength(6);
+});
+
 it('🔴 switching BACK re-punches and re-fits, and still re-seats no producer', async () => {
   const r = await boot();
   await onAir(r);
@@ -851,15 +902,25 @@ it('🔴 a plate a look shows for the FIRST TIME never lands on a HELD layer', a
   expect(recordOf(r, 'live-2')?.held ?? false).toBe(false);
   expect(recordOf(r, 'live-2')?.producer).toBe(heldProducer);
   /*
-    It was held, not destroyed, so coming back is never a re-seat. Its rect is the SAME in
-    look 'a' as it was when it was seated, so no `FILL`/`CLIP` is due either — the geometry
-    genuinely did not move, and re-emitting it would be noise. What IS due is the volume: the
-    hold muted it, so the plate's intent has to be re-asserted or a deliberately-raised source
-    comes back silent.
+    It was held, not destroyed, so coming back is never a re-seat. What IS due is the volume
+    — the hold muted it, so the plate's intent has to be re-asserted or a deliberately-raised
+    source comes back silent — and, since `B-154`, the GEOMETRY.
+
+    🔴 THIS ASSERTION WAS INVERTED BY `B-154`, and the old reasoning is kept here because it
+    was correct about the wrong premise. It read: _"its rect is the SAME in look 'a' as it was
+    when it was seated, so no `FILL`/`CLIP` is due either — the geometry genuinely did not
+    move, and re-emitting it would be noise."_ True of the plate's rect, and that was never
+    the question: the HOLD now parks the seat's fill off the raster so it renders nothing
+    (`parkedFit` — a held producer otherwise shows through whatever hole the active look
+    punches over its cell). So the geometry DID move, on the way out, and coming back is
+    exactly where it has to move back. A switch that re-punched the page's hole without
+    re-emitting the fill would leave the box permanently empty.
   */
   expect(playsIn(lines)).toEqual([]);
   expect(lines).toContain(`MIXER 1-${String(heldLayer)} VOLUME 0`);
-  expect(lines.some((l) => l.startsWith(`MIXER 1-${String(heldLayer)} FILL `))).toBe(false);
+  expect(lines.some((l) => l.startsWith(`MIXER 1-${String(heldLayer)} FILL `))).toBe(true);
+  // …and it is back on screen, at the rect look 'a' gives it — not merely un-parked.
+  expect(mock?.layerRenderedRect({ channel: 1, layer: heldLayer })).not.toBeNull();
 });
 
 // ───────── REVIEW REGRESSIONS (session BC adversarial review) ─────────

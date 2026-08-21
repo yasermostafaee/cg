@@ -107,7 +107,12 @@ import {
   LIVE_PLATE_NO_LAYER,
   LIVE_PLATE_NO_RANGE,
 } from './live-plate-seating.js';
-import { releaseLivePlate, type LivePlateRelease } from './live-plate-release.js';
+import {
+  isParkedFit,
+  parkedFit,
+  releaseLivePlate,
+  type LivePlateRelease,
+} from './live-plate-release.js';
 import { TemplateRegistry } from './template-registry.js';
 import { DelimiterStore } from './delimiter-store.js';
 import {
@@ -4597,7 +4602,44 @@ export class CasparRuntime {
         );
         muted = sent.ok;
       }
-      next.push({ ...record, held: muted });
+      /*
+        🔴 `B-154` — AND PARK THE GEOMETRY, because muting a held plate silences it and does
+        NOT hide it.
+
+        The mute above is the audio half and it was, until this bug, the whole of the hold.
+        A held producer kept the `FILL`/`CLIP` of the look it left and went on rendering into
+        that cell, which is invisible only while the page covers it — and the page does not,
+        as soon as the ACTIVE look punches a hole overlapping it. Six-box → solo put five
+        held feeds inside the solo box. {@link parkedFit} carries the full argument, including
+        why the FILL is what moves.
+
+        SENT ONCE, on the same latch and for the same reason as the mute — a plate held
+        across two switches must not re-send it — and unconditionally under a take, which
+        re-asserts every layer it owns. The RECORD keeps what was actually sent (the ledger's
+        standing contract), which is also what makes the return trip work: the delta at the
+        top of this method compares the parked fit against the real one, finds it moved, and
+        re-emits the real geometry. Recording the real fit while sending the parked one would
+        make coming back a silent no-op — the plate would stay invisible for good.
+      */
+      const parked = parkedFit(record.fill);
+      let fitParked = isParkedFit(record.fill);
+      if (!fitParked || mode === 'take') {
+        fitParked = true;
+        for (const line of this.#builder.mixerFit(record.slot, parked)) {
+          const sent = await this.#send(line, this.#nextSeq(), 'urgent');
+          if (sent.ok) continue;
+          // Under-claims on failure, the same safe direction the mute takes: the next
+          // reconcile re-sends both. A refused `CLIP` after an acked `FILL` still renders
+          // nothing — that is why the FILL is the half that moves.
+          fitParked = false;
+          break;
+        }
+      }
+      next.push({
+        ...record,
+        held: muted,
+        ...(fitParked && { fill: parked.fill, clip: parked.clip }),
+      });
     }
 
     this.registerLiveLayers(itemId, next);

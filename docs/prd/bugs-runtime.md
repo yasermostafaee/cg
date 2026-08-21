@@ -4376,3 +4376,62 @@ skew, which is what would catch that rot.
 
 - **Cross-refs:** [[B-152]] (the same incident's other half), [[B-074]] (the build-time route
   coverage this is the run-time counterpart to).
+
+## [x] B-154 — a HELD live plate kept rendering: five feeds from the look you LEFT, tiled inside the look you switched TO ⟨priority: high — the wrong guests on air, from a switch that reported success⟩ — FIXED 2026-08-21 (session BM)
+
+**What.** A 6-box debate is on air. The operator switches to the SOLO look. §12.4 holds the five
+plates solo does not show — seated, muted, not punching — and the switch reports `ok`. **The five
+held feeds appear inside the solo box**, each in the cell it occupied a moment ago, on top of the
+picture the operator actually wanted.
+
+**Why, and it is one sentence.** The hold muted the plate and stopped there. Its producer kept the
+`MIXER FILL`/`CLIP` it was given for the look it left, so it went on rendering into that cell — and
+a page's punched hole is transparent to the **whole band**, not to one layer. CasparCG composites
+the band bottom-up; the solo hole is the full raster; every held cell lies inside it.
+
+🔴 **THE PREMISE THAT WAS WRONG IS A SENTENCE, AND IT IS WHY THREE TEST SUITES MISSED THIS.**
+`live-plate-release.ts`'s header read _"the plate stops being VISIBLE because the page stops punching
+its hole; that is a different mutation on a different machine, and this module is deliberately about
+the seat alone."_ That is **true about the plate's own cell and false about the frame**. Because the
+sentence was believed, the phase-3 tests asserted the three axes it implies — a held plate keeps its
+LAYER, keeps its PRODUCER, loses its VOLUME — and **nobody ever asked what it RENDERS**. One
+regression test even pinned the defect in place, asserting that no `MIXER … FILL` is emitted for a
+held plate on the way back.
+
+⚠ **The predicate that would have caught it already existed and was never called.** `@cg/amcp-mock`
+exposes `layerRenderedRect(slot)` — the intersection of `FILL` and `CLIP`, or `null` when the layer
+renders nothing — and its own doc says why it exists: _"a test asserting only on `layerState().fill`
+cannot catch it."_ Every look test asserted on `clip`. The regression test now asks the mock's
+predicate instead of re-deriving one, which is golden rule 6 applied to a test.
+
+**Fixed by giving the HOLD a geometry.** A held seat's fill is PARKED — moved off the raster, its
+size kept — and the record stores what was sent, so the return trip's ordinary delta finds the
+geometry moved and re-emits the real fit. Recording the real fit while sending the parked one would
+have made coming back a silent no-op and left the box empty for good.
+
+🔴 **THE FILL IS THE HALF THAT MOVES, AND THAT IS THE DESIGN, NOT A COIN TOSS.** `mixerFit` emits
+`FILL` then `CLIP` on one connection and either can be refused. An off-raster fill renders nothing on
+`FILL` alone, so a refused `CLIP` after an acked `FILL` still renders nothing — **the partial send is
+safe by construction.** The mirror spelling (leave the fill, move the clip away) fails twice: a
+refused `CLIP` leaves the defect exactly as it was, and no in-raster rectangle is disjoint from a
+FULL-FRAME fill at all, so a plate held after a solo look would have nowhere to put the mask.
+
+⚠ **What is measured and what is not.** That a fill box moved out from under its clip window renders
+nothing at all IS measured (`design.md` §3's last row, on 2.5.0 and re-confirmed on the plant's
+2.3.2). That `MIXER FILL` accepts an origin outside `0..1` — an ordinary transform, and the basis of
+every animate-in — is **not separately measured on this plant**, and is filed for the hardware
+session rather than assumed silently.
+
+**Acceptance**
+
+- WHEN a look switch holds a plate THEN that layer renders NOTHING, not its previous cell
+- WHEN the look being entered punches a hole over a held plate's old cell THEN nothing of the held
+  feed appears in it
+- WHEN the look switches BACK THEN the plate's real geometry is re-emitted and it is on screen again
+- WHEN a held plate is held across a second switch THEN the park is not re-sent
+- WHEN a `MIXER` of the park is refused THEN the record does not claim it and the next reconcile
+  re-sends
+
+- **Cross-refs:** [[B-126]] (a replace is never a CLEAR-then-ADD — the sibling rule about what a
+  seat change may emit), [[B-145]] (the ledger records what was SENT, which is what makes the return
+  trip work), [[B-151]] (the other half of "a surface disagreed with air", from the preview side).

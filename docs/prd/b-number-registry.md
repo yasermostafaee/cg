@@ -992,10 +992,28 @@ forward reference written before the heading exists is exactly where the wrong n
 over `docs/prd/*.md` excluding `README.md` and this file: the highest `B-` heading was `B-150`, and
 `git grep "B-15[123]" -- docs` returned only the two "next free: `B-151`" POINTERS written by the
 previous session — no heading. `B-` stays contiguous `B-001` … `B-153`, **no gaps**.
-**Next free: `B-154`.**
+**Next free: `B-154`.** — CLAIMED, see the section below.
 
 ⚠ **The two `B-151` hits were pointers, not claims, and that distinction was checked rather than
 assumed.** The previous session's registry entry and handoff each say "next free: `B-151`", which a
 naive `grep -c` reports as the number being in use. The sweep that decides is the HEADING sweep;
 a plain occurrence count is not it. This is the same lesson the entry above records from the other
 direction — where a narrower grep missed two headings and nearly shipped a collision.
+
+## 2026-08-21 — one number claimed (`B-154`), and the pointer-vs-heading rule paid for itself again
+
+| Prefix | Claimed | Item                                                            | File                               |
+| ------ | ------- | --------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-154` | a HELD live plate kept rendering into the look it had just left | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the documented heading sweep, run immediately before the heading was written**
+over `docs/prd/*.md` excluding `README.md` and this file: `git grep "^## \[.\] B-15"` returned
+`B-150`…`B-153` and no `B-154`. `B-` stays contiguous `B-001` … `B-154`, **no gaps**.
+**Next free: `B-155`.**
+
+⚠ **The sweep for `B-154` ran while the number was ALREADY in this session's working tree** — in
+the fix's own code comments and test names, written before the heading. `git grep "B-154"` therefore
+returned six hits, none of them a claim. That is the same shape as the previous entry's two `B-151`
+pointers, met from a third direction: **the occurrence count is never the answer; the heading sweep
+is.** A session that renumbers on a raw count would have skipped a free number here and left a gap
+behind it.
