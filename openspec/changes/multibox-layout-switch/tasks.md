@@ -945,6 +945,15 @@ candidate shapes.
       `StackRetentionStore` · `assignment-freeze.integration.test.ts` (9) ·
       `e2e/assignment-freeze.spec.ts` (2).
 
+  > ✅ **Linux `gate:e2e` DISCHARGED for 7.16, 7.20, 7.21 and 7.22 (session BP):**
+  > <https://github.com/yasermostafaee/cg/actions/runs/32524325718> — head `a5e7b9eb`, the tip
+  > carrying every change of the session, `completed` + `success`, and the **`E2E (Playwright)` job
+  > RAN** (2026-08-21 20:35:38Z → 20:45:57Z), not skipped.
+  >
+  > ⚠ This does NOT discharge anything for **7.15**, which owes a PLANT measurement rather than a
+  > suite — see that item. A green Linux run says the cause is gone from the wire; it says nothing
+  > about what the plant renders.
+
 - [ ] 7.16b **WHERE THE TEMPLATE-ASSIGNMENT EDITOR SHOULD EVENTUALLY LIVE — direction recorded,
       NOT this session's work, and §1.1's freeze is what makes that safe.**
       Owner, 2026-08-21, correcting his own first answer: _"The Live sources modal is about

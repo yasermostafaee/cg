@@ -8,12 +8,13 @@
 
 ## 0. State
 
-| Fact              | Value                                                                                      |
-| ----------------- | ------------------------------------------------------------------------------------------ |
-| Tip read at start | `0ed9be81` — `HEAD == origin/dev`, tree clean, zero delta                                  |
-| **BO's owed e2e** | ✅ **DISCHARGED** — see §6                                                                 |
-| **Pushed**        | see §7 — verified by `git ls-remote origin dev`, never by an exit code                     |
-| Resolved          | `tasks.md` **7.16** (the assignment collapse). `B-155`'s CAUSE closed; the item stays OPEN |
+| Fact                   | Value                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| Tip read at start      | `0ed9be81` — `HEAD == origin/dev`, tree clean, zero delta                                  |
+| **BO's owed e2e**      | ✅ **DISCHARGED** — see §6                                                                 |
+| **Pushed**             | `a5e7b9eb` — verified by `git ls-remote origin dev`, never by an exit code                 |
+| **This session’s e2e** | ✅ **DISCHARGED** — see §6                                                                 |
+| Resolved               | `tasks.md` **7.16** (the assignment collapse). `B-155`'s CAUSE closed; the item stays OPEN |
 
 ## 1. The decision, in one sentence
 
@@ -148,14 +149,22 @@ page hard-reloaded against the current bridge.
 - **Mutation-checked, not assumed:** bypassing the pin reddens 3 of the 9 freeze tests (and named the
   wire lines); omitting `frozenAssignment` from `toRetained` reddens the retention guard naming the
   field.
-- The new E2E ran locally, 2/2. 🔴 **A Linux `gate:e2e` is OWED for THIS session** — UI, render and
-  bridge diff — and is discharged only by a COMPLETED run whose `E2E (Playwright)` job RAN. See §7.
+- The new E2E ran locally, 2/2.
+- ✅ **THIS session’s Linux `gate:e2e` — DISCHARGED.**
+  <https://github.com/yasermostafaee/cg/actions/runs/32524325718> — head `a5e7b9eb`, the tip
+  carrying every change of the session, `completed` + `success`, and the **`E2E (Playwright)` job
+  RAN** (2026-08-21 20:35:38Z → 20:45:57Z), not skipped. Also written beside `tasks.md` 7.16/7.20,
+  so the evidence outlives this file.
+  ⚠ It discharges NOTHING for `B-155`’s residual, which owes a PLANT measurement rather than a
+  suite. A green Linux run says the cause is gone from the wire; it says nothing whatever about
+  what the plant renders.
 
 ## 7. Flags for the owner
 
 1. **On-air / product source** — this changes what a live row resolves. That is the point, and it is
    the class that must never land silently.
-2. **The owed Linux `gate:e2e` for this session's tip** is undischarged at the time of writing.
+2. **The Linux `gate:e2e` for this session’s tip is DISCHARGED** — §6 carries the run URL. What is
+   still owed is the PLANT measurement behind `B-155`, which no CI run can supply.
 3. **No shared config changed.** `CLAUDE.md`, `turbo.json`, root `package.json` and the gate-hook are
    untouched. ⚠ **One candidate, deliberately NOT taken:** golden rule 9 makes `git grep` the sweep
    instrument, and §2's NUL finding is a case where a file can be invisible to `grep -r`/ripgrep
