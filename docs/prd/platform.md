@@ -1823,6 +1823,14 @@ warning that outlives its truth_.
 `packages/` and `tools/`. ⚠ **The Designer does NOT differ** — it was checked specifically, and its
 only extra exclusion is `src/generated`, unrelated.
 
+**Status update (2026-08-22, sessions BR + BS): the middle path (option 3) is underway,
+per-workspace.** `apps/runtime` includes `tests/**` in its typecheck since `a7924255` (session BR;
+113 errors, all fixed, four vacuous tests made real), and `tools/caspar-bridge` since `85e3c27e`
+(session BS; 56 errors, all fixed — via a separate `tsconfig.typecheck.json`, because that package's
+BUILD is `tsc -b` and its build config cannot include tests). The measured table above is the state
+at `1577c4b9` and stands as history. `apps/designer` and the remaining `packages/*` are still
+outside the guarantee, and whether they follow remains the owner's question below.
+
 **Acceptance:**
 
 - WHEN a test calls a typed function with arguments its signature forbids THEN the gate fails, rather
