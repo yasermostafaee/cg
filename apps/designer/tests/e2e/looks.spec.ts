@@ -20,6 +20,35 @@ import { expect, test } from './fixtures/designer.js';
 test.setTimeout(300_000);
 
 /**
+ * ⭐ **P-037 — where a handoff still goes.**
+ *
+ * The four stills below illustrate `docs/handoff/2026-08-20-session-bb.md` and are COMMITTED.
+ * Their bytes move a little every run (render nondeterminism), so writing them to their tracked
+ * paths unconditionally left an ordinary `pnpm test:e2e` with a dirty working tree.
+ *
+ * 🔴 The cost was never the dirt, it was the JUDGEMENT the dirt demanded: every run ended with a
+ * `git status` a human had to read and dismiss, and a tree that is EXPECTED to be dirty is exactly
+ * the state in which a real change gets staged by accident — which is what `P-035` was filed after.
+ *
+ * So the shot is ALWAYS taken: coverage is unchanged and a failure can still be looked at. It just
+ * lands under the already-ignored `test-results/` unless the run is explicitly asked to refresh the
+ * committed stills. Same spirit as `CG_GATE_HOOK_E2E` and `CG_ALLOW_STALE_E2E` — the behaviour with
+ * a lasting side effect is opt-in, and the default is quiet.
+ *
+ *     CG_HANDOFF_STILLS=1 pnpm --filter @cg/designer test:e2e looks
+ *
+ * Paths stay relative to the runner's cwd (`apps/designer`), the convention this file already used.
+ */
+const REFRESH_HANDOFF_STILLS = process.env['CG_HANDOFF_STILLS'] === '1';
+
+/** The tracked path the handoff doc links to when refreshing; an ignored scratch path otherwise. */
+function stillPath(name: string): string {
+  return REFRESH_HANDOFF_STILLS
+    ? `../../docs/handoff/img/${name}.png`
+    : `test-results/handoff/${name}.png`;
+}
+
+/**
  * 🔴 The 6-box grid in SCENE coordinates, WRITTEN through the Transform panel after each
  * plate is placed. The click position only creates the element; relying on it for the
  * final geometry made the spec viewport-dependent — on CI the fraction-derived clicks
@@ -92,7 +121,7 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
   }
   await app.addTextElement(at(0.5, 0.9));
   await app.deselect();
-  await app.page.screenshot({ path: '../../docs/handoff/img/bb-step3-sixbox-authoring.png' });
+  await app.page.screenshot({ path: stillPath('bb-step3-sixbox-authoring') });
 
   // ── look-2: the solo, its own sub-scene with its own geometry ─────────────
   await app.openComposition(homeName);
@@ -113,7 +142,7 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
   const scale = stageBox.width / 1920;
   expect(Math.abs(plateBox.x - (stageBox.x + 320 * scale))).toBeLessThan(2);
   await app.deselect();
-  await app.page.screenshot({ path: '../../docs/handoff/img/bb-step4-solo-authoring.png' });
+  await app.page.screenshot({ path: stillPath('bb-step4-solo-authoring') });
 
   // ── back home: the selector switches, and the canvas VISIBLY changes ──────
   await app.openComposition(homeName);
@@ -127,11 +156,11 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
 
   await picker.selectOption('look-1');
   await expect(visiblePlates).toHaveCount(6);
-  await app.page.screenshot({ path: '../../docs/handoff/img/bb-step5-switched-sixbox.png' });
+  await app.page.screenshot({ path: stillPath('bb-step5-switched-sixbox') });
 
   await picker.selectOption('look-2');
   await expect(visiblePlates).toHaveCount(1);
-  await app.page.screenshot({ path: '../../docs/handoff/img/bb-step5b-switched-solo.png' });
+  await app.page.screenshot({ path: stillPath('bb-step5b-switched-solo') });
 
   // What the screenshot cannot show: the 6-box plates are GONE from the render
   // (display:none up the instance chain), not merely covered — a covered plate still

@@ -2338,7 +2338,7 @@ looking for the missing one. That is why this outranks a feature.
   item prevents; `P-035` (the other guard filed the same day, same "enforce rather than remember"
   shape).
 
-## [ ] P-037 — `pnpm test:e2e` regenerates four COMMITTED handoff stills, so an ordinary run leaves the tree dirty ⟨priority: medium⟩
+## [~] P-037 — `pnpm test:e2e` regenerates four COMMITTED handoff stills, so an ordinary run leaves the tree dirty ⟨priority: medium⟩ — implemented: the opt-in, with a two-arm proof
 
 **What:** an ordinary `pnpm test:e2e` leaves `git status` CLEAN. The four stills a handoff document
 displays are written only when a run is explicitly asked for them; every other run writes its
@@ -2388,3 +2388,24 @@ skipped when unset) and is the precedent this item follows.
   the next clone — both trade a visible wart for an invisible one.
 - **Cross-refs:** `P-035` (never-stage guard — the accident this noise makes likelier); `P-036`
   (the other "the runner should enforce it, not the human remember it" guard).
+- **Shipped:** `apps/designer/tests/e2e/looks.spec.ts` only — a `REFRESH_HANDOFF_STILLS` flag read
+  from `CG_HANDOFF_STILLS` and a `stillPath()` helper. No product source touched, nothing deleted,
+  nothing newly gitignored. The default writes to `apps/designer/test-results/handoff/`, already
+  covered by `.gitignore:88`.
+- 🔴 **PROVEN IN TWO ARMS, because a "the tree is clean now" reading alone cannot tell a fix from a
+  screenshot that silently stopped being taken:**
+  1. **opt-in arm** — `CG_HANDOFF_STILLS=1 pnpm --filter @cg/designer exec playwright test looks`:
+     1 passed, and `git status` then showed **`bb-step3` and `bb-step4` MODIFIED**. That is the
+     positive control: it reproduces the wart on demand and proves the doc can still be
+     re-illustrated. Restored with `git checkout --`.
+  2. **default arm** — a full `pnpm test:e2e`: **269 passed, 12 skipped**, and `git status
+--porcelain` reported **nothing under `docs/handoff/img/`**; all four stills hash-identical to
+     `HEAD`; all four screenshots present in `apps/designer/test-results/handoff/`, which
+     `git check-ignore -v` resolves to `.gitignore:88`.
+- ⚠ **Only TWO of the four images moved in the opt-in arm** — `bb-step5` and `bb-step5b` came back
+  byte-identical that run. The nondeterminism is PARTIAL, so the dirty set varied run to run. That
+  is worse than uniform dirt, not better: a reader could not even form a stable expectation of what
+  "normal" looked like, which is exactly the judgement cost the **Why** describes.
+- **Not covered by `typecheck`:** `apps/designer`'s tsconfig `include` is `["src/**/*",
+"vite.config.ts"]`, so this file is outside the compile guarantee (`P-033`, still open). The
+  change is covered by `lint` (which does lint `tests/`, 0 errors) and by the run itself.
