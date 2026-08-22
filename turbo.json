@@ -30,7 +30,7 @@
     "lint": {
       "dependsOn": ["@cg/eslint-config#build"],
       "outputs": [],
-      "inputs": ["src/**", "tests/**", ".eslintrc*", "eslint.config.*", "package.json"]
+      "inputs": ["src/**", "tests/**", "bin/**", ".eslintrc*", "eslint.config.*", "package.json"]
     },
     "test": {
       "dependsOn": ["^build", "build"],
