@@ -114,6 +114,23 @@ describe('CommandBuilder — Live Source verbs (C-015 phase 6, task 6.1)', () =>
       );
     });
 
+    it('stream (C-025): the URL, quoted — byte-exact the command the owner proved by hand', () => {
+      // The owner ran `PLAY 1-<layer> "<url>"` on the plant and it played. One
+      // manual run, not a suite — recorded honestly in producerArgument's doc.
+      expect(
+        builder.playSource(slot, { kind: 'stream', url: 'rtmp://cdn.example/live/studio-1' }),
+      ).toBe('PLAY 1-10 "rtmp://cdn.example/live/studio-1"');
+    });
+
+    it('stream (C-025): quote() is the IDENTITY for every character a URL carries', () => {
+      // `?`, `&`, `=`, `:` and `/` are not in quote()'s escape set (`\`, `"`,
+      // LF, CR), so the wire text IS the URL, wrapped — the same property that
+      // made the media-field workaround produce the proven command.
+      const url = 'https://host:8080/live/playlist.m3u8?token=a1&expires=99';
+      expect(builder.sourceArgument({ kind: 'stream', url })).toBe(`"${url}"`);
+      expect(builder.playSource(slot, { kind: 'stream', url })).toBe(`PLAY 1-10 "${url}"`);
+    });
+
     it('every user-supplied value is quoted exactly once — no framing break', () => {
       const line = builder.playSource(slot, { kind: 'media', file: 'a"b\\c' });
       const body = line.slice('PLAY 1-10 "'.length, -1);

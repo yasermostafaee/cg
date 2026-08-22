@@ -87,6 +87,19 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   await dialog.getByLabel('Signal format for Studio A').selectOption('1080i5000');
   await expect(dialog.getByText('aspect: 16:9 (from the format)')).toBeVisible();
 
+  // C-025 — the FIFTH kind: an internet stream by URL. The kind is labelled as
+  // a feed, choosing it shows a URL field, a scheme outside the client's
+  // allowlist is refused BY NAME at the config boundary (the mock runs the
+  // bridge's own validator, so this refusal is the real station's), and an
+  // accepted URL reads back prefixed `stream` — a feed, distinguishable from a
+  // clip by a second operator reading the config.
+  await dialog.getByLabel('Producer kind for Studio A').selectOption('stream');
+  await expect(dialog.getByLabel('Stream URL for Studio A')).toBeVisible();
+  await dialog.getByLabel('Stream URL for Studio A').fill('ftp://server/feed.ts');
+  await expect(dialog.getByText(/accepted scheme/)).toBeVisible();
+  await dialog.getByLabel('Stream URL for Studio A').fill('srt://10.0.0.20:9000');
+  await expect(dialog.getByText('stream srt://10.0.0.20:9000')).toBeVisible();
+
   // ONE source, a fill/key DEVICE PAIR: the pair is a property of the
   // INSTALLATION, and no template ever names it (design.md §1a).
   await dialog.getByLabel('Producer kind for Studio A').selectOption('decklink');

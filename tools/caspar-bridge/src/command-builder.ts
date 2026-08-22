@@ -181,7 +181,7 @@ export class CommandBuilder {
    * time — with a guest's box black and nothing on screen saying why. This method
    * is the only place that union becomes wire text.
    *
-   * The four spellings, and how much each is worth:
+   * The five spellings, and how much each is worth:
    *
    *   `route`    — `route://<channel>[-<layer>]`. MEASURED on the plant's 2.3.2
    *                (design.md §0b): the form is accepted and does not run away. The
@@ -199,6 +199,13 @@ export class CommandBuilder {
    *                see design.md §12.1.
    *   `ndi`      — `NDI NAME "<source>"`. Same standing as `decklink`: no NDI source
    *                exists on this plant, and the NDI module is gated. C-021.
+   *   `stream`   — the URL alone, quoted, exactly as `media` is (C-025). ⭐ Its
+   *                standing DIFFERS from its neighbours and is stated honestly:
+   *                the owner ran `PLAY 1-<layer> "<url>"` BY HAND on the plant
+   *                and it PLAYED — one manual run, not a suite, and more than
+   *                `decklink`/`ndi` have ever had here. The scheme allowlist is
+   *                `validateSourceCatalog`'s (the config boundary); by the time a
+   *                URL reaches this method it has already been accepted there.
    *
    * `keyDevice` is deliberately NOT read here. A fill+key pair is TWO layers, so it
    * is a decision about how many producers to seat and where — the caller's, from
@@ -326,9 +333,11 @@ function numberArg(n: number): string {
  * Every user-supplied value goes through `quote()` EXACTLY ONCE, per this module's
  * contract. Note which values are quoted and which are not, because it is not
  * uniform and the difference is the server's, not ours: a route address, a media
- * file name and an NDI source NAME are single arguments and are quoted; the
- * `DECKLINK` / `DEVICE` / `NAME` keywords and the device INDEX are AMCP syntax and
- * would be refused if quoted.
+ * file name, a stream URL and an NDI source NAME are single arguments and are
+ * quoted; the `DECKLINK` / `DEVICE` / `NAME` keywords and the device INDEX are
+ * AMCP syntax and would be refused if quoted. For a URL, `quote()` is the
+ * IDENTITY wrap: its escape set (`\`, `"`, LF, CR) contains no character a URL
+ * carries, which is why the media-field workaround produced the proven command.
  *
  * The device index is emitted through `String()` on a value the schema has already
  * constrained to a positive integer — there is no path by which an operator string
@@ -352,6 +361,8 @@ function producerArgument(producer: SourceProducer): string {
       return `NDI NAME ${quote(producer.source)}`;
     case 'media':
       return quote(producer.file);
+    case 'stream':
+      return quote(producer.url);
   }
 }
 

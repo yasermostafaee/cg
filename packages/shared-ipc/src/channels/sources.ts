@@ -159,6 +159,43 @@ export function aspectForFormat(format: LiveSourceFormat): number | null {
 }
 
 /**
+ * C-025 — the URL schemes a `stream` producer's URL may use.
+ *
+ * 🔴 **THIS LIST STATES WHAT THE CLIENT REQUIRES THE PRODUCT TO ACCEPT — nothing
+ * more.** It is NOT a statement about what CasparCG or its linked ffmpeg can
+ * play: no source of truth for that is available to this project, and a
+ * hand-written list posing as one would be a guard whose name lies (the class
+ * session BS spent a session auditing out). WIDENING the list is therefore a
+ * product decision to take with the client, never a "discovery" that some other
+ * scheme happens to work on one install.
+ *
+ * The rule this list feeds is enforced in {@link validateSourceCatalog} — once.
+ */
+export const STREAM_URL_SCHEMES = [
+  'http',
+  'https',
+  'rtmp',
+  'rtmps',
+  'rtsp',
+  'srt',
+  'udp',
+  'rtp',
+  'mms',
+] as const;
+
+/**
+ * The scheme of a stream URL, lowercased — or `null` when the text carries no
+ * `scheme://` head at all. Case-insensitive per RFC 3986 §3.1 (`RTMP://` is
+ * `rtmp://`); the `://` is required because every form the allowlist covers is
+ * written that way, and a scheme-less `host:port` has no scheme to judge.
+ */
+function streamUrlScheme(url: string): string | null {
+  const match = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//.exec(url.trim());
+  const scheme = match?.[1];
+  return scheme === undefined ? null : scheme.toLowerCase();
+}
+
+/**
  * The concrete producer a source resolves to — a DISCRIMINATED UNION on `kind`,
  * never a free string, so an unreachable producer form is a parse error at the
  * boundary rather than an AMCP `400` at take time.
@@ -200,6 +237,22 @@ export const SourceProducerSchema = z.discriminatedUnion('kind', [
     kind: z.literal('media'),
     /** A clip in CasparCG's media folder — the one producer that needs no signal. */
     file: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('stream'),
+    /**
+     * C-025 — an internet stream, played by URL: `PLAY <ch>-<layer> "<url>"`,
+     * the command the owner proved by hand on the plant. Deliberately its OWN
+     * arm and not an extension of `media`: that is "the one producer that needs
+     * no signal", and a stream is its opposite — it needs a signal and can drop.
+     *
+     * The scheme must be one of {@link STREAM_URL_SCHEMES}, and that rule is
+     * spelled ONCE, in {@link validateSourceCatalog} — deliberately NOT here as
+     * a zod refine. A hand-written config file is a legal way to configure a
+     * station, and at LOAD a zod failure is an unusable-file boot error, while
+     * the validator refuses with a NAMED code an operator can act on.
+     */
+    url: z.string().min(1),
   }),
 ]);
 export type SourceProducer = z.infer<typeof SourceProducerSchema>;
@@ -397,12 +450,18 @@ export function nextSourceId(existing: readonly string[]): string {
  *   disjoint from the operator's candidate bank AND from the playout system's
  *   reserved layers. Checked at LOAD and at every CHANGE; the message names
  *   BOTH ranges so the operator can see which side to move.
+ * - `stream-scheme-not-allowed` — a `stream` URL whose scheme is outside
+ *   {@link STREAM_URL_SCHEMES}, or absent. "Not allowed", not "unsupported":
+ *   the list states what the product ACCEPTS (the client's requirement), and
+ *   refusing here is what keeps a mistyped URL from becoming an AMCP failure
+ *   at take, on air (C-025).
  */
 export const SOURCES_SET_CONFIG_REASONS = [
   'duplicate-id',
   'duplicate-name',
   'overlaps-fixed-bank',
   'overlaps-reserved',
+  'stream-scheme-not-allowed',
 ] as const;
 export type SourcesSetConfigReason = (typeof SOURCES_SET_CONFIG_REASONS)[number];
 
@@ -528,6 +587,27 @@ export function validateSourceCatalog(
       );
     }
     seenNames.add(key);
+
+    // C-025 — the ONE spelling of the stream scheme rule. Reached at LOAD and at
+    // every CHANGE, by the bridge and by the offline mock, because they all call
+    // this function; a second copy anywhere is the drift this file warns about.
+    if (source.producer.kind === 'stream') {
+      const scheme = streamUrlScheme(source.producer.url);
+      if (scheme === null) {
+        throw new SourceCatalogConfigError(
+          'stream-scheme-not-allowed',
+          `the stream URL for "${source.name}" has no scheme — write it as scheme://…, where ` +
+            `the scheme is one of: ${STREAM_URL_SCHEMES.join(', ')}`,
+        );
+      }
+      if (!(STREAM_URL_SCHEMES as readonly string[]).includes(scheme)) {
+        throw new SourceCatalogConfigError(
+          'stream-scheme-not-allowed',
+          `the stream URL for "${source.name}" uses the scheme "${scheme}", which is not one ` +
+            `this product accepts — accepted: ${STREAM_URL_SCHEMES.join(', ')}`,
+        );
+      }
+    }
   }
 
   const range = value.layerRange;

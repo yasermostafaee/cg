@@ -137,9 +137,16 @@ export interface LivePlateRelease {
  * Can a producer of this form be HELD — left seated, muted and idle — across a look that
  * does not show it?
  *
- * Continuous live inputs (`route`, `decklink`, `ndi`) can: they carry no timeline, so the
- * picture on return is whatever the feed is showing then, which is exactly what it would
- * have been had the plate never left. A `media` clip cannot, for the reason above.
+ * Continuous live inputs (`route`, `decklink`, `ndi`, `stream`) can: they carry no
+ * timeline, so the picture on return is whatever the feed is showing then, which is exactly
+ * what it would have been had the plate never left. A `media` clip cannot, for the reason
+ * above.
+ *
+ * ⚠ `stream` (C-025) is answered as a continuous input DELIBERATELY: a stream has no local
+ * timeline to run out, which is the one thing this predicate asks. That a held stream can
+ * DROP or STALL meanwhile is a different axis — B-086's works-or-link-down model, with
+ * stall detection recorded out of scope by C-025 v1 — and folding it in here would make
+ * this name answer a question it does not test.
  *
  * ⚠ Written as an EXHAUSTIVE switch rather than `kind !== 'media'` on purpose: a producer
  * form added later gets a compile error here — the one place the question is asked — rather
@@ -150,6 +157,7 @@ export function canHoldLivePlate(producer: SourceProducer): boolean {
     case 'route':
     case 'decklink':
     case 'ndi':
+    case 'stream':
       return true;
     case 'media':
       return false;

@@ -39,6 +39,8 @@ const CONFIG_MESSAGES = {
     'The live source layer band would overlap the operator’s candidate layers — the two must stay disjoint.',
   'overlaps-reserved':
     'The live source layer band would overlap the reserved playout range — the two must stay disjoint.',
+  'stream-scheme-not-allowed':
+    'That stream URL doesn’t start with an accepted scheme — use one of http, https, rtmp, rtmps, rtsp, srt, udp, rtp or mms.',
 } satisfies Record<SourcesSetConfigReason, string>;
 
 const ASSIGNMENT_MESSAGES = {

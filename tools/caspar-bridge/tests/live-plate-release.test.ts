@@ -16,12 +16,18 @@ const ROUTE: SourceProducer = { kind: 'route', channel: 2 };
 const CLIP: SourceProducer = { kind: 'media', file: 'sting.mov' };
 const DECK: SourceProducer = { kind: 'decklink', device: 1 };
 const NDI: SourceProducer = { kind: 'ndi', source: 'STUDIO (Cam 1)' };
+const STREAM: SourceProducer = { kind: 'stream', url: 'srt://10.0.0.20:9000' };
 
 describe('canHoldLivePlate', () => {
   it('holds every CONTINUOUS live input — they carry no timeline to run out', () => {
     expect(canHoldLivePlate(ROUTE)).toBe(true);
     expect(canHoldLivePlate(DECK)).toBe(true);
     expect(canHoldLivePlate(NDI)).toBe(true);
+    // C-025 — a stream is a continuous signal too: the picture on return is the
+    // feed's NOW, which is what it would have been had the plate never left. The
+    // hold assumption is media's failure (a timeline runs out), not this arm's;
+    // that a held stream can DROP meanwhile is B-086's axis and out of scope.
+    expect(canHoldLivePlate(STREAM)).toBe(true);
   });
 
   it('🔴 refuses to hold a MEDIA clip — held, it runs to its end and comes back black', () => {

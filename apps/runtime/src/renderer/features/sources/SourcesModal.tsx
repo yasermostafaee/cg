@@ -110,13 +110,27 @@ const styles = {
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: '0.5rem 0 0' },
 } as const;
 
-/** The producer kinds, in the order an operator is most likely to need them. */
-const PRODUCER_KINDS: readonly SourceProducer['kind'][] = ['route', 'decklink', 'ndi', 'media'];
+/**
+ * The producer kinds, in the order an operator is most likely to need them.
+ *
+ * `stream` (C-025) sits WITH the signal-bearing producers, after them because it
+ * is the newest and least established; `media` stays LAST because it is the odd
+ * one out — "the one producer that needs no signal" in a list of lives — and an
+ * operator scanning for a feed should not meet the clip in the middle of them.
+ */
+const PRODUCER_KINDS: readonly SourceProducer['kind'][] = [
+  'route',
+  'decklink',
+  'ndi',
+  'stream',
+  'media',
+];
 
 const KIND_LABEL: Record<SourceProducer['kind'], string> = {
   route: 'Route from a channel',
   decklink: 'Decklink input',
   ndi: 'NDI source',
+  stream: 'Internet stream (URL)',
   media: 'Media file',
 };
 
@@ -136,6 +150,11 @@ function emptyProducer(kind: SourceProducer['kind']): SourceProducer {
       return { kind: 'decklink', device: 1 };
     case 'ndi':
       return { kind: 'ndi', source: 'NDI SOURCE' };
+    case 'stream':
+      // The default must PASS the scheme allowlist: every edit round-trips the
+      // bridge, so a default the validator refuses would refuse the kind switch
+      // itself and the operator could never reach the URL field to fix it.
+      return { kind: 'stream', url: 'rtmp://server/live/stream' };
     case 'media':
       return { kind: 'media', file: 'AMB' };
   }
@@ -154,6 +173,10 @@ function describeProducer(p: SourceProducer): string {
         : `DECKLINK DEVICE ${String(p.device)} + KEY ${String(p.keyDevice)}`;
     case 'ndi':
       return `NDI ${p.source}`;
+    case 'stream':
+      // Prefixed so a second operator reading the config can tell a FEED from a
+      // clip at a glance — the C-025 finding was precisely that they could not.
+      return `stream ${p.url}`;
     case 'media':
       return `media ${p.file}`;
   }
@@ -608,6 +631,21 @@ function ProducerFields({
             ariaLabel={`NDI source name for ${source.name}`}
             placeholder="STUDIO (CAM 2)"
             onCommit={(next) => onChange({ ...p, source: next })}
+          />
+        </div>
+      );
+    case 'stream':
+      // Committed like every text field here — the bridge validates and is
+      // authoritative, so a scheme outside the allowlist comes back as the
+      // NAMED refusal in the message region rather than being silently kept.
+      return (
+        <div style={styles.row}>
+          <RequiredText
+            value={p.url}
+            label="Stream URL"
+            ariaLabel={`Stream URL for ${source.name}`}
+            placeholder="rtmp://server/live/stream"
+            onCommit={(next) => onChange({ ...p, url: next })}
           />
         </div>
       );

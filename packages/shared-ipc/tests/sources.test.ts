@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   aspectForFormat,
   assignedSourceId,
+  STREAM_URL_SCHEMES,
   checkSourceAssignments,
   checkSourceCatalog,
   EMPTY_SOURCE_ASSIGNMENTS,
@@ -417,8 +418,113 @@ describe('deleting a source that is in use — cascades, never dangles', () => {
   });
 });
 
+describe('the STREAM arm — C-025, the URL the owner proved by hand', () => {
+  const streamSource = (url: string) => ({
+    id: 'src-str',
+    name: 'Web feed',
+    producer: { kind: 'stream' as const, url },
+  });
+  const NO_LAYERS = { fixedBank: null, reservedLayers: [] } as const;
+
+  it('parses at the union — the fifth arm, URL required non-empty', () => {
+    expect(
+      SourceProducerSchema.safeParse({ kind: 'stream', url: 'rtmp://cdn/live/x' }).success,
+    ).toBe(true);
+    expect(SourceProducerSchema.safeParse({ kind: 'stream', url: '' }).success).toBe(false);
+    expect(SourceProducerSchema.safeParse({ kind: 'stream' }).success).toBe(false);
+  });
+
+  it('the allowlist is EXACTLY the nine the client requires, and each is accepted', () => {
+    // The list is the client's requirement, not a claim about CasparCG/ffmpeg —
+    // its docstring says so, and this pins the set against silent widening.
+    expect([...STREAM_URL_SCHEMES]).toEqual([
+      'http',
+      'https',
+      'rtmp',
+      'rtmps',
+      'rtsp',
+      'srt',
+      'udp',
+      'rtp',
+      'mms',
+    ]);
+    for (const scheme of STREAM_URL_SCHEMES) {
+      expect(
+        checkSourceCatalog(
+          { sources: [streamSource(`${scheme}://10.0.0.20:9000/live`)] },
+          NO_LAYERS,
+        ),
+      ).toEqual({ ok: true });
+    }
+  });
+
+  it('scheme CASE is not a refusal — RTMP:// is rtmp:// (RFC 3986 §3.1)', () => {
+    expect(checkSourceCatalog({ sources: [streamSource('RTMP://cdn/live/x')] }, NO_LAYERS)).toEqual(
+      { ok: true },
+    );
+  });
+
+  it('refuses a scheme outside the nine, with the NAMED code — at the boundary, never at take', () => {
+    const verdict = checkSourceCatalog({ sources: [streamSource('ftp://server/x.ts')] }, NO_LAYERS);
+    expect(verdict).toMatchObject({ ok: false, reason: 'stream-scheme-not-allowed' });
+    // The message names the SPECIFICS — the source and the scheme — per house rule.
+    expect(verdict.ok ? '' : verdict.message).toContain('ftp');
+    expect(verdict.ok ? '' : verdict.message).toContain('Web feed');
+  });
+
+  it('refuses a URL with no scheme at all — malformed goes through the same door', () => {
+    for (const url of ['239.0.0.1:1234', 'server/live/stream', 'rtmp:cdn/live']) {
+      expect(checkSourceCatalog({ sources: [streamSource(url)] }, NO_LAYERS)).toMatchObject({
+        ok: false,
+        reason: 'stream-scheme-not-allowed',
+      });
+    }
+  });
+
+  it('the refusal is the SAME DOOR duplicate-name goes through — a coded SourceCatalogConfigError', () => {
+    // At LOAD the store catches this class and refuses the file with the code;
+    // at CHANGE the wire answers it as { ok: false, reason }. One spelling, in
+    // validateSourceCatalog — deliberately NOT a zod refine, so a hand-written
+    // config gets a NAMED refusal rather than an unusable-file boot error.
+    expect(() => validateSourceCatalog({ sources: [streamSource('ftp://x')] }, NO_LAYERS)).toThrow(
+      SourceCatalogConfigError,
+    );
+  });
+
+  it('C-025 §1.4 — a stream states NO aspect unless told: explicit aspect, else null (AUTO’s branch)', () => {
+    // Pinned so a later session does not "fix" this into a required field: a
+    // stream usually states no format, and that falls through sourceAspect to
+    // the explicit aspect and then to null — exactly where AUTO lands.
+    expect(sourceAspect({ ...streamSource('srt://10.0.0.20:9000'), aspect: 16 / 9 })).toBeCloseTo(
+      16 / 9,
+      10,
+    );
+    expect(sourceAspect(streamSource('srt://10.0.0.20:9000'))).toBeNull();
+  });
+
+  it('the MEDIA arm is NOT narrowed — a URL typed into it still parses and still passes', () => {
+    // The pre-C-025 workaround (a URL in "Media file") keeps working: the gap
+    // was expression, not capability, and closing it must not break the bridge
+    // configs that used the workaround.
+    expect(
+      checkSourceCatalog(
+        {
+          sources: [
+            {
+              id: 'src-m',
+              name: 'Old feed',
+              producer: { kind: 'media', file: 'https://example.com/live.m3u8' },
+            },
+          ],
+        },
+        NO_LAYERS,
+      ),
+    ).toEqual({ ok: true });
+  });
+});
+
 describe('the refusal codes are ONE definition', () => {
-  it('names the four the catalog can raise and the two the assignments can', () => {
+  it('names the five the catalog can raise and the two the assignments can', () => {
     // The stores DERIVE their error types from these arrays. A code added on one
     // side and not the other is exactly the drift the shared const prevents.
     expect([...SOURCES_SET_CONFIG_REASONS]).toEqual([
@@ -426,6 +532,7 @@ describe('the refusal codes are ONE definition', () => {
       'duplicate-name',
       'overlaps-fixed-bank',
       'overlaps-reserved',
+      'stream-scheme-not-allowed',
     ]);
     expect([...SOURCES_SET_ASSIGNMENTS_REASONS]).toEqual(['duplicate-plate', 'unknown-source']);
   });
