@@ -80,7 +80,7 @@ describe('MockRuntime fixed-bank parity (S12)', () => {
     const load = (
       layer: number,
       itemId: string,
-    ): Promise<{ accepted: boolean; errorCode?: string }> =>
+    ): Promise<{ accepted: boolean; errorCode?: string | undefined }> =>
       bridge.fixedLayers.load({
         channel: 1,
         layer,

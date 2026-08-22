@@ -51,14 +51,14 @@ function itemWith(status: StackItemState['status'] = 'on-air'): StackItemState {
 /** The slice of `window.cg` these panels touch. */
 function stubBridge(over: Record<string, unknown> = {}): void {
   const stub = {
-    link: {
-      status: () => 'live',
-      onStatusChanged: () => () => undefined,
-      resyncing: () => false,
-      onResyncingChanged: () => () => undefined,
-    },
     // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
     // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
+    //
+    // ⚠ SESSION BR — a SECOND `link` key sat above this one, with `status: () => 'live'`.
+    // The later key wins in an object literal, so the first was dead and this one is what
+    // every spec in the file has actually been running against. Removing the dead copy is
+    // behaviour-identical; leaving two keys with DIFFERENT values would not have stayed that
+    // way.
     link: {
       status: () => linkFor('both-up'),
       onStatusChanged: () => () => undefined,

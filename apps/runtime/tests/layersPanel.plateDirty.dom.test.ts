@@ -68,8 +68,14 @@ const TEMPLATE: TemplateInfo = {
   fields: [],
   liveSources: {
     resolution: { width: 1920, height: 1080 },
+    defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
     sources: [
-      { elementId: 'el-1', sourceId: PLATE, rect: { x: 0, y: 0, width: 960, height: 540 } },
+      {
+        elementId: 'el-1',
+        sourceId: PLATE,
+        rect: { x: 0, y: 0, width: 960, height: 540 },
+        dynamic: false,
+      },
     ],
   },
 };
@@ -168,7 +174,9 @@ async function renderPanel(): Promise<HTMLDivElement> {
             inspectorPx: 320,
             focus: 'none' as const,
             narrow: false,
+            monitorPx: 220,
             setInspectorPx: () => undefined,
+            setMonitorPx: () => undefined,
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,

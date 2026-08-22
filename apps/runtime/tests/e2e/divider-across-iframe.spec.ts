@@ -142,7 +142,7 @@ test('a drag released over the PVW frame ends completely and leaves no global st
   // point to an IFRAME before relying on a release there to mean anything.
   const tagAtRelease = await page.evaluate(
     ([px, py]) => document.elementFromPoint(px, py)?.tagName ?? 'NONE',
-    [overX, overY],
+    [overX, overY] as const,
   );
   expect(tagAtRelease, 'the release point must actually be over an iframe').toBe('IFRAME');
 
@@ -260,7 +260,7 @@ test('the same drag by TOUCH ends completely — one code path for mouse, touch 
       over.dispatchEvent(new PointerEvent('pointermove', { ...base, clientX: sx, clientY: fy }));
       over.dispatchEvent(new PointerEvent('pointerup', { ...base, clientX: sx, clientY: fy }));
     },
-    [x, startY, overFrameY],
+    [x, startY, overFrameY] as const,
   );
 
   await expect(divider, 'the touch drag must have ended').not.toHaveClass(/is-dragging/);

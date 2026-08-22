@@ -34,8 +34,8 @@ const NESTED_TEMPLATE: TemplateInfo = {
       compositionId: 'comp-title-card',
       aggregate: {
         fields: [
-          { id: 'name', type: 'text', label: 'Name', default: 'نام' },
-          { id: 'role', type: 'text', label: 'Role', default: 'سمت' },
+          { id: 'name', type: 'text', label: 'Name', required: false, default: 'نام' },
+          { id: 'role', type: 'text', label: 'Role', required: false, default: 'سمت' },
         ],
         groups: [],
       },

@@ -183,7 +183,7 @@ describe('B-153 — the bridge is asked what it can do, at connect', () => {
       port: 0,
       connection: {
         servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
-        strategy: 'single',
+        strategy: 'mirror-sync',
         autoFailoverEnabled: false,
       },
     });

@@ -51,7 +51,6 @@ const BANK: FixedLayerBank = {
   channel: 1,
   start: 70,
   count: 3,
-  visible: [70, 71, 72],
   aliases: {},
 };
 
@@ -140,7 +139,9 @@ async function renderPanel(reach: Reachability): Promise<HTMLDivElement> {
             inspectorPx: 320,
             focus: 'none' as const,
             narrow: false,
+            monitorPx: 220,
             setInspectorPx: () => undefined,
+            setMonitorPx: () => undefined,
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,

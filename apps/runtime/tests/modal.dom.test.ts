@@ -38,11 +38,12 @@ async function renderModal(onClose: () => void): Promise<void> {
           {
             title: 'Remove all items?',
             onClose,
-            footer: createElement(
-              Button,
-              { variant: 'ghost', onClick: onClose, key: 'cancel' },
-              'Cancel',
-            ),
+            footer: createElement(Button, {
+              variant: 'ghost',
+              onClick: onClose,
+              key: 'cancel',
+              children: 'Cancel',
+            }),
           },
           'This clears anything on air.',
         ),

@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import type { StackItemState, TemplateInfo } from '@cg/shared-schema';
+import type { StackItemState } from '@cg/shared-schema';
+import type { TemplateInfo } from '@cg/shared-ipc';
 import { createMockBridge } from '../src/platform/createRuntimeBridge.js';
 import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
 import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
@@ -112,7 +113,10 @@ const itemOf = (items: readonly StackItemState[], id = 'item-1'): StackItemState
 
 it('🔴 §3c — a per-look input SURVIVES the UPDATE: the panel reads back what it sent', async () => {
   const { cg, latest } = boot();
-  await cg.templates.import({ template: TEMPLATE });
+  await cg.templates.import({
+    template: TEMPLATE,
+    html: '<!doctype html><html><body>debate</body></html>',
+  });
   await cg.stack.load({ itemId: 'item-1', templateId: 'debate', fields: { title: 'before' } });
 
   // 1. THE PANEL stages an edit, through the real store.
@@ -152,7 +156,10 @@ it('§3c — a SECOND update does not lose the first look bindings', async () =>
     a delta payload would pass the test above and fail this one.
   */
   const { cg, latest } = boot();
-  await cg.templates.import({ template: TEMPLATE });
+  await cg.templates.import({
+    template: TEMPLATE,
+    html: '<!doctype html><html><body>debate</body></html>',
+  });
   await cg.stack.load({ itemId: 'item-1', templateId: 'debate', fields: {} });
 
   stageLookBinding('item-1', 'solo', 'l-1', 'studio-3');
@@ -169,7 +176,10 @@ it('§3c — a SECOND update does not lose the first look bindings', async () =>
 
 it('§3c — staging BLANK removes the binding, which is how a composition is undone', async () => {
   const { cg, latest } = boot();
-  await cg.templates.import({ template: TEMPLATE });
+  await cg.templates.import({
+    template: TEMPLATE,
+    html: '<!doctype html><html><body>debate</body></html>',
+  });
   await cg.stack.load({ itemId: 'item-1', templateId: 'debate', fields: {} });
 
   stageLookBinding('item-1', 'solo', 'l-1', 'studio-3');

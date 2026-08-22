@@ -102,7 +102,7 @@ function dragSlider(el: HTMLInputElement | undefined, percent: number): void {
  * release does — the fidelity gap is in the event OBJECT, not in the path.
  */
 function releaseSlider(el: HTMLInputElement | undefined): void {
-  const Ctor = (globalThis as { PointerEvent?: typeof Event }).PointerEvent ?? Event;
+  const Ctor: new (type: string, init?: EventInit) => Event = globalThis.PointerEvent ?? Event;
   el?.dispatchEvent(new Ctor('pointerup', { bubbles: true }));
 }
 

@@ -40,14 +40,14 @@ const inlineScript = (() => {
   const match = /<script>([\s\S]*?)<\/script>/.exec(html);
   if (match === null)
     throw new Error('no inline <script> in index.html — the splash clock is gone');
-  return match[1];
+  return match[1] as string;
 })();
 
 /** The document body with both `<script>` blocks stripped — the splash's markup. */
 const bodyMarkup = (() => {
   const match = /<body>([\s\S]*)<\/body>/.exec(html);
   if (match === null) throw new Error('no <body> in index.html');
-  return match[1].replace(/<script[\s\S]*?<\/script>/g, '');
+  return (match[1] as string).replace(/<script[\s\S]*?<\/script>/g, '');
 })();
 
 /** A numeric `var NAME = 123;` from the inline script. */

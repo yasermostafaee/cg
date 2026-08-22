@@ -454,7 +454,6 @@ async function buildVcgWithLiveSource(
         id: 'comp-box',
         name: 'box',
         resolution: { width: 960, height: 540 },
-        frameRate: 50,
         frameRange: { in: 0, out: 50 },
         editorBackdrop: 'transparent',
         layers: [

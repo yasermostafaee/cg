@@ -53,7 +53,6 @@ function scopedExportOf(starterScene: Scene): Scene {
     ...(entry.activeRange !== undefined ? { activeRange: entry.activeRange } : {}),
     ...(entry.lifecycle !== undefined ? { lifecycle: entry.lifecycle } : {}),
     ...(entry.playout !== undefined ? { playout: entry.playout } : {}),
-    background: entry.background,
     layers: entry.layers,
     fields: entry.fields ?? [],
     bindings: entry.bindings ?? [],

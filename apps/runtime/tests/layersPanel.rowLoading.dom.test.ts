@@ -58,7 +58,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, visible: [70, 71], aliases: {} };
+const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, aliases: {} };
 
 /** Layer 70 is BOUND to an item; layer 71 genuinely carries nothing. */
 const SLOTS: FixedSlotState[] = [
@@ -176,7 +176,9 @@ async function renderPanel(): Promise<HTMLDivElement> {
             inspectorPx: 320,
             focus: 'none' as const,
             narrow: false,
+            monitorPx: 220,
             setInspectorPx: () => undefined,
+            setMonitorPx: () => undefined,
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,

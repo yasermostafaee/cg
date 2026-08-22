@@ -1,7 +1,8 @@
 import * as dgram from 'node:dgram';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type { ConnectionConfig, FixedLayerBank, StackItemState } from '@cg/shared-ipc';
+import type { ConnectionConfig, FixedLayerBank } from '@cg/shared-ipc';
+import type { StackItemState } from '@cg/shared-schema';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures/runtime.js';
 
@@ -35,7 +36,6 @@ const BANK: FixedLayerBank = {
   channel: 1,
   start: 70,
   count: 4,
-  visible: [70, 71, 72, 73],
   aliases: {},
 };
 
@@ -358,7 +358,7 @@ test.describe('retention carries the row state (B-107 / B-109 / B-108)', () => {
     bridge = await createBridge({
       port,
       connection: connection(mock?.amcpPort ?? 0, oscPort),
-      fixedLayers: { ...BANK, count: 2, visible: [70, 71] },
+      fixedLayers: { ...BANK, count: 2 },
       reservedLayers: { ranges: [{ from: 72, to: 73 }] },
     });
 

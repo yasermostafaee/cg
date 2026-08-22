@@ -47,7 +47,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, visible: [70, 71], aliases: {} };
+const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, aliases: {} };
 const SLOTS: FixedSlotState[] = [
   { channel: 1, layer: 70, observed: { kind: 'empty' }, binding: null },
   { channel: 1, layer: 71, observed: { kind: 'empty' }, binding: null },
@@ -149,7 +149,9 @@ async function renderPanel(): Promise<HTMLDivElement> {
             inspectorPx: 320,
             focus: 'none' as const,
             narrow: false,
+            monitorPx: 220,
             setInspectorPx: () => undefined,
+            setMonitorPx: () => undefined,
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,

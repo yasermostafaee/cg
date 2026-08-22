@@ -83,6 +83,8 @@ const noop = (): Promise<{ accepted: boolean }> => Promise.resolve({ accepted: t
  */
 function row(item: StackItemState): ReturnType<typeof createElement> {
   return createElement(LayerRow, {
+    displayPosition: 1,
+    rehearsing: false,
     slot: {
       channel: 1,
       layer: 70,

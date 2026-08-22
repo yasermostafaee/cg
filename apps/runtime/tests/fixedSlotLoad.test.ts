@@ -67,7 +67,7 @@ describe('the fixed row’s one-action import+load chain', () => {
   it('imports into the shared library, then loads onto the EXACT slot', async () => {
     const bridge = fakeBridge();
     const bytes = await buildValidVcg('tpl-fixed-chain');
-    const file = new File([bytes], 'clock.vcg');
+    const file = new File([new Uint8Array(bytes)], 'clock.vcg');
 
     const result = await importAndLoadOntoFixedSlot(SLOT, () => Promise.resolve(file));
 

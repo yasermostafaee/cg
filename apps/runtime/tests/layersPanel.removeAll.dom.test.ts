@@ -50,7 +50,6 @@ function stubBridge(
       resyncing: () => false,
       onResyncingChanged: () => () => undefined,
     },
-    connections: connectionsStub(reach),
     // R-004 — the panel joins each row against the registry to label its template.
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     // R-028 — the merged panel also reads the declared layers and the playout tab.
@@ -110,7 +109,9 @@ async function renderPanel(): Promise<HTMLDivElement> {
             inspectorPx: 320,
             focus: 'none' as const,
             narrow: false,
+            monitorPx: 220,
             setInspectorPx: () => undefined,
+            setMonitorPx: () => undefined,
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,

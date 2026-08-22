@@ -1,11 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryWorkspace } from '@cg/storage';
-import {
-  parseWsFrame,
-  serializeWsFrame,
-  type StackItemState,
-  type TemplateInfo,
-} from '@cg/shared-ipc';
+import type { StackItemState } from '@cg/shared-schema';
+import { parseWsFrame, serializeWsFrame, type TemplateInfo } from '@cg/shared-ipc';
 import { LibraryStore } from '../src/platform/library/LibraryStore.js';
 import {
   BridgeDisconnectedError,

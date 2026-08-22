@@ -15,8 +15,8 @@ function parseRootVars(css: string): Record<string, string> {
   const root = /:root\s*\{([\s\S]*?)\}/.exec(css);
   if (root === null) throw new Error('no :root block in controls.css');
   const out: Record<string, string> = {};
-  for (const m of root[1].matchAll(/(--r-[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
-    out[m[1]] = m[2].trim();
+  for (const m of (root[1] as string).matchAll(/(--r-[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+    out[m[1] as string] = (m[2] as string).trim();
   }
   return out;
 }

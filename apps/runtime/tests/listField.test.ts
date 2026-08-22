@@ -100,7 +100,7 @@ describe('multi-line item text is never flattened (2026-07-07 live finding)', ()
     // The JSON layer escapes the newline (\n, two chars) and restores it byte-exact —
     // the payload never carries a flattened/joined string.
     expect(parsed[1]).toEqual({ id: 'b', text: twoLines, dwellMs: 4000 });
-    expect((parsed[1] as { text: string }).text).toContain('\n');
+    expect(String((parsed[1] as Record<string, unknown> | undefined)?.['text'])).toContain('\n');
   });
 });
 

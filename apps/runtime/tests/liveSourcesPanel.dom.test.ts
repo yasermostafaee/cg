@@ -426,9 +426,9 @@ describe('🔴 THE STACK HAS NOT ARRIVED — the absence that is not an absence'
       caller ordering them differently is how one surface comes to offer a control
       another refuses.
     */
-    expect(liveLayerBlindness(true, true, true)).toBe('link-down');
-    expect(liveLayerBlindness(true, false, true)).toBe('link-down');
-    expect(liveLayerBlindness(false, false, true)).toBe('stack-not-arrived');
+    expect(liveLayerBlindness(true, true, true, false)).toBe('link-down');
+    expect(liveLayerBlindness(true, false, true, false)).toBe('link-down');
+    expect(liveLayerBlindness(false, false, true, false)).toBe('stack-not-arrived');
     expect(liveLayerBlindness(false, true, true, false)).toBeNull();
   });
 
@@ -597,7 +597,7 @@ describe('🔴 THE EMPTY LIST — "I have not looked" is not "nothing is there" 
     expect(liveLayerEmptyView(null, false).known).toBe(false);
     expect(liveLayerEmptyView('link-down', true).known).toBe(false);
     // A blind STACK says nothing about whether the ledger is empty.
-    expect(liveLayerEmptyView('stack-empty', true).known).toBe(true);
+    expect(liveLayerEmptyView('stack-not-arrived', true).known).toBe(true);
   });
 });
 

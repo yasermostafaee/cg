@@ -27,7 +27,7 @@ const live = (...ids: string[]) => ({ ready: true as const, liveItemIds: new Set
 const pruneCalls: string[][] = [];
 
 vi.mock('../src/renderer/features/inspector/fromFilePersistence.js', async () => {
-  const actual = await vi.importActual<PersistenceModule>(
+  const actual = await vi.importActual<typeof PersistenceModule>(
     '../src/renderer/features/inspector/fromFilePersistence.js',
   );
   return {

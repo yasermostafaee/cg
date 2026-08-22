@@ -124,7 +124,11 @@ function expectMessageThroughTheRegion(dialog: HTMLElement, role: 'refusal' | 'n
 describe('the census — every Runtime dialog that can speak, speaks through the region', () => {
   /** `Candidate layers — configuration`: the reference implementation. */
   it('Candidate layers routes a bridge refusal through the region', async () => {
-    const bank: FixedLayerBank = { channel: 1, start: 70, count: 30, visible: [], aliases: {} };
+    // SESSION BR — `visible: []` was a key FixedLayerBank does not have (the real one is
+    // `visibility`, a record, whose ABSENCE means every row is visible). It asserted nothing
+    // and its removal is behaviour-identical: absent still means all thirty rows show, which
+    // is what this spec needs in order to scroll.
+    const bank: FixedLayerBank = { channel: 1, start: 70, count: 30, aliases: {} };
     const slots: FixedSlotState[] = Array.from({ length: 30 }, (_, i) => ({
       channel: 1,
       layer: 70 + i,
@@ -268,7 +272,7 @@ describe('the census — every Runtime dialog that can speak, speaks through the
       createElement(Modal, {
         title: 'Read only',
         onClose: () => undefined,
-        footer: createElement(ModalAction, { actionRole: 'cancel' }, 'Close'),
+        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'Close' }),
         children: 'body',
       }),
     );
@@ -287,7 +291,7 @@ describe('the ROLE decides the treatment, exactly as it does for the action butt
           { role: 'refusal' as const, text: 'why it did not happen', detail: 'the specifics' },
           { role: 'notice' as const, text: 'what happened when it worked' },
         ],
-        footer: createElement(ModalAction, { actionRole: 'cancel' }, 'Close'),
+        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'Close' }),
       }),
     );
 
@@ -308,7 +312,7 @@ describe('the ROLE decides the treatment, exactly as it does for the action butt
         title: 'One',
         onClose: () => undefined,
         message: { role: 'refusal' as const, text: 'a' },
-        footer: createElement(ModalAction, { actionRole: 'cancel' }, 'Close'),
+        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'Close' }),
       }),
     );
     const firstStyle = first.querySelector<HTMLElement>('[data-notice="refusal"]')?.style.cssText;
@@ -324,7 +328,7 @@ describe('the ROLE decides the treatment, exactly as it does for the action butt
         title: 'Two',
         onClose: () => undefined,
         message: { role: 'refusal' as const, text: 'b — a different sentence entirely' },
-        footer: createElement(ModalAction, { actionRole: 'cancel' }, 'Close'),
+        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'Close' }),
       }),
     );
     expect(second.querySelector<HTMLElement>('[data-notice="refusal"]')?.style.cssText).toBe(
@@ -353,7 +357,7 @@ describe('the ROLE decides the treatment, exactly as it does for the action butt
           text: 'این ردیف اشغال است — ابتدا تمپلیت آن را حذف کنید.',
           detail: 'لایه ۹۵ یک تمپلیت روی خود دارد.',
         },
-        footer: createElement(ModalAction, { actionRole: 'cancel' }, 'بستن'),
+        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'بستن' }),
       }),
     );
     const lines = [...(dialog.querySelector('[data-notice="refusal"]')?.children ?? [])];

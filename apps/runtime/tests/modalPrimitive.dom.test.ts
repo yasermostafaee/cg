@@ -68,7 +68,7 @@ describe('§1 — every dialog gets its chrome from the primitive', () => {
       createElement(Modal, {
         title: 'Some dialog',
         onClose: () => undefined,
-        footer: createElement(ModalAction, { actionRole: 'primary' }, 'Done'),
+        footer: createElement(ModalAction, { actionRole: 'primary', children: 'Done' }),
         children: 'body',
       }),
     );
@@ -96,8 +96,8 @@ describe('§1 — every dialog gets its chrome from the primitive', () => {
         onClose: () => undefined,
         message: { role: 'refusal' as const, text: 'why it did not happen' },
         footer: [
-          createElement(ModalAction, { actionRole: 'cancel', key: 'c' }, 'Cancel'),
-          createElement(ModalAction, { actionRole: 'primary', key: 'p' }, 'Apply'),
+          createElement(ModalAction, { actionRole: 'cancel', key: 'c', children: 'Cancel' }),
+          createElement(ModalAction, { actionRole: 'primary', key: 'p', children: 'Apply' }),
         ],
         children: 'body',
       }),
@@ -124,9 +124,13 @@ describe('§2 — each role resolves to exactly ONE treatment', () => {
         title: 'Roles',
         onClose: () => undefined,
         footer: [
-          createElement(ModalAction, { actionRole: 'cancel', key: 'c' }, 'Cancel'),
-          createElement(ModalAction, { actionRole: 'destructive', key: 'd' }, 'Clear all'),
-          createElement(ModalAction, { actionRole: 'primary', key: 'p' }, 'Apply'),
+          createElement(ModalAction, { actionRole: 'cancel', key: 'c', children: 'Cancel' }),
+          createElement(ModalAction, {
+            actionRole: 'destructive',
+            key: 'd',
+            children: 'Clear all',
+          }),
+          createElement(ModalAction, { actionRole: 'primary', key: 'p', children: 'Apply' }),
         ],
       }),
     );
@@ -167,7 +171,7 @@ describe('§2 — each role resolves to exactly ONE treatment', () => {
       createElement(Modal, {
         title: 'One',
         onClose: () => undefined,
-        footer: createElement(ModalAction, { actionRole: 'destructive' }, 'Clear all'),
+        footer: createElement(ModalAction, { actionRole: 'destructive', children: 'Clear all' }),
       }),
     );
     const firstClass = first.querySelector('[data-modal-role="destructive"]')?.className;
@@ -181,7 +185,7 @@ describe('§2 — each role resolves to exactly ONE treatment', () => {
       createElement(Modal, {
         title: 'Two',
         onClose: () => undefined,
-        footer: createElement(ModalAction, { actionRole: 'destructive' }, 'Remove'),
+        footer: createElement(ModalAction, { actionRole: 'destructive', children: 'Remove' }),
       }),
     );
     expect(second.querySelector('[data-modal-role="destructive"]')?.className).toBe(firstClass);
@@ -223,7 +227,6 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
     // reproduce the operator's situation at all.
     start: 70,
     count: 30,
-    visible: [],
     aliases: {},
   };
   const SLOTS: FixedSlotState[] = Array.from({ length: 30 }, (_, i) => ({
@@ -266,7 +269,7 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
     );
     if (apply === undefined) throw new Error('Apply not rendered');
     await act(async () => {
-      apply.click();
+      (apply as HTMLElement).click();
       await Promise.resolve();
     });
     await settle();

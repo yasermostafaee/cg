@@ -60,7 +60,7 @@ const tokenValues = new Map(
  */
 const localConstants = new Map(
   [...code.matchAll(/(--cg-[a-z0-9-]+)\s*:\s*([^;]+);/g)].map(
-    (m) => [normalise(m[2]), m[1]] as const,
+    (m) => [normalise(m[2] as string), m[1]] as const,
   ),
 );
 
@@ -111,7 +111,7 @@ function channels(literal: string): { r: number; g: number; b: number } {
       b: parseInt(full.slice(4, 6), 16),
     };
   }
-  const parts = /rgba?\(([^)]*)\)/.exec(literal)?.[1].split(',') ?? [];
+  const parts = /rgba?\(([^)]*)\)/.exec(literal)?.[1]?.split(',') ?? [];
   return { r: Number(parts[0]), g: Number(parts[1]), b: Number(parts[2]) };
 }
 
@@ -245,14 +245,14 @@ function keyframeBodies(css: string): Map<string, string> {
       else if (css[i] === '}') depth -= 1;
       i += 1;
     }
-    out.set(match[1], css.slice(opener.lastIndex, i - 1));
+    out.set(match[1] as string, css.slice(opener.lastIndex, i - 1));
   }
   return out;
 }
 
 /** The CSS properties a keyframe body animates. */
 function animatedProperties(body: string): string[] {
-  return [...new Set([...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]))].sort();
+  return [...new Set([...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1] as string))].sort();
 }
 
 describe('THE KEYFRAME AUDIT — a loop may cost a compositor frame and nothing more', () => {
@@ -261,8 +261,8 @@ describe('THE KEYFRAME AUDIT — a loop may cost a compositor frame and nothing 
   /** Keyframe names referenced by an `animation:` that repeats forever. */
   const looping = new Set(
     [...code.matchAll(/animation:\s*([^;]+);/g)]
-      .filter((m) => m[1].includes('infinite'))
-      .flatMap((m) => [...bodies.keys()].filter((name) => m[1].includes(name))),
+      .filter((m) => (m[1] as string).includes('infinite'))
+      .flatMap((m) => [...bodies.keys()].filter((name) => (m[1] as string).includes(name))),
   );
 
   it('finds the loops at all', () => {
@@ -279,7 +279,7 @@ describe('THE KEYFRAME AUDIT — a loop may cost a compositor frame and nothing 
     const referenced = [
       ...new Set(
         [...code.matchAll(/animation:\s*([^;]+);/g)].flatMap((m) =>
-          m[1].split(/[\s,]+/).filter((token) => /^cg-[\w-]+$/.test(token)),
+          (m[1] as string).split(/[\s,]+/).filter((token) => /^cg-[\w-]+$/.test(token)),
         ),
       ),
     ];
@@ -402,7 +402,9 @@ describe('the APASAI mark', () => {
 
   /** Every `d="…"` in a document, whitespace-normalised. */
   function paths(svg: string): string[] {
-    return [...svg.matchAll(/\sd="([^"]+)"/g)].map((m) => m[1].replace(/\s+/g, ' ').trim());
+    return [...svg.matchAll(/\sd="([^"]+)"/g)].map((m) =>
+      (m[1] as string).replace(/\s+/g, ' ').trim(),
+    );
   }
 
   it('is inlined, not fetched — a mark that arrives late is one the first frame lacks', () => {

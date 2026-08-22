@@ -62,7 +62,7 @@ const TWO_BOX: TemplateInfo = {
   fields: [],
   liveSources: {
     resolution: { width: 1920, height: 1080 },
-    defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
+    defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
     sources: [plate('el-1', 'guest-1'), plate('el-2', 'guest-2')],
   },
 };
@@ -73,7 +73,7 @@ const NO_PLATES: TemplateInfo = {
   fields: [],
   liveSources: {
     resolution: { width: 1920, height: 1080 },
-    defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
+    defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
     sources: [],
   },
 };
