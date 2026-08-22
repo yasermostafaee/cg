@@ -166,6 +166,19 @@ env mode then filters the caps out and the bound is a silent no-op), and do NOT 
 contention red by raising a timeout — B-073 already did that and B-098 is that bound blown in
 turn. The fix is the bound; a longer rope is not.
 
+**When you widen what a task READS, widen that task's turbo `inputs` in the SAME COMMIT.** A
+tsconfig `include`, a lint target, a newly-linted directory — the moment a task checks a file the
+cache key does not hash, its green stops meaning anything, and it fails **silently and ONLY under
+a cache HIT**, so neither `pnpm gate` (forced uncached) nor a cold CI runner can ever catch it.
+Session BS is the measured instance: it flipped `tools/caspar-bridge`'s typecheck to include
+`tests/**` while `typecheck` inputs still hashed `src/**` only, so a test-only edit could not
+invalidate a cached typecheck (closed in `85e3c27e`). The notch BS named one further out was real
+too: all four `bin/`-bearing workspaces run `eslint .`, which lints their `bin/**/*.mjs` (9 files),
+and a planted `no-unused-vars` error in `tools/soak-runner/bin/cg-soak.mjs` came back `cache hit,
+replaying logs` with `pnpm lint` exit 0 — until `bin/**` joined `lint` inputs. ⚠ STILL OPEN: `test`
+inputs do not hash `bin/**` either, and `tools/caspar-bridge/tests/live-layers-default.test.ts`
+SPAWNS `bin/caspar-bridge.mjs` as a child process.
+
 **Never background a push.** The pre-push gate must run in the FOREGROUND, or a
 second gate can start alongside it — two gates in one workspace collide over
 vitest's shared coverage tmp dir and fail an innocent suite with a bare `ENOENT`
