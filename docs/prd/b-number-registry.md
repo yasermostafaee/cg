@@ -1075,3 +1075,27 @@ recorded from six directions. The space stays contiguous `C-001` … `C-025`, **
 
 The filing prompt directed "take the next free number in whichever registry you pick"; the sweep
 agreed with the pointer the `C-024` entry recorded, so nothing was minted out of order.
+
+## 2026-08-22 — the E2E handoff-stills dirt wart gets its number (`P-037`)
+
+| Prefix | Claimed | Item                                                                         | File                       |
+| ------ | ------- | ---------------------------------------------------------------------------- | -------------------------- |
+| `P-`   | `P-037` | `pnpm test:e2e` regenerates four COMMITTED handoff stills, dirtying the tree | [platform.md](platform.md) |
+
+**Verified free by the heading sweep immediately before the heading was written.** Highest `P-`
+heading was `P-036`, by BOTH tools: the registry's documented `grep -rhoE` derivation and a
+`git grep -hoE "^## \[.\] P-[0-9]{3}" -- 'docs/prd/*.md' ':!docs/prd/README.md'` cross-check
+returned the same `036`. The duplicate audit for `P-` printed nothing. `git grep -n "P-037"`
+returned exactly THREE hits — this file's own "Next free: `P-037`" line, and the same pointer
+repeated in `docs/handoff/2026-08-18-session-ar.md` and
+`openspec/changes/multibox-layout-switch/design.md` — all forward-reference POINTERS, none a
+heading. That is the false positive this registry has now recorded from seven directions. The space
+stays contiguous `P-001` … `P-037`, **no gaps. Next free: `P-038`.**
+
+⚠ **The derivation was run with BOTH tools deliberately, and they are not interchangeable.** The
+command this file documents is `grep -rhoE`, but golden rule 9 forbids `grep -r` for tree sweeps
+precisely because it skips a NUL-bearing file in SILENCE — a short match count that looks like a
+clean sweep. For a number derivation a silent skip would under-report the highest heading and mint a
+COLLIDING number, which is the one failure this registry exists to prevent. Running both and
+requiring them to AGREE costs one extra command and removes that mode; where they ever disagree,
+`git grep` is the authority.

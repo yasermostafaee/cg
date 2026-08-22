@@ -2337,3 +2337,54 @@ looking for the missing one. That is why this outranks a feature.
 - **Cross-refs:** `B-140`'s change (`shared-drag-gesture/tasks.md` §6b) records the false result this
   item prevents; `P-035` (the other guard filed the same day, same "enforce rather than remember"
   shape).
+
+## [ ] P-037 — `pnpm test:e2e` regenerates four COMMITTED handoff stills, so an ordinary run leaves the tree dirty ⟨priority: medium⟩
+
+**What:** an ordinary `pnpm test:e2e` leaves `git status` CLEAN. The four stills a handoff document
+displays are written only when a run is explicitly asked for them; every other run writes its
+screenshots to an already-ignored output directory.
+
+**Why:** [`apps/designer/tests/e2e/looks.spec.ts`](../../apps/designer/tests/e2e/looks.spec.ts)
+writes four TRACKED files with `page.screenshot({ path: '../../docs/handoff/img/…' })` — lines
+**95, 116, 130 and 134** — `bb-step3-sixbox-authoring.png`, `bb-step4-solo-authoring.png`,
+`bb-step5-switched-sixbox.png` and `bb-step5b-switched-solo.png`. Render nondeterminism means the
+bytes differ a little every run, so the files re-dirty on every pass, green or red.
+
+🔴 **The cost is not the dirt, it is the JUDGEMENT the dirt demands.** Every E2E run now ends with a
+`git status` a human has to read and dismiss — and a working tree that is expected to be dirty is
+exactly the state in which a real change gets staged by accident. This repo already forbids
+`git add <directory>` for that reason (`P-035`, filed after `git add` swept the owner's uncommitted
+hack onto `dev`), and already has a NEVER-STAGE guard for one specific file. Habitual noise defeats
+both: a guard is only as good as the reader's willingness to look at what it is guarding.
+
+**Only ONE test does this.** Swept with `git grep` (golden rule 9) across every `tests/` tree for
+`screenshot(`, `writeFileSync`, and repo-relative `../../` write targets. The other screenshot
+callers — `pixel-paint.spec.ts:148,276`, `rehearse-canvas.spec.ts:107`,
+`rehearse-composite.spec.ts:167,185` — capture to a BUFFER with no `path:`, so they write nothing.
+Every `../../fixtures/b034` reference is a `readFileSync`. The one adjacent writer,
+`apps/designer/tests/exporter-vcg-fonts.test.ts:362`, is **already opt-in** (`D121_FIXTURE_OUT`,
+skipped when unset) and is the precedent this item follows.
+
+**Acceptance:**
+
+- WHEN an ordinary `pnpm test:e2e` completes THEN `git status --porcelain` reports no change under
+  `docs/handoff/img/` — the tree is CLEAN
+- WHEN that ordinary run completes THEN the four stills are STILL PRESENT in the repository and
+  still the correct images, byte-identical to what the handoff document displayed before the run
+- WHEN a run is explicitly asked to refresh the stills THEN it rewrites those four tracked paths, so
+  the document can be re-illustrated on demand
+- WHEN the stills are not being refreshed THEN the screenshots are still taken and still written,
+  to an already-ignored output directory, so the spec's coverage is unchanged and a failure can
+  still be looked at
+- WHEN a reader opens `docs/handoff/2026-08-20-session-bb.md` THEN its image links still resolve —
+  no committed image is deleted and no path it links to is gitignored
+
+**Notes:**
+
+- **Direction:** an env opt-in in the spirit of `CG_GATE_HOOK_E2E` / `CG_ALLOW_STALE_E2E`, with the
+  default writing under `apps/designer/test-results/` (already covered by `.gitignore:88`).
+- **Deliberately NOT the two obvious shortcuts.** Deleting the committed images breaks the handoff
+  document, and gitignoring `docs/handoff/img/` would make a path a document links to invisible to
+  the next clone — both trade a visible wart for an invisible one.
+- **Cross-refs:** `P-035` (never-stage guard — the accident this noise makes likelier); `P-036`
+  (the other "the runner should enforce it, not the human remember it" guard).
