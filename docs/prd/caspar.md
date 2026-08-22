@@ -1187,7 +1187,7 @@ source. The hack is not a workaround for a hard problem; it is a workaround for 
 - **Cross-refs:** [[P-035]] (the net this is the cure for), [[B-038]] (the template HTTP server this
   advertises for), [[C-001]] (the bridge whose probe `guessLanHost()` mirrors).
 
-## [~] C-025 — a `stream` producer arm: the catalog can SAY a live is a URL ⟨priority: high⟩ — ⭐ CLIENT REQUIREMENT; the owner proved the command on the plant by hand — implemented: `openspec/changes/stream-producer-arm/`, awaiting the CI `e2e` discharge + archive
+## [x] C-025 — a `stream` producer arm: the catalog can SAY a live is a URL ⟨priority: high⟩ — ⭐ CLIENT REQUIREMENT; the owner proved the command on the plant by hand — DONE + archived: `openspec/changes/archive/2026-08-22-stream-producer-arm/`; e2e discharged by https://github.com/yasermostafaee/cg/actions/runs/32575013749 (the `E2E (Playwright)` job RAN and passed on `fef781cb`)
 
 **What:** a FIFTH arm in `SourceProducerSchema` — `{ kind: 'stream', url }` — so an internet stream
 is a first-class live source: labelled as a stream in the Runtime's Sources modal, refused at the
