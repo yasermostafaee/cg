@@ -4718,6 +4718,14 @@ question, and the rule above has to stay true if that interlock ever changes.
 change REMOVED and omitted the one it ADDED, and nothing caught it (vitest transpiles without
 checking). Turning it on is its own piece of work: **113 pre-existing errors, measured**.
 
+> ✅ **CLOSED 2026-08-22 (session BR).** The count was re-measured independently rather than
+> trusted, and matched at **113**. The typecheck now includes `tests/`, and the sweep found
+> **four tests that were not asserting what they looked like** — a shape test that never made
+> its claim about a row with live plates, a harness that could not render a rehearsing row at
+> all, a panel spec three APIs out of date, and a mock-parity guard blind to two whole groups.
+> **No product defect: every one was a hole in a guard.** See
+> `docs/handoff/2026-08-22-session-br.md` §2.
+
 - **Cross-refs:** [[B-151]] (the same shape one field over — RECTS, where this is NAMES; read them
   as a pair), [[R-049]] (the overlay whose purpose this defeats), [[R-048]] (level 4, which the
   overlay now honours), [[B-146]] (the class: a surface showing what air does not).
