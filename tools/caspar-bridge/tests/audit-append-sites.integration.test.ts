@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type { AuditEntry } from '@cg/shared-schema';
+import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
 import { UNATTRIBUTED_ACTOR, type ConnectionConfig, type TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS } from './support/harness.js';
@@ -33,6 +33,33 @@ import { HEALTH_MS } from './support/harness.js';
  *   3. **A write failure never fails the action.** The station stays on air and
  *      the fault surfaces through `auditHealth`.
  */
+
+/** The seven, driven one by one in the suite below. */
+const PLAYOUT_VERBS = ['load', 'take', 'update', 'stop', 'next', 'out', 'remove'] as const;
+
+/**
+ * Every OTHER audit action, BY NAME: lifecycle and control events that are not per-item
+ * playout verbs, each recorded by its own suite (`audit-actor`, failover, the template
+ * registry). The partition test below refuses an action in neither list, so adding an
+ * action to `AuditEntrySchema` forces a decision HERE — drive it above, or name it here —
+ * instead of silently escaping the "every playout verb" claim.
+ */
+const NON_VERB_ACTIONS = [
+  'failover',
+  'reconnect',
+  'import',
+  'export',
+  'lock-engage',
+  'lock-release',
+  'update-deferred',
+  'update-installed',
+] as const;
+
+it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {
+  expect([...PLAYOUT_VERBS, ...NON_VERB_ACTIONS].sort()).toEqual(
+    [...AuditEntrySchema.shape.action.options].sort(),
+  );
+});
 
 let mock: MockHandle | null = null;
 let runtime: CasparRuntime | null = null;
@@ -162,7 +189,7 @@ describe('B-141 — every playout verb records exactly one entry, at its real ou
 
       // 7 verbs + the `import` that registered the template.
       const rows = await entriesOnDisk(file, 8);
-      for (const action of ['load', 'take', 'update', 'stop', 'next', 'out', 'remove'] as const) {
+      for (const action of PLAYOUT_VERBS) {
         const mine = forAction(rows, action);
         // EXACTLY one. Zero is the gap this closes; two would mean the structural
         // wrapper is firing beside a hand-written append.
@@ -331,7 +358,7 @@ describe('B-141 — the REFUSALS, each with the code that refused it', () => {
         {},
         {
           auditLogPath: file,
-          fixedSlots: [{ channel: 1, layer: 71, server: 'primary' }],
+          fixedSlots: [{ channel: 1, layer: 71 }],
         },
       );
       runtime = r;
