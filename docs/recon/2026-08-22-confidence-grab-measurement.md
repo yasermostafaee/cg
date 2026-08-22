@@ -308,11 +308,14 @@ connections; this only works with two).
 **Window 2 landing = `COMMIT` is channel-wide across connections = the ban stands.** Window 2 not
 landing = `COMMIT` is per-connection, and §3b's one-frame switch becomes available.
 
-### C2 — is `PLAY` on an OCCUPIED layer really an in-place REPLACE on 2.3.2?
+### C2 — is `PLAY` on an OCCUPIED layer really an in-place REPLACE on the production 2.5.0?
 
-**Where it is written** (`tools/caspar-bridge/src/caspar-runtime.ts:5472-5476`, `swapLiveSource`):
+(Corrected 2026-08-22 — this heading said 2.3.2. That install is RETIRED at `D:\programs\CasparCG`
+and must never be probed; the measurement is owed on the production **2.5.0** `69e8ad5`.)
 
-> _"⚠ **THAT SUBSTITUTION IS UNVERIFIED ON THE PLANT'S 2.3.2 (task 6.9a).** The mock models `PLAY`
+**Where it is written** (`swapLiveSource`'s doc in `tools/caspar-bridge/src/caspar-runtime.ts`):
+
+> _"⚠ **THAT SUBSTITUTION IS UNVERIFIED ON THE PRODUCTION 2.5.0 (task 6.9a).** The mock models `PLAY`
 > on an occupied layer as a replace, so the tests prove this code is self-consistent and prove
 > NOTHING about the server. It rides with §3b's `DEFER`/`COMMIT` question and 6.3a's `CLIP` probe —
 > all AMCP probes on the same build."_

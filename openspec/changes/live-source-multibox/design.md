@@ -828,7 +828,8 @@ R-021's own rationale **this plant runs several Runtime stations against one Cas
 `COMMIT` we send might apply **another controller's** deferred changes. That is the same class of
 harm the channel-scoped ban exists to prevent.
 
-**The question, answerable with `amcp-poke` on the plant's 2.3.2 and needing no capture card:**
+**The question, answerable with `amcp-poke` on the production 2.5.0 and needing no capture card
+(corrected 2026-08-22 — this said "the plant's 2.3.2", which is retired and must never be probed):**
 
 > Does `MIXER <ch> COMMIT` apply only the DEFERRING CONNECTION's queued changes, or every deferred
 > change on the channel?

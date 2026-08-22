@@ -1299,8 +1299,11 @@ beforehand: 85/85, `0 cached`.
       NOT because the server is known to want it.** No recorded precision exists.
       `numberArg` in `command-builder.ts` is the single place to change if a probe
       shows otherwise.
-      Both are AMCP probes on the plant's 2.3.2, and both should ride the SAME session
-      as §3b's `DEFER`/`COMMIT` question and 6.9a's replace measurement.
+      Both are AMCP probes on the production **2.5.0** (`69e8ad5`; corrected 2026-08-22 —
+      this said "the plant's 2.3.2", which is RETIRED at `D:\programs\CasparCG` and must
+      never be probed, per the probe README's `assertProductionBuild`), and both should
+      ride the SAME session as §3b's `DEFER`/`COMMIT` question and 6.9a's replace
+      measurement.
       Original: **NARROWED 2026-08-03 — coordinate space and composition order are SETTLED by
       measurement** (`design.md` §3: `CLIP`'s rect is channel-normalized like `FILL`'s, and it MASKS
       rather than travelling with it; a disjoint clip window renders nothing). `MIXER CROP` is no
@@ -1516,8 +1519,9 @@ beforehand: 85/85, `0 cached`.
       resolve to ONE state — unassigned — deliberately: a second "assigned, but not really" state is
       one every consumer would have to learn and could get wrong.
 - [ ] 6.8 The two-box `route://` demo on real hardware, which needs no capture card.
-- [ ] 6.8a 🔴 **A3-R1 — RECON: does `route://<channel>-<layer>` exist on 2.3.2, and WHAT does it
-      deliver?** (`design.md` §12.6; run alongside §12.5's M1–M4 on the plant's CasparCG **2.3.2**.)
+- [ ] 6.8a 🔴 **A3-R1 — RECON: does `route://<channel>-<layer>` exist on the production 2.5.0, and
+      WHAT does it deliver?** (`design.md` §12.6; run alongside §12.5's M1–M4. Corrected
+      2026-08-22 — this named 2.3.2, which is RETIRED and must never be probed.)
       **The whole no-feedback argument for the studio plate rests on the answer.** §0b measured
       `PLAY 1-2 "route://1-1"` rendering layer 1's picture on layer 2 with no runaway — that shows
       the form is ACCEPTED and does not loop; it does NOT establish what the routed picture IS.
@@ -1589,11 +1593,14 @@ beforehand: 85/85, `0 cached`.
       ledger is unchanged, **the override is NOT recorded** (a row claiming the new
       source while the layer carries the old is worse than the failure), and the
       message says so in as many words.
-      🔴 **THE 2.3.2 MEASUREMENT IS STILL OWED — NO HARDWARE THIS SESSION.** The mock
+      🔴 **THE PLANT MEASUREMENT — on the production 2.5.0 — IS STILL OWED, NO HARDWARE
+      THIS SESSION.** (Corrected 2026-08-22: this said "the 2.3.2 measurement"; 2.3.2 is
+      RETIRED at `D:\programs\CasparCG` and must never be probed.) The mock
       models `PLAY` on an occupied layer as a substitution, so the tests prove the code
       is self-consistent and prove NOTHING about the server. Ride it with `design.md`
       §3b's `DEFER`/`COMMIT` question and 6.3a's `CLIP` intersection probe — three AMCP
-      probes on the same build, one session instead of three.
+      probes on the same build, one session instead of three. The owner's walk:
+      `docs/recon/2026-08-22-b155-switch-flash-walk.md`.
       Original: **A REPLACE, never a clear-then-add.** `PLAY` on the occupied layer substitutes the
       producer in place. A `CLEAR` then a `PLAY` that fails is the `B-126` window arriving during an
       emergency: a destructive step committed before the constructive one was known to succeed. On

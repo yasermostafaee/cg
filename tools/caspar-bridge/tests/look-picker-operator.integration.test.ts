@@ -27,8 +27,8 @@ import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
  *
  * **What it looks like on air.** No unit test can photograph a cut. What is proven is the
  * COMMAND SEQUENCE — that a switch moves the fills and then tells the page, in that order,
- * and that a preset lands only on the switch. Whether that reads as a clean cut on a 2.3.2
- * server is a plant measurement.
+ * and that a preset lands only on the switch. Whether that reads as a clean cut on the
+ * production 2.5.0 server is a plant measurement.
  *
  * **The picker itself.** The control is a renderer concern and is tested in
  * `apps/runtime/tests/lookPicker.dom.test.ts`. What crosses between them is

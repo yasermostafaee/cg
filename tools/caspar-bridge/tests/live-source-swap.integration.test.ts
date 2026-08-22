@@ -25,8 +25,8 @@ import { HEALTH_MS } from './support/harness.js';
  * known to have worked.
  *
  * ⚠ **THE ONE THING THESE TESTS DO NOT PROVE (task 6.9a).** The mock models `PLAY`
- * on an OCCUPIED layer as a substitution. Whether the plant's CasparCG **2.3.2**
- * does is UNMEASURED — so this file proves the code is self-consistent and proves
+ * on an OCCUPIED layer as a substitution. Whether the plant's CasparCG — the
+ * production **2.5.0** — does is UNMEASURED — so this file proves the code is self-consistent and proves
  * nothing about the server. That probe rides with design.md §3b's `DEFER`/`COMMIT`
  * question and 6.3a's `CLIP` intersection question, all three being AMCP probes on
  * the same build.

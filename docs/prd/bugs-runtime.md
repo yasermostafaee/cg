@@ -4503,10 +4503,11 @@ as that property, not as an absence.
 against `@cg/amcp-mock`, and the mock is precisely the thing that models the behaviour in question:
 
 - **`PLAY` on an occupied layer as an in-place replace** — which `caspar-runtime.ts`'s own
-  `swapLiveSource` doc already marks **UNVERIFIED on the plant's 2.3.2 (task 6.9a)**: _"the mock models
-  `PLAY` on an occupied layer as a replace, so the tests prove this code is self-consistent and prove
-  NOTHING about the server."_ The flash IS the replace's timing, so the mock cannot see it by
-  construction.
+  `swapLiveSource` doc already marks **UNVERIFIED on the production 2.5.0 (task 6.9a)** (corrected
+  2026-08-22 — this said "the plant's 2.3.2", which is retired and must never be probed): _"the mock
+  models `PLAY` on an occupied layer as a replace, so the tests prove this code is self-consistent
+  and prove NOTHING about the server."_ The flash IS the replace's timing, so the mock cannot see it
+  by construction.
 - **Whether `FILL` and `CLIP` land on the SAME FRAME** — an open question (`design.md` §3b:
   `MIXER … DEFER` + a channel-scoped `COMMIT`, forbidden here until the COMMIT-scope question is
   answered). A hole that opens a frame before its mask is another way to reveal the wrong picture.
@@ -4556,12 +4557,12 @@ GUEST and black. Same reasoning, opposite answer, because the alternative to bla
 
 ### The candidates, priced — and the measurement that decides
 
-| Candidate                                 | Cost                          | Why not yet                                                                                                               |
-| ----------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| ⭐ `LOADBG` then `PLAY`                   | one extra command per re-seat | AMCP's own answer to exactly this; **`LOADBG` is not in this bridge's vocabulary and is unmeasured on the plant's 2.3.2** |
-| Hold at `MIXER OPACITY 0` until confirmed | needs a readiness signal      | `OPACITY` unmeasured here, and "confirmed" has no source yet                                                              |
-| Targeted `INFO` before punching           | a round-trip per switch       | turns a cut into a round-trip; likely worse than the flash                                                                |
-| Bounded frame deferral                    | none on the wire              | a guess dressed as a fix, and it must never expire into "show the old one"                                                |
+| Candidate                                 | Cost                          | Why not yet                                                                                                                                                                                            |
+| ----------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ⭐ `LOADBG` then `PLAY`                   | one extra command per re-seat | AMCP's own answer to exactly this; **`LOADBG` is not in this bridge's vocabulary and is unmeasured for LIVE producers on the production 2.5.0** (its HTML pre-warm IS measured there, design.md §9.6c) |
+| Hold at `MIXER OPACITY 0` until confirmed | needs a readiness signal      | `OPACITY` unmeasured here, and "confirmed" has no source yet                                                                                                                                           |
+| Targeted `INFO` before punching           | a round-trip per switch       | turns a cut into a round-trip; likely worse than the flash                                                                                                                                             |
+| Bounded frame deferral                    | none on the wire              | a guess dressed as a fix, and it must never expire into "show the old one"                                                                                                                             |
 
 🔴 **What is OWED and cannot be done from a dev machine: the frame count.** Patch A1 asks for a
 reading at 25 fps, reproduced twice, with the channel read EMPTY before and after. **This session had

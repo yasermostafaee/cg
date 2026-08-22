@@ -462,8 +462,9 @@ plate to a concrete source is an INSTALLATION concern configured in the Runtime.
 - WHEN a template declaring N Live Sources is configured THEN CG Control can assign **each plate
   individually** to one of the installation's named sources, persisted bridge-side (a SECOND store
   beside the template registry, because the bridge is what resolves a plate at take)
-- WHEN the two-box `route://` demo is run THEN it works on the plant's real CasparCG **2.3.2** —
-  which needs no capture card
+- WHEN the two-box `route://` demo is run THEN it works on the plant's real CasparCG — the
+  production **2.5.0** (corrected 2026-08-22; this said 2.3.2, which is retired and must never be
+  probed) — which needs no capture card
 
 **NARROWED 2026-08-08 (owner, `live-source-multibox` design.md §12.1).** The two bullets above
 REPLACE the original _"WHEN DECKLINK / ROUTE / media sources are used THEN behavior is verified on
@@ -575,7 +576,7 @@ preview can never show the live video the template composites over.
 - WHEN a capture fails THEN the panel shows a legible stale/error state — never a frozen frame
   masquerading as live
 - WHEN the capture mechanism is chosen THEN its cost on the playout machine has been measured
-  on real 2.3.2 BEFORE the mechanism is fixed (RECON-FIRST — verify the exact grab command this
+  on the production 2.5.0 BEFORE the mechanism is fixed (RECON-FIRST — verify the exact grab command this
   build supports and whether grabbing hitches channel output)
 - WHEN the panel is hidden or off THEN its polling stops; the panel is OFF by default and
   toggleable
