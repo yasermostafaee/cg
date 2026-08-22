@@ -93,6 +93,26 @@ const BRIDGE_SURFACE: {
     // §4 — `resyncing` says whether an EMPTY stack is an answer or a not-yet.
     // `B-153` — `skew` names the channels the connected bridge PROCESS does not route.
     link: ['status', 'onStatusChanged', 'resyncing', 'onResyncingChanged', 'skew', 'onSkewChanged'],
+    /*
+      🔴 **SESSION BR — `delimiters` AND `sources` were BOTH missing from this expected tree,
+      so the one guard that exists to prove the mock shim matches the real bridge has never
+      compared either group.**
+
+      Nothing caught it because `apps/runtime`'s typecheck did not include `tests/`: the
+      literal is declared as a full `{ [G in BridgeGroupName]: … }`, so the two absent keys
+      were a type error the compiler was never asked to look at. Both groups ARE implemented
+      by the mock (`createRuntimeBridge`), so this is a hole in the GUARD rather than a
+      missing capability — but the guard could not have told anyone that, which is the point.
+    */
+    delimiters: ['list', 'set', 'onChanged'],
+    sources: [
+      'config',
+      'setConfig',
+      'onConfigChanged',
+      'assignments',
+      'setAssignments',
+      'onAssignmentsChanged',
+    ],
     stack: [
       'load',
       'take',

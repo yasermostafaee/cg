@@ -296,6 +296,24 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     clear: () => Promise.resolve({ accepted: true }),
     clearLayer: () => Promise.resolve({ accepted: true }),
     remove: () => Promise.resolve({ accepted: true }),
+    /*
+      🔴 **SESSION BR — THESE FOUR WERE MISSING, AND THEIR ABSENCE MADE THE SHAPE TEST BELOW
+      ASSERT SOMETHING NARROWER THAN ITS OWN TITLE.**
+
+      `LayerRowActionDeps` requires them; this builder omitted them, and nothing caught it
+      because `apps/runtime`'s typecheck did not include `tests/` and Vitest transpiles
+      without checking. At runtime `deps.hasLivePlates` was therefore `undefined` — falsy —
+      so `swap-source` and `plate-audio` were **structurally absent from every action list
+      this file has ever built**. See the SHAPE test for what that cost.
+
+      `restoreBlocked: false` is likewise the honest default (R-021 stage 4's "this layer is
+      not ours to command" is a state a spec must opt INTO), and the two handlers are stubs
+      of the same shape as their neighbours.
+    */
+    restoreBlocked: false,
+    hasLivePlates: false,
+    swapSource: () => Promise.resolve({ accepted: true }),
+    plateAudio: () => Promise.resolve({ accepted: true }),
     onError: () => undefined,
   });
 
@@ -519,7 +537,26 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     // OFF PVW), exactly like `load-remove`: one key, one position, so the shape
     // assertion keeps its meaning and the control never moves under the
     // operator's finger.
-    const SHAPE = [
+    /*
+      🔴 **SESSION BR — THIS TEST WAS NARROWER THAN ITS OWN TITLE, AND THE TITLE IS THE
+      PROPERTY THE OWNER ASKED FOR.**
+
+      It asserted ONE shape, over four row states × next × linkDown — and every one of those
+      was built by a `deps()` that OMITTED `hasLivePlates`. Undefined is falsy, so
+      `swap-source` and `plate-audio` could not appear in any of them: the list it pinned was
+      the no-live-plates list, and the "the shape never changes" claim was simply never made
+      about a row that HAS live plates — which is the row this whole feature exists for.
+
+      Nothing caught it because `apps/runtime`'s typecheck did not include `tests/`. The
+      required deps were missing from the object and TypeScript never saw the call.
+
+      So the shape is now asserted for BOTH kinds of row. The property is unchanged and still
+      the owner's: a control never moves under the operator's finger. `hasLivePlates` is a
+      property of the bound TEMPLATE, so it cannot flip while the operator is looking at the
+      row — which is why two fixed shapes, one per kind, is the honest statement of it rather
+      than a weakening.
+    */
+    const BASE = [
       // §6 — 'load-library' is GONE: LOAD opens the picker, so there is no second
       // similarly-named entry point to keep in the shape.
       'load-remove',
@@ -530,17 +567,33 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
       'stop',
       'clear',
     ];
-    // Empty, loaded, on air, with and without a next step, link up and down:
-    // the control set is identical every time. Only `disabled` moves. This is
-    // the property the owner asked for after watching NEXT appear and vanish.
+    // C-015 — SOURCE and AUDIO are offered together, on a row whose template declares live
+    // plates, and they sit BEFORE `next`. Their position is part of the shape.
+    const WITH_PLATES = [
+      'load-remove',
+      'play',
+      'rehearse',
+      'swap-source',
+      'plate-audio',
+      'next',
+      'update',
+      'stop',
+      'clear',
+    ];
+    // Empty, loaded, on air, with and without a next step, link up and down, with and
+    // without live plates: the control set is identical every time for a given kind of row.
+    // Only `disabled` moves. This is the property the owner asked for after watching NEXT
+    // appear and vanish.
     for (const item of [null, itemWith('loaded'), itemWith('on-air'), itemWith('idle')]) {
       for (const hasNext of [true, false]) {
         for (const linkDown of [true, false]) {
-          const actions = actionsFor({ ...deps(item, hasNext), linkDown });
-          expect(
-            actions.map((a) => a.key),
-            `item=${String(item?.status ?? 'empty')} hasNext=${String(hasNext)} linkDown=${String(linkDown)}`,
-          ).toEqual(SHAPE);
+          for (const hasLivePlates of [false, true]) {
+            const actions = actionsFor({ ...deps(item, hasNext), linkDown, hasLivePlates });
+            expect(
+              actions.map((a) => a.key),
+              `item=${String(item?.status ?? 'empty')} hasNext=${String(hasNext)} linkDown=${String(linkDown)} plates=${String(hasLivePlates)}`,
+            ).toEqual(hasLivePlates ? WITH_PLATES : BASE);
+          }
         }
       }
     }

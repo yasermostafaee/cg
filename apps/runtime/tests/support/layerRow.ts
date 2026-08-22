@@ -190,6 +190,23 @@ export async function renderLayerRow(options: {
    * bootstrap window, and it is the one combination that must NOT read as EMPTY.
    */
   stackReady?: boolean;
+  /**
+   * 🔴 **SESSION BR — REQUIRED BY `LayerRow`, AND THIS HARNESS NEVER PASSED IT.**
+   *
+   * `rehearsing` is a required prop; the render below omitted it, so every spec built
+   * through this helper has rendered with it `undefined` — falsy. **The DOM-level
+   * rehearsing appearance was therefore UNREACHABLE from this harness**, and no spec using
+   * it has ever asserted anything about a row on PVW. (R-022’s rehearse behaviour IS
+   * covered, but through `layerRowActions` directly — the pure function, not the render.)
+   *
+   * Exposed here so the state is reachable at all. It defaults to `false`, which is exactly
+   * what every existing spec was already getting, so nothing that passes today changes.
+   * ⚠ Nothing uses it yet: naming the visual a rehearsing row SHOULD have is a judgement
+   * this session did not make. Recorded as a gap rather than guessed at.
+   */
+  rehearsing?: boolean;
+  /** `LayerRow`’s display index. Was passed below but never declared here. */
+  displayPosition?: number;
 }): Promise<RenderedRow> {
   const link = options.link ?? 'live';
   const stubs = stubBridge(link, options.reach ?? 'both-up');
@@ -223,6 +240,7 @@ export async function renderLayerRow(options: {
           // A standalone row is the first row AND the bank's first position; specs
           // that care about the difference drive the panel, not one row.
           displayPosition: options.displayPosition ?? 1,
+          rehearsing: options.rehearsing ?? false,
           bankPosition: options.bankPosition ?? 1,
           selected: options.selected ?? false,
           dirty: options.dirty ?? false,

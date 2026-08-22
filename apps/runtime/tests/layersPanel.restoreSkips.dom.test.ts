@@ -46,7 +46,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, visible: [70, 71], aliases: {} };
+const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, aliases: {} };
 const SLOTS: FixedSlotState[] = [
   { channel: 1, layer: 70, observed: { kind: 'empty' }, binding: null },
   { channel: 1, layer: 71, observed: { kind: 'empty' }, binding: null },
@@ -109,10 +109,39 @@ async function renderPanel(): Promise<HTMLDivElement> {
       createElement(
         StrictMode,
         null,
+        /*
+          🔴 **SESSION BR — THIS CALL WAS THREE APIs OUT OF DATE, and only a typecheck of
+          `tests/` could see it.**
+
+          It passed `selectedItemId` (the prop is `selectedId`), `layout: 'wide'` (the prop is
+          a `ShellLayout` OBJECT), and omitted `inspectorOpen` / `onToggleInspector`
+          entirely. React does not object: unknown props are dropped and missing ones are
+          `undefined`. So this spec has been rendering the panel with **no selection prop, a
+          string where the layout object goes, and no inspector controls** — and its
+          assertion about the restore-skips notice held anyway, because that notice does not
+          depend on any of them.
+
+          The assertion is therefore intact and is NOT being changed. What changes is the
+          harness around it: the panel is now rendered the way its siblings render it, so the
+          spec is exercising the component the product actually mounts.
+        */
         createElement(LayersPanel, {
           onSelectionChange: () => undefined,
-          selectedItemId: null,
-          layout: 'wide',
+          selectedId: null,
+          layout: {
+            inspectorPx: 320,
+            monitorPx: 220,
+            focus: 'none' as const,
+            narrow: false,
+            setInspectorPx: () => undefined,
+            setMonitorPx: () => undefined,
+            setFocus: () => undefined,
+            reset: () => undefined,
+            customized: false,
+          },
+          onUpdate: () => Promise.resolve({ accepted: true }),
+          inspectorOpen: false,
+          onToggleInspector: () => undefined,
         }),
       ),
     );
