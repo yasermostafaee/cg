@@ -1058,3 +1058,20 @@ contiguous `B-001` … `B-157`, **no gaps**.
 line inside `B-154`’s section (corrected by session BO, recorded above); repeating that is what the
 note above exists to prevent.
 **Next free: `B-158`.**
+
+## 2026-08-22 — the `stream` producer arm gets its number (`C-025`)
+
+| Prefix | Claimed | Item                                                         | File                   |
+| ------ | ------- | ------------------------------------------------------------ | ---------------------- |
+| `C-`   | `C-025` | a `stream` producer arm: the catalog can SAY a live is a URL | [caspar.md](caspar.md) |
+
+**Verified free by the heading sweep immediately before the heading was written.** Highest `C-`
+heading was `C-024` (`git grep "^## \[.\] C-0" -- docs/prd`); `git grep -n "C-025"` returned
+exactly THREE hits — this file's own "Next free: `C-025`" line, and the same pointer repeated in
+`docs/handoff/2026-08-18-session-ar.md` and `openspec/changes/multibox-layout-switch/design.md` —
+all forward-reference POINTERS, none a heading. That is the false positive this registry has now
+recorded from six directions. The space stays contiguous `C-001` … `C-025`, **no gaps. Next free:
+`C-026`.**
+
+The filing prompt directed "take the next free number in whichever registry you pick"; the sweep
+agreed with the pointer the `C-024` entry recorded, so nothing was minted out of order.

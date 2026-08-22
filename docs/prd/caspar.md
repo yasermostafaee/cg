@@ -1186,3 +1186,103 @@ source. The hack is not a workaround for a hard problem; it is a workaround for 
   no occurrence anywhere in the tree).
 - **Cross-refs:** [[P-035]] (the net this is the cure for), [[B-038]] (the template HTTP server this
   advertises for), [[C-001]] (the bridge whose probe `guessLanHost()` mirrors).
+
+## [ ] C-025 — a `stream` producer arm: the catalog can SAY a live is a URL ⟨priority: high⟩ — ⭐ CLIENT REQUIREMENT; the owner proved the command on the plant by hand, and the product cannot express it
+
+**What:** a FIFTH arm in `SourceProducerSchema` — `{ kind: 'stream', url }` — so an internet stream
+is a first-class live source: labelled as a stream in the Runtime's Sources modal, refused at the
+config boundary when its URL's scheme is outside the client's allowlist, and emitted by the bridge
+as `PLAY <ch>-<layer> "<url>"` — the command the owner proved by hand on the plant.
+
+**Why — the finding, and its exact shape: THE GAP IS EXPRESSION, NOT CAPABILITY.** The mechanism
+already works end to end, unlabelled. The `media` arm is `file: z.string().min(1)`;
+`producerArgument` (`tools/caspar-bridge/src/command-builder.ts`) emits `quote(producer.file)`; and
+`quote()` (`packages/caspar-client/src/amcp/escape.ts`) is the IDENTITY for every character except
+`\`, `"`, LF and CR — none of which appear in a URL. So typing a URL into today's "Media file"
+field already produces exactly the command the owner proved. There is NO PLANT RISK in the
+mechanism — which is why the real work of this item is labelling, validation and refusal, not wire
+plumbing:
+
+1. **The label lies.** `SourcesModal.tsx`'s `PRODUCER_KINDS` and `KIND_LABEL` are hand-written
+   four-entry consts (`route` / `decklink` / `ndi` / `media`); the field reads "Media file"; the
+   placeholder is `AMB`. Nobody discovers the workaround, and a second operator reading the config
+   cannot tell a clip from a feed — a distinction that matters exactly when the feed drops.
+2. **Nothing validates the URL.** `SOURCES_SET_CONFIG_REASONS` carries `duplicate-id`,
+   `duplicate-name`, `overlaps-fixed-bank`, `overlaps-reserved` — nothing about a URL. A mistyped
+   URL is therefore refused BY CASPARCG, AT TAKE, ON AIR — the exact failure
+   `SourceProducerSchema`'s own docstring says the union exists to prevent: _"an unreachable
+   producer form is a parse error at the boundary rather than an AMCP `400` at take time."_
+
+**Already sound — recorded so nobody proposes the work:**
+
+- `producerArgument` is an EXHAUSTIVE no-default switch with a declared `: string` return, so a new
+  `kind` fails COMPILATION until every site handles it (session BS §3 audited exactly this and
+  called it sound by construction — `docs/handoff/2026-08-22-session-bs.md`). Adding the arm is
+  compiler-guided, not a grep.
+- `sourceArgument()` exists so the ledger records _"the concrete producer argument actually SENT"_
+  by asking the same function `playSource` asks; and the ledger's `producer: z.string()`
+  (`tools/caspar-bridge/src/live-layers.ts`) is a ledger record, not a catalog schema — both carry
+  a URL with no change. Verified against source at filing.
+
+**The three decisions — TAKEN BY THE OWNER; do not re-open them:**
+
+1. **A NEW `stream` arm, NOT an extension of `media`.** `media`'s own docstring is _"the one
+   producer that needs no signal"_, and a stream is its opposite — it needs a signal and can drop.
+   One arm covering both would leave the schema unable to say which failure modes a source even
+   has.
+2. **A SCHEME ALLOWLIST, and it is the CLIENT'S OWN REQUIREMENT.** Exactly these nine: `http`
+   `https` `rtmp` `rtmps` `rtsp` `srt` `udp` `rtp` `mms`. A URL whose scheme is outside the set is
+   REFUSED at the config boundary, with its own new refusal code added to
+   `SOURCES_SET_CONFIG_REASONS`. 🔴 **How the arm's docstring must frame the list — load-bearing:**
+   it states WHAT THE CLIENT REQUIRES THE PRODUCT TO ACCEPT. It must NOT be written as a claim
+   about what CasparCG or its linked ffmpeg supports — no source of truth for that is available,
+   and a hand-written list posing as one is precisely the guard failure session BS spent a session
+   auditing and repairing. Write the honest sentence.
+3. **v1 SCOPE = "type a URL and it plays."** Reconnect, stall detection and stream health are OUT
+   OF SCOPE — named here so their absence reads as a decision, not an oversight. The known limit
+   that goes with them: a stream can be ALIVE-BUT-STALLED, and nothing in the bridge models that
+   today — every existing arm either works or the link to CasparCG is down (the [[B-086]] model).
+
+**A consequence, not a task:** a stream usually states no `format`, so `sourceAspect()` falls
+through to the explicit `aspect` and then to `null` — the same branch `AUTO` lands on. v1 adds NO
+required aspect field.
+
+**Acceptance:**
+
+- WHEN the operator defines a source of kind `stream` with a URL whose scheme is one of the nine
+  THEN the catalog accepts it, and the Sources modal labels the kind as a stream with a URL field —
+  never "Media file" / `AMB`
+- WHEN a catalog is set containing a `stream` URL whose scheme is outside the nine THEN
+  `sources.set-config` refuses it at the boundary with the new refusal code, naming the offending
+  scheme, and nothing is persisted or reaches the wire
+- WHEN a plate assigned to a `stream` source is taken THEN the bridge emits
+  `PLAY <ch>-<layer> "<url>"` — built by `producerArgument`'s new arm through `quote()` exactly
+  once, per the command-builder's contract
+- WHEN a `stream` producer is seated THEN the ledger's `producer` field records the concrete URL
+  argument as sent, via `sourceArgument` — asserted for the new arm, not assumed from the old ones
+- WHEN the shared validator refuses a scheme THEN the mock refuses IDENTICALLY — the allowlist
+  lives beside `SOURCES_SET_CONFIG_REASONS` in `@cg/shared-ipc`'s shared validator
+  (`validateSourceCatalog`), one implementation for bridge and mock, per that function's own rule
+- WHEN a `stream` source states no `format` THEN fit falls through to the explicit `aspect` and
+  then to `null`, and no new required field exists
+
+**Explicitly OUT of scope (decision 3):** reconnect, stall detection, stream health or any
+modelling of alive-but-stalled; any required aspect field; DECKLINK/NDI/fill+key hardware
+validation ([[C-021]]'s, unchanged).
+
+**Notes:**
+
+- Filed in `caspar.md` by the nearest-sibling rule: [[C-021]] is an item entirely about producer
+  ARMS of this same union, and [[C-015]] built the union, the catalog and the Sources modal's
+  producer editor under a `C-` number. The Runtime modal work here is the thin surface half of the
+  same one change, so no twin item is filed in `runtime.md`.
+- Unlike [[C-021]]'s arms, this one is VALIDATABLE ON THIS PLANT — the owner already validated the
+  command by hand; the item is not hardware-blocked.
+- [[C-022]]'s read-only catalog endpoint serves id / name / format and needs no change for a new
+  producer kind.
+- **FILED ONLY — no implementation.** The number was verified free by the heading sweep
+  immediately before this heading was written (highest `C-` heading was `C-024`;
+  `git grep -n "C-025"` returned only "next free" pointers, none a heading) — recorded in
+  [b-number-registry.md](b-number-registry.md).
+- **Cross-refs:** [[C-015]] (the union and catalog), [[C-021]] (the sibling arms), [[B-086]] (the
+  works-or-link-down model the stalled limit is stated against).

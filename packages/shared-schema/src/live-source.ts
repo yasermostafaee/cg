@@ -48,7 +48,7 @@ export const LiveSourceDeclarationSchema = z.object({
    *
    * A template declares ONE symbolic id, and whether it resolves to a single
    * device or to a fill/key DEVICE PAIR is a property of the installation's
-   * MAPPING (`SourceMappingsSchema`'s DECKLINK arm), never of the scene. The
+   * MAPPING (`SourceProducerSchema`'s DECKLINK arm), never of the scene. The
    * author cannot know how a source arrives at a plant, which is §12.1's
    * principle and §3's, applied one step further.
    *
