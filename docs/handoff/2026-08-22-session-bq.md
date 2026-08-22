@@ -7,11 +7,12 @@
 
 ## 0. State
 
-| Fact              | Value                                                                  |
-| ----------------- | ---------------------------------------------------------------------- |
-| Tip read at start | `8fd8eeb1` — `HEAD == origin/dev`, tree clean                          |
-| **Pushed**        | see §7 — verified by `git ls-remote origin dev`, never by an exit code |
-| Filed             | **`B-157`** (fixed), in its own dated registry section with its sweep  |
+| Fact              | Value                                                                    |
+| ----------------- | ------------------------------------------------------------------------ |
+| Tip read at start | `8fd8eeb1` — `HEAD == origin/dev`, tree clean                            |
+| **Pushed**        | `669f392d` — verified by `git ls-remote origin dev`, not by an exit code |
+| **Owed e2e**      | ✅ **DISCHARGED** — see §6                                               |
+| Filed             | **`B-157`** (fixed), in its own dated registry section with its sweep    |
 
 ## 1. The report, and the one-sentence rule that settles it
 
@@ -84,14 +85,18 @@ smuggled in here. Recorded in `B-157` and in the fixture itself.
 
 - `pnpm gate` — green, **uncached** (`0 cached, 89 total`; openspec 58/58).
 - `@cg/runtime` 95 files / 882 tests · `@cg/caspar-bridge` 78 files / 598 tests — full suites.
-- E2E 2/2 locally. 🔴 **A Linux `gate:e2e` is OWED** — this is UI and render — discharged only by a
-  COMPLETED run whose `E2E (Playwright)` job RAN. See §7.
+- E2E 2/2 locally.
+- ✅ **The Linux `gate:e2e` — DISCHARGED.**
+  <https://github.com/yasermostafaee/cg/actions/runs/32540851167> — head `669f392d`, the tip
+  carrying every change of the session, `completed` + `success`, and the **`E2E (Playwright)` job
+  RAN** (00:36:03Z → 00:45:26Z), not skipped. Written beside `tasks.md` 7.23 as well, so the
+  evidence outlives this file.
 
 ## 7. Flags for the owner
 
 1. **Product source, and a shared package.** `@cg/shared-ipc` gained three exported functions and
    the bridge now delegates to them — every workspace that depends on it rebuilds.
-2. **The owed Linux `gate:e2e`** for this tip.
+2. **The Linux `gate:e2e` for this tip is DISCHARGED** — §6 carries the run URL.
 3. No `CLAUDE.md`, `turbo.json`, root `package.json` or gate-hook change.
 
 ## 8. Out of scope — named untouched

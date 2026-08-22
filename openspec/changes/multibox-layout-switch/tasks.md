@@ -1098,6 +1098,11 @@ candidate shapes.
       field and omitted an ADDED one and nothing caught it. Turning it on is its own work: **113
       pre-existing errors, measured.**
 
+  > ✅ **Linux `gate:e2e` DISCHARGED for 7.23 (session BQ):**
+  > <https://github.com/yasermostafaee/cg/actions/runs/32540851167> — head `669f392d`, the tip
+  > carrying every change of the session, `completed` + `success`, and the **`E2E (Playwright)` job
+  > RAN** (2026-08-22 00:36:03Z → 00:45:26Z), not skipped.
+
 - [ ] 7.17 **The stale TITLE binding — DEFERRED by BM-2's patch §C, which is explicit that the flash
       outranks it.** Everything `tasks.md` 7.13 records still stands: deferring costs no re-authoring
       (`BindingTargetSchema` is a discriminated union; `live-source-id` is the precedent for a target
