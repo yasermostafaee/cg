@@ -3035,10 +3035,16 @@ export class CasparRuntime {
       press of UPDATE an atomic operator action rather than two commands sharing a button.
     */
     if (lookBindings !== undefined) {
-      const applied = await this.#applyBindingTransaction(itemId, slot, {
-        overrides: this.#sourceOverrides.get(itemId),
-        bindings: lookBindings,
-      });
+      // `B-155` §B — under the item's live-seat lock (see `#withLiveSeatLock`), so a
+      // binding apply cannot interleave into an in-flight look switch's window; the
+      // overrides are read INSIDE the lock so a queued apply composes with what the
+      // action ahead of it recorded.
+      const applied = await this.#withLiveSeatLock(itemId, () =>
+        this.#applyBindingTransaction(itemId, slot, {
+          overrides: this.#sourceOverrides.get(itemId),
+          bindings: lookBindings,
+        }),
+      );
       if (!applied.ok) {
         return {
           accepted: false,
@@ -4637,6 +4643,16 @@ export class CasparRuntime {
       spelling).
     */
     /*
+      🔴 `B-155` §B — THE WHOLE ON-AIR BRANCH RUNS UNDER THE ITEM'S LIVE-SEAT LOCK
+      (see {@link #withLiveSeatLock}): from the on-air read through the reconcile to the
+      page flip is ONE critical section, so a swap or an update arriving mid-switch runs
+      AFTER the page has been told and therefore plans against the look the page is
+      actually punching. The reads below (`#reconciler`, `#liveLayers`) are inside the
+      lock for the same reason the plan is — read on the near side of a queue, they
+      could describe a row a queued action has since changed.
+    */
+    return this.#withLiveSeatLock(itemId, async () => {
+      /*
       🔴 "IS THIS ROW ON AIR" IS ASKED OF THE STATUS, NOT OF THE LEDGER.
 
       This tested `the ledger is empty` and called it "nothing is seated, so recording the
@@ -4656,42 +4672,42 @@ export class CasparRuntime {
       stays, but only for what it genuinely answers — an OFF-AIR row with no seats has nothing
       to reconcile, so recording the look really is the whole action there.
     */
-    const item = this.#reconciler.get(itemId);
-    const onAir = item != null && isOnAirStatus(item.status, item.pending);
-    if (!onAir && (this.#liveLayers.get(itemId) ?? []).length === 0) {
-      // Case 2 of `#recordActiveLook`: there is no page to disagree, and the next `CG ADD`
-      // carries this look into the build. Recording it IS the whole action.
-      this.#recordActiveLook(itemId, lookId);
-      return { ok: true };
-    }
-    if (this.#noServerReachable()) {
-      return {
-        ok: false,
-        reason: 'disconnected',
-        // 7.9 — it says the look was NOT changed, because now it was not. The old sentence
-        // ("the look was recorded but the live sources were not moved") described the very
-        // half-state this method no longer leaves behind.
-        message:
-          'Not connected to CasparCG — the look was not changed, and nothing was queued. ' +
-          'Reissue it once the server is back.',
-      };
-    }
-    /*
+      const item = this.#reconciler.get(itemId);
+      const onAir = item != null && isOnAirStatus(item.status, item.pending);
+      if (!onAir && (this.#liveLayers.get(itemId) ?? []).length === 0) {
+        // Case 2 of `#recordActiveLook`: there is no page to disagree, and the next `CG ADD`
+        // carries this look into the build. Recording it IS the whole action.
+        this.#recordActiveLook(itemId, lookId);
+        return { ok: true };
+      }
+      if (this.#noServerReachable()) {
+        return {
+          ok: false,
+          reason: 'disconnected',
+          // 7.9 — it says the look was NOT changed, because now it was not. The old sentence
+          // ("the look was recorded but the live sources were not moved") described the very
+          // half-state this method no longer leaves behind.
+          message:
+            'Not connected to CasparCG — the look was not changed, and nothing was queued. ' +
+            'Reissue it once the server is back.',
+        };
+      }
+      /*
       The PROSPECTIVE look, passed explicitly rather than read back out of a map this method
       has deliberately not written (7.9). The rects the reconcile seats and the id the page is
       told below are now the same `look` object travelling through one call, which is what
       `design.md` §6/§12.2 asks for and what routing them through shared mutable state was
       quietly costing.
     */
-    const reconciled = await this.reconcileLivePlates(itemId, { mode: 'live', lookId: look.id });
-    if (!reconciled.ok) {
-      return {
-        ok: false,
-        ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
-        ...(reconciled.message === undefined ? {} : { message: reconciled.message }),
-      };
-    }
-    /*
+      const reconciled = await this.reconcileLivePlates(itemId, { mode: 'live', lookId: look.id });
+      if (!reconciled.ok) {
+        return {
+          ok: false,
+          ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
+          ...(reconciled.message === undefined ? {} : { message: reconciled.message }),
+        };
+      }
+      /*
       `tasks.md` 6.7 — TELL THE PAGE, and tell it LAST.
 
       The fills have just moved; this is the command that moves the HOLES they sit behind.
@@ -4721,16 +4737,16 @@ export class CasparRuntime {
       has nothing to tell — case 2 of {@link #recordActiveLook} — so the look is recorded here
       and the next take's re-ADD path carries it into the rebuilt page.
     */
-    if (!this.#loaded.has(itemId)) {
-      this.#recordActiveLook(itemId, lookId);
-      return { ok: true };
-    }
-    const told = await this.#tellPageLook(itemId, slot, lookId);
-    if (told.ok) return { ok: true };
-    return {
-      ok: false,
-      reason: told.errorCode ?? 'amcp-error',
-      /*
+      if (!this.#loaded.has(itemId)) {
+        this.#recordActiveLook(itemId, lookId);
+        return { ok: true };
+      }
+      const told = await this.#tellPageLook(itemId, slot, lookId);
+      if (told.ok) return { ok: true };
+      return {
+        ok: false,
+        reason: told.errorCode ?? 'amcp-error',
+        /*
         7.9 — the LAST sentence is the one that changed, and it is a statement about state
         rather than a nicety. The fills did move; the holes did not; and the row stays
         RECORDED on the look the page is actually punching, so the next ordinary reconcile
@@ -4738,11 +4754,67 @@ export class CasparRuntime {
         half-switch. The picture is wrong until the operator re-issues, and it converges on
         its own rather than waiting for them to.
       */
-      message:
-        `the live sources moved to look "${lookId}", but CasparCG refused the command that ` +
-        `tells the graphic to switch — its holes are still on the previous look, and the row ` +
-        `is still recorded on it. Re-issue the switch.`,
-    };
+        message:
+          `the live sources moved to look "${lookId}", but CasparCG refused the command that ` +
+          `tells the graphic to switch — its holes are still on the previous look, and the row ` +
+          `is still recorded on it. Re-issue the switch.`,
+      };
+    });
+  }
+
+  /**
+   * 🔴 **`B-155` §B (`tasks.md` 7.15) — ONE LIVE RECONCILE AT A TIME PER ITEM, so a
+   * producer change can never interleave into a switch's plan-to-page-flip window.**
+   *
+   * ── THE HOLE THIS CLOSES, WHICH IS THE LAST RESIDUAL PATH §A FOUND ──────────────
+   *
+   * The bridge dispatches WebSocket requests without awaiting the previous one
+   * (`bridge.ts` — `void handleMessage(...)`; the actor-context note there names two
+   * browsers interleaving as a design fact). Sequentially, the switch is safe by its own
+   * ordering: fills move, departing seats are PARKED, and only then is the page told to
+   * open the new look's holes. INTERLEAVED, that ordering is no longer one ordering:
+   * a `swapLiveSource` or an `update` arriving while a `setActiveLook` is parked on an
+   * AMCP ack plans against the OUTGOING look (`#activeLooks` is written only when the
+   * page has been told — `tasks.md` 7.9) and against the PRE-SWITCH ledger (written only
+   * at the end of `#applyLivePlates`), so its `PLAY` and its `MIXER FILL` at the OLD
+   * look's geometry can land between the switch's fills and its page flip — a producer
+   * change inside a moving hole, which is `B-155`'s shape arriving by concurrency
+   * instead of by the (closed) assignment lurk. And the two actions' final
+   * `registerLiveLayers` writes are each computed from the SAME `previous` snapshot, so
+   * whichever finishes last erases the other's records: golden rule 7's two-reads-with-
+   * an-await-between, at the ledger instead of at a boolean.
+   *
+   * ── WHAT IS GATED, AND WHAT IS DELIBERATELY NOT ─────────────────────────────────
+   *
+   * Gated: the three LIVE doors — `setActiveLook`, `swapLiveSource`, and `update`'s
+   * binding transaction — each around its whole read-plan-send-record span, page flip
+   * included. NOT gated: `take` and `out`. The take is the OPERATOR'S REPAIR VERB and
+   * must never queue behind the thing it may be repairing — a wedged switch holding this
+   * lock must not be able to hold the row off air; the take's own mode already
+   * re-asserts every seat unconditionally and rolls back on failure, which is what makes
+   * that safe. The restore path runs at boot, before any door can be called.
+   *
+   * ── WHY THIS IS A PROVEN NO-OP ON THE COMMON PATH ───────────────────────────────
+   *
+   * Sequential calls chain onto an already-resolved promise: same commands, same order,
+   * same everything — pinned by the golden-sequence test in `live-look-reconcile`
+   * (`B-155 §B — the common path's exact wire sequence`), which asserts the full ordered
+   * line list of a plain switch and was green before this lock existed.
+   */
+  readonly #liveSeatQueues = new Map<string, Promise<unknown>>();
+
+  async #withLiveSeatLock<T>(itemId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.#liveSeatQueues.get(itemId) ?? Promise.resolve();
+    const run = prev.then(fn);
+    // The stored tail swallows the failure so one refused action cannot poison the
+    // queue for every later one; `run` itself still rejects to the caller.
+    const tail = run.catch(() => undefined);
+    this.#liveSeatQueues.set(itemId, tail);
+    try {
+      return await run;
+    } finally {
+      if (this.#liveSeatQueues.get(itemId) === tail) this.#liveSeatQueues.delete(itemId);
+    }
   }
 
   /**
@@ -5469,11 +5541,13 @@ export class CasparRuntime {
    * recorded, and the row is told — a state that claimed the new source while the
    * layer carried the old would be worse than the failure.
    *
-   * ⚠ **THAT SUBSTITUTION IS UNVERIFIED ON THE PLANT'S 2.3.2 (task 6.9a).** The
+   * ⚠ **THAT SUBSTITUTION IS UNVERIFIED ON THE PRODUCTION 2.5.0 (task 6.9a).** The
    * mock models `PLAY` on an occupied layer as a replace, so the tests prove this
    * code is self-consistent and prove NOTHING about the server. It rides with
    * §3b's `DEFER`/`COMMIT` question and 6.3a's `CLIP` probe — all AMCP probes on
-   * the same build.
+   * the same build. (This used to say "the plant's 2.3.2"; production is 2.5.0
+   * `69e8ad5` and the 2.3.2 at `D:\programs\CasparCG` is RETIRED and must never be
+   * probed — `tools/caspar-amcp-probe/README.md`, `assertProductionBuild`.)
    *
    * ── THE THREE THINGS THAT TRAVEL WITH IT ───────────────────────────────────
    *
@@ -5535,28 +5609,38 @@ export class CasparRuntime {
     }
 
     /*
+      🔴 `B-155` §B — EVERYTHING FROM THE MAP READS DOWN RUNS UNDER THE ITEM'S LIVE-SEAT
+      LOCK (see {@link #withLiveSeatLock}). A swap arriving while a look switch is parked
+      on an AMCP ack used to plan against the OUTGOING look and the PRE-SWITCH ledger —
+      its `PLAY` + `MIXER FILL` at the old look's geometry landing between the switch's
+      fills and its page flip. Queued, it plans against the look the page is actually
+      punching. The map reads are inside the lock so a queued swap composes with the
+      overrides the action ahead of it recorded, not with a snapshot from before it.
+    */
+    return this.#withLiveSeatLock(itemId, async () => {
+      /*
       WHICH MAP THIS WRITES — the only place the two scopes diverge. Everything downstream
       (the refusal, the reconcile, the rollback, the publish) treats them identically,
       because they are the same edit at two scopes.
     */
-    const current = this.#sourceOverrides.get(itemId) ?? {};
-    const currentBindings = this.#lookSourceBindings.get(itemId) ?? {};
-    const next: Record<string, string> = { ...current };
-    const nextBindings: Record<string, Record<string, string>> = { ...currentBindings };
-    if (lookId === undefined) {
-      if (sourceId === null) delete next[plateId];
-      else next[plateId] = sourceId;
-    } else {
-      const forLook: Record<string, string> = { ...(currentBindings[lookId] ?? {}) };
-      if (sourceId === null) delete forLook[plateId];
-      else forLook[plateId] = sourceId;
-      // An EMPTY per-look map is no binding at all, for the same reason an empty override
-      // map is: keeping one would publish a row as composed when it is back on its defaults.
-      if (Object.keys(forLook).length === 0) delete nextBindings[lookId];
-      else nextBindings[lookId] = forLook;
-    }
+      const current = this.#sourceOverrides.get(itemId) ?? {};
+      const currentBindings = this.#lookSourceBindings.get(itemId) ?? {};
+      const next: Record<string, string> = { ...current };
+      const nextBindings: Record<string, Record<string, string>> = { ...currentBindings };
+      if (lookId === undefined) {
+        if (sourceId === null) delete next[plateId];
+        else next[plateId] = sourceId;
+      } else {
+        const forLook: Record<string, string> = { ...(currentBindings[lookId] ?? {}) };
+        if (sourceId === null) delete forLook[plateId];
+        else forLook[plateId] = sourceId;
+        // An EMPTY per-look map is no binding at all, for the same reason an empty override
+        // map is: keeping one would publish a row as composed when it is back on its defaults.
+        if (Object.keys(forLook).length === 0) delete nextBindings[lookId];
+        else nextBindings[lookId] = forLook;
+      }
 
-    /*
+      /*
       🔴 §6.2 / §2.7 — REFUSED HERE, BEFORE ANYTHING IS WRITTEN OR SENT.
 
       Both refusals are about the binding the operator just asked for, so they belong at the
@@ -5564,12 +5648,12 @@ export class CasparRuntime {
       take instead would refuse a graphic on the way to air over a choice made minutes
       earlier; reaching them during the reconcile would already have written the override.
     */
-    const refusal = this.#refuseBindingChange(itemId, itemSlot, {
-      overrides: next,
-      bindings: nextBindings,
-    });
-    if (refusal !== null) return { ok: false, ...refusal };
-    /*
+      const refusal = this.#refuseBindingChange(itemId, itemSlot, {
+        overrides: next,
+        bindings: nextBindings,
+      });
+      if (refusal !== null) return { ok: false, ...refusal };
+      /*
       ⚠ `#applyBindingTransaction` asks this again, and that is not golden rule 7's hazard.
       Rule 7 is about a condition read TWICE WITH AN AWAIT BETWEEN, where the second read can
       disagree with the first and a destructive step has already run on the first. Here both
@@ -5579,27 +5663,27 @@ export class CasparRuntime {
       never reaches the transaction at all and must still be refused.
     */
 
-    const seatedAnything = (this.#liveLayers.get(itemId) ?? []).length > 0;
-    if (!seatedAnything) {
-      // Nothing seated for this plate — the item is not on air, or its hole is
-      // off-frame. Recording the override IS the whole action; the next take
-      // resolves through it. Deliberately not gated on reachability: this is a
-      // list edit, exactly like setting a position on an idle row.
-      this.#applySourceOverride(itemId, next, nextBindings);
-      return { ok: true };
-    }
+      const seatedAnything = (this.#liveLayers.get(itemId) ?? []).length > 0;
+      if (!seatedAnything) {
+        // Nothing seated for this plate — the item is not on air, or its hole is
+        // off-frame. Recording the override IS the whole action; the next take
+        // resolves through it. Deliberately not gated on reachability: this is a
+        // list edit, exactly like setting a position on an idle row.
+        this.#applySourceOverride(itemId, next, nextBindings);
+        return { ok: true };
+      }
 
-    if (this.#noServerReachable()) {
-      return {
-        ok: false,
-        reason: 'disconnected',
-        message:
-          'Not connected to CasparCG — the swap was refused, not queued. Reissue it once the ' +
-          'server is back.',
-      };
-    }
+      if (this.#noServerReachable()) {
+        return {
+          ok: false,
+          reason: 'disconnected',
+          message:
+            'Not connected to CasparCG — the swap was refused, not queued. Reissue it once the ' +
+            'server is back.',
+        };
+      }
 
-    /*
+      /*
       🔴 §4 / 6.3 — THE SWAP IS A CALLER OF THE ONE RECONCILE, NOT A PEER OF IT.
 
       This method used to resolve, fit, `PLAY`, re-assert and re-ledger one plate itself,
@@ -5623,9 +5707,9 @@ export class CasparRuntime {
       swap records nothing. Written through the raw map rather than `#applySourceOverride`
       so a refusal never publishes a substitution that did not happen.
     */
-    // THE ORDERING LIVES IN ONE PLACE — see {@link #applyBindingTransaction}.
+      // THE ORDERING LIVES IN ONE PLACE — see {@link #applyBindingTransaction}.
 
-    /*
+      /*
       🔴 **`tasks.md` 7.9 — THIS CALL IS WHERE THE DEFECT SURFACED, AND IT IS DELIBERATELY
       UNCHANGED. Do not add an `updateLook` here.**
 
@@ -5649,19 +5733,20 @@ export class CasparRuntime {
       So R-048's on-air behaviour is UNCHANGED by 7.9: a swap still sends exactly its own
       producer's `PLAY` + `MIXER`, and still tells the page nothing.
     */
-    const applied = await this.#applyBindingTransaction(itemId, itemSlot, {
-      overrides: next,
-      bindings: nextBindings,
+      const applied = await this.#applyBindingTransaction(itemId, itemSlot, {
+        overrides: next,
+        bindings: nextBindings,
+      });
+      if (applied.ok) return { ok: true };
+      return {
+        ok: false,
+        reason: applied.reason ?? 'amcp-error',
+        message:
+          applied.message ??
+          `CasparCG refused the substitution, so plate "${plateId}" is still on its previous ` +
+            `source. Nothing was cleared.`,
+      };
     });
-    if (applied.ok) return { ok: true };
-    return {
-      ok: false,
-      reason: applied.reason ?? 'amcp-error',
-      message:
-        applied.message ??
-        `CasparCG refused the substitution, so plate "${plateId}" is still on its previous ` +
-          `source. Nothing was cleared.`,
-    };
   }
 
   /**

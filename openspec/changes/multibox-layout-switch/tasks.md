@@ -898,13 +898,71 @@ candidate shapes.
       still owed is a MEASUREMENT, not a fix — see the rule below and the two probes. Ticking this
       on a green suite is the precise thing the next paragraph forbids.
       🔴 **DO NOT READ THE GREEN SUITE AS A FIX.** `@cg/amcp-mock` models `PLAY` on an occupied layer
-      as an in-place replace, which `swapLiveSource`'s own doc marks **UNVERIFIED on 2.3.2 (task
-      6.9a)** — the flash IS that replace's timing, so the mock cannot see it. And whether `FILL` and
+      as an in-place replace, which `swapLiveSource`'s own doc marks **UNVERIFIED on the production
+      2.5.0 (task 6.9a)** — the flash IS that replace's timing, so the mock cannot see it.
+      (Corrected 2026-08-22: this and 6.9a/6.3a/§3b said "the plant's 2.3.2"; that install is
+      RETIRED at `D:\programs\CasparCG` and `assertProductionBuild` refuses it — probe README.)
+      And whether `FILL` and
       `CLIP` land on the SAME FRAME is open (`design.md` **§3b**: `MIXER … DEFER` + a channel-scoped
       `COMMIT`, forbidden until the COMMIT-scope question is answered).
       **The probes this waits on: `6.9a` and `§3b`.** Also owed: the FRAME COUNT at 25 fps,
       reproduced twice, channel read EMPTY before and after — a plant measurement this session could
-      not take.
+      not take. 🔴 **The owner's numbered plant walk exists:
+      `docs/recon/2026-08-22-b155-switch-flash-walk.md`** (it rides the same visit as
+      `2026-08-22-confidence-grab-measurement.md` §C).
+
+      ⭐ **2026-08-22 (session BT) — THE RESIDUAL PATHS ENUMERATED FROM THE CODE, one fixed, the
+      rest measured-only.** Per case, the AMCP sequence a switch emits (anchors at this date's
+      tree):
+
+      1. **COMMON path (seats already seated):** `setActiveLook` → `reconcileLivePlates('live')` →
+         `#applyLivePlates` — per punched plate whose geometry moved, `MIXER FILL`+`CLIP` only
+         (`caspar-runtime.ts:5068` `seatUnchanged`); departing seats `MIXER VOLUME 0` + the B-154
+         park; then the page flip `CG … UPDATE` LAST (fills-first-page-last-and-only-on-success).
+         **No `PLAY`, no `CLEAR`** — pure geometry, as asserted. Now pinned BYTE-FOR-BYTE:
+         `live-look-reconcile` _"the common path's exact wire sequence"_ asserts the full ordered
+         line list.
+      2. **A look never seated (no preset):** reachable only where the union-seating left no seat —
+         a `media`-kind plate (torn down on exit, `live-plate-release.ts:222`) or a preset whose
+         earlier pre-seat failed and was dropped (`caspar-runtime.ts:5171`). The switch then emits
+         `PLAY` → `VOLUME` → `FILL`+`CLIP` on a FRESH, EMPTY band layer, all acked BEFORE the page
+         flip — the hole opens onto a layer that never carried the previous source. INFERENCE
+         (renderer, not wire): an acquiring producer composites as nothing ⇒ BLACK, which the rule
+         allows. Plant walk step 6 measures it.
+      3. **Re-point (level 3) by UPDATE, then a switch:** the UPDATE's reconcile pre-seats the new
+         input PARKED (`#planLiveSeating`'s union-over-every-look, `caspar-runtime.ts:3811`;
+         `freshParked` at `:5049`), so the later switch is case 1 for it: re-fit + un-mute, **no
+         `PLAY` inside the switch**. Pinned by PATCH-01 A6. (A re-point of the ACTIVE look is a
+         replace under a NON-moving hole — R-048's contract, 6.9a's unverified timing.)
+      4. 🔴 **`R-048` swap landing while a switch is IN FLIGHT — the one path that could still put
+         a producer change inside a moving hole, and it is CLOSED.** `bridge.ts:594` dispatches
+         requests without awaiting (`void handleMessage`), and nothing serialized the live doors:
+         a swap arriving mid-switch planned against the OUTGOING look (`#activeLooks` is written
+         only at the page flip, 7.9) and the PRE-SWITCH ledger, so its `PLAY` + `FILL` at the OLD
+         geometry could land between the switch's fills and its flip — measured, not inferred: the
+         pre-fix run put the swap's `PLAY` at wire index 1 with the flip at 21. And both actions'
+         `registerLiveLayers` writes came from the same `previous` snapshot — golden rule 7's
+         two-reads-with-an-await-between, at the ledger. **Fixed: `#withLiveSeatLock`
+         (`caspar-runtime.ts:4806`)** — one live reconcile at a time per item, gating
+         `setActiveLook`, `swapLiveSource` and `update`'s binding transaction, each through its
+         page flip. `take`/`out` are DELIBERATELY not gated: the repair verb must never queue
+         behind the thing it may be repairing. **Proven no-op on the common path:** the golden
+         sequence test was green BEFORE the lock and green after; the serialization test was RED
+         before (that index-1 `PLAY`) and green after, and asserts the queued swap resolves the
+         ENTERED look's geometry.
+      5. **Re-take of a thawed row:** after a landed `out`, seats are torn down, so the re-take
+         `PLAY`s onto EMPTY layers before `CG PLAY` — black-until-frames at worst. A re-take of a
+         STILL-ON-AIR row (the repair verb / the freeze-adoption door) re-asserts every seat
+         unconditionally, `PLAY` on OCCUPIED layers with holes open but NOT moving — the ordering
+         is right (all `PLAY`s ack before `CG PLAY` re-runs the intro), and what the replace shows
+         while the incoming producer acquires is EXACTLY 6.9a's unverified question. No code can
+         improve it without a forbidden CLEAR-then-PLAY window; plant walk step 5 measures it
+         (and walk step 8 confirms case 4's serialization by eye).
+
+      🔴 **WHAT THE GREEN SUITE STILL CANNOT PROVE, unchanged by the fix:** the mock models `PLAY`
+      on an occupied layer as an instantaneous in-place replace and has no notion of producer
+      acquisition time, so cases 2, 4-as-fixed and 5 are proven for ORDER only — no test anywhere
+      can see a frame. This block does not tick 7.15; only the plant walk's frame counts can.
       **The rule, decided so it is not re-litigated:** the new look's hole must NEVER show the
       previous source; if the incoming producer is not ready, BLACK is acceptable and the previous
       guest is not. That does not contradict `B-126`, whose case is the opposite trade (a dead feed

@@ -32,7 +32,7 @@ import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
  * air. What is proven here is the COMMAND SEQUENCE — that a plain switch issues no `PLAY`,
  * that `MIXER FILL`/`CLIP` are re-derived per look, that held producers stay seated and
  * muted, that the layer set does not move — and the claim that those commands produce a
- * clean cut on a 2.3.2 server remains a plant measurement, not a result.
+ * clean cut on the production 2.5.0 server remains a plant measurement, not a result.
  *
  * **The PAGE's half of the switch.** A look switch is two mutations on two machines: the
  * bridge moves the producers' geometry (here) and the page flips which look's instance is
@@ -2139,4 +2139,90 @@ it('⭐ §3 positive control — a switch whose input DID change still emits its
     playsIn(lines).length + (await recvLines()).filter((l) => l.includes('"route://5"')).length,
     'the changed input reached the wire somewhere in this run',
   ).toBeGreaterThan(0);
+});
+
+// ───────── B-155 §B — THE COMMON PATH PINNED EXACTLY, AND THE LOCK THAT MADE IT SAFE ─────────
+
+it("🔴 B-155 §B — the common path's exact wire sequence: a plain switch, byte for byte", async () => {
+  /*
+    THE NO-OP PROOF for the live-seat lock (`#withLiveSeatLock`). The tests above assert
+    what a switch must NOT contain (no `PLAY`, no `CLEAR`); this one asserts the WHOLE
+    ordered line list, so any change that adds, drops or reorders a single command on the
+    common path goes red — including the serialization itself, which is only acceptable
+    because this test was GREEN BEFORE the lock existed and is green after.
+
+    The sequence, derived in `#applyLivePlates`'s own order: the punched plate's re-fit
+    first (FILL then CLIP, one geometry), then each departing seat in ledger order —
+    mute, then the B-154 park (FILL moved off-raster, CLIP opened to the full frame) —
+    and the page flip LAST, only after every fill is where the new look's holes expect it.
+  */
+  const r = await boot();
+  await onAir(r);
+  const before = (await recvLines()).length;
+
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+
+  const lines = await since(before);
+  const expected = [
+    'MIXER 1-30 FILL 0 0 1 1',
+    'MIXER 1-30 CLIP 0 0 1 1',
+    ...[31, 32, 33, 34, 35].flatMap((layer) => [
+      `MIXER 1-${String(layer)} VOLUME 0`,
+      `MIXER 1-${String(layer)} FILL 2 2 0.25 0.25`,
+      `MIXER 1-${String(layer)} CLIP 0 0 1 1`,
+    ]),
+  ];
+  expect(lines.slice(0, expected.length)).toEqual(expected);
+  // The page flip is the LAST line, and it carries the look id the fills were derived from.
+  expect(lines).toHaveLength(expected.length + 1);
+  const flip = lines[expected.length] as string;
+  expect(flip).toMatch(/^CG 1-\d+ UPDATE 0 /);
+  expect(readCgControl(dataArgOf(flip, 'UPDATE'))?.look).toBe('solo');
+});
+
+it('🔴 B-155 §B — a swap arriving MID-SWITCH is serialized after it and resolves the ENTERED look', async () => {
+  /*
+    THE RESIDUAL PATH §A FOUND, closed. `bridge.ts` dispatches requests without awaiting
+    the previous one, so a `swapLiveSource` can arrive while a `setActiveLook` is parked
+    on an AMCP ack. Unserialized, the swap planned against the OUTGOING look
+    (`#activeLooks` is written only when the page has been told) and the PRE-SWITCH
+    ledger — its `PLAY` and its `MIXER FILL` at the OLD look's geometry landing between
+    the switch's fills and its page flip: a producer change inside a moving hole, which
+    is `B-155`'s shape arriving by concurrency instead of by the closed assignment lurk.
+
+    Under `#withLiveSeatLock` the swap runs strictly AFTER the switch — page flip
+    included — so it plans against the look the page is punching.
+
+    ⚠ What this cannot prove: what the REPLACE looks like on the plant while the new
+    producer acquires. `@cg/amcp-mock` models `PLAY` on an occupied layer as an in-place
+    substitution (6.9a, unverified on the production 2.5.0), so a green run here says the
+    ORDER is right and nothing about frames. The plant walk carries that half.
+  */
+  const r = await boot();
+  await onAir(r);
+  const live1Layer = layerOf(r, 'live-1');
+  const before = (await recvLines()).length;
+
+  // Fired back to back WITHOUT awaiting the first — the two-console interleaving.
+  const switchP = r.setActiveLook('item-1', 'solo');
+  const swapP = r.swapLiveSource('item-1', 'live-1', 'src-sd'); // 4:3, so the fit must re-derive
+  expect(await switchP).toEqual({ ok: true });
+  expect(await swapP).toEqual({ ok: true });
+
+  const lines = await since(before);
+  const flipAt = lines.findIndex((l) => /^CG 1-\d+ UPDATE 0 /.test(l));
+  const playAt = lines.findIndex((l) => l === `PLAY 1-${String(live1Layer)} "route://9"`);
+  expect(flipAt, 'the switch completed through its page flip').toBeGreaterThanOrEqual(0);
+  expect(playAt, 'the swap issued its replace').toBeGreaterThanOrEqual(0);
+  // EVERY switch line precedes EVERY swap line — the producer change happens strictly
+  // after the hole stopped moving.
+  expect(playAt).toBeGreaterThan(flipAt);
+
+  // …and the swap re-derived its fit against SOLO's full-frame hole, not the 6-box cell
+  // the outgoing look would have given it: a 4:3 feed covering a 16:9 frame overflows
+  // VERTICALLY (fill height > 1), where the 6-box cell's fill height is 0.33.
+  const rec = recordOf(r, 'live-1');
+  expect(rec?.producer).toBe('"route://9"');
+  expect(rec?.clip).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+  expect(rec?.fill.height ?? 0).toBeGreaterThan(1);
 });
