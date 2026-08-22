@@ -180,11 +180,20 @@ knowing before assuming a green `typecheck` said anything about this diff.
   carrying both its commits), `completed` + **`success`**, and **`E2E (Playwright)` reported
   `completed :: success`, i.e. it RAN**, not skipped. Read from the run's job list, not from an exit
   code.
-- ⏳ **`E2E-PNG-01`'s e2e debt is OWED** on `3e4f7832`. A local Windows `pnpm test:e2e` passed
-  269 / 12-skipped, but **that does not discharge it** by the very rule that owes it. The
-  authoritative Linux run is the push run for that commit; its URL belongs in this section and is
-  the only thing that closes it.
-- Both pushes verified with `git ls-remote origin dev` matching local `HEAD`.
+- ✅ **`E2E-PNG-01`'s e2e debt DISCHARGED** —
+  <https://github.com/yasermostafaee/cg/actions/runs/32585878051> — head `4124885d`, `completed` +
+  **`success`**, **`E2E (Playwright)` `completed :: success`, i.e. it RAN**. That tip is a later
+  `dev` HEAD that CONTAINS `3e4f7832`, which is what the discharge rule allows; a green Windows
+  `pnpm test:e2e` (269 passed / 12 skipped, run locally) does **not** discharge it and is recorded
+  here only as the local signal it is.
+- ⚠ **Disclosed, because it cost `3e4f7832` its own run.** `2bf31fa5`, `3e4f7832` and
+  `4124885d` were pushed in ONE push rather than one per commit, so GitHub raised a single run, for
+  the tip. The debt is still discharged — the run's diff spans the previous remote tip
+  (`4257ef19`) to `4124885d`, so `looks.spec.ts` was in the classified set and `e2e` RAN rather
+  than skipping — but it is the exact "a middle commit gets no run of its own" shape `CLAUDE.md`
+  warns about under the merge backstop, arrived at by push batching rather than by a burst. Push
+  per commit next time.
+- All pushes verified with `git ls-remote origin dev` matching local `HEAD`.
 - Files staged **individually** throughout; `git add <dir>` never used; `template-http-server.ts`
   never staged.
 

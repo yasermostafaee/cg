@@ -2409,3 +2409,7 @@ skipped when unset) and is the precedent this item follows.
 - **Not covered by `typecheck`:** `apps/designer`'s tsconfig `include` is `["src/**/*",
 "vite.config.ts"]`, so this file is outside the compile guarantee (`P-033`, still open). The
   change is covered by `lint` (which does lint `tests/`, 0 errors) and by the run itself.
+- ✅ **Linux `e2e` debt DISCHARGED** —
+  <https://github.com/yasermostafaee/cg/actions/runs/32585878051> — head `4124885d`, a later
+  `dev` HEAD carrying the fix commit `3e4f7832`; `completed` + `success`, with the
+  **`E2E (Playwright)` job RUN, not skipped**. The local Windows pass is not what discharges it.
