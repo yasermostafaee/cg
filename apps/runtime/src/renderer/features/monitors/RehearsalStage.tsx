@@ -341,7 +341,7 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
           live,
           raster,
           subject.position,
-          (plateId) => subject.plateSourceNames.get(plateId) ?? null,
+          subject.plateSources,
           subject.activeLookId,
         ).map((p) => ({ ...p, elementId: `${subject.itemId}:${p.elementId}` }));
       }),

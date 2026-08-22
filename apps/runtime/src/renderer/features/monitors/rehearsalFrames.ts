@@ -7,6 +7,7 @@ import {
   type TemplateLiveSources,
 } from '@cg/shared-ipc';
 import type { FieldValues, Position } from '@cg/shared-schema';
+import type { PlateSourceLookup } from './livePlateGeometry.js';
 
 /**
  * R-022 — the SUBJECTS of a rehearsal render: one per rehearsing row, resolved
@@ -34,15 +35,25 @@ export interface RehearsalSubject {
    */
   liveSources: TemplateLiveSources | undefined;
   /**
-   * R-049 — `plateId → the APPLIED source's operator-facing NAME`, or `null` for
-   * a plate nothing is bound to.
+   * 🔴 **SESSION BQ — WHAT THE OVERLAY NEEDS TO RESOLVE A SOURCE NAME, not the names
+   * themselves. The change of shape IS the fix.**
    *
-   * Resolved by the panel (which can see the sources store) rather than here, so
-   * the stage stays a presentational component. The names are the JOIN the
-   * exported page cannot make: it carries a plate identifier and nothing else, and
-   * only the Runtime holds the installation's binding for it.
+   * This was `plateSourceNames: ReadonlyMap<string, string | null>` — a map keyed by PLATE
+   * ID with no look dimension in it, so the same plate in two looks could only ever yield
+   * one name and a per-look binding was **unrepresentable**. `activeLookId` was already on
+   * this same interface, driving the rects; the names never saw it. The owner met that as a
+   * rehearsing row whose placeholder read "studio 1" after he had bound that look to
+   * studio 3 — PVW naming a source air would not have shown.
+   *
+   * ⚠ `B-151` was this exact shape one field over (the overlay never learned looks existed,
+   * that time for RECTS), which is why the fix follows BL's rather than patching the call
+   * site: the RESOLVER moved to where both processes can call it, and the overlay resolves
+   * with the look it already holds.
+   *
+   * The id→name join still belongs to the PANEL (which can see the sources store), so the
+   * stage stays presentational — that part was always right.
    */
-  plateSourceNames: ReadonlyMap<string, string | null>;
+  plateSources: PlateSourceLookup;
   /**
    * 🔴 `B-151` — WHICH LOOK THIS ROW IS SHOWING, as the BRIDGE published it
    * (`StackItemState.activeLookId`), and `undefined` for a row nobody has switched.

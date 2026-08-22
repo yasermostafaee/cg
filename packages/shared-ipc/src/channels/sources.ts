@@ -762,3 +762,123 @@ export const SourcesAssignmentsChangedChannel = definePublishChannel(
   'sources.assignments-changed',
   SourceAssignmentsSchema,
 );
+
+/**
+ * 🔴 **SESSION BQ — THE ONE RESOLUTION OF "WHICH SOURCE DOES THIS PLATE SHOW, IN THIS
+ * LOOK", CALLABLE FROM BOTH PROCESSES.**
+ *
+ * ── WHY IT MOVED HERE ───────────────────────────────────────────────────────
+ *
+ * The four-level precedence lived bridge-side only (`live-look-bindings.ts`). The bridge
+ * could resolve a name for a look; the RENDERER could not, so PVW's overlay was handed a
+ * `(plateId) => name` callback with **no look dimension in it at all** — a per-look binding
+ * was literally unrepresentable, and the preview named the template default while air
+ * showed the bound source. `B-151` was the same shape one field over: PVW's overlay never
+ * learned that looks exist, that time about RECTS.
+ *
+ * BL fixed the first one by moving the resolver rather than patching the call site, and
+ * `lookPlateRects` carries the reason in its own doc: _"PVW could not have called a private
+ * method on a process it does not run in — which is precisely how it came to have its own
+ * idea of the layout."_ **This is that fix, applied to the second field.** One function, two
+ * processes, no second spelling — the bridge delegates to these rather than keeping a copy.
+ *
+ * ── THE FOUR LEVELS, PLUS THE FREEZE ────────────────────────────────────────
+ *
+ *   1. the installation's **CATALOG** — resolved by the caller, which owns the id→name join
+ *   2. the template's **ASSIGNMENT** — ⚠ or, for a row that has taken, the snapshot that
+ *      take FROZE ({@link assignmentInForce})
+ *   3. the row's **PER-LOOK composition**
+ *   4. the row's **PER-PLATE emergency patch** (`R-048`), outermost, in force in EVERY look
+ */
+
+/**
+ * Levels 3 and 4, flattened for ONE look — the row's per-look composition with its
+ * per-plate emergency patch on top.
+ *
+ * ⚠ **The emergency wins, in every look, and that is deliberate.** `R-048` exists because
+ * an INPUT IS DEAD, and a dead input is dead in every look; if a per-look binding outranked
+ * it, switching look would bring the dead feed straight back and the operator would have to
+ * re-patch, live, once per look, having already been told the substitution was applied.
+ *
+ * 🔴 **THIS IS THE ONE PLACE THAT ORDER IS DECIDED.** It was briefly two expressions that
+ * happened to agree — the duplicate session BM's own review caught (§3b.1) — and the pair
+ * survived review precisely BECAUSE they agreed. Do not add a third.
+ */
+export function effectiveOverridesForLook(
+  lookId: string | undefined,
+  bindings: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined,
+  overrides: Readonly<Record<string, string>> | undefined,
+): Record<string, string> | undefined {
+  const perLook = lookId === undefined ? undefined : bindings?.[lookId];
+  if (perLook === undefined) return overrides === undefined ? undefined : { ...overrides };
+  return { ...perLook, ...(overrides ?? {}) };
+}
+
+/**
+ * 🔴 **LEVEL 2 IN FORCE FOR ONE ROW: the snapshot its take FROZE, or the template's live
+ * assignment when it has not taken.**
+ *
+ * Session BP made a row on air resolve its template assignment from what it captured at
+ * TAKE, so an edit made during a show cannot change a picture that is already up. A surface
+ * that resolved the LIVE assignment while air resolved the FROZEN one would be a second
+ * answer to the same question — which is the class this feature keeps producing — so the
+ * choice is made HERE and every caller inherits it.
+ *
+ * ⚠ **`undefined` means NOT FROZEN; an EMPTY record is a real freeze to nothing.** The test
+ * is presence, never emptiness. And the frozen map is the row's COMPLETE level-2 answer: a
+ * plate absent from it is unassigned for this run and does NOT fall through to the store.
+ *
+ * ⚠ A REHEARSING row is off air by `R-022`'s interlock, so nothing is frozen for it and this
+ * returns the live assignment. The rule is written to stay true if that ever changes rather
+ * than to be correct by accident today.
+ */
+export function assignmentInForce(
+  templateId: string,
+  assignments: SourceAssignments,
+  frozenAssignment: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  if (frozenAssignment !== undefined) return { ...frozenAssignment };
+  const map: Record<string, string> = {};
+  for (const a of assignments.assignments) {
+    if (a.templateId === templateId) map[a.plateId] = a.sourceId;
+  }
+  return map;
+}
+
+/** What {@link resolvePlateSourcesForLook} needs to answer for one row, in one look. */
+export interface PlateSourceResolution {
+  readonly templateId: string;
+  /** The plates to answer for — normally the look's members, in declaration order. */
+  readonly plateIds: readonly string[];
+  /** The installation's level 2 store. */
+  readonly assignments: SourceAssignments;
+  /** Session BP — the row's frozen level 2, when it has taken. Absent ⇒ not frozen. */
+  readonly frozenAssignment?: Readonly<Record<string, string>> | undefined;
+  /** The look being resolved; `undefined` for a carrier that authors none. */
+  readonly lookId: string | undefined;
+  /** Level 3 — `lookId → plateId → catalog id`. */
+  readonly lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined;
+  /** Level 4 — `plateId → catalog id`, `R-048`'s emergency patch. */
+  readonly overrides?: Readonly<Record<string, string>> | undefined;
+}
+
+/**
+ * 🔴 **THE ANSWER A TAKE OF THIS ROW, IN THIS LOOK, WOULD PUT ON AIR — as
+ * `plateId → catalog id`, or `null` where nothing resolves.**
+ *
+ * That sentence is the whole contract, and it settles every case without a table of
+ * exceptions: the preview names what air would show, because both ask this.
+ *
+ * ⚠ It answers in CATALOG IDS, not names. The id→name join belongs to the caller, because
+ * only a surface knows whether a missing catalog entry should read as "unassigned" (a
+ * preview) or refuse a take (the bridge).
+ */
+export function resolvePlateSourcesForLook(
+  input: PlateSourceResolution,
+): Map<string, string | null> {
+  const levelTwo = assignmentInForce(input.templateId, input.assignments, input.frozenAssignment);
+  const effective = effectiveOverridesForLook(input.lookId, input.lookBindings, input.overrides);
+  return new Map(
+    input.plateIds.map((plateId) => [plateId, effective?.[plateId] ?? levelTwo[plateId] ?? null]),
+  );
+}

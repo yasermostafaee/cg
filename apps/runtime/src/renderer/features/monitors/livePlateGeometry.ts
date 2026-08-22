@@ -9,8 +9,8 @@
 // same program. The subpath keeps this app importing pure arithmetic and nothing
 // ambient.
 import { outputLetterbox, outputScale, outputTranslate } from '@cg/template-runtime/position';
-import { lookPlateRects } from '@cg/shared-ipc';
-import type { ChannelRaster, TemplateLiveSources } from '@cg/shared-ipc';
+import { lookPlateRects, resolvePlateSourcesForLook } from '@cg/shared-ipc';
+import type { ChannelRaster, SourceAssignments, TemplateLiveSources } from '@cg/shared-ipc';
 import type { Position } from '@cg/shared-schema';
 
 /**
@@ -87,6 +87,57 @@ export interface PlatePlacement {
 }
 
 /**
+ * 🔴 **SESSION BQ — WHAT THIS OVERLAY NEEDS IN ORDER TO NAME A SOURCE, and the shape is the
+ * fix.**
+ *
+ * ── WHAT WAS HERE, AND WHY IT COULD NOT BE RIGHT ────────────────────────────
+ *
+ * This argument was `sourceNameOf: (plateId: string) => string | null` — **keyed by plate
+ * alone, with `activeLookId` sitting in the very same parameter list, used for the rects and
+ * ignored for the names.** A per-look binding was therefore not merely unresolved, it was
+ * UNREPRESENTABLE: the same plate in two looks could only ever yield one name. The owner met
+ * it as a rehearsing row whose PVW placeholder read "studio 1" after he had bound that look's
+ * plate to studio 3 and pressed UPDATE.
+ *
+ * 🔴 **`B-151` AGAIN, ONE FIELD OVER.** That bug was this overlay never learning that looks
+ * exist — about RECTS. BL's handoff closed by warning that _"one surface learning a state and
+ * its neighbour not is a recurring shape in this feature, not a one-off."_ It was right.
+ *
+ * ── SO THE LOOK IS NO LONGER SOMETHING A CALLER CAN FORGET ──────────────────
+ *
+ * The caller now hands over the INPUTS and this function does the resolution, supplying the
+ * look from its own parameter. A call site cannot drop the look dimension, because it never
+ * holds it: `resolvePlateSourcesForLook` is called HERE, with `activeLookId`. That is the
+ * difference between fixing the symptom and fixing the shape — a plate-keyed callback would
+ * still have let the next caller pass a look-blind map.
+ *
+ * ⚠ The id→name join stays with the CALLER (`nameOf`), because only a surface knows what a
+ * missing catalog entry means: on a preview it reads as unassigned; at the bridge it refuses
+ * a take.
+ */
+export interface PlateSourceLookup {
+  readonly templateId: string;
+  /** The installation's level-2 store, as this browser has it. */
+  readonly assignments: SourceAssignments;
+  /**
+   * Session BP — the snapshot this row's TAKE froze, when it has taken.
+   *
+   * ⚠ A rehearsing row is off air by `R-022`'s interlock, so this is normally absent and
+   * level 2 resolves live. It is threaded anyway so the rule stays true if that interlock
+   * ever changes: a preview resolving the LIVE assignment while air resolved the FROZEN one
+   * would be a second answer to the same question, which is the class this feature keeps
+   * producing.
+   */
+  readonly frozenAssignment?: Readonly<Record<string, string>> | undefined;
+  /** Level 3 — the row's per-look composition, `lookId → plateId → catalog id`. */
+  readonly lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined;
+  /** Level 4 — `R-048`'s emergency patch, in force in EVERY look. */
+  readonly overrides?: Readonly<Record<string, string>> | undefined;
+  /** Catalog id → the operator-facing NAME, or `null` when the catalog has no such entry. */
+  readonly nameOf: (catalogId: string) => string | null;
+}
+
+/**
  * Place the plates the ACTIVE LOOK shows onto the channel raster.
  *
  * ⚠ Not "every plate a template declares", which is what this said and did before `B-151`.
@@ -109,7 +160,7 @@ export function platePlacements(
   live: TemplateLiveSources,
   raster: ChannelRaster,
   position: Position | undefined,
-  sourceNameOf: (plateId: string) => string | null,
+  sources: PlateSourceLookup,
   activeLookId: string | undefined,
 ): PlatePlacement[] {
   const s = outputScale(raster);
@@ -136,14 +187,37 @@ export function platePlacements(
     frame and a label at the origin.
   */
   const rects = lookPlateRects(live, activeLookId);
+  /*
+    🔴 SESSION BQ — THE NAMES COME FROM THE SAME LOOK AS THE RECTS, resolved by the SHARED
+    four-level resolver rather than by anything this app owns.
+
+    `resolvePlateSourcesForLook` is the function the BRIDGE delegates to as well
+    (`live-look-bindings.ts`), so what this overlay names and what a take would seat cannot
+    disagree — the same argument `lookPlateRects` above makes for the geometry, now made for
+    the naming. A test asserts the two agree for the same input, because two implementations
+    that agree today are exactly what let this drift.
+  */
+  const resolvedIds = resolvePlateSourcesForLook({
+    templateId: sources.templateId,
+    plateIds: live.sources.map((p) => p.sourceId),
+    assignments: sources.assignments,
+    frozenAssignment: sources.frozenAssignment,
+    lookId: activeLookId,
+    lookBindings: sources.lookBindings,
+    overrides: sources.overrides,
+  });
   return live.sources.flatMap((plate) => {
     const rect = rects[plate.sourceId];
     if (rect === undefined) return [];
+    const catalogId = resolvedIds.get(plate.sourceId) ?? null;
     return [
       {
         elementId: plate.elementId,
         plateId: plate.sourceId,
-        sourceName: sourceNameOf(plate.sourceId),
+        // A binding whose catalog entry has gone reads as UNASSIGNED — the same reading
+        // `pruneAssignmentsForCatalog` gives a dangling reference, and the safe direction
+        // anyway, since that plate will refuse its take.
+        sourceName: catalogId === null ? null : sources.nameOf(catalogId),
         x: pad.x + s * (t.x + rect.x),
         y: pad.y + s * (t.y + rect.y),
         width: s * rect.width,

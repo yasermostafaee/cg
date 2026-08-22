@@ -32,7 +32,21 @@ function subject(over: Partial<RehearsalSubject> & { layer: number }): Rehearsal
     position: undefined,
     fields: {},
     liveSources: undefined,
-    plateSourceNames: new Map<string, string | null>(),
+    /*
+      SESSION BQ — the subject carries the RESOLUTION INPUTS now, not a pre-joined
+      plate-keyed name map. See `PlateSourceLookup` for why the old shape WAS the defect.
+
+      ⚠ This fixture kept the removed `plateSourceNames` and omitted the new required field
+      for a while and NOTHING caught it: `apps/runtime/tsconfig.json` includes the SRC GLOB
+      only, so the runtime's `typecheck` never sees `tests/`, and vitest transpiles without
+      checking. Turning that on is its own piece of work — 113 pre-existing errors, measured
+      — and is filed rather than smuggled in here (see `B-157`).
+    */
+    plateSources: {
+      templateId: 'tpl-1',
+      assignments: { assignments: [] },
+      nameOf: () => null,
+    },
     ...over,
   };
 }

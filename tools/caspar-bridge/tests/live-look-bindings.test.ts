@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SourceCatalog, TemplateLiveSources, TemplateLook } from '@cg/shared-ipc';
+import { lookPlateRects, resolvePlateSourcesForLook } from '@cg/shared-ipc';
 import type { LiveSourceRect } from '@cg/shared-schema';
 import { framesOfLook, resolveLookBindings } from '../src/live-look-bindings.js';
 
@@ -200,4 +201,118 @@ describe('a carrier that authors no looks', () => {
     const p = plan({ carrier: pre, bindings: { solo: { 'l-3': 'studio-1' } } });
     expect(framesOfLook(p, undefined).get('l-3')?.source.id).toBe('studio-3');
   });
+});
+
+// ───── SESSION BQ — THE BRIDGE AND THE PREVIEW ANSWER FROM THE SAME FUNCTION ─────
+
+/**
+ * 🔴 **PINNED AT THE SHARED FUNCTION, NOT PER SURFACE — and that choice is the finding.**
+ *
+ * PVW's overlay named the template default while air showed the per-look binding, because
+ * the four-level precedence lived bridge-side only and the renderer was handed a plate-keyed
+ * name callback with no look in it. `B-151` was the same shape one field over, about RECTS,
+ * and BL fixed THAT by MOVING the resolver rather than patching the call site.
+ *
+ * So `effectiveOverridesForLook` and the whole composition now live in `@cg/shared-ipc`, and
+ * this file's `resolveLookBindings` DELEGATES to them. What this asserts is that the
+ * delegation is real: the bridge's per-frame answer equals the shared resolver's, input for
+ * input.
+ *
+ * ⚠ **It is near-tautological TODAY, deliberately, and that is what makes it worth having.**
+ * The failure mode is not two functions disagreeing now — it is somebody re-inlining
+ * `effective?.[plateId] ?? assigned.get(plateId)` here for convenience, which would compile,
+ * pass every other test, and put the preview and the wire back on separate answers. Two
+ * surface-level tests that agree today are exactly what let this drift in the first place.
+ */
+describe('BQ — resolveLookBindings agrees with the SHARED resolver, per look, per plate', () => {
+  /** Every `(look, plate) → catalog id` the bridge's plan actually resolved. */
+  const bridgeAnswer = (
+    over: Record<string, unknown>,
+  ): Record<string, Record<string, string | null>> => {
+    const p = plan(over);
+    const out: Record<string, Record<string, string | null>> = {};
+    for (const lookId of ['three', 'two', 'solo']) {
+      const frames = framesOfLook(p, lookId);
+      out[lookId] = Object.fromEntries(
+        ['l-1', 'l-2', 'l-3'].map((plateId) => [plateId, frames.get(plateId)?.source.id ?? null]),
+      );
+    }
+    return out;
+  };
+
+  /** The same question, asked of the shared function the renderer's overlay calls. */
+  const sharedAnswer = (over: {
+    bindings?: Record<string, Record<string, string>>;
+    overrides?: Record<string, string>;
+  }): Record<string, Record<string, string | null>> => {
+    const out: Record<string, Record<string, string | null>> = {};
+    for (const lookId of ['three', 'two', 'solo']) {
+      const rects = lookPlateRects(carrier(), lookId);
+      const resolved = resolvePlateSourcesForLook({
+        templateId: 'debate',
+        plateIds: ['l-1', 'l-2', 'l-3'],
+        assignments: { assignments: ASSIGNMENTS },
+        lookId,
+        lookBindings: over.bindings,
+        overrides: over.overrides,
+      });
+      out[lookId] = Object.fromEntries(
+        ['l-1', 'l-2', 'l-3'].map((plateId) => [
+          plateId,
+          // The bridge only resolves a frame the look actually SHOWS, so the comparison is
+          // scoped to membership — otherwise this would be asserting a difference in what
+          // the two functions are being ASKED, not in what they answer.
+          rects[plateId] === undefined ? null : (resolved.get(plateId) ?? null),
+        ]),
+      );
+    }
+    return out;
+  };
+
+  const CASES: { name: string; over: Parameters<typeof sharedAnswer>[0] }[] = [
+    { name: 'nothing but the template assignment', over: {} },
+    {
+      name: 'a per-look binding on one look',
+      over: { bindings: { two: { 'l-1': 'studio-4' } } },
+    },
+    {
+      name: 'the SAME plate bound differently in two looks',
+      over: { bindings: { three: { 'l-1': 'studio-4' }, two: { 'l-1': 'studio-3' } } },
+    },
+    {
+      name: 'an R-048 emergency patch, which outranks every look',
+      over: { bindings: { two: { 'l-1': 'studio-4' } }, overrides: { 'l-1': 'studio-2' } },
+    },
+    {
+      name: 'a binding naming a source the catalog does not have',
+      over: { bindings: { two: { 'l-2': 'a-source-that-was-deleted' } } },
+    },
+  ];
+
+  for (const { name, over } of CASES) {
+    it(`agrees on: ${name}`, () => {
+      const bridge = bridgeAnswer(over);
+      const shared = sharedAnswer(over);
+      /*
+        ⚠ ONE difference is legitimate and is normalised rather than hidden: a binding naming
+        a RETIRED catalog entry resolves to an id the shared function returns and the bridge
+        reports as UNRESOLVED (it has no `SourceDefinition` to seat). That is the id→entry
+        join, which the shared function deliberately does NOT do — only a surface knows
+        whether a missing entry reads as "unassigned" or refuses a take.
+      */
+      const known = new Set(catalog.sources.map((s) => s.id));
+      const normalised = Object.fromEntries(
+        Object.entries(shared).map(([lookId, plates]) => [
+          lookId,
+          Object.fromEntries(
+            Object.entries(plates).map(([plateId, id]) => [
+              plateId,
+              id !== null && known.has(id) ? id : null,
+            ]),
+          ),
+        ]),
+      );
+      expect(bridge).toEqual(normalised);
+    });
+  }
 });

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { ChannelRaster, TemplateLiveSources } from '@cg/shared-ipc';
+import type { ChannelRaster, TemplateLiveSources, TemplateSourceAssignment } from '@cg/shared-ipc';
 import type { Position } from '@cg/shared-schema';
 import { outputLetterbox, outputScale, outputTranslate } from '@cg/template-runtime/position';
-import { platePlacements } from '../src/renderer/features/monitors/livePlateGeometry.js';
+import {
+  platePlacements,
+  type PlateSourceLookup,
+} from '../src/renderer/features/monitors/livePlateGeometry.js';
 
 /**
  * R-049 — a PVW placeholder must land ON its hole, on EVERY channel raster.
@@ -45,7 +48,42 @@ function liveSources(over: Partial<TemplateLiveSources> = {}): TemplateLiveSourc
   };
 }
 
-const named = (name: string | null) => () => name;
+/**
+ * 🔴 SESSION BQ — the lookup `platePlacements` now takes, instead of a plate-keyed name
+ * callback. The old `(plateId) => name` shape is the DEFECT: it had no look dimension, so a
+ * per-look binding could not be expressed at all. These helpers build the real inputs.
+ */
+function lookup(over: Partial<PlateSourceLookup> = {}): PlateSourceLookup {
+  return {
+    templateId: 'tpl-1',
+    assignments: { assignments: [] },
+    nameOf: (id) => NAMES[id] ?? null,
+    ...over,
+  };
+}
+
+/** A catalog, as the panel's `nameOf` would resolve it. */
+const NAMES: Record<string, string> = {
+  'studio-1': 'Studio 1',
+  'studio-3': 'Studio 3',
+  'studio-9': 'Studio 9',
+};
+
+/** Level 2 for `tpl-1`, the template's default assignment. */
+const assign = (pairs: Record<string, string>): { assignments: TemplateSourceAssignment[] } => ({
+  assignments: Object.entries(pairs).map(([plateId, sourceId]) => ({
+    templateId: 'tpl-1',
+    plateId,
+    sourceId,
+  })),
+});
+
+/** The old helper's replacement: every plate resolves to one name. */
+const named = (name: string | null) =>
+  lookup({
+    nameOf: () => name,
+    assignments: assign({ 'guest-1': 'studio-1', 'l-1': 'studio-1', 'l-2': 'studio-1' }),
+  });
 
 function only(raster: ChannelRaster, live = liveSources(), position?: Position) {
   const [placement] = platePlacements(live, raster, position, named('Studio A'), undefined);
@@ -198,7 +236,10 @@ describe('R-049 — what each placement carries', () => {
       live,
       { width: 1920, height: 1080 },
       undefined,
-      (plateId) => (plateId === 'guest-1' ? 'Studio A' : null),
+      lookup({
+        assignments: assign({ 'guest-1': 'studio-1' }),
+        nameOf: (id) => (id === 'studio-1' ? 'Studio A' : null),
+      }),
       undefined,
     );
     expect(placed.map((p) => [p.plateId, p.sourceName])).toEqual([
@@ -216,7 +257,7 @@ describe('R-049 — what each placement carries', () => {
         liveSources({ sources: [] }),
         { width: 1920, height: 1080 },
         undefined,
-        () => null,
+        lookup(),
         undefined,
       ),
     ).toEqual([]);
@@ -266,7 +307,7 @@ describe('B-151 — the overlay draws the ACTIVE look, and only it', () => {
 
   const RASTER: ChannelRaster = { width: 1920, height: 1080 };
   const place = (activeLookId: string | undefined) =>
-    platePlacements(twoLooks(), RASTER, undefined, () => 'Studio A', activeLookId);
+    platePlacements(twoLooks(), RASTER, undefined, named('Studio A'), activeLookId);
 
   it('🔴 4.2 — a hidden look’s plate has NO placement at all, not a covered one', () => {
     /*
@@ -305,7 +346,164 @@ describe('B-151 — the overlay draws the ACTIVE look, and only it', () => {
   it('a PRE-LOOKS template is untouched — it keeps its declaration rects', () => {
     // The absent-vs-empty rule at the overlay: a carrier with no `looks` predates LOOKS and
     // its declarations ARE its geometry. Passing a look id it cannot honour must not empty it.
-    const placed = platePlacements(liveSources(), RASTER, undefined, () => null, 'solo');
+    const placed = platePlacements(liveSources(), RASTER, undefined, lookup(), 'solo');
     expect(placed.map((p) => p.plateId)).toEqual(['guest-1']);
+  });
+});
+
+// ───────── SESSION BQ — PVW NAMES WHAT A TAKE WOULD SHOW, IN THIS LOOK ─────────
+
+/**
+ * 🔴 **THE OWNER'S REPORT, 2026-08-21, with a screenshot.** A row is ON PVW, PVW LOOK =
+ * `look-1`. In LOOK INPUTS he sets `look-1` → plate `11` → **studio 3** and presses UPDATE.
+ * **The PVW placeholder still reads "studio 1"** — the template's default for that plate.
+ * The binding is applied everywhere else; the preview names the old source.
+ *
+ * That strikes at `R-049`'s stated reason for existing: _"It does what the PAGE never could:
+ * show the ASSIGNED SOURCE'S NAME… The Runtime knows the join."_ The join it drew was the
+ * wrong one.
+ *
+ * ── WHY THE OLD CODE COULD NOT PASS THESE ───────────────────────────────────
+ *
+ * `platePlacements` took `sourceNameOf: (plateId: string) => string | null` and the caller
+ * built it from `appliedPlateSources` — LEVEL 2 ONLY, keyed by plate. **The look was not in
+ * the signature**, so the second test below could not even be WRITTEN against the old shape:
+ * one plate, two looks, two different names is not expressible by a plate-keyed map.
+ *
+ * ⚠ **`B-151` again, one field over** — that bug was this overlay never learning looks exist,
+ * about RECTS. BL's handoff warned that _"one surface learning a state and its neighbour not
+ * is a recurring shape in this feature, not a one-off."_
+ *
+ * **The rule these pin:** _the PVW overlay names exactly what a TAKE of THIS row, in THIS
+ * look, would put on air._
+ */
+describe('BQ — the overlay resolves the NAME from the look, not from the plate alone', () => {
+  const LEFT = { x: 0, y: 0, width: 480, height: 270 };
+  const RIGHT = { x: 480, y: 0, width: 480, height: 270 };
+  const RASTER: ChannelRaster = { width: 1920, height: 1080 };
+
+  /** Two looks over two plates — `l-1` is in both, which is what makes the case expressible. */
+  const carrier = (): TemplateLiveSources =>
+    liveSources({
+      resolution: { width: 960, height: 540 },
+      sources: [
+        { elementId: 'el-1', sourceId: 'l-1', rect: LEFT, dynamic: false },
+        { elementId: 'el-2', sourceId: 'l-2', rect: RIGHT, dynamic: false },
+      ],
+      looks: [
+        {
+          id: 'look-1',
+          name: '2-box',
+          entered: { mode: 'cut' },
+          rects: { 'l-1': LEFT, 'l-2': RIGHT },
+        },
+        { id: 'look-2', name: 'Solo', entered: { mode: 'cut' }, rects: { 'l-1': LEFT } },
+      ],
+      defaultLookId: 'look-1',
+    });
+
+  const nameOn = (over: Partial<PlateSourceLookup>, lookId: string | undefined, plateId = 'l-1') =>
+    platePlacements(carrier(), RASTER, undefined, lookup(over), lookId).find(
+      (p) => p.plateId === plateId,
+    )?.sourceName ?? null;
+
+  it('🔴 §3.1 — THE REPORTED CASE: a per-look binding is NAMED, not the template default', () => {
+    /*
+      Red before the fix, and it could not have been anything else: the name came from a map
+      keyed by plate, so `studio-1` was the only answer available for `l-1` in any look.
+    */
+    expect(
+      nameOn(
+        {
+          assignments: assign({ 'l-1': 'studio-1', 'l-2': 'studio-1' }),
+          lookBindings: { 'look-1': { 'l-1': 'studio-3' } },
+        },
+        'look-1',
+      ),
+    ).toBe('Studio 3');
+  });
+
+  it('🔴 §3.2 — the SAME plate in two looks gets two names; switching the look changes it', () => {
+    /*
+      🔴 THE ASSERTION THE OLD SIGNATURE COULD NOT EXPRESS. One plate, two looks, two
+      bindings. A `(plateId) => name` callback has exactly one slot for this answer, which is
+      why the defect was not a missed case but an unrepresentable one.
+    */
+    const bound = {
+      assignments: assign({ 'l-1': 'studio-1' }),
+      lookBindings: { 'look-1': { 'l-1': 'studio-3' }, 'look-2': { 'l-1': 'studio-9' } },
+    };
+    expect(nameOn(bound, 'look-1')).toBe('Studio 3');
+    expect(nameOn(bound, 'look-2')).toBe('Studio 9');
+  });
+
+  it('🔴 §3.3 — the `R-048` EMERGENCY wins, in EVERY look', () => {
+    /*
+      Level 4 is outermost because a dead input is dead in every look. If a per-look binding
+      outranked it, switching look would bring the dead feed straight back and the operator
+      would have to re-patch, live, once per look — having already been told the substitution
+      was applied.
+    */
+    const patched = {
+      assignments: assign({ 'l-1': 'studio-1' }),
+      lookBindings: { 'look-1': { 'l-1': 'studio-3' }, 'look-2': { 'l-1': 'studio-3' } },
+      overrides: { 'l-1': 'studio-9' },
+    };
+    expect(nameOn(patched, 'look-1')).toBe('Studio 9');
+    expect(nameOn(patched, 'look-2')).toBe('Studio 9');
+  });
+
+  it('§3.4 — BLANK falls through to the template default, named as it always was', () => {
+    // The commonest case by far, and the one the old code got right. It must stay right:
+    // a fix that made every plate need an explicit binding would be a worse regression.
+    expect(nameOn({ assignments: assign({ 'l-1': 'studio-1' }) }, 'look-1')).toBe('Studio 1');
+    // …and a look with a binding for a DIFFERENT plate does not disturb this one.
+    expect(
+      nameOn(
+        {
+          assignments: assign({ 'l-1': 'studio-1', 'l-2': 'studio-1' }),
+          lookBindings: { 'look-1': { 'l-2': 'studio-3' } },
+        },
+        'look-1',
+      ),
+    ).toBe('Studio 1');
+  });
+
+  it('a plate with nothing bound anywhere still reads as UNASSIGNED', () => {
+    expect(nameOn({ assignments: assign({}) }, 'look-1')).toBeNull();
+  });
+
+  it('a binding whose CATALOG ENTRY has gone reads as unassigned, not as a raw id', () => {
+    // `pruneAssignmentsForCatalog`'s own reading of a dangling reference, and the safe
+    // direction anyway: that plate will refuse its take.
+    expect(
+      nameOn(
+        {
+          assignments: assign({ 'l-1': 'studio-1' }),
+          lookBindings: { 'look-1': { 'l-1': 'a-source-that-was-deleted' } },
+        },
+        'look-1',
+      ),
+    ).toBeNull();
+  });
+
+  it('session BP — a FROZEN level 2 is what the overlay names, not the live assignment', () => {
+    /*
+      ⚠ A rehearsing row is off air by `R-022`'s interlock, so nothing is frozen for it today
+      and this path is not reachable from PVW. It is asserted anyway because the RULE is "name
+      what a take would show", and a surface that resolved the LIVE assignment while air
+      resolved the FROZEN one would be a second answer to the same question — the exact class
+      this feature keeps producing. Pinning it now means the rule stays true if the interlock
+      ever changes, rather than being correct by accident.
+    */
+    expect(
+      nameOn(
+        {
+          assignments: assign({ 'l-1': 'studio-9' }), // the store has moved on…
+          frozenAssignment: { 'l-1': 'studio-1' }, // …but this row froze studio-1
+        },
+        'look-1',
+      ),
+    ).toBe('Studio 1');
   });
 });

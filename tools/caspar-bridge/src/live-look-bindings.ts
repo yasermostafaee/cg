@@ -1,5 +1,9 @@
 import type { SourceCatalog, SourceDefinition, TemplateLiveSources } from '@cg/shared-ipc';
-import { lookPlateRects } from '@cg/shared-ipc';
+import {
+  effectiveOverridesForLook,
+  lookPlateRects,
+  resolvePlateSourcesForLook,
+} from '@cg/shared-ipc';
 import type { LiveSourceDeclaration } from '@cg/shared-schema';
 
 /**
@@ -63,26 +67,22 @@ export type LookSourceBindings = Readonly<Record<string, Readonly<Record<string,
 export type PlateSourceOverrides = Readonly<Record<string, string>>;
 
 /**
- * 🔴 **THE ONE PLACE LEVELS 3 AND 4 ARE ORDERED — the row's per-look composition with its
- * per-plate emergency patch on top, flattened for ONE look.**
+ * 🔴 **SESSION BQ — LEVELS 3 AND 4 ARE ORDERED IN `@cg/shared-ipc` NOW, AND THIS IS A
+ * RE-EXPORT. Do not restore a local body here.**
  *
- * Both readers call this: the resolver below, and the runtime's refusal path (which has to
- * hand `resolvePlateAssignments` a single `{plate → catalog id}` map). They were briefly two
- * expressions that happened to agree, which is the two-spellings defect this repo keeps
- * paying for — one of them would eventually have been "simplified" and the two would have
- * disagreed about a plate that is on air.
+ * It was bridge-private, which is exactly why PVW's overlay could not resolve a name for a
+ * look and named the template default while air showed the bound source. `B-151` was the
+ * same shape one field over (the overlay never learned looks existed, that time for RECTS),
+ * and BL fixed THAT by moving the resolver rather than patching the call site —
+ * `lookPlateRects` carries the argument in its own doc. This is that fix applied to the
+ * second field: **one function, two processes, no second spelling.**
  *
- * The emergency wins, in every look. See this module's header for why.
+ * Both bridge readers still call it through this name: the resolver below, and the runtime's
+ * refusal path (which has to hand `resolvePlateAssignments` a single `{plate → catalog id}`
+ * map). The emergency wins, in every look — see this module's header, and the moved
+ * function's own doc, for why.
  */
-export function effectiveOverridesForLook(
-  lookId: string | undefined,
-  bindings: LookSourceBindings | undefined,
-  overrides: PlateSourceOverrides | undefined,
-): Record<string, string> | undefined {
-  const perLook = lookId === undefined ? undefined : bindings?.[lookId];
-  if (perLook === undefined) return overrides === undefined ? undefined : { ...overrides };
-  return { ...perLook, ...(overrides ?? {}) };
-}
+export { effectiveOverridesForLook };
 
 /** One frame of one look, and the input it resolves to. */
 export interface ResolvedFrame {
@@ -147,12 +147,6 @@ export function resolveLookBindings(input: {
   readonly argumentOf: (source: SourceDefinition) => string;
 }): LookBindingPlan {
   const byCatalogId = new Map(input.catalog.sources.map((s) => [s.id, s] as const));
-  const assigned = new Map(
-    input.assignments
-      .filter((a) => a.templateId === input.templateId)
-      .map((a) => [a.plateId, a.sourceId] as const),
-  );
-
   const seats = new Map<string, { source: SourceDefinition; frames: ResolvedFrame[] }>();
   const frames: ResolvedFrame[] = [];
   const unresolved: { lookId: string | undefined; plateId: string }[] = [];
@@ -163,7 +157,23 @@ export function resolveLookBindings(input: {
     // re-derivation of "which plates does this look show" (`B-151` is what a second copy of
     // that question cost).
     const rects = lookPlateRects(input.carrier, lookId);
-    const effective = effectiveOverridesForLook(lookId, input.bindings, input.overrides);
+    /*
+      🔴 SESSION BQ — THE FOUR LEVELS ARE COMPOSED BY THE SHARED RESOLVER, not here.
+
+      This used to read `effective?.[plateId] ?? assigned.get(plateId)` inline, which is the
+      composition PVW's overlay then had no way to perform — so it was handed a name callback
+      with no look in it and named the template default. The bridge now DELEGATES, so the
+      preview and the wire cannot answer differently: a test asserts they agree for the same
+      input, which two independent implementations would satisfy right up until they did not.
+    */
+    const resolvedIds = resolvePlateSourcesForLook({
+      templateId: input.templateId,
+      plateIds: input.carrier.sources.map((d) => d.sourceId),
+      assignments: { assignments: [...input.assignments] },
+      lookId,
+      lookBindings: input.bindings,
+      overrides: input.overrides,
+    });
     /** producerArg → the plates of THIS look already bound to it (§6.2's axis). */
     const inThisLook = new Map<string, string[]>();
 
@@ -172,8 +182,8 @@ export function resolveLookBindings(input: {
     for (const declaration of input.carrier.sources) {
       const plateId = declaration.sourceId;
       if (rects[plateId] === undefined) continue;
-      const catalogId = effective?.[plateId] ?? assigned.get(plateId);
-      const source = catalogId === undefined ? undefined : byCatalogId.get(catalogId);
+      const catalogId = resolvedIds.get(plateId) ?? null;
+      const source = catalogId === null ? undefined : byCatalogId.get(catalogId);
       if (source === undefined) {
         unresolved.push({ lookId, plateId });
         continue;

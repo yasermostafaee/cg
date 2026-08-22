@@ -10,8 +10,12 @@ import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 import { useFixedBank, useFixedSlots } from '../../hooks/useFixedLayers.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { buildApplyPayload, draftsVersion, subscribeDrafts } from '../inspector/draftStore.js';
-import { appliedPlateSources } from '../inspector/livePlates.js';
-import { currentSourceCatalog, sourcesVersion, subscribeSources } from '../sources/sourceStore.js';
+import {
+  currentSourceAssignments,
+  currentSourceCatalog,
+  sourcesVersion,
+  subscribeSources,
+} from '../sources/sourceStore.js';
 import { RehearsalStage } from './RehearsalStage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
 
@@ -113,6 +117,23 @@ export function PreviewPanel(): JSX.Element {
           // `B-151` — the bridge's published look drives BOTH halves of the preview.
           activeLookId: item.activeLookId,
           /**
+           * 🔴 **SESSION BQ — THE RESOLUTION INPUTS, all four levels, not a pre-joined
+           * name map.**
+           *
+           * This built `plateSourceNames` from `appliedPlateSources` alone — LEVEL 2 ONLY,
+           * keyed by plate, with no look in it. So a per-look binding (level 3) and an
+           * `R-048` patch (level 4) were both invisible to the preview: the overlay named
+           * the template's default while air showed the bound source. The owner met it on a
+           * rehearsing row after pressing UPDATE.
+           *
+           * The panel now hands over the INPUTS and `platePlacements` resolves them with
+           * the look it already holds, through `resolvePlateSourcesForLook` — the same
+           * function the bridge delegates to. **The rule it makes true: the overlay names
+           * exactly what a TAKE of this row, in this look, would put on air.**
+           *
+           * ⚠ The id→name join stays here (`nameOf`), because only this panel can see the
+           * sources store; the stage below stays presentational.
+           *
            * 🔴 THE APPLIED BINDING, NOT THE DRAFT — and this is the ONE place
            * this panel deliberately diverges from the "show what the operator
            * has typed" rule the field values above follow.
@@ -126,25 +147,26 @@ export function PreviewPanel(): JSX.Element {
            * exact moment it will not — which is the failure PVW is their last
            * chance to catch.
            *
-           * `appliedPlateSources` is the canonical join (the Inspector's LIVE
-           * PLATES section and `isItemDirty` both read it); the catalog lookup
-           * turns its source ID into the NAME the operator actually recognises,
-           * because an id like `src-8f2a1c` names nothing to anyone.
+           * ⚠ That rule is unchanged and is why the store is read here rather than the
+           * draft: `currentSourceAssignments()` is the APPLIED level 2, and levels 3 and 4
+           * come off the item as the BRIDGE published them. Nothing staged reaches this.
            *
-           * A binding whose catalog entry has gone reads as UNASSIGNED, matching
-           * `pruneAssignmentsForCatalog`'s own reading of a dangling reference —
-           * and it is the safe direction anyway, since that plate will refuse.
+           * A binding whose catalog entry has gone reads as UNASSIGNED (`nameOf` answers
+           * `null`), matching `pruneAssignmentsForCatalog`'s own reading of a dangling
+           * reference — and it is the safe direction anyway, since that plate will refuse.
            */
-          plateSourceNames: new Map(
-            [...appliedPlateSources(item.templateId, live?.sources ?? []).entries()].map(
-              ([plateId, sourceId]) => [
-                plateId,
-                sourceId === null
-                  ? null
-                  : (catalog.sources.find((s) => s.id === sourceId)?.name ?? null),
-              ],
-            ),
-          ),
+          plateSources: {
+            templateId: item.templateId,
+            assignments: currentSourceAssignments(),
+            ...(item.frozenAssignment !== undefined && {
+              frozenAssignment: item.frozenAssignment,
+            }),
+            ...(item.lookSourceOverride !== undefined && {
+              lookBindings: item.lookSourceOverride,
+            }),
+            ...(item.sourceOverride !== undefined && { overrides: item.sourceOverride }),
+            nameOf: (catalogId) => catalog.sources.find((s) => s.id === catalogId)?.name ?? null,
+          },
         };
       }),
     // `draftVersion` is a real dependency even though nothing in the body names
