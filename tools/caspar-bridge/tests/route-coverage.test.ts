@@ -35,7 +35,7 @@ const routedNames = (): string[] => {
   // no sockets.
   const runtime = new CasparRuntime({
     servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
-    strategy: 'single',
+    strategy: 'mirror-sync',
     autoFailoverEnabled: false,
   });
   return [...buildRoutes(runtime).keys()].sort();
@@ -71,8 +71,9 @@ describe('bridge route coverage (B-074)', () => {
     // (a typo'd or renamed channel), and the caller would still get `unknown channel`.
     // Every EXPORTED request channel, runtime and Designer alike — this direction asks
     // whether a route names something real, which the Designer split has no bearing on.
+    const values: unknown[] = Object.values(ipc);
     const exported = new Set(
-      Object.values(ipc)
+      values
         .filter(
           (v): v is { name: string } =>
             typeof v === 'object' && v !== null && 'name' in v && 'request' in v,
@@ -88,7 +89,8 @@ describe('bridge route coverage (B-074)', () => {
     const runtimeOwned = new Set(ipc.runtimeRequestChannelNames(ipc));
     for (const ns of ipc.DESIGNER_ONLY_NAMESPACES) {
       // The namespace still exists as an EXPORTED channel, and the filter still excludes it.
-      const inNamespace = Object.values(ipc).filter(
+      const values: unknown[] = Object.values(ipc);
+      const inNamespace = values.filter(
         (v): v is { name: string } =>
           typeof v === 'object' &&
           v !== null &&

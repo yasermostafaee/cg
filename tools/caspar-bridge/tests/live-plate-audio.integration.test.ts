@@ -6,11 +6,11 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type {
   ConnectionConfig,
-  RetainedStackItem,
   SourceAssignments,
   SourceCatalog,
   TemplateInfo,
 } from '@cg/shared-ipc';
+import type { RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 

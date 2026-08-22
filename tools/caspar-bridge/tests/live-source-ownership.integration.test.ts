@@ -126,6 +126,7 @@ function liveRecord(layer: number, sourceId = 'guest-1'): LiveLayerRecord {
     producer: 'route://2',
     fill: box,
     clip: box,
+    intendedVolume: 0,
   };
 }
 

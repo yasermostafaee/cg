@@ -247,7 +247,7 @@ it('B-114 — a retained item on a declared row is RE-BOUND to that row after a 
       templateId: 'tpl-clock',
       fields: {},
       state: 'loaded',
-      slot: { channel: 1, layer: 72 },
+      slot: { channel: 1, layer: 72, server: 'primary' },
     },
   ]);
   expect(result.restored).toBe(1);

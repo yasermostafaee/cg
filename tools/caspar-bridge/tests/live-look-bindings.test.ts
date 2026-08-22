@@ -67,7 +67,7 @@ const ASSIGNMENTS = [
 const argumentOf = (s: { producer: { kind: string; channel?: number } }): string =>
   `"route://${String(s.producer.channel ?? 0)}"`;
 
-function plan(over: Parameters<typeof resolveLookBindings>[0] | Record<string, unknown> = {}) {
+function plan(over: Partial<Parameters<typeof resolveLookBindings>[0]> = {}) {
   return resolveLookBindings({
     templateId: 'debate',
     carrier: carrier(),
@@ -75,7 +75,7 @@ function plan(over: Parameters<typeof resolveLookBindings>[0] | Record<string, u
     catalog,
     argumentOf,
     ...over,
-  } as Parameters<typeof resolveLookBindings>[0]);
+  });
 }
 
 describe('the seat count', () => {

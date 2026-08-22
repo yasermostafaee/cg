@@ -2,7 +2,8 @@ import * as dgram from 'node:dgram';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import type { ConnectionConfig, StackItemStatus, TemplateInfo } from '@cg/shared-ipc';
+import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import type { StackItemStatus } from '@cg/shared-schema';
 import { HEALTH_MS } from './support/harness.js';
 
 /**

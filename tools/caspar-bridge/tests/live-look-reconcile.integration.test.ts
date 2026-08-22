@@ -175,10 +175,10 @@ function sixBoxTemplate(
 function catalog(over: Partial<SourceCatalog> = {}): SourceCatalog {
   return {
     sources: [
-      ...ROUTE_KEYS.map((k, i) => ({
+      ...ROUTE_KEYS.map((_k, i) => ({
         id: `src-${String(i + 1)}`,
         name: `Feed ${String(i + 1)}`,
-        format: '1080i5000',
+        format: '1080i5000' as const,
         producer: { kind: 'route' as const, channel: i + 2 },
       })),
       // A CLIP — the one producer form that cannot be held idle (§12.4's named fallback).
@@ -888,9 +888,15 @@ it('🔴 a plate a look shows for the FIRST TIME never lands on a HELD layer', a
       sources: ['live-1', 'live-2', 'live-3'],
       looks: [
         // The default seats live-1 and live-2 only — live-3 has never been seated.
-        look('a', { 'live-1': GRID['live-1'], 'live-2': GRID['live-2'] }),
+        look('a', {
+          'live-1': GRID['live-1'] as LiveSourceRect,
+          'live-2': GRID['live-2'] as LiveSourceRect,
+        }),
         // …then live-2 is HELD, and live-3 arrives for the first time.
-        look('c', { 'live-1': GRID['live-1'], 'live-3': GRID['live-3'] }),
+        look('c', {
+          'live-1': GRID['live-1'] as LiveSourceRect,
+          'live-3': GRID['live-3'] as LiveSourceRect,
+        }),
       ],
     }),
     assignments: assign([
@@ -967,7 +973,10 @@ it('🔴 an ON-AIR row with an EMPTY ledger still reconciles — status, not sea
       sources: ['live-1', 'live-2'],
       looks: [
         look('empty', {}),
-        look('two', { 'live-1': GRID['live-1'], 'live-2': GRID['live-2'] }),
+        look('two', {
+          'live-1': GRID['live-1'] as LiveSourceRect,
+          'live-2': GRID['live-2'] as LiveSourceRect,
+        }),
       ],
     }),
     // ⚠ NOTHING IS ASSIGNED AT TAKE, and under session BM that is what makes the ledger
@@ -1770,7 +1779,10 @@ it('🔴 §8.8 — a hole in a look you are NOT showing does not refuse the take
 
 /** The owner's template again, with a text field so an UPDATE has both halves to carry. */
 function ownersTemplateWithField() {
-  return { ...ownersTemplate(), fields: [{ id: 'title', label: 'Title', type: 'text' as const }] };
+  return {
+    ...ownersTemplate(),
+    fields: [{ id: 'title', label: 'Title', type: 'text' as const, required: false, default: '' }],
+  };
 }
 
 it('🔴 §6.1 — ONE update carries the text AND the per-look binding, and both land', async () => {
@@ -2044,7 +2056,10 @@ it('🔴 PATCH-01 A6 — UPDATE applying the binding FIRST makes the later switc
     action as a switch still changes a producer while a hole moves. `B-155` carries that.
   */
   const r = await boot({
-    template: { ...ownersTemplate(), fields: [{ id: 'title', label: 'T', type: 'text' as const }] },
+    template: {
+      ...ownersTemplate(),
+      fields: [{ id: 'title', label: 'T', type: 'text' as const, required: false, default: '' }],
+    },
     assignments: OWNERS_ASSIGNMENTS,
   });
   await r.load('item-1', 'debate', { title: 'a' });

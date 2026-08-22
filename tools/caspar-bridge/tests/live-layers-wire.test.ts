@@ -58,7 +58,7 @@ afterEach(async () => {
 function deadConnection(): ConnectionConfig {
   return {
     servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
-    strategy: 'single',
+    strategy: 'mirror-sync',
     autoFailoverEnabled: false,
   };
 }

@@ -4,12 +4,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type {
-  ConnectionConfig,
-  FixedSlotState,
-  RetainedStackItem,
-  TemplateInfo,
-} from '@cg/shared-ipc';
+import type { ConnectionConfig, FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
+import type { RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS } from './support/harness.js';
 

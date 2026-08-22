@@ -4,7 +4,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type { ConnectionConfig, RetainedStackItem, TemplateInfo } from '@cg/shared-ipc';
+import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import type { RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 
@@ -154,9 +155,7 @@ it('SITE 1b — loadFixed emits NOTHING at all, so it needs no mute and no guard
   // The stronger form, and the reason the filed per-site table is stale: LOAD is
   // LIST-ONLY. A path that cannot emit beats a guard that has to be remembered.
   const r = await boot();
-  expect(
-    r.setFixedLayers({ channel: 1, start: 70, count: 4, templateType: 'lower-third' }).ok,
-  ).toBe(true);
+  expect(r.setFixedLayers({ channel: 1, start: 70, count: 4 }).ok).toBe(true);
   const before = (await recvLines()).length;
 
   expect((await r.loadFixed({ channel: 1, layer: 70 }, 'item1', 'lower-third', {})).accepted).toBe(

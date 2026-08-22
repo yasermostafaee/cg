@@ -142,7 +142,15 @@ function statusOf(r: CasparRuntime, itemId: string): string | undefined {
 /** A ledger record for `slot`. The rects are inert here — phase 6 computes them. */
 function liveRecord(slot: { channel: number; layer: number }): LiveLayerRecord {
   const box = { x: 0, y: 0, width: 1, height: 1 };
-  return { slot, sourceId: 'guest-1', role: 'fill', producer: 'route://2', fill: box, clip: box };
+  return {
+    slot,
+    sourceId: 'guest-1',
+    role: 'fill',
+    producer: 'route://2',
+    fill: box,
+    clip: box,
+    intendedVolume: 0,
+  };
 }
 
 it('THE DEFECT: an item whose believed status is WRONG is still cleared, and the layer really empties', async () => {

@@ -14,6 +14,7 @@ import {
   type ChannelRequest,
   type ChannelResponse,
   type ConnectionConfig,
+  type TemplateInfo,
 } from '@cg/shared-ipc';
 import { CasparRuntime, deriveOscBindHost } from '../src/caspar-runtime.js';
 import { createBridge, type BridgeHandle } from '../src/index.js';
@@ -69,11 +70,11 @@ function singleServer(amcpPort: number, oscPort: number, host = '127.0.0.1'): Co
   };
 }
 
-const TEMPLATE = {
+const TEMPLATE: TemplateInfo = {
   templateId: 'lower-third',
   templateType: 'lower-third',
   fields: [],
-} as const;
+};
 const HTML = '<!doctype html><html><body>served</body></html>';
 
 /** Minimal WS request/response client over the shared-ipc frame envelope. */

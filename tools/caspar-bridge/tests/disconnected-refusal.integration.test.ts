@@ -41,7 +41,7 @@ function freeUdpPort(): Promise<number> {
 function connectionFor(amcpPort: number, oscPort: number): ConnectionConfig {
   return {
     servers: { A: { host: '127.0.0.1', amcpPort, oscPort } },
-    strategy: 'single',
+    strategy: 'mirror-sync',
     autoFailoverEnabled: false,
   };
 }

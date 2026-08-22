@@ -146,10 +146,10 @@ function template(over: { looks?: TemplateLook[] | undefined; defaultLookId?: st
 function catalog(): SourceCatalog {
   return {
     sources: [
-      ...KEYS.map((k, i) => ({
+      ...KEYS.map((_k, i) => ({
         id: `src-${String(i + 1)}`,
         name: `Feed ${String(i + 1)}`,
-        format: '1080i5000',
+        format: '1080i5000' as const,
         producer: { kind: 'route' as const, channel: i + 2 },
       })),
       // The PRESET target — a second feed to point a plate at before switching to it.

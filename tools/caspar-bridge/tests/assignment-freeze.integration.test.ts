@@ -119,8 +119,18 @@ const TEMPLATE: TemplateInfo = {
     resolution: SCENE,
     defaultPosition: CENTRED,
     sources: [
-      { elementId: 'el-1', sourceId: 'guest-1', rect: PAIR['guest-1'] as LiveSourceRect },
-      { elementId: 'el-2', sourceId: 'guest-2', rect: PAIR['guest-2'] as LiveSourceRect },
+      {
+        elementId: 'el-1',
+        sourceId: 'guest-1',
+        rect: PAIR['guest-1'] as LiveSourceRect,
+        dynamic: false,
+      },
+      {
+        elementId: 'el-2',
+        sourceId: 'guest-2',
+        rect: PAIR['guest-2'] as LiveSourceRect,
+        dynamic: false,
+      },
     ],
     looks: [look('pair', PAIR), look('solo', SOLO)],
     defaultLookId: 'pair',
@@ -142,7 +152,14 @@ const PROMO: TemplateInfo = {
   liveSources: {
     resolution: SCENE,
     defaultPosition: CENTRED,
-    sources: [{ elementId: 'el-p', sourceId: 'guest-1', rect: SOLO['guest-1'] as LiveSourceRect }],
+    sources: [
+      {
+        elementId: 'el-p',
+        sourceId: 'guest-1',
+        rect: SOLO['guest-1'] as LiveSourceRect,
+        dynamic: false,
+      },
+    ],
     looks: [look('full', SOLO)],
     defaultLookId: 'full',
   },
