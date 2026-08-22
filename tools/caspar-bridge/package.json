@@ -22,7 +22,7 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "rimraf --glob dist *.tsbuildinfo",
-    "typecheck": "tsc --noEmit -p tsconfig.json --tsBuildInfoFile typecheck.tsbuildinfo",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json --tsBuildInfoFile typecheck.tsbuildinfo",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run --coverage",
     "start": "node ./bin/caspar-bridge.mjs"

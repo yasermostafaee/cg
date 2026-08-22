@@ -17,12 +17,20 @@
     "typecheck": {
       "dependsOn": ["^build"],
       "outputs": [],
-      "inputs": ["src/**", "tsconfig.json", "package.json"]
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "tsconfig.json",
+        "tsconfig.typecheck.json",
+        "vite.config.*",
+        "vitest.config.*",
+        "package.json"
+      ]
     },
     "lint": {
       "dependsOn": ["@cg/eslint-config#build"],
       "outputs": [],
-      "inputs": ["src/**", ".eslintrc*", "eslint.config.*", "package.json"]
+      "inputs": ["src/**", "tests/**", ".eslintrc*", "eslint.config.*", "package.json"]
     },
     "test": {
       "dependsOn": ["^build", "build"],

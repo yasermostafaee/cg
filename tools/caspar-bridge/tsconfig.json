@@ -6,5 +6,9 @@
     "types": ["node"]
   },
   "include": ["src/**/*"],
+  // The tests/ exclusion here is a BUILD constraint, not a statement that tests go
+  // unchecked: this config drives `tsc -b` with rootDir ./src and outDir ./dist, so
+  // including tests/ would be a hard rootDir error and would ship tests into dist.
+  // `pnpm typecheck` runs tsconfig.typecheck.json, which DOES include tests/.
   "exclude": ["src/**/*.test.ts", "tests/**/*"]
 }
