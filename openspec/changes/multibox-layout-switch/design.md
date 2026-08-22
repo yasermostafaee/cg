@@ -2502,3 +2502,51 @@ re-take. This changed one existing test's FIXTURE (`an ON-AIR row with an EMPTY 
 reconciles`), which had arranged its state through the lurk; its subject — that `setActiveLook`
 decides "on air" from the STATUS and not from an empty ledger — is unchanged and now asserted more
 sharply, because a refusal naming the unassigned plates is positive proof the plan was built.
+
+### 14.11 🔴 THE PREVIEW AND THE WIRE ANSWER FROM ONE FUNCTION (session BQ, `B-157`)
+
+PVW's overlay named the template default while air showed the per-look binding. The cause was a
+type signature: `platePlacements` took `sourceNameOf: (plateId: string) => string | null` — keyed
+by plate alone — with `activeLookId` in the same argument list, used for the rects and ignored for
+the names. **A per-look binding was unrepresentable**, not merely unresolved.
+
+**This is `B-151` one field over**, and that is the part worth keeping. `B-151` was this same
+overlay never learning looks exist, about RECTS; BL fixed it by MOVING `lookPlateRects` to
+`@cg/shared-ipc` so both processes call one function, and its doc states the reason: _"PVW could
+not have called a private method on a process it does not run in — which is precisely how it came
+to have its own idea of the layout."_ The NAMES were left behind, and the same operator met the
+same class of wrongness on the same component a week later. BL's handoff had predicted exactly
+that: _"one surface learning a state and its neighbour not is a recurring shape in this feature,
+not a one-off."_
+
+**So the fix is BL's, applied to the second field.** `effectiveOverridesForLook` moved out of
+`live-look-bindings.ts` into `@cg/shared-ipc`, joined there by:
+
+- `assignmentInForce(templateId, assignments, frozenAssignment)` — **level 2**, choosing between
+  the live store and the snapshot a take froze (§14.10). The choice is made once, so a preview
+  cannot resolve the live assignment while air resolves the frozen one.
+- `resolvePlateSourcesForLook(...)` — **the whole four-level answer for one look**, in catalog ids.
+
+The bridge's `resolveLookBindings` now DELEGATES to them rather than composing
+`effective?.[plateId] ?? assigned.get(plateId)` itself.
+
+**Two decisions worth stating, because both were available and only one is right.**
+
+1. **The overlay takes the resolution INPUTS, not a resolved map.** Handing it a look-resolved
+   `plateId → name` map would have fixed the reported bug and left the shape intact — the next
+   caller could still pass a look-blind one. `platePlacements` now calls the shared resolver
+   **with the look it already holds**, so no call site is in a position to drop the dimension.
+   Fixing the symptom and fixing the shape were genuinely different changes here.
+2. **The id→name join stays with the caller.** The shared function answers in catalog IDS, because
+   only a surface knows what a missing entry means: on a preview it reads as unassigned, at the
+   bridge it refuses a take. Folding that in would have forced one of those two to be wrong.
+
+**And the test is pinned at the SHARED FUNCTION, not once per surface** — `live-look-bindings.test.ts`
+asserts the bridge's per-look answer equals the shared resolver's over five input shapes. It is
+near-tautological today, deliberately: the failure mode is not two functions disagreeing now, it is
+somebody re-inlining the composition for convenience, which would compile and pass every other
+test. Mutation-checked against a re-inline that gets the precedence backwards. **Two tests that
+agree today are what let this drift in the first place.**
+
+**The rule, which settles every case without a table of exceptions:** _the PVW overlay names
+exactly what a TAKE of THIS row, in THIS look, would put on air._

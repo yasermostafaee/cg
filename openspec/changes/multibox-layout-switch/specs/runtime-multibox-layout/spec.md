@@ -498,6 +498,51 @@ that no live source is on air.
 - **WHEN** a plate is seated, released or held
 - **THEN** the list changes without the console asking again
 
+### Requirement: The preview NAMES what a take of this row, in this look, would put on air
+
+The PVW live-plate placeholder SHALL name the source that a TAKE of that row, in the look PVW is
+showing, would put on air. It SHALL resolve all four levels — the installation's catalog, the
+template assignment (or, for a row that has taken, the snapshot that take froze), the row's
+per-look composition, and the row's per-plate emergency override with the emergency outermost.
+
+The preview and the bridge SHALL obtain that answer from **one shared function**. Neither SHALL
+carry its own walk of the precedence, and the agreement SHALL be asserted at that function rather
+than once per surface.
+
+A plate whose resolved source names no catalog entry SHALL read as UNASSIGNED on the preview,
+never as a raw identifier.
+
+#### Scenario: A per-look binding is what the placeholder names
+
+- **GIVEN** a rehearsing row whose PVW look has a plate bound to a source other than the template's
+  default for that plate
+- **WHEN** the operator looks at the PVW placeholder for that plate
+- **THEN** it names the bound source, not the template default
+
+#### Scenario: The name follows a look switch
+
+- **GIVEN** one plate bound to different sources in two of the template's looks
+- **WHEN** the operator switches which look PVW is showing
+- **THEN** the placeholder's name changes with the look, as its rect already did
+
+#### Scenario: An emergency override is named in every look
+
+- **GIVEN** a per-plate emergency override in force on a plate
+- **WHEN** the operator looks at that plate's placeholder in any look
+- **THEN** it names the overridden source
+
+#### Scenario: An unbound plate names the template default
+
+- **GIVEN** a plate with no per-look binding and no override
+- **WHEN** the operator looks at its placeholder
+- **THEN** it names the template's assigned source for that plate
+
+#### Scenario: The preview and the bridge cannot disagree
+
+- **GIVEN** the same row, look, assignment, per-look composition and override
+- **WHEN** the preview resolves a plate's source and the bridge resolves the same plate's source
+- **THEN** both answer the same catalog entry, because both call the same function
+
 ### Requirement: The operator switches a running row's look from a picker that IS the on-air readout
 
 A row whose template authors looks SHALL carry an always-visible control that both STATES which

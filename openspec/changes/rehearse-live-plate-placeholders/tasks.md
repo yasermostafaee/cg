@@ -31,6 +31,14 @@
       `outputTranslate` imported from `@cg/template-runtime/position`. **No local re-derivation.**
       (Named `livePlateGeometry`, not `livePlateOverlay`: a case-only difference from the component
       beside it is a compile error on a case-insensitive filesystem.)
+      ⚠ **THE SIGNATURE ABOVE IS SUPERSEDED — `sourceNameOf` no longer exists (session BQ,
+      `B-157`).** A `(plateId) => name` callback has no LOOK in it, so once per-look input bindings
+      shipped the same plate in two looks could only ever yield one name, and PVW named the
+      template default while air showed the bound source. The fourth parameter is now a
+      `PlateSourceLookup` — the resolution INPUTS — and `platePlacements` calls
+      `@cg/shared-ipc`'s `resolvePlateSourcesForLook` with the look it already holds. The rest of
+      this item (the arithmetic, the single fit scale, the no-local-re-derivation rule) is
+      unchanged and still correct.
 - [x] 2.1a `outputTranslate`'s first parameter WIDENED to `Pick<Scene, 'resolution'>` — the body
       only ever read that, every existing caller still satisfies it, and the alternative was a
       caller with no scene fabricating one or copying two lines of arithmetic.

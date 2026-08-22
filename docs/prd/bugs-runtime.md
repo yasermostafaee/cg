@@ -4303,8 +4303,13 @@ mechanism — it is what the shipped take path already does with a recorded look
 - WHEN a rehearsing row's look is switched THEN nothing reaches CasparCG
 - WHEN a template predates LOOKS THEN nothing about it changes
 
-- **Cross-refs:** [[R-049]] (the placeholder overlay), [[R-022]] (rehearse and its interlock),
-  [[B-146]] (the same class — a surface showing something air does not).
+- **Cross-refs:** [[R-049]] (the placeholder overlay), [[R-048]] (the emergency patch this
+  overlay must also honour), [[R-022]] (rehearse and its interlock), [[B-146]] (the same class — a
+  surface showing something air does not), and 🔴 **[[B-157]] — THIS EXACT SHAPE, ONE FIELD OVER.**
+  This item taught the overlay that looks exist for its **RECTS**; its NAMES were never taught, and
+  the same operator met the same class of wrongness on the same surface a week later. The warning
+  that closed this session's handoff — _"one surface learning a state and its neighbour not is a
+  recurring shape in this feature, not a one-off"_ — was right, and `B-157` is the proof.
 
 ## [x] B-152 — a wire identifier reached a broadcast surface: `unknown channel: stack.set-active-look` in a red toast, mid-show ⟨priority: high — the operator can do nothing with it, and it names an internal id⟩ — FIXED 2026-08-21 (session BL)
 
@@ -4634,3 +4639,85 @@ assumed here.
 
 - **Cross-refs:** [[B-151]] (the same shape one layer out — a surface that had not learned a state
   its neighbour had), [[R-022]] (the interlock the three-state order rests on), [[R-048]].
+
+## [x] B-157 — PVW named the WRONG SOURCE: the overlay learned about looks for its RECTS and never for its NAMES ⟨priority: high — the preview, whose whole job is naming the source, named one air would not show⟩ — FIXED 2026-08-22 (session BQ)
+
+**What the owner saw**, with a screenshot. A row is **ON PVW** (rehearsing), PVW LOOK = `look-1`.
+In LOOK INPUTS he sets `look-1` → plate `11` → **studio 3** and presses UPDATE. **The PVW
+placeholder still reads "studio 1"** — the template's default for that plate. The binding is
+applied everywhere else; the preview names the old source.
+
+🔴 **This strikes at [[R-049]]'s stated reason for existing.** Its own text: _"⭐ It does what the
+PAGE never could: show the ASSIGNED SOURCE'S NAME… The Runtime knows the join."_ **The join it drew
+was the wrong one** — which is worse than drawing none, because an operator checks PVW precisely to
+avoid putting the wrong face up.
+
+## The cause was visible in a type signature
+
+`livePlateGeometry.ts`:
+
+```ts
+export function platePlacements(
+  …,
+  sourceNameOf: (plateId: string) => string | null,   // ← keyed by PLATE ALONE
+  activeLookId: string | undefined,                   // ← passed, and used only for the RECTS
+)
+```
+
+**A map keyed by plate id with no look in it makes a per-look binding UNREPRESENTABLE** — the same
+plate in two looks can only ever yield one name. The active look was sitting in the very same
+argument list, driving the geometry and ignored by the naming. The caller
+(`PreviewPanel.tsx`) built that map from `appliedPlateSources`, which is **level 2 only**, so
+level 3 (the per-look composition) and level 4 (`R-048`'s emergency patch) were both invisible to
+the preview.
+
+🔴 **THIS IS [[B-151]] AGAIN, ONE FIELD OVER**, and that is the finding rather than the bug. `B-151`
+was _"PVW's overlay never learned that looks exist"_ — about RECTS. Session BL's handoff closed by
+warning that _"one surface learning a state and its neighbour not is a recurring shape in this
+feature, not a one-off."_ It was right, and this is the second instance on the same component.
+
+## Fixed by moving the resolver, the way `B-151` was fixed — not by patching the call site
+
+The four-level precedence lived bridge-side only (`live-look-bindings.ts`), which is exactly why
+the renderer could not perform it. `lookPlateRects` already carries the argument in its own doc:
+_"PVW could not have called a private method on a process it does not run in — which is precisely
+how it came to have its own idea of the layout."_
+
+So `effectiveOverridesForLook` **moved to `@cg/shared-ipc`**, beside `activeLookOf` /
+`lookPlateRects`, joined by `assignmentInForce` (level 2, honouring session BP's frozen snapshot)
+and `resolvePlateSourcesForLook` (the whole answer for one look). **The bridge delegates to them**
+— `resolveLookBindings` no longer composes the levels itself.
+
+And the SHAPE changed so a caller cannot drop the look again: `platePlacements` takes the
+resolution INPUTS (`PlateSourceLookup`) and calls the shared resolver **with the look it already
+holds**. A plate-keyed callback would have fixed the symptom and left the next caller free to pass
+a look-blind map.
+
+**The rule, which settles every case in one sentence:** _the PVW overlay names exactly what a TAKE
+of THIS row, in THIS look, would put on air._
+
+**Acceptance**
+
+- WHEN a per-look binding is applied for the look PVW is showing THEN the placeholder names the
+  BOUND source, not the template default
+- WHEN the same plate is bound differently in two looks THEN switching the PVW look changes the
+  NAME as well as the rect
+- WHEN an `R-048` emergency patch is in force THEN the placeholder names the patched source in
+  EVERY look
+- WHEN no per-look binding exists THEN the template default is named, as before
+- WHEN the bridge and the overlay are asked the same question THEN they answer from the SAME
+  function, asserted at that function rather than once per surface
+
+⚠ **Session BP's frozen level 2 is honoured too**, though a rehearsing row is off air by `R-022`'s
+interlock so nothing is frozen for it today. It is threaded and tested anyway: a preview resolving
+the LIVE assignment while air resolved the FROZEN one would be a second answer to the same
+question, and the rule above has to stay true if that interlock ever changes.
+
+⚠ **A gap found on the way, filed rather than fixed here:** `apps/runtime/tsconfig.json` includes
+`src/**/*` only, so **the runtime's `typecheck` never sees `tests/`** — a fixture kept a field this
+change REMOVED and omitted the one it ADDED, and nothing caught it (vitest transpiles without
+checking). Turning it on is its own piece of work: **113 pre-existing errors, measured**.
+
+- **Cross-refs:** [[B-151]] (the same shape one field over — RECTS, where this is NAMES; read them
+  as a pair), [[R-049]] (the overlay whose purpose this defeats), [[R-048]] (level 4, which the
+  overlay now honours), [[B-146]] (the class: a surface showing what air does not).

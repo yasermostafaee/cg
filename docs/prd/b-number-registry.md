@@ -1039,4 +1039,22 @@ over `docs/prd/*.md` excluding `README.md` and this file: `git grep "^## \[.\] B
 `B-156` in the tree was the "next free" POINTER on the line above — a pointer, not a claim, which is
 the distinction this registry has now recorded from four directions. `B-` stays contiguous
 `B-001` … `B-156`, **no gaps**.
-**Next free: `B-157`.**
+**Next free: `B-157`.** — CLAIMED, see below.
+
+## 2026-08-22 — `B-157` claimed (session BQ)
+
+| Prefix | Claimed | Item                                                                           | File                               |
+| ------ | ------- | ------------------------------------------------------------------------------ | ---------------------------------- |
+| `B-`   | `B-157` | PVW named the WRONG SOURCE: the overlay learned looks for its RECTS, not names | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the documented heading sweep, run immediately before this heading was
+written** over `docs/prd/*.md` excluding `README.md` and this file:
+`git grep "^## \[.\] B-1"` reported `B-151` … `B-156` and **no `B-157`**. The only occurrence of
+`B-157` anywhere in the tree was the **"next free" POINTER** on the line above — a pointer, not a
+claim, which is the distinction this registry has now recorded from five directions. `B-` stays
+contiguous `B-001` … `B-157`, **no gaps**.
+
+⚠ **This entry is its own dated section, which is the point.** `B-155` was claimed by appending a
+line inside `B-154`’s section (corrected by session BO, recorded above); repeating that is what the
+note above exists to prevent.
+**Next free: `B-158`.**

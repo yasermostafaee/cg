@@ -1058,6 +1058,46 @@ candidate shapes.
       four of them in an OSC packet parser. Both fixed; all 2399 text-ish tracked files are now
       NUL-free and the 113 remaining hits are genuine binaries.
 
+- [x] 7.23 ✅ **LANDED 2026-08-22 (session BQ) — `B-157`: PVW named the WRONG SOURCE, because the
+      overlay learned about looks for its RECTS and never for its NAMES.**
+      The owner, with a screenshot: a row ON PVW, PVW LOOK = `look-1`, that look's plate bound to
+      **studio 3** and applied — and the placeholder still reading **"studio 1"**, the template
+      default. It defeats `R-049`'s stated purpose (_"show the ASSIGNED SOURCE'S NAME… The Runtime
+      knows the join"_) by drawing the wrong join.
+      🔴 **THE CAUSE WAS A TYPE SIGNATURE.** `platePlacements` took
+      `sourceNameOf: (plateId: string) => string | null` — keyed by PLATE ALONE — with
+      `activeLookId` in the same argument list, used for the rects and ignored for the names. A
+      per-look binding was therefore not merely unresolved but **unrepresentable**: one plate in
+      two looks has one slot for an answer. The caller built that map from `appliedPlateSources`,
+      which is LEVEL 2 ONLY, so levels 3 and 4 were both invisible to the preview.
+      🔴 **`B-151` AGAIN, ONE FIELD OVER** — that item was this same overlay never learning looks
+      exist, about RECTS. BL's handoff warned that _"one surface learning a state and its
+      neighbour not is a recurring shape in this feature, not a one-off."_ Second instance, same
+      component. Cross-referenced in both directions in `bugs-runtime.md`.
+      **FIXED THE WAY BL FIXED THE FIRST ONE — by moving the resolver, not patching the call
+      site.** `effectiveOverridesForLook` moved to `@cg/shared-ipc` beside `activeLookOf` /
+      `lookPlateRects`, joined by `assignmentInForce` (level 2, honouring 7.16's frozen snapshot)
+      and `resolvePlateSourcesForLook` (the whole four-level answer for one look). **The bridge
+      DELEGATES**: `resolveLookBindings` no longer composes the levels itself. And the SHAPE
+      changed so the look cannot be dropped again — `platePlacements` takes the resolution INPUTS
+      and calls the shared resolver with the look it already holds.
+      **The rule: _the PVW overlay names exactly what a TAKE of THIS row, in THIS look, would put
+      on air._**
+      **Asserted:** the reported case (mutation-checked — reverting to level-2-only naming reddens
+      it with `expected 'Studio 1' to be 'Studio 3'`, the owner's screenshot); one plate, two
+      looks, two names (the assertion the old signature could not express); the `R-048` emergency
+      winning in every look; blank falling through to the default; a dangling catalog entry reading
+      as unassigned; 7.16's frozen level 2 being what is named. **Plus parity AT THE SHARED
+      FUNCTION** (`live-look-bindings.test.ts`) — the bridge's per-look answer equals the shared
+      resolver's over five input shapes, mutation-checked against a re-inline with the precedence
+      backwards. Two surface-level tests that agree today are what let this drift.
+      **E2E:** `e2e/pvw-look-source-name.spec.ts`, 2/2 — the operator's real path (Inspector →
+      UPDATE → published item → overlay), plus the name following a PVW look switch.
+      ⚠ **A gap found on the way, FILED not fixed:** `apps/runtime/tsconfig.json` includes
+      `src/**/*` only, so the runtime's `typecheck` never sees `tests/` — a fixture kept a REMOVED
+      field and omitted an ADDED one and nothing caught it. Turning it on is its own work: **113
+      pre-existing errors, measured.**
+
 - [ ] 7.17 **The stale TITLE binding — DEFERRED by BM-2's patch §C, which is explicit that the flash
       outranks it.** Everything `tasks.md` 7.13 records still stands: deferring costs no re-authoring
       (`BindingTargetSchema` is a discriminated union; `live-source-id` is the precedent for a target
