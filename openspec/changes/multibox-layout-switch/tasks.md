@@ -963,6 +963,14 @@ candidate shapes.
       on an occupied layer as an instantaneous in-place replace and has no notion of producer
       acquisition time, so cases 2, 4-as-fixed and 5 are proven for ORDER only — no test anywhere
       can see a frame. This block does not tick 7.15; only the plant walk's frame counts can.
+
+      ✅ **Linux `gate:e2e` DISCHARGED for the case-4 fix (session BT):**
+      <https://github.com/yasermostafaee/cg/actions/runs/32581287096> — head `57e07795` (the tip
+      carrying the lock, its tests and this record), `completed` + `success`, and the
+      **`E2E (Playwright)` job RAN** (2026-08-22 15:18:27Z → 15:27:16Z), not skipped. The
+      classifier scored the diff `kind=code needsE2e=true` (`tools/caspar-bridge/**` is not on
+      the known-non-render list — the safe direction). ⚠ It discharges NOTHING for 7.15 itself,
+      which owes the PLANT measurement above.
       **The rule, decided so it is not re-litigated:** the new look's hole must NEVER show the
       previous source; if the incoming producer is not ready, BLACK is acceptable and the previous
       guest is not. That does not contradict `B-126`, whose case is the opposite trade (a dead feed
