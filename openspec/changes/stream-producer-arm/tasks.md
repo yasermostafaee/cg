@@ -54,6 +54,6 @@
 ## 4. Verification
 
 - [x] 4.1 `pnpm gate` green, uncached
-- [ ] 4.2 Linux `gate:e2e` debt — discharged ONLY by a completed, green `e2e` job on GitHub Actions
-      for the commit carrying this change, cited here by run URL. Awaiting the CI run for the
-      pushed commit; the URL is written here when it completes.
+- [x] 4.2 Linux `gate:e2e` debt — DISCHARGED: the `E2E (Playwright)` job RAN (not skipped) and
+      completed green on `fef781cb` (the commit carrying this change) —
+      https://github.com/yasermostafaee/cg/actions/runs/32575013749
