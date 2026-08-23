@@ -35,7 +35,7 @@
     "test": {
       "dependsOn": ["^build", "build"],
       "outputs": ["coverage/**"],
-      "inputs": ["src/**", "tests/**", "scripts/**", "vitest.config.*", "package.json"],
+      "inputs": ["src/**", "tests/**", "bin/**", "scripts/**", "vitest.config.*", "package.json"],
       "passThroughEnv": [
         "VITEST_MAX_FORKS",
         "VITEST_MIN_FORKS",
