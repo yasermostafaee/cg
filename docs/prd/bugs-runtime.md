@@ -5424,6 +5424,11 @@ failed `expected '127.0.0.1' to be '0.0.0.0'` and the apply case failed `expecte
 - **`deriveServeOptions`' signature changed** — it is exported from `@cg/caspar-bridge`'s index.
   Every in-repo caller was updated; an out-of-repo embedder passing a bare string would now be a
   type error, which is the intended loud failure.
+- ✅ **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32658676558> —
+  head `7a8eda09` (the tip carrying this fix, its mock correction and [[B-164]]), `completed` +
+  `success`, with the **`E2E (Playwright)` job RUN, not skipped** (`Lint • Typecheck • Test • Build`
+  ran and passed too). Both heavy jobs are whole-tree, so that run verifies every commit in the
+  span. The local Windows `gate:e2e` was green first and is NOT what discharges it.
 - **Cross-refs:** [[B-159]]/[[B-160]] (same family — a backup silently wrong — but reached through
   AMCP, which this is not), [[C-024]] (the advertise-host-from-configuration item this discharges
   the CLI half of), [[B-038]] (the template HTTP server), [[B-163]] (positive verification).
@@ -5577,6 +5582,12 @@ and absent-key both not audible and not merged; the state class present/absent; 
 - **Number verified free** immediately before filing: `git grep "B-164"` across `docs/`,
   `openspec/`, `packages/`, `tools/` and `apps/` returned only this session's own code comments
   and the registry's forward-reference "Next free" line — no heading anywhere.
+- ✅ **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32658676558> —
+  head `7a8eda09`, `completed` + `success`, with the **`E2E (Playwright)` job RUN, not skipped**.
+  This is the run that matters most for this item: the fix CHANGED two assertions in
+  `live-source-layers.spec.ts` that had the defect written down as expected behaviour, and
+  `pnpm gate` does not run Playwright (`P-028`), so only a Linux `e2e` can show they were corrected
+  rather than merely edited.
 - **Cross-refs:** [[C-026]] (multi-box audio: the monitor/VU work that would make a MEASUREMENT
   possible), [[B-154]]/[[B-155]] (the HELD plate's other consequences), `CLAUDE.md` golden rule 6
   (one predicate, reused — the rule this restores).
