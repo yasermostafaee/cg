@@ -5312,6 +5312,10 @@ swap the inputs, press UPDATE, and nothing must appear on air.** Then take the r
 new inputs are the ones that come up — that second half is the one that proves the edit was not
 merely discarded.
 
+- ✅ **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32633887346>
+  — head `6f6eb690` (the tip carrying the gate, its four tests and this record), `completed` +
+  `success`, with the **`E2E (Playwright)` job RUN, not skipped**. Classifier scored the diff
+  `kind=code needsE2e=true`. The local Windows run is not what discharges it.
 - **Cross-refs:** [[B-155]] (case 3 — the union pre-seat this gate must not narrow), [[B-154]] (the
   related-but-different held-plate shape), `CLAUDE.md` golden rule 10 (the invariant),
   `openspec/changes/multibox-layout-switch/tasks.md` 7.14d.
