@@ -230,7 +230,10 @@ knowing before assuming a green `typecheck` said anything about this diff.
 2. **`P-033` is still open for `apps/designer`** — its typecheck is `src/**` only, which is why §2.6
    needs a caveat at all. `apps/runtime` and `tools/caspar-bridge` now give two patterns to copy
    from (vite-built and tsc-built).
-3. **`E2E-PNG-01`'s run URL** — write it into §3 above when that push run completes.
+3. ✅ **`E2E-PNG-01`'s run URL** — written into §3 above; discharged.
+4. **The scoped-task blind spot §7.1 measured** — `@cg/soak-runner#test` does not inherit
+   the generic `test` inputs. Harmless today; it stops being harmless the moment that
+   workspace's tests touch its own `bin/`.
 
 ## 6. Out of scope — named untouched
 
@@ -239,3 +242,89 @@ tsconfig · the committed `bb-step*.png` images (restored, never deleted) · `do
 gitignore status (unchanged — a doc links there) · any other slow or flaky E2E ·
 `template-http-server.ts` (read only; still carrying its LAN-host pin, still unstaged) · any product
 source, and anything on air.
+
+---
+
+## 7. `PATCH-BU-01` — the delta run on 2026-08-23
+
+A four-item patch from the owner: it answered this session's two open questions, corrected one
+verdict and filled one gap. **Everything in `TURBO-BIN-01` and `E2E-PNG-01` above stands as run.**
+
+### 7.1 The `test`-inputs notch (§1.4) is CLOSED — `7dd8140d`
+
+Answered YES, and done by MEASUREMENT rather than by analogy to the `lint` case. **Every cached
+turbo task was checked; exactly one more reads `bin/`:**
+
+| task                          | reads `bin/`?                  | evidence                                                                                           |
+| ----------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| **`test`**                    | **YES — 1 workspace, 1 file**  | `@cg/caspar-bridge`, `bin/caspar-bridge.mjs`, spawned by `live-layers-default.test.ts:96` + `:107` |
+| `build`                       | NO — 0 files, all 4 workspaces | `tsc -p tsconfig.json --listFiles`; the `/src/` control hit 12 / 8 / 22 / 3                        |
+| `typecheck`                   | NO — 0 files, all 4 workspaces | same instrument, same live control (measured in `db32fd14`)                                        |
+| `test:integration`            | **VACUOUS**                    | **no workspace defines the script** — task and root script exist, nothing implements them          |
+| `package`                     | **VACUOUS**                    | no workspace defines it either                                                                     |
+| `@cg/template-fixtures#build` | N/A                            | that workspace has no `bin/`                                                                       |
+| `@cg/soak-runner#test`        | NO                             | soak-runner's tests reference no `bin/` path — **not widened, deliberately**                       |
+| `test:e2e`                    | —                              | `cache: false`, so its inputs are never consulted. Left alone.                                     |
+
+**The sweep behind "exactly one":** every reference to a `bin/` path from any test file in any
+workspace is that single line, and the **only** `spawn`/`exec`/`fork` in any test file repo-wide is
+the one at `:107` — checked because a spawn-by-NAME would be invisible to a path sweep, and all
+four packages do declare a `bin` name. A `dist/` control over the same sweep hit in three
+workspaces, so the instrument was live.
+
+🔴 **The stale green here is worse than the `lint` one, because the hidden defect is in the CLI a
+station actually runs.** Cache warm (`44 cached, 44 total`), the real defect planted by deleting
+`...(liveLayersPath !== null ? { liveLayersPath } : {})` — the exact regression that test was
+written to catch:
+
+| step               | result                                                           |
+| ------------------ | ---------------------------------------------------------------- |
+| direct `vitest`    | **2 tests FAIL** on the ledger assertion — the probe is live     |
+| `pnpm test` BEFORE | `@cg/caspar-bridge:test: cache hit, replaying logs` · **exit 0** |
+| `pnpm test` AFTER  | `cache miss, executing` · both failures surface · **exit 1**     |
+
+A green suite over a bridge that had lost its ledger. The CLI was restored byte-identical (hash
+`48f113f1` both sides) and never staged.
+
+⚠ **REPORTED, NOT FIXED — one input gap noticed on the way, and measured rather than assumed.**
+A workspace-scoped task definition **REPLACES** the generic one's inputs rather than merging with
+them. Touching BOTH bin files produced exactly ONE cache miss (`@cg/caspar-bridge`);
+`@cg/soak-runner#test` stayed **cached** with its own `bin/` file changed. Harmless today — that
+workspace's tests read no `bin/` — but the generic widening does not reach it, and would not if
+they ever did.
+
+### 7.2 `P-037` is `[x]` — `af31d32f`
+
+Flipped, and the convention was checked rather than assumed. `docs/prd/README.md` line 47 defines
+`[x]` as _"done (archived — link the change dir)"_, which `P-037` has no artifact for — **but
+`P-026` and `P-027` are both `[x]` with _"no change dir; filed and fixed in one commit under
+CLAUDE.md's Spec discipline path"_ stated outright.** `P-037` is exactly that shape (`2bf31fa5`
+filed, `3e4f7832` fixed), so the heading says so in the same words rather than inventing an
+artifact to link. The partial-nondeterminism reading moved into the item's **Why**, where it
+belongs — it is a property of the DEFECT, not of the fix — and the Notes bullet that duplicated it
+now points there instead.
+
+### 7.3 The push verdict corrected — `6bfb2bd0`
+
+See §3: the batched push is the owner's MODEL, not a slip, and `CLAUDE.md` was checked and does
+not contradict it.
+
+### 7.4 Session BT written up — `e785dac5`
+
+[`2026-08-22-session-bt.md`](2026-08-22-session-bt.md), labelled RECONSTRUCTED, built strictly from
+`8e80fdf7` / `57e07795` / `4777b724`, `multibox-layout-switch/tasks.md` and the recon walk. Its §5
+is a list of **silences**, not findings — four of them named, because the difference between "BT
+did not record a gate result" and "BT did not run one" is exactly what a reconstruction is tempted
+to close.
+
+### 7.5 Verification for the patch
+
+- **`pnpm gate` green UNCACHED** — `89 successful, 89 total`, **`0 cached, 89 total`**, exit 0.
+- Classifier over the patch diff → `{ kind: 'code', needsE2e: true }` (`turbo.json` again).
+- ✅ **DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32627438845> — head
+  `e785dac5`, `completed` + **`success`**, **`E2E (Playwright)` `completed :: success`, i.e. it
+  RAN**.
+- **Four commits accumulated, ONE push** — the model §3 now states. Verified with
+  `git ls-remote origin dev` matching local `HEAD`.
+- ⚠ **SHARED CONFIG again — `turbo.json`.** With `TURBO-BIN-01`'s `turbo.json` + `CLAUDE.md`,
+  the next session inherits all three on pull.
