@@ -1170,3 +1170,25 @@ defect reproduced at the wire, gated, and proven RED-then-GREEN with both neighb
 **10** — numbered 10 rather than inserted earlier **on purpose**: this file, `CLAUDE.md` itself and
 several PRD items already cite "golden rule 9" meaning the `git grep`/NUL-byte sweep, and
 renumbering it would have quietly falsified every one of those references.
+
+## 2026-08-23 — multi-box audio and metering gets its number (`C-026`)
+
+| Prefix | Claimed | Item                                                                                      | File                   |
+| ------ | ------- | ----------------------------------------------------------------------------------------- | ---------------------- |
+| `C-`   | `C-026` | multi-box audio: per-box control now, monitor / master / VU metering after the plant walk | [caspar.md](caspar.md) |
+
+**Verified free by the heading sweep immediately before the heading was written.** Highest `C-`
+heading was `C-025`, from
+`git grep -hoE "^## \[.\] C-[0-9]{3}" -- 'docs/prd/*.md' ':!docs/prd/README.md'` sorted on the
+NUMBER (a lexicographic sort of the whole heading puts `[~] C-015` last and is the trap here — the
+checkbox sorts before the digits). The duplicate audit for `C-` printed nothing.
+`git grep -n "C-026"` returned exactly ONE hit: this file's own "Next free: `C-026`" line — a
+forward-reference POINTER, not a heading, which is the false positive this registry has now
+recorded from seven directions. The space stays contiguous `C-001` … `C-026`, **no gaps. Next
+free: `C-027`.**
+
+⚠ **Filed at `[~]`, not `[ ]` or `[x]`** — the item ships one half (the per-box PGM audio surface)
+and leaves the other half SPEC-ONLY behind a plant measurement it cannot take. A `[x]` would claim
+the monitor channel, the master volume and the VU meters exist; a `[ ]` would hide a surface that
+is on `dev` and clickable. `[~]` is the status that is true of both halves at once, and the change
+dir's `tasks.md` §1.11 is where the undone half is enumerated.

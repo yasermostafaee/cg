@@ -1287,3 +1287,66 @@ validation ([[C-021]]'s, unchanged).
   [b-number-registry.md](b-number-registry.md).
 - **Cross-refs:** [[C-015]] (the union and catalog), [[C-021]] (the sibling arms), [[B-086]] (the
   works-or-link-down model the stalled limit is stated against).
+
+## [~] C-026 — multi-box audio: per-box control now, monitor / master / VU metering after the plant is measured ⟨priority: high⟩ — in progress: `openspec/changes/add-multibox-audio/`
+
+**What:** Make a multi-box graphic's audio CONTROLLABLE and VISIBLE per box. Four operator verbs
+— fader, ON/OFF, SOLO and PANIC ("silence all boxes") — all expressed as writes to ONE map of
+plate volumes, shown on a strip beside every seated plate rather than behind a dialog. And, gated
+on a plant measurement, three things this installation has never been able to answer: a MONITOR /
+PFL channel, per-box audio for a `<video>` inside the template, and a VU meter per input.
+
+**Why:** Audio is the one property of a graphic an operator cannot see. `plateVolumes` has been
+published on the wire since C-015 phase 6 and the ONLY surface that read it was a modal opened
+from one row's action menu — so the console's answer to _"is this guest audible?"_ was **open a
+dialog and look**, one row at a time. The two gestures a director asks for by name under
+pressure — "just this one" and "silence everything" — did not exist at all.
+
+**Acceptance:**
+
+- WHEN the operator applies a MAP of plate volumes for a row THEN it reaches the bridge as ONE
+  call, holding that row's live-seat lock, and reports a PER-PLATE outcome so a partial failure
+  names the guest who did not move
+- WHEN any audio verb is used on a row that does not own live seats THEN the intent is recorded
+  and NOTHING is sent — no `PLAY`, no `MIXER VOLUME`, no fill, no un-hold (golden rule 10)
+- WHEN any audio verb touches a HELD plate THEN its intent is recorded and no wire command is
+  sent, and the surface reads "armed, not audible — hidden by this look" without greying it
+- WHEN SOLO is pressed THEN exactly one `MIXER … VOLUME 1` and N−1 `… VOLUME 0` reach the wire,
+  the same values land in `plateVolumes`, and nothing offers to restore the previous levels
+- WHEN OFF then ON is pressed THEN the plate returns to 100 %, NOT to its previous fader value,
+  and the surface says so in words
+- WHEN PANIC is pressed THEN every plate of every ON-AIR row is set to 0 and the console reports
+  how many plates it silenced; an empty scope reports that nothing was on air rather than success
+- WHEN the LIVE SOURCES tab is open THEN every seated plate shows a state pill, a fader, ON/OFF,
+  SOLO and a % readout without any dialog being opened, and the layer row carries a compact
+  READ-ONLY summary outside its six-column verb block
+- WHEN any of this is rendered THEN no indicator is a bar, a needle or a meter — an INTENT pill
+  and a LEVEL meter are different claims and only the first is knowable today
+
+**Notes:**
+
+- **SHIPPED half rests on `MIXER … VOLUME`, already proven on this plant.** No new AMCP verb, no
+  new CasparCG channel, no new resolution level, no meter.
+- **GATED half is spec-only until `docs/recon/2026-08-23-audio-paths-walk.md` is run** on the
+  production 2.5.0 (`69e8ad5`) — W1/W2/W5/W6 for the monitor channel, W3 for template-internal
+  box audio, W4 for `MASTERVOLUME`, W7/W8 for metering. **W8 is load-bearing:** if a monitor
+  channel's peak does not track its one routed input, per-input VU for Live Source plates does
+  not exist at any price and only the in-template `AnalyserNode` path survives.
+- 🔴 **The metering ceiling is MEASURED, not assumed.** `audio_mixer.cpp` publishes
+  `state_["volume"]` as peaks **per AUDIO channel (L/R), maximum across ALL mixed layers** —
+  there is no per-layer variant, and 2.3 removed the older `…/audio/{n}/dBFS` addresses. A
+  per-input meter therefore cannot come from the programme channel's OSC.
+- **The MON channel array IS the metering array** — specified as one feature so an installation
+  is never asked to provision one set of channels for monitoring and another for metering.
+- **Per-plate, not per-look** (recorded so it is not re-litigated): plate resolution is already
+  four levels deep and audio does not need a fifth. A held plate is already silenced by the hold.
+- Filed in `caspar.md` by the nearest-sibling rule: it is about what AMCP verbs and CasparCG
+  channels this plant has, which is [[C-015]] / [[C-021]]'s territory. The Runtime surface is the
+  thin half of the same one change, so no twin item is filed in `runtime.md`.
+- The number was verified free by the heading sweep immediately before this heading was written
+  (highest `C-` heading was `C-025`; `git grep -n "C-026"` returned only the registry's own "next
+  free" pointer, not a heading) — recorded in [b-number-registry.md](b-number-registry.md).
+- **Cross-refs:** [[C-015]] (the plate model, the mute-on-create rule and `plateVolumes`),
+  [[C-019]] (audio authored INSIDE a template — the asset/packaging half, a different item from
+  this one's per-box GAIN), [[C-018]] / [[C-020]] (the 2.5.0 cutover the monitor channel assumes),
+  [[B-161]] (golden rule 10, the gate every verb here satisfies first).
