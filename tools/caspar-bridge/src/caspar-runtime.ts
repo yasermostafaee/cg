@@ -4295,6 +4295,32 @@ export class CasparRuntime {
    * commands), while `update` sends the `CG UPDATE` **after** this returns ok — BD's
    * fills-first-page-last-and-only-on-success, which is why the page half cannot live here.
    */
+  /**
+   * 🔴 **`B-161` — DOES THIS ROW OWN LIVE LAYERS RIGHT NOW?** The question a
+   * configuration verb must ask before it is allowed to touch one.
+   *
+   * TWO ways to own them, and they are not the same state:
+   *
+   * - **on air** — {@link isOnAirStatus}, the ONE canonical status predicate, REUSED here
+   *   rather than re-derived. Golden rule 6: a second local spelling of this status list is
+   *   how one of them comes to disagree, and that predicate's own header already says so.
+   * - **rehearsing** — the row holds its plates on PVW. Deliberately NOT covered by the
+   *   predicate above: `enterRehearse` REFUSES an on-air row, so the two states are disjoint
+   *   by construction and "on air" can never imply "rehearsing". A gate built on
+   *   `isOnAirStatus` alone would take rehearse's re-point away without failing any test that
+   *   existed before `B-161`.
+   *
+   * Everything else — `idle`, `loaded`, a row that has been taken out — owns nothing, so a
+   * binding change for it is pure state and the next take is what puts it on air.
+   */
+  #ownsLiveSeats(itemId: string): boolean {
+    const item = this.#reconciler.get(itemId);
+    if (item !== null && item !== undefined && isOnAirStatus(item.status, item.pending)) {
+      return true;
+    }
+    return this.#rehearsing.has(itemId);
+  }
+
   async #applyBindingTransaction(
     itemId: string,
     slot: CommandSlot,
@@ -4309,6 +4335,41 @@ export class CasparRuntime {
     const restoreOverrides = this.#sourceOverrides.get(itemId);
     const restoreBindings = this.#lookSourceBindings.get(itemId);
     this.#applyBindingMaps(itemId, next.overrides, next.bindings);
+
+    /*
+      🔴 **`B-161` — A CONFIGURATION VERB IS NEVER A PLAYOUT VERB.**
+
+      The owner, on the plant: he STOPPED several plates, SWAPPED their inputs and pressed
+      UPDATE only — no play, no take — and **the boxes went to AIR: the videos played with no
+      template above them.** No background, no strokes, none of the page's chrome, because no
+      page had been taken. Measured at the wire on a `loaded` row: four `PLAY`s, four
+      `MIXER VOLUME 0` and eight `MIXER FILL`/`CLIP`, sizing them into the look's geometry.
+
+      `UPDATE` puts values **IN FORCE**; only a **take** puts content **ON AIR**. So the
+      bindings above have already landed in STATE — that is the verb's whole job, and the next
+      take seats them — and a row that owns no live layers stops here, before anything can
+      reach one.
+
+      ⚠ **THE GATE IS AT THE ROW, NEVER AT THE LOOK OR THE VISIBLE HOLE.** On a row that IS
+      live this returns early for nothing and the reconcile below runs exactly as before,
+      UNION pre-seat and all — every look's inputs stay seated, including the looks that are
+      not punched. That pre-seating is what makes a switch pure `MIXER FILL`; narrowing it to
+      the punched look would put a `PLAY` back inside a switch and reintroduce `B-155` case 3,
+      which session BT closed on `4777b724`. A gate that changes the pre-seat SET is the wrong
+      gate, and `live-look-reconcile.integration.test.ts`'s `neighbour 1` asserts the whole set
+      rather than the one box a reader would think to look at.
+
+      ⚠ **AND IT IS NOT `isOnAirStatus` ALONE**, which is the trap this shape invites. A
+      REHEARSING row is deliberately NOT on air — `enterRehearse` refuses when
+      `isOnAirStatus` is true — yet it OWNS its layers, on PVW, and must keep re-pointing.
+      Asking only the air question would have silently broken rehearse; `neighbour 2` is the
+      test that says so. Hence {@link #ownsLiveSeats}, which asks the question this decision
+      actually turns on.
+    */
+    if (!this.#ownsLiveSeats(itemId)) {
+      this.#applySourceOverride(itemId, next.overrides ?? {}, next.bindings);
+      return { ok: true };
+    }
 
     const reconciled = await this.reconcileLivePlates(itemId, {
       // The row may be ON AIR. A failure must not black the plates that are working; see

@@ -2226,3 +2226,121 @@ it('🔴 B-155 §B — a swap arriving MID-SWITCH is serialized after it and res
   expect(rec?.clip).toEqual({ x: 0, y: 0, width: 1, height: 1 });
   expect(rec?.fill.height ?? 0).toBeGreaterThan(1);
 });
+
+// ─────────────── `B-161` — UPDATE IS A CONFIGURATION VERB, NEVER A PLAYOUT VERB ───────────────
+//
+// 🔴 The owner, on the plant 2026-08-22: he STOPPED several plates, SWAPPED their inputs, and
+// pressed UPDATE only — no play, no take. **The boxes went to AIR: the videos played, with no
+// template above them.** No background, no strokes, none of the page's chrome — because no page
+// had been taken.
+//
+// The rule, decided: **a configuration verb is NEVER a playout verb.** `UPDATE` puts values IN
+// FORCE; only a TAKE puts content ON AIR. A row that is not on air must produce no `PLAY`, no
+// un-mute and no fill on any live layer — the binding lands in STATE, and the next take seats it.
+//
+// ⚠ **The gate is at the ROW, never at the look or the visible hole.** On a row that IS on air the
+// UNION pre-seat must survive exactly as it is today — every look's inputs stay seated, including
+// the looks that are not punched. That pre-seating is what makes a switch pure `MIXER FILL`;
+// narrowing it would put a `PLAY` back inside a switch and reintroduce `B-155` case 3, which
+// session BT closed on `4777b724`. `neighbour 1` therefore asserts the whole seat SET, not the one
+// box a reader would think to look at.
+//
+// `src-4` is route 5 and is bound by no look in `ownersTemplate()`, so binding it forces a genuine
+// new seat rather than deduping onto one that already exists — which is what makes "did anything
+// reach the wire" a real question in every one of these.
+
+/** Every `MIXER 1-<layer> VOLUME …` this action put on the wire — the AUDIO half. */
+const volumesIn = (lines: readonly string[]): string[] =>
+  lines.filter((l) => /^MIXER 1-\d+ VOLUME/.test(l));
+
+/** Every `MIXER 1-<layer> FILL|CLIP …` — the GEOMETRY half. */
+const fitsIn = (lines: readonly string[]): string[] =>
+  lines.filter((l) => /^MIXER 1-\d+ (FILL|CLIP)/.test(l));
+
+const NEW_BINDING = { two: { 'live-2': 'src-4' } } as const;
+
+it('🔴 B-161 — a row that is NOT ON AIR: UPDATE with new bindings reaches NO live layer at all', async () => {
+  const r = await boot({ template: ownersTemplateWithField(), assignments: OWNERS_ASSIGNMENTS });
+  // LOADED, never taken. This row is configured and cued and NOT on air, which is the whole
+  // question: `isOnAirStatus` is false for `loaded`.
+  await r.load('item-1', 'debate', { title: 'before' });
+  expect(layerSet(r), 'a loaded row seats nothing before the update').toEqual([]);
+
+  const before = (await recvLines()).length;
+  const res = await r.update('item-1', { title: 'after' }, 'merge', NEW_BINDING);
+  const lines = await since(before);
+
+  // The edit is ACCEPTED — an operator's configuration change is never refused for this. It
+  // simply must not play.
+  expect(res.accepted).toBe(true);
+
+  /*
+    🔴 ONE assertion carrying THREE facts, deliberately. Three different commands can put a
+    picture on air — the `PLAY` that creates the producer, the `VOLUME` that un-mutes it, and the
+    `FILL`/`CLIP` that sizes it — and separate `expect`s would stop at the first, hiding whether
+    the other two also fired. The defect report needs all three halves in one reading, and
+    "bare video is bad, bare video WITH SOUND is worse" is only answerable if the audio half is
+    never masked by the video half failing first.
+  */
+  expect({
+    plays: playsIn(lines),
+    volumes: volumesIn(lines),
+    fits: fitsIn(lines),
+    seats: layerSet(r),
+  }).toEqual({ plays: [], volumes: [], fits: [], seats: [] });
+});
+
+it('🔴 B-161 — …and the edit is NOT LOST: the next TAKE comes up with the new binding in force', async () => {
+  const r = await boot({ template: ownersTemplateWithField(), assignments: OWNERS_ASSIGNMENTS });
+  await r.load('item-1', 'debate', { title: 'before' });
+  expect((await r.update('item-1', {}, 'merge', NEW_BINDING)).accepted).toBe(true);
+
+  // The STATE half must actually have been written, or the gate trades an on-air defect for a
+  // silently-lost edit — the worse bug of the two, and the one a "just don't send anything"
+  // fix would introduce.
+  const before = (await recvLines()).length;
+  expect((await r.take('item-1')).accepted).toBe(true);
+  const lines = await since(before);
+  expect(
+    playsIn(lines).some((l) => /route:\/\/5\b/.test(l)),
+    'the take must seat the input the off-air UPDATE bound (src-4 → route 5)',
+  ).toBe(true);
+});
+
+it('B-161 neighbour 1 — an ON-AIR row still re-points immediately, and KEEPS THE UNION PRE-SEAT', async () => {
+  const r = await boot({ template: ownersTemplateWithField(), assignments: OWNERS_ASSIGNMENTS });
+  await r.load('item-1', 'debate', { title: 'before' });
+  expect((await r.take('item-1')).accepted).toBe(true);
+  // The whole seat set BEFORE — every look's inputs, including the looks not punched.
+  const seatsBefore = layerSet(r);
+  expect(seatsBefore.length, 'the fixture must actually pre-seat something').toBeGreaterThan(0);
+
+  const before = (await recvLines()).length;
+  expect((await r.update('item-1', { title: 'after' }, 'merge', NEW_BINDING)).accepted).toBe(true);
+  const lines = await since(before);
+
+  // BM-2 §4 step 4 — the FEATURE, unchanged: changing a live row's input changes it quickly.
+  expect(playsIn(lines).length, 'an on-air row still re-points on the wire').toBeGreaterThan(0);
+  // 🔴 The union never NARROWS. A gate placed at the look or at the visible hole would drop the
+  // seats the unpunched looks hold, which is a `PLAY` pushed back inside the next switch —
+  // `B-155` case 3, closed by session BT. Asserting a superset (not equality) is deliberate: a
+  // new binding legitimately ADDS a seat, it must never remove one.
+  expect(layerSet(r), 'the UNION pre-seat must survive a re-point').toEqual(
+    expect.arrayContaining(seatsBefore),
+  );
+});
+
+it('B-161 neighbour 2 — a REHEARSING row still seats: the gate must not be "on air" alone', async () => {
+  const r = await boot({ template: ownersTemplateWithField(), assignments: OWNERS_ASSIGNMENTS });
+  await r.load('item-1', 'debate', { title: 'before' });
+  expect((await r.enterRehearse('item-1')).ok, 'a loaded row can enter rehearse').toBe(true);
+
+  const before = (await recvLines()).length;
+  expect((await r.update('item-1', {}, 'merge', NEW_BINDING)).accepted).toBe(true);
+  const lines = await since(before);
+
+  // 🔴 Rehearsing is NOT on air, but it is not stopped either: it OWNS its layers, on PVW. A gate
+  // that asked `isOnAirStatus` ALONE would silently break rehearse, which is exactly why this
+  // test sits beside the off-air one rather than in a file of its own.
+  expect(playsIn(lines).length, 'a rehearsing row still seats its plates').toBeGreaterThan(0);
+});
