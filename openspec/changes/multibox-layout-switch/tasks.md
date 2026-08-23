@@ -885,6 +885,35 @@ candidate shapes.
   a template-wide blast radius; folding it into one row's update would be the scope confusion the
   panel's wording exists to prevent. What is atomic is what reaches AIR on THIS row.
 
+- [ ] 7.14b ⚠ **`B-158` — THE SWITCH IS NOT VISUALLY ATOMIC: the plates move and the page's CHROME
+      FOLLOWS.** Filed 2026-08-23 from the owner's 2026-08-22 observation — going 2-box → solo he sees
+      the solo picture **while the 2-box outlines are still drawn**. _"if it happened at the same time
+      it would be better."_ Full item: `docs/prd/bugs-runtime.md` **`B-158`**.
+      🔴 **COSMETIC-ON-AIR, NOT WRONG-SOURCE — it does not reopen `B-155` and does not touch its
+      rule.** What is briefly wrong is the DECORATION (background, box strokes) of the look being
+      LEFT, drawn around plates that have already moved. No face is in the wrong hole. It sits
+      beside 7.14/7.15 because it is the same switch, not because it is the same defect.
+      **Mechanism (established from code, not inherited):** it is exactly this change's own
+      _"fills first, page last, only on success"_ — `caspar-runtime.ts:4702` reconciles the
+      `MIXER FILL`/`CLIP`, `:4744` → `:4561` then sends `updateLook`; the page CUTS at
+      `template-runtime/src/runtime.ts:534` (`applyLook`) → `:476` (`repunch`), with no animation
+      anywhere. Nothing tells the page the target look first — `updateLook` has ONE production
+      caller and `caspar-runtime.ts:5714` says _"Do not add an `updateLook` here."_
+      ⚠ **The `:4723` note's 2.2–8.3 ms bounds the TRANSPORT, not the page's RENDER** — it ends at
+      `window.update` entry, before `repunch`'s forced layout read-back, the browser paint and the
+      CEF texture. Do not read it as proof the gap is sub-frame.
+      🔴 **The unknown is `k`, the frames the page trails the mixer, and NO test in this repo can
+      take it** — the mock has no CEF and no frames. **Walk step 8b measures it**, on the same plant
+      visit, scored on its OWN tables: step 8b can neither tick nor block 7.15.
+      Four options are RECORDED AND NOT CHOSEN in the item — (a) synchronized `linear` tween
+      (§9.2/§9.6f: 20 easings accepted, `ease`/`cubic-bezier` `403`, `linear` the only exact match at
+      0.0 px, three holes ≈ 4 % of frame budget), (b) page pre-arm then reveal, (c) suppress the
+      chrome, (d) accept it — each stating what it does to _"page last, only on success"_; (b) is the
+      one that puts that guarantee at risk. **§3b's `DEFER`/`COMMIT` is NOT the cure**: it makes
+      several MIXER changes land on one frame and does nothing about the PAGE (and remains banned,
+      `design.md:560`).
+      **No product source was changed by the filing session, and no option was implemented.**
+
 - [ ] 7.15 🔴 **`B-155` — THE SWITCH FLASH. OPEN, AND NOTHING ABOUT IT IS VERIFIED ON THE PLANT.**
       The owner, on air: _"change `l-1`'s source and press look-1, then when we go to solo it shows
       the OLD source for a moment and then switches to the new one."_

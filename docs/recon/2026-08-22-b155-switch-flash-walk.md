@@ -13,6 +13,11 @@ source; if the incoming producer is not ready, BLACK is acceptable and the previ
 **Rides the same visit as** `docs/recon/2026-08-22-confidence-grab-measurement.md` §C (C1/C2/C3
 are raw-AMCP siblings of steps 5–6 here; C4 is the same frame count this walk records).
 
+⚠ **It also carries ONE step that is not about `B-155` at all — step 8b, for `B-158`** (the look
+switch is not visually atomic: the plates move and the page’s chrome follows). It rides this visit
+because it needs the same room, the same channel and the same slow-mo camera — **but it is scored
+on its own tables and it can neither tick nor block 7.15.** Wrong CHROME is not wrong SOURCE.
+
 ---
 
 ## Before you start
@@ -153,6 +158,49 @@ This reading confirms it on the plant:
    size/position, that does not self-correct.
 3. Run it twice. This is a race; a pass is a confirmation, not a proof — note anything odd.
 
+### 8b. `B-158` — does the CHROME move with the pictures? (EYE + INSTRUMENT: phone slow-mo on the PGM monitor)
+
+🔴 **A DIFFERENT QUESTION FROM EVERY STEP ABOVE, and it must not be scored on the same sheet.**
+Every other step asks _"is the wrong SOURCE ever visible?"_ This one asks _"do the plates and the
+page's decoration change on the SAME FRAME?"_ — the background, the strokes around the boxes, the
+frame decoration. **Nobody's face is in the wrong hole here.** A non-zero count in this step is a
+`B-158` reading and says nothing about `B-155`; a zero here does not tick 7.15 either. Score it in
+its own tables below.
+
+**What is being counted:** `k` — the number of frames for which the plates are already at the NEW
+look's geometry while the OLD look's chrome is still drawn. Nothing in the repo can measure this;
+it is why the step exists.
+
+1. Take the row into the **2-box** look and let it settle.
+2. Start the phone's slow-mo recording on the PGM monitor, then press **solo** in the look picker.
+   Stop recording once the picture is settled. **This is the case the owner reported.**
+3. Step through the recording and count the frames from **the first frame on which a plate is at
+   its new size/position** to **the first frame on which the chrome (background + box strokes) is
+   the NEW look's**. Convert: `frames at 25 fps = slow-mo frames × 25 ÷ slow-mo rate`.
+   - **EYE — what a FAIL looks like:** the big solo picture is up while the 2-box outlines are
+     still drawn around it, for one or more frames. Record `k`.
+   - **EYE — what a PASS looks like:** `k = 0` — no frame shows the solo picture with the 2-box
+     chrome, and none shows the 2-box pictures with the solo chrome. The switch reads as ONE event.
+   - ⚠ If the chrome moves FIRST (`k` negative — the new background is up while the plates are
+     still at the old geometry), record it as negative and say so. That would invert the mechanism
+     `B-158` describes and is a finding in its own right.
+4. **Now the reverse: solo → 2-box.** Same recording, same count. It costs one extra press and it
+   tells us whether `k` depends on which direction the layout grows.
+5. **Run each direction TWICE.** Two runs per direction, four numbers.
+
+| run | 2-box → solo, slow-mo frames | at 25 fps | solo → 2-box, slow-mo frames | at 25 fps |
+| --- | ---------------------------- | --------- | ---------------------------- | --------- |
+| 1   |                              |           |                              |           |
+| 2   |                              |           |                              |           |
+
+| what the wrong frames actually showed (one line, verbatim) |
+| ---------------------------------------------------------- |
+|                                                            |
+
+⚠ **If `k` reads 0 on all four runs**, say so plainly — it means the gap is below one frame at the
+plant's frame rate and `B-158` can be closed as not-reproducible-on-air, whatever the code path
+suggests. That is a real outcome and not a failed measurement.
+
 ### 9. Out, and the channel reads EMPTY, after
 
 1. Take the row out in CG Control. **EYE — pass:** PGM is black.
@@ -171,6 +219,9 @@ This reading confirms it on the plant:
 1. Fill the tables above at the box — they are the primary record.
 2. Copy the 25 fps counts into `openspec/changes/multibox-layout-switch/tasks.md` **7.15** and
    into `docs/prd/bugs-runtime.md` **B-155**, beside the date and the build string from step 1.
+   ⚠ **Step 8b’s four numbers go to `B-158` instead**, never to 7.15 or `B-155` — they answer a
+   different question (`k`, the chrome lag) and mixing them into the wrong-source record would
+   make a cosmetic reading look like a source reading.
 3. **If every "wrong source" count is ZERO on both runs of every step, with steps 2 and 9 both
    EMPTY** — that is the measurement that lets `B-155` close and 7.15 tick. Black-only counts
    do not block closing (the rule accepts black); record them anyway.
