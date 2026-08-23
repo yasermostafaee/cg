@@ -4730,3 +4730,193 @@ checking). Turning it on is its own piece of work: **113 pre-existing errors, me
 - **Cross-refs:** [[B-151]] (the same shape one field over — RECTS, where this is NAMES; read them
   as a pair), [[R-049]] (the overlay whose purpose this defeats), [[R-048]] (level 4, which the
   overlay now honours), [[B-146]] (the class: a surface showing what air does not).
+
+## [ ] B-158 — a look switch is not visually ATOMIC: the pictures move first and the page's chrome follows, so the OLD look's outlines are briefly drawn around the NEW look's picture ⟨priority: medium — cosmetic, but it is on air and it is every switch⟩ — OPEN. Mechanism established from the code; the FRAME COUNT is a plant reading nothing in this repo can take
+
+**Observed 2026-08-22, by the owner, on air.** Switching between looks, the two halves of one
+switch land at different times: **the pictures move first, the background and the strokes around
+the boxes follow.** Going from a 2-box look to a solo look he sees the big solo picture **while
+the 2-box outlines are still drawn**. Brief, but visible. In his words:
+
+> _"if it happened at the same time it would be better."_
+
+🔴 **CLASS: COSMETIC-ON-AIR. This is NOT a wrong-source defect, and it does not reopen
+[[B-155]].** `B-155`'s decided rule — _the new look's hole must NEVER show the previous source; if
+the incoming producer is not ready, BLACK is acceptable and the previous guest is not_ — is
+**untouched by this item and is not in question here**. What is briefly wrong here is the
+**chrome**: the background and the box strokes belonging to the look being LEFT, drawn for a few
+frames around plates that have already moved to the look being ENTERED. Nobody's face is in the
+wrong hole. An item about decoration must never be read as reopening an item about sources, so
+this paragraph is placed before the mechanism rather than after it.
+
+### The mechanism, established from the code
+
+The ordering is exactly the _"fills first, page last, only on success"_ doctrine, and it is
+deliberate at every step:
+
+| half                          | where                                                                                                                                     |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| the switch entry              | `tools/caspar-bridge/src/caspar-runtime.ts:4596` — `setActiveLook`, whole on-air branch under `#withLiveSeatLock` (`B-155` §B)            |
+| **1. the MIXER commands**     | `caspar-runtime.ts:4702` — `reconcileLivePlates(itemId, { mode: 'live', lookId })`, which issues the per-plate `MIXER FILL`/`CLIP`        |
+| **2. the PAGE update**        | `caspar-runtime.ts:4744` — `#tellPageLook(...)` → `caspar-runtime.ts:4561` — `#send(this.#builder.updateLook(slot, lookId), …, 'urgent')` |
+| the command itself            | `tools/caspar-bridge/src/command-builder.ts:87` — `updateLook`, the reserved `__cg` key on a `CG UPDATE`                                  |
+| **3. where the page redraws** | `packages/template-runtime/src/runtime.ts:2399` `setActiveLook` → `:557` `enterLook` → `:534` `applyLook` → `:476` `repunch`              |
+
+**The page CUTS; it does not animate.** `runtime.ts:517-519` states it as a design decision:
+
+> _"Exactly ONE look's instance is visible; a switch is a VISIBILITY FLIP plus a re-punch, and
+> deliberately nothing else — no geometry override machinery, because under LOOKS the geometry is
+> authored inside each look's own sub-scene."_
+
+So the chrome the owner is describing — background, box strokes, frame decoration — is authored
+**inside each look's own sub-scene instance** and changes when `applyLook` (`runtime.ts:534`)
+rewrites the `visibility` map and `repunch` (`runtime.ts:476`) re-applies it. There is no
+transition, no fade and no easing anywhere on that path: the chrome is correct on the frame the
+page paints, and wrong on every frame before it.
+
+🔴 **Does anything today tell the page the target look BEFORE the fills move? NO — verified.**
+`updateLook` has exactly **one** production caller, `#tellPageLook` at `caspar-runtime.ts:4562`,
+and it is reached only after `reconciled.ok` at `:4702`. `setActiveLook` deliberately records
+nothing up front (the long `tasks.md` 7.9 note at `caspar-runtime.ts:4613-4643`), and
+`caspar-runtime.ts:5714` says in terms: **_"Do not add an `updateLook` here."_** The page learns
+the target look strictly after the fills have moved, by design.
+
+### ⚠ The existing note bounds the TRANSPORT, not the RENDER — read this before concluding the gap is sub-frame
+
+`caspar-runtime.ts:4723-4731` argues the window is small, and its numbers are real:
+
+> _"`CG UPDATE` → `window.update` was measured at 2.2–8.3 ms (median ≈5 ms, §9.2) — under a
+> quarter of a 20 ms frame at 50i — and both commands go out back-to-back on ONE connection in the
+> urgent lane, so nothing queues between them."_
+
+**That measurement ends where this defect begins.** It is command-out → JS-handler-entry. It does
+NOT include what happens after `window.update` returns control to the page:
+`applyLook` → `repunch` → `applyArrangementToNodes` → **`liveArrangementView`, which reads the
+page's layout BACK out of the DOM** (`runtime.ts:480-483`, a forced synchronous layout by
+construction — the comment calls the read-back load-bearing) → `repunchLiveSourceHoles` → the
+browser's own layout and paint → the CEF texture → the server's composite of that texture.
+
+Meanwhile the `MIXER FILL` half needs none of that: it is server-side compositing and lands on the
+server's next frame.
+
+**So the two halves are not racing over the transport — they are racing a transport against a
+browser render, and only the transport has ever been measured.** Anyone reading the `:4723` note
+alone would reasonably conclude the gap is a quarter of a frame and that the owner cannot be
+seeing this. That conclusion does not follow, and this paragraph exists so the next reader does not
+draw it.
+
+### 🔴 THE UNKNOWN: `k`, how many frames the page trails the mixer
+
+**`k` is not known, and it cannot be obtained in this repo.** `@cg/amcp-mock` has no notion of
+producer acquisition, no CEF, and no frames at all — it models a `MIXER` change as an instantaneous
+state write and cannot see a rendered pixel. **No test anywhere in this repository can measure
+`k`**: not a unit test, not an integration test, not a Playwright E2E, because every one of them
+observes either the wire or a browser, never the server's composited output. The suites can prove
+the ORDER (and do — `live-look-reconcile.integration.test.ts:1813` asserts `fills first, page
+last` at the wire). Order is not the question here; **the question is how many frames sit between
+the two, and that is a PLANT READING.**
+
+Everything about the remedy depends on `k`. At `k = 1` this is arguably not worth changing; at
+`k = 5` at 25 fps it is a fifth of a second of visibly wrong decoration on every switch. **Measure
+before choosing** — the walk step below rides the same plant visit as `B-155`'s.
+
+### Repro
+
+1. A template with at least a 2-box look and a solo look, on air on an off-air-safe channel.
+2. Take the row into the 2-box look.
+3. Press the solo look in the look picker.
+4. Watch the boundary between the two looks in slow motion.
+
+**Expected:** the plates' geometry and the page's chrome (background, box strokes) change on the
+SAME frame — the switch is one visual event.
+
+**Actual:** the plates move first; the previous look's chrome is still drawn for `k` frames
+afterwards. Going 2-box → solo, the solo picture appears while the 2-box outlines are still around
+it.
+
+**Env:** production CasparCG **2.5.0** (`69e8ad5`); bridge on `dev` at or after 2026-08-22. Not
+reproducible against `@cg/amcp-mock` — see the unknown above.
+
+**Regression-test note:** 🔴 **a regression test for the visible symptom cannot exist here**, for
+the reason given above. What CAN be tested, and already is, is the ORDER
+(`live-look-reconcile.integration.test.ts:1813`). If an option below is implemented, its testable
+surface is the WIRE — that a `MIXER FILL` carries the chosen duration and tween, and that the page
+payload carries the matching duration — never the pixels. Any test claiming to prove the frames
+match is claiming something the mock cannot know.
+
+### The options — RECORDED, NOT CHOSEN
+
+Each states what happens to **_"page last, ONLY ON SUCCESS"_** — the guarantee
+(`caspar-runtime.ts:4719-4726`) that a page never shows a look whose holes did not move.
+
+**(a) Synchronized short tween.** Give the `MIXER FILL` a duration and tell the page to animate its
+own chrome over the SAME duration, so both move together instead of cutting `k` frames apart.
+The facts are already measured in `design.md` §9.2/§9.6f:
+
+- `MIXER <ch>-<layer> FILL x y sx sy <frames> <tween>` is **accepted on 2.5.0**, 20 Penner easings.
+- **`ease`, `ease-in-out` and `cubic-bezier` are rejected `403`.** The CasparCG and CSS vocabularies
+  share no name, and **`linear` is the only exactly-matchable pair (0.0 px** vs CSS `linear`;
+  `ease-in-out` diverges 232.8 px, `ease` 580.6 px).
+- **Interpolating three plate holes costs ≈ 4 % of the frame budget** (§9.6f). ⚠ For contrast and
+  as a warning about scope: **crossfading two full-frame backdrops cost −10 % with a 120 ms worst
+  gap — the background transition is the expensive half**, so "animate the chrome" must be scoped
+  to the strokes and boxes, not turned into a backdrop crossfade.
+- **Cost: the switch stops being a cut.** That is an editorial change to what the switch IS, and
+  the owner has to want it. It also makes the two sides' clocks a real contract — `design.md:276`
+  already warns about _"two independent timelines, no shared origin, no shared clock"_.
+- **_"Page last, only on success"_: KEPT, unchanged.** The order does not move; both commands
+  simply carry a duration. The page is still told after the fills, still only on success, and a
+  refused reconcile still leaves the old look intact.
+
+**(b) Page pre-arm, then reveal.** The page renders the target look's chrome hidden and reveals it
+on the switch, so the render cost is paid before the switch rather than inside it.
+
+- Keeps the cut, which is its main attraction.
+- **Cost:** an extra round trip before every switch, and a NEW FAILURE MODE — a page that has been
+  pre-armed but not revealed, or revealed for a switch that then failed.
+- 🔴 **_"Page last, only on success"_: AT RISK, and this is the option's central question.** The
+  arm message reaches the page BEFORE the fills move, which is precisely what the current design
+  forbids. It survives only if the ARM is provably invisible — rendering hidden chrome must change
+  no pixel — and the REVEAL stays after the reconcile and only on success. **If the arm can be seen
+  at all, this option forfeits the guarantee** and must be marked as such rather than argued around.
+  Note also that pre-arming re-introduces the state `tasks.md` 7.9 removed: a page holding a look
+  it has not entered.
+
+**(c) Suppress the chrome during the transition.** Hide background and strokes for the `k` frames,
+so nothing wrong is drawn — only nothing at all.
+
+- **Cheapest and ugliest, and it should be recorded as ugly.** It replaces briefly-wrong decoration
+  with a brief hole in the design, which on a full-frame background may read as a flash. It also
+  still needs `k`, to know how long to suppress — so it does not escape the measurement.
+- **_"Page last, only on success"_: KEPT** if the suppression is driven by the same page update
+  that switches the look, i.e. the page suppresses on entry and restores when it has painted.
+  **FORFEITED** if the suppression is sent as a separate earlier command, which makes it (b) with
+  worse aesthetics.
+
+**(d) Accept it,** with the reason written down. Defensible if `k` measures at 1–2 frames: the
+current design buys **_"a refused switch leaves the old look intact"_** with this window, the cut
+is otherwise ~0.20 frames (§9.3/§9.4), and no option above is free. **_"Page last, only on
+success"_: KEPT trivially.** If this is chosen, the reason belongs in this item so the next person
+to see it on air does not re-file it.
+
+### ⚠ §3b (`MIXER … DEFER` + `COMMIT`) is NOT the cure — stated so the next reader does not assume it is
+
+`design.md` §3b's `MIXER … DEFER` + a channel-scoped `COMMIT` is still open and still **banned**
+(`design.md:560` — `COMMIT` is CHANNEL-scoped, so on this shared plant it could apply another
+controller's deferred changes; recorded as _"a refusal to measure, not an absence of data"_).
+
+**Even fully available it would not fix this.** It makes several **MIXER** changes land on ONE
+frame — it is about the plates agreeing with EACH OTHER. **It does nothing whatsoever about the
+PAGE**, which is not a MIXER client at all. The residual it addresses is already measured as
+invisible: `design.md:556` — _"`DEFER`/`COMMIT` being unusable costs nothing visible"_, worst case
+one frame of partially-applied geometry at ≈20 % probability.
+
+**Would it help option (a)?** Marginally and only there: if a tween is adopted, `DEFER`/`COMMIT`
+would make all N plates START their tween on the same frame instead of within the 0.20-frame span.
+That is a second-order tidy-up of an already-invisible span, not a reason to lift the ban.
+
+- **Cross-refs:** [[B-155]] (the switch flash — the WRONG-SOURCE item; this one is cosmetic and
+  does not touch its rule), `openspec/changes/multibox-layout-switch/tasks.md` 7.14/7.15 (where
+  this is cross-referenced), `design.md` §9.2/§9.3/§9.6f (the measured tween and cut numbers),
+  `design.md` §3b (the DEFER/COMMIT ban), [[B-154]] (the other "a switch reported success and the
+  picture disagreed" item, fixed).

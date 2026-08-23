@@ -1099,3 +1099,29 @@ clean sweep. For a number derivation a silent skip would under-report the highes
 COLLIDING number, which is the one failure this registry exists to prevent. Running both and
 requiring them to AGREE costs one extra command and removes that mode; where they ever disagree,
 `git grep` is the authority.
+
+## 2026-08-23 — the look switch's chrome lag gets its number (`B-158`)
+
+| Prefix | Claimed | Item                                                                              | File                               |
+| ------ | ------- | --------------------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-158` | a look switch is not visually ATOMIC — the plates move, the page's chrome follows | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the heading sweep immediately before the heading was written, with BOTH tools.**
+The duplicate audit printed **exactly `B-056` and `B-080`**, the two known accepted duplicates and
+nothing else. Highest `B-` heading was `B-157` by the registry's documented `grep -rhoE` derivation
+AND by a `git grep -hoE "^## \[.\] B-[0-9]{3}" -- 'docs/prd/*.md' ':!docs/prd/README.md'`
+cross-check — both returned `157`. `git grep -n "B-158"` returned exactly ONE hit: this file's own
+"Next free: `B-158`" line, a forward-reference POINTER and not a heading — the false positive this
+registry has now recorded from eight directions. `B-` stays contiguous `B-001` … `B-158`, **no
+gaps. Next free: `B-159`.**
+
+⚠ **Filed in `bugs-runtime.md`, and the neighbours were checked rather than assumed.** The filing
+prompt named `B-151`/`B-152`/`B-153` (PVW items) and `B-155` (the wrong-source switch flash) as
+possible duplicates; all four were read, and none is this. `B-158` is **cosmetic-on-air** — the
+CHROME of the look being left, drawn around plates that have already moved — where `B-155` is
+**wrong-source**. The item says so before it says anything else, because an item about decoration
+must never be read as reopening an item about sources.
+
+⚠ **Both tools were run deliberately, for the reason the `P-037` entry above records:** `grep -r`
+skips a NUL-bearing file in SILENCE, and for a NUMBER derivation a silent skip under-reports the
+highest heading and mints a COLLIDING number — the one failure this registry exists to prevent.
