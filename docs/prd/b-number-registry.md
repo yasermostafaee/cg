@@ -1125,3 +1125,29 @@ must never be read as reopening an item about sources.
 ⚠ **Both tools were run deliberately, for the reason the `P-037` entry above records:** `grep -r`
 skips a NUL-bearing file in SILENCE, and for a NUMBER derivation a silent skip under-reports the
 highest heading and mints a COLLIDING number — the one failure this registry exists to prevent.
+
+## 2026-08-23 — the backup-divergence pair gets its numbers (`B-159`, `B-160`)
+
+| Prefix | Claimed | Item                                                                                 | File                               |
+| ------ | ------- | ------------------------------------------------------------------------------------ | ---------------------------------- |
+| `B-`   | `B-159` | a media file missing on the BACKUP diverges the two servers, and nothing surfaces it | [bugs-runtime.md](bugs-runtime.md) |
+| `B-`   | `B-160` | nothing checks a media file's presence PER SERVER — the take is the first check      | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the heading sweep immediately before the headings were written, with BOTH
+tools.** The duplicate audit printed **exactly `B-056` and `B-080`** and nothing else. Highest `B-`
+heading was `B-158` by the registry's documented `grep -rhoE` derivation AND by the `git grep`
+cross-check. `git grep -n "B-159"` returned exactly ONE hit — this file's own "Next free" line, a
+forward-reference POINTER, not a heading — and `B-160` returned **none at all**. `B-` stays
+contiguous `B-001` … `B-160`, **no gaps. Next free: `B-161`.**
+
+⚠ **The neighbours named by the filing prompt were READ, not assumed distinct.** The `C-013`
+redundancy family and the `R-048` swap family were both checked, as was this file's own closed
+`B-044`-era redundancy item (the PHANTOM-backup noise defect, fixed 2026-07-11). None is this one:
+that item is a DEAD backup producing divergence noise; `B-159` is a **LIVE, healthy, reachable**
+backup that is silently WRONG. The distinction is the whole point of `B-159`, so it is recorded
+here as well as in the item.
+
+**Two numbers rather than one, deliberately:** `B-159` is the defect (behave correctly when a file
+is missing at the take) and `B-160` is its prevention (find the missing file before the take).
+They are separable — `B-160` shipping would not make `B-159` unnecessary, because a check is only
+as fresh as its last `CLS`.

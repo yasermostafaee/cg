@@ -4920,3 +4920,250 @@ That is a second-order tidy-up of an already-invisible span, not a reason to lif
   this is cross-referenced), `design.md` §9.2/§9.3/§9.6f (the measured tween and cut numbers),
   `design.md` §3b (the DEFER/COMMIT ban), [[B-154]] (the other "a switch reported success and the
   picture disagreed" item, fixed).
+
+## [ ] B-159 — a media file missing on the BACKUP costs that server the whole look, and NOTHING tells anyone: the backup's divergence is emitted into a void ⟨priority: high — a backup that silently differs from the main is not a backup⟩ — OPEN. Mechanism established from the code, and §1's shape did NOT survive contact with it — read "What the code actually does" before designing anything
+
+**Observed 2026-08-22, by the owner.** With a backup server configured, a media item exists on
+server **A** and not on server **B**. Switching to the look that uses it: **A switches, B does
+not** — B stays on the PREVIOUS look. The two servers then differ in **LAYOUT**, not merely in one
+box's content.
+
+### 🔴 THE RULE, recorded as DECIDED — not as a proposal
+
+**A per-INPUT failure must never become a per-LOOK failure, and must never become a per-SERVER
+divergence.** The switch happens on **every** server, the box COUNT and geometry are identical
+everywhere, and **only the hole whose input failed is BLACK.**
+
+Three things follow, and the third is the one that gets forgotten:
+
+1. **Black, not the previous content.** Inherited unchanged from [[B-155]]: _the new look's hole
+   must NEVER show the previous source; if the incoming producer is not ready, BLACK is acceptable
+   and the previous guest is not._ This item does not touch that rule; it extends its reach to the
+   backup.
+2. **Divergence is the WORST of the three outcomes** — worse than a black box, worse than a refused
+   switch. A backup whose layout differs from the main **is not a backup**. The failure stays
+   invisible until someone cuts to it, which is the moment they least want to discover it, and a
+   confidently-wrong surface is this product's worst defect class.
+3. ⚠ **This does NOT overturn _"page last, only on success"_, and here is how the two coexist.**
+   That rule (`caspar-runtime.ts:4719-4726`) is about **ordering within one server**: a page must
+   never show a look whose holes did not move, so the page is told after the fills and only if they
+   moved. This item is about **which servers the decision applies to**. They meet cleanly because
+   they answer different questions:
+   - _"Did the LAYOUT apply?"_ decides whether the page is told — **and it must be decided the
+     same way on every server**, so a switch is refused everywhere or applied everywhere.
+   - _"Did this one INPUT arrive?"_ must NOT feed that decision at all. A missing producer in one
+     hole does not mean the holes failed to move; it means one hole is empty.
+
+   So _"only on success"_ keeps its meaning, with **success redefined as structural**: the fills
+   moved. That is exactly the STRUCTURAL-vs-CONTENT split below, and it is why the two rules do not
+   collide — today the code does not make that distinction anywhere, which is the defect.
+
+### 🔴 WHAT THE CODE ACTUALLY DOES — §1's shape did not survive, and this is the headline
+
+Answering the six mechanism questions with anchors. **Default strategy is `mirror-sync`**
+(`tools/caspar-bridge/src/bridge.ts:342`).
+
+**1. Which layer refuses? NONE OF THEM — nothing refuses.** In `mirror-sync`
+(`packages/caspar-client/src/redundancy/redundancy-adapter.ts:244`) both sessions are enqueued
+under one `Promise.allSettled`. A missing media file makes B's `PLAY` answer a non-`2xx`, and
+**`enqueue` RESOLVES on a non-`2xx`** — it rejects only on timeout / abort / disconnect
+(`packages/caspar-client/src/queue/command-queue.ts:138-139`). So `bRes.status === 'fulfilled'`
+with `code = 404`, the **first** branch is taken (`redundancy-adapter.ts:254`), and it:
+
+- journals the send as `'ok'` **with the PRIMARY's code** (`:255`),
+- calls `reportDivergence(seq, primaryCode, backupCode)` (`:257`),
+- and **returns `{ ...pRes.value, winner: this.primary }`** (`:260`) — the primary's result.
+
+**2. What the failure actually is:** a `PLAY` returning a non-`2xx` from B. Not a preflight (there
+is none — see [[B-160]]), not a timeout (a timeout would REJECT and take a different branch).
+
+**3. What the ledger records for B: NOTHING, because the ledger has no server dimension at all.**
+`registerLiveLayers` / `live-layers-store.ts` carry no server label — the store is **server-blind**
+by construction. It records what the BRIDGE believes is seated, which is the primary's truth
+written once and assumed true of both. **B is not marked degraded anywhere**, because there is no
+per-server place to mark.
+
+**4. What the operator sees today: nothing about this.** `#send`
+(`tools/caspar-bridge/src/caspar-runtime.ts`, the `#adapter.send` wrapper) computes
+`const ok = result.response.kind !== 'err'` — and `result` is the adapter's return, i.e. **the
+PRIMARY's response**. **The backup's `404` is therefore structurally invisible to the bridge**:
+`ok` is `true`, `applyAck` records success, the reconcile continues, and the operator gets a
+successful switch. The connection-health surface reports whether B is REACHABLE; it has no notion
+of whether B is CORRECT.
+
+**5. Does `journal-replay` retry forever, and what does it cost?** The relevant loop is not
+`journal-replay` but the **corrective resend**
+(`redundancy-adapter.ts` `triggerCorrectiveResend`), fired from `reportDivergence` once the
+divergence budget trips (3 in 30 s). It replays **every `'ok'` journal entry** to B, `await`ed
+one at a time, each failure swallowed by a bare `catch {}`. 🔴 **For a genuinely missing file this
+can never converge**: the replayed `PLAY` 404s again, which is a fresh divergence, which refills
+the budget, which fires another full replay. The journal itself is bounded (500 entries / 5 min,
+the B-044 fix recorded above in this file), so each burst is bounded — **the LOOP is not.** A
+permanently-missing file is a permanent divergence source, and retry cannot fix a missing file.
+
+**6. 🔴 DOES ANYTHING DETECT THAT THE TWO SERVERS ARE IN DIFFERENT STATES TODAY?**
+**Detected — yes, at the adapter. Surfaced — NO, to nobody.** `reportDivergence`
+(`redundancy-adapter.ts`) emits `mirror-divergence`, and every 3rd in 30 s emits
+`split-brain-persistent`. **A `git grep` for both event names across the whole repository finds
+NO listener in `tools/**`or`apps/**`** — every other hit is a doc, a living spec, an archived
+change, or a test. The events are emitted into a void. (Instrument checked: the same sweep for the
+sibling concept `failover` finds it wired through `intent.ts`, `audit.ts`, `tally.ts` and
+`caspar-runtime.ts:7104`, so the grep is live and the absence is real.)
+
+⚠ **So §1's shape is NOT what this path produces, and the difference matters for the fix.** Under
+`mirror-sync` B receives **every** `MIXER FILL`/`CLIP` and the `CG UPDATE` — they are separate
+commands and they do not fail just because a `PLAY` did. **B's page should switch.** What the code
+predicts is a **per-PLATE** failure on B, not a per-look one: the layer whose `PLAY` 404'd gets no
+new producer.
+
+🔴 **And the predicted per-plate outcome is WORSE than the reported one, which is why this item is
+`high`.** If that `PLAY` was aimed at an **occupied** layer, the PREVIOUS producer is still seated
+— so the backup shows **the previous guest in the new look's hole**, which is precisely the outcome
+[[B-155]]'s rule exists to forbid, on the server nobody is looking at, reported to nobody. Whether
+a 404'd `PLAY` leaves the old producer or clears the layer is a **CasparCG behaviour this repo
+cannot answer** (see the mock note below).
+
+**Two readings of the discrepancy, both recorded, neither chosen:** either the owner saw one box on
+B still showing old content and read it as "B did not switch" — the layouts differing in one hole
+rather than wholly — or there is a second path not exercised here. **This must be settled before
+anything is implemented**, and settling it needs a second real server; see the shape below.
+
+### 🔴 THE DISTINCTION THE WHOLE IMPLEMENTATION TURNS ON
+
+| failure kind   | meaning                                         | required behaviour                                                          |
+| -------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
+| **STRUCTURAL** | the LAYOUT itself cannot be applied             | **REFUSE** — keep the previous look, on **every** server, page not told     |
+| **CONTENT**    | one INPUT failed; the layout is fine without it | **APPLY** the layout **everywhere**, **BLACK** that hole, and **REPORT** it |
+
+**Where the distinction would have to be made: it does not exist today, at either of the two
+places it could live.**
+
+- At the adapter (`redundancy-adapter.ts:254-261`), which today collapses a two-server outcome to
+  the primary's response before the bridge sees it. Any per-server decision needs the backup's code
+  to survive that collapse — the return would have to carry both outcomes, not one.
+- At the reconcile (`caspar-runtime.ts:4702` `reconcileLivePlates`, whose result gates
+  `#tellPageLook` at `:4744`), which today asks one question — _"did the send come back ok?"_ —
+  and would have to ask two: _"did the LAYOUT apply?"_ (gates the page, must agree across servers)
+  and _"did this INPUT arrive?"_ (blacks one hole, never gates the page).
+
+`#send`'s `ok = result.response.kind !== 'err'` is the exact line where a per-input failure and a
+per-layout failure become the same boolean. **Golden rule 7's shape, one level up:** one boolean is
+being asked to carry two different questions about two different machines.
+
+### 🔴 THE SURFACE — an operator must see B is degraded WITHOUT cutting to it
+
+**A silent black box on the backup is the same defect wearing a different mask.** If the fix blacks
+the hole and says nothing, the failure is still invisible until the cut — it has only moved from
+"wrong layout, silent" to "right layout, wrong content, silent".
+
+What must be visible, and it is three facts, not one: **WHICH SERVER · WHICH PLATE · WHY.** "B is
+degraded" is not enough to act on; "B: plate 3 (`live-2`), media `intro.mp4` not found (404)" is.
+
+Where it lives — recorded as the shape, not as a decision:
+
+- The **Runtime's per-plate row** already names each plate and already carries per-plate state
+  (`apps/runtime/src/renderer/features/inspector/livePlates.ts` — whose own comment at `:120` is
+  about exactly this class: _"a divergence the operator needs told about"_). A per-server degraded
+  marker belongs beside the plate it concerns, because that is where the operator is already
+  looking when they think about that box.
+- The **connection-health surface** is the wrong home alone: it answers "is B reachable", and B is
+  perfectly reachable here. A green health light beside a diverged backup is worse than no light.
+- **The `mirror-divergence` / `split-brain-persistent` events already exist and already carry the
+  seq and both codes.** The missing half is entirely on the consuming side — nothing listens. That
+  is the cheapest true statement in this item: **the detector is built; the wire to the operator
+  is not.**
+
+### The state question
+
+**No — the model carries no per-plate, per-server degraded state today.** The ledger is
+server-blind (see mechanism 3), and `ConnectionHealth` is per-server but not per-plate. What would
+have to be added is a per-(server, plate) state carrying at least: the server label, the plate /
+source id, the AMCP code, and when it was last observed.
+
+🔴 **What it must NOT be: `#multiBoxCount` must never become a layer-demand or a health proxy.**
+`caspar-runtime.ts:3705` returns `template.liveSources?.sources.length` for a `declared` carrier —
+it counts **DECLARATIONS**, and its own header says so: _"…on the channel, which is its
+declaration, and a look switch must never change the answer."_ A degraded plate is still a declared
+plate. Feeding health into that count would make the declaration move when a file goes missing,
+which is the one thing it is documented never to do.
+
+### One alternative, RECORDED and NOT chosen
+
+**A station slate instead of pure black** for the failed hole — a caption, a logo, a "SOURCE
+UNAVAILABLE" card. It has a real argument: black reads as "the graphic is broken", a slate reads as
+"this one input is missing", and on a backup that someone has just cut to, the second is far more
+actionable. **The owner's default is BLACK** and this item does not change it; the slate is
+recorded so the choice stays his, later, on evidence.
+
+### An implementation SHAPE — not a design
+
+- **Which layer decides:** the RECONCILE, on a per-plate result the ADAPTER must first stop
+  discarding. The adapter's job is to report both servers' outcomes; the policy (structural vs
+  content) is the bridge's.
+- **What state is added:** per-(server, plate) degraded, as above — additive, never folded into an
+  existing count.
+- **What the surface says:** server, plate, reason — beside the plate.
+- **What the tests would assert, at the WIRE level:** that a non-`2xx` `PLAY` on B alone still
+  produces the full `MIXER FILL`/`CLIP` set and the `CG UPDATE` on **both** servers; that the
+  failed hole receives no producer and is not left holding the previous one; that the switch is
+  NOT refused; and that a STRUCTURAL failure (the fills themselves refused) IS refused on both.
+- 🔴 **What the mock cannot prove — say it plainly: the redundancy path is where `@cg/amcp-mock`'s
+  fidelity is weakest.** It can be told to answer 404 (the archived redundancy change's soak used
+  exactly that, its `diverging` backup mode), so ORDER and WIRE CONTENT are testable. What it
+  cannot answer is the question this item turns on: **what a real CasparCG 2.5.0 does to an
+  OCCUPIED layer when a `PLAY` fails** — leave the old producer, or clear it. The mock models
+  `PLAY` on an occupied layer as an instantaneous in-place replace and has no failure semantics for
+  it at all. **That needs a SECOND REAL SERVER**, deliberately missing one file, and it decides
+  whether this is a cosmetic black-box item or a `B-155`-class wrong-source item on the backup.
+
+- **Cross-refs:** [[B-155]] (the rule this inherits — black, never the previous guest),
+  [[B-160]] (the companion: find it at assign/preflight, not at the take),
+  `openspec/changes/multibox-layout-switch/tasks.md` 7.14c (the cross-reference),
+  `openspec/specs/runtime-caspar-bridge/spec.md` (the LIVING home of the split-brain requirements —
+  the only `design.md` that owns redundancy is ARCHIVED and was deliberately not edited),
+  [[C-013]] (the redundancy family), [[R-048]] (the swap family).
+
+## [ ] B-160 — nothing checks whether a media file EXISTS on each server, so a missing file is discovered at the TAKE ⟨priority: medium — prevention for [[B-159]]; the take is the worst possible moment to find out⟩ — OPEN
+
+**The companion to [[B-159]], filed with it.** A file missing on one server should be found **when
+the media is assigned, or at preflight — not at the take**, on air, with the divergence already on
+the backup.
+
+**What exists today to check a media's presence per server: NOTHING. Measured, not assumed.**
+`tools/caspar-bridge/src/command-builder.ts` emits `CG ADD`, `CG INVOKE`, `CG NEXT`, `CG PLAY`,
+`CG REMOVE`, `CG UPDATE`, `CLEAR`, `MIXER` and `PLAY`. **It emits no `CLS` and no `INFO`**, and a
+repo-wide `git grep` for a `CLS` send finds none (control: the same sweep finds 21 hits for the
+verbs that do exist, so the grep is live). There is no media catalog check per server, and no
+preflight that touches the servers at all. The first thing that ever asks a server about a file is
+the `PLAY` at the take.
+
+**Roughly what a check would cost.** `CLS` returns the server's whole media library in one reply,
+so the natural shape is **one `CLS` per server, cached**, not one probe per file: a set membership
+test after that is free. `INFO` per file would be N round trips and is the wrong shape. The cost is
+therefore one command per server per refresh, plus whatever staleness window is chosen — a
+missing-file check is only as fresh as its last `CLS`, and a file deleted after the cache was
+filled is still a take-time surprise. That residual is why this item is **prevention, not a
+replacement for `B-159`**: `B-159` must still behave correctly when the check passes and the file
+is gone anyway.
+
+**Where it would live:** beside the media assignment in the Runtime (so the operator learns at the
+moment they choose the file, which is when it is cheapest to fix) and in the existing preflight
+path that already refuses an export/take for other reasons. The bridge would own the `CLS` cache,
+because it is the only thing holding both server sessions.
+
+**Acceptance:**
+
+- WHEN a media input is assigned to a plate THEN each configured server is checked for that file
+  and the operator is told, at assign time, if any server lacks it — naming the SERVER
+- WHEN a take or a look switch is preflighted THEN a file missing on ANY configured server is
+  reported before the take, naming the server and the plate
+- WHEN only one server is declared THEN the check runs against that one server and adds no
+  backup-related surface (the declared-single-server rule the `B-044` fix established)
+- WHEN the check passes and the file is nonetheless missing at the take THEN [[B-159]]'s behaviour
+  governs — this item never becomes the reason a take-time failure is handled badly
+
+**Notes:** small item, no design work requested or done. The `CLS` cache's staleness policy is the
+only real decision in it.
+
+- **Cross-refs:** [[B-159]] (the defect this prevents), [[B-155]] (the black-not-previous rule both
+  inherit).
