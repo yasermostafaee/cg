@@ -96,8 +96,16 @@
 - [ ] 7.2 ⚠ STATE THE COST in the report: an operator using FROM FILE today loses the control on
       any template not re-exported with the box ticked. `P-031`'s floor permits it; the owner
       should hear it as a decision, not discover it.
-- [ ] 7.3 Linux `gate:e2e` debt — this alters what renders in the Runtime Inspector (a control
-      disappears from most fields; the Inspector's content height changes, which is exactly what
-      R-018 flagged `panel-scroll.spec.ts` for). Record the CI run URL HERE, beside this item,
-      once a COMPLETED green `e2e` job exists for the commit that carries the change.
-      Run URL: _(pending — owed, not discharged)_
+- [x] 7.3 **Linux `gate:e2e` DISCHARGED.** This alters what renders in the Runtime Inspector (a
+      control disappears from most fields; the Inspector's content height changes, which is exactly
+      what R-018 flagged `panel-scroll.spec.ts` for). A COMPLETED, GREEN `e2e` job on
+      `ubuntu-latest` for commit `104a5cd4`, a later `dev` tip that CONTAINS this change
+      (`8b4c852c`): <https://github.com/yasermostafaee/cg/actions/runs/32649701579> — run
+      `conclusion: success`, `E2E (Playwright)` job conclusion `success`, Playwright genuinely ran
+      (9m45s; runtime **92 passed**, designer **269 passed / 12 skipped**), including the
+      named-risk `panel-scroll.spec.ts` and the Inspector specs.
+
+      The earlier run for `8b4c852c` itself was RED, but NOT because of this change: it failed on
+      `live-source-layers.spec.ts`, a PANIC assertion belonging to `add-multibox-audio` that
+      encoded a rule `09eb9760` had deleted (see that change's `tasks.md` 8.7). Named here so the
+      red run in this commit's history is not mistaken for a defect in the file-source grant.

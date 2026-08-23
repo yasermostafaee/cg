@@ -127,8 +127,21 @@ nothing and reported success.
 - [x] 8.6 `design.md` §5 rewritten — and it corrects its own earlier claim that `exitRehearse`
       CAUSES the seated-off-air window. Measured: a rehearsing row's plates are never seated.
       **Boot adoption (`B-145`) is the origin**; rehearse only passes through it.
-- [ ] 8.7 ⏳ **Linux `gate:e2e` owed for this patch too** — it alters `LiveSourcesPanel` and the
-      Inspector's LOOK INPUTS label. Run URL to be written here.
+- [x] 8.7 **Linux `gate:e2e` DISCHARGED** — a COMPLETED, GREEN `e2e` job on `ubuntu-latest` for
+      commit `104a5cd4`, which is `dev`'s tip and carries this patch:
+      <https://github.com/yasermostafaee/cg/actions/runs/32649701579> — run `conclusion: success`,
+      `E2E (Playwright)` job conclusion `success`, and the job really RAN Playwright rather than
+      being killed early (9m45s; runtime **92 passed**, designer **269 passed / 12 skipped**).
+
+      ⚠ **The FIRST attempt at this run was RED, and by this patch's own doing.**
+      `8b4c852c`'s run (<https://github.com/yasermostafaee/cg/actions/runs/32647108544>) failed on
+      `live-source-layers.spec.ts` — it pressed PANIC on a seeded `loaded` row and expected the
+      refusal _"no row is on air"_, which is precisely the rule 8.x DELETED. The unit tests that
+      encoded the old rule were corrected in `09eb9760`; this Playwright spec was missed, and
+      `pnpm gate` does not run Playwright (`P-028`), so no local signal existed. Fixed forward in
+      `104a5cd4` — the spec now asserts that the seated-off-air row IS reached, which is the
+      regression guard this change actually wanted, and it was proven RED by reinstating the old
+      `items.filter(isOnAir)`-joined-to-`liveRows` scope.
 
 ## 3. SPEC ONLY — the MONITOR / PFL channel ⏳ gated on 1.11 (W1, W2, W5, W6)
 
