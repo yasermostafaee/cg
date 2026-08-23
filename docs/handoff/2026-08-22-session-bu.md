@@ -2,7 +2,9 @@
 
 > **Safe to pull.** Everything below is on `dev`; see §0. `pnpm gate` is green uncached (twice).
 >
-> **Letter:** `BU`. `BN`–`BS` have handoffs; **`BT` ran and left none** (its work is `8e80fdf7` +
+> **Letter:** `BU`. `BN`–`BS` have handoffs; **`BT` ran and left none at the time** — since
+> written up as [`2026-08-22-session-bt.md`](2026-08-22-session-bt.md), reconstructed from the
+> record by this session under `PATCH-BU-01` §4 (its work is `8e80fdf7` +
 > `57e07795` + `4777b724`, and it is cited by `docs/recon/2026-08-22-b155-switch-flash-walk.md`),
 > so `BT` is used and this is `BU`.
 >
@@ -12,13 +14,13 @@
 
 ## 0. State
 
-| Fact              | Value                                                                                                                                         |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tip read at start | `4777b724` (session BT) — `HEAD == origin/dev`, `git pull` reported already up to date                                                        |
-| Tree at start     | ONE modified file: `template-http-server.ts` — the standing never-stage LAN-host pin, named in both briefs' §5. Never staged, still unstaged. |
-| **Pushed**        | `4257ef19` (`TURBO-BIN-01`), then `3e4f7832` (`E2E-PNG-01`) — each verified by `git ls-remote origin dev`, not by an exit code                |
-| **Owed e2e**      | ✅ `TURBO-BIN-01` DISCHARGED (§3); `E2E-PNG-01` still owed — see §3                                                                           |
-| Commits           | 4, in the two-per-prompt shape both briefs required; no file from one prompt was ever staged with the other's                                 |
+| Fact              | Value                                                                                                                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tip read at start | `4777b724` (session BT) — `HEAD == origin/dev`, `git pull` reported already up to date                                                                                             |
+| Tree at start     | ONE modified file: `template-http-server.ts` — the standing never-stage LAN-host pin, named in both briefs' §5. Never staged, still unstaged.                                      |
+| **Pushed**        | Two pushes: tip `4257ef19` (`TURBO-BIN-01`), then tip `4124885d` carrying `2bf31fa5` + `3e4f7832` + the handoff. Each verified by `git ls-remote origin dev`, not by an exit code. |
+| **Owed e2e**      | ✅ `TURBO-BIN-01` DISCHARGED (§3); `E2E-PNG-01` still owed — see §3                                                                                                                |
+| Commits           | 4, in the two-per-prompt shape both briefs required; no file from one prompt was ever staged with the other's                                                                      |
 
 ---
 
@@ -186,13 +188,25 @@ knowing before assuming a green `typecheck` said anything about this diff.
   `dev` HEAD that CONTAINS `3e4f7832`, which is what the discharge rule allows; a green Windows
   `pnpm test:e2e` (269 passed / 12 skipped, run locally) does **not** discharge it and is recorded
   here only as the local signal it is.
-- ⚠ **Disclosed, because it cost `3e4f7832` its own run.** `2bf31fa5`, `3e4f7832` and
-  `4124885d` were pushed in ONE push rather than one per commit, so GitHub raised a single run, for
-  the tip. The debt is still discharged — the run's diff spans the previous remote tip
-  (`4257ef19`) to `4124885d`, so `looks.spec.ts` was in the classified set and `e2e` RAN rather
-  than skipping — but it is the exact "a middle commit gets no run of its own" shape `CLAUDE.md`
-  warns about under the merge backstop, arrived at by push batching rather than by a burst. Push
-  per commit next time.
+- **`2bf31fa5`, `3e4f7832` and `4124885d` went out in ONE push, so `3e4f7832` has no run of its
+  own — and that is the MODEL, not a slip** (corrected by `PATCH-BU-01`; an earlier revision of
+  this line called it one, and anyone who read that should unlearn it). The owner's model is **one
+  logical change per COMMIT, accumulated locally, ONE push at the end.** Each push costs a
+  pre-push gate wait and a metered CI run, and GitHub keeps only one pending run per concurrency
+  group, so pushing per commit buys runs that are immediately superseded. **"A middle commit with
+  no run of its own" is the known, accepted COST of that model** — affordable precisely because
+  `ci` and `e2e` are **whole-tree, never diff-scoped**, so the run at the tip verifies the tree
+  every earlier commit in the batch contributed to. The one exception is a fix that supersedes an
+  ALREADY-PUSHED defect: that goes out promptly, because until it lands the pushed tip is wrong.
+  Here the tip run's diff spanned `4257ef19..4124885d`, so `looks.spec.ts` was in the classified
+  set and `e2e` RAN rather than skipping.
+- ✅ **`CLAUDE.md` does NOT contradict this, checked rather than assumed.** Its merge-backstop
+  paragraph names the one-pending-run behaviour as a **known hole that the backstop catches**, not
+  as a rule against batching, and its `P-030` note states the whole-tree property outright: "a
+  green run that EXECUTED both therefore verifies the whole tree at that SHA, including the code
+  of every earlier commit in the span." There is no line to escalate and nothing was changed there.
+  (Its hole (1) is also a different mechanism — a **burst of pushes superseding a PENDING run**.
+  One push of three commits supersedes nothing.)
 - All pushes verified with `git ls-remote origin dev` matching local `HEAD`.
 - Files staged **individually** throughout; `git add <dir>` never used; `template-http-server.ts`
   never staged.
