@@ -2338,7 +2338,7 @@ looking for the missing one. That is why this outranks a feature.
   item prevents; `P-035` (the other guard filed the same day, same "enforce rather than remember"
   shape).
 
-## [~] P-037 — `pnpm test:e2e` regenerates four COMMITTED handoff stills, so an ordinary run leaves the tree dirty ⟨priority: medium⟩ — implemented: the opt-in, with a two-arm proof
+## [x] P-037 — `pnpm test:e2e` regenerates four COMMITTED handoff stills, so an ordinary run leaves the tree dirty ⟨priority: medium⟩ — done: no change dir; filed and fixed in one commit each (`2bf31fa5`, `3e4f7832`), the platform/dev-loop path `P-026` and `P-027` established
 
 **What:** an ordinary `pnpm test:e2e` leaves `git status` CLEAN. The four stills a handoff document
 displays are written only when a run is explicitly asked for them; every other run writes its
@@ -2349,6 +2349,13 @@ writes four TRACKED files with `page.screenshot({ path: '../../docs/handoff/img/
 **95, 116, 130 and 134** — `bb-step3-sixbox-authoring.png`, `bb-step4-solo-authoring.png`,
 `bb-step5-switched-sixbox.png` and `bb-step5b-switched-solo.png`. Render nondeterminism means the
 bytes differ a little every run, so the files re-dirty on every pass, green or red.
+
+⚠ **And the nondeterminism is PARTIAL, which is what made this worse than uniform dirt.** Measured
+during the fix: in one opt-in run only **two of the four** images moved — `bb-step5` and `bb-step5b`
+came back byte-identical — so the dirty SET varied from run to run. Uniform dirt at least teaches a
+stable expectation a reader can subtract. A varying set teaches none, so every run's `git status`
+had to be read afresh on its merits, and "that file is always modified" was never available as a
+dismissal. **An unstable expectation is what a real change hides behind.**
 
 🔴 **The cost is not the dirt, it is the JUDGEMENT the dirt demands.** Every E2E run now ends with a
 `git status` a human has to read and dismiss — and a working tree that is expected to be dirty is
@@ -2402,10 +2409,9 @@ skipped when unset) and is the precedent this item follows.
 --porcelain` reported **nothing under `docs/handoff/img/`**; all four stills hash-identical to
      `HEAD`; all four screenshots present in `apps/designer/test-results/handoff/`, which
      `git check-ignore -v` resolves to `.gitignore:88`.
-- ⚠ **Only TWO of the four images moved in the opt-in arm** — `bb-step5` and `bb-step5b` came back
-  byte-identical that run. The nondeterminism is PARTIAL, so the dirty set varied run to run. That
-  is worse than uniform dirt, not better: a reader could not even form a stable expectation of what
-  "normal" looked like, which is exactly the judgement cost the **Why** describes.
+- **Where the partial-nondeterminism reading came from:** the opt-in arm above is the measurement
+  the **Why** now carries — two of four images moved, `bb-step5` and `bb-step5b` did not. Recorded
+  once, in the **Why**, because it is a property of the DEFECT rather than of the fix.
 - **Not covered by `typecheck`:** `apps/designer`'s tsconfig `include` is `["src/**/*",
 "vite.config.ts"]`, so this file is outside the compile guarantee (`P-033`, still open). The
   change is covered by `lint` (which does lint `tests/`, 0 errors) and by the run itself.
