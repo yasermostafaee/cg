@@ -204,7 +204,7 @@ it('🔴 6.9c — a deliberately RAISED plate is still audible after the swap', 
   const layer = layerOf(r, 'guest-1') ?? 0;
   // Every bridge-created producer is born muted (6.5), so raising it is an
   // explicit recorded intent naming the layer — the only thing that may raise it.
-  expect(await r.setLivePlateVolume('item-1', 'guest-1', 1)).toEqual({ ok: true });
+  expect(await r.setLivePlateVolume('item-1', 'guest-1', 1)).toEqual({ ok: true, sent: true });
   expect(mock?.layerState({ channel: 1, layer })?.volume).toBe(1);
 
   await r.swapLiveSource('item-1', 'guest-1', 'src-c');

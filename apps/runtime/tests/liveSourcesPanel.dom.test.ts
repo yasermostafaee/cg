@@ -15,6 +15,10 @@ import {
   releaseScopeOf,
 } from '../src/renderer/features/layers/liveLayerRows.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
+import {
+  onCommandError,
+  onCommandSuccess,
+} from '../src/renderer/features/status/commandFeedback.js';
 import { connectionsStub, type Reachability } from './support/reachability.js';
 
 /**
@@ -118,22 +122,35 @@ async function render(
   ledgerReady = true,
   deliveryPending = false,
   /**
-   * `add-multibox-audio` — the plate intents, and PANIC's scope.
-   *
-   * Both are the CALLER's answers in production too (only `LayersPanel` can see the stack),
-   * so injecting them here is the same seam rather than a test-only one.
+   * `add-multibox-audio` — the plate intents. The CALLER's answer in production too (only
+   * `LayersPanel` can see the stack), so injecting it here is the same seam.
    */
   volumeOf: (itemId: string, plateId: string) => number | undefined = () => undefined,
-  panicScope: { itemId: string; plates: readonly string[] }[] = [],
+  /**
+   * 🔴 What the BRIDGE reports PANIC did — not a scope handed DOWN.
+   *
+   * `PATCH-BX-01` B: PANIC used to take a scope from the panel, resolved from the on-air rows.
+   * The door now takes no arguments at all, so the only thing a test can inject is the ANSWER.
+   * That is the shape of the fix, and this signature is where it shows.
+   */
+  panicReport: {
+    ok: boolean;
+    silenced: number;
+    recorded: number;
+    rows: { itemId: string; plates: number }[];
+    failed: { itemId: string; plateId: string; reason: string }[];
+  } = { ok: false, silenced: 0, recorded: 0, rows: [], failed: [] },
 ): Promise<{
   el: HTMLDivElement;
   remove: ReturnType<typeof vi.fn>;
   onSelectOwner: ReturnType<typeof vi.fn>;
   applied: { itemId: string; volumes: Record<string, number> }[];
+  panics: number;
 }> {
   const { remove } = stubBridge(link, removeResult, reach);
   const onSelectOwner = vi.fn();
   const applied: { itemId: string; volumes: Record<string, number> }[] = [];
+  const counter = { panics: 0 };
   const blind = liveLayerBlindness(
     link === 'disconnected',
     stackReady,
@@ -155,7 +172,10 @@ async function render(
           ledgerReady,
           blind,
           onSelectOwner,
-          panicScope,
+          onPanic: () => {
+            counter.panics += 1;
+            return Promise.resolve(panicReport);
+          },
           onApplyVolumes: (itemId, volumes) => {
             applied.push({ itemId, volumes });
             return Promise.resolve({ ok: true, refused: [] });
@@ -164,7 +184,15 @@ async function render(
       ),
     );
   });
-  return { el: container, remove, onSelectOwner, applied };
+  return {
+    el: container,
+    remove,
+    onSelectOwner,
+    applied,
+    get panics() {
+      return counter.panics;
+    },
+  };
 }
 
 const rowFor = (el: HTMLElement, coordinate: string): HTMLElement | null =>
@@ -981,19 +1009,53 @@ describe('add-multibox-audio — audio is visible without opening anything', () 
   });
 });
 
-describe('add-multibox-audio — PANIC', () => {
+/**
+ * `PATCH-BX-01` B — **PANIC'S SCOPE IS THE BRIDGE'S LEDGER, AND THE PANEL NO LONGER CHOOSES
+ * IT.**
+ *
+ * The panel used to resolve the scope from the ON-AIR rows and hand it down. That was `B-122`'s
+ * shape one verb along — an emergency control gated on believed status — and it cost two real
+ * cases: a row in the `exitRehearse` window (plates seated and potentially AUDIBLE, status not
+ * on air) was never reached, and a browser whose ledger snapshot had not yet arrived would have
+ * addressed nothing while reporting success.
+ *
+ * These tests therefore assert about the DOOR and the WORDING. That the scope is right is a
+ * property of the bridge and is pinned in
+ * `tools/caspar-bridge/tests/live-plate-panic.integration.test.ts`, where a wire can be observed.
+ */
+describe('PATCH-BX-01 — PANIC asks the bridge, and reads its answer out loud', () => {
   const panicButton = (el: HTMLElement): HTMLButtonElement | undefined =>
     [...el.querySelectorAll('button')].find((b) => b.textContent === 'SILENCE ALL BOXES');
 
-  it('🔴 PANIC zeroes every plate of every row in its scope, one call per row', async () => {
-    const both = ownerLabelFor([item('item-a'), item('item-b')], () => 'IRIB News');
-    const { el, applied } = await render(
-      [
-        layer({ layer: 10, itemId: 'item-a', sourceId: 'guest-1' }),
-        layer({ layer: 11, itemId: 'item-a', sourceId: 'guest-2' }),
-        layer({ layer: 20, itemId: 'item-b', sourceId: 'guest-9' }),
-      ],
-      both,
+  /**
+   * The command feedback channel, captured directly.
+   *
+   * ⚠ The toast COMPONENT (`CommandToast`) is not mounted by this harness, so the wording never
+   * reaches `document.body` here. Subscribing to the channel is the honest way to assert what
+   * the operator is told without dragging an unrelated component into every case — and it also
+   * separates the two channels, which matters: a refusal on the ERROR channel and a completion
+   * on the SUCCESS channel are different claims, and a test that read one blob of text could
+   * not tell them apart.
+   */
+  function captureFeedback(): { errors: string[]; successes: string[]; stop: () => void } {
+    const errors: string[] = [];
+    const successes: string[] = [];
+    const offError = onCommandError((m) => errors.push(m));
+    const offSuccess = onCommandSuccess((m) => successes.push(m));
+    return {
+      errors,
+      successes,
+      stop: () => {
+        offError();
+        offSuccess();
+      },
+    };
+  }
+
+  it('🔴 one press = ONE call to the bridge, with NO scope of the panel’s choosing', async () => {
+    const captured = await render(
+      [layer({ layer: 10, sourceId: 'guest-1' }), layer({ layer: 11, sourceId: 'guest-2' })],
+      OWNED,
       'live',
       { accepted: true },
       'both-up',
@@ -1002,33 +1064,32 @@ describe('add-multibox-audio — PANIC', () => {
       true,
       false,
       () => undefined,
-      [
-        { itemId: 'item-a', plates: ['guest-1', 'guest-2'] },
-        { itemId: 'item-b', plates: ['guest-9'] },
-      ],
+      { ok: true, silenced: 2, recorded: 2, rows: [{ itemId: 'item-a', plates: 2 }], failed: [] },
     );
 
     await act(async () => {
-      panicButton(el)?.click();
+      panicButton(captured.el)?.click();
       await Promise.resolve();
     });
 
-    expect(applied).toEqual([
-      { itemId: 'item-a', volumes: { 'guest-1': 0, 'guest-2': 0 } },
-      { itemId: 'item-b', volumes: { 'guest-9': 0 } },
-    ]);
+    expect(captured.panics).toBe(1);
+    // …and NOT through the per-row map door. A panel that still fanned out per row would be
+    // choosing the scope by another name.
+    expect(captured.applied).toEqual([]);
   });
 
-  it('🔴 PANIC touches ONLY the rows in its scope — an off-air row is not addressed', async () => {
-    // The scope is resolved by the caller from the console's ONE on-air predicate. A row
-    // that is merely seated is not in it, and PANIC must not invent one.
-    const both = ownerLabelFor([item('item-a'), item('item-b')], () => 'IRIB News');
-    const { el, applied } = await render(
-      [
-        layer({ layer: 10, itemId: 'item-a', sourceId: 'guest-1' }),
-        layer({ layer: 20, itemId: 'item-b', sourceId: 'guest-9' }),
-      ],
-      both,
+  it('🔴 it is offered even when NO row reads as on air — that is the whole fix', async () => {
+    /*
+      The `exitRehearse` window: plates seated, the item present, and nothing about it saying
+      "on air". Under the old scope this press addressed nothing. The panel must not gate it.
+    */
+    const offAir = ownerLabelFor(
+      [{ ...item('item-a'), status: 'loaded' } as StackItemState],
+      () => 'IRIB News',
+    );
+    const captured = await render(
+      [layer()],
+      offAir,
       'live',
       { accepted: true },
       'both-up',
@@ -1037,28 +1098,133 @@ describe('add-multibox-audio — PANIC', () => {
       true,
       false,
       () => undefined,
-      [{ itemId: 'item-a', plates: ['guest-1'] }],
+      { ok: true, silenced: 1, recorded: 1, rows: [{ itemId: 'item-a', plates: 1 }], failed: [] },
     );
 
+    expect(panicButton(captured.el)?.disabled, 'the press is not gated on any status').toBe(false);
     await act(async () => {
-      panicButton(el)?.click();
+      panicButton(captured.el)?.click();
       await Promise.resolve();
     });
-
-    expect(applied).toEqual([{ itemId: 'item-a', volumes: { 'guest-1': 0 } }]);
+    expect(captured.panics).toBe(1);
   });
 
-  it('🔴 an EMPTY scope sends nothing and does NOT report a success', async () => {
-    // B-122's failure was an emergency control reporting success having sent nothing at
-    // all. Silence over an empty scope would be that failure, one verb along.
-    const { el, applied } = await render([layer()]);
+  it('names the ROWS it addressed — under a ledger scope they can be unpredicted ones', async () => {
+    const { el } = await render(
+      [layer()],
+      OWNED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      () => undefined,
+      {
+        ok: true,
+        silenced: 3,
+        recorded: 3,
+        rows: [
+          { itemId: 'item-a', plates: 2 },
+          { itemId: 'item-b', plates: 1 },
+        ],
+        failed: [],
+      },
+    );
 
+    const fb = captureFeedback();
     await act(async () => {
       panicButton(el)?.click();
       await Promise.resolve();
     });
+    fb.stop();
 
-    expect(applied).toEqual([]);
+    expect(fb.successes.join(' ')).toContain('Silenced 3 plate(s)');
+    expect(fb.successes.join(' ')).toContain('2 row(s)');
+    expect(fb.errors, 'a completed panic is not also an error').toEqual([]);
+  });
+
+  it('🔴 distinguishes what reached the WIRE from what was only RECORDED (held plates)', async () => {
+    // A held plate is already silent, so nothing is sent for it — but its intent goes to 0 so
+    // it stays silent when its look comes back. Reporting 4 "silenced" would overstate what
+    // left air; saying nothing about the other 2 would hide a real effect.
+    const { el } = await render(
+      [layer()],
+      OWNED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      () => undefined,
+      { ok: true, silenced: 2, recorded: 4, rows: [{ itemId: 'item-a', plates: 4 }], failed: [] },
+    );
+
+    const fb = captureFeedback();
+    await act(async () => {
+      panicButton(el)?.click();
+      await Promise.resolve();
+    });
+    fb.stop();
+
+    const said = fb.successes.join(' ');
+    expect(said, 'it must not claim 4 reached air').toContain('Silenced 2 plate(s)');
+    expect(said).toMatch(/2 already silent in the current look/i);
+  });
+
+  it('🔴 a bridge holding NO live plates is NOT reported as a success', async () => {
+    // B-122's failure exactly: an operator told the escape hatch worked while nothing was sent.
+    const { el } = await render([layer()]);
+
+    const fb = captureFeedback();
+    await act(async () => {
+      panicButton(el)?.click();
+      await Promise.resolve();
+    });
+    fb.stop();
+
+    expect(fb.errors.join(' ')).toMatch(/nothing was sent/i);
+    // 🔴 On the SUCCESS channel, silence. A no-op reported as a completed panic is exactly the
+    // lie B-122 names — and asserting on one blob of page text could not tell the two apart.
+    expect(fb.successes).toEqual([]);
+  });
+
+  it('a plate that did not take is NAMED, and the press is not called a success', async () => {
+    const { el } = await render(
+      [layer()],
+      OWNED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      () => undefined,
+      {
+        ok: false,
+        silenced: 1,
+        recorded: 1,
+        rows: [{ itemId: 'item-a', plates: 2 }],
+        failed: [{ itemId: 'item-a', plateId: 'guest-2', reason: 'amcp-error' }],
+      },
+    );
+
+    const fb = captureFeedback();
+    await act(async () => {
+      panicButton(el)?.click();
+      await Promise.resolve();
+    });
+    fb.stop();
+
+    // It NAMES the plate. "The panic failed" would have the operator re-press it; saying
+    // nothing would leave a guest audible with the console reporting a success.
+    expect(fb.errors.join(' ')).toContain('guest-2');
+    expect(fb.errors.join(' ')).toMatch(/may still be audible/i);
+    expect(fb.successes).toEqual([]);
   });
 
   it('PANIC has no confirm — an emergency control behind a dialog is one that does not happen', async () => {
@@ -1073,7 +1239,7 @@ describe('add-multibox-audio — PANIC', () => {
       true,
       false,
       () => undefined,
-      [{ itemId: 'item-a', plates: ['guest-1'] }],
+      { ok: true, silenced: 1, recorded: 1, rows: [{ itemId: 'item-a', plates: 1 }], failed: [] },
     );
 
     await act(async () => {
@@ -1087,5 +1253,14 @@ describe('add-multibox-audio — PANIC', () => {
   it('PANIC is disabled with the BRIDGE down — the command cannot leave the browser', async () => {
     const { el } = await render([layer()], OWNED, 'disconnected');
     expect(panicButton(el)?.disabled).toBe(true);
+  });
+
+  it('the control SAYS its scope is wider than what this console shows as on air', async () => {
+    const { el } = await render([layer()]);
+    const title = panicButton(el)?.getAttribute('title') ?? '';
+    expect(title).toMatch(/every live plate the bridge has seated/i);
+    expect(title, 'an operator must not be surprised by the wider reach').toMatch(
+      /rows this console does not show as on air/i,
+    );
   });
 });

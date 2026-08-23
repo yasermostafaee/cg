@@ -496,10 +496,20 @@ export function LayersPanel({
     },
     [],
   );
-  const onAirItemIds = new Set(items.filter(isOnAir).map((i) => i.itemId));
-  const panicScope = [...new Set(liveRows.map((r) => r.itemId))]
-    .filter((itemId) => onAirItemIds.has(itemId))
-    .map((itemId) => ({ itemId, plates: seatedPlatesOf(liveRows, itemId) }));
+  /**
+   * 🔴 **PANIC TAKES NO SCOPE FROM HERE ANY MORE, and the deleted code is the point.**
+   *
+   * This used to be `items.filter(isOnAir)` joined against `liveRows` — an emergency control
+   * scoped from believed status, which is `B-122`'s shape one verb along. It cost two real
+   * cases: a row in the `exitRehearse` window (plates seated and potentially AUDIBLE, status
+   * not on air) was never reached, and a browser whose `useLiveLayers` snapshot had not yet
+   * arrived would have addressed nothing and reported success for it.
+   *
+   * The BRIDGE scopes it from its own ledger now. ⚠ Do not reintroduce a status filter here,
+   * or a scope prop, under any name — the whole reason the door takes no arguments is that the
+   * caller must not be able to narrow it.
+   */
+  const panic = useCallback(() => window.cg.stack.silenceAllLivePlates(), []);
   const tabs: TabSpec[] = [
     { id: 'layers', label: 'LAYERS' },
     {
@@ -914,7 +924,7 @@ export function LayersPanel({
               setActiveTab('layers');
             }}
             onApplyVolumes={applyPlateVolumes}
-            panicScope={panicScope}
+            onPanic={panic}
           />
         ) : (
           <StationLayersPanel layers={playout} />

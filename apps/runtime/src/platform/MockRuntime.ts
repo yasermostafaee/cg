@@ -685,6 +685,47 @@ export class MockRuntime {
     return { ok: results.every((r) => r.ok), results };
   }
 
+  /**
+   * PANIC parity — silence every plate the (mock) LEDGER holds a seat for.
+   *
+   * 🔴 **SCOPED FROM `liveLayersState()`, not from the stack, and that IS the parity that
+   * matters here.** The bridge answers this from its ledger precisely so that a row whose
+   * STATUS does not say "on air" — the `exitRehearse` window — is still silenced. A mock that
+   * scoped it from `isOnAir` would teach the UI a model the bridge does not have, which is the
+   * `B-070` / `B-072` class this parity guard exists for.
+   *
+   * The offline mock has no wire, so `silenced` and `recorded` are the same number: recording
+   * the intent IS the whole effect. ⚠ Do NOT "restore parity" by inventing a held/sent split
+   * here — the mock's seed carries a HELD row, but modelling a send it cannot make would be a
+   * fiction, and the wire behaviour is integration-tested bridge-side where it can be observed.
+   */
+  silenceAllLivePlates(): {
+    ok: boolean;
+    silenced: number;
+    recorded: number;
+    rows: { itemId: string; plates: number }[];
+    failed: { itemId: string; plateId: string; reason: string }[];
+  } {
+    const byItem = new Map<string, Set<string>>();
+    for (const layer of this.liveLayersState()) {
+      const plates = byItem.get(layer.itemId) ?? new Set<string>();
+      plates.add(layer.sourceId);
+      byItem.set(layer.itemId, plates);
+    }
+    const rows: { itemId: string; plates: number }[] = [];
+    let recorded = 0;
+    for (const [itemId, plates] of byItem) {
+      rows.push({ itemId, plates: plates.size });
+      for (const plateId of plates) {
+        this.#plateVolumes.set(itemId, { ...this.#plateVolumes.get(itemId), [plateId]: 0 });
+        recorded += 1;
+      }
+    }
+    if (recorded > 0) this.#emitStack();
+    // Nothing owed is NOT a success — the same `B-122` rule the bridge applies.
+    return { ok: recorded > 0, silenced: recorded, recorded, rows, failed: [] };
+  }
+
   /** C-015 (6.5f) — the stored audio intent for an item (test/diagnostic surface). */
   plateVolumesOf(itemId: string): Readonly<Record<string, number>> | undefined {
     return this.#plateVolumes.get(itemId);

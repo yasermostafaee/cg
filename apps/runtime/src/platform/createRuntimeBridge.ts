@@ -146,8 +146,10 @@ export function createMockBridge(): RuntimeBridge {
       // C-015 (6.5f) — the per-plate audio intent.
       setPlateVolume: (req) =>
         Promise.resolve(mock.setPlateVolume(req.itemId, req.plateId, req.volume)),
-      // `add-multibox-audio` — the MAP door (FADER / ON-OFF / SOLO / PANIC).
+      // `add-multibox-audio` — the MAP door (FADER / ON-OFF / SOLO).
       setPlateVolumes: (req) => Promise.resolve(mock.setPlateVolumes(req.itemId, req.volumes)),
+      // PANIC — no arguments: the scope is the LEDGER's, not the caller's.
+      silenceAllLivePlates: () => Promise.resolve(mock.silenceAllLivePlates()),
       // R-048 — the per-plate live-source swap.
       swapLiveSource: (req) =>
         // Session BM: `lookId` absent is R-048 (every look); present is one look’s binding.

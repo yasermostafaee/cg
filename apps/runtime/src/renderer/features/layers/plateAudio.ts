@@ -186,17 +186,17 @@ export function soloMap(
   return map;
 }
 
-/**
- * PANIC's map for ONE row — every plate it owns, at zero.
- *
- * Deduplicated, because a fill+key pair puts the same `sourceId` on two ledger records and a
- * map with the key written twice is the same map written twice.
- */
-export function panicMap(seatedPlateIds: readonly string[]): Record<string, number> {
-  const map: Record<string, number> = {};
-  for (const id of seatedPlateIds) map[id] = 0;
-  return map;
-}
+/*
+  ⚠ **A `panicMap(seatedPlateIds)` helper lived here and was REMOVED, not left unused.**
+
+  It built PANIC's all-zero map for one row, back when the renderer resolved PANIC's SCOPE from
+  the on-air rows. That scope was the defect (`B-122`'s shape: an emergency control gated on
+  believed status), and PANIC is now a bridge verb that takes no arguments and reads its own
+  ledger — so nothing calls this, and a helper nothing calls is the written-but-unreachable
+  class this repo has filed repeatedly. Noted rather than silently deleted because the pull
+  towards re-adding one is real: if you find yourself building a panic map in the renderer, the
+  question to ask is why the browser is choosing the scope of an emergency verb at all.
+*/
 
 /**
  * The layer row's compact READ-ONLY summary: how many of a row's plates are raised.

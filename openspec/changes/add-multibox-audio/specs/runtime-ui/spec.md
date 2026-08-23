@@ -58,14 +58,24 @@ this in words, so an operator is not left to discover it under pressure.
 ### Requirement: SOLO and PANIC are single presses that promise no restore
 
 **SOLO** SHALL raise the chosen plate and silence every sibling plate of the same item in ONE
-action. **PANIC** SHALL silence every plate of every item the console reads as on air, from the
-head of the LIVE SOURCES panel.
+action. **PANIC** SHALL silence every live plate the BRIDGE holds a seat for, from the head of
+the LIVE SOURCES panel.
 
 Neither SHALL present an undo, an "un-solo", or any wording that implies the previous levels
 are remembered.
 
-PANIC SHALL report what it addressed, so that a press that reached nothing cannot read as a
-success.
+🔴 **PANIC's scope SHALL NOT be resolved by the console.** The panel SHALL call a bridge verb
+that takes no scope argument, and SHALL NOT filter, narrow or select the rows it applies to.
+Gating an emergency control on the console's believed status is `B-122`'s defect, and a scope
+computed from a snapshot the browser may not yet have received is the same defect by another
+route.
+
+PANIC SHALL report what it addressed — how many plates reached the wire, how many had their
+intent recorded, and which rows — so that a press that reached nothing cannot read as a
+success, and so that rows the operator would not have predicted are named.
+
+The control's own labelling SHALL state that its reach is wider than what the console shows as
+on air, so the wider scope cannot surprise an operator.
 
 #### Scenario: SOLO leaves one plate up
 
@@ -73,11 +83,21 @@ success.
 - **THEN** that plate's intent is `1`, its three siblings' intents are `0`, and no control
   offers to restore the previous levels
 
-#### Scenario: PANIC silences the on-air rows
+#### Scenario: PANIC reaches a seated row the console does not show as on air
 
-- **WHEN** PANIC is pressed while two rows are on air and one is idle
-- **THEN** every plate of the two on-air rows is set to `0` and the operator is told how many
-  plates were silenced
+- **WHEN** PANIC is pressed while the bridge holds seats for one row that is on air and one
+  that is not
+- **THEN** both rows' plates are silenced, and the report names both rows
+
+#### Scenario: PANIC is one call, with no scope of the panel's choosing
+
+- **WHEN** PANIC is pressed
+- **THEN** exactly one bridge call is made, carrying no list of rows or plates
+
+#### Scenario: A bridge holding no live plates is not reported as a success
+
+- **WHEN** PANIC is pressed and the bridge holds no seats
+- **THEN** the operator is told nothing was sent, and no count of silenced plates is claimed
 
 ### Requirement: The layer row carries a compact read-only audio summary, outside the verb grid
 

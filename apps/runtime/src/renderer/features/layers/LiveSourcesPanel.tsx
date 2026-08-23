@@ -15,12 +15,20 @@ import {
   type LiveLayerRowView,
 } from './liveLayerRows.js';
 import { PlateAudioStrip } from './PlateAudioStrip.js';
-import { panicMap } from './plateAudio.js';
 
-/** The rows PANIC addresses, and the plates it will zero on each. */
-export interface PanicScope {
-  itemId: string;
-  plates: readonly string[];
+/**
+ * What PANIC actually did, as the BRIDGE reports it.
+ *
+ * ⚠ The shape is the bridge's, carried through unchanged. `silenced` (reached the wire) and
+ * `recorded` (intent written, including HELD plates that were already silent) are different
+ * numbers on purpose — see the channel's own note.
+ */
+export interface PanicReport {
+  ok: boolean;
+  silenced: number;
+  recorded: number;
+  rows: readonly { itemId: string; plates: number }[];
+  failed: readonly { itemId: string; plateId: string; reason: string }[];
 }
 
 interface Props {
@@ -54,20 +62,20 @@ interface Props {
     volumes: Record<string, number>,
   ) => Promise<{ ok: boolean; refused: string[] }>;
   /**
-   * 🔴 **THE ROWS PANIC ADDRESSES — resolved by the CALLER, which is the only place that can
-   * see the stack.**
+   * 🔴 **PANIC — and it takes NO SCOPE, which is the whole of the change.**
    *
-   * It is the ON-AIR rows' seated plates. That it is status-gated at all is a recorded
-   * decision with a recorded cost (`add-multibox-audio` design.md §5): `B-122`'s lesson is
-   * that an emergency control must not depend on the values that may be wrong in the
-   * emergency, and the containments are that PANIC REPORTS what it addressed (so a no-op
-   * cannot read as a success) and that CLEAR ALL — which ignores status entirely and takes
-   * the audio down with the layer — is one panel away.
+   * It used to take one: the caller resolved the ON-AIR rows' seated plates from the stack and
+   * handed them down. That was `B-122`'s shape one verb along — an emergency control gated on
+   * believed status — and it cost two real cases: a row in the `exitRehearse` window (plates
+   * seated and potentially AUDIBLE, status not on air) was never reached, and a browser whose
+   * live-layer snapshot had not yet arrived would have addressed nothing while reporting
+   * success for it.
    *
-   * EMPTY means there is nothing on air to silence, and PANIC says exactly that rather than
-   * reporting a success over nothing.
+   * The bridge now scopes it from its own LEDGER — every plate it seated, whatever any status
+   * claims — and hands back what it did. This panel's job is to press the button and read the
+   * answer out loud.
    */
-  panicScope: readonly PanicScope[];
+  onPanic: () => Promise<PanicReport>;
 }
 
 const styles = {
@@ -157,7 +165,7 @@ export function LiveSourcesPanel({
   blind,
   onSelectOwner,
   onApplyVolumes,
-  panicScope,
+  onPanic,
 }: Props): JSX.Element {
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
@@ -215,41 +223,47 @@ export function LiveSourcesPanel({
   };
 
   /**
-   * PANIC — silence every plate of every ON-AIR row, from one press.
+   * PANIC — silence every plate the BRIDGE holds a seat for, from one press.
    *
    * ⚠ **NO CONFIRM, deliberately.** An emergency control behind a dialog is one that does not
    * happen; the dialog next door makes the same argument for its own MUTE button. Silencing is
    * also the RECOVERABLE direction — the faders are still there — which a CLEAR is not, and
    * that is the line this product draws for a confirm.
    *
-   * The report counts what ACTUALLY went. An empty scope reports "nothing on air" rather than
-   * a success over nothing: `B-122`'s failure was an emergency control reporting success
-   * having sent nothing at all.
+   * 🔴 **THE SCOPE IS NOT COMPUTED HERE ANY MORE.** It was, and the panel resolved it from the
+   * on-air rows — so a seated-but-not-on-air row was never silenced, and a browser whose
+   * ledger snapshot had not arrived would have silenced nothing and said it worked. Both are
+   * `B-122`'s shape. The bridge answers from its ledger; this reads the answer out.
+   *
+   * The wording says what ACTUALLY went, and it distinguishes the two numbers the bridge
+   * distinguishes: `silenced` reached the wire, while a HELD plate was already silent and only
+   * had its intent recorded — so that when its look comes back it stays silent instead of
+   * returning at whatever it was before.
    */
   const panic = async (): Promise<{ accepted: boolean; cancelled?: boolean }> => {
-    if (panicScope.length === 0) {
-      reportCommandError('Nothing was sent — no row is on air, so there is no plate to silence.');
-      return { accepted: false, cancelled: true };
-    }
-    const outcomes = await Promise.all(
-      panicScope.map(async (scope) => ({
-        scope,
-        res: await onApplyVolumes(scope.itemId, panicMap(scope.plates)),
-      })),
-    );
-    const silenced = outcomes
-      .filter((o) => o.res.ok)
-      .reduce((n, o) => n + o.scope.plates.length, 0);
-    const refused = outcomes.flatMap((o) => o.res.refused);
-    if (refused.length > 0) {
+    const res = await onPanic();
+    if (res.failed.length > 0) {
+      const names = res.failed.map((f) => f.plateId).join(', ');
       reportCommandError(
-        `Silenced ${String(silenced)} plate(s), but ${refused.join(', ')} did not take — ` +
-          `those may still be audible.`,
+        `Silenced ${String(res.silenced)} plate(s), but ${names} did not take — those may ` +
+          `still be audible.`,
       );
       return { accepted: false, cancelled: true };
     }
+    if (!res.ok || res.recorded === 0) {
+      // A no-op is NEVER a success. `B-122`: an operator told the escape hatch worked while
+      // the thing is still on air is worse off than one told nothing happened.
+      reportCommandError(
+        'Nothing was sent — the bridge holds no live plates, so there was nothing to silence.',
+      );
+      return { accepted: false, cancelled: true };
+    }
+    const held = res.recorded - res.silenced;
     reportCommandSuccess(
-      `Silenced ${String(silenced)} plate(s) across ${String(panicScope.length)} on-air row(s).`,
+      `Silenced ${String(res.silenced)} plate(s) across ${String(res.rows.length)} row(s)` +
+        (held > 0
+          ? `; ${String(held)} already silent in the current look, now armed silent too.`
+          : '.'),
     );
     return { accepted: true };
   };
@@ -384,10 +398,11 @@ export function LiveSourcesPanel({
             disabled={audioRefusal !== undefined}
             title={
               audioRefusal ??
-              'Set every plate of every ON-AIR row to zero. The pictures stay on air. There ' +
-                'is no un-panic — raise what you need again on its own fader.'
+              'Set EVERY live plate the bridge has seated to zero — including rows this ' +
+                'console does not show as on air. The pictures stay on air. There is no ' +
+                'un-panic — raise what you need again on its own fader.'
             }
-            aria-label="Silence all boxes — set every plate of every on-air row to zero"
+            aria-label="Silence all boxes — set every live plate the bridge has seated to zero"
           >
             SILENCE ALL BOXES
           </AsyncButton>

@@ -108,7 +108,7 @@ never folded together with the key being absent, which means "nobody has said".
 ## 5. SOLO and PANIC have no restore, and the UI must not imply one
 
 Same argument as §4, one scope wider. SOLO writes `1` to one plate and `0` to every sibling of
-the same item in ONE call; PANIC writes `0` to every plate of every on-air item. Neither
+the same item in ONE call; PANIC writes `0` to every plate the bridge holds a seat for. Neither
 remembers what it overwrote, so neither offers an "un-solo" — the operator raises what they
 want back, on the same faders.
 
@@ -118,26 +118,64 @@ seated plate can be audible; the pre-seat is the UNION of every look, so a held 
 set and correctly receives a recorded-only `0`; and the ledger is the same array the panel is
 already rendering, so what SOLO addresses and what the operator sees cannot disagree.
 
-### PANIC's item set — a recorded tension with `B-122`
+### PANIC's scope is the LEDGER — `B-122`, applied one verb along (`PATCH-BX-01` B)
 
-PANIC addresses the items the console reads as **ON AIR**, through `features/stack/onAir.ts`'s
-`isOnAir` — the console's ONE on-air predicate, imported rather than re-derived.
+**PANIC addresses every plate the BRIDGE holds a seat for, whatever any status says.** It is a
+bridge verb (`stack.silence-all-live-plates`) that takes **no arguments**, because the scope is
+not the caller's to choose.
 
-⚠ **That is a status-gated emergency control, which `B-122` warns against** (`onAir.ts`'s own
-header: _"it must never gate a clear path again"_). It is accepted here, deliberately, with two
-containments:
+⚠ **This section previously recorded the opposite, and the reversal is the point.** PANIC's
+first cut resolved its scope in the BROWSER, from `features/stack/onAir.ts`'s `isOnAir`. That
+was accepted here as a tension with two containments — and the tension was real: `onAir.ts`'s
+own header says _"it must never gate a clear path again"_, because gating an emergency control
+on believed status gates it on **exactly the values that may be wrong in the emergency**. It
+cost two concrete cases:
 
-- **PANIC is not a clear path.** The failure `B-122` describes is an emergency control
-  reporting success having sent nothing while a graphic is still on air. PANIC's report names
-  the items it addressed and the plates that refused, so a no-op cannot come back dressed as a
-  success.
-- **The status-blind remedy still sits beside it.** `CLEAR ALL` addresses every row that HOLDS
-  a layer, whatever the status claims, and it takes the audio with the layer.
+- **A row holding seats while not reading on air was never reached.** The bridge routinely holds
+  confirmed seats for such a row — `B-145`'s boot adoption restores the persisted ledger while
+  the browser re-delivers its stack intent separately, so _"after a restart EVERY row arrives in
+  this state"_. If a plate on one was raised, it is audible, and the panic button pointed
+  elsewhere.
+- **A browser whose ledger snapshot had not yet arrived would have silenced nothing** and
+  reported a success for it — `B-122`'s failure verbatim.
 
-**The residual, stated rather than buried:** a row that owns seated plates while reading not-on-air
-— the `exitRehearse` state of §2 — is **not** touched by PANIC. Closing that would mean making
-PANIC's set the ledger's rather than the stack's, which is the better rule and is _not_ what
-this change was scoped to do.
+⚠ **The earlier write-up named `exitRehearse` as the cause of the first case. That is wrong and
+is corrected here:** a rehearsing row's plates are never seated in the first place
+(`enterRehearse` seats nothing; `setActiveLook` returns early for a row that is neither on air
+nor already seated; a `swapLiveSource`/`update` on one was probed and left the ledger empty).
+**Boot adoption** is what produces a seated off-air row; rehearse is only a way of passing
+through it. The window is real — the mechanism named for it was not.
+
+`CLEAR ALL` is the precedent and the shape is copied from it deliberately: the one filter that
+remains is about OWNERSHIP, not belief — a plate with no seat has nothing to silence — and that
+is a structural fact the bridge wrote itself when it sent the `PLAY`.
+
+#### 🔴 It does NOT weaken golden rule 10, and the sentence lives beside the code too
+
+Rule 10 stops a **configuration** verb putting content **ON AIR**. Its own words are _"no
+`PLAY`, no un-mute and no fill"_. PANIC does none of those three: it only ever LOWERS a volume,
+on layers that already exist, and it **seats nothing, un-holds nothing, fills nothing and
+creates nothing**. There is no state of the plant in which `MIXER … VOLUME 0` puts a frame or a
+sample on air that was not already there.
+
+That is why the gate inside `setLivePlateVolume` is now **DIRECTIONAL** rather than carrying a
+PANIC exemption: a **raise** still requires `#ownsLiveSeats`, and a **silence** never does. And
+gating the silence was a defect in its own right, not a conservative choice — OFF and a fader
+dragged to zero were refused the wire on exactly the rows where a guest could actually be
+audible, recorded an intent, and answered `ok`.
+
+`the wire carries ONLY MIXER … VOLUME 0` in `live-plate-panic.integration.test.ts` is that
+claim measured rather than argued, and the raise half is pinned beside it.
+
+#### HELD plates: intent recorded, nothing sent
+
+A held plate is seated but the active look punches no hole for it, and §12.4's hold is _"muted
+and idle"_ — it is **already silent**, so there is nothing for a panic to take off air. Its
+recorded intent still goes to `0`, because the reconcile that eventually un-holds it asserts
+that intent: a plate silenced during a panic stays silent when its look comes back, instead of
+returning at whatever it was before. This is the existing held rule inherited, not a second one
+written for PANIC — which is why `silenced` (reached the wire) and `recorded` (intent written)
+are reported as **two different numbers**, both true.
 
 ## 6. The metering ceiling is MEASURED, and it is why the design is what it is
 

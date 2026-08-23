@@ -39,6 +39,7 @@ import type {
   StackRemoveChannel,
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
+  StackSilenceAllLivePlatesChannel,
   StackSetPositionChannel,
   StackSetActiveLookChannel,
   StackSwapLiveSourceChannel,
@@ -233,6 +234,22 @@ export interface RuntimeBridge {
     setPlateVolumes(
       req: ChannelRequest<typeof StackSetPlateVolumesChannel>,
     ): Promise<ChannelResponse<typeof StackSetPlateVolumesChannel>>;
+    /**
+     * 🔴 **PANIC — silence every live plate the BRIDGE holds a seat for.**
+     *
+     * NO ARGUMENTS, deliberately: the scope is not the caller's to choose. It was, in the
+     * first cut — the browser resolved it from `isOnAir(item)` — and that left a row in the
+     * `exitRehearse` window (plates seated, potentially audible, status not on air) outside
+     * the panic button's reach, and would have addressed nothing at all in the window before
+     * `useLiveLayers` had answered. `B-122`'s rule is that an emergency control must not
+     * depend on the bookkeeping whose failure is the emergency; the bridge's ledger is the
+     * structural fact that replaces it.
+     *
+     * ⚠ It does NOT weaken golden rule 10: rule 10 stops a configuration verb putting content
+     * ON AIR (*"no `PLAY`, no un-mute and no fill"*), and this only ever lowers a volume on a
+     * layer that already exists.
+     */
+    silenceAllLivePlates(): Promise<ChannelResponse<typeof StackSilenceAllLivePlatesChannel>>;
     /**
      * R-010 — OUT + REMOVE every stack item (clears air, empties the list).
      * The sanctioned path to unblock a server reconfiguration.

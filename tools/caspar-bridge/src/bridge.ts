@@ -48,6 +48,7 @@ import {
   StackSetActiveLookChannel,
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
+  StackSilenceAllLivePlatesChannel,
   StackSetPositionChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
@@ -868,6 +869,11 @@ export function buildRoutes(
       (r: { itemId: string; volumes: Readonly<Record<string, number>> }) =>
         b.setLivePlateVolumes(r.itemId, r.volumes),
     ),
+    // PANIC — the audio sibling of `clearAll`: silence every plate the LEDGER holds a seat
+    // for, whatever any status claims. It takes NO arguments, and that is the point: the
+    // scope is not the caller's to choose (B-122 — a browser-resolved scope is an emergency
+    // control gated on bookkeeping that may not have arrived).
+    route(StackSilenceAllLivePlatesChannel, () => b.silenceAllLivePlates()),
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
     route(StackRemoveAllChannel, () => b.removeAll()),
     route(StackClearAllChannel, () => b.clearAll()),

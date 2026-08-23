@@ -1080,7 +1080,7 @@ it('🔴 setLivePlateVolume does NOT put a HELD plate on air — the intent wait
   expect(recordOf(r, 'live-2')?.held).toBe(true);
   const before = (await recvLines()).length;
 
-  expect(await r.setLivePlateVolume('item-1', 'live-2', 1)).toEqual({ ok: true });
+  expect(await r.setLivePlateVolume('item-1', 'live-2', 1)).toEqual({ ok: true, sent: false });
 
   /*
     A held plate is seated but off-screen. Asserting a raise onto it would put a VOICE on air

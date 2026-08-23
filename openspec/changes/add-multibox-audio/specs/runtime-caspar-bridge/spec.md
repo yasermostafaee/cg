@@ -75,6 +75,53 @@ take carries it.
 - **WHEN** a plate's volume is armed on an off-air row and the row is then taken
 - **THEN** the take seats that plate at the armed volume, without any further operator action
 
+### Requirement: PANIC silences every seated plate, and its scope is the LEDGER rather than any status
+
+The bridge SHALL expose a verb that silences **every live plate it holds a seat for**, taking no
+scope argument, so that no caller can narrow what an emergency control reaches.
+
+The scope SHALL be the bridge's own live-layer LEDGER — a structural fact it wrote when it sent
+the `PLAY` that seated each plate — and SHALL NOT be a status. A row the console does not show
+as on air can still hold seats whose producers are lit and audible: boot adoption restores the
+persisted ledger while the browser re-delivers its stack intent separately.
+
+🔴 **This SHALL NOT be read as weakening the configuration-verb rule.** That rule forbids a
+configuration verb producing a `PLAY`, an un-mute or a fill on a row that owns no live layers.
+Silencing does none of those: it lowers a volume on a layer that already exists, and cannot put
+a frame or a sample on air that was not already there. Accordingly the single-plate writer's
+gate SHALL be **directional** — a RAISE requires the row to own live seats, a SILENCE never
+does — rather than carrying an exemption for this verb alone.
+
+A plate the ledger holds a seat for SHALL be addressable even when the item is no longer on the
+stack, since the seat itself is proof the plate exists and such a layer is the one nothing else
+in the product can reach.
+
+The verb SHALL report how many plates reached the WIRE and how many had their intent RECORDED
+as distinct numbers, SHALL name the rows it addressed, and SHALL NOT report success when it
+addressed nothing.
+
+#### Scenario: A seated row that is not on air is silenced
+
+- **WHEN** the bridge holds seats for a row whose status is not on air, one of them raised, and
+  PANIC is invoked
+- **THEN** `MIXER … VOLUME 0` reaches that plate's layer and the plate is silent
+
+#### Scenario: PANIC never emits anything but a mute
+
+- **WHEN** PANIC is invoked with plates seated and raised
+- **THEN** every line it puts on the wire is a `MIXER … VOLUME 0` — no `PLAY`, no `CG` command,
+  no `MIXER … FILL` or `CLIP`, and no volume above zero — and no held plate is un-held
+
+#### Scenario: A raise on the same row is still refused the wire
+
+- **WHEN** a plate's volume is raised on a row that owns no live seats
+- **THEN** nothing is sent and the intent is recorded, exactly as before
+
+#### Scenario: An empty ledger is not a success
+
+- **WHEN** PANIC is invoked and the bridge holds no seats
+- **THEN** it reports not-ok with zero counts, and sends nothing
+
 ### Requirement: A HELD plate records its intent and receives no wire command
 
 A plate that is seated but **held** — the active look punches no hole in front of it — SHALL
@@ -89,6 +136,12 @@ un-holds the plate re-asserts its recorded intent at that moment.
 - **WHEN** SOLO raises one plate on a row whose sibling is held
 - **THEN** the raised plate's layer receives `MIXER … VOLUME 1`, the held sibling's layer
   receives no command at all, and the held sibling's intent is recorded as `0`
+
+#### Scenario: PANIC over a held plate sends nothing and still records its intent
+
+- **WHEN** PANIC is invoked on a row with one held plate and one unheld plate
+- **THEN** only the unheld plate's layer receives a command, the held plate's intent is `0`, and
+  the report counts the held plate as RECORDED but not as SILENCED
 
 ### Requirement: SOLO is one call that raises one plate and silences its siblings
 

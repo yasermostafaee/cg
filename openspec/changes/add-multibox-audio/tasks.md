@@ -63,9 +63,11 @@ spec alone.
       it is the `B-100` / `P-012` class and is rejected deliberately (`design.md` §4).
 - [x] 2.9 SOLO — `1` to this plate and `0` to every sibling plate seated for the same item, in ONE
       call. No restore, and the UI does not imply one.
-- [x] 2.10 PANIC — `0` to every plate of every ON-AIR item, from `isOnAir` (the console's one
-      predicate, imported). Built from per-plate volume, **NOT** from `MASTERVOLUME`. The
-      `B-122` tension and its containment are recorded in `design.md` §5.
+- [x] 2.10 PANIC — `0` to every plate. Built from per-plate volume, **NOT** from `MASTERVOLUME`.
+      ⚠ **SUPERSEDED IN SCOPE by `PATCH-BX-01` B (task 8), and the first version is recorded
+      rather than overwritten**: it addressed every ON-AIR item, resolved in the BROWSER from
+      `isOnAir`. That was `B-122`'s shape — an emergency control gated on believed status — and
+      it is now a bridge verb scoped from the LEDGER. See `design.md` §5.
 
 ### 2d. Make audio VISIBLE without opening anything
 
@@ -85,7 +87,9 @@ spec alone.
 
 - [x] 2.17 SOLO emits exactly one `MIXER … VOLUME 1` and N−1 `MIXER … VOLUME 0`, and writes the
       same into `plateVolumes`.
-- [x] 2.18 PANIC touches ON-AIR items only.
+- [x] 2.18 ⚠ **REPLACED by 8.5 — "PANIC touches ON-AIR items only" was the DEFECT, not the
+      property.** It is left here rather than deleted because it is what the change originally
+      asserted, and the reversal is the useful record.
 - [x] 2.19 A HELD plate receives NO wire command from any of the four verbs, and its intent is
       still recorded.
 - [x] 2.20 Golden rule 10 — on a row where `#ownsLiveSeats` is false, each of the four sends zero
@@ -94,6 +98,37 @@ spec alone.
 - [x] 2.22 `0` is never confused with absent, in every new read.
 - [x] 2.23 The new tests COMPILE — typechecking tests is policy for `apps/runtime` and
       `caspar-bridge`.
+
+## 8. `PATCH-BX-01` B — PANIC's scope moves from the STACK to the LEDGER
+
+🔴 **The residual `design.md` §5 recorded became the behaviour.** The first cut gated an
+emergency control on the console's believed status; a row holding seats while not reading on
+air was never reached, and a browser whose ledger snapshot had not arrived would have silenced
+nothing and reported success.
+
+- [x] 8.1 `stack.silence-all-live-plates` — a bridge verb taking **NO arguments**, so no caller
+      can narrow an emergency control's reach. `clearAll` is the precedent.
+- [x] 8.2 `CasparRuntime.silenceAllLivePlates()` iterates the LEDGER and composes the ONE
+      writer per plate. Report: `silenced` (reached the wire) and `recorded` (intent written,
+      including held) as distinct numbers, plus the rows it addressed and the plates that
+      failed. `ok` only when something was owed AND all of it landed.
+- [x] 8.3 🔴 The gate in `setLivePlateVolume` becomes **DIRECTIONAL** — a RAISE needs
+      `#ownsLiveSeats`, a SILENCE never does — rather than PANIC carrying an exemption. Rule 10
+      forbids _"no `PLAY`, no un-mute and no fill"_; a mute is none of the three. This also fixes
+      OFF and a fader dragged to zero, which were refused the wire on exactly the rows where a
+      guest could be audible.
+- [x] 8.4 A plate the LEDGER seats is addressable even when the item has left the stack — a
+      stranded live layer is the one thing nothing else in the product can reach, and it was
+      being refused `unknown-plate`.
+- [x] 8.5 Tests, RED-first and **proven red by reverting each change in turn**: a seated
+      off-air row IS silenced (3 tests red without the directional gate); PANIC still silences
+      on-air rows; the wire carries ONLY `MIXER … VOLUME 0`; held plates record intent and send
+      nothing; a stranded seat is reachable (red without 8.4).
+- [x] 8.6 `design.md` §5 rewritten — and it corrects its own earlier claim that `exitRehearse`
+      CAUSES the seated-off-air window. Measured: a rehearsing row's plates are never seated.
+      **Boot adoption (`B-145`) is the origin**; rehearse only passes through it.
+- [ ] 8.7 ⏳ **Linux `gate:e2e` owed for this patch too** — it alters `LiveSourcesPanel` and the
+      Inspector's LOOK INPUTS label. Run URL to be written here.
 
 ## 3. SPEC ONLY — the MONITOR / PFL channel ⏳ gated on 1.11 (W1, W2, W5, W6)
 

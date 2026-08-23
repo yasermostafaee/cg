@@ -326,8 +326,30 @@ describe('🔴 GOLDEN RULE 10 — on a row that owns no live seats, every verb s
     return r;
   }
 
-  for (const [name, map] of VERBS) {
-    it(`${name} sends ZERO commands and still records the intent`, async () => {
+  /*
+    ⚠ **THE RULE IS DIRECTIONAL, and this block used to state it wrongly (`PATCH-BX-01` B).**
+
+    It asserted that ALL FIVE maps send zero commands on a row that owns no live seats. That
+    over-stated rule 10 and was a defect in its own right: rule 10's words are *"no `PLAY`, no
+    un-mute and no fill"*, and a `MIXER … VOLUME 0` is none of the three. Gating the silence
+    meant OFF, a fader dragged to zero and the panic button were all refused the wire on
+    precisely the rows where a guest could still be AUDIBLE — each recording an intent, sending
+    nothing, and answering `ok`.
+
+    So the maps are split by DIRECTION rather than by verb name. What is unchanged, and is the
+    half `B-161` is about, is that a RAISE still sends nothing.
+  */
+  const RAISING: [string, Record<string, number>][] = [
+    ['FADER', FADER],
+    ['ON', ON],
+  ];
+  const SILENCING: [string, Record<string, number>][] = [
+    ['OFF', OFF],
+    ['PANIC', PANIC],
+  ];
+
+  for (const [name, map] of RAISING) {
+    it(`${name} (a RAISE) sends ZERO commands and still records the intent`, async () => {
       const r = await loadedWithSeats();
       const before = (await recvLines()).length;
 
@@ -344,6 +366,42 @@ describe('🔴 GOLDEN RULE 10 — on a row that owns no live seats, every verb s
       expect(r.livePlateVolumes('item-1')).toEqual(map);
     });
   }
+
+  for (const [name, map] of SILENCING) {
+    it(`${name} (a SILENCE) DOES reach the wire — a mute cannot put anything on air`, async () => {
+      const r = await loadedWithSeats();
+      const before = (await recvLines()).length;
+
+      const verdict = await r.setLivePlateVolumes('item-1', map);
+
+      expect(verdict.ok).toBe(true);
+      const lines = await volumeLines(before);
+      expect(lines.length, 'the silence is not swallowed').toBe(Object.keys(map).length);
+      for (const line of lines) expect(line).toMatch(/ VOLUME 0$/);
+      expect(r.livePlateVolumes('item-1')).toEqual(map);
+    });
+  }
+
+  it('🔴 SOLO on such a row sends its ZEROS and withholds its ONE — the split, in one call', async () => {
+    /*
+      The sharpest statement of the directional rule, because SOLO carries both directions in a
+      single map. The three siblings are silenced (a mute reaches a seated layer whatever the
+      row's state); the raised plate is NOT (that is the half that could put a voice on air).
+      Both intents are recorded either way.
+    */
+    const r = await loadedWithSeats();
+    const before = (await recvLines()).length;
+
+    await r.setLivePlateVolumes('item-1', SOLO);
+
+    const lines = await volumeLines(before);
+    expect(lines.filter((l) => l.endsWith(' VOLUME 0'))).toHaveLength(3);
+    expect(
+      lines.filter((l) => l.endsWith(' VOLUME 1')),
+      'the RAISE is withheld',
+    ).toEqual([]);
+    expect(r.livePlateVolumes('item-1')).toEqual(SOLO);
+  });
 
   it('🔴 the LEDGER’s as-sent volume is untouched too — a claim about a command never sent', async () => {
     // Skipping only the send would leave `intendedVolume` claiming a volume the layer never
@@ -378,32 +436,36 @@ describe('🔴 GOLDEN RULE 10 — on a row that owns no live seats, every verb s
     expect(await volumeLines(before)).toContain('MIXER 1-30 VOLUME 1');
   });
 
-  it('…and LEAVING rehearse closes it again, with the plates still seated', async () => {
+  it('…and LEAVING rehearse closes the RAISE again, with the plates still seated', async () => {
     // `exitRehearse` does NOT tear plates down — it drops the row from `#rehearsing` and
-    // restores the TEMPLATE layer's volume. So this is the reachable production state the
-    // gate exists for, reached by the door that actually produces it.
+    // restores the TEMPLATE layer's volume. The row then owns no seats, so its RAISE half is
+    // gated once more; its SILENCE half never was.
     const r = await loadedWithSeats();
     await r.enterRehearse('item-1');
     await r.exitRehearse('item-1');
     expect(r.liveLayers().get('item-1'), 'the plates really are still seated').toHaveLength(4);
     const before = (await recvLines()).length;
 
-    await r.setLivePlateVolumes('item-1', SOLO);
+    await r.setLivePlateVolumes('item-1', ON);
 
     expect(await volumeLines(before)).toEqual([]);
-    expect(r.livePlateVolumes('item-1')).toEqual(SOLO);
+    expect(r.livePlateVolumes('item-1')).toEqual(ON);
   });
 
   it('the single-plate verb is gated by the SAME code — one gate, two doors', async () => {
     // The gate lives inside `setLivePlateVolume`, the one writer both channels share, so a
-    // caller cannot get round it by choosing the other door.
+    // caller cannot get round it by choosing the other door — in EITHER direction.
     const r = await loadedWithSeats();
     const before = (await recvLines()).length;
 
-    expect(await r.setLivePlateVolume('item-1', 'guest-1', 1)).toEqual({ ok: true });
-
+    expect(await r.setLivePlateVolume('item-1', 'guest-1', 1)).toEqual({ ok: true, sent: false });
     expect(await recvLines()).toHaveLength(before);
-    expect(r.livePlateVolumes('item-1')).toEqual({ 'guest-1': 1 });
+
+    // …and the same one writer lets the SILENCE through, on the same row, in the same call
+    // shape. Two doors, one gate, one direction rule.
+    expect(await r.setLivePlateVolume('item-1', 'guest-1', 0)).toEqual({ ok: true, sent: true });
+    expect(await volumeLines(before)).toEqual(['MIXER 1-30 VOLUME 0']);
+    expect(r.livePlateVolumes('item-1')).toEqual({ 'guest-1': 0 });
   });
 });
 

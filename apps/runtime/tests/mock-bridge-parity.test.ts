@@ -141,6 +141,11 @@ const BRIDGE_SURFACE: {
       // lock: the bridge's exists to keep a look switch out of the middle of a SOLO, and the
       // offline mock has neither a wire nor a reconcile to interleave with.
       'setPlateVolumes',
+      // `PATCH-BX-01` B — PANIC. It takes NO arguments on either side, because the scope is the
+      // LEDGER's and not the caller's; the mock scopes it from `liveLayersState()` for exactly
+      // that reason, rather than from `isOnAir` (which would teach the UI a model the bridge
+      // does not have — the B-070 / B-072 class).
+      'silenceAllLivePlates',
       'removeAll',
       'clearAll',
       'stopAll',

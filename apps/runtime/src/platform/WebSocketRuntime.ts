@@ -36,6 +36,7 @@ import {
   StackStopChannel,
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
+  StackSilenceAllLivePlatesChannel,
   StackSetPositionChannel,
   StackSetActiveLookChannel,
   StackSwapLiveSourceChannel,
@@ -875,9 +876,11 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetActiveLookChannel, req),
     setPlateVolume: (req: ChannelRequest<typeof StackSetPlateVolumeChannel>) =>
       this.#invoke(StackSetPlateVolumeChannel, req),
-    // `add-multibox-audio` — the MAP door: FADER, ON/OFF, SOLO and PANIC all arrive here.
+    // `add-multibox-audio` — the MAP door: FADER, ON/OFF and SOLO all arrive here.
     setPlateVolumes: (req: ChannelRequest<typeof StackSetPlateVolumesChannel>) =>
       this.#invoke(StackSetPlateVolumesChannel, req),
+    // PANIC — no arguments: the bridge scopes it from its own LEDGER, not the browser's copy.
+    silenceAllLivePlates: () => this.#invoke(StackSilenceAllLivePlatesChannel, undefined),
     removeAll: () => this.#invoke(StackRemoveAllChannel, undefined),
     clearAll: () => this.#invoke(StackClearAllChannel, undefined),
     // C-012 / R-028 — the graceful bulk beside the hard one.

@@ -5877,14 +5877,34 @@ export class CasparRuntime {
     itemId: string,
     plateId: string,
     volume: number,
-  ): Promise<{ ok: boolean; reason?: string }> {
-    // The PLATE must be one this item's template actually declares. Checked
-    // against the declaration rather than against the ledger, so the intent can be
-    // armed before anything is seated — the ledger is empty until the take.
+  ): Promise<{ ok: boolean; reason?: string; sent?: boolean }> {
+    /*
+      THE PLATE MUST BE ONE THIS BRIDGE CAN ACCOUNT FOR — and there are TWO ways to account
+      for one, not one.
+
+      The DECLARATION is what lets an intent be armed BEFORE anything is seated: the ledger is
+      empty until the take, so a ledger-only check would refuse the whole
+      arm-before-the-take affordance the mute rule exists to preserve.
+
+      🔴 **A SEATED LEDGER RECORD IS THE SECOND WAY, and it is not belt-and-braces.** The
+      ledger is keyed by `itemId` and adopted from disk at boot, so it can legitimately hold
+      records for an item the reconciler no longer carries — a STRANDED live layer, which is
+      `B-145`'s whole subject: *"the layers stay lit and nothing in the product can name them"*.
+      With the declaration check alone, `this.#reconciler.get(itemId)` answers null for such a
+      row, `declared` is undefined, and EVERY audio verb refuses it `unknown-plate` — including
+      the emergency silence. A producer the bridge itself seated would be the one thing the
+      panic button could not reach.
+
+      A record is proof enough: the bridge only writes one when it sent the `PLAY` that seated
+      that plate. And it widens nothing dangerous, because the gate below is what decides
+      whether anything is SENT — a stranded row owns no live seats, so a RAISE on it still
+      records intent and emits nothing.
+    */
     const templateId = this.#reconciler.get(itemId)?.templateId;
     const declared = templateId === undefined ? undefined : this.#templates.get(templateId);
     const plate = declared?.liveSources?.sources.find((x) => x.sourceId === plateId);
-    if (plate === undefined) return { ok: false, reason: 'unknown-plate' };
+    const seated = (this.#liveLayers.get(itemId) ?? []).some((r) => r.sourceId === plateId);
+    if (plate === undefined && !seated) return { ok: false, reason: 'unknown-plate' };
     // `Number.isFinite` first: `NaN >= 0` is false, so a NaN would otherwise fall
     // through the range test and be recorded as an intent nothing can assert.
     if (!Number.isFinite(volume) || volume < 0 || volume > 1)
@@ -5951,15 +5971,41 @@ export class CasparRuntime {
       ⚠ **WHAT IS NOT SKIPPED IS THE INTENT.** `#plateVolumes` is written exactly as before,
       so arming a plate's audio ahead of the take still works. That is the affordance the mute
       rule exists to preserve and this gate must not take it away.
+
+      ── 🔴 THE GATE IS DIRECTIONAL, AND THAT IS RULE 10 READ EXACTLY RATHER THAN RELAXED ──
+
+      **A SILENCE IS NEVER GATED.** Golden rule 10's own words are: *"A row that does not
+      already own live layers must produce **no `PLAY`, no un-mute and no fill**"*. A
+      `MIXER … VOLUME 0` is none of those three. It creates no producer, punches no hole, moves
+      no fill, un-holds nothing, and cannot make one frame or one sample reach air. The only
+      thing it can do is take a sound OFF air.
+
+      🔴 **AND GATING IT WAS A DEFECT IN ITS OWN RIGHT, not a conservative choice.** The window
+      the gate exists for — `exitRehearse` leaves plates SEATED while the row owns no seats —
+      is a window in which a guest can be genuinely AUDIBLE. Refusing to lower the volume there
+      meant OFF, a fader dragged to zero, and the panic button all recorded an intent and left
+      the microphone open, while the console reported `ok`. That is the same class of lie
+      `B-122` names: an operator told the escape hatch worked while the thing is still on air.
+
+      So the gate asks the question it is actually for — *can this command put content on air?*
+      — instead of the proxy *is this row live?*. A raise still needs `#ownsLiveSeats`; a
+      silence never does.
     */
-    if (record !== undefined && record.held !== true && this.#ownsLiveSeats(itemId)) {
+    const silencing = volume <= CREATED_MUTED_VOLUME;
+    let sent = false;
+    if (
+      record !== undefined &&
+      record.held !== true &&
+      (silencing || this.#ownsLiveSeats(itemId))
+    ) {
       if (this.#noServerReachable()) return { ok: false, reason: 'disconnected' };
-      const sent = await this.#send(
+      const ack = await this.#send(
         this.#builder.mixerVolume(record.slot, volume),
         this.#nextSeq(),
         'urgent',
       );
-      if (!sent.ok) return { ok: false, reason: sent.errorCode ?? 'amcp-error' };
+      if (!ack.ok) return { ok: false, reason: ack.errorCode ?? 'amcp-error' };
+      sent = true;
       // The ledger's copy is what was SENT, so it is updated only after the send
       // LANDED. A ledger claiming a volume the layer never received would be
       // re-asserted onto every future swap, spreading one failed command into a
@@ -5976,12 +6022,135 @@ export class CasparRuntime {
 
     this.#plateVolumes.set(itemId, { ...this.#plateVolumes.get(itemId), [plateId]: volume });
     this.#markDirty(itemId);
-    return { ok: true };
+    /*
+      🔴 **`sent` — THE WRITER SAYS WHETHER IT REACHED THE WIRE, so no caller has to work it
+      out.** `silenceAllLivePlates` reports how many plates it actually silenced ON AIR as
+      against how many it merely recorded, and the only honest source for that is the code that
+      made the decision. A caller re-deriving it from `held` and `#ownsLiveSeats` would be a
+      second copy of this gate — golden rule 6 — and would drift the day the gate changes,
+      which is exactly what just happened to it.
+    */
+    return { ok: true, sent };
   }
 
   /** The audio intent for one item's plates, or `undefined` when none is recorded. */
   livePlateVolumes(itemId: string): LivePlateVolumes | undefined {
     return this.#plateVolumes.get(itemId);
+  }
+
+  /**
+   * 🔴 **PANIC — SILENCE EVERY LIVE PLATE THIS BRIDGE HOLDS A SEAT FOR. `clearAll`'s sibling,
+   * and built to the same rule for the same reason.**
+   *
+   * ── THE SCOPE IS THE LEDGER, AND STATUS IS NOT ASKED ────────────────────────
+   *
+   * ⭐ **`B-122`, applied one verb along.** Clear-All used to gate on believed status and
+   * therefore *"gated the emergency control on exactly the values that may be wrong in the
+   * emergency"* — with every item reading `idle` it sent nothing and reported success. This
+   * verb's first cut had the same shape one layer up: PANIC's scope was resolved in the
+   * BROWSER from `isOnAir(item)`, so **a row in the `exitRehearse` window — plates seated,
+   * potentially audible, status not on air — was never silenced by the panic button.**
+   *
+   * The scope is now the LEDGER: every plate the bridge itself seated, whatever any status
+   * claims. That is a structural fact — the bridge wrote each record when it sent the `PLAY`
+   * that seated the plate — and a structural fact cannot be wrong in the way a status can.
+   *
+   * ⚠ **AND IT LIVES HERE, NOT IN THE RENDERER, for a reason beyond tidiness.** The browser's
+   * copy of the ledger is a snapshot that may not have ARRIVED; a panic button scoped from it
+   * would silently address nothing at exactly the moment `useLiveLayers` was still loading, and
+   * report success for it. The authority is where the ledger is.
+   *
+   * ── 🔴 THIS DOES NOT WEAKEN GOLDEN RULE 10, AND HERE IS WHY ─────────────────
+   *
+   * Rule 10 stops a CONFIGURATION verb from putting content **ON AIR** — its own words are
+   * *"no `PLAY`, no un-mute and no fill"*. PANIC does none of those three: it only ever LOWERS
+   * a volume, on layers that already exist, and it **seats nothing, un-holds nothing, fills
+   * nothing and creates nothing**. There is no state of the plant in which sending
+   * `MIXER … VOLUME 0` puts a frame or a sample on air that was not already there.
+   *
+   * That is why it is safe for it to reach a row `#ownsLiveSeats` calls false, and it is not an
+   * exemption bolted on for this verb: the gate inside {@link setLivePlateVolume} is
+   * DIRECTIONAL, so a silence is never gated there either and OFF behaves the same way. Written
+   * out because *"PANIC ignores `#ownsLiveSeats`"* reads like the very defect rule 10 exists to
+   * stop, and the next reader will otherwise flag it — or, worse, "fix" it.
+   *
+   * ── 🔴 HELD PLATES: INTENT RECORDED, NOTHING SENT ───────────────────────────
+   *
+   * A held plate is seated but the active look punches no hole for it, and §12.4's hold is
+   * *"muted and idle"* — so it is **already silent** and there is nothing for a panic to take
+   * off air. Sending to it would be traffic for no effect. What matters is that its recorded
+   * intent goes to `0` like every other, because the reconcile that eventually UN-holds it
+   * asserts that intent — so a plate silenced during a panic stays silent when its look comes
+   * back, instead of returning at whatever it was before. This is the existing held rule
+   * inherited rather than a second one written for PANIC.
+   *
+   * ── ORDER: EVERY INTENT FIRST, THEN THE WIRE ────────────────────────────────
+   *
+   * `setLivePlateVolume` writes `#plateVolumes` on its own, but the LOOP below is what makes
+   * the property hold across plates: because every plate's target is the same `0`, a reconcile
+   * that interleaves mid-panic re-asserts intents that are already zero and converges on
+   * silence by itself. That is why this verb needs no `#withLiveSeatLock` — where a SOLO's
+   * cross-plate statement can be torn in half by a look switch, a PANIC's cannot be, and an
+   * emergency verb must not queue behind the thing it may be repairing (`clearAll` and `take`
+   * are un-gated for that same reason).
+   *
+   * ── THE REPORT ─────────────────────────────────────────────────────────────
+   *
+   * It counts what ACTUALLY went and it NAMES the rows — under a ledger scope those can be rows
+   * the operator would not have predicted, which is the most useful thing this report can say.
+   * `ok` is true only when something was owed AND all of it landed, so no shape of no-op can
+   * come back dressed as a success.
+   *
+   * ⚠ **`silenced` and `recorded` are DIFFERENT NUMBERS and both are wanted.** A HELD plate is
+   * recorded and not sent, because it is already silent; a plate on a row with nothing seated
+   * behind it likewise. Collapsing them into one "attempted" would need a caveat to be read
+   * correctly, and a number that needs a caveat is worse than two that do not. `ok` deliberately
+   * turns on `recorded`, not on `silenced`: a ledger of entirely HELD plates is a complete
+   * success with zero sends.
+   */
+  async silenceAllLivePlates(): Promise<{
+    ok: boolean;
+    /** Plates whose `MIXER … VOLUME 0` LANDED on the wire — what actually left air. */
+    silenced: number;
+    /** Plates whose intent was set to `0`, including the held (already silent) ones. */
+    recorded: number;
+    /** WHICH rows it addressed, and how many plates each owns. */
+    rows: { itemId: string; plates: number }[];
+    failed: { itemId: string; plateId: string; reason: string }[];
+  }> {
+    // A SNAPSHOT of the ledger's keys first: `setLivePlateVolume` calls `registerLiveLayers`,
+    // which mutates the map we would otherwise be iterating.
+    const entries = [...this.#liveLayers.entries()].map(
+      ([itemId, records]) => [itemId, [...records]] as const,
+    );
+    const rows: { itemId: string; plates: number }[] = [];
+    const failed: { itemId: string; plateId: string; reason: string }[] = [];
+    let silenced = 0;
+    let recorded = 0;
+
+    for (const [itemId, records] of entries) {
+      // Deduplicated: a fill+key pair puts the SAME `sourceId` on two records, and silencing
+      // a plate twice is one statement sent twice.
+      const plateIds = [...new Set(records.map((r) => r.sourceId))];
+      if (plateIds.length === 0) continue;
+      rows.push({ itemId, plates: plateIds.length });
+      for (const plateId of plateIds) {
+        // ONE writer. The gate, the held rule, the ledger discipline and the intent write are
+        // all its — this loop supplies the SCOPE and nothing else.
+        const verdict = await this.setLivePlateVolume(itemId, plateId, CREATED_MUTED_VOLUME);
+        if (!verdict.ok) {
+          failed.push({ itemId, plateId, reason: verdict.reason ?? 'unknown' });
+          continue;
+        }
+        recorded += 1;
+        // `sent` comes FROM the writer, never re-derived here — see its own note.
+        if (verdict.sent === true) silenced += 1;
+      }
+    }
+
+    // Nothing owed is not a success — `B-122`'s acceptance, restated for audio. An empty
+    // ledger reports `ok: false` with zeros rather than a completed panic over nothing.
+    return { ok: recorded > 0 && failed.length === 0, silenced, recorded, rows, failed };
   }
 
   /**

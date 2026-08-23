@@ -328,6 +328,47 @@ export const StackSetPlateVolumeChannel = defineChannel(
  * refuses a bad value per plate — that is defence in depth for its internal callers, not a
  * relaxation of this bound.
  */
+/**
+ * 🔴 **PANIC — SILENCE EVERY LIVE PLATE THE BRIDGE HOLDS A SEAT FOR.**
+ *
+ * The audio sibling of {@link StackClearAllChannel}, and it takes NO arguments on purpose:
+ * **the scope is not the caller's to choose.**
+ *
+ * ⭐ **`B-122`, one verb along.** PANIC's first cut resolved its scope in the BROWSER, from the
+ * console's on-air predicate — so a row in the `exitRehearse` window (plates seated and
+ * potentially audible, status not on air) was never reached by the panic button, and a browser
+ * whose ledger snapshot had not yet ARRIVED would have addressed nothing and reported success
+ * for it. That is precisely the shape `B-122` describes: an emergency control gated on the
+ * bookkeeping whose failure is the emergency.
+ *
+ * The bridge answers it from its own LEDGER — every plate it seated, whatever any status says —
+ * which is a structural fact and cannot be wrong the way a status can.
+ *
+ * ⚠ **IT DOES NOT WEAKEN GOLDEN RULE 10.** Rule 10 stops a configuration verb putting content
+ * ON AIR: *"no `PLAY`, no un-mute and no fill"*. This lowers a volume on layers that already
+ * exist — it seats nothing, un-holds nothing, fills nothing, and cannot put a frame or a sample
+ * on air that was not already there.
+ *
+ * The report distinguishes what LANDED on the wire (`silenced`) from what was merely RECORDED
+ * (`recorded` — a HELD plate is already silent, so its intent is written and nothing is sent),
+ * and NAMES the rows it addressed, so no shape of no-op can come back as a success.
+ */
+export const StackSilenceAllLivePlatesChannel = defineChannel(
+  'stack.silence-all-live-plates',
+  z.void(),
+  z.object({
+    /** True only when something was owed AND all of it landed. */
+    ok: z.boolean(),
+    /** Plates whose `MIXER … VOLUME 0` actually reached the wire. */
+    silenced: z.number().int().nonnegative(),
+    /** Plates whose intent was set to `0`, including the HELD ones nothing was sent for. */
+    recorded: z.number().int().nonnegative(),
+    /** Which rows were addressed — under a ledger scope, possibly ones nobody predicted. */
+    rows: z.array(z.object({ itemId: IdSchema, plates: z.number().int().positive() })),
+    failed: z.array(z.object({ itemId: IdSchema, plateId: z.string().min(1), reason: z.string() })),
+  }),
+);
+
 export const StackSetPlateVolumesChannel = defineChannel(
   'stack.set-plate-volumes',
   z.object({

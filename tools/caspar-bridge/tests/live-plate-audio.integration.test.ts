@@ -162,7 +162,7 @@ it('🔴 raising a plate reaches the WIRE and records the intent', async () => {
   const layer = layerOf(r, 'guest-1');
   const before = (await recvLines()).length;
 
-  expect(await r.setLivePlateVolume('item-1', 'guest-1', 1)).toEqual({ ok: true });
+  expect(await r.setLivePlateVolume('item-1', 'guest-1', 1)).toEqual({ ok: true, sent: true });
 
   expect((await recvLines()).slice(before)).toContain(`MIXER 1-${String(layer)} VOLUME 1`);
   expect(volumeOf(r, 'guest-1')).toBe(1);
@@ -192,7 +192,7 @@ it('the intent can be ARMED BEFORE the take — nothing is sent, and the take ca
   await r.load('item-1', 'lower-third', {});
   const before = (await recvLines()).length;
 
-  expect(await r.setLivePlateVolume('item-1', 'guest-1', 0.5)).toEqual({ ok: true });
+  expect(await r.setLivePlateVolume('item-1', 'guest-1', 0.5)).toEqual({ ok: true, sent: false });
 
   // No producer exists yet, so there is nothing to command and nothing is sent.
   expect((await recvLines()).slice(before)).toEqual([]);
@@ -207,7 +207,7 @@ it('🔴 ZERO IS A REAL INTENT — recorded, published, and NOT re-raised by a s
   await onAir(r);
   await r.setLivePlateVolume('item-1', 'guest-1', 1);
   // The operator mutes it again, deliberately.
-  expect(await r.setLivePlateVolume('item-1', 'guest-1', 0)).toEqual({ ok: true });
+  expect(await r.setLivePlateVolume('item-1', 'guest-1', 0)).toEqual({ ok: true, sent: true });
 
   // RECORDED, not deleted: "the operator muted this" is a different state from
   // "nobody has said", and only one of the two was chosen.
