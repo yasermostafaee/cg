@@ -429,6 +429,13 @@ this item is the UI plus a runtime path to apply it.
   already derives the routable template-serve host when CasparCG is remote —
   the serve path is solved; the panel only changes where the config comes
   from.
+  🔴 **That last clause was FALSE for a BACKUP and stayed false for months** —
+  the derivation read `servers.A.host` alone, so a remote backup behind a
+  loopback primary was served an address it could not fetch and showed live
+  sources with no graphic. Corrected 2026-08-23; see [[B-162]]. Left in place
+  rather than rewritten, because "the serve path is solved" is exactly the
+  belief that let the gap survive, and a reader arriving here should meet it
+  together with its correction.
 
 **Missing:** the settings UI itself and a `connections.configure`-style
 channel that applies a new `ConnectionConfig` to a RUNNING bridge

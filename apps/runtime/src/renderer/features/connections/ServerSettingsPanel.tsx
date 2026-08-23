@@ -319,6 +319,36 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
                 setRefusal(result.message ?? 'The bridge refused the new configuration.');
                 return { accepted: false, errorCode: result.reason ?? 'refused' };
               }
+              /*
+                🔴 B-162 — THE APPLY THAT SUCCEEDS AND STILL COSTS A SERVER ITS
+                GRAPHICS.
+
+                The bridge's own verdict (`unreachable`) is read FIRST, ahead of
+                both existing sentences, because it is the only one of the three
+                that reports a fault — and the case it reports used to land on
+                "Applied. All listeners remain loopback-only.", which is TRUE and
+                completely misleading. A loopback template server with a remote
+                CasparCG configured means that server fetches ITSELF, gets
+                nothing, and shows live sources with no graphic over them, while
+                `CG ADD` reports success and health stays green. This message is
+                the only place an operator can learn that, so it is a REFUSAL
+                (attention), not the success notice.
+
+                It is the bridge's verdict, never re-derived here: the panel
+                knows the hosts and could compute it, and a second spelling of
+                "who can reach us" is how the two answers come to disagree
+                (golden rule 6, B-100/P-012).
+              */
+              const unreachable = result.templateServe?.unreachable ?? [];
+              if (unreachable.length > 0) {
+                setRefusal(
+                  `Applied, but the template server is loopback-only and ${unreachable.join(', ')} ` +
+                    `cannot reach it. Those servers will show live sources with NO TEMPLATE — no ` +
+                    `background, no text — and their CG ADD will still report success. Restart the ` +
+                    `bridge with --template-serve-host set to this machine's address as they see it.`,
+                );
+                return { accepted: true };
+              }
               setStatus(
                 result.templateServe?.exposed === true
                   ? `Applied. Template serve is LAN-exposed at ${result.templateServe.serveHost} (remote server); control stays on 127.0.0.1.`

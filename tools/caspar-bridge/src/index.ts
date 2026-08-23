@@ -5,7 +5,7 @@ export {
   parseReservedLayersFlag,
   ReservedLayersFileError,
 } from './reserved-layers-store.js';
-export { CasparRuntime } from './caspar-runtime.js';
+export { CasparRuntime, configuredCasparHosts } from './caspar-runtime.js';
 export { CommandBuilder } from './command-builder.js';
 export type { CommandSlot } from './command-builder.js';
 export type { LiveLayerLedger, LiveLayerRecord, NormalizedRect } from './live-layers.js';
@@ -22,6 +22,8 @@ export {
   TemplateHttpServer,
   deriveServeOptions,
   guessLanHost,
+  hostsUnableToFetchTemplates,
   isLoopbackHost,
+  templateServeUnreachableWarning,
 } from './template-http-server.js';
 export type { TemplateServeOptions, TemplateServeOverride } from './template-http-server.js';

@@ -37,7 +37,13 @@ const CONFIG: ConnectionConfig = {
 
 function stubBridge(
   items: readonly StackItemState[],
-  setConfigResult: { ok: boolean; reason?: 'on-air-block'; message?: string } = { ok: true },
+  setConfigResult: {
+    ok: boolean;
+    reason?: 'on-air-block';
+    message?: string;
+    // B-162 — the bridge's own reachability verdict rides the apply response.
+    templateServe?: { serveHost: string; port: number; exposed: boolean; unreachable?: string[] };
+  } = { ok: true },
 ): { setConfig: Mock } {
   const setConfig = vi.fn(() => Promise.resolve(setConfigResult));
   const stub = {
@@ -140,6 +146,51 @@ describe('ServerSettingsPanel — R-010', () => {
       strategy: 'mirror-sync',
       autoFailoverEnabled: true,
     });
+  });
+
+  /*
+    🔴 B-162 §2a — THE APPLY THAT SUCCEEDS AND STILL COSTS A SERVER ITS GRAPHICS.
+
+    This is the only surface on which an operator can learn about it. `CG ADD`
+    returns 200, the journal records success and health stays green, so there is
+    no error anywhere to notice — and before this the panel actively reassured,
+    printing "Applied. All listeners remain loopback-only." on exactly the
+    configuration that had just cost the backup its template.
+  */
+  it('B-162: an apply that leaves a server unable to fetch templates says so, and does NOT print the reassuring line', async () => {
+    stubBridge([], {
+      ok: true,
+      templateServe: {
+        serveHost: '127.0.0.1',
+        port: 7911,
+        exposed: false,
+        unreachable: ['192.168.21.50'],
+      },
+    });
+    const el = await renderPanel();
+    await act(async () => {
+      applyButton(el).click();
+      await Promise.resolve();
+    });
+    expect(el.textContent).toContain('192.168.21.50');
+    expect(el.textContent).toContain('NO TEMPLATE');
+    expect(el.textContent).toContain('--template-serve-host');
+    // The false reassurance must be GONE, not merely accompanied.
+    expect(el.textContent).not.toContain('All listeners remain loopback-only');
+  });
+
+  it('B-162: an apply with nothing unreachable still reports the plain loopback success', async () => {
+    stubBridge([], {
+      ok: true,
+      templateServe: { serveHost: '127.0.0.1', port: 7911, exposed: false, unreachable: [] },
+    });
+    const el = await renderPanel();
+    await act(async () => {
+      applyButton(el).click();
+      await Promise.resolve();
+    });
+    expect(el.textContent).toContain('All listeners remain loopback-only');
+    expect(el.textContent).not.toContain('NO TEMPLATE');
   });
 
   it('validates ports and disables Apply on garbage', async () => {

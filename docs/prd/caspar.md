@@ -1117,7 +1117,25 @@ it reads the assignment the Runtime already holds — while this item needs all 
 does not say which plate it belongs to, and a plate label that does not say whether the feed arrived,
 are each half an answer.
 
-## [ ] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS
+## [~] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS — **CLI half LANDED 2026-08-23 by [[B-162]]**
+
+⭐ **STATUS UPDATE 2026-08-23 — `--template-serve-host` EXISTS.** [[B-162]] needed the same seam
+(its §1c) and wired it: `bin/caspar-bridge.mjs` now passes `templateServe` to `createBridge`, so
+`--template-serve-host` and `--template-serve-port` set `TemplateServeOverride` from the command
+line, a flag given without a value is a hard boot error (the `--reserved-layers` doctrine), and the
+boot line names the advertised host **and where it came from**. Four of the five Acceptance bullets
+below are therefore met. **What is NOT met, and why this stays `[~]`:**
+
+- **No persisted-file layer.** The stated precedence is _explicit flag > persisted file > derived
+  default_; there is no `~/.cg-runtime/bridge-template-serve.json` and no settings-panel field, so
+  the middle term does not exist. The flag must be re-typed on every start.
+- **The hack is still in the owner's working tree** and `.claude/never-stage` still lists
+  `template-http-server.ts`. It CAN now be dropped in favour of
+  `--template-serve-host 192.168.21.93`, but that is the owner's action on their own machine, not
+  something a commit can perform — so the entry stays until they confirm, because removing the net
+  while the hack is still present is strictly worse than leaving it.
+
+Read the original item below unchanged; it is still the specification of the remaining half.
 
 **What:** the template HTTP server's advertised host must be resolvable from CONFIGURATION, with a
 documented default — so that no machine-specific address appears in the source and the owner no
@@ -1148,7 +1166,7 @@ words and flag that the refactor has no ID** — this item is that ID, and the c
 both ways.
 
 **The seam ALREADY EXISTS in the library, and that is why this is small:**
-`deriveServeOptions(casparHost, override)` already honours `override.serveHost`
+`deriveServeOptions(casparHosts, override)` (a LIST since [[B-162]]) already honours `override.serveHost`
 (`template-http-server.ts`), and `BridgeOptions.templateServe` already carries a
 `TemplateServeOverride`. **What is missing is a CLI flag that sets it** — `bin/caspar-bridge.mjs`
 passes no `templateServe` at all, so the ONLY way to change the advertised host today is to edit the

@@ -47,7 +47,7 @@ import {
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
 import { operatorActorForWire } from './operatorName.js';
-import { isLoopbackHost } from '../shared/loopback.js';
+import { configuredHosts, isLoopbackHost } from '../shared/loopback.js';
 import { seedConfig, seedHealth, seedStack, seedTemplates } from './seed.js';
 
 /** R-028 part B — the mock mirrors the bridge's refusal union exactly. */
@@ -1099,7 +1099,16 @@ export class MockRuntime {
     // (fix-setconfig-serve-restart); the synchronous mock can never emit it.
     reason?: 'on-air-block' | 'apply-in-progress' | 'apply-failed';
     message?: string;
-    templateServe?: { serveHost: string; port: number; exposed: boolean };
+    // B-162 — `unreachable` rides here too: the mock is what the browser talks
+    // to with no bridge, and a mock whose response shape is missing the fault
+    // channel teaches every surface built against it that the fault cannot
+    // happen.
+    templateServe?: {
+      serveHost: string;
+      port: number;
+      exposed: boolean;
+      unreachable?: string[];
+    };
   } {
     const unsettled = this.#stack.filter(
       (i) =>
@@ -1127,7 +1136,15 @@ export class MockRuntime {
       templateServe: {
         serveHost: '127.0.0.1',
         port: 0,
-        exposed: !isLoopbackHost(config.servers.A.host),
+        // B-162 — the SET, not the primary. The mock serves nothing, so this is
+        // only the shape the real bridge reports; deriving it from `servers.A`
+        // alone here is the same wrong axis that cost the real one a backup's
+        // graphics, and a mock that models the bug teaches it.
+        exposed: !configuredHosts(config).every(isLoopbackHost),
+        // The mock's serveHost is a fixed `127.0.0.1`, so every declared REMOTE
+        // server is by construction unable to fetch it. Reported honestly rather
+        // than left empty: the panel's warning is exercised by the mock too.
+        unreachable: configuredHosts(config).filter((h) => !isLoopbackHost(h)),
       },
     };
   }

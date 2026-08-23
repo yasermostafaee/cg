@@ -126,7 +126,9 @@ import { DelimiterStore } from './delimiter-store.js';
 import {
   TemplateHttpServer,
   deriveServeOptions,
+  hostsUnableToFetchTemplates,
   isLoopbackHost,
+  templateServeUnreachableWarning,
   type TemplateServeOptions,
   type TemplateServeOverride,
 } from './template-http-server.js';
@@ -468,6 +470,26 @@ function isOnAirStatus(status: StackItemState['status'], pending: boolean): bool
  */
 export function deriveOscBindHost(serverHost: string): string {
   return isLoopbackHost(serverHost) ? '127.0.0.1' : '0.0.0.0';
+}
+
+/**
+ * `B-162` — every CasparCG host this config declares, primary AND backup, in
+ * declaration order.
+ *
+ * 🔴 **The template serve decision is about the SET, never about the primary.**
+ * OSC gets this right by construction because each session binds its own ingest
+ * (`#buildSessions` → `deriveOscBindHost(ep.host)`, one derivation PER server);
+ * the template server is a single shared socket handing out a single shared URL,
+ * so it has no per-server seam to make the mistake impossible — this helper is
+ * that seam. Both `deriveServeOptions` and `hostsUnableToFetchTemplates` are fed
+ * from here and from nowhere else, so a future server C cannot be forgotten by
+ * one caller and remembered by the other.
+ */
+export function configuredCasparHosts(config: ConnectionConfig): readonly string[] {
+  return [
+    config.servers.A.host,
+    ...(config.servers.B !== undefined ? [config.servers.B.host] : []),
+  ];
 }
 
 /** CasparCG video channel the bridge drives (Phase 2: single channel). */
@@ -1157,9 +1179,13 @@ export class CasparRuntime {
       options.templateServer ?? new TemplateHttpServer((id) => this.#templates.html(id));
     this.#config = config;
     this.#serveOverride = serveOverride;
-    // B-038 Phase 3 — serve loopback when CasparCG is local; an opt-in routable
-    // host (configured or guessed) when remote. The control WS stays loopback.
-    this.#serveOptions = deriveServeOptions(config.servers.A.host, serveOverride);
+    // B-038 Phase 3 — serve loopback when EVERY CasparCG is local; an opt-in
+    // routable host (configured or guessed) when ANY of them is remote. The
+    // control WS stays loopback.
+    //
+    // B-162 — `configuredCasparHosts`, never `servers.A.host`: one URL goes to
+    // every server, so the decision belongs to the whole declared set.
+    this.#serveOptions = deriveServeOptions(configuredCasparHosts(config), serveOverride);
     // B-046 — only DECLARED servers get a session: no phantom backup, no
     // reconnect churn, no divergence noise under the single-server default.
     this.#sessions = this.#buildSessions(config);
@@ -7328,7 +7354,7 @@ export class CasparRuntime {
       this.ownedOccupancyChanged.emit([]);
     }
 
-    // 5. Template serve — re-derive from the new primary's locality; the only
+    // 5. Template serve — re-derive from the new server SET's locality; the only
     //    realistically fallible step (bind conflict). Retry ONCE on safe
     //    loopback-ephemeral options; if that also fails, land on the new
     //    config with serving down (loads fail loudly via the serve guards).
@@ -7336,7 +7362,13 @@ export class CasparRuntime {
     //    (#servingDesired, set once by startServing()) — never on the
     //    transient `listening`, which reads false during any in-flight
     //    teardown and previously let a concurrent apply skip this step.
-    this.#serveOptions = deriveServeOptions(next.servers.A.host, this.#serveOverride);
+    //
+    //    B-162 — this path re-derives with the SAME rule as construction, from
+    //    the same `configuredCasparHosts` helper. It is the door nobody was
+    //    watching: a bridge booted all-loopback and then given a remote backup
+    //    through the settings dialog reaches exactly the broken state by apply
+    //    alone, with no restart to make anyone suspicious.
+    this.#serveOptions = deriveServeOptions(configuredCasparHosts(next), this.#serveOverride);
     let serveError: string | null = null;
     if (this.#servingDesired) {
       try {
@@ -7385,10 +7417,26 @@ export class CasparRuntime {
           `Control WebSocket remains loopback-bound.\n`,
       );
     }
+    // B-162 — the CORRECTNESS complement of the warning above. That one asks
+    // "did you mean to expose this?"; this one says a configured server will get
+    // NO GRAPHICS, which nothing else reports: the `CG ADD` succeeds, the
+    // journal records success and health stays green.
+    const unreachable =
+      serve === null ? [] : hostsUnableToFetchTemplates(configuredCasparHosts(next), serve);
+    if (unreachable.length > 0 && serve !== null) {
+      process.stderr.write(templateServeUnreachableWarning(unreachable, serve));
+    }
     return {
       ok: true,
       ...(serve !== null
-        ? { templateServe: { serveHost: serve.serveHost, port: serve.port, exposed } }
+        ? {
+            templateServe: {
+              serveHost: serve.serveHost,
+              port: serve.port,
+              exposed,
+              unreachable: [...unreachable],
+            },
+          }
         : {}),
     };
   }

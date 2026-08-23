@@ -1192,3 +1192,26 @@ and leaves the other half SPEC-ONLY behind a plant measurement it cannot take. A
 the monitor channel, the master volume and the VU meters exist; a `[ ]` would hide a surface that
 is on `dev` and clickable. `[~]` is the status that is true of both halves at once, and the change
 dir's `tasks.md` §1.11 is where the undone half is enumerated.
+
+## 2026-08-23 — the backup-gets-no-template pair gets its numbers (`B-162`, `B-163`)
+
+| Prefix | Claimed | Item                                                                                      | File                               |
+| ------ | ------- | ----------------------------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-162` | template hosting derived from the PRIMARY alone, so a remote BACKUP got no template       | [bugs-runtime.md](bugs-runtime.md) |
+| `B-`   | `B-163` | nothing positively confirms a server actually FETCHED the template — prevention for above | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the heading sweep immediately before the headings were written, with BOTH tools.**
+The duplicate audit printed **exactly `B-056` and `B-080`** over 163 headings. Highest `B-` heading
+was `B-161` by the registry's documented derivation AND by the `git grep` cross-check.
+`git grep -n "B-162"` returned exactly ONE hit — this file's own "Next free" line, a
+forward-reference POINTER, not a heading, which is the false positive this registry has now recorded
+from nine directions — and `git grep "B-163"` returned **none at all**. `B-` stays contiguous
+`B-001` … `B-163`, **no gaps. Next free: `B-164`.**
+
+**Two numbers rather than one, on the [[B-159]]/[[B-160]] precedent and for the same reason:**
+`B-162` is the defect (host the template so every configured server can fetch it, and SAY SO when
+one cannot) and `B-163` is its prevention (positively confirm a server actually did fetch). They are
+separable — `B-163` shipping would not make `B-162` unnecessary, and a warning about a
+configuration is not a measurement of a fetch. `B-162` is `[x]` on arrival (filed and fixed in the
+same session, RED-then-GREEN); `B-163` is `[ ]` and deliberately unimplemented, because implying the
+warning is proof is the failure it exists to prevent.

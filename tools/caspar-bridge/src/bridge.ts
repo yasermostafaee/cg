@@ -97,7 +97,7 @@ import {
 } from '@cg/shared-ipc';
 import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
 import { runAsActor } from './actor-context.js';
-import { CasparRuntime } from './caspar-runtime.js';
+import { CasparRuntime, configuredCasparHosts } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import {
   FixedLayersConfigError,
@@ -120,7 +120,11 @@ import {
   validateSourceAssignments,
   type SourceAssignmentsSource,
 } from './source-assignments-store.js';
-import type { TemplateServeOverride } from './template-http-server.js';
+import {
+  hostsUnableToFetchTemplates,
+  templateServeUnreachableWarning,
+  type TemplateServeOverride,
+} from './template-http-server.js';
 
 export interface BridgeOptions {
   /** Bind host. Defaults to loopback (`127.0.0.1`) — enforced at the socket bind. */
@@ -132,8 +136,15 @@ export interface BridgeOptions {
   /**
    * B-038 Phase 3 — overrides for the template HTTP server (`/template/<id>`).
    * Defaults derive from where CasparCG runs: loopback bind + serve-host when
-   * CasparCG is local; an opt-in routable bind + guessed/configured serve-host
-   * when remote. The control WebSocket is unaffected and stays loopback.
+   * EVERY declared server is local; an opt-in routable bind + guessed/configured
+   * serve-host when ANY of them is remote (B-162 — the decision is about the
+   * whole configured set, because one URL is handed to all of them). The control
+   * WebSocket is unaffected and stays loopback.
+   *
+   * `serveHost` here is what `--template-serve-host` sets: an EXPLICIT answer
+   * that replaces the guess rather than refining it. It is the operator's, not
+   * the derivation's — `guessLanHost()` takes the first non-internal IPv4, which
+   * on a machine with virtual adapters is routinely the wrong one (C-024).
    */
   templateServe?: TemplateServeOverride;
   /**
@@ -255,7 +266,18 @@ export interface BridgeHandle {
    * B-038 Phase 3 — the template HTTP serve address: the base URL CasparCG fetches
    * `/template/<id>` from, plus whether the bind is LAN-exposed (non-loopback).
    */
-  readonly templateServe: { url: string; serveHost: string; port: number; exposed: boolean };
+  readonly templateServe: {
+    url: string;
+    serveHost: string;
+    port: number;
+    exposed: boolean;
+    /**
+     * `B-162` — declared CasparCG hosts that cannot fetch this address. Empty is
+     * the healthy case; non-empty means those servers get NO TEMPLATE and
+     * nothing else anywhere reports it.
+     */
+    unreachable: readonly string[];
+  };
   /** The real `@cg/caspar-client`-backed runtime (Reconciler is the truth). */
   readonly runtime: CasparRuntime;
   /**
@@ -612,11 +634,16 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const servePort = serve?.port ?? 0;
   const exposed =
     serve !== null && serve.bindHost !== '127.0.0.1' && serve.bindHost !== 'localhost';
+  // B-162 — the CORRECTNESS verdict, from the SAME predicate the apply path
+  // uses, over EVERY declared server rather than the primary alone.
+  const unreachable =
+    serve === null ? [] : hostsUnableToFetchTemplates(configuredCasparHosts(connection), serve);
   const templateServe = {
     url: `http://${serveHost}:${String(servePort)}`,
     serveHost,
     port: servePort,
     exposed,
+    unreachable,
   };
   // Loud warning ONLY when the template server is LAN-exposed (remote CasparCG):
   // a wrong serve-host guess must be obvious. Loopback (the common case) is quiet.
@@ -625,6 +652,12 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       `[caspar-bridge] ⚠ template HTTP server LAN-EXPOSED on ${serve?.bindHost ?? '0.0.0.0'}:${String(servePort)} ` +
         `— CG ADD URL host is ${serveHost}. Ensure this is the bridge's address as CasparCG sees it.\n`,
     );
+  }
+  // B-162 — its complement, and the one that costs graphics rather than
+  // privacy. Quiet when every declared server can reach us; loud, naming the
+  // servers and the flag that fixes it, when one cannot.
+  if (unreachable.length > 0 && serve !== null) {
+    process.stderr.write(templateServeUnreachableWarning(unreachable, serve));
   }
 
   return {

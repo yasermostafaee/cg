@@ -16,6 +16,8 @@
 //   caspar-bridge --source-assignments-path C:\cg\plates.json   # D-137/C-015: which live each plate uses
 //   caspar-bridge --live-layers-path C:\cg\live.json         # B-145: where the live-layer ledger persists
 //   caspar-bridge --no-live-layers                    # B-145: deliberately DO NOT persist it
+//   caspar-bridge --template-serve-host 192.168.21.93 # B-162/C-024: the address CasparCG fetches templates from
+//   caspar-bridge --template-serve-port 7911          # B-162: pin the template HTTP port (default: ephemeral)
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -163,6 +165,44 @@ const auditLogPath =
     ? args['audit-log-path']
     : path.join(os.homedir(), '.cg-runtime', 'bridge-audit.ndjson');
 
+// 🔴 B-162 / C-024 — THE ADVERTISED TEMPLATE HOST, from CONFIGURATION.
+//
+// `deriveServeOptions` guesses: loopback when every declared server is local, and
+// otherwise `guessLanHost()` — the FIRST non-internal IPv4 this machine reports.
+// On a box with virtual adapters (Hyper-V, WSL, VPN, Docker) that is routinely not
+// the interface the plant can reach, and the failure it produces is SILENT: the
+// served URL is unfetchable, `CG ADD` still returns 200, and the operator sees live
+// sources with no graphic over them. A better guess is still a guess — the operator
+// is the one who knows the answer, so this flag lets them SAY it.
+//
+// Precedence matches every other bridge store: explicit flag > derived default.
+// (There is no persisted-file layer for this one yet; see C-024.) A flag given
+// WITHOUT a value is a hard boot error rather than a silently ignored one, for the
+// same reason `--reserved-layers` is: the operator believes they configured the
+// address, and believing it while the derivation quietly guessed is exactly the
+// state that costs a server its graphics.
+for (const flag of ['template-serve-host', 'template-serve-port']) {
+  if (args[flag] === true) {
+    console.error(
+      `[caspar-bridge] --${flag} needs a value. Refusing to boot rather than silently ` +
+        'falling back to a guessed address.',
+    );
+    process.exit(1);
+  }
+}
+const templateServePort =
+  typeof args['template-serve-port'] === 'string' ? Number(args['template-serve-port']) : undefined;
+if (templateServePort !== undefined && !Number.isInteger(templateServePort)) {
+  console.error('[caspar-bridge] --template-serve-port must be an integer (0 = ephemeral).');
+  process.exit(1);
+}
+const templateServe = {
+  ...(typeof args['template-serve-host'] === 'string'
+    ? { serveHost: args['template-serve-host'] }
+    : {}),
+  ...(templateServePort !== undefined ? { port: templateServePort } : {}),
+};
+
 // Build the CasparCG connection from flags, falling back to defaults.
 // B-046 — server B exists ONLY when a --backup-* flag declares it; the
 // default is single-server (a phantom backup diverges every send, replays
@@ -217,6 +257,7 @@ const handle = await createBridge({
   sourceAssignmentsPath,
   ...(liveLayersPath !== null ? { liveLayersPath } : {}),
   auditLogPath,
+  templateServe,
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
@@ -228,8 +269,18 @@ console.error(
 console.error(`[caspar-bridge] live layer ledger: ${describeLiveLayers(handle.liveLayers)}`);
 console.error(
   `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
-    (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)'),
+    (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)') +
+    ` - advertised host from ${describeServeHostSource()}`,
 );
+// B-162 — the correctness verdict, on the boot line an operator actually reads.
+// `createBridge` already wrote the full warning to stderr; this is the one-line
+// restatement beside the address it is about, so the two are never read apart.
+if (handle.templateServe.unreachable.length > 0) {
+  console.error(
+    `[caspar-bridge] !! ${handle.templateServe.unreachable.join(', ')} CANNOT fetch that address ` +
+      '- those servers will show live sources with NO TEMPLATE. Set --template-serve-host.',
+  );
+}
 
 const shutdown = async () => {
   console.error('[caspar-bridge] stopping');
@@ -239,6 +290,24 @@ const shutdown = async () => {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+/**
+ * WHERE THE ADVERTISED TEMPLATE HOST CAME FROM (B-162 / C-024).
+ *
+ * The `candidate layers:` and `live sources:` lines are the precedent and this
+ * follows it for the same reason: a value alone cannot answer "why this one, and
+ * what do I change?". It is sharper here than anywhere else, because the derived
+ * answer is a GUESS at which of this machine's interfaces the plant can reach,
+ * and a wrong guess produces no error on any surface.
+ *
+ * ASCII only, deliberately — the Windows console renders an en-dash as mojibake,
+ * and a line whose whole job is to be READ must not arrive with garbage in it.
+ */
+function describeServeHostSource() {
+  if (typeof args['template-serve-host'] === 'string') return '--template-serve-host';
+  return 'the built-in derivation (loopback if every declared server is local, else this ' +
+    "machine's first non-internal IPv4) - override with --template-serve-host";
+}
 
 /**
  * The bank in force, in one line, WITH WHERE IT CAME FROM.

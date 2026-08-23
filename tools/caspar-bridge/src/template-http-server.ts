@@ -49,23 +49,102 @@ export function guessLanHost(): string {
 /**
  * Derive serve options from where CasparCG runs (design §6), honoring overrides:
  *
- * - CasparCG **local** (loopback host) → bind + serve on `127.0.0.1` (no LAN
- *   exposure — the common operator case).
- * - CasparCG **remote** → bind a routable interface (`0.0.0.0`, opt-in) and serve
- *   on an explicit `serveHost`, else a guessed LAN IPv4.
+ * - **every** configured CasparCG is **local** (loopback host) → bind + serve on
+ *   `127.0.0.1` (no LAN exposure — the common operator case).
+ * - **any** configured CasparCG is **remote** → bind a routable interface
+ *   (`0.0.0.0`, opt-in) and serve on an explicit `serveHost`, else a guessed
+ *   LAN IPv4.
  *
  * Port defaults to `0` (ephemeral); the `CG ADD` URL carries the actual bound port.
+ *
+ * 🔴 **IT TAKES EVERY CONFIGURED HOST, AND THE URL MUST SATISFY THE STRICTEST
+ * READER — the REMOTE one.** `urlFor()` builds ONE string and mirror-sync hands
+ * that same string to EVERY server, so this is not a decision about the primary;
+ * it is a decision about the whole configured set. Deriving it from the primary
+ * alone is `B-162`: a loopback primary with a remote backup bound `127.0.0.1`
+ * and advertised `127.0.0.1`, so the backup fetched ITSELF and its template
+ * never rendered — while its live plates, which never touch this server, came up
+ * fine. `CG ADD` still returned 200, because the page's fetch failing afterwards
+ * is not an AMCP outcome.
+ *
+ * ⚠ The argument is a LIST for exactly that reason. If you find yourself passing
+ * one host here, you are re-deriving the bug: ask the configuration for all of
+ * its servers, backup included.
+ *
+ * An EMPTY list is all-loopback by `every`'s vacuous truth, and correctly so —
+ * no configured server can fail to reach anything.
  */
 export function deriveServeOptions(
-  casparHost: string,
+  casparHosts: readonly string[],
   override: TemplateServeOverride = {},
 ): TemplateServeOptions {
-  const local = isLoopbackHost(casparHost);
+  const allLocal = casparHosts.every(isLoopbackHost);
   return {
-    bindHost: override.bindHost ?? (local ? '127.0.0.1' : '0.0.0.0'),
+    bindHost: override.bindHost ?? (allLocal ? '127.0.0.1' : '0.0.0.0'),
     port: override.port ?? 0,
-    serveHost: override.serveHost ?? (local ? '127.0.0.1' : guessLanHost()),
+    serveHost: override.serveHost ?? (allLocal ? '127.0.0.1' : guessLanHost()),
   };
+}
+
+/**
+ * `B-162` — the configured CasparCG hosts that **cannot fetch the served URL**,
+ * given the serve options actually in force. Empty means every configured server
+ * can reach it.
+ *
+ * 🔴 **THIS IS THE CORRECTNESS DIRECTION, and it is the half with no other
+ * surface.** The existing warning is the SECURITY direction — "the template
+ * server is LAN-EXPOSED, make sure that is what you meant". Its complement is
+ * silent: a loopback bind or a loopback advertised host while a REMOTE server is
+ * configured costs that server its graphics, and nothing anywhere errors.
+ * `CG ADD` returns 200 (CasparCG accepted the command; the page's later fetch is
+ * not an AMCP outcome), the journal records success, health stays green, and the
+ * operator sees boxes with no template over them.
+ *
+ * Two ways to land here, both reachable in production:
+ * 1. `guessLanHost()` found no non-internal IPv4 and fell back to `127.0.0.1`;
+ * 2. `setConfig`'s bind-conflict retry deliberately falls back to safe
+ *    loopback-ephemeral options.
+ *
+ * The predicate is deliberately ONE function used by every surface (boot line,
+ * apply response, operator dialog) rather than three re-derivations — a second
+ * local copy of "who can reach us" is how the name comes to lie (`B-100`/`P-012`).
+ */
+export function hostsUnableToFetchTemplates(
+  casparHosts: readonly string[],
+  options: TemplateServeOptions,
+): readonly string[] {
+  const remote = casparHosts.filter((h) => !isLoopbackHost(h));
+  if (remote.length === 0) return [];
+  // Either half alone is fatal for a remote reader: a loopback BIND means the
+  // socket is unreachable from the LAN at all, and a loopback SERVE HOST means
+  // the remote fetches ITSELF. `0.0.0.0` and a specific LAN address are both
+  // routable, so `isLoopbackHost` is the right test for the bind too.
+  const loopbackOnly = isLoopbackHost(options.bindHost) || isLoopbackHost(options.serveHost);
+  return loopbackOnly ? remote : [];
+}
+
+/**
+ * `B-162` — the operator-facing sentence for {@link hostsUnableToFetchTemplates},
+ * written ONCE and emitted by both surfaces that report it (boot and apply).
+ *
+ * It names the servers, the two halves of the address they cannot reach, and —
+ * the part that matters at 03:00 — what the failure LOOKS like, because the
+ * failure looks like nothing: live plates render, `CG ADD` succeeds, and only
+ * the graphic is missing. It also names the flag that fixes it, since the
+ * derivation is a guess and the operator is the one who knows the answer.
+ */
+export function templateServeUnreachableWarning(
+  unreachable: readonly string[],
+  options: TemplateServeOptions,
+): string {
+  return (
+    `[caspar-bridge] ⚠ template HTTP server is LOOPBACK-ONLY ` +
+    `(bind ${options.bindHost}, CG ADD URL host ${options.serveHost}:${String(options.port)}) ` +
+    `but these CasparCG servers are REMOTE and cannot fetch it: ${unreachable.join(', ')}. ` +
+    `Those servers will show live sources but NO TEMPLATE — no background, no text — ` +
+    `and CG ADD will still report success. ` +
+    `Set --template-serve-host <this machine's address as those servers see it>.\n`
+  );
 }
 
 /**

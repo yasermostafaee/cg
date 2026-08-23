@@ -114,6 +114,20 @@ const TemplateServeInfoSchema = z.object({
   serveHost: z.string().min(1),
   port: z.number().int().nonnegative(),
   exposed: z.boolean(),
+  /**
+   * `B-162` — the configured CasparCG hosts that CANNOT fetch this address, and
+   * will therefore show live sources with NO TEMPLATE over them.
+   *
+   * 🔴 The COMPLEMENT of `exposed`, and the two must not be confused. `exposed`
+   * is the SECURITY question ("did you mean to open this to the LAN?"); this is
+   * the CORRECTNESS one, and it has no other surface anywhere: `CG ADD` returns
+   * 200 whether or not the page's later fetch succeeds, so a server listed here
+   * is failing silently — green health, a journaled success, and a blank layer.
+   *
+   * Optional so a runtime that does not compute it (the browser mock) stays
+   * valid; ABSENT and EMPTY both mean "nothing to report".
+   */
+  unreachable: z.array(z.string()).optional(),
 });
 
 export type TemplateServeInfo = z.infer<typeof TemplateServeInfoSchema>;

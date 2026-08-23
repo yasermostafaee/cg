@@ -5319,3 +5319,158 @@ merely discarded.
 - **Cross-refs:** [[B-155]] (case 3 — the union pre-seat this gate must not narrow), [[B-154]] (the
   related-but-different held-plate shape), `CLAUDE.md` golden rule 10 (the invariant),
   `openspec/changes/multibox-layout-switch/tasks.md` 7.14d.
+
+## [x] B-162 — 🔴 the BACKUP server got no template, because template hosting was derived from the PRIMARY alone ⟨priority: high — a backup showing live sources with no graphic over them, reported as success by every surface⟩ — FIXED 2026-08-23
+
+**What:** `deriveServeOptions` decided BOTH the template HTTP server's bind interface and the host
+it advertises in the `CG ADD` URL from **one** CasparCG host, and both call sites passed
+`servers.A.host`. `servers.B.host` was read **nowhere** in that decision. One URL is handed to every
+server, so the backup had no dimension in a decision that concerns it.
+
+**The owner's reproduction (2026-08-23), two CasparCG installs — his own machine and a server at
+`192.168.21.50`:**
+
+| primary (A)  | backup (B)   | result                                                                                               |
+| ------------ | ------------ | ---------------------------------------------------------------------------------------------------- |
+| server `.50` | own machine  | both fine                                                                                            |
+| own machine  | server `.50` | own machine fine; **on the server the BOXES appear, the TEMPLATE does not** — no background, no text |
+
+**Why the table reads that way — TWO STACKED FAILURES, either one fatal:**
+
+1. **The socket was unreachable.** A loopback primary made `bindHost` `127.0.0.1`, so the template
+   HTTP server was not on the LAN at all.
+2. **The URL pointed at the wrong machine.** `serveHost` was `127.0.0.1` too, so the remote backup
+   fetched **ITSELF** — its own CasparCG box, where nothing serves `/template/<id>`.
+
+The reverse row worked for the same reason inverted: a remote PRIMARY sent the derivation down the
+routable branch, and a LAN address is reachable from the bridge's own machine as well as from the
+plant — so the loopback backup was served correctly by accident.
+
+⚠ **Why the BOXES survived and only the TEMPLATE died.** Live plates never touch this server:
+`producerArgument` (`command-builder.ts`) emits `route://`, `DECKLINK DEVICE`, `NDI NAME`, a media
+path or a stream URL — every one of them resolved by CasparCG from its OWN resources. The template
+is the only asset fetched over HTTP from the bridge, so it is the only thing an unreachable serve
+address can cost. The symptom is therefore maximally confusing: the row looks half-alive.
+
+🔴 **AND IT PRODUCED NO ERROR ANYWHERE — this is the half that matters.** `CG ADD` returns **200**:
+CasparCG accepted the command, and the PAGE's later fetch failing is not an AMCP outcome. So a
+perfectly-journaled backup reports success, health stays green, the audit log records a completed
+load, and the only evidence is a human looking at that server's output. [[B-159]]/[[B-160]] are the
+same family — the backup silently differing from the main — but **neither covers this**: they are
+about a media file missing on one server, discovered through the AMCP result. This arrives through a
+door **AMCP cannot see**, which is why nothing in that pair would have caught it.
+
+### The fix
+
+- **`deriveServeOptions(casparHosts: readonly string[], override?)`** — the argument is a LIST, and
+  the signature change is deliberate: it makes the old mistake unspellable. **If ANY configured
+  server is non-loopback the bind is routable and the advertised host is one that server can
+  reach**; only an all-loopback configuration stays on `127.0.0.1`. The rule is written at the
+  function: **one string goes to every server, so it must satisfy the STRICTEST reader — the remote
+  one.**
+- **`configuredCasparHosts(config)`** (`caspar-runtime.ts`) is the one place the set is assembled,
+  and BOTH call sites feed from it — the constructor (`:1162`) and the `setConfig` apply
+  (`:7339`). The apply path was the door nobody was watching: a bridge booted all-loopback and then
+  given a remote backup through the settings dialog reaches the broken state with no restart.
+  ⚠ OSC never had this defect because each session binds its own ingest (`deriveOscBindHost(ep.host)`,
+  one derivation PER server). The template server is a single shared socket handing out a single
+  shared URL, so it had no per-server seam — `configuredCasparHosts` is that seam.
+- **An explicitly configured serve host is now the ANSWER, not a better guess** —
+  `--template-serve-host` (and `--template-serve-port`) wire the long-existing
+  `TemplateServeOverride` to the CLI. Before this the ONLY way to change the advertised host was to
+  edit the source, which is why [[C-024]]'s uncommitted hack existed. The boot line now names the
+  host AND where it came from, per the provenance rule the fixed bank and source catalog follow.
+- **The CORRECTNESS warning** — `hostsUnableToFetchTemplates(hosts, options)`, ONE predicate used by
+  every surface. The pre-existing warning was the SECURITY direction ("this is LAN-EXPOSED, did you
+  mean that?"); its complement was silent. Now a loopback bind **or** a loopback advertised host
+  while a remote server is configured names that server at boot (stderr + the boot line) and on
+  every apply (the `connections.set-config` response carries `templateServe.unreachable`).
+- **The operator surface** — the settings dialog previously printed _"Applied. All listeners remain
+  loopback-only."_ on exactly the configuration that had just cost the backup its template. It now
+  reads the bridge's verdict FIRST and, when non-empty, replaces that reassurance with a refusal-role
+  message naming the servers, what they will show, and the flag that fixes it. **The verdict is the
+  bridge's, never re-derived in the panel** (golden rule 6).
+
+### Tests — RED first, chain rebuilt before each reading
+
+- `tests/template-http-server.test.ts` — loopback A + remote B ⇒ routable bind, advertised host
+  equal to the remote-primary answer; remote A + loopback B unchanged; all-loopback still fully
+  loopback; the empty set; and five cases pinning `hostsUnableToFetchTemplates`, including each half
+  (loopback bind with routable host, routable bind with loopback host) on its own.
+- `tests/reconfigure.integration.test.ts` — the apply path re-derives over the whole set, the
+  working combination does not regress, an all-loopback PAIR stays loopback, and the unreachable
+  verdict fires at boot AND on apply while staying silent for all-loopback.
+- `apps/runtime/tests/serverSettingsPanel.dom.test.ts` — the false reassurance is GONE, not merely
+  accompanied.
+
+⚠ **The assertions are deliberately environment-independent.** `guessLanHost()` enumerates real
+interfaces, so its VALUE differs between the owner's machine, a CI container and a network-less
+sandbox; asserting "not loopback" would be asserting a property of the test host. What is invariant
+is that **which** server is remote cannot matter, and that the bind is routable. The advertised-host
+half is pinned with an explicit override instead.
+
+**RED measured:** with the pre-fix decision restored (primary only, same signature) the unit case
+failed `expected '127.0.0.1' to be '0.0.0.0'` and the apply case failed `expected false to be true`;
+23 other tests passed. **GREEN after the revert: 25/25.**
+
+**Notes:**
+
+- **What the owner can do to see it fixed:** configure his own machine as primary and `192.168.21.50`
+  as backup, press Apply, and take a row — the template must now appear on the server. If it does
+  not, the dialog will say which server cannot reach the bridge and he sets
+  `--template-serve-host <the address that server can reach>` rather than editing source.
+- 🔴 **The warning is about the CONFIGURATION and is NOT evidence that any page loaded.** Positive
+  verification is [[B-163]], filed rather than implied.
+- **`deriveServeOptions`' signature changed** — it is exported from `@cg/caspar-bridge`'s index.
+  Every in-repo caller was updated; an out-of-repo embedder passing a bare string would now be a
+  type error, which is the intended loud failure.
+- **Cross-refs:** [[B-159]]/[[B-160]] (same family — a backup silently wrong — but reached through
+  AMCP, which this is not), [[C-024]] (the advertise-host-from-configuration item this discharges
+  the CLI half of), [[B-038]] (the template HTTP server), [[B-163]] (positive verification).
+
+## [ ] B-163 — nothing positively confirms a CasparCG server actually FETCHED the template ⟨priority: medium — prevention for [[B-162]]; a configuration warning is not a measurement⟩ — OPEN
+
+**What:** the bridge should be able to say _"server B fetched `/template/<id>` at 12:04:07"_ rather
+than only _"server B is configured remote and my serve address is loopback, which looks wrong"_.
+
+**Why:** [[B-162]] added a warning about the CONFIGURATION. That warning fires on the shape it can
+see and is silent on every other way the fetch can fail — a firewall on the CasparCG box, a subnet
+with no route back, a VPN adapter chosen by `guessLanHost()`, an operator's `--template-serve-host`
+typo that happens to be a routable address belonging to something else. In all of those the bridge
+advertises a perfectly plausible URL and the server still gets nothing, with `CG ADD` returning 200.
+**A configuration check cannot become a measurement by being made stricter.**
+
+**What was considered, and why it is not being done inside [[B-162]]:**
+
+- ❌ **The bridge fetching the URL itself** proves only that the BRIDGE can reach it — the axis that
+  was never in doubt. Reading one channel's success as another's is the [[B-101]] mistake.
+- ⚠ **Attributing the incoming `GET` by source address** is genuinely implementable and is the
+  strongest candidate — the bridge's own HTTP server already SEES each fetch, so no page change is
+  needed for the positive half. Its problems are all in the negative half and in the matching:
+  CEF **caches**, so a second `CG ADD` of the same template may legitimately never re-fetch; the
+  source address is the server's address as the bridge sees it, which NAT, multiple interfaces or a
+  hostname-vs-IP config makes a heuristic match rather than an identity; and "no GET within N ms" is
+  exactly the silence-as-evidence reading that cost this project [[B-101]].
+- ⚠ **A beacon in the served page** (the page `POST`s back on load) is stronger still — it reports
+  that the page RAN, not merely that bytes were fetched — but it changes what is served, so it needs
+  a decision about templates that must stay byte-identical to what the Designer exported.
+
+**Acceptance (sketch — refine when scheduled):**
+
+- WHEN a template is loaded on a server THEN the bridge records whether that server fetched it, with
+  a timestamp, per server
+- WHEN a server has never fetched a template the bridge served it THEN that is surfaced as a
+  distinct state from "not configured" and from "configuration looks wrong" — three states, never
+  two
+- WHEN the fetch cannot be attributed to a specific server THEN it is reported as unattributed
+  rather than assigned to a guess, and silence is NEVER reported as failure without a positive
+  control that the instrument is live
+
+**Notes:**
+
+- **Number verified free** immediately before filing: the registry's duplicate audit printed exactly
+  `B-056` and `B-080`, the highest `B-` heading was `B-161`, and `git grep "B-163"` returned no hits
+  anywhere in the tree.
+- **Cross-refs:** [[B-162]] (the defect this is prevention for), [[B-101]] (probe the axis you
+  intend to judge — the rule that shapes every option above), [[B-160]] (the same
+  defect-then-prevention split, for media files).
