@@ -1,7 +1,7 @@
 import type { LiveLayerState } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { plateAudioPill, type PlateAudioPill } from './plateAudio.js';
+import { plateAudioPill, type PlateAudioPill, type RowPlateAudio } from './plateAudio.js';
 
 /**
  * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **how one seated Live
@@ -457,6 +457,39 @@ export function releaseScopeOf(
  */
 export function seatedPlatesOf(rows: readonly LiveLayerRowView[], itemId: string): string[] {
   return [...new Set(rows.filter((r) => r.itemId === itemId).map((r) => r.plate))];
+}
+
+/**
+ * `B-164` — **the same plates, WITH the two facts audibility needs.**
+ *
+ * {@link seatedPlatesOf} answers "which plates does this item own" and is exactly right for
+ * SOLO and PANIC, which address a SET. The layer row's audio chip needs more than the set: it
+ * has to separate the plates the active look SHOWS from the ones §12.4 is HOLDING, and it has
+ * to know each plate's recorded intent. Read off the SAME `LiveLayerRowView`s for the reason
+ * that function already gives — a chip computed from a different set than the one on screen is
+ * how the row and the strips below it come to disagree.
+ *
+ * ⚠ **A row whose `audio` is `null` is DROPPED, and that is deliberate.** `audio` is null in
+ * exactly the branches that must not make a claim: BLIND (the ledger is stale or the stack has
+ * not arrived, so `liveLayerRow` refuses to say SILENT) and STRANDED (no item owns the layer,
+ * so no intent map reaches it). Counting those rows would put a number on the chip that the
+ * neighbouring surface has just declined to state. An item with no claimable row therefore
+ * summarises to `null` and shows no chip — "I cannot tell" is not a fraction.
+ *
+ * Deduplication is left to {@link audioSummary}, which is where the fill+key pair is already
+ * reasoned about; doing it in both places would be two rules for one fact.
+ */
+export function rowPlateAudioOf(
+  rows: readonly LiveLayerRowView[],
+  itemId: string,
+): RowPlateAudio[] {
+  return rows
+    .filter((r) => r.itemId === itemId && r.audio !== null)
+    .map((r) => ({
+      plateId: r.plate,
+      volume: r.audio?.volume,
+      held: r.audio?.held ?? false,
+    }));
 }
 
 /**

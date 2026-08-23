@@ -1,4 +1,3 @@
-import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 
 /**
@@ -55,22 +54,73 @@ export function plateAudioState(volume: number | undefined, held: boolean): Plat
   return volume > 0 ? 'audible' : 'silent';
 }
 
+/**
+ * 🔴 **THE ONE ANSWER TO "WHAT IS THIS PLATE'S AUDIO DOING" — every surface asks THIS.**
+ *
+ * `add-multibox-audio` shipped with TWO definitions of "has sound" on one screen: the strips
+ * and the dialog derived AUDIBLE/SILENT/ARMED from {@link plateAudioPill}, while the layer
+ * row's summary counted `plateIntent > 0` on its own. That split is the whole of
+ * `B-164`, and it produced two wrong numbers at once — an INTENT numerator (a held plate
+ * armed at 100% counted as raised while it was silent on air) over a SEATED denominator (a
+ * held plate is invisible and still inflated the total).
+ *
+ * The split is closed by making this the only place the three facts are derived, and by having
+ * {@link plateAudioPill} and {@link audioSummary} both read it. It is the golden-rule-6 shape:
+ * a second local copy of "can this be heard" is exactly how one surface comes to disagree with
+ * the other about a property the operator CANNOT see.
+ *
+ * ⚠ **`audible` and `armed` are NOT the same question, and a held plate is where they part.**
+ * `armed` is the recorded INTENT — the operator raised it. `audible` additionally requires the
+ * active look to show the plate, because §12.4's hold keeps a seated-but-unshown plate muted
+ * and idle no matter what the intent says. For a SHOWN plate the two agree; for a held one they
+ * must not, and folding them is the defect.
+ *
+ * ⚠ Still an INTENT, never a measurement — see the module header. `audible` means "the console
+ * asked for this plate's sound and nothing it knows about is suppressing it", not "a sample
+ * reached the output".
+ */
+export interface PlateAudioVerdict {
+  /** The three-state disposition — the same one the pill wears. */
+  state: PlateAudioState;
+  /** Sound is being asked for AND the look is not suppressing it. */
+  audible: boolean;
+  /** The operator raised this plate. TRUE for a held plate too — that is the point. */
+  armed: boolean;
+}
+
+export function plateAudioVerdict(volume: number | undefined, held: boolean): PlateAudioVerdict {
+  const state = plateAudioState(volume, held);
+  return {
+    state,
+    audible: state === 'audible',
+    // `=== undefined` and then `> 0`, never truthiness: an explicit 0 is a CHOICE to mute and
+    // an absent key is nobody having said, and both must fail this test for different reasons
+    // (module header). Zero is falsy, which this repo has paid for three times.
+    armed: volume !== undefined && volume > 0,
+  };
+}
+
 /** Percent, for the operator. The wire takes a 0–1 gain. */
 export function pct(volume: number): string {
   return `${String(Math.round(volume * 100))}%`;
 }
 
-/**
- * The plate's recorded intent, or `undefined` when nobody has said.
- *
- * A one-line helper rather than an inline lookup because it is the exact place the `?? 0`
- * temptation appears: a caller that defaults to `0` here can no longer tell "chosen silent"
- * from "never asked", and both this module's pill wording and the row summary depend on the
- * difference.
- */
-export function plateIntent(item: StackItemState, plateId: string): number | undefined {
-  return item.plateVolumes?.[plateId];
-}
+/*
+  ⚠ **A `plateIntent(item, plateId)` helper lived here and was REMOVED, not left unused** —
+  the same call this module already made about `panicMap` below, for the same reason.
+
+  It read one plate's recorded volume off a `StackItemState`, and it existed because
+  `audioSummary` took the ITEM and did the join itself. That join was the wrong shape: reading
+  an intent map is not enough to answer "is this plate audible", because audibility also needs
+  §12.4's `held`, which lives on the LEDGER and not on the item. `B-164` moved the join to the
+  panel — `rowPlateAudioOf` reads both facts off the same `LiveLayerRowView`s the strips render
+  — and with it this helper's only caller went away.
+
+  Noted rather than silently deleted because the pull towards re-adding one is real: if you
+  find yourself reaching for a plate's volume off the stack item inside this module, the
+  question to ask is whether you also have its `held`, because a verdict built on one of the
+  two is the defect this item fixed.
+*/
 
 export interface PlateAudioPill {
   /** The WORD. Never omitted — the hue is never the only signal (theme.ts's rule). */
@@ -142,9 +192,10 @@ const HELD_TONE = colors.text;
  * before-the-take affordance the mute rule exists to preserve.
  */
 export function plateAudioPill(volume: number | undefined, held: boolean): PlateAudioPill {
-  const state = plateAudioState(volume, held);
+  // The SHARED verdict, not a local re-derivation — `armed` used to be computed inline here
+  // and nowhere else could reach it, which is half of why the row summary grew its own rule.
+  const { state, armed } = plateAudioVerdict(volume, held);
   if (state !== 'held') return PILL[state];
-  const armed = volume !== undefined && volume > 0;
   return {
     label: armed ? 'ARMED · HIDDEN BY THIS LOOK' : 'HIDDEN BY THIS LOOK',
     tone: HELD_TONE,
@@ -199,31 +250,119 @@ export function soloMap(
 */
 
 /**
- * The layer row's compact READ-ONLY summary: how many of a row's plates are raised.
+ * One plate this row owns, with the two facts audibility needs.
  *
- * `total` is the SEATED count rather than the declared one, for `soloMap`'s reason — the two
- * numbers have to describe the same set or `audio 2/4` names a denominator the strip below it
- * does not have.
- *
- * Returns `null` when the row owns no live plates at all, which is what keeps the summary off
- * every ordinary row rather than printing `audio 0/0`.
+ * Built by the panel from the SAME `LiveLayerRowView`s the LIVE SOURCES tab renders
+ * (`rowPlateAudioOf`), so the chip and the strips below it cannot describe different plates.
+ * `volume` is the recorded intent — `undefined` is a REAL third state ("nobody has said") and
+ * is never collapsed to `0` on the way here.
  */
-export function audioSummary(
-  item: StackItemState,
-  seatedPlateIds: readonly string[],
-): { raised: number; total: number; label: string } | null {
-  const unique = [...new Set(seatedPlateIds)];
+export interface RowPlateAudio {
+  plateId: string;
+  volume: number | undefined;
+  held: boolean;
+}
+
+export interface AudioSummary {
+  /** Plates the active look SHOWS whose sound is being asked for. */
+  audible: number;
+  /** Plates the active look SHOWS. The denominator, and the whole of `B-164`'s first half. */
+  shown: number;
+  /** Plates that are armed but HELD — outside the fraction, never folded into it. */
+  armedHidden: number;
+  /** The chip's text. */
+  label: string;
+  /** The sentence, for the tooltip and the accessible name. */
+  detail: string;
+}
+
+/**
+ * The layer row's compact READ-ONLY summary.
+ *
+ * 🔴 **`B-164` — BOTH NUMBERS WERE COUNTING THE WRONG THING, AND THE FIX IS THE AXIS, NOT THE
+ * ARITHMETIC.**
+ *
+ * The owner measured one row, one template declaring three plates, three looks:
+ *
+ * | look   | boxes on screen | the chip read |
+ * | ------ | --------------- | ------------- |
+ * | ghab-1 | 1               | `audio 1/2`   |
+ * | ghab-2 | 2               | `audio 1/3`   |
+ * | ghab-3 | 3               | `audio 1/3`   |
+ *
+ *   - **The DENOMINATOR counted SEATS, not what the look SHOWS.** The bridge pre-seats the
+ *     UNION of every look, so a held plate is seated, invisible, and was still inflating the
+ *     total — which is precisely `1 box → /2` and `2 boxes → /3`.
+ *   - **The NUMERATOR counted INTENT, not audibility.** A held plate armed at 100% — which the
+ *     audio dialog EXISTS to permit, so the operator can arm a box before switching to its
+ *     look — read as raised while it was silent on air. The chip could say `2/2` with one
+ *     plate making sound. That half is worse and the owner has not hit it yet.
+ *
+ * ⚠ **The wrong axis is SEATED vs SHOWN, and the fix is NOT to count DECLARED plates.**
+ * `LayerRow.tsx`'s prop still argues why seated beats declared — a declared plate with no
+ * producer cannot be audible — and that argument is untouched. Both numbers here are drawn
+ * from the SEATED set; what changed is that the fraction is narrowed to the shown part of it.
+ *
+ * ⚠ **The armed-but-hidden count is reported SEPARATELY and never inside the fraction.** The
+ * operator armed that plate deliberately and needs to know it is waiting; putting it in the
+ * numerator would claim sound that the hold is preventing, and dropping it would silently lose
+ * the one thing the pre-arm affordance exists to make visible.
+ *
+ * Returns `null` when the row owns no live plates at all — what keeps the chip off every
+ * ordinary row. A row whose active look shows NO plates still summarises (`audio 0/0` is
+ * suppressed by `plates.length === 0`, not by `shown === 0`): an all-held row with something
+ * armed has a real thing to say.
+ */
+export function audioSummary(plates: readonly RowPlateAudio[]): AudioSummary | null {
+  // Deduplicated by plate id: a fill+key pair puts the same `sourceId` on TWO ledger records,
+  // and counting both would double every keyed guest.
+  const unique = [...new Map(plates.map((p) => [p.plateId, p])).values()];
   if (unique.length === 0) return null;
-  const raised = unique.filter((id) => {
-    const v = plateIntent(item, id);
-    // `=== undefined` and then `> 0`: an explicit 0 is NOT raised, and neither is an absent
-    // key, but they arrive here as different values and must not be folded by a truthiness
-    // test that happens to agree today.
-    return v !== undefined && v > 0;
-  }).length;
-  return {
-    raised,
-    total: unique.length,
-    label: `audio ${String(raised)}/${String(unique.length)}`,
-  };
+  let audible = 0;
+  let shown = 0;
+  let armedHidden = 0;
+  for (const plate of unique) {
+    // ONE verdict function, the same one the strips and the dialog read.
+    const verdict = plateAudioVerdict(plate.volume, plate.held);
+    if (plate.held) {
+      if (verdict.armed) armedHidden++;
+      continue;
+    }
+    shown++;
+    if (verdict.audible) audible++;
+  }
+  const label =
+    `audio ${String(audible)}/${String(shown)}` +
+    // Only when non-zero: an ordinary row must not carry a permanent `· 0 armed`.
+    (armedHidden > 0 ? ` · ${String(armedHidden)} armed` : '');
+  return { audible, shown, armedHidden, label, detail: summaryDetail(audible, shown, armedHidden) };
+}
+
+/**
+ * The summary said as a sentence.
+ *
+ * 🔴 **IT CLAIMS ONLY WHAT THE CONSOLE KNOWS.** The old wording was _"N of this row's M live
+ * plates are raised"_ — and "raised" is an INTENT word being used where a reader takes it as a
+ * report about air. Nothing in this console can know a sample reached the output: CasparCG's
+ * programme channel reports ONE peak pair for the whole channel, so a per-input level does not
+ * exist to be read (`add-multibox-audio` design.md §6). So the sentence says what was ASKED
+ * FOR, and says out loud that it is not a measurement — rather than leaving a reader to infer
+ * which of the two they are looking at.
+ */
+function summaryDetail(audible: number, shown: number, armedHidden: number): string {
+  const head =
+    shown === 0
+      ? 'This look shows no live plates.'
+      : `Sound is asked for on ${String(audible)} of the ${String(shown)} live ` +
+        `${shown === 1 ? 'plate' : 'plates'} this look shows.`;
+  const waiting =
+    armedHidden === 0
+      ? ''
+      : ` ${String(armedHidden)} more ${armedHidden === 1 ? 'is' : 'are'} armed but hidden by ` +
+        `this look — ${armedHidden === 1 ? 'it becomes' : 'they become'} audible on switching ` +
+        `to a look that shows ${armedHidden === 1 ? 'it' : 'them'}.`;
+  return (
+    `${head}${waiting} Nothing here measures the output — this is what the console asked for. ` +
+    `Open LIVE SOURCES, or this row's audio dialog, to change it.`
+  );
 }

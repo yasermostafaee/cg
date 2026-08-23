@@ -5474,3 +5474,109 @@ advertises a perfectly plausible URL and the server still gets nothing, with `CG
 - **Cross-refs:** [[B-162]] (the defect this is prevention for), [[B-101]] (probe the axis you
   intend to judge — the rule that shapes every option above), [[B-160]] (the same
   defect-then-prevention split, for media files).
+
+## [x] B-164 — the row's audio chip counted the wrong things TWICE: seats for a denominator and intent for a numerator ⟨priority: medium — a console stating who can be heard, wrongly, about a property the operator cannot see⟩ — FIXED 2026-08-23
+
+**What:** the layer row's `audio N/M` chip derived its own answer to "has this plate got sound"
+instead of asking the one the strips and the audio dialog ask. Both numbers were on the wrong axis.
+
+**The owner's measurement — ONE row, ONE template declaring three plates, three looks:**
+
+| look   | boxes on screen | the chip read |
+| ------ | --------------- | ------------- |
+| ghab-1 | 1               | `audio 1/2`   |
+| ghab-2 | 2               | `audio 1/3`   |
+| ghab-3 | 3               | `audio 1/3`   |
+
+He also reported it is hard to see at all.
+
+**Why — TWO DEFINITIONS OF "HAS SOUND" ON ONE SCREEN:**
+
+- The strips and the dialog read `plateAudioPill(volume, held)`, which honours §12.4's HOLD.
+- `audioSummary` counted `plateIntent > 0` across every SEATED plate id, which honours neither.
+
+Both consequences follow from that one split:
+
+1. **The DENOMINATOR counted SEATS, not what the ACTIVE LOOK SHOWS.** The bridge pre-seats the
+   UNION of every look, so a held plate is seated, invisible, and still inflated the total —
+   exactly `1 box → /2` and `2 boxes → /3`.
+2. **The NUMERATOR counted INTENT, not audibility.** A held plate armed at 100% — which the audio
+   dialog EXISTS to permit, so an operator can arm a box BEFORE switching to its look — read as
+   raised while it was silent on air. Measured in the RED run: `audio 2/2` with one plate making
+   sound. **This half is worse than the wrong denominator and the owner had not hit it yet.**
+
+⚠ **The wrong axis is seated vs SHOWN, NOT seated vs DECLARED.** `LayerRow.tsx`'s prop already
+argued why seated beats declared — a declared plate with no producer cannot be audible — and that
+argument is untouched. Both numbers are still drawn from the seated set; the fraction is narrowed
+to the shown part of it.
+
+### The fix
+
+- **`plateAudioVerdict(volume, held) → { state, audible, armed }`** in
+  `apps/runtime/src/renderer/features/layers/plateAudio.ts` — the ONE answer, and now the only
+  place the three facts are derived. `plateAudioPill` reads it (its `armed` was an inline local
+  before, reachable by nothing else, which is half of why the summary grew its own rule) and so
+  does `audioSummary`. **`audible` and `armed` are different questions and a held plate is where
+  they part**; folding them is the defect.
+- **`audioSummary(plates)`** takes `RowPlateAudio[]` — plate id, volume AND `held` — instead of a
+  `StackItemState` plus bare ids. The old shape could not express audibility at all, because
+  `held` lives on the LEDGER and not on the item.
+- **`rowPlateAudioOf(rows, itemId)`** (`liveLayerRows.ts`) builds that list off the SAME
+  `LiveLayerRowView`s the LIVE SOURCES tab renders. `seatedPlatesOf` is untouched and still
+  correct for SOLO and PANIC, which address a SET. A row whose `audio` is `null` — BLIND or
+  STRANDED — is DROPPED: those are the branches that must not make a claim, and a chip counting
+  them would state a number the surface beside it has just declined to state.
+- **`plateIntent` was REMOVED**, not left unused, on this module's own `panicMap` precedent: its
+  only caller was the join `audioSummary` should never have been doing.
+- **Legibility (§3)** — the chip takes the state colour the pills already use: SKY when a shown
+  plate is asking for sound, muted grey otherwise. The CSS's earlier all-muted argument ("a second
+  coloured mark would compete with the row's STATE cell") does not survive the specific hue: the
+  STATE cell owns GREEN, the sacred ON AIR mark, and sky is not a state hue on this surface —
+  which is exactly why `plateAudio.ts` chose it for AUDIBLE. 🔴 **Still a PILL**: two flat states,
+  no track, no fill, no bar, no ramp. `VERB_COUNT` stays 6 and no column was added.
+
+**2c — the wording, decided:** `audio 1/2 · 1 armed`, and the armed count is emitted ONLY when
+non-zero. It is **outside** the fraction because folding it in would claim sound the hold is
+preventing, and dropping it would silently lose the one thing the pre-arm affordance exists to
+make visible. The word is `armed` rather than a synonym on §3's own instruction — one word means
+one thing here and in LIVE SOURCES, where the pill reads `ARMED · HIDDEN BY THIS LOOK` — and the
+`·` separator mirrors that pill's own construction. The full sentence lives in the tooltip and the
+accessible name, which is where the ambiguity a two-word chip cannot avoid is resolved.
+
+**2d — the tooltip no longer says "raised".** It was _"N of this row's M live plates are raised"_ —
+an INTENT word sitting where a reader takes it as a report about air. It now reads _"Sound is asked
+for on N of the M live plates this look shows … Nothing here measures the output — this is what the
+console asked for."_ Nothing in this console can know a sample reached the output: CasparCG's
+programme channel reports ONE peak pair for the whole channel, so a per-input level does not exist
+to be read (`add-multibox-audio` design.md §6).
+
+### Tests — RED first, chain rebuilt before each reading
+
+`apps/runtime/tests/layerRow.dom.test.ts`. **RED measured** with the pre-fix rule restored behind
+the new signature: the owner's table failed `expected 'audio 1/3' to be 'audio 1/1'`; the
+held-armed case failed `expected 'audio 2/2' to be 'audio 1/1 · 1 armed'`; the tooltip and the two
+colour cases failed with it — **6 failed, 54 passed. GREEN after: 60/60.**
+
+Covered: the owner's three-look table driven end to end; a HELD plate armed at 100% not counted
+audible and reported separately; the armed clause absent at zero; an all-HELD row that still
+summarises because something is waiting; a SHOWN plate whose volume assert FAILED reading silent
+(the bridge leaves the intent ABSENT on `!ack.ok` rather than optimistically raised); explicit `0`
+and absent-key both not audible and not merged; the state class present/absent; `VERB_COUNT` still
+6; and the no-meter assertions still green.
+
+**Notes:**
+
+- **What the owner can click:** the LAYERS tab, on a row with a multi-box template taken to air.
+  Switch looks and the chip's denominator now tracks the boxes on screen. Arm a plate in a look
+  that does not show it and the chip says `· 1 armed` without moving the fraction.
+- ⚠ **A KNOWN LIMIT, stated rather than implied:** `volume` here is the INTENT recorded on the
+  stack item, so the chip is exactly as honest as the strips beside it and no more. A plate whose
+  volume was successfully asserted and then lost some other way would still read as asking for
+  sound. That is a property of the shared verdict, which is the point of the fix; a per-input
+  MEASUREMENT does not exist to be read (see [[C-026]]).
+- **Number verified free** immediately before filing: `git grep "B-164"` across `docs/`,
+  `openspec/`, `packages/`, `tools/` and `apps/` returned only this session's own code comments
+  and the registry's forward-reference "Next free" line — no heading anywhere.
+- **Cross-refs:** [[C-026]] (multi-box audio: the monitor/VU work that would make a MEASUREMENT
+  possible), [[B-154]]/[[B-155]] (the HELD plate's other consequences), `CLAUDE.md` golden rule 6
+  (one predicate, reused — the rule this restores).

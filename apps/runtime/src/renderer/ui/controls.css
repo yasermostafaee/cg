@@ -1686,17 +1686,28 @@ input[type='checkbox']:disabled:checked {
 }
 
 /*
- * The row's LIVE-PLATE AUDIO summary (`add-multibox-audio`) — `audio 2/4`.
+ * The row's LIVE-PLATE AUDIO summary (`add-multibox-audio`) — `audio 1/2 · 1 armed`.
  *
- * Sits beside the draft chip in the alias cell, and is deliberately QUIETER than it: a draft
- * chip says something is UNAPPLIED and wants acting on, while this is a standing fact about a
- * row. It is muted text, never an accent — the row's STATE cell owns colour on this surface,
- * and a second coloured mark on the same row would compete with the one an operator has to
- * find from across a gallery.
+ * Sits beside the draft chip in the alias cell, and is quieter than it in WEIGHT: a draft chip
+ * says something is UNAPPLIED and wants acting on, while this is a standing fact about a row.
  *
- * ⚠ NOT A METER, and the shape says so: type on the row's own background, with no track, no
- * fill and no bar. There is no per-input level to draw until an installation has a monitor
- * channel array (`add-multibox-audio` design.md §6) — a bar here would claim one.
+ * ── COLOUR (B-164) — the all-muted rule is RETIRED, and here is why ──────────────
+ *
+ * It used to be muted text in every state, arguing that "a second coloured mark on the same
+ * row would compete with the one an operator has to find from across a gallery". The owner's
+ * report is that it does not read at a glance at all, and the argument does not survive the
+ * specific hue involved: the row's STATE cell owns GREEN (the sacred ON AIR mark), and this
+ * takes SKY — which is exactly the colour `plateAudio.ts` chose for AUDIBLE, for exactly this
+ * reason, and which is not a state hue anywhere on this surface. So it competes with nothing,
+ * and one word plus one colour now mean the same thing here as in LIVE SOURCES.
+ *
+ * SILENT stays muted grey, unchanged and deliberately: silence is the DEFAULT — every producer
+ * the bridge creates is created muted — so the common case should still recede.
+ *
+ * ⚠ NOT A METER, and the shape still says so: type on the row's own background, with no track,
+ * no fill and no bar. There is no per-input level to draw until an installation has a monitor
+ * channel array (`add-multibox-audio` design.md §6) — a bar here would claim one, and a COLOUR
+ * RAMP would claim one just as loudly. Two flat states, no gradient between them.
  *
  * `cursor: default`, like `.cg-pill`: nothing here is pressable, and the pointer must not
  * promise otherwise.
@@ -1711,6 +1722,10 @@ input[type='checkbox']:disabled:checked {
   letter-spacing: 0.03em;
   white-space: nowrap;
   cursor: default;
+}
+/* At least one plate the ACTIVE LOOK SHOWS is asking for sound. */
+.cg-chip-audio--audible {
+  color: var(--r-ready);
 }
 
 /* ── Pill (link / session indicators) ───────────────────────────────────── */

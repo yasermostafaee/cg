@@ -26,7 +26,7 @@ import { LiveSourceSwapDialog } from './LiveSourceSwapDialog.js';
 import { LookPicker, lookOptionsOf } from './LookPicker.js';
 import { lookSwitchRefusal } from './lookSwitch.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
-import { audioSummary } from './plateAudio.js';
+import { audioSummary, type RowPlateAudio } from './plateAudio.js';
 import { rowState, type RowBinding } from './rowState.js';
 import {
   ROW_GEOMETRY,
@@ -90,11 +90,18 @@ interface Props {
    *
    * ⚠ SEATED, not DECLARED. A declared plate with no producer cannot be audible, so a
    * summary counting declarations would name a denominator the audio strips do not have.
+   * `B-164` did NOT change this — the wrong axis was seated vs SHOWN, not seated vs
+   * declared, and the fraction is narrowed inside `audioSummary` rather than here.
+   *
+   * 🔴 It carries each plate's `volume` and `held` rather than just its id (`B-164`). The
+   * bare id list could only support an INTENT count over a SEATED denominator, which is the
+   * pair of wrong numbers this prop's consumer used to print. `held` is §12.4's disposition
+   * and is what separates the plates the active look SHOWS from the ones it hides.
    *
    * Defaults to empty — a row rendered on its own (a test, a story) shows no summary, which
    * is the correct reading for a row that owns no live layers.
    */
-  seatedPlates?: readonly string[];
+  seatedPlates?: readonly RowPlateAudio[];
   /**
    * How much text this width can carry (see `layerTable.ts`). Defaults to the
    * widest — a row rendered on its own shows everything it has.
@@ -797,16 +804,27 @@ export function LayerRow({
         */}
         {item !== null &&
           (() => {
-            const summary = audioSummary(item, seatedPlates);
+            const summary = audioSummary(seatedPlates);
             return summary === null ? null : (
               <span
-                className="cg-chip-audio"
-                data-audio-summary={summary.label}
-                title={
-                  `${String(summary.raised)} of this row's ${String(summary.total)} live plates ` +
-                  `are raised. Open LIVE SOURCES, or this row's audio dialog, to change them.`
+                /*
+                  §3 — IT NOW CARRIES THE STATE COLOUR THE PILLS ALREADY USE, and the earlier
+                  argument for muted-only is retired rather than overridden by taste: it said a
+                  second coloured mark would compete with the row's STATE cell. SKY is not a
+                  state hue on this surface — that is the same reason `plateAudio.ts` chose it
+                  for AUDIBLE over green, which is the sacred ON AIR mark — so it competes with
+                  nothing and the vocabulary matches LIVE SOURCES word for word.
+
+                  🔴 STILL A PILL. Colour is the only thing that changed: no track, no fill, no
+                  bar, no ramp. There is no per-input level to draw, and a shape that implied
+                  one would be this product claiming a measurement it cannot take.
+                */
+                className={
+                  summary.audible > 0 ? 'cg-chip-audio cg-chip-audio--audible' : 'cg-chip-audio'
                 }
-                aria-label={`${String(summary.raised)} of ${String(summary.total)} live plates raised`}
+                data-audio-summary={summary.label}
+                title={summary.detail}
+                aria-label={summary.detail}
               >
                 {summary.label}
               </span>

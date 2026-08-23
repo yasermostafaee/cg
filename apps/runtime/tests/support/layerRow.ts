@@ -9,6 +9,7 @@ import type { StackItemState } from '@cg/shared-schema';
 import { LayerRow } from '../../src/renderer/features/layers/LayerRow.js';
 import { resolveRowBinding, type RowBinding } from '../../src/renderer/features/layers/rowState.js';
 import type { LayerRowActionDeps } from '../../src/renderer/features/layers/layerRowActions.js';
+import type { RowPlateAudio } from '../../src/renderer/features/layers/plateAudio.js';
 
 /**
  * R-028 part B — the shared harness for LayerRow DOM tests.
@@ -210,8 +211,13 @@ export async function renderLayerRow(options: {
   /**
    * `add-multibox-audio` — the LIVE PLATES this row's item owns, for the read-only audio
    * summary. Defaults to none, which is every row that has no live plates — the ordinary case.
+   *
+   * `B-164` — each plate carries its own `volume` and `held` rather than a bare id, because
+   * the summary's denominator is what the ACTIVE LOOK SHOWS (`held === false`) and its
+   * numerator is audibility. A harness that could only express ids could not express the
+   * owner's three-look table at all.
    */
-  seatedPlates?: readonly string[];
+  seatedPlates?: readonly RowPlateAudio[];
 }): Promise<RenderedRow> {
   const link = options.link ?? 'live';
   const stubs = stubBridge(link, options.reach ?? 'both-up');

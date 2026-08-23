@@ -158,9 +158,22 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   //
   // Read HERE, before the panic, and on a row that has not been PLAYed: the summary counts
   // SEATED plates, not on-air ones, and reading it after the panic would only ever see zeros.
+  //
+  // 🔴 `B-164` — `1/1`, NOT `1/2`, AND THIS SPEC IS WHERE THE DEFECT WAS WRITTEN DOWN.
+  //
+  // `guest-2` is HELD — the assertions twenty lines up prove it, and prove the console refuses
+  // to call it AUDIBLE on the strip. The chip nonetheless counted it in the denominator,
+  // because it counted SEATS while the strip beside it counted what the look SHOWS. Two
+  // definitions of "has sound" on one screen, and this line is the one that encoded the wrong
+  // one as expected behaviour.
+  //
+  // The denominator is now the plates the ACTIVE LOOK SHOWS: `guest-1` alone. `guest-2` was
+  // silenced by the SOLO above, so it is held-and-NOT-armed and contributes no `· N armed`
+  // clause either — the armed-and-waiting case is covered in the unit suite, where a held
+  // plate can be left raised.
   await app.page.getByRole('tab', { name: /^LAYERS/ }).click();
   const newsRow = app.layers.locator('[data-item-id="item-irib-news"]');
-  await expect(newsRow.locator('[data-audio-summary]')).toHaveText('audio 1/2');
+  await expect(newsRow.locator('[data-audio-summary]')).toHaveText('audio 1/1');
   await expect(newsRow.locator('[data-verb-block] button')).toHaveCount(6);
 
   /*
@@ -189,9 +202,10 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   await expect(stripOf(onScreen, 'guest-1')).toContainText('0%');
   await expect(stripOf(held, 'guest-2')).toContainText('0%');
 
-  // …and the row's own summary follows the plates it counts.
+  // …and the row's own summary follows the plates it counts. `B-164` — the denominator stays
+  // the SHOWN plate; PANIC silences, it does not change which look is up.
   await app.page.getByRole('tab', { name: /^LAYERS/ }).click();
-  await expect(newsRow.locator('[data-audio-summary]')).toHaveText('audio 0/2');
+  await expect(newsRow.locator('[data-audio-summary]')).toHaveText('audio 0/1');
 
   // ── ON AIR, the same one press still works. Not a duplicate of the above: it is the case
   //    the OLD rule allowed, kept so removing the status filter cannot have broken it.

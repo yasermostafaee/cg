@@ -11,6 +11,7 @@ import type { StackItemState } from '@cg/shared-schema';
 // against, never restated as a literal: a test carrying its own `6` would keep passing on the
 // day the block grew a seventh button and the header words slid off their glyphs.
 import { VERB_COUNT } from '../src/renderer/features/layers/layerTable.js';
+import type { RowPlateAudio } from '../src/renderer/features/layers/plateAudio.js';
 import {
   bindingFor,
   itemWith,
@@ -1023,22 +1024,104 @@ describe('LayerRow — the live-plate audio summary', () => {
 
   const summary = (el: HTMLElement): Element | null => el.querySelector('[data-audio-summary]');
 
-  it('counts the RAISED plates against the plates the row owns', async () => {
-    rendered = await renderLayerRow({
-      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1, 'guest-2': 0 } }),
-      seatedPlates: ['guest-1', 'guest-2', 'guest-3', 'guest-4'],
-    });
-    expect(summary(rendered.container)?.textContent).toBe('audio 1/4');
+  /** One plate, said the way the ledger says it. */
+  const plate = (plateId: string, volume: number | undefined, held = false): RowPlateAudio => ({
+    plateId,
+    volume,
+    held,
   });
 
-  it('🔴 an explicit 0 is NOT raised, and neither is an absent key — but they are not merged', async () => {
-    // Zero is falsy and this repo has paid for that three times. Both read as not-raised
-    // here; what must not happen is either of them counting as raised.
+  /*
+    🔴 B-164 — THE OWNER'S TABLE, DRIVEN.
+
+    ONE row, ONE template declaring three plates, three looks showing 1, 2 and 3 boxes. The
+    bridge pre-seats the UNION of every look, so all three plates are seated in all three
+    cases and only `held` moves. `guest-1` is the one raised plate throughout.
+
+    | look   | boxes | measured before | expected |
+    | ------ | ----- | --------------- | -------- |
+    | ghab-1 | 1     | `audio 1/2`     | `1/1`    |
+    | ghab-2 | 2     | `audio 1/3`     | `1/2`    |
+    | ghab-3 | 3     | `audio 1/3`     | `1/3`    |
+
+    The old denominator counted SEATS, which is why it climbed with the pre-seat instead of
+    with the boxes on screen.
+  */
+  it("🔴 the owner's table: the denominator is what the ACTIVE LOOK SHOWS, not what is seated", async () => {
+    const seated = (shown: number): RowPlateAudio[] => [
+      plate('guest-1', 1, shown < 1),
+      plate('guest-2', undefined, shown < 2),
+      plate('guest-3', undefined, shown < 3),
+    ];
+
+    for (const [shown, expected] of [
+      [1, 'audio 1/1'],
+      [2, 'audio 1/2'],
+      [3, 'audio 1/3'],
+    ] as const) {
+      rendered = await renderLayerRow({
+        item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+        seatedPlates: seated(shown),
+      });
+      expect(summary(rendered.container)?.textContent, `${String(shown)} box(es) on screen`).toBe(
+        expected,
+      );
+      await rendered.unmount();
+      rendered = null;
+    }
+  });
+
+  /*
+    🔴 B-164's SECOND half, and the one the owner has not hit yet.
+
+    A HELD plate armed at 100% is exactly what the audio dialog exists to permit — you arm the
+    box BEFORE switching to its look. Counting it as raised makes the chip claim sound that
+    §12.4's hold is actively muting: `2/2` with one plate audible.
+  */
+  it('🔴 a HELD plate armed at 100% is NOT counted audible — it is reported separately', async () => {
     rendered = await renderLayerRow({
-      item: itemWith('on-air', { plateVolumes: { 'guest-1': 0 } }),
-      seatedPlates: ['guest-1', 'guest-2'],
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1, 'guest-2': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', 1, true)],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 1/1 · 1 armed');
+  });
+
+  it('the armed count is OUTSIDE the fraction and absent when it is zero', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      // Held but NOT armed: nothing is waiting, so nothing is said.
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', 0, true)],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 1/1');
+  });
+
+  it('🔴 an explicit 0 is NOT audible, and neither is an absent key — but they are not merged', async () => {
+    // Zero is falsy and this repo has paid for that three times. Both read as not-audible
+    // here; what must not happen is either of them counting as audible.
+    rendered = await renderLayerRow({
+      item: itemWith('on-air'),
+      seatedPlates: [plate('guest-1', 0), plate('guest-2', undefined)],
     });
     expect(summary(rendered.container)?.textContent).toBe('audio 0/2');
+  });
+
+  /*
+    A plate the look SHOWS whose volume assert FAILED must not read as audible.
+
+    The bridge is what makes this expressible: `setLivePlateVolume` returns on `!ack.ok`
+    BEFORE writing `#plateVolumes` (`caspar-runtime.ts` — "a ledger claiming a volume the layer
+    never received would be re-asserted onto every future swap"), so a failed assert leaves the
+    intent ABSENT rather than optimistically raised. The chip sees that absence and must call
+    it silent — the same reading an absent key gets, and for the same reason.
+  */
+  it('🔴 a SHOWN plate whose volume assert failed reads silent, not audible', async () => {
+    rendered = await renderLayerRow({
+      // The operator pressed raise on `guest-2` and the MIXER VOLUME did not land, so no
+      // intent was recorded for it. `guest-1` succeeded.
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', undefined)],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 1/2');
   });
 
   it('a row that owns NO live plates shows no summary at all — never `audio 0/0`', async () => {
@@ -1046,10 +1129,65 @@ describe('LayerRow — the live-plate audio summary', () => {
     expect(summary(rendered.container)).toBeNull();
   });
 
+  /*
+    A row whose look shows NOTHING still summarises, because it has something to say: the
+    suppression is `no plates at all`, never `shown === 0`. An operator who armed a box and
+    then switched away must still see it waiting.
+  */
+  it('an all-HELD row still summarises when something is armed and waiting', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: [plate('guest-1', 1, true), plate('guest-2', undefined, true)],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 0/0 · 1 armed');
+  });
+
+  /*
+    2d — THE TOOLTIP CLAIMS ONLY WHAT THE CONSOLE KNOWS.
+
+    "raised" was an intent word sitting where a reader takes it as a report about air. Nothing
+    here can know a sample reached the output, so the sentence says what was ASKED FOR and
+    says out loud that it is not a measurement.
+  */
+  it('🔴 the tooltip does not say "raised", and states plainly that it is not a measurement', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1, 'guest-2': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', 1, true)],
+    });
+    const chip = summary(rendered.container);
+    const title = chip?.getAttribute('title') ?? '';
+    expect(title).not.toMatch(/raised/i);
+    expect(title).toContain('Nothing here measures the output');
+    expect(title).toContain('armed but hidden by this look');
+    // The accessible name carries the same sentence — one wording, both channels.
+    expect(chip?.getAttribute('aria-label')).toBe(title);
+  });
+
+  /*
+    §3 — LEGIBILITY. The chip was small muted text in every state and did not read at a
+    glance. It now takes the state colour the pills already use, so one word plus one colour
+    mean the same thing here as in LIVE SOURCES.
+  */
+  it('carries the AUDIBLE state class when a shown plate is asking for sound', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', undefined)],
+    });
+    expect(summary(rendered.container)?.className).toContain('cg-chip-audio--audible');
+  });
+
+  it('does NOT carry it when every shown plate is silent — including an armed-but-held one', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-2': 1 } }),
+      seatedPlates: [plate('guest-1', 0), plate('guest-2', 1, true)],
+    });
+    expect(summary(rendered.container)?.className).not.toContain('cg-chip-audio--audible');
+  });
+
   it('🔴 the verb block still holds exactly SIX buttons, and the summary is not one of them', async () => {
     rendered = await renderLayerRow({
       item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
-      seatedPlates: ['guest-1', 'guest-2'],
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', undefined)],
     });
     const block = rendered.container.querySelector('[data-verb-block]');
     expect(block?.querySelectorAll('button')).toHaveLength(VERB_COUNT);
@@ -1059,7 +1197,7 @@ describe('LayerRow — the live-plate audio summary', () => {
   it('it is READ-ONLY — no button, no input, and the pointer does not promise one', async () => {
     rendered = await renderLayerRow({
       item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
-      seatedPlates: ['guest-1', 'guest-2'],
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', undefined)],
     });
     const chip = summary(rendered.container);
     expect(chip?.tagName).toBe('SPAN');
@@ -1069,10 +1207,11 @@ describe('LayerRow — the live-plate audio summary', () => {
   it('🔴 nothing about it is drawn as a METER', async () => {
     // There is no per-input level to draw: CasparCG's programme channel reports ONE peak pair
     // for the whole channel. A bar here would claim "sound is present" from data that only
-    // says "we asked for it".
+    // says "we asked for it". The §3 colour change is TWO FLAT STATES and no ramp, which is
+    // why adding it does not weaken this assertion.
     rendered = await renderLayerRow({
       item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
-      seatedPlates: ['guest-1', 'guest-2'],
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', undefined)],
     });
     expect(rendered.container.querySelector('meter, progress, [role="progressbar"]')).toBeNull();
   });

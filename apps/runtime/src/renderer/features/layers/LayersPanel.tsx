@@ -46,7 +46,7 @@ import {
   liveLayerRows,
   ownerLabelFor,
   plateVolumeFor,
-  seatedPlatesOf,
+  rowPlateAudioOf,
 } from './liveLayerRows.js';
 import { hasStationLayerOccupant } from './stationLayerOccupancy.js';
 import { FixedBankConfigModal } from '../fixedLayers/FixedBankConfigModal.js';
@@ -897,8 +897,14 @@ export function LayersPanel({
                         a summary reading `audio 2/4` while the strip below listed three
                         plates would be the console disagreeing with itself about how many
                         boxes a row has.
+
+                        🔴 `B-164` — `rowPlateAudioOf`, not `seatedPlatesOf`. The bare id list
+                        is still exactly right for SOLO and PANIC, which address a SET; the
+                        chip needs each plate's `held` and `volume` as well, because its
+                        denominator is what the ACTIVE LOOK SHOWS and its numerator is
+                        AUDIBILITY rather than intent. Same rows, same pass, two questions.
                       */
-                      seatedPlates={item === null ? [] : seatedPlatesOf(liveRows, item.itemId)}
+                      seatedPlates={item === null ? [] : rowPlateAudioOf(liveRows, item.itemId)}
                       onSelect={onSelectionChange}
                       onUpdate={onUpdate}
                     />

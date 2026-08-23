@@ -1215,3 +1215,22 @@ separable — `B-163` shipping would not make `B-162` unnecessary, and a warning
 configuration is not a measurement of a fetch. `B-162` is `[x]` on arrival (filed and fixed in the
 same session, RED-then-GREEN); `B-163` is `[ ]` and deliberately unimplemented, because implying the
 warning is proof is the failure it exists to prevent.
+
+## 2026-08-23 — the row audio chip's two wrong counts gets its number (`B-164`)
+
+| Prefix | Claimed | Item                                                                                      | File                               |
+| ------ | ------- | ----------------------------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-164` | the row's `audio N/M` chip counted SEATS for its denominator and INTENT for its numerator | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the heading sweep immediately before the heading was written.** The duplicate
+audit printed **exactly `B-056` and `B-080`**. Highest `B-` heading was `B-163` — claimed earlier in
+this same session, two headings up. `git grep "B-164"` across `docs/`, `openspec/`, `packages/`,
+`tools/` and `apps/` returned only this session's own SOURCE COMMENTS (the fix cites its number, as
+every fix in this repo does) plus the "Next free" line above — **no heading anywhere**. `B-` stays
+contiguous `B-001` … `B-164`, **no gaps. Next free: `B-165`.**
+
+⚠ **A second `B-` claimed in one session, and deliberately not folded into `B-162`.** They share a
+session and nothing else: `B-162` is the BRIDGE hosting a template at an address a server cannot
+fetch; this is the RENDERER counting the wrong set on a chip. Rolling them together would have made
+one commit that a revert could not take apart, which is the branching policy's own rule about one
+logical change per commit.
