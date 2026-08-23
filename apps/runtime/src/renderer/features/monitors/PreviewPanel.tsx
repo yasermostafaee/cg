@@ -9,6 +9,8 @@ import { useStack } from '../../hooks/useStack.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 import { useFixedBank, useFixedSlots } from '../../hooks/useFixedLayers.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
+import { useLiveLayers } from '../../hooks/useLiveLayers.js';
+import { plateAudioState } from '../layers/plateAudio.js';
 import { buildApplyPayload, draftsVersion, subscribeDrafts } from '../inspector/draftStore.js';
 import {
   currentSourceAssignments,
@@ -93,6 +95,13 @@ export function PreviewPanel(): JSX.Element {
   const templates = useTemplateIndex(items.map((i) => i.templateId));
   const sourceVersion = useSyncExternalStore(subscribeSources, sourcesVersion, sourcesVersion);
   const catalog = currentSourceCatalog();
+  /*
+    `add-multibox-audio` — the bridge's live-layer ledger, for the HELD half of each box's
+    audio glyph. The intent half rides the stack item this panel already holds; the two are
+    separate snapshots and this is where they are joined, because the geometry module below
+    must stay free of both.
+  */
+  const { value: liveLayers } = useLiveLayers();
 
   const subjects = useMemo(
     () =>
@@ -166,6 +175,28 @@ export function PreviewPanel(): JSX.Element {
             }),
             ...(item.sourceOverride !== undefined && { overrides: item.sourceOverride }),
             nameOf: (catalogId) => catalog.sources.find((s) => s.id === catalogId)?.name ?? null,
+            /*
+              `add-multibox-audio` — what each box's audio is doing, joined HERE for `nameOf`'s
+              reason: it needs the stack (the recorded intent) AND the bridge's ledger (the
+              hold), and the geometry module owns neither.
+
+              🔴 `plateAudioState` is IMPORTED, never re-derived. The LIVE SOURCES strip, the
+              row summary and this glyph must not be able to disagree about whether a guest can
+              be heard — audio is the one property of a graphic nobody can check by looking, so
+              a divergence between two surfaces would survive until air.
+
+              ⚠ The HELD flag comes from the ledger record for THIS item and plate. Absent
+              (the ledger has not arrived, or the row is not seated) reads as NOT held, which
+              is what an un-seated rehearsing plate actually is: it will be muted-on-create when
+              it is seated, and its intent is what this same map already says.
+            */
+            audioOf: (plateId) =>
+              plateAudioState(
+                item.plateVolumes?.[plateId],
+                liveLayers.some(
+                  (l) => l.itemId === item.itemId && l.sourceId === plateId && l.held,
+                ),
+              ),
           },
         };
       }),
@@ -179,7 +210,11 @@ export function PreviewPanel(): JSX.Element {
     // another console — or on this one, through the Inspector's Update — would
     // keep reading "no source assigned" here until something unrelated
     // invalidated this memo.
-    [rehearsals, items, slots, bank, draftVersion, templates, sourceVersion, catalog],
+    // `liveLayers` is a real dependency for the same class of reason: the HELD half of each
+    // box's audio glyph reads it, and a look switch changes it without touching anything else
+    // in this list — so without it the glyph would keep saying NOT IN THIS LOOK after the look
+    // that hides the box has been left.
+    [rehearsals, items, slots, bank, draftVersion, templates, sourceVersion, catalog, liveLayers],
   );
 
   // Which page each rehearsing row needs. Kept as a SERIALISED key rather than

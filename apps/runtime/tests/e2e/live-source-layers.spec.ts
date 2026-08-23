@@ -74,3 +74,100 @@ test('the bridge-seated live layers appear on their own tab, distinguishable fro
     'true',
   );
 });
+
+/**
+ * `add-multibox-audio` — **AUDIO IS VISIBLE AND REACHABLE WITHOUT OPENING ANYTHING.**
+ *
+ * The defect: `StackItemState.plateVolumes` was on the wire and the only surface that read it
+ * was a MODAL reachable from one row's action menu. So the console's answer to *"is this guest
+ * audible?"* was **open a dialog and look** — for every row, one at a time — for the one
+ * property of a graphic an operator cannot see by looking at a monitor.
+ *
+ * This drives the four verbs against the offline mock's e2e-armed ledger seed: `1-10` on
+ * screen and `1-11` HELD, both belonging to the seeded news row. The bridge-side truth — the
+ * wire footprint, the golden-rule-10 gate, the held-plate rule and retention — is
+ * integration-tested in `tools/caspar-bridge/tests/live-plate-audio-verbs.integration.test.ts`;
+ * what can only be proven HERE is that an operator can reach and read it.
+ */
+test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANIC are one press each', async ({
+  app,
+}) => {
+  await app.liveSourcesTab.click();
+  const onScreen = app.liveSourceRow('1-10');
+  const held = app.liveSourceRow('1-11');
+
+  // ── The strip is THERE, on every seated plate, with no dialog opened.
+  const stripOf = (row: typeof onScreen, plate: string) =>
+    row.locator(`[data-plate-audio="${plate}"]`);
+  await expect(stripOf(onScreen, 'guest-1')).toBeVisible();
+  await expect(stripOf(held, 'guest-2')).toBeVisible();
+
+  // Every plate starts SILENT — the rule, visible rather than implied.
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('SILENT');
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('0%');
+
+  // ── 🔴 NOTHING HERE IS A METER. There is no per-input level to draw until the plant walk
+  //    answers W7/W8 — CasparCG's programme channel reports ONE peak pair for the whole
+  //    channel — so a bar would claim "sound is present" from data that only says "we asked
+  //    for it". That is the same mistake the PLACEHOLDER rule exists to prevent, one sense over.
+  await expect(app.layers.locator('meter')).toHaveCount(0);
+  await expect(app.layers.locator('progress')).toHaveCount(0);
+  await expect(app.layers.getByRole('progressbar')).toHaveCount(0);
+
+  // ── ON is ONE press, and it is FULL volume.
+  await stripOf(onScreen, 'guest-1')
+    .getByRole('button', { name: /^Full volume for guest-1/ })
+    .click();
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('AUDIBLE');
+
+  // …and the control says so on itself, so an operator does not discover it under pressure.
+  await expect(
+    stripOf(onScreen, 'guest-1').getByRole('button', { name: /not the previous level/ }),
+  ).toBeVisible();
+
+  // ── 🔴 A HELD PLATE READS ARMED-NOT-AUDIBLE, AND ITS CONTROLS STAY LIVE.
+  //    Grey reads as disabled; arming a held plate's audio BEFORE switching to the look that
+  //    shows it is the affordance the whole mute rule exists to preserve.
+  const heldOn = stripOf(held, 'guest-2').getByRole('button', { name: /^Full volume for guest-2/ });
+  await expect(heldOn).toBeEnabled();
+  await heldOn.click();
+  await expect(stripOf(held, 'guest-2')).toContainText('ARMED');
+  await expect(stripOf(held, 'guest-2')).toContainText('HIDDEN BY THIS LOOK');
+  // …and it is NOT claimed to be audible, because the look is what decides that.
+  await expect(stripOf(held, 'guest-2')).not.toContainText('AUDIBLE');
+
+  // ── SOLO raises one and silences its siblings, in one press and with no restore offered.
+  await stripOf(onScreen, 'guest-1')
+    .getByRole('button', { name: /^Solo guest-1/ })
+    .click();
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
+  await expect(stripOf(held, 'guest-2')).toContainText('0%');
+  await expect(app.layers.getByRole('button', { name: /un-?solo|restore/i })).toHaveCount(0);
+
+  // ── PANIC. The seeded row is `loaded`, so there is nothing ON AIR to silence — and the
+  //    console says exactly that rather than reporting a success over nothing (B-122's
+  //    failure was an emergency control reporting success having sent nothing at all).
+  const panic = app.layers.getByRole('button', { name: /^Silence all boxes/ });
+  await expect(panic).toBeEnabled();
+  await panic.click();
+  await expect(app.error).toContainText('no row is on air');
+  // The intents really are untouched — the refusal was not a silent no-op dressed as one.
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
+
+  // ── Now put the row ON AIR and press it again.
+  await app.page.getByRole('tab', { name: /^LAYERS/ }).click();
+  const newsRow = app.layers.locator('[data-item-id="item-irib-news"]');
+  await newsRow.getByRole('button', { name: 'PLAY' }).click();
+
+  // 🔴 THE ROW'S OWN READ-ONLY SUMMARY, outside the six-column verb block — `VERB_COUNT`
+  // stays 6, so every sticky header word still sits above its own glyph.
+  await expect(newsRow.locator('[data-audio-summary]')).toHaveText('audio 1/2');
+  await expect(newsRow.locator('[data-verb-block] button')).toHaveCount(6);
+
+  await app.liveSourcesTab.click();
+  await app.layers.getByRole('button', { name: /^Silence all boxes/ }).click();
+  await expect(app.success).toContainText('Silenced 2 plate(s)');
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('0%');
+  await expect(stripOf(held, 'guest-2')).toContainText('0%');
+});

@@ -1685,6 +1685,34 @@ input[type='checkbox']:disabled:checked {
   font-weight: var(--r-weight-bold);
 }
 
+/*
+ * The row's LIVE-PLATE AUDIO summary (`add-multibox-audio`) — `audio 2/4`.
+ *
+ * Sits beside the draft chip in the alias cell, and is deliberately QUIETER than it: a draft
+ * chip says something is UNAPPLIED and wants acting on, while this is a standing fact about a
+ * row. It is muted text, never an accent — the row's STATE cell owns colour on this surface,
+ * and a second coloured mark on the same row would compete with the one an operator has to
+ * find from across a gallery.
+ *
+ * ⚠ NOT A METER, and the shape says so: type on the row's own background, with no track, no
+ * fill and no bar. There is no per-input level to draw until an installation has a monitor
+ * channel array (`add-multibox-audio` design.md §6) — a bar here would claim one.
+ *
+ * `cursor: default`, like `.cg-pill`: nothing here is pressable, and the pointer must not
+ * promise otherwise.
+ */
+.cg-chip-audio {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.4rem;
+  color: var(--r-text-muted);
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  cursor: default;
+}
+
 /* ── Pill (link / session indicators) ───────────────────────────────────── */
 
 /*

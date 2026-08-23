@@ -164,7 +164,43 @@ const styles = {
   plate: { fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, color: '#ffffff' },
   source: { fontSize: '12px', color: '#ffffff' },
   unassigned: { fontSize: '12px', fontWeight: 700, color: colors.pending },
+  audio: {
+    fontSize: '10px',
+    fontWeight: 700,
+    letterSpacing: '0.08em',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+  },
 } as const satisfies Record<string, CSSProperties>;
+
+/**
+ * `add-multibox-audio` — **HOW A BOX SAYS WHETHER IT HAS SOUND.**
+ *
+ * ── 🔴 A PILL, NEVER A METER, AND ON THIS SURFACE THAT MATTERS MOST ─────────
+ *
+ * This whole overlay exists because a placeholder that READS AS A PICTURE is worse than the
+ * blank region it replaces — it converts *"I can't see it"* into *"I saw it and it was fine"*.
+ * An audio BAR here would be the identical mistake on the identical surface, one sense over:
+ * it would convert *"I can't hear it"* into *"I watched the level and it was fine"*, while the
+ * console in fact knows only what was ASKED FOR. CasparCG's programme channel reports ONE peak
+ * pair for the whole channel, so a per-box level does not exist to be drawn (`add-multibox-audio`
+ * design.md §6). Word plus dot; nothing that could be mistaken for a measurement.
+ *
+ * ── COLOUR FOLLOWS THIS FILE'S EXISTING RULE, NOT A NEW ONE ────────────────
+ *
+ * Nothing here is coloured unless it needs ATTENTION. `held` is a normal, chosen disposition
+ * and wears a WORD — the same rule `liveLayerRows` states for the LIVE SOURCES tab, so the two
+ * surfaces cannot come to disagree about whether a held plate is a problem. GREEN is not used
+ * at all: it is the sacred ON AIR mark of the layer table.
+ */
+const AUDIO_GLYPH: Record<'audible' | 'silent' | 'held', { text: string; color: string }> = {
+  audible: { text: '♪ AUDIO ON', color: colors.ready },
+  silent: { text: '✕ SILENT', color: 'rgba(255,255,255,0.72)' },
+  // "This box is not audible because the LOOK hides it" — a fact about the layout, not a
+  // fault, so it says which and stays uncoloured.
+  held: { text: '✕ NOT IN THIS LOOK', color: 'rgba(255,255,255,0.72)' },
+};
 
 interface Props {
   /** Every rehearsing row's plates, already placed in RASTER pixels. */
@@ -235,6 +271,20 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
               ) : (
                 <span style={styles.unassigned} data-live-plate-unassigned="">
                   no source assigned
+                </span>
+              )}
+              {/*
+                ABSENT means NOT STATED, and nothing is drawn for it — the stack and the ledger
+                are separate snapshots from the template registry that produced this placement,
+                and a glyph rendered before they land would assert silence on the one property
+                an operator cannot check by looking at the frame.
+              */}
+              {p.audio !== undefined && (
+                <span
+                  style={{ ...styles.audio, color: AUDIO_GLYPH[p.audio].color }}
+                  data-live-plate-audio={p.audio}
+                >
+                  {AUDIO_GLYPH[p.audio].text}
                 </span>
               )}
             </div>

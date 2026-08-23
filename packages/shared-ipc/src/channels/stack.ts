@@ -291,6 +291,69 @@ export const StackSetPlateVolumeChannel = defineChannel(
 );
 
 /**
+ * `add-multibox-audio` — **A MAP OF PLATE VOLUMES FOR ONE ROW, APPLIED AS ONE ACTION.**
+ *
+ * ── WHY A MAP VERB EXISTS BESIDE THE SINGLE-PLATE ONE ──────────────────────
+ *
+ * Two of the four operator gestures are **CROSS-PLATE STATEMENTS** rather than per-plate
+ * ones. SOLO says _"this plate and NONE of its siblings"_; PANIC says _"none of them"_.
+ * Sent as a sequence of single-plate calls those become several actions the caller has to
+ * keep in order, and a look switch landing between two of them leaves the row in a state
+ * neither the operator nor the ledger ever asked for — two plates audible after a SOLO,
+ * with nothing anywhere saying so. The bridge holds the item's live-seat lock for the whole
+ * map, which is the only way that window closes.
+ *
+ * 🔴 **IT IS NOT A SECOND WRITER.** The bridge applies each entry through the SAME
+ * `setLivePlateVolume` that this channel's single-plate sibling calls. A second spelling of
+ * _"what volume should this layer have"_ is the `B-100` / `P-012` failure this project has
+ * now paid for five times, and audio is the one property of a graphic an operator cannot
+ * see — so a divergence here would be invisible until air.
+ *
+ * ── ⚠ PER-PLATE OUTCOMES, NEVER ONE AVERAGED BOOLEAN ───────────────────────
+ *
+ * A SOLO across four plates can land three and be refused on the fourth (its layer's send
+ * failed, or the plate is not declared). One `ok: false` would say the action failed while
+ * three plates had in fact moved, and one `ok: true` would hide the plate that did not.
+ * `results` carries one verdict per plate so the console can say exactly which guest is not
+ * where the operator put them. `ok` is true only when EVERY entry landed.
+ *
+ * ⚠ **`volume: 0` IS A REAL REQUEST** — "mute this plate" — recorded like any other, and
+ * NOT the same as the key being absent from the map, which means "leave this plate alone".
+ * SOLO depends on that distinction: it names every sibling explicitly rather than relying on
+ * omission to mean silence.
+ *
+ * Bounded to `[0, 1]` **at the boundary**, exactly as the single-plate channel is and for
+ * the same reason: a mistyped `100` is a request to amplify a guest's microphone by forty
+ * decibels, and a parse error here beats an AMCP the server accepts. The bridge verb ALSO
+ * refuses a bad value per plate — that is defence in depth for its internal callers, not a
+ * relaxation of this bound.
+ */
+export const StackSetPlateVolumesChannel = defineChannel(
+  'stack.set-plate-volumes',
+  z.object({
+    itemId: IdSchema,
+    /**
+     * `plateId → gain`. The SCENE's handles for the holes (`guest-1`), never catalog ids.
+     *
+     * A plate ABSENT from this map is left exactly as it was — the map is a set of
+     * statements, not a complete picture of the row.
+     */
+    volumes: z.record(z.string().min(1), z.number().min(0).max(1)),
+  }),
+  z.object({
+    /** True only when EVERY entry landed. A partial application is never `ok`. */
+    ok: z.boolean(),
+    results: z.array(
+      z.object({
+        plateId: z.string().min(1),
+        ok: z.boolean(),
+        reason: z.string().optional(),
+      }),
+    ),
+  }),
+);
+
+/**
  * R-010 — clear EVERYTHING in one operation: every stack item is OUTed and
  * REMOVEd (per-item CLEAR-destroys semantics, in sequence), clearing air and
  * emptying the list. The sanctioned path to unblock a server reconfiguration.

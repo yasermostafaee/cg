@@ -5,14 +5,23 @@ import { Button } from '../../ui/Button.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
-import { casparRefusalReason } from '../../ui/reachWording.js';
+import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import {
   liveLayerEmptyView,
   releaseScopeOf,
+  seatedPlatesOf,
   type LiveLayerBlindness,
   type LiveLayerRowView,
 } from './liveLayerRows.js';
+import { PlateAudioStrip } from './PlateAudioStrip.js';
+import { panicMap } from './plateAudio.js';
+
+/** The rows PANIC addresses, and the plates it will zero on each. */
+export interface PanicScope {
+  itemId: string;
+  plates: readonly string[];
+}
 
 interface Props {
   /**
@@ -33,6 +42,32 @@ interface Props {
   blind: LiveLayerBlindness | null;
   /** Select the owning row, so its verbs are one click away. */
   onSelectOwner: (itemId: string) => void;
+  /**
+   * `add-multibox-audio` — apply a MAP of plate volumes to one row's item, in ONE bridge call.
+   *
+   * Every audio gesture on this panel goes through it: the fader, ON, OFF, SOLO and PANIC.
+   * There is no second door and no per-plate variant here, because SOLO and PANIC are
+   * CROSS-PLATE statements and a sequence of single-plate calls cannot make one.
+   */
+  onApplyVolumes: (
+    itemId: string,
+    volumes: Record<string, number>,
+  ) => Promise<{ ok: boolean; refused: string[] }>;
+  /**
+   * 🔴 **THE ROWS PANIC ADDRESSES — resolved by the CALLER, which is the only place that can
+   * see the stack.**
+   *
+   * It is the ON-AIR rows' seated plates. That it is status-gated at all is a recorded
+   * decision with a recorded cost (`add-multibox-audio` design.md §5): `B-122`'s lesson is
+   * that an emergency control must not depend on the values that may be wrong in the
+   * emergency, and the containments are that PANIC REPORTS what it addressed (so a no-op
+   * cannot read as a success) and that CLEAR ALL — which ignores status entirely and takes
+   * the audio down with the layer — is one panel away.
+   *
+   * EMPTY means there is nothing on air to silence, and PANIC says exactly that rather than
+   * reporting a success over nothing.
+   */
+  panicScope: readonly PanicScope[];
 }
 
 const styles = {
@@ -41,6 +76,12 @@ const styles = {
     fontSize: '0.8rem',
     color: colors.textMuted,
     borderBottom: `1px solid ${colors.border}`,
+  },
+  introHead: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: '0.75rem',
   },
   list: { overflowY: 'auto' as const, minHeight: 0 },
   row: {
@@ -110,7 +151,14 @@ const styles = {
  * The one exception is a STRANDED layer, and it is the reason the item was filed:
  * see `liveLayerRows.ts`, which holds that rule and its evidence.
  */
-export function LiveSourcesPanel({ rows, ledgerReady, blind, onSelectOwner }: Props): JSX.Element {
+export function LiveSourcesPanel({
+  rows,
+  ledgerReady,
+  blind,
+  onSelectOwner,
+  onApplyVolumes,
+  panicScope,
+}: Props): JSX.Element {
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
@@ -124,6 +172,87 @@ export function LiveSourcesPanel({ rows, ledgerReady, blind, onSelectOwner }: Pr
    * capability, it is the appearance of one.
    */
   const releaseRefusal = casparRefusalReason(linkDown, casparReach);
+
+  /**
+   * 🔴 **THE AUDIO CONTROLS ASK A NARROWER QUESTION THAN RELEASE DOES — the BRIDGE hop only,
+   * not the CasparCG one — and the difference is a real affordance rather than a nicety.**
+   *
+   * Setting a plate's volume is a CONFIGURATION verb (golden rule 10). On a row that owns no
+   * live seats the bridge records the intent and sends NOTHING, so an unreachable playout
+   * machine has no bearing on whether the press can be done — and arming a plate's audio while
+   * the plant is being brought back up is exactly when an operator wants to. Refusing it for
+   * `CASPAR_UNREACHABLE` would take away the before-the-take affordance the mute rule exists
+   * to preserve.
+   *
+   * With the BRIDGE down the call cannot leave the browser at all, so that one still refuses.
+   * Where a send IS owed — a row that owns its seats — the bridge answers `disconnected` and
+   * the operator is told by the toast, which is the honest place for a refusal only the bridge
+   * can know it must make.
+   */
+  const audioRefusal = linkDown ? BRIDGE_DOWN_REASON : undefined;
+
+  /**
+   * Apply a map for one row, and turn the bridge's PER-PLATE verdicts into one sentence.
+   *
+   * ⚠ The per-plate detail is not decoration: a SOLO across four plates can land three and be
+   * refused on the fourth, and an operator told only "failed" would re-press it — re-applying
+   * three changes that already landed — while one told "ok" would leave a guest audible with
+   * nothing saying so. The toast names the plates that did not move.
+   */
+  const applyAndReport = async (
+    itemId: string,
+    volumes: Record<string, number>,
+  ): Promise<{ ok: boolean; refused: string[] }> => {
+    const res = await onApplyVolumes(itemId, volumes);
+    if (!res.ok) {
+      reportCommandError(
+        res.refused.length > 0
+          ? `Audio not applied to ${res.refused.join(', ')} — those plates are unchanged.`
+          : 'The audio change was refused.',
+      );
+    }
+    return res;
+  };
+
+  /**
+   * PANIC — silence every plate of every ON-AIR row, from one press.
+   *
+   * ⚠ **NO CONFIRM, deliberately.** An emergency control behind a dialog is one that does not
+   * happen; the dialog next door makes the same argument for its own MUTE button. Silencing is
+   * also the RECOVERABLE direction — the faders are still there — which a CLEAR is not, and
+   * that is the line this product draws for a confirm.
+   *
+   * The report counts what ACTUALLY went. An empty scope reports "nothing on air" rather than
+   * a success over nothing: `B-122`'s failure was an emergency control reporting success
+   * having sent nothing at all.
+   */
+  const panic = async (): Promise<{ accepted: boolean; cancelled?: boolean }> => {
+    if (panicScope.length === 0) {
+      reportCommandError('Nothing was sent — no row is on air, so there is no plate to silence.');
+      return { accepted: false, cancelled: true };
+    }
+    const outcomes = await Promise.all(
+      panicScope.map(async (scope) => ({
+        scope,
+        res: await onApplyVolumes(scope.itemId, panicMap(scope.plates)),
+      })),
+    );
+    const silenced = outcomes
+      .filter((o) => o.res.ok)
+      .reduce((n, o) => n + o.scope.plates.length, 0);
+    const refused = outcomes.flatMap((o) => o.res.refused);
+    if (refused.length > 0) {
+      reportCommandError(
+        `Silenced ${String(silenced)} plate(s), but ${refused.join(', ')} did not take — ` +
+          `those may still be audible.`,
+      );
+      return { accepted: false, cancelled: true };
+    }
+    reportCommandSuccess(
+      `Silenced ${String(silenced)} plate(s) across ${String(panicScope.length)} on-air row(s).`,
+    );
+    return { accepted: true };
+  };
 
   /**
    * 🔴 **THE ROWS AS OF NOW, not as of the render that drew the button.**
@@ -235,9 +364,34 @@ export function LiveSourcesPanel({ rows, ledgerReady, blind, onSelectOwner }: Pr
   return (
     <>
       <div style={styles.intro}>
-        These layers were created by this console to composite live sources behind a
-        template&rsquo;s holes. Repoint, audio and off-air are the owning row&rsquo;s verbs — open
-        the row to reach them.
+        <div style={styles.introHead}>
+          <span>
+            These layers were created by this console to composite live sources behind a
+            template&rsquo;s holes. Repoint and off-air are the owning row&rsquo;s verbs — audio is
+            on each plate&rsquo;s own strip below.
+          </span>
+          {/*
+            PANIC AT THE HEAD, not per row: it is the only control here whose scope is EVERY
+            row, and a control that acts on the whole list belongs above the list rather than
+            repeated inside it. `caution-strong` and not `danger` — red is this palette's
+            error-and-destructive hue, and silencing is neither: the pictures stay on air and
+            the faders are still there.
+          */}
+          <AsyncButton
+            variant="caution-strong"
+            run={panic}
+            onError={reportCommandError}
+            disabled={audioRefusal !== undefined}
+            title={
+              audioRefusal ??
+              'Set every plate of every ON-AIR row to zero. The pictures stay on air. There ' +
+                'is no un-panic — raise what you need again on its own fader.'
+            }
+            aria-label="Silence all boxes — set every plate of every on-air row to zero"
+          >
+            SILENCE ALL BOXES
+          </AsyncButton>
+        </div>
       </div>
       <div style={styles.list}>
         {rows.map((row) => (
@@ -254,6 +408,19 @@ export function LiveSourcesPanel({ rows, ledgerReady, blind, onSelectOwner }: Pr
                 {row.plate} — {row.producer}
               </span>
               <span style={styles.detail}>{row.detail}</span>
+              {/*
+                The audio strip renders itself away when the console cannot honestly state
+                this plate's audio — blind, or stranded. That decision lives on the ROW
+                (`LiveLayerRowView.audio`), computed in the one pass that produced everything
+                else on this surface, so the strip and the headline can never disagree about
+                whether anything is knowable.
+              */}
+              <PlateAudioStrip
+                row={row}
+                siblings={seatedPlatesOf(rows, row.itemId)}
+                refusal={audioRefusal}
+                onApply={(volumes) => applyAndReport(row.itemId, volumes)}
+              />
             </div>
             {row.releasable ? (
               <AsyncButton

@@ -4,6 +4,9 @@ import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { Button } from '../../ui/Button.js';
+// The ONE vocabulary, shared with the LIVE SOURCES strip and the row's summary — so the
+// dialog's SOLO and the panel's SOLO cannot address different sets or round differently.
+import { pct, soloMap } from './plateAudio.js';
 
 /**
  * C-015 phase 6 (6.5f) — **RAISE (or mute) ONE PLATE's audio: the operator surface
@@ -45,6 +48,26 @@ import { Button } from '../../ui/Button.js';
  * Each control commits on release, with no Apply: an Apply is another action, and
  * under pressure another action is one that does not happen. `0` is a REAL value —
  * "the operator muted this plate" — and is recorded, never treated as a reset.
+ *
+ * ── `add-multibox-audio` — WHAT CHANGED, AND WHAT DELIBERATELY DID NOT ────
+ *
+ * The dialog gains **ON / OFF** and **SOLO** beside the fader, and every gesture now goes
+ * through the MAP door (`stack.set-plate-volumes`) rather than the single-plate one. That is
+ * not a refactor for tidiness: SOLO is a CROSS-PLATE statement — _"this plate and NONE of its
+ * siblings"_ — and a sequence of single-plate calls cannot make one. The bridge holds the
+ * row's live-seat lock for the whole map, so a look switch cannot land in the middle of a
+ * SOLO and leave two guests up.
+ *
+ * 🔴 **OFF-then-ON RETURNS TO 100 %, NOT TO THE PREVIOUS FADER VALUE**, and the dialog says so
+ * in words. Restoring the previous level needs a SECOND store of intent beside the bridge's
+ * `#plateVolumes`, answering the same question a second way — the `B-100` / `P-012` class,
+ * whose specific failure here is that only one of the two stores is retained, so a plate comes
+ * back from a bridge blip at a volume nobody chose.
+ *
+ * ⚠ **This dialog did NOT become the only surface, and it did not stop being useful.** The
+ * always-visible strip lives in LIVE SOURCES, where every seated plate is already enumerated;
+ * this is where ONE ROW's plates are adjusted against each other, which is the thing a list of
+ * every plate on the channel is worse at.
  */
 
 const styles = {
@@ -56,6 +79,19 @@ const styles = {
     alignItems: 'center',
     padding: '0.45rem 0',
   },
+  /**
+   * The verb row, on its own line UNDER the fader rather than as three more grid columns.
+   *
+   * A dialog is not the layer table and has no fixed-column contract to protect, but the same
+   * arithmetic applies: three more columns would squeeze the fader — the control an operator
+   * spends the most time in — to make room for buttons they press once.
+   */
+  verbs: {
+    gridColumn: '1 / -1',
+    display: 'flex',
+    gap: '0.4rem',
+    padding: '0 0 0.35rem',
+  },
   plate: { fontSize: '0.82rem', fontWeight: 600 },
   note: { display: 'block', fontSize: '0.7rem', fontWeight: 400, color: colors.textMuted },
   live: { color: colors.pending, fontSize: '0.7rem' },
@@ -66,23 +102,26 @@ const styles = {
   },
 } as const;
 
-/** Percent, for the operator. The wire takes a 0–1 gain. */
-const pct = (v: number): string => `${String(Math.round(v * 100))}%`;
-
 export interface LivePlateAudioDialogProps {
   item: StackItemState;
   template: TemplateInfo;
-  onSetVolume: (
-    plateId: string,
-    volume: number,
-  ) => Promise<{ ok: boolean; reason?: string | undefined }>;
+  /**
+   * Apply a MAP of this row's plate volumes, in ONE call.
+   *
+   * ⚠ A MAP and not a plate/volume pair, because SOLO is a cross-plate statement. `refused`
+   * names the plates that did not move — a partial application must be visible rather than
+   * averaged into one boolean.
+   */
+  onApplyVolumes: (
+    volumes: Record<string, number>,
+  ) => Promise<{ ok: boolean; refused: readonly string[] }>;
   onClose: () => void;
 }
 
 export function LivePlateAudioDialog({
   item,
   template,
-  onSetVolume,
+  onApplyVolumes,
   onClose,
 }: LivePlateAudioDialogProps): React.JSX.Element {
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -104,24 +143,42 @@ export function LivePlateAudioDialog({
   // it. Zero is falsy, and this repo has paid for that three times.
   const shown = (plateId: string): number => dragging[plateId] ?? intents[plateId] ?? 0;
 
-  const commit = (plateId: string, volume: number): void => {
+  /**
+   * Apply a map and reconcile the optimistic state.
+   *
+   * ⚠ The optimistic value is dropped for EVERY plate the map named, not just the one a
+   * pointer was on: SOLO writes N plates and any of them could have been mid-drag.
+   */
+  const commit = (volumes: Record<string, number>): void => {
     setRefusal(null);
-    void onSetVolume(plateId, volume).then((res) => {
-      // The optimistic value is dropped either way: on success the published state
-      // now carries it, and on failure it never happened.
+    void onApplyVolumes(volumes).then((res) => {
+      // Dropped either way: on success the published state now carries it, and on failure it
+      // never happened.
       setDragging((d) => {
-        const { [plateId]: _drop, ...rest } = d;
-        return rest;
+        const next = { ...d };
+        for (const plateId of Object.keys(volumes)) delete next[plateId];
+        return next;
       });
       if (!res.ok) {
         setRefusal(
-          res.reason === 'disconnected'
-            ? 'Not connected to CasparCG — the change was refused, not queued. Reissue it once the server is back.'
-            : `The volume change was refused (${res.reason ?? 'unknown'}).`,
+          res.refused.length > 0
+            ? `The change was refused for ${res.refused.join(', ')} — those plates are unchanged.`
+            : 'The volume change was refused.',
         );
       }
     });
   };
+
+  /**
+   * SOLO's scope: every plate this TEMPLATE declares.
+   *
+   * ⚠ Declared, and not the ledger's seated set — this dialog is the only audio surface that
+   * can be opened on a row which is not on air, where there is no ledger to read and arming
+   * the plates ahead of the take is the whole point. Every declared plate is one the bridge
+   * accepts (it validates against this same declaration), and a `0` written to an unseated
+   * plate is a recorded intent with nothing sent — exactly what the mute rule wants.
+   */
+  const declaredIds = plates.map((p) => p.sourceId);
 
   return (
     <Modal
@@ -140,6 +197,20 @@ export function LivePlateAudioDialog({
         microphone, so nothing the bridge puts on a layer is audible until it is raised here. This
         is a per-plate setting for <strong>this row</strong>, and it survives a source swap and a
         bridge restart. It can be set before the take.
+        <br />
+        {/*
+          🔴 THE ONE SENTENCE AN OPERATOR MUST NOT HAVE TO DISCOVER UNDER PRESSURE.
+
+          ON is full volume, not "back to where it was". Someone who assumes otherwise puts a
+          guest back at 100 % having meant 40 %, on air, and there is nothing on screen that
+          would have told them. Restoring the previous level would need a second store of
+          intent beside the bridge's — the `B-100` / `P-012` class — and only one of the two
+          would be retained across a blip, so the plate would come back at a volume nobody
+          chose. The trade is deliberate; saying it here is the price of making it.
+        */}
+        <strong>ON is full volume (100 %)</strong> — it does not return a plate to its previous
+        fader level. <strong>SOLO</strong> raises one plate and silences the others on this row, and
+        there is no un-solo.
       </p>
       {plates.map((plate) => {
         const value = shown(plate.sourceId);
@@ -162,7 +233,7 @@ export function LivePlateAudioDialog({
               variant="secondary"
               disabled={!audible}
               onClick={() => {
-                commit(plate.sourceId, 0);
+                commit({ [plate.sourceId]: 0 });
               }}
               aria-label={`Mute ${plate.sourceId}`}
             >
@@ -184,13 +255,58 @@ export function LivePlateAudioDialog({
               // Committed on RELEASE, not on every drag frame: one AMCP command per
               // decision rather than one per pixel.
               onPointerUp={() => {
-                commit(plate.sourceId, shown(plate.sourceId));
+                commit({ [plate.sourceId]: shown(plate.sourceId) });
               }}
               onKeyUp={() => {
-                commit(plate.sourceId, shown(plate.sourceId));
+                commit({ [plate.sourceId]: shown(plate.sourceId) });
               }}
             />
             <span style={styles.readout}>{pct(value)}</span>
+            <span style={styles.verbs}>
+              {/*
+                ON and OFF as two named buttons rather than one toggle: a toggle has to be
+                READ before it can be pressed, and under pressure that read is a guess. OFF
+                always means silence whatever the plate was doing, which is the urgent
+                direction. MUTE above stays — it is OFF's twin beside the fader, and removing
+                a control an operator already reaches for to make room for a tidier set is not
+                an improvement.
+              */}
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  commit({ [plate.sourceId]: 1 });
+                }}
+                title="ON = full volume (100%). It does not return to the previous fader level."
+                aria-label={`Full volume for ${plate.sourceId} (100%, not the previous level)`}
+              >
+                ON
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  commit({ [plate.sourceId]: 0 });
+                }}
+                aria-label={`Silence ${plate.sourceId}`}
+              >
+                OFF
+              </Button>
+              <Button
+                variant="caution"
+                disabled={declaredIds.length < 2}
+                onClick={() => {
+                  commit(soloMap(declaredIds, plate.sourceId));
+                }}
+                title={
+                  declaredIds.length < 2
+                    ? 'This template has only one plate — there is nothing to solo against.'
+                    : 'Raise this plate and silence every other plate on this row. There is no ' +
+                      'un-solo — raise the others again on their own faders.'
+                }
+                aria-label={`Solo ${plate.sourceId} — silences the other ${String(declaredIds.length - 1)} plate(s) on this row, with no restore`}
+              >
+                SOLO
+              </Button>
+            </span>
           </div>
         );
       })}

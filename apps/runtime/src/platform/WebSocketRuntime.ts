@@ -35,6 +35,7 @@ import {
   StackRestoreChannel,
   StackStopChannel,
   StackSetPlateVolumeChannel,
+  StackSetPlateVolumesChannel,
   StackSetPositionChannel,
   StackSetActiveLookChannel,
   StackSwapLiveSourceChannel,
@@ -874,6 +875,9 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetActiveLookChannel, req),
     setPlateVolume: (req: ChannelRequest<typeof StackSetPlateVolumeChannel>) =>
       this.#invoke(StackSetPlateVolumeChannel, req),
+    // `add-multibox-audio` — the MAP door: FADER, ON/OFF, SOLO and PANIC all arrive here.
+    setPlateVolumes: (req: ChannelRequest<typeof StackSetPlateVolumesChannel>) =>
+      this.#invoke(StackSetPlateVolumesChannel, req),
     removeAll: () => this.#invoke(StackRemoveAllChannel, undefined),
     clearAll: () => this.#invoke(StackClearAllChannel, undefined),
     // C-012 / R-028 — the graceful bulk beside the hard one.

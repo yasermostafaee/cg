@@ -55,10 +55,9 @@ afterEach(() => {
 });
 
 function renderDialog(
-  onSetVolume: (
-    plateId: string,
-    volume: number,
-  ) => Promise<{ ok: boolean; reason?: string | undefined }>,
+  onApplyVolumes: (
+    volumes: Record<string, number>,
+  ) => Promise<{ ok: boolean; refused: readonly string[] }>,
   over: Parameters<typeof itemWith>[1] = {},
 ): void {
   host = document.createElement('div');
@@ -70,12 +69,18 @@ function renderDialog(
       createElement(LivePlateAudioDialog, {
         item: itemWith('on-air', over),
         template: TEMPLATE,
-        onSetVolume,
+        onApplyVolumes,
         onClose: () => undefined,
       }),
     );
   });
 }
+
+/** Every dialog button carrying an exact label. */
+const buttonsLabelled = (label: string): HTMLButtonElement[] =>
+  [...(openDialog()?.querySelectorAll('button') ?? [])].filter(
+    (b) => b.textContent === label,
+  ) as HTMLButtonElement[];
 
 /**
  * Drag the slider to `percent`, WITHOUT releasing it.
@@ -109,10 +114,7 @@ function releaseSlider(el: HTMLInputElement | undefined): void {
 const sliders = (): HTMLInputElement[] => [
   ...(openDialog()?.querySelectorAll<HTMLInputElement>('input[type="range"]') ?? []),
 ];
-const muteButtons = (): HTMLButtonElement[] =>
-  [...(openDialog()?.querySelectorAll('button') ?? [])].filter(
-    (b) => b.textContent === 'MUTE',
-  ) as HTMLButtonElement[];
+const muteButtons = (): HTMLButtonElement[] => buttonsLabelled('MUTE');
 
 describe('6.5f — the AUDIO verb is on the ROW, beside SOURCE', () => {
   it('a row whose template declares plates offers AUDIO', () => {
@@ -167,7 +169,7 @@ describe('6.5f — the AUDIO verb is on the ROW, beside SOURCE', () => {
 
 describe('6.5f — the dialog states the rule and commits one decision at a time', () => {
   it('says every plate starts SILENT, and why', () => {
-    renderDialog(() => Promise.resolve({ ok: true }));
+    renderDialog(() => Promise.resolve({ ok: true, refused: [] }));
     const text = openDialog()?.textContent ?? '';
     expect(text).toContain('silent');
     // The REASON, not just the state: a plate carries a guest's live microphone.
@@ -177,7 +179,9 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
   });
 
   it('shows one control per plate, and says which are audible', () => {
-    renderDialog(() => Promise.resolve({ ok: true }), { plateVolumes: { 'guest-1': 1 } });
+    renderDialog(() => Promise.resolve({ ok: true, refused: [] }), {
+      plateVolumes: { 'guest-1': 1 },
+    });
     expect(sliders()).toHaveLength(2);
     const text = openDialog()?.textContent ?? '';
     expect(text).toContain('guest-1');
@@ -191,18 +195,22 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
   it('🔴 MUTE commits 0 in one press — the urgent direction is one gesture', () => {
     // Dragging a slider to exactly zero under pressure is a worse gesture than
     // pressing one button, and an open microphone is the failure with seconds on it.
-    const onSetVolume = vi.fn(() => Promise.resolve({ ok: true }));
-    renderDialog(onSetVolume, { plateVolumes: { 'guest-1': 1 } });
+    const onApply = vi.fn(() => Promise.resolve({ ok: true, refused: [] }));
+    renderDialog(onApply, { plateVolumes: { 'guest-1': 1 } });
 
     act(() => {
       muteButtons()[0]?.click();
     });
 
-    expect(onSetVolume).toHaveBeenCalledWith('guest-1', 0);
+    // A MAP with one entry — the same door every audio gesture goes through, so a look
+    // switch cannot land between the entries of a multi-plate one.
+    expect(onApply).toHaveBeenCalledWith({ 'guest-1': 0 });
   });
 
   it('MUTE is disabled on a plate that is already silent', () => {
-    renderDialog(() => Promise.resolve({ ok: true }), { plateVolumes: { 'guest-1': 1 } });
+    renderDialog(() => Promise.resolve({ ok: true, refused: [] }), {
+      plateVolumes: { 'guest-1': 1 },
+    });
     const [first, second] = muteButtons();
     expect(first?.disabled).toBe(false);
     // `guest-2` has no intent at all, so it is silent and there is nothing to mute.
@@ -211,26 +219,26 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
 
   it('🔴 the slider commits on RELEASE, not on every drag frame', () => {
     // One AMCP command per decision rather than one per pixel.
-    const onSetVolume = vi.fn(() => Promise.resolve({ ok: true }));
-    renderDialog(onSetVolume);
+    const onApply = vi.fn(() => Promise.resolve({ ok: true, refused: [] }));
+    renderDialog(onApply);
     const slider = sliders()[0];
 
     act(() => {
       dragSlider(slider, 60);
     });
-    expect(onSetVolume, 'dragging must not commit').not.toHaveBeenCalled();
+    expect(onApply, 'dragging must not commit').not.toHaveBeenCalled();
 
     act(() => {
       releaseSlider(slider);
     });
-    expect(onSetVolume).toHaveBeenCalledWith('guest-1', 0.6);
+    expect(onApply).toHaveBeenCalledWith({ 'guest-1': 0.6 });
   });
 
   it('🔴 an explicit 0 reads as 0%, NOT as an unset plate — zero is falsy', () => {
     // A plate the operator deliberately muted and a plate nobody has spoken about
     // both show 0%; what must not happen is the explicit 0 being dropped and the
     // control falling back to some other value.
-    renderDialog(() => Promise.resolve({ ok: true }), {
+    renderDialog(() => Promise.resolve({ ok: true, refused: [] }), {
       plateVolumes: { 'guest-1': 0, 'guest-2': 1 },
     });
     expect(sliders()[0]?.value).toBe('0');
@@ -239,8 +247,8 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
   });
 
   it('🔴 a REFUSED change does not leave the control showing a value the bridge rejected', async () => {
-    const onSetVolume = vi.fn(() => Promise.resolve({ ok: false, reason: 'disconnected' }));
-    renderDialog(onSetVolume);
+    const onApply = vi.fn(() => Promise.resolve({ ok: false, refused: ['guest-1'] }));
+    renderDialog(onApply);
     const slider = sliders()[0];
 
     await act(async () => {
@@ -254,6 +262,128 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
     // everywhere else — and for audio it means believing a guest is muted when
     // they are not.
     expect(sliders()[0]?.value).toBe('0');
-    expect(openDialog()?.textContent).toMatch(/refused, not queued/i);
+    // ⚠ It NAMES the plate. A partial application must say WHICH guest did not move —
+    // "refused" alone would have the operator re-press a SOLO whose other three plates
+    // already landed.
+    expect(openDialog()?.textContent).toMatch(/refused for guest-1/i);
+  });
+});
+
+/**
+ * `add-multibox-audio` — the two gestures the dialog gained, and the ONE SENTENCE it must say.
+ */
+describe('add-multibox-audio — ON / OFF and SOLO in the dialog', () => {
+  it('🔴 ON writes 1 and OFF writes 0 — two named buttons, never one toggle', () => {
+    // A toggle has to be READ before it can be pressed, and under pressure that read is a
+    // guess. OFF means silence whatever the plate was doing.
+    const onApply = vi.fn(() => Promise.resolve({ ok: true, refused: [] }));
+    renderDialog(onApply, { plateVolumes: { 'guest-1': 0.4 } });
+
+    act(() => {
+      buttonsLabelled('ON')[0]?.click();
+    });
+    expect(onApply).toHaveBeenCalledWith({ 'guest-1': 1 });
+
+    act(() => {
+      buttonsLabelled('OFF')[0]?.click();
+    });
+    expect(onApply).toHaveBeenCalledWith({ 'guest-1': 0 });
+  });
+
+  it('🔴 OFF-then-ON returns to 100%, and the surface SAYS so', () => {
+    // The rule, stated where the operator reads it. Restoring the previous level would need
+    // a SECOND store of intent beside the bridge's — the B-100 / P-012 class — and only one
+    // of the two survives a bridge blip, so the plate would come back at a volume nobody
+    // chose. The trade is deliberate; the sentence is the price of making it.
+    const onApply = vi.fn(() => Promise.resolve({ ok: true, refused: [] }));
+    renderDialog(onApply, { plateVolumes: { 'guest-1': 0.4 } });
+
+    act(() => {
+      buttonsLabelled('OFF')[0]?.click();
+    });
+    act(() => {
+      buttonsLabelled('ON')[0]?.click();
+    });
+
+    // NOT 0.4 — full volume, which is what the copy promises.
+    expect(onApply).toHaveBeenLastCalledWith({ 'guest-1': 1 });
+    expect(openDialog()?.textContent).toMatch(/ON is full volume/i);
+    expect(openDialog()?.textContent).toMatch(/does not return a plate to its previous/i);
+  });
+
+  it('🔴 SOLO is ONE call — 1 for the plate and 0 for every sibling', () => {
+    // A cross-plate statement. Sent as N single-plate calls it would be N statements that
+    // happen to be adjacent, and a look switch landing between two of them leaves two
+    // guests audible with nothing recording it.
+    const onApply = vi.fn(() => Promise.resolve({ ok: true, refused: [] }));
+    renderDialog(onApply, { plateVolumes: { 'guest-1': 0.2, 'guest-2': 0.9 } });
+
+    act(() => {
+      buttonsLabelled('SOLO')[0]?.click();
+    });
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply).toHaveBeenCalledWith({ 'guest-1': 1, 'guest-2': 0 });
+  });
+
+  it('SOLO says there is no restore, and does not offer one', () => {
+    renderDialog(() => Promise.resolve({ ok: true, refused: [] }));
+    expect(openDialog()?.textContent).toMatch(/no un-solo/i);
+    // Nothing anywhere offers to put the previous levels back.
+    const labels = [...(openDialog()?.querySelectorAll('button') ?? [])].map((b) => b.textContent);
+    expect(labels.some((l) => /un-?solo|restore|undo/i.test(l ?? ''))).toBe(false);
+  });
+
+  it('SOLO is disabled on a single-plate template — there is nothing to solo against', () => {
+    host = document.createElement('div');
+    document.body.append(host);
+    const r = createRoot(host);
+    root = r;
+    const onePlate = templateWith({
+      liveSources: {
+        resolution: { width: 1920, height: 1080 },
+        defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+        sources: [
+          {
+            elementId: 'el-1',
+            sourceId: 'guest-1',
+            rect: { x: 0, y: 0, width: 400, height: 225 },
+            dynamic: false,
+          },
+        ],
+      },
+    });
+    act(() => {
+      r.render(
+        createElement(LivePlateAudioDialog, {
+          item: itemWith('on-air'),
+          template: onePlate,
+          onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
+          onClose: () => undefined,
+        }),
+      );
+    });
+    expect(buttonsLabelled('SOLO')[0]?.disabled).toBe(true);
+  });
+
+  it('🔴 an explicit 0 sibling is written EXPLICITLY, never left out of the map', () => {
+    // An absent key means "leave this plate alone". Relying on omission to mean silence
+    // would make SOLO a no-op on every plate but the chosen one.
+    const seen: Record<string, number>[] = [];
+    renderDialog(
+      (volumes) => {
+        seen.push(volumes);
+        return Promise.resolve({ ok: true, refused: [] });
+      },
+      { plateVolumes: { 'guest-2': 1 } },
+    );
+
+    act(() => {
+      buttonsLabelled('SOLO')[0]?.click();
+    });
+
+    const sent = seen[0];
+    expect(Object.keys(sent ?? {}).sort()).toEqual(['guest-1', 'guest-2']);
+    expect(sent?.['guest-2']).toBe(0);
   });
 });

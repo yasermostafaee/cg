@@ -12,6 +12,8 @@ import { outputLetterbox, outputScale, outputTranslate } from '@cg/template-runt
 import { lookPlateRects, resolvePlateSourcesForLook } from '@cg/shared-ipc';
 import type { ChannelRaster, SourceAssignments, TemplateLiveSources } from '@cg/shared-ipc';
 import type { Position } from '@cg/shared-schema';
+// The ONE audio vocabulary, shared with the LIVE SOURCES strip and the layer row's summary.
+import type { PlateAudioState } from '../layers/plateAudio.js';
 
 /**
  * R-049 — WHERE each Live Source plate sits on the rehearsal frame, and WHAT the
@@ -84,6 +86,21 @@ export interface PlatePlacement {
   y: number;
   width: number;
   height: number;
+  /**
+   * `add-multibox-audio` — **WHAT THIS BOX'S AUDIO IS DOING**, or `undefined` when the panel
+   * could not say.
+   *
+   * ⚠ **`undefined` IS NOT SILENT.** The intent lives on the STACK ITEM (`plateVolumes`) and
+   * the held flag on the bridge's LEDGER — two snapshots that land independently of the
+   * template registry this placement is built from. Printing SILENT before they arrive would
+   * be a confident claim about the one property an operator cannot check by looking, on the
+   * surface whose entire premise is *"never let the console assert something it does not
+   * know"*.
+   *
+   * RESOLVED BY THE CALLER, like `sourceName`: only the panel can see the stack and the
+   * ledger, and this module stays free of both joins.
+   */
+  audio?: PlateAudioState | undefined;
 }
 
 /**
@@ -135,6 +152,12 @@ export interface PlateSourceLookup {
   readonly overrides?: Readonly<Record<string, string>> | undefined;
   /** Catalog id → the operator-facing NAME, or `null` when the catalog has no such entry. */
   readonly nameOf: (catalogId: string) => string | null;
+  /**
+   * `add-multibox-audio` — what this plate's audio is doing, or `undefined` when the caller
+   * cannot say. INJECTED for `nameOf`'s reason: it is a join across the stack and the ledger,
+   * and only a panel can see either.
+   */
+  readonly audioOf?: ((plateId: string) => PlateAudioState | undefined) | undefined;
 }
 
 /**
@@ -218,6 +241,10 @@ export function platePlacements(
         // `pruneAssignmentsForCatalog` gives a dangling reference, and the safe direction
         // anyway, since that plate will refuse its take.
         sourceName: catalogId === null ? null : sources.nameOf(catalogId),
+        // `undefined` when the caller supplied no lookup, and `undefined` again when it has
+        // one but cannot answer for this plate. Both mean "not stated", and the overlay draws
+        // no glyph rather than an honest-looking wrong one.
+        ...(sources.audioOf !== undefined && { audio: sources.audioOf(plate.sourceId) }),
         x: pad.x + s * (t.x + rect.x),
         y: pad.y + s * (t.y + rect.y),
         width: s * rect.width,

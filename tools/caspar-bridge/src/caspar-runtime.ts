@@ -5860,6 +5860,18 @@ export class CasparRuntime {
    * is what makes it possible to arm a plate's audio BEFORE the take instead of
    * having to catch it afterwards, which is the whole operator complaint the mute
    * rule creates.
+   *
+   * ── 🔴 GOLDEN RULE 10 — **THE GATE LIVES HERE, AND HERE ONLY** ────────────
+   *
+   * Setting a volume is a **CONFIGURATION** verb. `UPDATE` puts values IN FORCE; only a
+   * **take** puts content ON AIR. So on a row that owns no live seats this records the
+   * intent and sends NOTHING — see the gate in the body for the full argument.
+   *
+   * It is gated in THIS method rather than in each caller because every audio path in the
+   * product funnels through here: `stack.set-plate-volume` (one plate) and
+   * `stack.set-plate-volumes` (the map behind FADER / ON-OFF / SOLO / PANIC). `B-161`'s own
+   * rule is *"gate the one path the verbs share rather than making two paths agree"*, and a
+   * fifth verb added later inherits this by construction instead of by remembering.
    */
   async setLivePlateVolume(
     itemId: string,
@@ -5906,7 +5918,41 @@ export class CasparRuntime {
       source's audio before switching to the look that shows it — which is the same
       before-the-take affordance the mute rule already exists to preserve.
     */
-    if (record !== undefined && record.held !== true) {
+    /*
+      🔴 **`B-161` / GOLDEN RULE 10 — A CONFIGURATION VERB IS NEVER A PLAYOUT VERB.**
+
+      `UPDATE` puts values IN FORCE; only a **take** puts content ON AIR. Raising a plate's
+      audio is the same kind of statement: it says how loud this plate SHOULD be, and the
+      row's next take — or the reconcile that already re-asserts every plate's intent — is
+      what carries it to the layer.
+
+      🔴 **THE COUPLING THAT MAKES THIS NECESSARY, and it is one field wide.** The seat is
+      written at `record.intendedVolume` and re-asserted whenever that seat is (re)built. So
+      a plate raised on a row that owns no live seats would be **seated AUDIBLE** by whatever
+      seated it next — a guest's microphone reaching air through a verb nobody associates
+      with playout. That is `B-161`'s shape exactly, arriving on the audio axis instead of
+      the picture one.
+
+      ⚠ **`#ownsLiveSeats`, NOT `isOnAirStatus`** — the same trap `B-161` names. A REHEARSING
+      row is deliberately NOT on air and yet OWNS its plates on PVW, and it must keep hearing
+      them: rehearse is precisely when an operator checks a guest's level before air. Asking
+      only the air question would take that away without failing any test that existed before.
+
+      ⚠ **A record can legitimately exist while this is false**, which is why the record check
+      alone is not the gate. `out` and `stopItem` both tear plates down, but `exitRehearse`
+      does NOT — it drops the row from `#rehearsing` and restores the TEMPLATE layer's volume,
+      leaving the plate records seated. That row owns seats by neither test.
+
+      ⚠ **BOTH HALVES of the send path are skipped — the wire AND the ledger's as-sent copy.**
+      Writing `intendedVolume` for a command that was never sent is the standing lie the
+      failed-send path below already refuses to tell, and it is the very field the coupling
+      above rides.
+
+      ⚠ **WHAT IS NOT SKIPPED IS THE INTENT.** `#plateVolumes` is written exactly as before,
+      so arming a plate's audio ahead of the take still works. That is the affordance the mute
+      rule exists to preserve and this gate must not take it away.
+    */
+    if (record !== undefined && record.held !== true && this.#ownsLiveSeats(itemId)) {
       if (this.#noServerReachable()) return { ok: false, reason: 'disconnected' };
       const sent = await this.#send(
         this.#builder.mixerVolume(record.slot, volume),
@@ -5936,6 +5982,82 @@ export class CasparRuntime {
   /** The audio intent for one item's plates, or `undefined` when none is recorded. */
   livePlateVolumes(itemId: string): LivePlateVolumes | undefined {
     return this.#plateVolumes.get(itemId);
+  }
+
+  /**
+   * `add-multibox-audio` — **A MAP OF PLATE VOLUMES FOR ONE ROW, APPLIED AS ONE ACTION.**
+   *
+   * ── WHY THIS EXISTS BESIDE {@link setLivePlateVolume} ──────────────────────
+   *
+   * Two of the four operator gestures are **CROSS-PLATE STATEMENTS**: SOLO says _"this plate
+   * and NONE of its siblings"_, PANIC says _"none of them"_. A sequence of single-plate calls
+   * cannot make either statement — it makes N statements that happen to be adjacent, and the
+   * row is briefly in a state nobody asked for between any two of them.
+   *
+   * 🔴 **IT IS NOT A SECOND WRITER, and that is the whole of its implementation.** Every
+   * entry goes through {@link setLivePlateVolume} — the same refusals, the same held-plate
+   * rule, the same golden-rule-10 gate, the same ledger discipline. A second spelling of
+   * _"what volume should this layer have"_ is the `B-100` / `P-012` class, and on the audio
+   * axis a divergence is INVISIBLE until air, because audio is the one property of a graphic
+   * an operator cannot see.
+   *
+   * ── 🔴 THE LOCK, AND WHY THIS VERB TAKES ONE WHERE ITS SINGLE-PLATE SIBLING
+   *      DOES NOT ────────────────────────────────────────────────────────────
+   *
+   * Held ONCE, around the WHOLE map (see {@link #withLiveSeatLock}). Not per entry — per
+   * entry would serialise each send against a switch and still lose the cross-plate property,
+   * which is the only reason the lock is here.
+   *
+   * It closes two windows, both of them golden rule 7's two-reads-with-an-await:
+   *
+   *   1. **STALE-INTENT CLOBBER.** `#applyLivePlates` reads `#plateVolumes` at PLAN time and
+   *      asserts it at SEAT time. A reconcile that planned before our write and seats after
+   *      it sends the OLD volume — leaving the plate silent while the published intent says
+   *      otherwise. One `await` wide for a single plate; N awaits wide for a map.
+   *   2. **HALF-APPLIED SOLO.** A look switch interleaving between the raise and the mutes
+   *      leaves two plates audible, with neither the ledger nor the intent map recording it.
+   *
+   * ⚠ **The `take`/`out` exemption does NOT extend to this verb, and the difference is the
+   * point.** Those two are exempt because a wedged switch must never be able to hold a row
+   * OFF AIR — the take is the operator's repair verb. An audio verb queueing behind a switch
+   * is CORRECT: the switch's own tail re-asserts every plate's intent from `#plateVolumes`,
+   * so the result converges either way, and the queued verb lands on the seats that actually
+   * exist rather than on the ones that were there when it was pressed. And PANIC is not made
+   * unsafe by waiting — the status-blind emergency remedy is `CLEAR ALL` / the row's own
+   * CLEAR, neither of which this lock gates, and both of which take the audio with the layer.
+   *
+   * ── ⚠ PER-PLATE OUTCOMES, NEVER ONE AVERAGED BOOLEAN ───────────────────────
+   *
+   * A SOLO across four plates can land three and be refused on the fourth. One `ok: false`
+   * would say the action failed while three plates had moved; one `ok: true` would hide the
+   * plate that did not. `results` carries a verdict per plate; `ok` is true only when every
+   * entry landed.
+   *
+   * ⚠ **APPLIED IN A STABLE ORDER** (`Object.keys` insertion order, which is the caller's),
+   * so a failure is reproducible and a wire trace reads the same way twice. SOLO's callers
+   * put the RAISE first, so a map that dies half-way has silenced siblings rather than
+   * raised ones — the safe direction.
+   */
+  async setLivePlateVolumes(
+    itemId: string,
+    volumes: Readonly<Record<string, number>>,
+  ): Promise<{ ok: boolean; results: { plateId: string; ok: boolean; reason?: string }[] }> {
+    const entries = Object.entries(volumes);
+    // An EMPTY map is a no-op that succeeded, not a failure: PANIC over a row whose
+    // template declares no plates has nothing to say and must not report a problem.
+    if (entries.length === 0) return { ok: true, results: [] };
+    return this.#withLiveSeatLock(itemId, async () => {
+      const results: { plateId: string; ok: boolean; reason?: string }[] = [];
+      for (const [plateId, volume] of entries) {
+        const verdict = await this.setLivePlateVolume(itemId, plateId, volume);
+        results.push({
+          plateId,
+          ok: verdict.ok,
+          ...(verdict.reason !== undefined && { reason: verdict.reason }),
+        });
+      }
+      return { ok: results.every((r) => r.ok), results };
+    });
   }
 
   /** Is this exact coordinate a bridge-owned Live Source layer? */

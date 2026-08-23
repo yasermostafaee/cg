@@ -47,6 +47,7 @@ import {
   StackRemoveChannel,
   StackSetActiveLookChannel,
   StackSetPlateVolumeChannel,
+  StackSetPlateVolumesChannel,
   StackSetPositionChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
@@ -858,6 +859,14 @@ export function buildRoutes(
     // C-015 (6.5f) — the explicit recorded intent that raises a plate's audio.
     route(StackSetPlateVolumeChannel, (r: { itemId: string; plateId: string; volume: number }) =>
       b.setLivePlateVolume(r.itemId, r.plateId, r.volume),
+    ),
+    // `add-multibox-audio` — the same intent for SEVERAL plates as ONE action, which is what
+    // SOLO and PANIC are. It composes the writer above rather than duplicating it, and holds
+    // the item's live-seat lock so a look switch cannot interleave into the middle of a SOLO.
+    route(
+      StackSetPlateVolumesChannel,
+      (r: { itemId: string; volumes: Readonly<Record<string, number>> }) =>
+        b.setLivePlateVolumes(r.itemId, r.volumes),
     ),
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
     route(StackRemoveAllChannel, () => b.removeAll()),

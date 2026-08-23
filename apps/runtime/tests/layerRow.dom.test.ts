@@ -7,6 +7,10 @@ import {
   MISSING_TEMPLATE_REASON,
 } from '../src/renderer/features/layers/layerRowActions.js';
 import type { StackItemState } from '@cg/shared-schema';
+// `add-multibox-audio` — the row's own declaration of how wide the verb block is. Asserted
+// against, never restated as a literal: a test carrying its own `6` would keep passing on the
+// day the block grew a seventh button and the header words slid off their glyphs.
+import { VERB_COUNT } from '../src/renderer/features/layers/layerTable.js';
 import {
   bindingFor,
   itemWith,
@@ -995,5 +999,81 @@ describe('LayerRow — CasparCG reachability gates the AMCP verbs', () => {
     }
     expect(actions.find((x) => x.key === 'stop')?.disabled).toBe(false);
     expect(actions.find((x) => x.key === 'clear')?.disabled).toBe(false);
+  });
+});
+
+/**
+ * `add-multibox-audio` — **THE ROW'S READ-ONLY AUDIO SUMMARY, AND THE INVARIANT IT MUST NOT
+ * TOUCH.**
+ *
+ * A row carries a VARIABLE number of live plates while the verb block is a FIXED six-column
+ * grid whose sticky header prints the word above each glyph. A conditional control inside that
+ * block would put every header word from its column rightward above the WRONG glyph — and this
+ * product's STOP (graceful) and CLEAR (hard kill) are the inverse of the reference product's,
+ * so the header word is precisely the channel that retires the misread. The summary therefore
+ * rides the ALIAS cell, adds no column, and is not pressable.
+ */
+describe('LayerRow — the live-plate audio summary', () => {
+  let rendered: Awaited<ReturnType<typeof renderLayerRow>> | null = null;
+
+  afterEach(async () => {
+    await rendered?.unmount();
+    rendered = null;
+  });
+
+  const summary = (el: HTMLElement): Element | null => el.querySelector('[data-audio-summary]');
+
+  it('counts the RAISED plates against the plates the row owns', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1, 'guest-2': 0 } }),
+      seatedPlates: ['guest-1', 'guest-2', 'guest-3', 'guest-4'],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 1/4');
+  });
+
+  it('🔴 an explicit 0 is NOT raised, and neither is an absent key — but they are not merged', async () => {
+    // Zero is falsy and this repo has paid for that three times. Both read as not-raised
+    // here; what must not happen is either of them counting as raised.
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 0 } }),
+      seatedPlates: ['guest-1', 'guest-2'],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 0/2');
+  });
+
+  it('a row that owns NO live plates shows no summary at all — never `audio 0/0`', async () => {
+    rendered = await renderLayerRow({ item: itemWith('on-air'), seatedPlates: [] });
+    expect(summary(rendered.container)).toBeNull();
+  });
+
+  it('🔴 the verb block still holds exactly SIX buttons, and the summary is not one of them', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: ['guest-1', 'guest-2'],
+    });
+    const block = rendered.container.querySelector('[data-verb-block]');
+    expect(block?.querySelectorAll('button')).toHaveLength(VERB_COUNT);
+    expect(block?.querySelector('[data-audio-summary]'), 'it is OUTSIDE the grid').toBeNull();
+  });
+
+  it('it is READ-ONLY — no button, no input, and the pointer does not promise one', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: ['guest-1', 'guest-2'],
+    });
+    const chip = summary(rendered.container);
+    expect(chip?.tagName).toBe('SPAN');
+    expect(chip?.querySelector('button, input')).toBeNull();
+  });
+
+  it('🔴 nothing about it is drawn as a METER', async () => {
+    // There is no per-input level to draw: CasparCG's programme channel reports ONE peak pair
+    // for the whole channel. A bar here would claim "sound is present" from data that only
+    // says "we asked for it".
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: ['guest-1', 'guest-2'],
+    });
+    expect(rendered.container.querySelector('meter, progress, [role="progressbar"]')).toBeNull();
   });
 });

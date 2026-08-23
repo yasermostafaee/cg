@@ -207,6 +207,11 @@ export async function renderLayerRow(options: {
   rehearsing?: boolean;
   /** `LayerRow`’s display index. Was passed below but never declared here. */
   displayPosition?: number;
+  /**
+   * `add-multibox-audio` — the LIVE PLATES this row's item owns, for the read-only audio
+   * summary. Defaults to none, which is every row that has no live plates — the ordinary case.
+   */
+  seatedPlates?: readonly string[];
 }): Promise<RenderedRow> {
   const link = options.link ?? 'live';
   const stubs = stubBridge(link, options.reach ?? 'both-up');
@@ -244,6 +249,7 @@ export async function renderLayerRow(options: {
           bankPosition: options.bankPosition ?? 1,
           selected: options.selected ?? false,
           dirty: options.dirty ?? false,
+          seatedPlates: options.seatedPlates ?? [],
           onSelect: options.onSelect ?? ((): void => undefined),
           onUpdate: options.onUpdate ?? stubs.update,
         }),

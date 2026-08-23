@@ -26,6 +26,7 @@ import { LiveSourceSwapDialog } from './LiveSourceSwapDialog.js';
 import { LookPicker, lookOptionsOf } from './LookPicker.js';
 import { lookSwitchRefusal } from './lookSwitch.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
+import { audioSummary } from './plateAudio.js';
 import { rowState, type RowBinding } from './rowState.js';
 import {
   ROW_GEOMETRY,
@@ -82,6 +83,18 @@ interface Props {
    * one snapshot for the whole table keeps thirty rows agreeing by construction.
    */
   rehearsing: boolean;
+  /**
+   * `add-multibox-audio` — the LIVE PLATES this row's item actually owns, resolved by the
+   * PANEL from the bridge's ledger for `rehearsing`'s reason: one snapshot for the whole
+   * table, and the SAME array the LIVE SOURCES tab renders.
+   *
+   * ⚠ SEATED, not DECLARED. A declared plate with no producer cannot be audible, so a
+   * summary counting declarations would name a denominator the audio strips do not have.
+   *
+   * Defaults to empty — a row rendered on its own (a test, a story) shows no summary, which
+   * is the correct reading for a row that owns no live layers.
+   */
+  seatedPlates?: readonly string[];
   /**
    * How much text this width can carry (see `layerTable.ts`). Defaults to the
    * widest — a row rendered on its own shows everything it has.
@@ -248,6 +261,7 @@ export function LayerRow({
   selected,
   dirty,
   rehearsing,
+  seatedPlates = [],
   density = 'full',
   onSelect,
   onUpdate,
@@ -755,6 +769,49 @@ export function LayerRow({
       >
         {rowName}
         {dirty && <DraftChip label={`${rowName} has unapplied edits`} />}
+        {/*
+          🔴 `add-multibox-audio` — THE ROW'S AUDIO SUMMARY, READ-ONLY, AND **OUTSIDE THE VERB
+          BLOCK**.
+
+          ── WHY IT IS HERE AND NOT A SEVENTH BUTTON ────────────────────────────────────
+
+          `layerTable.ts` fixes `VERB_COUNT` at SIX, and the sticky header prints the word each
+          glyph stands for directly ABOVE it. A seventh control — or a conditional one, which
+          is what a plate-bearing row would need — moves every header word from that column
+          rightward onto the WRONG glyph. That file names it as the dangerous failure for a
+          specific reason: this product's STOP (graceful) and CLEAR (hard kill) are the inverse
+          of the reference product's, and the header word is precisely the channel that retires
+          the misread.
+
+          So this rides the ALIAS cell beside the draft chip. It adds no column, `VERB_COUNT`
+          stays 6, `gridTemplateColumns(density)` is untouched and `minWidthFor` still sums the
+          same columns — the same "no new column" discipline the look picker's second line
+          keeps, reached a different way.
+
+          ── AND IT IS READ-ONLY, WHICH IS THE OTHER HALF ───────────────────────────────
+
+          A row carries a VARIABLE number of plates; a control here would have to be one
+          control for several values. The number is the whole job: an operator scanning thirty
+          rows learns which ones have sound at all, and the strip in LIVE SOURCES — or this
+          row's own audio dialog — is where a value is changed.
+        */}
+        {item !== null &&
+          (() => {
+            const summary = audioSummary(item, seatedPlates);
+            return summary === null ? null : (
+              <span
+                className="cg-chip-audio"
+                data-audio-summary={summary.label}
+                title={
+                  `${String(summary.raised)} of this row's ${String(summary.total)} live plates ` +
+                  `are raised. Open LIVE SOURCES, or this row's audio dialog, to change them.`
+                }
+                aria-label={`${String(summary.raised)} of ${String(summary.total)} live plates raised`}
+              >
+                {summary.label}
+              </span>
+            );
+          })()}
       </span>
       {spec.showTemplate &&
         (templateLabel !== null ? (
@@ -790,7 +847,14 @@ export function LayerRow({
         The verb block. It needs no click handler of its own: the row's handler
         ignores anything that came from a control (see `onClick` above).
       */}
-      <span style={VERBS_GRID}>
+      {/*
+        `data-verb-block` — a stable hook for the ONE invariant this block has: it contains
+        exactly `VERB_COUNT` buttons, so every sticky header word sits above its own glyph.
+        Asserted rather than trusted because the failure is silent and dangerous: this
+        product's STOP (graceful) and CLEAR (hard kill) are the inverse of the reference
+        product's, and the header word is what retires that misread.
+      */}
+      <span style={VERBS_GRID} data-verb-block="">
         {buttons.map((action) => (
           <AsyncButton
             key={action.key}
@@ -884,9 +948,17 @@ export function LayerRow({
         <LivePlateAudioDialog
           item={item}
           template={template}
-          onSetVolume={(plateId, volume) =>
-            window.cg.stack.setPlateVolume({ itemId: item.itemId, plateId, volume })
-          }
+          /*
+            `add-multibox-audio` — the MAP door, not the single-plate one. SOLO is a
+            cross-plate statement and the bridge holds the row's live-seat lock for the whole
+            map, so a look switch cannot land in the middle of one. `refused` carries the
+            per-plate verdicts through unchanged: which guest did not move is the one thing an
+            operator needs from a partial failure.
+          */
+          onApplyVolumes={async (volumes) => {
+            const res = await window.cg.stack.setPlateVolumes({ itemId: item.itemId, volumes });
+            return { ok: res.ok, refused: res.results.filter((r) => !r.ok).map((r) => r.plateId) };
+          }}
           onClose={() => {
             setAudioOpen(false);
           }}

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type {
   FixedLayerBank,
   FixedSlotState,
+  LiveLayerState,
   Rehearsal,
   SourceAssignments,
   SourceCatalog,
@@ -123,6 +124,12 @@ interface Fixture {
   rehearsals: Rehearsal[];
   templates?: TemplateInfo[];
   assignments?: SourceAssignments;
+  /**
+   * `add-multibox-audio` — the bridge's seated-layer ledger, for the HELD half of each box's
+   * audio glyph. Empty by default: a rehearsing plate with nothing seated is not held, which
+   * is what every case here except the held one is.
+   */
+  liveLayers?: LiveLayerState[];
 }
 
 function stubBridge(f: Fixture): void {
@@ -163,6 +170,10 @@ function stubBridge(f: Fixture): void {
       onStatusChanged: noop,
       resyncing: () => false,
       onResyncingChanged: () => () => undefined,
+    },
+    liveLayers: {
+      state: () => Promise.resolve(f.liveLayers ?? []),
+      onStateChanged: noop,
     },
   };
   (window as unknown as { cg: unknown }).cg = stub;

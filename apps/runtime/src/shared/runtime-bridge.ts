@@ -38,6 +38,7 @@ import type {
   StackRemoveAllChannel,
   StackRemoveChannel,
   StackSetPlateVolumeChannel,
+  StackSetPlateVolumesChannel,
   StackSetPositionChannel,
   StackSetActiveLookChannel,
   StackSwapLiveSourceChannel,
@@ -217,6 +218,21 @@ export interface RuntimeBridge {
     setPlateVolume(
       req: ChannelRequest<typeof StackSetPlateVolumeChannel>,
     ): Promise<ChannelResponse<typeof StackSetPlateVolumeChannel>>;
+    /**
+     * `add-multibox-audio` — the same intent for SEVERAL plates of one row, as ONE action.
+     *
+     * The door FADER, ON/OFF, SOLO and PANIC all go through. SOLO and PANIC are CROSS-PLATE
+     * statements ("this one and none of its siblings", "none of them"), which a sequence of
+     * single-plate calls cannot make: the bridge holds the row's live-seat lock for the whole
+     * map, so a look switch cannot land in the middle of one.
+     *
+     * ⚠ It reports **one outcome per plate**. A SOLO that lands three plates and is refused on
+     * the fourth is neither a success nor a failure, and a single boolean would have to lie
+     * about one of them.
+     */
+    setPlateVolumes(
+      req: ChannelRequest<typeof StackSetPlateVolumesChannel>,
+    ): Promise<ChannelResponse<typeof StackSetPlateVolumesChannel>>;
     /**
      * R-010 — OUT + REMOVE every stack item (clears air, empties the list).
      * The sanctioned path to unblock a server reconfiguration.

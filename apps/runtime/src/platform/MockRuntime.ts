@@ -658,6 +658,33 @@ export class MockRuntime {
     return { ok: true };
   }
 
+  /**
+   * `add-multibox-audio` parity — the MAP of plate volumes, applied as ONE action.
+   *
+   * Composes {@link setPlateVolume} exactly as the bridge composes its own writer, so the
+   * offline console cannot teach the UI a model the bridge does not have (the B-070 / B-072
+   * parity rule). There is no lock here because there is no wire and no reconcile to
+   * interleave with — the bridge's `#withLiveSeatLock` exists to keep a look switch out of
+   * the middle of a SOLO, and the offline mock has neither.
+   *
+   * ⚠ **One outcome per plate**, like the bridge: a SOLO that lands three plates and is
+   * refused on the fourth must not report as a plain success or a plain failure.
+   */
+  setPlateVolumes(
+    itemId: string,
+    volumes: Readonly<Record<string, number>>,
+  ): { ok: boolean; results: { plateId: string; ok: boolean; reason?: string }[] } {
+    const results = Object.entries(volumes).map(([plateId, volume]) => {
+      const verdict = this.setPlateVolume(itemId, plateId, volume);
+      return {
+        plateId,
+        ok: verdict.ok,
+        ...(verdict.reason !== undefined && { reason: verdict.reason }),
+      };
+    });
+    return { ok: results.every((r) => r.ok), results };
+  }
+
   /** C-015 (6.5f) — the stored audio intent for an item (test/diagnostic surface). */
   plateVolumesOf(itemId: string): Readonly<Record<string, number>> | undefined {
     return this.#plateVolumes.get(itemId);

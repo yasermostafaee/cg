@@ -117,20 +117,30 @@ async function render(
   stackHasRows = true,
   ledgerReady = true,
   deliveryPending = false,
+  /**
+   * `add-multibox-audio` — the plate intents, and PANIC's scope.
+   *
+   * Both are the CALLER's answers in production too (only `LayersPanel` can see the stack),
+   * so injecting them here is the same seam rather than a test-only one.
+   */
+  volumeOf: (itemId: string, plateId: string) => number | undefined = () => undefined,
+  panicScope: { itemId: string; plates: readonly string[] }[] = [],
 ): Promise<{
   el: HTMLDivElement;
   remove: ReturnType<typeof vi.fn>;
   onSelectOwner: ReturnType<typeof vi.fn>;
+  applied: { itemId: string; volumes: Record<string, number> }[];
 }> {
   const { remove } = stubBridge(link, removeResult, reach);
   const onSelectOwner = vi.fn();
+  const applied: { itemId: string; volumes: Record<string, number> }[] = [];
   const blind = liveLayerBlindness(
     link === 'disconnected',
     stackReady,
     stackHasRows,
     deliveryPending,
   );
-  const rows = liveLayerRows(layers, labelFor, blind);
+  const rows = liveLayerRows(layers, labelFor, blind, volumeOf);
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -140,11 +150,21 @@ async function render(
       createElement(
         StrictMode,
         null,
-        createElement(LiveSourcesPanel, { rows, ledgerReady, blind, onSelectOwner }),
+        createElement(LiveSourcesPanel, {
+          rows,
+          ledgerReady,
+          blind,
+          onSelectOwner,
+          panicScope,
+          onApplyVolumes: (itemId, volumes) => {
+            applied.push({ itemId, volumes });
+            return Promise.resolve({ ok: true, refused: [] });
+          },
+        }),
       ),
     );
   });
-  return { el: container, remove, onSelectOwner };
+  return { el: container, remove, onSelectOwner, applied };
 }
 
 const rowFor = (el: HTMLElement, coordinate: string): HTMLElement | null =>
@@ -726,5 +746,317 @@ describe('liveLayerRows — the gate as pure functions', () => {
     */
     const labelFor = ownerLabelFor([item('item-a')], () => undefined);
     expect(labelFor('item-a')).toBe('item-a');
+  });
+});
+
+// ── `add-multibox-audio` — the always-visible per-plate audio ──────────────────
+
+const stripIn = (el: HTMLElement, plate: string): HTMLElement | null =>
+  el.querySelector(`[data-plate-audio="${plate}"]`);
+
+const stateOf = (el: HTMLElement, plate: string): string | null =>
+  stripIn(el, plate)
+    ?.querySelector('[data-plate-audio-state]')
+    ?.getAttribute('data-plate-audio-state') ?? null;
+
+const raised =
+  (map: Record<string, Record<string, number>>) =>
+  (itemId: string, plateId: string): number | undefined =>
+    map[itemId]?.[plateId];
+
+describe('add-multibox-audio — audio is visible without opening anything', () => {
+  it('🔴 every seated plate carries a strip, with a state pill and a % readout', async () => {
+    // The defect this closes: `plateVolumes` was on the wire and no surface outside a
+    // dialog read it, so the console's answer to "is this guest audible?" was "open a
+    // dialog and look" — for every row, one at a time.
+    const { el } = await render(
+      [layer({ layer: 10, sourceId: 'guest-1' }), layer({ layer: 11, sourceId: 'guest-2' })],
+      OWNED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      raised({ 'item-a': { 'guest-1': 1 } }),
+    );
+
+    expect(stateOf(el, 'guest-1')).toBe('audible');
+    expect(stripIn(el, 'guest-1')?.textContent).toContain('100%');
+    expect(stateOf(el, 'guest-2')).toBe('silent');
+    expect(stripIn(el, 'guest-2')?.textContent).toContain('0%');
+  });
+
+  it('🔴 a chosen 0 and an untouched plate BOTH read silent — and neither reads raised', async () => {
+    // They are different states and only one was CHOSEN; what must never happen is
+    // either of them reading as raised because a truthiness test folded them.
+    const { el } = await render(
+      [layer({ layer: 10, sourceId: 'guest-1' }), layer({ layer: 11, sourceId: 'guest-2' })],
+      OWNED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      raised({ 'item-a': { 'guest-1': 0 } }),
+    );
+
+    expect(stateOf(el, 'guest-1')).toBe('silent');
+    expect(stateOf(el, 'guest-2')).toBe('silent');
+  });
+
+  it('🔴 a HELD plate reads ARMED-not-audible and its controls stay LIVE', async () => {
+    // Grey reads as disabled. The control stays live because arming a held plate's audio
+    // before switching to the look that shows it is the affordance the mute rule exists to
+    // preserve — and the wording must say WHY it is silent, or the operator goes looking
+    // for a fault in the input.
+    const { el } = await render(
+      [layer({ layer: 10, sourceId: 'guest-1', held: true })],
+      OWNED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      raised({ 'item-a': { 'guest-1': 1 } }),
+    );
+
+    const strip = stripIn(el, 'guest-1');
+    expect(strip?.textContent).toMatch(/HIDDEN BY THIS LOOK/i);
+    expect(strip?.textContent).toMatch(/ARMED/i);
+    expect(strip?.querySelector('input[type="range"]')?.hasAttribute('disabled')).toBe(false);
+    expect(buttonIn(strip, 'ON')?.disabled).toBe(false);
+    expect(buttonIn(strip, 'SOLO')).toBeDefined();
+  });
+
+  it('🔴 nothing on this surface is drawn as a METER', async () => {
+    // There is no per-input level to draw until the plant walk answers W7/W8: CasparCG's
+    // programme channel reports ONE peak pair for the whole channel. A bar here would claim
+    // "sound is present" from data that only says "we asked for it".
+    const { el } = await render(
+      [layer()],
+      OWNED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      raised({ 'item-a': { 'guest-1': 1 } }),
+    );
+
+    expect(el.querySelector('meter')).toBeNull();
+    expect(el.querySelector('progress')).toBeNull();
+    expect(el.querySelector('[role="meter"]')).toBeNull();
+    expect(el.querySelector('[role="progressbar"]')).toBeNull();
+  });
+
+  it('🔴 SOLO sends ONE map — 1 for the plate, 0 for every sibling of the same item', async () => {
+    const { el, applied } = await render([
+      layer({ layer: 10, sourceId: 'guest-1' }),
+      layer({ layer: 11, sourceId: 'guest-2' }),
+      layer({ layer: 12, sourceId: 'guest-3' }),
+    ]);
+
+    await act(async () => {
+      buttonIn(stripIn(el, 'guest-2'), 'SOLO')?.click();
+      await Promise.resolve();
+    });
+
+    expect(applied).toHaveLength(1);
+    expect(applied[0]).toEqual({
+      itemId: 'item-a',
+      volumes: { 'guest-2': 1, 'guest-1': 0, 'guest-3': 0 },
+    });
+  });
+
+  it('SOLO does not reach a DIFFERENT item’s plates', async () => {
+    // The scope is the ROW's item, not the channel. Soloing one row's guest must not
+    // silence another row's — two rows can be on air at once and they are separate graphics.
+    const both = ownerLabelFor([item('item-a'), item('item-b')], () => 'IRIB News');
+    const { el, applied } = await render(
+      [
+        layer({ layer: 10, itemId: 'item-a', sourceId: 'guest-1' }),
+        layer({ layer: 11, itemId: 'item-a', sourceId: 'guest-2' }),
+        layer({ layer: 20, itemId: 'item-b', sourceId: 'guest-9' }),
+      ],
+      both,
+    );
+
+    await act(async () => {
+      buttonIn(stripIn(el, 'guest-1'), 'SOLO')?.click();
+      await Promise.resolve();
+    });
+
+    expect(applied).toEqual([{ itemId: 'item-a', volumes: { 'guest-1': 1, 'guest-2': 0 } }]);
+    expect(Object.keys(applied[0]?.volumes ?? {})).not.toContain('guest-9');
+  });
+
+  it('SOLO is disabled on a row that owns ONE plate — there is nothing to solo against', async () => {
+    const { el } = await render([layer()]);
+    expect(buttonIn(stripIn(el, 'guest-1'), 'SOLO')?.disabled).toBe(true);
+  });
+
+  it('🔴 ON writes 1 and OFF writes 0 — through the same MAP door', async () => {
+    const { el, applied } = await render([layer()]);
+
+    await act(async () => {
+      buttonIn(stripIn(el, 'guest-1'), 'ON')?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      buttonIn(stripIn(el, 'guest-1'), 'OFF')?.click();
+      await Promise.resolve();
+    });
+
+    expect(applied.map((a) => a.volumes)).toEqual([{ 'guest-1': 1 }, { 'guest-1': 0 }]);
+  });
+
+  it('ON says, on the control itself, that it is FULL volume and not the previous level', async () => {
+    const { el } = await render([layer()]);
+    const on = buttonIn(stripIn(el, 'guest-1'), 'ON');
+    expect(on?.getAttribute('aria-label')).toMatch(/not the previous level/i);
+    expect(on?.getAttribute('title')).toMatch(/full volume/i);
+  });
+
+  it('🔴 a BLIND row shows no strip at all — SILENT is a claim', async () => {
+    // The intent lives on the stack, a separate snapshot. Before it lands, printing SILENT
+    // for a plate that may be raised is the B-094 class on the one axis an operator cannot
+    // check by looking at a monitor.
+    const { el } = await render(
+      [layer()],
+      OWNED,
+      'disconnected',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      raised({ 'item-a': { 'guest-1': 1 } }),
+    );
+    expect(stripIn(el, 'guest-1')).toBeNull();
+  });
+
+  it('a STRANDED row shows no strip either — no item owns it, so no verb reaches it', async () => {
+    const { el } = await render([layer()], STRANDED);
+    expect(stripIn(el, 'guest-1')).toBeNull();
+    // …and it still gets the one control that CAN reach it.
+    expect(buttonIn(rowFor(el, '1-10'), 'RELEASE')).toBeDefined();
+  });
+});
+
+describe('add-multibox-audio — PANIC', () => {
+  const panicButton = (el: HTMLElement): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll('button')].find((b) => b.textContent === 'SILENCE ALL BOXES');
+
+  it('🔴 PANIC zeroes every plate of every row in its scope, one call per row', async () => {
+    const both = ownerLabelFor([item('item-a'), item('item-b')], () => 'IRIB News');
+    const { el, applied } = await render(
+      [
+        layer({ layer: 10, itemId: 'item-a', sourceId: 'guest-1' }),
+        layer({ layer: 11, itemId: 'item-a', sourceId: 'guest-2' }),
+        layer({ layer: 20, itemId: 'item-b', sourceId: 'guest-9' }),
+      ],
+      both,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      () => undefined,
+      [
+        { itemId: 'item-a', plates: ['guest-1', 'guest-2'] },
+        { itemId: 'item-b', plates: ['guest-9'] },
+      ],
+    );
+
+    await act(async () => {
+      panicButton(el)?.click();
+      await Promise.resolve();
+    });
+
+    expect(applied).toEqual([
+      { itemId: 'item-a', volumes: { 'guest-1': 0, 'guest-2': 0 } },
+      { itemId: 'item-b', volumes: { 'guest-9': 0 } },
+    ]);
+  });
+
+  it('🔴 PANIC touches ONLY the rows in its scope — an off-air row is not addressed', async () => {
+    // The scope is resolved by the caller from the console's ONE on-air predicate. A row
+    // that is merely seated is not in it, and PANIC must not invent one.
+    const both = ownerLabelFor([item('item-a'), item('item-b')], () => 'IRIB News');
+    const { el, applied } = await render(
+      [
+        layer({ layer: 10, itemId: 'item-a', sourceId: 'guest-1' }),
+        layer({ layer: 20, itemId: 'item-b', sourceId: 'guest-9' }),
+      ],
+      both,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      () => undefined,
+      [{ itemId: 'item-a', plates: ['guest-1'] }],
+    );
+
+    await act(async () => {
+      panicButton(el)?.click();
+      await Promise.resolve();
+    });
+
+    expect(applied).toEqual([{ itemId: 'item-a', volumes: { 'guest-1': 0 } }]);
+  });
+
+  it('🔴 an EMPTY scope sends nothing and does NOT report a success', async () => {
+    // B-122's failure was an emergency control reporting success having sent nothing at
+    // all. Silence over an empty scope would be that failure, one verb along.
+    const { el, applied } = await render([layer()]);
+
+    await act(async () => {
+      panicButton(el)?.click();
+      await Promise.resolve();
+    });
+
+    expect(applied).toEqual([]);
+  });
+
+  it('PANIC has no confirm — an emergency control behind a dialog is one that does not happen', async () => {
+    const { el } = await render(
+      [layer()],
+      OWNED,
+      'live',
+      { accepted: true },
+      'both-up',
+      true,
+      true,
+      true,
+      false,
+      () => undefined,
+      [{ itemId: 'item-a', plates: ['guest-1'] }],
+    );
+
+    await act(async () => {
+      panicButton(el)?.click();
+      await Promise.resolve();
+    });
+
+    expect(openDialog(), 'no confirm dialog stands between the press and the silence').toBeNull();
+  });
+
+  it('PANIC is disabled with the BRIDGE down — the command cannot leave the browser', async () => {
+    const { el } = await render([layer()], OWNED, 'disconnected');
+    expect(panicButton(el)?.disabled).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import type { LiveLayerState } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
+import { plateAudioPill, type PlateAudioPill } from './plateAudio.js';
 
 /**
  * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **how one seated Live
@@ -90,6 +91,35 @@ export interface LiveLayerRowView {
   needsAttention: boolean;
   /** Accent for the headline — never the only signal; the word always says it too. */
   tone: string;
+  /**
+   * `add-multibox-audio` — **THIS PLATE'S AUDIO, or `null` when the console cannot honestly
+   * say.**
+   *
+   * 🔴 **`null` IS NOT "silent", AND THE DIFFERENCE IS THE WHOLE REASON THIS IS NULLABLE.**
+   * The volume comes from the STACK ITEM (`plateVolumes`), which is a different snapshot from
+   * the ledger this row is built out of, and the two land independently. So there are two
+   * states in which a strip would be inventing its answer, and both resolve to `null`:
+   *
+   *   - **BLIND** (see {@link LiveLayerBlindness}) — with the link down the ledger is stale,
+   *     and before the stack has arrived there is no intent map to read. Printing SILENT for
+   *     a plate that is in fact raised is the `B-094` honesty class exactly, on the one axis
+   *     an operator cannot check by looking at a monitor.
+   *   - **STRANDED** — no row on the stack owns this layer, so there is no item to carry an
+   *     intent and no item-scoped verb that could change one. That row gets RELEASE, which is
+   *     the only thing that can reach it.
+   *
+   * When it is present the surface may show the pill AND offer the controls; the two travel
+   * together deliberately, so a console can never offer a fader over a state it was not
+   * willing to state.
+   */
+  audio: {
+    /** The recorded intent, or `undefined` when nobody has said. NEVER defaulted to `0`. */
+    volume: number | undefined;
+    /** §12.4 — seated, but the active look punches no hole in front of it. */
+    held: boolean;
+    /** How it reads. Derived HERE so every surface reading this row reads the same words. */
+    pill: PlateAudioPill;
+  } | null;
 }
 
 /**
@@ -199,6 +229,12 @@ export function liveLayerRow(
   layer: LiveLayerState,
   ownerLabel: string | null,
   blind: LiveLayerBlindness | null,
+  /**
+   * `add-multibox-audio` — the plate's recorded intent, INJECTED for `labelFor`'s reason: the
+   * intent lives on the STACK ITEM and this module must stay free of the stack join, so a
+   * test can build a raised plate without building a stack.
+   */
+  volumeOf: (itemId: string, plateId: string) => number | undefined = () => undefined,
 ): LiveLayerRowView {
   const base = {
     coordinate: liveLayerCoordinate(layer),
@@ -215,11 +251,19 @@ export function liveLayerRow(
       releasable: false,
       needsAttention: false,
       tone: colors.textMuted,
+      // Blind: the ledger is stale or the intent map has not arrived. See `audio`'s note —
+      // SILENT is a claim, and this branch is the one that must not make one.
+      audio: null,
     };
   }
+  const volume = volumeOf(layer.itemId, layer.sourceId);
+  const audio = { volume, held: layer.held, pill: plateAudioPill(volume, layer.held) };
   if (ownerLabel === null) {
     return {
       ...base,
+      // No item owns this layer, so no item-scoped verb can reach its audio and there is no
+      // intent map to read. RELEASE is the only thing that reaches a stranded layer.
+      audio: null,
       headline: 'Stranded — no row owns this',
       detail:
         `The bridge seated this layer for an item the stack no longer carries, so no row's ` +
@@ -250,6 +294,10 @@ export function liveLayerRow(
     */
     return {
       ...base,
+      // The RECORD is unconfirmed; the INTENT is not. `plateVolumes` is live stack state, and
+      // arming a plate's audio before re-taking the row is exactly what an operator wants to
+      // do here — so the strip is offered even though the layer's own state is a file claim.
+      audio,
       headline: 'Adopted — not confirmed',
       detail:
         `Seated for ${ownerLabel} according to the bridge’s saved ledger, read back after a ` +
@@ -265,6 +313,7 @@ export function liveLayerRow(
   if (layer.held) {
     return {
       ...base,
+      audio,
       headline: 'Held — not in the current look',
       detail:
         `Seated for ${ownerLabel}, muted and with no hole in front of it. It is kept rather ` +
@@ -277,8 +326,11 @@ export function liveLayerRow(
   }
   return {
     ...base,
+    audio,
     headline: 'On screen',
-    detail: `Seated for ${ownerLabel}. Repoint, audio and off-air are that row's verbs.`,
+    detail:
+      `Seated for ${ownerLabel}. Repoint and off-air are that row's verbs; audio is on ` +
+      `the strip below.`,
     ownerLabel,
     releasable: false,
     needsAttention: false,
@@ -293,13 +345,16 @@ export function liveLayerRow(
  * does not carry it — INJECTED rather than derived here so this module stays free of
  * the bank/binding join, and so a test can produce a stranded row without building a
  * stack.
+ *
+ * `volumeOf` is injected for the same reason and answers the plate's recorded audio intent.
  */
 export function liveLayerRows(
   layers: readonly LiveLayerState[],
   labelFor: (itemId: string) => string | null,
   blind: LiveLayerBlindness | null,
+  volumeOf: (itemId: string, plateId: string) => number | undefined = () => undefined,
 ): LiveLayerRowView[] {
-  return layers.map((l) => liveLayerRow(l, labelFor(l.itemId), blind));
+  return layers.map((l) => liveLayerRow(l, labelFor(l.itemId), blind, volumeOf));
 }
 
 /**
@@ -385,6 +440,38 @@ export function releaseScopeOf(
   itemId: string,
 ): LiveLayerRowView[] {
   return rows.filter((r) => r.itemId === itemId);
+}
+
+/**
+ * `add-multibox-audio` — **THE PLATES ONE ITEM OWNS, which is the set SOLO silences and the
+ * set PANIC zeroes.**
+ *
+ * Read off the SAME rows the panel renders, for `releaseScopeOf`'s reason one axis over: a
+ * SOLO computed from a different set than the one on screen would silence a box the operator
+ * cannot see and leave one they can. Deduplicated because a fill+key pair puts the same
+ * `sourceId` on two ledger records.
+ *
+ * ⚠ It answers with the SEATED plates, not the template's declared ones. A plate with no
+ * producer cannot be audible, and the bridge's pre-seat is the UNION of every look — so a
+ * HELD plate is here and correctly receives a recorded-only `0`.
+ */
+export function seatedPlatesOf(rows: readonly LiveLayerRowView[], itemId: string): string[] {
+  return [...new Set(rows.filter((r) => r.itemId === itemId).map((r) => r.plate))];
+}
+
+/**
+ * `add-multibox-audio` — the plate-intent lookup `liveLayerRows` takes, built from the stack.
+ *
+ * The mirror of {@link ownerLabelFor}: the join lives with the caller that can see the stack,
+ * and the row module stays free of it. `undefined` for an item the stack does not carry, and
+ * `undefined` for a plate nobody has spoken about — the latter is a REAL third state and is
+ * never collapsed to `0` here (see `plateAudio.ts`).
+ */
+export function plateVolumeFor(
+  items: readonly StackItemState[],
+): (itemId: string, plateId: string) => number | undefined {
+  const byId = new Map(items.map((i) => [i.itemId, i]));
+  return (itemId, plateId) => byId.get(itemId)?.plateVolumes?.[plateId];
 }
 
 /**

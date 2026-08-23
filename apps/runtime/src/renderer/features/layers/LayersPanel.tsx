@@ -45,6 +45,8 @@ import {
   liveLayerBlindness,
   liveLayerRows,
   ownerLabelFor,
+  plateVolumeFor,
+  seatedPlatesOf,
 } from './liveLayerRows.js';
 import { hasStationLayerOccupant } from './stationLayerOccupancy.js';
 import { FixedBankConfigModal } from '../fixedLayers/FixedBankConfigModal.js';
@@ -459,8 +461,45 @@ export function LayersPanel({
       reconnect — and offer to cut a guest who is perfectly well owned.
     */
     liveBlind,
+    /*
+      `add-multibox-audio` — the plate-intent join, supplied here for `ownerLabelFor`'s
+      reason: only this panel can see the stack, and the row module must stay free of it.
+      The audio state and the stranded verdict are therefore ONE evaluation, so a strip can
+      never state a volume on a row the same pass called unknowable.
+    */
+    plateVolumeFor(items),
   );
   const liveStranded = hasStrandedLiveLayer(liveRows);
+  /**
+   * `add-multibox-audio` — the audio door, and PANIC's scope. Both resolved HERE because
+   * both need the stack, which the tab below cannot see.
+   *
+   * ⚠ **`isOnAir` is IMPORTED, never re-derived.** It is this console's ONE on-air
+   * predicate — the same one the row verbs, the Inspector and the on-air count read — and a
+   * second local spelling of that status list is how one of them comes to disagree (golden
+   * rule 6). The `B-122` tension in gating an emergency control on status at all, and the two
+   * containments that make it acceptable here, are recorded in `add-multibox-audio`
+   * design.md §5.
+   */
+  const applyPlateVolumes = useCallback(
+    async (
+      itemId: string,
+      volumes: Record<string, number>,
+    ): Promise<{ ok: boolean; refused: string[] }> => {
+      const res = await window.cg.stack.setPlateVolumes({ itemId, volumes });
+      return {
+        ok: res.ok,
+        // The PER-PLATE verdicts, kept per-plate. Collapsing them to a count would take away
+        // the one thing an operator needs from a partial failure: WHICH guest did not move.
+        refused: res.results.filter((r) => !r.ok).map((r) => r.plateId),
+      };
+    },
+    [],
+  );
+  const onAirItemIds = new Set(items.filter(isOnAir).map((i) => i.itemId));
+  const panicScope = [...new Set(liveRows.map((r) => r.itemId))]
+    .filter((itemId) => onAirItemIds.has(itemId))
+    .map((itemId) => ({ itemId, plates: seatedPlatesOf(liveRows, itemId) }));
   const tabs: TabSpec[] = [
     { id: 'layers', label: 'LAYERS' },
     {
@@ -838,6 +877,18 @@ export function LayersPanel({
                       // take the bridge rejects — or worse, allow one it thought was
                       // interlocked off.
                       rehearsing={item !== null && isRehearsing(rehearsals, item.itemId)}
+                      /*
+                        `add-multibox-audio` — the plates this row's item actually OWNS, for
+                        the read-only audio summary.
+
+                        Supplied from the SAME `liveRows` the LIVE SOURCES tab renders rather
+                        than re-derived from the template's declaration. The two are not the
+                        same set — a declared plate that is not seated cannot be audible — and
+                        a summary reading `audio 2/4` while the strip below listed three
+                        plates would be the console disagreeing with itself about how many
+                        boxes a row has.
+                      */
+                      seatedPlates={item === null ? [] : seatedPlatesOf(liveRows, item.itemId)}
                       onSelect={onSelectionChange}
                       onUpdate={onUpdate}
                     />
@@ -862,6 +913,8 @@ export function LayersPanel({
               onSelectionChange(itemId);
               setActiveTab('layers');
             }}
+            onApplyVolumes={applyPlateVolumes}
+            panicScope={panicScope}
           />
         ) : (
           <StationLayersPanel layers={playout} />
