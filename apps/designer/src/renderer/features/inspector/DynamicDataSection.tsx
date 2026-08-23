@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import type {
-  DynamicField,
-  FieldBinding,
-  RepeaterElement,
-  Scene,
-  SequenceElement,
-  TextElement,
-  TickerElement,
+import {
+  fieldAllowsFileSource,
+  type DynamicField,
+  type FieldBinding,
+  type RepeaterElement,
+  type Scene,
+  type SequenceElement,
+  type TextElement,
+  type TickerElement,
 } from '@cg/shared-schema';
 import { designerStore, type ElementFieldMetaPatch } from '../../state/store.js';
 import { CollapseSection } from './CollapseSection.js';
@@ -211,6 +212,7 @@ function FieldMeta({
           checked={field.required}
           onChange={(v) => patch({ required: v })}
         />
+        <FileSourceRow field={field} onChange={(v) => patch({ allowFileSource: v })} />
         <p className={s.hint}>
           The field’s items are the {element.type}’s Items section; operators edit them live in the
           preview’s data form.
@@ -275,6 +277,12 @@ function FieldMeta({
             resetKey={element.id}
             onCommit={(p) => patch({ pattern: p })}
           />
+          {/* TEXT-FILE-OPT-01 — inside the `fieldType === 'text'` block on purpose:
+              a NUMBER cannot hold file content, so the author is never shown a
+              control for a grant that could not exist. Switching to Number drops
+              any grant the field had (`rebuildField`), so nothing is hidden here —
+              it is gone. */}
+          <FileSourceRow field={field} onChange={(v) => patch({ allowFileSource: v })} />
         </>
       )}
       {fieldType === 'number' ? (
@@ -343,6 +351,41 @@ function PatternField({
       ) : (
         example !== undefined && <p className={s.hint}>Accepts e.g. {example}</p>
       )}
+    </>
+  );
+}
+
+/**
+ * TEXT-FILE-OPT-01 — the AUTHORED grant that decides whether the Runtime operator
+ * may point this field at a text file.
+ *
+ * WHY IT IS AUTHORED HERE AT ALL. The Runtime's "From file…" affordance used to be
+ * gated on FIELD KIND alone, which is a decision about a TYPE rather than about a
+ * field: it rendered identically under a twelve-character `title` and under a
+ * four-hundred-word crawl, once per text / multiline / list field on the template.
+ * The owner's report — _"it is really for subtitles and long copy, not small
+ * labels"_ — is a statement only the AUTHOR can make, and this is where they are
+ * already saying what kind of content the field holds.
+ *
+ * The hint names the operator's control because that is the honest explanation of
+ * what ticking the box does; the LABEL names the grant, not the control.
+ */
+function FileSourceRow({
+  field,
+  onChange,
+}: {
+  field: DynamicField;
+  onChange: (v: boolean) => void;
+}): JSX.Element {
+  const granted = fieldAllowsFileSource(field);
+  return (
+    <>
+      <CheckRow label="Allow file source" checked={granted} onChange={onChange} />
+      <p className={s.hint}>
+        {granted
+          ? 'Operators can point this field at a text file and reload it — for subtitles and long copy.'
+          : 'Off: operators type this field by hand. Turn it on for subtitles and long copy prepared elsewhere.'}
+      </p>
     </>
   );
 }

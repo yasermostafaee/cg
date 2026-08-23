@@ -1,4 +1,10 @@
-import type { DynamicField, Element, FieldBinding, ListItem } from '@cg/shared-schema';
+import {
+  fieldTakesFileSource,
+  type DynamicField,
+  type Element,
+  type FieldBinding,
+  type ListItem,
+} from '@cg/shared-schema';
 import { current, set } from '../store-core.js';
 import { activeFieldData, locate, withActiveFieldData } from '../scene-doc.js';
 import { designerStore } from '../store.js';
@@ -27,6 +33,12 @@ export interface ElementFieldMetaPatch {
   maxLength?: number;
   pattern?: string;
   default?: string | number;
+  /**
+   * TEXT-FILE-OPT-01 — the authored file-source grant. Only the `text`, `multiline`
+   * and `list` variants can hold it (see `@cg/shared-schema`), so `rebuildField`
+   * carries it on those three and DROPS it when the author switches to `number`.
+   */
+  allowFileSource?: boolean;
 }
 
 /**
@@ -44,10 +56,25 @@ function defaultAsString(field: DynamicField): string {
 }
 
 /**
+ * TEXT-FILE-OPT-01 — the field's CURRENT authored file-source grant, or `undefined`
+ * when it has none. Absence is preserved as absence (never normalized to `false`),
+ * so a field nobody has made a decision about round-trips without gaining a key.
+ */
+function currentFileSourceGrant(field: DynamicField): boolean | undefined {
+  return fieldTakesFileSource(field) ? field.allowFileSource : undefined;
+}
+
+/**
  * Rebuild the dynamic field backing a Data key from a high-level meta patch,
  * producing a valid variant for the selected `fieldType`/`multiline` and
  * coercing `default` to that variant. Length/pattern constraints carry forward
  * where the target variant supports them; a 0 / empty value clears them.
+ *
+ * ⚠ IT REBUILDS FROM SCRATCH. Every key the result should keep must be carried
+ * forward EXPLICITLY here — a key that is merely set by some other code path is
+ * silently lost the next time the author edits something unrelated. That is why
+ * TEXT-FILE-OPT-01's grant appears in three of the four branches below and is
+ * pinned by a test that edits the TITLE and then re-reads the grant.
  */
 function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): DynamicField {
   const label = patch.title ?? field.label;
@@ -61,17 +88,27 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
     ...(description !== undefined && description !== '' ? { description } : {}),
   };
 
+  // TEXT-FILE-OPT-01 — the grant, resolved once for every branch that can hold it.
+  // `??` and not `||`: an explicit `false` is a decision the author made and must
+  // not fall through to the field's previous value.
+  const rawGrant = patch.allowFileSource ?? currentFileSourceGrant(field);
+  const grant = rawGrant === undefined ? {} : { allowFileSource: rawGrant };
+
   // D-028 — a list field (the ticker's Data key) has no text/number variant
   // switching; only the base meta applies. Its default (the items) is edited
   // through the items editor (`setTickerItems`), not this meta patch.
   if (field.type === 'list') {
-    return { ...base, type: 'list', default: field.default };
+    return { ...base, type: 'list', default: field.default, ...grant };
   }
 
   const fieldType = patch.fieldType ?? (field.type === 'number' ? 'number' : 'text');
   const multiline = patch.multiline ?? field.type === 'multiline';
 
   if (fieldType === 'number') {
+    // 🔴 The grant is deliberately NOT carried here. A number cannot hold file
+    // content, so switching to it DROPS the grant rather than parking it out of
+    // sight — "un-settable rather than silently ignored", made real. Switching
+    // back to `text` leaves the field un-granted until the author says otherwise.
     const cur = field.type === 'number' ? field.default : Number(defaultAsString(field));
     const raw = patch.default !== undefined ? Number(patch.default) : cur;
     const next = Number.isFinite(raw) ? raw : 0;
@@ -108,6 +145,7 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
         : {}),
       ...(minLength !== undefined ? { minLength } : {}),
       ...(pattern !== undefined ? { pattern } : {}),
+      ...grant,
     };
   }
   return {
@@ -120,6 +158,7 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
     ...(field.type === 'text' && field.direction !== undefined
       ? { direction: field.direction }
       : {}),
+    ...grant,
   };
 }
 

@@ -77,6 +77,12 @@ const styles = {
  * the EXISTING field-update path (stage → `stack.update`) — the file is just
  * an input method, never a second content pipeline.
  *
+ * TEXT-FILE-OPT-01 — it renders only on a field whose AUTHOR GRANTED it a file
+ * source (`allowFileSource`). The kind is still the outer condition but no longer
+ * the whole one: the gate lives in `Inspector.tsx`'s `fromFileKind`, and this
+ * component is mounted only for a field that passed it. Nothing here re-checks the
+ * grant — a second copy of that rule is how the two would come to disagree.
+ *
  * Chromium-only by nature (File System Access API): elsewhere the button
  * renders disabled with the reason — a legible degrade, never a broken control.
  */
@@ -123,11 +129,13 @@ export function FromFileControl({
       <div className="cg-from-file" style={styles.wrap}>
         <div style={styles.row}>
           {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` (no fill, no border, muted
-              text) and read as static text under every text-carrying field — the most
-              PROPAGATED instance of that mistake in the app, since it renders once per
-              text / multiline / list field. `neutral` keeps it colourless while giving
-              it the boundary, hover and focus ring a control owes. See the `--ghost`
-              warning in `controls.css`. */}
+              text) and read as static text under every text-carrying field — at the
+              time, the most PROPAGATED instance of that mistake in the app, since it
+              rendered once per text / multiline / list field. TEXT-FILE-OPT-01 cut the
+              propagation (it now renders only where the author granted a file source),
+              but the styling verdict stands on its own and must not be walked back:
+              `neutral` keeps it colourless while giving it the boundary, hover and
+              focus ring a control owes. See the `--ghost` warning in `controls.css`. */}
           <Button
             variant="neutral"
             aria-label={`Load ${fieldId} from file`}

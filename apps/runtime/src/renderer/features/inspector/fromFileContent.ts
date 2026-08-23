@@ -1,4 +1,4 @@
-import type { FieldValue, ListItem } from '@cg/shared-schema';
+import type { FieldValue, FileSourceCapableField, ListItem } from '@cg/shared-schema';
 
 /**
  * R-018 — pure transforms from a text file's content to a field value. Kept
@@ -14,8 +14,16 @@ import type { FieldValue, ListItem } from '@cg/shared-schema';
  * separators, and the whole file IS the content.
  */
 
-/** The field kinds a text file can feed. */
-export type FromFileFieldKind = 'text' | 'multiline' | 'list';
+/**
+ * The field kinds a text file can feed.
+ *
+ * DERIVED, not re-listed (golden rule 6). It used to spell `'text' | 'multiline' |
+ * 'list'` here while `Inspector.tsx` spelled the same three inline in its gate —
+ * two copies of one rule, which is how an outer gate comes to admit a kind the
+ * inner one refuses. `@cg/shared-schema` now owns the list once, as the variants
+ * that can carry the authored `allowFileSource` grant, and both read it from there.
+ */
+export type FromFileFieldKind = FileSourceCapableField['type'];
 
 /** How list-field content is (optionally) split into items. */
 export interface SplitConfig {

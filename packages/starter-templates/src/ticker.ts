@@ -333,6 +333,12 @@ export const tickerScene: Scene = {
       required: true,
       type: 'list',
       default: HEADLINES,
+      // TEXT-FILE-OPT-01 — the textbook case for the authored file-source grant, and
+      // the reason this starter is the one that carries it: a crawl IS long copy a
+      // typist prepares elsewhere. `label` one field up is the complement — a short
+      // label nobody loads from a file — so this starter shows an operator both
+      // states in one Inspector without authoring anything.
+      allowFileSource: true,
     },
   ],
   bindings: [

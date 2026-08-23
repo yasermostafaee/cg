@@ -257,3 +257,62 @@ describe('1.5e — a Live Source FRAME round-trips through the `.vcg` exporter',
     expect(el && 'stroke' in el).toBe(false);
   });
 });
+
+/**
+ * TEXT-FILE-OPT-01 — the authored file-source grant survives the `.vcg` exporter.
+ *
+ * Worth pinning for the reason stated above `1.5e`: `pack()` runs `SceneSchema.parse`
+ * before writing `template.json`, so a field key the schema does not know is DROPPED
+ * silently at export. The grant is an authored decision that must reach the operator's
+ * Inspector on another machine — a drop here would look exactly like "the author never
+ * ticked the box".
+ */
+describe('the authored file-source grant round-trips through the `.vcg` exporter', () => {
+  const packWithFields = async (fields: Scene['fields']): Promise<Scene> => {
+    const buf = await pack({
+      scene: { ...fixtureScene, fields },
+      manifestExtras: fixtureManifestExtras,
+      indexHtml: fixtureIndexHtml,
+      cgJs: fixtureCgJs,
+      cgCss: fixtureCgCss,
+    });
+    return (await unpack(buf)).scene;
+  };
+
+  it('carries the grant on a granted multiline field', async () => {
+    const out = await packWithFields([
+      {
+        id: 'crawl',
+        label: 'Crawl',
+        required: false,
+        type: 'multiline',
+        default: '',
+        allowFileSource: true,
+      },
+    ]);
+    expect(out.fields[0]).toMatchObject({ id: 'crawl', allowFileSource: true });
+  });
+
+  it('an UN-granted field round-trips with the key still ABSENT — absent is the OFF default', async () => {
+    const out = await packWithFields([
+      { id: 'headline', label: 'Headline', required: false, type: 'text', default: '' },
+    ]);
+    const f = out.fields[0] as Record<string, unknown> | undefined;
+    expect(f && 'allowFileSource' in f).toBe(false);
+  });
+
+  it('carries the grant on a granted LIST field, beside its items', async () => {
+    const out = await packWithFields([
+      {
+        id: 'items',
+        label: 'Items',
+        required: false,
+        type: 'list',
+        default: [{ id: 'i1', text: 'یک' }],
+        allowFileSource: true,
+      },
+    ]);
+    expect(out.fields[0]).toMatchObject({ id: 'items', allowFileSource: true });
+    expect((out.fields[0] as { default: unknown }).default).toEqual([{ id: 'i1', text: 'یک' }]);
+  });
+});

@@ -4,6 +4,8 @@ import { useLink } from '../../hooks/useLink.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import {
   aggregateHasFields,
+  fieldAllowsFileSource,
+  fieldTypeTakesFileSource,
   isFieldNamespace,
   type CompositionFieldGroup,
   type DynamicField,
@@ -22,6 +24,8 @@ import { Panel } from '../../ui/Panel.js';
 import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
+import { grantedFileSourcePaths } from './fileSourceGrants.js';
+import { detachUngrantedSources } from './fromFileStore.js';
 import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
@@ -364,6 +368,43 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
     };
   }, [item]);
 
+  /*
+   * TEXT-FILE-OPT-01 — reconcile this item's file attachments against what its
+   * template actually GRANTS. An attachment on a field whose grant the author turned
+   * off is detached, durably, rather than left live behind a hidden control.
+   *
+   * 🔴 THE THREE CONDITIONS ON `known: true` ARE THE SAFETY, and each rules out a
+   * different way of deleting on absent information rather than on a decision:
+   *
+   *   - `item !== null`   — nothing selected, nothing to reconcile.
+   *   - `info !== null`   — the schema has NOT resolved. This is the state on every
+   *     selection change (`info` starts null and is filled asynchronously) and the
+   *     permanent state for a template the registry does not know. Every field looks
+   *     un-granted from here, so acting on it would delete every attachment the
+   *     operator has, on every selection — the `pruneDrafts`/`pruneFromFile` bootstrap
+   *     class of bug (see `useStackHousekeeping`), one store over.
+   *   - the ids MATCH — `info` is NOT cleared when `item` changes, so between
+   *     selecting item B and B's `templates.get` resolving, `info` still holds item
+   *     A's template. Reconciling B's attachments against A's grants would detach
+   *     whatever A does not happen to grant. Nothing on screen would say why.
+   *
+   * Anything short of all three resolves to `{known: false}`, which deletes nothing.
+   */
+  useEffect(() => {
+    detachUngrantedSources(
+      item !== null && info !== null && info.templateId === item.templateId
+        ? {
+            known: true,
+            itemId: item.itemId,
+            grantedPaths: grantedFileSourcePaths({
+              fields: info.fields,
+              groups: info.groups ?? [],
+            }),
+          }
+        : { known: false },
+    );
+  }, [item, info]);
+
   if (item === null) {
     return (
       <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
@@ -678,9 +719,22 @@ function FieldEditor({
   const kind = field?.type ?? inferKind(value);
   const dirty = isFieldDirty(itemId, path, applied);
   const stage = (next: FieldValue): void => stageField(itemId, path, next);
-  // R-018 — text-carrying fields can source their value from a text file.
+  /*
+   * R-018 + TEXT-FILE-OPT-01 — a field sources its value from a text file only when
+   * its AUTHOR granted it one. The kind test is still the outer condition, but it is
+   * no longer the WHOLE condition and it is no longer spelled here: gating on kind
+   * alone is a decision about a TYPE, so it rendered this control identically under a
+   * twelve-character `title` and under a four-hundred-word crawl — once per text /
+   * multiline / list field on the template.
+   *
+   * Asked of the FIELD, never of `kind`. `kind` falls back to `inferKind(value)` when
+   * the template schema has not resolved, and an inferred row was never authored, so
+   * it can carry no grant — reading it here would be reading a guess as a decision.
+   */
   const fromFileKind =
-    kind === 'text' || kind === 'multiline' || kind === 'list' ? kind : undefined;
+    field !== null && fieldAllowsFileSource(field) && fieldTypeTakesFileSource(field.type)
+      ? field.type
+      : undefined;
   // Built ONCE and placed in one of two spots (see below), so the two placements
   // cannot drift into two differently-configured controls.
   const fromFile =

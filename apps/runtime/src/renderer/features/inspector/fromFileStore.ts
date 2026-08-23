@@ -6,6 +6,7 @@ import {
   pruneAttachments,
   saveAttachment,
 } from './fromFilePersistence.js';
+import { fieldPathKey } from './listFieldTargets.js';
 import {
   fsaTextFileSource,
   queryReadPermission,
@@ -165,6 +166,64 @@ export function setFromFileError(itemId: string, path: FieldPath, error: string 
   if (entry === undefined) return;
   entries.set(key, { ...entry, error });
   bump();
+}
+
+/**
+ * TEXT-FILE-OPT-01 — what one item's template says about file-source grants.
+ *
+ * 🔴 THE `known: false` ARM IS THE POINT OF THIS TYPE, and it is modelled on
+ * {@link StackPruneInput} for exactly the reason that one exists.
+ * {@link detachUngrantedSources} DELETES from durable storage, and the fact it
+ * deletes on — "this field was not granted" — is indistinguishable, at a glance,
+ * from "we do not yet know what this field was granted". The Inspector starts
+ * `info` at `null` and fills it from an async `templates.get`, so the unknown state
+ * is not an edge case: it is the state on EVERY selection change, for EVERY field,
+ * and for the whole life of a template the registry cannot resolve.
+ *
+ * Making the caller produce a discriminated snapshot means the mistake cannot be
+ * made by forgetting a guard — there is no shape in which "I have no schema" and
+ * "the schema grants nothing" are the same value. Golden rule 8, one axis over:
+ * silence on the schema channel is evidence that the answer is UNAVAILABLE, never
+ * evidence that the answer is "no".
+ */
+export type FieldGrantSnapshot =
+  | { readonly known: false }
+  | {
+      readonly known: true;
+      readonly itemId: string;
+      /** `fieldPathKey(path)` for every field this item's template GRANTS. */
+      readonly grantedPaths: ReadonlySet<string>;
+    };
+
+/**
+ * TEXT-FILE-OPT-01 — detach any attachment on a field this item's template does NOT
+ * grant a file source, from the live store AND from durable storage.
+ *
+ * This is the answer to "what happens to a field that already has a file attached
+ * when the author turns the grant off?". The alternative — keep the attachment and
+ * hide the control — is content arriving from a source with no visible cause, and it
+ * is worse than it looks: `restoreFromFileAttachments` would keep restoring it every
+ * boot, so re-granting the field later would hand the operator a control pre-armed
+ * with a file they attached and forgot. Detaching ends both.
+ *
+ * Scoped to ONE item because the grant is a fact about ONE template, and the caller
+ * (the Inspector) only ever holds one item's resolved schema at a time. Entries for
+ * every other item are left untouched — items are pruned by `pruneFromFile`, on the
+ * stack snapshot, which is a different question with a different input.
+ */
+export function detachUngrantedSources(snapshot: FieldGrantSnapshot): void {
+  if (!snapshot.known) return;
+  let changed = false;
+  for (const key of [...entries.keys()]) {
+    // Same decode as `pruneFromFile`: the key IS `[itemId, ...path]` (`attachmentKey`).
+    const [entryItemId, ...path] = JSON.parse(key) as [string, ...string[]];
+    if (entryItemId !== snapshot.itemId) continue;
+    if (snapshot.grantedPaths.has(fieldPathKey(path))) continue;
+    entries.delete(key);
+    void deleteAttachment(key);
+    changed = true;
+  }
+  if (changed) bump();
 }
 
 /**
