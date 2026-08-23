@@ -1141,10 +1141,26 @@ export class MockRuntime {
         // alone here is the same wrong axis that cost the real one a backup's
         // graphics, and a mock that models the bug teaches it.
         exposed: !configuredHosts(config).every(isLoopbackHost),
-        // The mock's serveHost is a fixed `127.0.0.1`, so every declared REMOTE
-        // server is by construction unable to fetch it. Reported honestly rather
-        // than left empty: the panel's warning is exercised by the mock too.
-        unreachable: configuredHosts(config).filter((h) => !isLoopbackHost(h)),
+        /*
+          🔴 ALWAYS EMPTY, AND THAT IS THE HONEST ANSWER RATHER THAN THE LAZY ONE.
+
+          The obvious implementation — derive it from the `serveHost` two lines up —
+          reports EVERY remote server as unable to fetch templates, because that
+          `127.0.0.1` is a PLACEHOLDER the mock has always printed and not an address
+          anything serves from. There is no template HTTP server in the browser at
+          all. The mock would then be inventing a fault out of its own stand-in value
+          and showing every offline operator a warning about a bridge they are not
+          running.
+
+          What the mock simulates is what the REAL bridge would answer for this
+          config, and for a remote server the real bridge binds routable and
+          advertises a reachable host — so nothing is unreachable. The mock cannot
+          simulate the cases where that derivation goes wrong (no LAN interface, a
+          `--template-serve-host` typo) because it cannot see this machine's
+          interfaces, so it declines to claim one. The panel's warning is exercised
+          in `serverSettingsPanel.dom.test.ts`, where the response can be arranged.
+        */
+        unreachable: [],
       },
     };
   }
