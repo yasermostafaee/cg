@@ -39,7 +39,6 @@ Persian / RTL is a core requirement.
    the wait (`probeAmcpLiveness`), never by a quiet OSC port. Reading silence on one
    channel as death on another is what destroyed a working socket every ~13 s on
    every OSC-less install (see `B-101`, and `B-100` one layer up).
-
 9. **When the deliverable is a STRING, the compiler cannot help you.** Changing user-facing
    wording obliges a tree-wide `git grep` for the OLD text — tests, docs, task lists and spec
    files — BEFORE the commit, because the only thing that fails on a stale copy is a suite that
@@ -61,6 +60,23 @@ Persian / RTL is a core requirement.
    looking closed. Write separators as escapes, never as literal bytes; and if you have just
    written a file that talks about NUL bytes, scan it — `node -e "…readFileSync(p).indexOf(0)"` is
    the whole check, and BP wrote one into its own handoff that way.
+
+10. 🔴 **A CONFIGURATION VERB IS NEVER A PLAYOUT VERB.** `UPDATE` puts values **IN
+    FORCE**; only a **take** puts content **ON AIR**. A row that does not already own live
+    layers must produce **no `PLAY`, no un-mute and no fill** — the change lands in STATE, and
+    the next take seats it. `B-161`: the owner stopped several plates, swapped their inputs and
+    pressed UPDATE alone, and the videos went to air with **no template above them** — measured
+    at the wire as four `PLAY`s, four `MIXER VOLUME` and eight `MIXER FILL`/`CLIP` on a row that
+    had never been taken. The complement of BM's _STAGED ≠ IN FORCE_.
+    ⚠ **Gate at the ROW, never at the look or the visible hole.** A live row's UNION pre-seat
+    — every look's inputs, including the looks not punched — is what makes a switch pure
+    `MIXER FILL`; narrowing it puts a `PLAY` back inside a switch (`B-155` case 3). If a gate
+    changes the pre-seat SET, it is the wrong gate.
+    ⚠ **And "owns live layers" is NOT `isOnAirStatus` alone** — a REHEARSING row is
+    deliberately not on air yet owns its plates on PVW, so the air question alone silently
+    breaks rehearse. Use the ONE predicate that asks what the decision turns on
+    (`#ownsLiveSeats`), and gate the one path the verbs share rather than making two paths
+    agree.
 
 ## Where features go
 

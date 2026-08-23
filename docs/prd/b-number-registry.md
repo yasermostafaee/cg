@@ -1151,3 +1151,22 @@ here as well as in the item.
 is missing at the take) and `B-160` is its prevention (find the missing file before the take).
 They are separable — `B-160` shipping would not make `B-159` unnecessary, because a check is only
 as fresh as its last `CLS`.
+
+## 2026-08-23 — the UPDATE-put-video-on-air defect gets its number (`B-161`)
+
+| Prefix | Claimed | Item                                                                                  | File                               |
+| ------ | ------- | ------------------------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-161` | UPDATE seated producers on a row that was never taken — video on air with no template | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the heading sweep immediately before the heading was written, with BOTH tools.**
+The duplicate audit printed **exactly `B-056` and `B-080`**. Highest `B-` heading was `B-160` by the
+registry's documented `grep -rhoE` derivation AND by the `git grep` cross-check. `git grep "B-161"`
+returned exactly ONE hit — this file's own "Next free" line, a forward-reference POINTER, not a
+heading. `B-` stays contiguous `B-001` … `B-161`, **no gaps. Next free: `B-162`.**
+
+🔴 **Filed and FIXED in the same session, which is why it is `[x]` on arrival.** An on-air
+defect reproduced at the wire, gated, and proven RED-then-GREEN with both neighbours green
+(612 tests / 78 files, no regressions). The invariant it establishes is now `CLAUDE.md` golden rule
+**10** — numbered 10 rather than inserted earlier **on purpose**: this file, `CLAUDE.md` itself and
+several PRD items already cite "golden rule 9" meaning the `git grep`/NUL-byte sweep, and
+renumbering it would have quietly falsified every one of those references.

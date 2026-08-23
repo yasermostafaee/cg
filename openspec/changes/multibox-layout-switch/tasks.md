@@ -943,6 +943,32 @@ candidate shapes.
       spec, an archive or a test. The detector is built; the wire to the operator is not.
       **No product source was changed by the filing session, and neither item was implemented.**
 
+- [x] 7.14d 🔴 **THE INVARIANT: A CONFIGURATION VERB IS NEVER A PLAYOUT VERB (`B-161`, FIXED
+      2026-08-23).** The owner stopped several plates, swapped their inputs and pressed UPDATE
+      alone — no play, no take — and **the videos went to air with no template above them.**
+      Measured at the wire on a `loaded` row: four `PLAY`s, four `MIXER VOLUME 0` and eight
+      `MIXER FILL`/`CLIP`, plus four seats written to the ledger. There was no chrome because no
+      page had ever been taken.
+      **`UPDATE` puts values IN FORCE; only a TAKE puts content ON AIR.** A row that owns no live
+      layers produces no `PLAY`, no un-mute and no fill — the binding lands in STATE and the next
+      take seats it. The complement of BM's _STAGED ≠ IN FORCE_, now `CLAUDE.md` golden rule 10.
+      ⚠ **Applying changed inputs to AIR on an UPDATE remains the FEATURE** (BM-2 §4 step 4). The
+      defect was only that it was not conditioned on the row being on air, so the gate is the
+      whole fix and the feature is byte-identical on the wire for a live row.
+      🔴 **The gate is at the ROW, never at the look or the visible hole — this is the part that
+      touches THIS change.** A live row's UNION pre-seat (every look's inputs, including the looks
+      not punched) is what makes a switch pure `MIXER FILL`. Narrowing it would put a `PLAY` back
+      inside a switch and reintroduce **`B-155` case 3, which session BT closed on `4777b724`** —
+      so `neighbour 1` asserts the whole seat SET as a superset, not the one visible box.
+      ⚠ **And the gate is NOT `isOnAirStatus` alone.** A REHEARSING row is deliberately not on air
+      yet owns its plates on PVW; the air question alone would have broken rehearse without
+      failing any pre-existing test. `#ownsLiveSeats` asks both, REUSING `isOnAirStatus` rather
+      than re-deriving the status list (golden rule 6).
+      **Shipped:** the gate + `#ownsLiveSeats` in `caspar-runtime.ts`, four wire tests in
+      `live-look-reconcile.integration.test.ts` (the defect, the state half, and both
+      neighbours), RED-then-GREEN with the chain rebuilt between readings; 612 tests / 78 files
+      green. Full item: `docs/prd/bugs-runtime.md` **`B-161`**.
+
 - [ ] 7.15 🔴 **`B-155` — THE SWITCH FLASH. OPEN, AND NOTHING ABOUT IT IS VERIFIED ON THE PLANT.**
       The owner, on air: _"change `l-1`'s source and press look-1, then when we go to solo it shows
       the OLD source for a moment and then switches to the new one."_

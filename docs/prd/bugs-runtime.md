@@ -5167,3 +5167,151 @@ only real decision in it.
 
 - **Cross-refs:** [[B-159]] (the defect this prevents), [[B-155]] (the black-not-previous rule both
   inherit).
+
+## [x] B-161 — 🔴 UPDATE put VIDEO ON AIR with no template above it: a configuration verb was acting as a playout verb ⟨priority: HIGHEST — bare video on air from a button that was never supposed to reach the wire⟩ — FIXED 2026-08-23, RED-then-GREEN at the wire, with both neighbours proven
+
+**Observed 2026-08-22, by the owner, on the plant.** He **stopped** several plates, **swapped their
+inputs**, and pressed **UPDATE only — no play, no take.** The boxes went to AIR: **the videos
+played, with no template above them** — no background, no strokes, none of the page's chrome.
+
+There was no chrome because **no page had been taken.** `UPDATE` seated the producers; nothing had
+ever seated a template above them.
+
+### 🔴 THE RULE, decided
+
+**A configuration verb is NEVER a playout verb.** `UPDATE` puts values **IN FORCE**; only a **take**
+puts content **ON AIR**. A row that does not already own live layers must produce **no `PLAY`, no
+un-mute and no fill on any live layer** — the binding lands in STATE, and the next take seats it.
+This is the missing complement of BM's **_STAGED ≠ IN FORCE_**, and it is now `CLAUDE.md` golden
+rule 10.
+
+⚠ **Applying changed inputs to AIR on an UPDATE is the FEATURE** (BM-2 §4 step 4 — _"change solo's
+input → changes quickly"_). The defect was only that it was **not conditioned on the row being on
+air**. The gate is the whole fix; the feature is untouched.
+
+### Repro / Expected / Actual
+
+**Repro:**
+
+1. Load a row with a multi-box template. **Do not take it.** (Or take it and take it out again —
+   either way the row is not on air.)
+2. Change the row's per-look source bindings.
+3. Press **UPDATE**. Nothing else — no play, no take.
+
+**Expected:** the new bindings are in force for the next take. **Nothing reaches a live layer.**
+
+**Actual (measured at the wire, on a `loaded` row that had never been taken):**
+
+```
+PLAY 1-30 "route://2"      MIXER 1-30 VOLUME 0    MIXER 1-30 FILL 0 0 0.25 0.25    MIXER 1-30 CLIP …
+PLAY 1-33 "route://5"      MIXER 1-33 VOLUME 0    MIXER 1-33 FILL 0.25 0 0.25 0.25 MIXER 1-33 CLIP …
+PLAY 1-31 "route://3"      MIXER 1-31 VOLUME 0    MIXER 1-31 FILL 2 2 0.25 0.25    MIXER 1-31 CLIP …
+PLAY 1-32 "route://4"      MIXER 1-32 VOLUME 0    MIXER 1-32 FILL 2 2 0.25 0.25    MIXER 1-32 CLIP …
+```
+
+Four producers created, sized into the look's geometry, and written into the ledger
+(`seats: [30, 31, 32, 33]`). Pictures on air, no page.
+
+**Env:** reproduced against `@cg/amcp-mock` at the wire level — this one needs no plant, which is
+why it could be fixed the same day.
+
+🔴 **THE AUDIO HALF, asked explicitly and MEASURED rather than assumed: it did NOT un-mute.** All
+four seats carried `MIXER … VOLUME 0`, because a plate with no recorded intent is born muted
+(`intendedVolume: intent[plateId] ?? CREATED_MUTED_VOLUME`, `caspar-runtime.ts:5088`). So this
+reproduction put **silent** video on air. ⚠ **But that is a property of the fixture, not of the
+defect:** the seat is written at `record.intendedVolume`
+(`caspar-runtime.ts:5128-5131`), so **any plate the operator had deliberately raised in an earlier
+show would have been seated AUDIBLE** by the same press. Bare video was the observed harm; bare
+video with sound was one raised fader away.
+
+### The mechanism, with anchors
+
+| step                               | anchor                                                                                               |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| the verb                           | `tools/caspar-bridge/src/caspar-runtime.ts:2979` `update()` → `:3010` `#updateImpl`                  |
+| the binding half                   | `:3043` → `#applyBindingTransaction` at `:4298`, under the `B-155` seat lock                         |
+| **the call that reached the wire** | `:4313` — `reconcileLivePlates(itemId, { mode: 'live' })`, issued **unconditionally**                |
+| what it emits per seat             | `PLAY` → `MIXER VOLUME` → `MIXER FILL`+`CLIP` (`:4935` `#applyLivePlates`, contract at `:4924-4938`) |
+
+**Where the row's playout state was consulted on this path: NOWHERE.** The call site's own comment
+said _"The row **may be** ON AIR"_ — it allowed for either and reconciled regardless.
+
+🔴 **A canonical predicate DID already exist, and this path simply never asked it.**
+`isOnAirStatus` (`caspar-runtime.ts:450`) is documented as _"THE on-air predicate for a stack item —
+the ONE definition"_, and its header explicitly invokes golden rule 6: _"a fourth inline copy of
+this status list is exactly how one of them comes to disagree."_ It had five consumers —
+`:2778`, `:2946`, `:3666`, `:4676` (`setActiveLook`, which **does** ask), `:7052`. **`#applyBindingTransaction`
+was not among them.** So the finding is not a missing predicate; it is **one path that did not
+consult the predicate the rest of the file already shares**.
+
+**Is this the same shape as `B-154`?** Related but not the same, and the `B-154` fix could not have
+covered it. `B-154` was a HELD plate still rendering — a plate that should have been torn down
+inside a switch on a row that WAS on air. Its fix corrected what the switch does to plates. This one
+is a row that was never on air at all, reached by a different verb: **no amount of correctness
+inside the seating plan helps when the question "should we be seating anything?" is never asked.**
+
+### The fix
+
+**One gate, at the one path the verbs share** — not two paths made to agree, which is this
+project's recurring defect.
+
+`#applyBindingTransaction` (`caspar-runtime.ts:4298`) now applies the binding maps, and then, if the
+row owns no live seats, **publishes the state and returns** before `reconcileLivePlates` is reached.
+The new predicate is `#ownsLiveSeats(itemId)`, placed immediately above it:
+
+- **on air** — `isOnAirStatus`, **reused, never re-derived** (golden rule 6);
+- **or rehearsing** — `#rehearsing.has(itemId)`, because a rehearsing row is deliberately NOT on air
+  (`enterRehearse` refuses an on-air row, so the two states are disjoint by construction) yet owns
+  its plates on **PVW**. 🔴 **A gate built on `isOnAirStatus` alone would have silently broken
+  rehearse without failing any test that existed before this item.**
+
+⚠ **The gate is at the ROW, never at the look or the visible hole.** On a live row it returns early
+for nothing and the reconcile runs exactly as before — **UNION pre-seat intact**, every look's
+inputs still seated including the looks not punched. That pre-seating is what makes a switch pure
+`MIXER FILL`; narrowing it would push a `PLAY` back inside a switch and reintroduce `B-155` case 3,
+which session BT closed on `4777b724`.
+
+### Regression tests — RED-then-GREEN at the wire, plus both neighbours
+
+All four in `tools/caspar-bridge/tests/live-look-reconcile.integration.test.ts`:
+
+| test                       | asserts                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **the defect**             | an off-air row's UPDATE puts **no `PLAY`, no `VOLUME`, no `FILL`/`CLIP`** on the wire and claims **no seats** |
+| **the state half**         | the next TAKE comes up with the off-air UPDATE's binding **in force** (`route://5` seated)                    |
+| **neighbour 1 (LIVE)**     | an on-air row **still re-points**, and the **UNION pre-seat never narrows** (asserted as a superset)          |
+| **neighbour 2 (REHEARSE)** | a rehearsing row **still seats** — the test that would have caught an `isOnAirStatus`-only gate               |
+
+**RED before the gate:** the defect test failed with the four `PLAY`s, four `VOLUME`s and eight
+`FILL`/`CLIP`s quoted above; the other three already passed. **GREEN after:** all four.
+**Whole suite: 612 passed / 78 files, no regressions.** The chain was rebuilt before both readings
+(a stale `dist` has faked red and green in this repo before).
+
+The defect test asserts all four facts in **one** object comparison rather than four `expect`s,
+deliberately: separate assertions stop at the first, which would have hidden whether the audio and
+geometry halves also fired — and the audio question could not have been answered at all.
+
+### §B.5 — can the operator get them off air? YES, and that is a real answer, not an assumption
+
+The producers were **written into the ledger** (`seats: [30,31,32,33]`, measured), so the bridge
+**owns** them and knows their coordinates. They are **not orphans** in the R-009 sense — the orphan
+sweep is for layers the bridge does not own. Therefore both ordinary escapes reach them:
+
+- **OUT on the row** — `#outImpl` is not gated on `isOnAirStatus` (it refuses only `unknown-item`
+  and `disconnected`) and its teardown clears the plates before the frame;
+- **CLEAR ALL** — the bigger hammer, ledger-driven.
+
+**No second defect, and nothing urgent is owed here.** Had the seats gone unrecorded this would have
+been a second, worse item; they did not.
+
+### What is owed on the plant
+
+**The fix needs no plant reading to be correct** — it is asserted at the wire and the mock is
+faithful for it. What the owner should do to SEE it fixed is in the item's Repro: **stop the plates,
+swap the inputs, press UPDATE, and nothing must appear on air.** Then take the row and confirm the
+new inputs are the ones that come up — that second half is the one that proves the edit was not
+merely discarded.
+
+- **Cross-refs:** [[B-155]] (case 3 — the union pre-seat this gate must not narrow), [[B-154]] (the
+  related-but-different held-plate shape), `CLAUDE.md` golden rule 10 (the invariant),
+  `openspec/changes/multibox-layout-switch/tasks.md` 7.14d.
