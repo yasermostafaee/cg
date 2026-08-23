@@ -128,10 +128,18 @@ spec alone.
 ## 7. Gate
 
 - [x] 7.1 `pnpm gate` green (uncached).
-- [ ] 7.2 ⏳ **Linux `gate:e2e` OWED** — this change alters UI and rendering (`LiveSourcesPanel`,
-      `LayerRow`, `LivePlateOverlay`, `LivePlateAudioDialog`). Discharged ONLY by a COMPLETED,
-      GREEN `e2e` job on GitHub Actions for the commit that carries the change, cited by run URL
-      **written here beside this item**. A Windows pass does not discharge it; neither does a
-      cancelled or skipped run.
+- [x] 7.2 **Linux `gate:e2e` DISCHARGED.** This change alters UI and rendering
+      (`LiveSourcesPanel`, `LayerRow`, `LivePlateOverlay`, `LivePlateAudioDialog`), so a Linux
+      E2E was owed.
 
-      Run URL: _(not yet — pushed, awaiting CI)_
+      **Run URL: https://github.com/yasermostafaee/cg/actions/runs/32639516624** — commit
+      `6f720776`, `conclusion: success`, and the **`E2E (Playwright)` job actually RAN** (it was
+      not skipped) alongside `Lint • Typecheck • Test • Build`. 92 runtime specs + 269 designer
+      specs green.
+
+      ⚠ The FIRST push of this change (`7bdb085a`) went red on that job and does **not**
+      discharge anything — its `ci` was green and its `e2e` failed on one assertion in the new
+      spec, which searched for a button named `/restore/i` to prove no un-solo is offered and
+      matched the SOLO buttons themselves ("…with no restore"). Fixed in `6f720776`. Recorded
+      here rather than quietly replaced: a red run is evidence about a commit, and the next
+      reader should be able to see which commit the green one is for.
