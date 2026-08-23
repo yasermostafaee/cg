@@ -143,7 +143,15 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
     .click();
   await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
   await expect(stripOf(held, 'guest-2')).toContainText('0%');
-  await expect(app.layers.getByRole('button', { name: /un-?solo|restore/i })).toHaveCount(0);
+  /*
+    ⚠ Asserted on the buttons' VISIBLE TEXT, not on their accessible names — and the first
+    version of this line was wrong in a way worth recording. `getByRole('button', {name:
+    /restore/i})` matched the SOLO buttons themselves, whose accessible name ends *"with no
+    restore"*: the control that promises there is no un-solo is the one a search for an un-solo
+    finds. The claim is about what the strip OFFERS, so read the labels.
+  */
+  const stripLabels = await app.layers.locator('[data-plate-audio] button').allTextContents();
+  expect(stripLabels.some((l) => /un-?solo|restore|undo/i.test(l))).toBe(false);
 
   // ── PANIC. The seeded row is `loaded`, so there is nothing ON AIR to silence — and the
   //    console says exactly that rather than reporting a success over nothing (B-122's

@@ -857,6 +857,35 @@ describe('add-multibox-audio — audio is visible without opening anything', () 
     expect(el.querySelector('[role="progressbar"]')).toBeNull();
   });
 
+  it('🔴 the state ATTRIBUTE and the PILL answer from ONE predicate, on the PUBLISHED value', async () => {
+    /*
+      Golden rule 6, and the two spellings had already come apart. The attribute was derived
+      by a local ternary over the OPTIMISTIC drag value while the pill beside it read the
+      PUBLISHED one — so mid-drag the row reported `audible` under a pill that said SILENT.
+      Both now call `plateAudioState`, on the value the bridge has actually accepted.
+
+      Dragging WITHOUT releasing is the whole point: that is the only window in which the two
+      values differ at all, which is exactly why the drift was invisible.
+    */
+    const { el } = await render([layer()]);
+    const slider = stripIn(el, 'guest-1')?.querySelector<HTMLInputElement>('input[type="range"]');
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(slider, '60');
+      slider?.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    // The fader has MOVED — the operator sees their own drag…
+    expect(slider?.value).toBe('60');
+    expect(stripIn(el, 'guest-1')?.textContent).toContain('60%');
+    // …and the STATE has not, because nothing has been committed. The pill and the attribute
+    // say the same thing, which is the property that broke.
+    expect(stateOf(el, 'guest-1')).toBe('silent');
+    expect(stripIn(el, 'guest-1')?.textContent).toContain('SILENT');
+  });
+
   it('🔴 SOLO sends ONE map — 1 for the plate, 0 for every sibling of the same item', async () => {
     const { el, applied } = await render([
       layer({ layer: 10, sourceId: 'guest-1' }),

@@ -2,9 +2,8 @@ import { useState } from 'react';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { reportCommandError } from '../status/commandFeedback.js';
-import { pct } from './plateAudio.js';
+import { pct, plateAudioState, soloMap } from './plateAudio.js';
 import type { LiveLayerRowView } from './liveLayerRows.js';
-import { soloMap } from './plateAudio.js';
 
 /**
  * `add-multibox-audio` — **ONE PLATE'S AUDIO, ON THE ROW ITSELF: the state, the fader,
@@ -120,7 +119,14 @@ export function PlateAudioStrip({
       <span
         style={styles.pill}
         title={audio.pill.detail}
-        data-plate-audio-state={audio.held ? 'held' : shown > 0 ? 'audible' : 'silent'}
+        /*
+          🔴 `plateAudioState`, NOT a local ternary — golden rule 6, and the two versions had
+          already come apart. An inline `held ? … : shown > 0 ? …` reads the OPTIMISTIC drag
+          value while the pill beside it reads the PUBLISHED one, so mid-drag this attribute
+          said `audible` under a pill that said SILENT. Both now answer from the one predicate,
+          on the one value: what the BRIDGE has accepted.
+        */
+        data-plate-audio-state={plateAudioState(audio.volume, audio.held)}
       >
         {/*
           A DOT plus a WORD, matching `.cg-pill`'s contract elsewhere in this app: the hue is
@@ -149,10 +155,14 @@ export function PlateAudioStrip({
         // Committed on RELEASE, not on every drag frame: one AMCP command per decision
         // rather than one per pixel.
         onPointerUp={() => {
-          void apply({ [row.plate]: dragging ?? shown }).catch(() => undefined);
+          // `shown` already IS `dragging ?? published ?? 0` — see above. Re-testing `dragging`
+          // here would be a third place the same fall-through is spelled out.
+          void apply({ [row.plate]: shown }).catch(() => undefined);
         }}
         onKeyUp={() => {
-          void apply({ [row.plate]: dragging ?? shown }).catch(() => undefined);
+          // `shown` already IS `dragging ?? published ?? 0` — see above. Re-testing `dragging`
+          // here would be a third place the same fall-through is spelled out.
+          void apply({ [row.plate]: shown }).catch(() => undefined);
         }}
       />
       <span style={styles.readout}>{pct(shown)}</span>

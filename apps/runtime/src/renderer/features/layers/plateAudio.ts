@@ -99,7 +99,7 @@ export interface PlateAudioPill {
  *   - **MUTED GREY for `silent`**, because silence is the DEFAULT: every producer the bridge
  *     creates is created muted, so the common case should recede.
  */
-const PILL: Record<PlateAudioState, PlateAudioPill> = {
+const PILL: Record<'audible' | 'silent', PlateAudioPill> = {
   audible: {
     label: 'AUDIBLE',
     tone: colors.ready,
@@ -112,12 +112,18 @@ const PILL: Record<PlateAudioState, PlateAudioPill> = {
       'This plate is not raised. Every live plate starts silent — a plate carries its ' +
       'guest’s live microphone, so nothing is audible until it is raised here.',
   },
-  held: {
-    label: 'HIDDEN BY THIS LOOK',
-    tone: colors.text,
-    detail: '',
-  },
 };
+
+/**
+ * `held`'s hue, kept beside the other two rather than in {@link plateAudioPill}'s body — the
+ * three states' colours belong in one place even though this one's WORDING is computed.
+ *
+ * NEUTRAL, and that is the neighbouring module's rule rather than a choice made here: *"`held`
+ * is a normal, chosen disposition and wears a WORD, not a hue."* Amber would make a held plate
+ * read as something to go and look at, and the LIVE SOURCES tab already refuses to say that
+ * about the same state one row up.
+ */
+const HELD_TONE = colors.text;
 
 /**
  * The pill for one plate.
@@ -141,7 +147,7 @@ export function plateAudioPill(volume: number | undefined, held: boolean): Plate
   const armed = volume !== undefined && volume > 0;
   return {
     label: armed ? 'ARMED · HIDDEN BY THIS LOOK' : 'HIDDEN BY THIS LOOK',
-    tone: PILL.held.tone,
+    tone: HELD_TONE,
     detail: armed
       ? 'Armed, not audible — the current look does not show this box. It becomes audible ' +
         'the moment a look that shows it is entered; nothing is wrong with the input.'
