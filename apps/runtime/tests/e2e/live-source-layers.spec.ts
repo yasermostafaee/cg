@@ -153,27 +153,54 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   const stripLabels = await app.layers.locator('[data-plate-audio] button').allTextContents();
   expect(stripLabels.some((l) => /un-?solo|restore|undo/i.test(l))).toBe(false);
 
-  // ── PANIC. The seeded row is `loaded`, so there is nothing ON AIR to silence — and the
-  //    console says exactly that rather than reporting a success over nothing (B-122's
-  //    failure was an emergency control reporting success having sent nothing at all).
-  const panic = app.layers.getByRole('button', { name: /^Silence all boxes/ });
-  await expect(panic).toBeEnabled();
-  await panic.click();
-  await expect(app.error).toContainText('no row is on air');
-  // The intents really are untouched — the refusal was not a silent no-op dressed as one.
-  await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
-
-  // ── Now put the row ON AIR and press it again.
-  await app.page.getByRole('tab', { name: /^LAYERS/ }).click();
-  const newsRow = app.layers.locator('[data-item-id="item-irib-news"]');
-  await newsRow.getByRole('button', { name: 'PLAY' }).click();
-
   // 🔴 THE ROW'S OWN READ-ONLY SUMMARY, outside the six-column verb block — `VERB_COUNT`
   // stays 6, so every sticky header word still sits above its own glyph.
+  //
+  // Read HERE, before the panic, and on a row that has not been PLAYed: the summary counts
+  // SEATED plates, not on-air ones, and reading it after the panic would only ever see zeros.
+  await app.page.getByRole('tab', { name: /^LAYERS/ }).click();
+  const newsRow = app.layers.locator('[data-item-id="item-irib-news"]');
   await expect(newsRow.locator('[data-audio-summary]')).toHaveText('audio 1/2');
   await expect(newsRow.locator('[data-verb-block] button')).toHaveCount(6);
 
+  /*
+    ── 🔴 PANIC REACHES A ROW THAT HOLDS SEATS WITHOUT READING ON AIR ────────────────────
+
+    THIS ASSERTION WAS INVERTED, and the inversion is the whole point. It used to press PANIC
+    on this `loaded` row and expect the refusal *"no row is on air"* — PANIC was scoped in the
+    BROWSER from `isOnAir`, so a row holding seated, potentially AUDIBLE plates while not
+    reading on air was never silenced. That is `B-122`'s shape one verb along: an emergency
+    control gated on exactly the values that may be wrong in the emergency.
+
+    `stack.silence-all-live-plates` now takes NO ARGUMENTS and the BRIDGE scopes it from its
+    own ledger, so the seated-off-air row IS reached. The old expectation encoded the defect,
+    which is why it is replaced rather than relaxed: this version FAILS if a status filter is
+    ever reintroduced on the caller's side, which the old one could not detect.
+
+    B-122's rule is untouched and still covered — a no-op is never a success. That arm is
+    "Nothing was sent — the bridge holds no live plates", asserted in the unit suite where an
+    empty ledger can actually be arranged.
+  */
   await app.liveSourcesTab.click();
+  const panic = app.layers.getByRole('button', { name: /^Silence all boxes/ });
+  await expect(panic).toBeEnabled();
+  await panic.click();
+  await expect(app.success).toContainText('Silenced 2 plate(s)');
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('0%');
+  await expect(stripOf(held, 'guest-2')).toContainText('0%');
+
+  // …and the row's own summary follows the plates it counts.
+  await app.page.getByRole('tab', { name: /^LAYERS/ }).click();
+  await expect(newsRow.locator('[data-audio-summary]')).toHaveText('audio 0/2');
+
+  // ── ON AIR, the same one press still works. Not a duplicate of the above: it is the case
+  //    the OLD rule allowed, kept so removing the status filter cannot have broken it.
+  await newsRow.getByRole('button', { name: 'PLAY' }).click();
+  await app.liveSourcesTab.click();
+  await stripOf(onScreen, 'guest-1')
+    .getByRole('button', { name: /^Full volume for guest-1/ })
+    .click();
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
   await app.layers.getByRole('button', { name: /^Silence all boxes/ }).click();
   await expect(app.success).toContainText('Silenced 2 plate(s)');
   await expect(stripOf(onScreen, 'guest-1')).toContainText('0%');
