@@ -914,6 +914,35 @@ candidate shapes.
       `design.md:560`).
       **No product source was changed by the filing session, and no option was implemented.**
 
+- [ ] 7.14c 🔴 **`B-159` / `B-160` — A MEDIA FILE MISSING ON THE BACKUP DIVERGES THE TWO
+      SERVERS, AND NOTHING SURFACES IT.** Filed 2026-08-23 from the owner's 2026-08-22 report: a
+      media item exists on A and not on B; switching to the look that uses it, A switches and B
+      does not. Full items: `docs/prd/bugs-runtime.md` **`B-159`** (the defect) and **`B-160`**
+      (the prevention — nothing checks a file's presence per server; the take is the first check).
+      **THE RULE, decided:** a per-INPUT failure must never become a per-LOOK failure and must
+      never become a per-SERVER divergence. The switch happens on EVERY server, the box count and
+      geometry are identical everywhere, and only the hole whose input failed is BLACK — black and
+      not the previous content, inheriting `B-155`'s rule unchanged.
+      ⚠ **It does not overturn 7.9's _"page last, only on success"_**, and the items say how they
+      coexist: that rule orders things WITHIN a server (a page never shows a look whose holes did
+      not move); this one says the SAME decision must be reached on every server. Success is
+      redefined as STRUCTURAL — the fills moved — and a per-input failure never feeds it.
+      🔴 **§1's shape did NOT survive contact with the code, which is the filing's headline.**
+      Default strategy is `mirror-sync` (`bridge.ts:342`); `enqueue` RESOLVES on a non-2xx
+      (`command-queue.ts:138`), so B's 404 is a fulfilled promise, the both-fulfilled branch runs
+      (`redundancy-adapter.ts:254`), the send is journaled `'ok'` with the PRIMARY's code and the
+      **primary's result is returned**. `#send`'s `ok = result.response.kind !== 'err'` therefore
+      never sees B's failure. B DOES receive every `MIXER FILL`/`CLIP` and the `CG UPDATE` — so
+      the code predicts a per-PLATE failure on B, not a per-look one. **Worse than reported:** if
+      that `PLAY` hit an OCCUPIED layer the previous producer may still be seated, i.e. `B-155`'s
+      forbidden outcome on the server nobody is watching. Which of the two it is needs a SECOND
+      REAL SERVER — `@cg/amcp-mock` has no failure semantics for `PLAY` on an occupied layer.
+      🔴 **Does anything detect the divergence today? Detected yes, surfaced NO.**
+      `reportDivergence` emits `mirror-divergence` and `split-brain-persistent`, and a repo-wide
+      `git grep` finds **no listener** in `tools/**` or `apps/**` — every other hit is a doc, a
+      spec, an archive or a test. The detector is built; the wire to the operator is not.
+      **No product source was changed by the filing session, and neither item was implemented.**
+
 - [ ] 7.15 🔴 **`B-155` — THE SWITCH FLASH. OPEN, AND NOTHING ABOUT IT IS VERIFIED ON THE PLANT.**
       The owner, on air: _"change `l-1`'s source and press look-1, then when we go to solo it shows
       the OLD source for a moment and then switches to the new one."_
