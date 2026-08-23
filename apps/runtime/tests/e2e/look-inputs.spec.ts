@@ -123,8 +123,21 @@ test('LOOK INPUTS lists every look with its own frames, and the flat template ke
     §3d — THE DEFAULT IS NAMED INSIDE THE CONTROL THAT INHERITS IT. The blank option used to
     read "— template default —" and the section pointed UPWARD at the LIVE PLATES list for what
     that meant. A default the operator cannot see is a value they cannot reason about.
+
+    ⚠ **ASSERTED ON THE BLANK OPTION, NOT ON THE `<select>`, and that is the repair rather than
+    an incidental tidy-up.** `toContainText` on a `<select>` matches the CONCATENATION of every
+    option's text — so this passed on a substring of the blank option while the other options
+    (catalog source NAMES) were free to change underneath it, and it would equally have passed
+    on a source happening to be called "Template default". Addressing the option directly means
+    the assertion fails when the thing it is about changes, and only then.
+
+    The value is `''` — `PLATE_UNASSIGNED`, the blank option's own value — which is a stable
+    handle in a way its LABEL is not: this spec is red today precisely because that label was
+    renamed (`— template default (none set) —` → `Default (none set)`).
   */
-  await expect(looks.locator('[data-look-binding="two:l-1"]')).toContainText('template default');
+  const blankOption = looks.locator('[data-look-binding="two:l-1"] option[value=""]');
+  await expect(blankOption).toHaveCount(1);
+  await expect(blankOption).toHaveText(/^Default \(/);
 
   /*
     ⚠ §2.1 — A TEMPLATE WITH NO LOOKS GETS NO LOOK INPUTS SECTION, and must therefore keep its

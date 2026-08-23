@@ -176,9 +176,30 @@ export function badgeFor(
   return { text: 'SELECTED — A TAKE SHOWS THIS', tone: 'not-on-air', color: styles.selected.color };
 }
 
-/** The name this station shows for a catalog id, or the id when it names nothing. */
-function sourceName(id: string | undefined): string {
-  if (id === undefined || id === '') return 'the template default';
+/**
+ * The name this station shows for a catalog id, or the id when it names nothing.
+ *
+ * 🔴 **IT TAKES A NON-EMPTY `string`, AND THE EMPTY CASE IS GONE RATHER THAN REWORDED.**
+ *
+ * It used to accept `string | undefined` and answer `'the template default'` for the empty
+ * case — old vocabulary from before the blank option named its own default, and by the time
+ * the option was renamed to `Default (…)` that fallback had become actively wrong: interpolated
+ * at the one call site below it produced **`Default (the template default)`**, self-referential
+ * nonsense an operator would read as a data fault rather than a copy fault.
+ *
+ * ⚠ **The dead branch is DELETED, not re-worded, because it fed TWO call sites.** Rewording it
+ * would have left one string doing duty in two roles — the blank option's label and the
+ * "not in force — patched to X" note — with only one of them ever exercised, which is precisely
+ * the shape that let the old wording rot unnoticed. Narrowing the parameter makes the state
+ * unrepresentable instead: each caller now proves its id is real where it can actually see the
+ * evidence.
+ *
+ * (It was never reachable — `SourceDefinitionIdSchema` is `.min(1)` plus a leading-alphanumeric
+ * regex, enforced at every boundary an assignment crosses, and `applyDraft` turns an empty
+ * staged value into a DELETION rather than a blank entry. Unreachability is why nothing was
+ * red; it is not why this changed.)
+ */
+function sourceName(id: string): string {
   return currentSourceCatalog().sources.find((s) => s.id === id)?.name ?? id;
 }
 
@@ -263,11 +284,21 @@ export function LooksBindingsSection({
                 is the SAME join the LIVE PLATES section uses for a no-looks template, so the
                 two surfaces cannot disagree about what "the default" is.
               */
-              const templateDefault = defaults.get(plate.sourceId) ?? null;
+              /*
+                ⚠ **`?? null` IS NOT ENOUGH HERE, and the difference is one falsy value wide.**
+                Nullish coalescing catches `null`/`undefined` and lets an EMPTY STRING through —
+                so an empty id would have survived as `''`, failed the `=== null` test below,
+                and taken the NAMED branch. The collapse is explicit for that reason.
+
+                It answers `Default (none set)`, which is the honest reading: an id that names
+                nothing IS no default set, and it is already the wording of the other branch.
+              */
+              const assigned = defaults.get(plate.sourceId);
+              const templateDefault = assigned === undefined || assigned === '' ? null : assigned;
               const defaultLabel =
                 templateDefault === null
-                  ? '— template default (none set) —'
-                  : `— template default (${sourceName(templateDefault)}) —`;
+                  ? 'Default (none set)'
+                  : `Default (${sourceName(templateDefault)})`;
               const value = effectiveLookBinding(item.itemId, look.id, plate.sourceId, applied);
               const dirty = isLookBindingDirty(item.itemId, look.id, plate.sourceId, applied);
               // §2 — level 4 masks level 3, for THIS plate, in EVERY look.

@@ -135,8 +135,16 @@ it('🔴 §3c — a per-look input SURVIVES the UPDATE: the panel reads back wha
     3. 🔴 THE ASSERTION THE OWNER'S REPORT IS. The drafts have cleared on success, so what
        the control renders now comes entirely from the PUBLISHED state. If the map did not
        survive the round trip, `applied` is undefined and every row falls back to
-       `PLATE_UNASSIGNED` — which the panel draws as "— template default —", exactly the
-       reported symptom.
+       `PLATE_UNASSIGNED` — the blank option, which the panel draws as the row's inherited
+       DEFAULT rather than as the bound source: exactly the reported symptom.
+
+       ⚠ This sentence used to QUOTE that option's label ("— template default —"), in the
+       present tense, and the quote was wrong twice over by the time anyone read it: session BO
+       had already replaced it with the parenthesised form, and it is now "Default (…)". A
+       comment reddens nothing, which is what let it rot — so it now names the option by its
+       ROLE, which is what this test is actually about, and there is no string left here to go
+       stale. The one place that asserts the label's text is `look-inputs.spec.ts`, where a
+       failure is visible.
   */
   const published = itemOf(latest());
   expect(published.lookSourceOverride, 'the published item carries the map').toEqual({
