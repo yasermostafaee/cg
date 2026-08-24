@@ -1345,6 +1345,23 @@ then widened past this checkout:
 `D-` stays contiguous `D-001` … `D-155` and `B-` stays contiguous `B-001` … `B-174`, **no gaps.
 Next free: `D-156` and `B-176`.**
 
+## 2026-08-24 — `D-156`, from session GIZMO-READ-01
+
+| Prefix | Claimed | Item                                                                                | File                       |
+| ------ | ------- | ----------------------------------------------------------------------------------- | -------------------------- |
+| `D-`   | `D-156` | `Shift` and `Alt` are two spellings of one job — bypass snapping — split by gesture | [designer.md](designer.md) |
+
+Noticed while establishing, for `D-155`'s aspect lock, that neither modifier was free. Filed rather
+than folded in, because `D-155`'s decision at that seam is precisely that it adds NO binding.
+
+**Verified free immediately before the heading was written:** the `D-` duplicate audit printed
+**nothing** (as it must for every prefix but `B-`); the highest `D-` heading on `dev` and across
+**every ref** after a `git fetch origin` was `D-155`; `git stash list` was EMPTY; and
+`git grep "D-156"` over `docs` + `openspec` returned **one hit** — this file's own "Next free"
+pointer above, the documented false positive.
+
+`D-` stays contiguous `D-001` … `D-156`, **no gaps. Next free: `D-157` and `B-176`.**
+
 ⚠ **`B-175` is filed UNREPRODUCED, and its item says so in its own `Env:` line.** The mechanism is a
 straight read of the data flow across four files; the visual consequence is deduced from it and was
 NOT observed in the running app. It is filed at ⟨high⟩ on the strength of the mechanism, with an

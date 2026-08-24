@@ -4736,7 +4736,7 @@ element's rect?", and every reader and writer goes through it:
   [[R-057]] (the arrangement feature), [[B-148]] (the other defect found in the same area — a missing
   refusal, not a control fault).
 
-## [ ] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩
+## [~] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩ — change AUTHORED 2026-08-24 (`openspec/changes/aspect-lock-live-source/`); NOT implemented. Its precondition [[B-175]] has landed
 
 **What:** When a `video-placeholder` has an `expectedAspect`, dragging any resize handle preserves
 that aspect LIVE, for the whole gesture. The author stops being able to deform the plate by accident
@@ -4931,9 +4931,62 @@ schedules the item** — this line records the decision, not permission to act o
 (`AspectRow`) · `ArrangementsSection.tsx:250-260` (the `CELLS` fields).
 
 - **Cross-refs:** [[D-147]] (the aspect declaration and the FIT button this re-purposes),
-  [[B-175]] (the resize gesture reads the AUTHORED transform while the gizmo is DRAWN at the
-  arrangement cell — **found while scoping this item, and it lands on the same drag path**;
-  whichever ships second must not re-derive the other's decision), [[D-154]] (the two-geometry-
-  editors defect whose shape the `CELLS` half exists to not repeat), [[D-122]] (the `Alt`
-  free-placement bypass that rules out a keyboard override), [[B-149]] (the other place where a
-  plate's rendered shape and its authored shape came apart).
+  [[B-175]] (the resize gesture read the AUTHORED transform while the gizmo was DRAWN at the
+  arrangement cell — **found while scoping this item, and it lands on the same drag path**. FIXED
+  2026-08-24, ahead of this item and deliberately: without it the lock would have constrained the
+  authored rect while the author watched the cell, so it would have been wrong on exactly the
+  multi-box templates it exists for), [[D-154]] (the two-geometry-editors defect whose shape the
+  `CELLS` half exists to not repeat), [[D-122]] (the `Alt` free-placement bypass that rules out a
+  keyboard override), [[D-156]] (the Shift/Alt inconsistency noticed while establishing that —
+  deliberately NOT folded in here), [[B-149]] (the other place where a plate's rendered shape and
+  its authored shape came apart).
+
+### 🔴 The one correction this item's brief needed, recorded so it is not re-derived
+
+The brief assumed the `CELLS` fields would lock to a plate's `expectedAspect`. **They cannot.** An
+arrangement's cells hold COMPOSITION INSTANCES (`boxInstanceIds` filters `e.type === 'composition'`)
+while `expectedAspect` lives on a `video-placeholder`, so a cell has no `expectedAspect` at all. The
+plate is still deformed by a mis-shaped cell, because `preScale` is per-axis — so **the quantity a
+cell preserves is the COMPOSITION'S RESOLUTION ASPECT**. That is written up as a requirement in the
+change's `designer-multibox-arrangements` delta rather than only here.
+
+## [ ] D-156 — `Shift` and `Alt` are two spellings of ONE job — bypass snapping — and which one works depends on which gesture you are in ⟨priority: low⟩
+
+**What:** Make ONE key mean "bypass snapping" across every canvas gesture.
+
+**Why:** Noticed while establishing that neither key was free for [[D-155]]'s aspect lock. The
+canvas has one concept — _"ignore the snap targets for this drag"_ — spelled two ways, and the
+spelling depends on which handle the author happened to grab:
+
+| gesture               | key     | where                                                  |
+| --------------------- | ------- | ------------------------------------------------------ |
+| resize                | `Shift` | `Gizmo.tsx:427`                                        |
+| rotate                | `Shift` | `Gizmo.tsx:505`                                        |
+| move (single element) | `Alt`   | `CanvasOverlay.tsx:1011` ([[D-122]], "free placement") |
+| move (group)          | `Alt`   | `CanvasOverlay.tsx:1113`                               |
+| arrow-key nudge       | `Alt`   | `App.tsx:482`                                          |
+
+An author who learns "hold Alt to place freely" while dragging a box discovers it does nothing
+while resizing one, and nothing on screen says why.
+
+⚠ **This is a LOW-priority tidy, and it is filed rather than fixed for a reason.** It is muscle
+memory for whoever has been using the app, so changing it is a retraining cost, not a bug fix — and
+[[D-122]]'s `Alt` in particular is a documented decision with its own item behind it. **It also
+must not be folded into [[D-155]]**, whose whole point at this seam is that it adds NO keyboard
+binding.
+
+**Acceptance:**
+
+- WHEN the author holds the chosen key during ANY canvas gesture — resize, rotate, single move,
+  group move, nudge — THEN snapping is bypassed for that gesture
+- WHEN the other key is held THEN it does whatever else it does, and does NOT bypass snapping
+- WHEN the decision is made THEN the losing spelling is removed rather than kept as an alias — two
+  keys for one job is the thing this item exists to end
+
+**Notes:** The choice between the two is the owner's; `Alt` has the wider reach today (three
+gestures to `Shift`'s two) and a named item behind it, while `Shift` is the more conventional
+modifier for this in other editors. `PathEditor.tsx:232` also uses `altKey`, for BREAKING A HANDLE
+PAIR — a different job on a different surface, and out of scope.
+
+- **Cross-refs:** [[D-122]] (the item that introduced `Alt` free placement), [[D-155]] (where this
+  was noticed, and which deliberately adds no binding), [[D-041]] (the group move).
