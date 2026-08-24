@@ -1316,3 +1316,40 @@ inside the item that replaced it is a premise the next reader re-derives:
 **Filed at `[ ]`.** Nothing shipped — a filing session: no product code, no living spec, no archive.
 The one dirty file in the tree (`tools/caspar-bridge/src/template-http-server.ts`, the owner's
 uncommitted `guessLanHost()` plant pin — `P-035`) was read and deliberately left untouched.
+
+## 2026-08-24 — `D-155` and `B-175`, from session ASPECT-LOCK-01
+
+TWO prefixes in one session, which is why both audits are recorded rather than only the `B-` one.
+The session was sent to file ONE designer feature (the Live-Source aspect lock) and found a second,
+unrelated defect while establishing its §5 question — so the second was filed rather than folded
+into the feature it was found under.
+
+| Prefix | Claimed | Item                                                                                                         | File                                 |
+| ------ | ------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| `D-`   | `D-155` | a Live Source with a declared aspect KEEPS it during the resize                                              | [designer.md](designer.md)           |
+| `B-`   | `B-175` | `D-154` left the RESIZE MATH reading the authored transform while the gizmo is drawn at the arrangement cell | [bugs-designer.md](bugs-designer.md) |
+
+**Both verified free immediately before the headings were written**, by this file's derivation and
+then widened past this checkout:
+
+- `D-` duplicate audit (`--exclude` the README, `{3}`-anchored): **empty**, as it must be for every
+  prefix other than `B-`.
+- `B-` duplicate audit: **exactly `B-056` and `B-080`**, unchanged.
+- Highest `D-` heading in `docs/prd/` on `dev`: **`D-154`**. Highest across **EVERY ref** after a
+  `git fetch origin`: **`D-154`**.
+- Highest `B-` heading on `dev` and across every ref: **`B-174`**.
+- `git stash list` **EMPTY**.
+- `git grep "D-155"` over `docs` + `openspec`: **no hits at all**. `git grep "B-175"`: **one hit** —
+  this file's own "Next free" pointer from the batch above, the documented false positive.
+
+`D-` stays contiguous `D-001` … `D-155` and `B-` stays contiguous `B-001` … `B-174`, **no gaps.
+Next free: `D-156` and `B-176`.**
+
+⚠ **`B-175` is filed UNREPRODUCED, and its item says so in its own `Env:` line.** The mechanism is a
+straight read of the data flow across four files; the visual consequence is deduced from it and was
+NOT observed in the running app. It is filed at ⟨high⟩ on the strength of the mechanism, with an
+explicit instruction to reproduce before fixing — a non-reproduction would itself be informative.
+
+**Filed at `[ ]`.** A filing session: no product code, no living spec, no archive, and **no OpenSpec
+change created** — `D-155` records WHY it needs its own change (three capabilities, two in-flight
+changes, one living spec) without creating one.

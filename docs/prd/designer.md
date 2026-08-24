@@ -4735,3 +4735,205 @@ element's rect?", and every reader and writer goes through it:
   makes the model explicable, D-154 makes it editable; neither fixes the other), [[D-152]] /
   [[R-057]] (the arrangement feature), [[B-148]] (the other defect found in the same area — a missing
   refusal, not a control fault).
+
+## [ ] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩
+
+**What:** When a `video-placeholder` has an `expectedAspect`, dragging any resize handle preserves
+that aspect LIVE, for the whole gesture. The author stops being able to deform the plate by accident
+and stops being sent to a button afterwards to undo it.
+
+**Why:** The author's words:
+
+> _"In the Designer, when I add a Live source and its aspect is 16:9, the resize must PRESERVE that
+> aspect while I drag — not let me deform it and then make me press a button to fit it back."_
+
+Today [[D-147]] gives the plate a declared aspect and a **Fit plate to aspect** button, and nothing
+between the two: the drag is free, so every resize of a 16:9 plate is a deformation followed by a
+repair the author has to remember. The declaration already exists and is already authoritative —
+the gesture is simply not reading it.
+
+⚠ **What the lock is FOR, stated because the obvious guess is wrong.** It stops background GAPS —
+an author-shaped hole that does not match the feed's shape. It is **not** a crop-prevention feature:
+what a mismatched aspect COSTS at runtime is a separate question and is moving (cropping today,
+letterboxing on the template background under the planned fit-mode work). **Nothing in this item
+depends on that, and no comment written for it may claim the lock prevents cropping.**
+
+### Scope — and it is narrow, which must be ASSERTED and not merely intended
+
+Applies to a `video-placeholder` whose `expectedAspect` is SET, and to nothing else. Every other
+element kind, and every plate with `— not specified —`, resizes byte-identically to today. So does
+any plate whose lock is OFF.
+
+### 🔴 The constrained quantity is the EFFECTIVE aspect, and it has ONE definition
+
+`(w · scaleX) / (h · scaleY)` — `effectiveAspect` in
+[`aspect-presets.ts`](../../apps/designer/src/renderer/features/inspector/aspect-presets.ts), which
+already exists and is already what [[D-147]]'s FIT and `matchesAspect` solve against. `scale` is
+never written by a resize, so the solve is for `size` alone, exactly as `fitToAspect` does it.
+
+⚠ **Golden rule 6, and it is the likeliest thing to be got wrong here.** The obvious implementation
+writes `w / h` into `geometry.ts` because that file has no aspect vocabulary and importing one feels
+like a layering violation. **It is not: a second spelling of "the aspect of this box" that ignores
+non-uniform `scale` would call a plate 16:9 that renders at some other shape entirely** — the exact
+arithmetic D-147 exists to take off the author, re-introduced one layer down. If the shape the
+gesture needs is not exported from `aspect-presets.ts` yet, EXPORT IT FROM THERE.
+
+### Where the constraint goes, and where it must NOT go
+
+`computeRectResize`
+([`geometry.ts:177`](../../apps/designer/src/renderer/features/canvas/geometry.ts)) derives `wNew`
+and `hNew` INDEPENDENTLY from `RESIZE_CFG[handle].freeW/freeH` (`:202-203`) and only then turns them
+into `ratioW`/`ratioH` (`:204-205`). Everything after that — the fixed-corner solve at `:210-218` —
+is already correct under rotation and non-uniform element scale and is what keeps the fixed corner
+still.
+
+🔴 **So the constraint belongs BETWEEN those two steps: reshape `wNew`/`hNew`, then let the existing
+code take the ratios.** If the implementer finds themselves editing the position solve, they have
+gone the wrong way and the fixed corner will drift.
+
+**Acceptance:**
+
+- WHEN an EDGE handle is dragged on a locked plate THEN the free axis follows the pointer and the
+  other is DERIVED from it, and the effective aspect stays within `ASPECT_TOLERANCE`
+- WHEN a CORNER handle is dragged THEN the pointer is PROJECTED onto the constrained diagonal — the
+  line through the FIXED corner whose slope is the locked ratio — and the rect is built from that
+  projection
+- WHEN a corner drag's pointer path CROSSES that diagonal THEN the emitted rect has NO discontinuity
+- WHEN the driving axis hits `MIN_SIZE` THEN the derived axis is recomputed from the CLAMPED value,
+  so the aspect survives the clamp
+- WHEN a locked plate is rotated and/or non-uniformly scaled THEN the fixed corner stays exactly
+  where it is, as it does today
+- WHEN the plate has no `expectedAspect`, or is not a Live Source, or the lock is OFF THEN the
+  resize is byte-identical to today
+
+#### 🔴 The corner rule is PROJECTION, not "whichever axis moved more"
+
+A dominant-axis rule reads as the simpler implementation and is a visible bug: it flips which axis
+drives the moment the pointer crosses the diagonal, and the box JUMPS mid-drag. **State in a comment
+why the dominant-axis rule was rejected** — it is the thing the next reader will propose.
+
+#### 🔴 Do NOT port `fitToAspect`'s bottom-edge FLIP into the drag
+
+`fitToAspect` swaps which dimension it preserves when solving for `h` would push the plate past the
+bottom of the frame. **That is right for a one-shot button and wrong for a live gesture:** swapping
+the preserved axis mid-drag is the same jump the dominant-axis rule produces, arriving from a
+different direction. A plate dragged out of frame stays an ordinary preflight error.
+
+⚠ **Say this in a comment next to the drag path.** The flip is RIGHT THERE in the function being
+reused, and the next reader will assume it was forgotten rather than declined.
+
+### The escape hatch — a TOGGLE, and NO keyboard override
+
+**A lock toggle beside the aspect select in `StyleSection`'s `AspectRow`, ON by default whenever
+`expectedAspect` is set.**
+
+🔴 **NO momentary keyboard unlock, because both plausible keys are taken.** Established by reading
+the gesture layer, not assumed:
+
+| key     | already means, in the canvas                                                                                                                                                                 |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Shift` | override SNAPPING — `Gizmo.tsx:427` (resize) and `:505` (rotate)                                                                                                                             |
+| `Alt`   | override SNAPPING — `CanvasOverlay.tsx:1011` (single-element move, `D-122`) and `:1113` (group move); also breaks a handle pair in `PathEditor.tsx:232`, and modifies nudge in `App.tsx:482` |
+
+Both are the same job — bypass snapping — spelled with a different key in the move gesture than in
+the resize gesture. **Overloading either with aspect-constrain would put two meanings on one key in
+one canvas**, and inventing a third chord for a feature with a visible toggle is worse than having
+no keyboard path at all. ⚠ **Do not invent one.** (That `Shift` and `Alt` mean the same thing in
+different gestures is its own smell; it is NOT this item's to fix and must not be folded in.)
+
+### The toggle is a SESSION preference, not authored state
+
+**Decided: session preference.** It is a fact about how the AUTHOR works, not about the template.
+Putting it in the scene means a `.vcg` that resizes differently for two people opening the same
+file, and a diff on a file nobody meaningfully edited — and it would have to be schema'd, migrated
+and exported for a value the runtime can never read. The aspect itself is already authored
+(`expectedAspect`); the lock is only how the editor treats it.
+
+⚠ It is a preference **per author, not per plate** — a single toggle whose state persists across
+selections, like `snappingEnabled`. A per-plate session flag would be invisible state the author
+cannot see the extent of.
+
+### The FIT button survives with a CHANGED JOB
+
+**Fit plate to aspect** stops being the normal path and becomes a **REPAIR**: for a plate authored
+before this item, or one deformed with the lock off. The label and tooltip should say so, and the
+existing `already` state (`matchesAspect`,
+[`StyleSection.tsx:831`](../../apps/designer/src/renderer/features/inspector/StyleSection.tsx))
+should read as SATISFIED — "this plate already matches" — rather than as an action that happens to
+be disabled. Today's tooltip already says the right sentence for that case; what changes is that it
+becomes the ordinary state rather than the exception.
+
+### The CELLS fields must honour it too — but NOT with the plate's aspect
+
+**Decided: the `CELLS` number fields in `ArrangementsSection` DO get a lock, and the quantity they
+lock is NOT `expectedAspect`.** Two geometry editors that disagree about one rule is the defect
+class this area already has one of ([[D-154]]), so leaving the cells free would re-open it — but the
+naive fix is wrong, and here is why, established from the code:
+
+- An arrangement's cells hold **composition instances**, not plates: `boxInstanceIds` filters
+  `e.type === 'composition'` (`arrangements.ts:233`). `expectedAspect` lives on a
+  `video-placeholder` (`packages/shared-schema/src/elements.ts:1151`). **A cell therefore has no
+  `expectedAspect` of its own.**
+- A plate inside a box is nonetheless deformed by a mis-shaped cell, because `preScale` is
+  computed **per axis** — `x = size.w / resolution.width`, `y = size.h / resolution.height`
+  (`packages/shared-schema/src/scene-flatten.ts:319-322`). A cell whose aspect differs from the
+  composition's own resolution applies a non-uniform pre-scale to everything inside it.
+- **So the quantity a cell must preserve is the COMPOSITION'S RESOLUTION ASPECT.** Preserve that and
+  every plate inside renders at its authored shape, whatever that is and however many plates there
+  are. Lock a cell to one plate's `expectedAspect` instead and you get the right answer only for the
+  special case of a box holding exactly one plate that fills its composition — and silently the
+  wrong one for every other box.
+
+**Acceptance:**
+
+- WHEN a cell's `width` is committed on a locked arrangement THEN its `height` follows so the cell
+  keeps the composition's resolution aspect, and vice versa
+- WHEN the box's composition has no usable resolution THEN the cell fields behave exactly as today
+
+### Tests — RED first, and the chain rebuilt before each reading
+
+- an edge drag on a 16:9 plate: the effective aspect stays within `ASPECT_TOLERANCE` **across the
+  whole drag, sampled at every emitted rect** — not only at the final one
+- a corner drag whose pointer path CROSSES the diagonal emits NO discontinuity (**this is the test
+  that proves the projection rule; a dominant-axis implementation passes every other test here**)
+- the fixed corner stays put under rotation AND non-uniform scale
+- `MIN_SIZE` clamping keeps the aspect
+- a plate with no `expectedAspect`, and a non-Live-Source element, resize byte-identically to today
+- the lock OFF resizes byte-identically to today
+
+⚠ The last two are the ones that will be written as "it probably still works". `computeRectResize`
+is shared by every element kind and by `D-110`'s keyframed-path morph rect — **assert the
+byte-identity, do not intend it.**
+
+### OpenSpec: this needs ITS OWN change, and the reason is the capability spread
+
+It touches **three capabilities across two in-flight changes and one living spec**, and no existing
+change owns even two of them:
+
+| what                             | capability                       | owned by                                         |
+| -------------------------------- | -------------------------------- | ------------------------------------------------ |
+| the resize gesture               | `designer-canvas-view`           | a LIVING spec                                    |
+| the lock toggle + the FIT button | `designer-live-source`           | the in-flight `live-source-multibox` ([[D-147]]) |
+| the `CELLS` fields               | `designer-multibox-arrangements` | the in-flight `multibox-layout-switch`           |
+
+Folding a canvas-gesture rule into either in-flight change would make that change's archive wait on
+a feature it does not own, and `live-source-multibox` in particular is large and on-air-critical.
+So: a new change with `## MODIFIED Requirements` against `designer-canvas-view` and additions to the
+two in-flight capabilities. ⚠ **Do not create it silently and do not create it before the owner
+schedules the item** — this line records the decision, not permission to act on it.
+
+**Notes:** [`aspect-presets.ts`](../../apps/designer/src/renderer/features/inspector/aspect-presets.ts)
+(`effectiveAspect`, `matchesAspect`, `fitToAspect`, `ASPECT_TOLERANCE`) ·
+[`geometry.ts:177`](../../apps/designer/src/renderer/features/canvas/geometry.ts)
+(`computeRectResize`) · [`Gizmo.tsx:443`](../../apps/designer/src/renderer/features/canvas/Gizmo.tsx)
+(the single call) ·
+[`StyleSection.tsx:770-884`](../../apps/designer/src/renderer/features/inspector/StyleSection.tsx)
+(`AspectRow`) · `ArrangementsSection.tsx:250-260` (the `CELLS` fields).
+
+- **Cross-refs:** [[D-147]] (the aspect declaration and the FIT button this re-purposes),
+  [[B-175]] (the resize gesture reads the AUTHORED transform while the gizmo is DRAWN at the
+  arrangement cell — **found while scoping this item, and it lands on the same drag path**;
+  whichever ships second must not re-derive the other's decision), [[D-154]] (the two-geometry-
+  editors defect whose shape the `CELLS` half exists to not repeat), [[D-122]] (the `Alt`
+  free-placement bypass that rules out a keyboard override), [[B-149]] (the other place where a
+  plate's rendered shape and its authored shape came apart).

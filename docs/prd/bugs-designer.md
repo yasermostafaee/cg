@@ -2492,3 +2492,80 @@ plate scaled by the cell's 0.5 `preScale` — where the pre-fix value would have
   and it already separates the hit area from the visible line (`HIT = 10` around `LINE = 2`,
   `Splitter.tsx:13-16`) — which is the pattern B-140 asks the Runtime to adopt.
 -->
+
+## [ ] B-175 — `D-154` fixed the gizmo's DRAW and its WRITE and left the RESIZE MATH reading the authored transform, so a handle on an arranged box computes against a rect that is not where it is drawn ⟨priority: high — the author grabs a handle they can see and the box jumps⟩ — OPEN, filed 2026-08-24 while scoping [[D-155]]
+
+**Found by inspection while scoping [[D-155]] (the aspect lock), not by a bug report.** [[D-154]]'s
+own question — _"does the resize COMMIT land on the arrangement's CELL, or still on the authored
+transform?"_ — was asked and answered, and the answer turned out to be **"the commit is fine; the
+INPUT is not."**
+
+### What D-154 actually fixed, and the one place it did not reach
+
+D-154's argument is that the arranged rect has a READ side and a WRITE side and both must go through
+it. Both were done:
+
+| side                                | goes through the arranged rect?                                            |
+| ----------------------------------- | -------------------------------------------------------------------------- |
+| gizmo DRAWING                       | ✅ `Gizmo.tsx:151` — `arrangedTransform(element, effectiveTransformAt(…))` |
+| the overlay's hit rect              | ✅ `CanvasOverlay.tsx:362`                                                 |
+| the Transform panel's numbers       | ✅ `TransformSection.tsx:43`                                               |
+| every geometry COMMIT               | ✅ `timeline.ts:481` → `commitToActiveCell` — the one chokepoint           |
+| **the resize gesture's START rect** | ❌ `Gizmo.tsx:397` — `const t0 = effectiveTransformAt(element, …)`         |
+| **the rotate gesture's START rect** | ❌ `Gizmo.tsx:473` — same                                                  |
+
+`beginResize` takes `t0` from `effectiveTransformAt` — the **authored** transform — and everything
+the gesture is built on is derived from it: `rect0 = boxRect(t0)` (`:402`), the grabbed handle's
+scene position `grabScene = localToScene(t0, …)` (`:406-407`), the fixed corner
+`fixedScene = localToScene(t0, fc.x, fc.y)` (`geometry.ts:194`), and the ratios taken against
+`rect.w`/`rect.h` (`geometry.ts:204-205`).
+
+### 🔴 Why it is worse than "the numbers are slightly off"
+
+With an arrangement active the box RENDERS at its cell and the handles are DRAWN there, so:
+
+1. **`grabScene` is not where the handle is.** The gesture believes the author grabbed the authored
+   box's corner. The pointer delta is added to that wrong origin, so **the box jumps by the
+   authored→cell offset on the first pointer-move.**
+2. **The fixed corner is the AUTHORED box's corner**, so the corner that is supposed to stay put is
+   a corner the author cannot see — and the visible opposite corner moves instead.
+3. **The ratios are taken against the AUTHORED size**, so a cell half the authored width makes every
+   drag apply twice the intended scale factor.
+
+None of this is caught by D-154's acceptance, which asserts the gizmo is DRAWN in the right place
+and that edits REACH the cell. **Both are true. The gesture in between reads the wrong box**, and it
+is precisely the shape D-154's own comment warns about — _"the owner's handles did not touch what he
+could see"_ — surviving in the one code path that comment did not audit.
+
+**Repro:** activate an arrangement, select a box whose cell differs from its authored transform,
+drag any resize handle.
+**Expected:** the handle tracks the pointer from where it is drawn; the opposite corner stays put.
+**Actual:** the box jumps on the first move, and the corner that holds still is not the one on
+screen.
+**Env:** established by reading `Gizmo.tsx`, `geometry.ts`, `arrangements.ts` and `timeline.ts` on
+`dev` @ `f6d2033d`. **NOT reproduced in the running app** — the mechanism is a straight read of the
+data flow, and the visual consequence above is deduced from it, not observed. ⚠ Whoever picks this
+up should reproduce it first: if it does NOT reproduce, that is itself informative and means
+something else is normalising the two rects.
+
+### The fix is one line each, and that is a reason for suspicion rather than confidence
+
+`t0` in `beginResize` (`:397`) and `beginRotate` (`:473`) should be
+`arrangedTransform(element, effectiveTransformAt(element, currentFrame))` — the same expression the
+render path already uses at `:151`. ⚠ **But check `NO_CELL` before shipping it:** a box with no cell
+in the active arrangement gets the zero-sized sentinel (`arrangements.ts:327`, `NO_CELL`), and
+`computeRectResize` divides by `Math.max(rect.w, 1e-6)`. A zero-width start rect therefore yields a
+ratio of ~1e6 rather than an error. The write side already refuses that case (`isNoCell` →
+`commitToActiveCell` returns `true` having written nothing), so the gesture must refuse it too
+rather than rely on the commit swallowing it.
+
+**Regression test:** `apps/designer/tests/` — with an active arrangement whose cell differs from the
+authored transform, assert that a resize drag's FIRST emitted rect differs from the start rect by
+the pointer delta alone (no jump), and that the fixed corner's scene position is unchanged. A test
+that only asserts the final committed cell will pass against the current code.
+
+- **Cross-refs:** [[D-154]] (the item that fixed the read and write sides — this is the third side it
+  did not name), [[D-155]] (found while scoping it; the aspect lock lands on this same drag path, so
+  whichever ships second must not re-derive the other's decision), [[D-153]] (the legibility half of
+  the same surface), [[B-149]] (the other place a plate's rendered rect and its authored rect came
+  apart, that one on air).
