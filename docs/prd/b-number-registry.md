@@ -1387,6 +1387,26 @@ touches five SOURCE files and no `docs/prd/**`, so it claims no number.
 
 `R-` stays contiguous `R-001` … `R-058`, **no gaps. Next free: `R-059`, `D-157` and `B-176`.**
 
+## 2026-08-24 — `B-176`, filed from a gate red that was not a regression
+
+| Prefix | Claimed | Item                                                                   | File               |
+| ------ | ------- | ---------------------------------------------------------------------- | ------------------ |
+| `B-`   | `B-176` | `.cgproj` re-packing is asserted byte-identical and is not, under load | [bugs.md](bugs.md) |
+
+The `R-058` turn's Stop-hook gate reddened on `@cg/vcg-format#test` — a package the turn's diff
+cannot reach. Established as load-dependent (12× green alone, 144/144 green alone, green on a full
+gate re-run, green on Linux CI for the same commit) and filed rather than "fixed": nothing was
+changed in `vcg-format`, no test was weakened, and the hypothesis about WHY is recorded as
+unproven with the measurement it owes.
+
+**Verified free immediately before the heading was written:** duplicate audit still prints exactly
+`B-056` and `B-080`; the highest `B-` heading on `dev` and across **every ref** after a
+`git fetch origin` was `B-175`; `git grep "B-176"` over `docs` + `openspec` returned only this
+file's own "next free" pointers, the documented false positive. `git stash list` holds `D-155`'s
+source-only WIP, which claims no number.
+
+`B-` stays contiguous `B-001` … `B-176`, **no gaps. Next free: `B-177`, `R-059` and `D-157`.**
+
 ⚠ **`B-175` is filed UNREPRODUCED, and its item says so in its own `Env:` line.** The mechanism is a
 straight read of the data flow across four files; the visual consequence is deduced from it and was
 NOT observed in the running app. It is filed at ⟨high⟩ on the strength of the mechanism, with an

@@ -1273,3 +1273,75 @@ nothing in the repo yet **detects** the absence. What changed is the blast radiu
   (85/85, 0 cached), which is fast pre-push feedback and explicitly **not** the landing gate.
   ⚠ Note what this cost even though it ended green: the verification arrived a day late and is
   **not attributable** to `d32fa13` — exactly the re-scored damage above.
+
+## [ ] B-176 — `.cgproj` re-packing is asserted BYTE-IDENTICAL and is not, under load: a determinism test that only holds on an idle machine ⟨priority: medium — a false red that reads exactly like a product regression, over a property the format may actually need⟩ — OPEN, observed 2026-08-24
+
+**Observed** on the `R-058` turn's Stop-hook gate: `@cg/vcg-format#test` failed at
+
+```
+tests/project-package.test.ts:107
+  it('re-packing the same input is byte-identical', async () => {
+    expect(await packFixture()).toEqual(await packFixture());
+```
+
+Two packs of the SAME pinned input produced different bytes. The gate went red on a commit whose
+diff cannot reach `vcg-format` at all.
+
+### 🔴 It is LOAD-DEPENDENT, and that was measured rather than assumed
+
+| check                                                   | result                                                                                                                                         |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| the failing test, alone, 12 consecutive runs            | **12 × green**                                                                                                                                 |
+| `pnpm --filter @cg/vcg-format test` alone               | **144/144 green**                                                                                                                              |
+| the full `pnpm gate` re-run                             | **green, 89/89, 0 cached**                                                                                                                     |
+| the same suite on Linux CI for the same commit          | **green** (run `32761345618`)                                                                                                                  |
+| does `vcg-format` depend on anything that turn changed? | **no** — its deps are `@cg/shared-schema`, `@noble/*`, `jszip`; the turn touched `shared-ipc`, `caspar-client`, `caspar-bridge` and runtime UI |
+
+So it is neither a regression nor attributable to the commit it reddened. It reproduces only when
+the machine is loaded, which is exactly when the gate runs it.
+
+### The inputs are pinned — the nondeterminism is downstream of them
+
+Checked so the next reader need not re-check: `packFixture()` passes a fixed `savedAt` and a
+module-level `index`/`files`; `packProject` embeds no wall clock (`savedAt` is its only time value
+and it is an argument); and `writeZip` already sorts paths and pins every entry date to a
+`FIXED_DATE` constant. `packProject`'s own header states the property outright — _"Deterministic
+for a fixed `savedAt`: the same input produces byte-identical output"_.
+
+⚠ **A hypothesis, explicitly NOT established.** JSZip's `generateAsync` compresses asynchronously
+in chunks driven by the event loop, and streaming DEFLATE can emit different — equally valid —
+block boundaries for identical input when the chunking differs, which under load it would.
+`compressionOptions: { level: 9 }` and `streamFiles: false` do not pin that. **This was not
+proven**: the byte offset of the first difference was not captured before the log rolled, and a
+direct 300× probe was abandoned when the hand-built fixture failed schema validation. **Whoever
+takes this must capture the first differing offset and decode what sits there** — a DEFLATE block
+header would confirm it, a date or a length field would refute it — rather than acting on the
+paragraph above.
+
+### 🔴 Why this is worth fixing rather than muting
+
+1. **A false red that reads as a product regression.** Byte-equality failing in the package format
+   is exactly the shape of a real corruption bug, and it lands on whichever unrelated commit
+   happened to be in the gate.
+2. **The property may be genuinely load-bearing.** `writeZip` is shared by `.cgproj` AND by `.vcg`
+   (`pack.ts:127`), and `.vcg` packages are signed and integrity-checked. Nothing re-packs and
+   compares today — but "the same project saves to the same bytes" is what a diff, a cache key or a
+   reproducible-build check would later assume, and it is currently false under load while being
+   documented as true.
+
+⚠ **The test must NOT be weakened to go green.** If the property cannot be provided, the DOC
+COMMENT and the test both stop claiming it — deliberately, in one change, with the reason written
+down. Loosening the assertion while `packProject`'s header goes on asserting determinism would
+leave the codebase claiming something it knows is false, which is worse than the flake.
+
+**Repro:** run `pnpm gate` on a loaded machine; intermittent. A tighter repro is the first thing
+this item owes.
+**Expected:** two packs of one input are byte-identical, as `packProject`'s header states.
+**Actual:** they differ under load; identical when idle.
+**Env:** Windows, `pnpm gate` (bounded fan-out, 4 tasks × 2 workers). Not seen on Linux CI — a
+weaker claim than it sounds, since CI runs the same suite far less contended.
+
+- **Cross-refs:** [[B-098]]/[[B-073]] (the contention-flake family this belongs to — and the
+  reminder that the answer is never a longer timeout), [[B-097]] (the other gate collision that
+  fails an innocent suite), [[B-078]] (the stale-process Playwright collision the repair rules
+  already carve out as "not a code bug").
