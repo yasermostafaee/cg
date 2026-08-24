@@ -4736,7 +4736,21 @@ element's rect?", and every reader and writer goes through it:
   [[R-057]] (the arrangement feature), [[B-148]] (the other defect found in the same area — a missing
   refusal, not a control fault).
 
-## [~] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩ — change AUTHORED 2026-08-24 (`openspec/changes/aspect-lock-live-source/`); NOT implemented. Its precondition [[B-175]] has landed
+## [ ] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩ — QUEUED. Change authored 2026-08-24 (`openspec/changes/aspect-lock-live-source/`) and precondition [[B-175]] landed, but NO implementation exists
+
+<!--
+  🔴 STATUS CORRECTION, 2026-08-24 — this item was briefly marked `[~]` and it was WRONG.
+
+  `README.md` defines `[~]` as "in progress / in review (**change implemented**, not yet archived)".
+  It was set after only the OpenSpec ARTIFACTS were authored, with no product code at all. The
+  heading prose said "NOT implemented" while the checkbox said the opposite — and the checkbox is
+  what a scan reads, what the processing contract keys off, and what the owner checked. He found
+  the mismatch by grepping the code, which is not a thing a status flag should make necessary.
+
+  ⚠ There is no `[~]`-shaped state for "the change is authored, the code is not". `[ ]` is correct
+  for that: the item is QUEUED, and the authored change is progress recorded in the heading text
+  rather than in the checkbox. Do not reach for `[~]` again until code exists.
+-->
 
 **What:** When a `video-placeholder` has an `expectedAspect`, dragging any resize handle preserves
 that aspect LIVE, for the whole gesture. The author stops being able to deform the plate by accident
