@@ -233,6 +233,16 @@ describe('the census — every Runtime dialog that can speak, speaks through the
           }),
         onConfigChanged: () => () => undefined,
         setConfig: () => Promise.resolve({ ok: true }),
+        // `C-024` — the panel reads what is IN FORCE on open; nothing is masked here.
+        templateServe: () =>
+          Promise.resolve({
+            serveHost: '127.0.0.1',
+            port: 0,
+            exposed: false,
+            unreachable: [],
+            flagOverrides: {},
+            candidates: [],
+          }),
       },
       stack: {
         snapshot: () =>

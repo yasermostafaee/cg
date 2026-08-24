@@ -175,8 +175,16 @@ const auditLogPath =
 // sources with no graphic over them. A better guess is still a guess — the operator
 // is the one who knows the answer, so this flag lets them SAY it.
 //
-// Precedence matches every other bridge store: explicit flag > derived default.
-// (There is no persisted-file layer for this one yet; see C-024.) A flag given
+// Precedence matches every other bridge store, and C-024 gave this one its MIDDLE
+// layer, so it is now the same three the rest of the bridge has:
+//
+//     explicit flag  >  persisted connection config  >  built-in derivation
+//
+// The stored layer is set from the Runtime's server settings panel, beside the
+// server hosts it is a fact about, and applied to the RUNNING bridge — no restart.
+// This flag still outranks it, deliberately: boot scripts and automation depend on
+// that, and a value saved from a panel silently beating a flag would be the inverse
+// of the confusion B-162 fixed. A flag given
 // WITHOUT a value is a hard boot error rather than a silently ignored one, for the
 // same reason `--reserved-layers` is: the operator believes they configured the
 // address, and believing it while the derivation quietly guessed is exactly the
@@ -270,7 +278,7 @@ console.error(`[caspar-bridge] live layer ledger: ${describeLiveLayers(handle.li
 console.error(
   `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
     (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)') +
-    ` - advertised host from ${describeServeHostSource()}`,
+    ` - advertised host from ${describeServeHostSource(handle.templateServe.source)}`,
 );
 // B-162 — the correctness verdict, on the boot line an operator actually reads.
 // `createBridge` already wrote the full warning to stderr; this is the one-line
@@ -278,7 +286,8 @@ console.error(
 if (handle.templateServe.unreachable.length > 0) {
   console.error(
     `[caspar-bridge] !! ${handle.templateServe.unreachable.join(', ')} CANNOT fetch that address ` +
-      '- those servers will show live sources with NO TEMPLATE. Set --template-serve-host.',
+      '- those servers will show live sources with NO TEMPLATE. Set the serve host in the ' +
+      'Runtime server settings panel (applies without a restart), or pass --template-serve-host.',
   );
 }
 
@@ -303,10 +312,19 @@ process.on('SIGTERM', shutdown);
  * ASCII only, deliberately — the Windows console renders an en-dash as mojibake,
  * and a line whose whole job is to be READ must not arrive with garbage in it.
  */
-function describeServeHostSource() {
-  if (typeof args['template-serve-host'] === 'string') return '--template-serve-host';
-  return 'the built-in derivation (loopback if every declared server is local, else this ' +
-    "machine's first non-internal IPv4) - override with --template-serve-host";
+function describeServeHostSource(source) {
+  if (source === 'flag') return '--template-serve-host';
+  if (source === 'config') {
+    return (
+      'the saved connection config (set in the Runtime server settings panel) - a ' +
+      '--template-serve-host flag would outrank it'
+    );
+  }
+  return (
+    'the built-in derivation (loopback if every declared server is local, else this ' +
+    "machine's first non-internal IPv4) - set it in the Runtime server settings panel, or " +
+    'override with --template-serve-host'
+  );
 }
 
 /**

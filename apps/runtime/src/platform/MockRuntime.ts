@@ -1165,6 +1165,41 @@ export class MockRuntime {
     };
   }
 
+  /**
+   * `C-024` — the mock's `connections.template-serve`.
+   *
+   * 🔴 **NO FLAG OVERRIDES AND NO CANDIDATES, and both absences are deliberate.** The browser has
+   * no command line to read and no interface list to enumerate, so inventing either would be the
+   * same fault `B-162`'s mock note already records one field down: a stand-in value presented as a
+   * measurement. An empty `flagOverrides` is the TRUE answer offline — nothing is masking anything
+   * — and an empty `candidates` correctly leaves the operator typing, which is what an offline
+   * console can honestly offer.
+   *
+   * The stored value is echoed back because that half IS knowable here: it is what the mock holds.
+   */
+  templateServeInfo(): {
+    serveHost: string;
+    port: number;
+    exposed: boolean;
+    // Mutable arrays, matching what the channel schema infers — the bridge shim assigns this
+    // straight into the contract's response type and `readonly` is not assignable to it.
+    unreachable: string[];
+    flagOverrides: { serveHost?: string; port?: number };
+    candidates: string[];
+  } {
+    const stored = this.#config.templateServeHost?.trim();
+    return {
+      serveHost: stored !== undefined && stored.length > 0 ? stored : '127.0.0.1',
+      port: this.#config.templateServePort ?? 0,
+      exposed: !configuredHosts(this.#config).every(isLoopbackHost),
+      // Same reasoning as `setConfig`'s field: the mock serves nothing, so it must not
+      // invent a fault out of its own placeholder.
+      unreachable: [],
+      flagOverrides: {},
+      candidates: [],
+    };
+  }
+
   /** Health derived from the declared servers (backup card only when B exists). */
   #healthFor(config: ConnectionConfig): ConnectionHealth {
     const at = new Date().toISOString();

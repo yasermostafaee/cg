@@ -132,6 +132,11 @@ import {
   type TemplateServeOptions,
   type TemplateServeOverride,
 } from './template-http-server.js';
+import {
+  detectServeHostCandidates,
+  resolveServeOverride,
+  storedServeOverride,
+} from './serve-host-config.js';
 
 /** R-010 — the `connections.set-config` response shape. */
 type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
@@ -1022,6 +1027,18 @@ export class CasparRuntime {
   readonly #templateServer: TemplateHttpServer;
   #serveOptions: TemplateServeOptions;
   /** Kept for `setConfig`'s serve re-derivation (explicit overrides keep winning). */
+  /**
+   * `C-024` — **the COMMAND-LINE layer only, and the name is load-bearing.**
+   *
+   * This is what `--template-serve-host` / `--template-serve-port` set, held for the life of the
+   * process. It is NOT "the override in force": the config file is a second source, and the two are
+   * combined by {@link resolveServeOverride} with THIS ONE LAST, so a flag always wins.
+   *
+   * ⚠ Do not merge the stored value INTO this field. It is `readonly` because the flags cannot
+   * change while the process runs, whereas the stored value changes on every apply — folding them
+   * together here would make a value from a panel permanently indistinguishable from one a boot
+   * script passed, and there would be no way left to report the mask to the operator.
+   */
   readonly #serveOverride: TemplateServeOverride;
   /**
    * fix-setconfig-serve-restart — TRUE once `startServing()` has run for
@@ -1185,7 +1202,11 @@ export class CasparRuntime {
     //
     // B-162 — `configuredCasparHosts`, never `servers.A.host`: one URL goes to
     // every server, so the decision belongs to the whole declared set.
-    this.#serveOptions = deriveServeOptions(configuredCasparHosts(config), serveOverride);
+    // C-024 — flag > stored > derived, through the ONE merge. `serveOverride` is the flag layer.
+    this.#serveOptions = deriveServeOptions(
+      configuredCasparHosts(config),
+      resolveServeOverride(storedServeOverride(config), serveOverride),
+    );
     // B-046 — only DECLARED servers get a session: no phantom backup, no
     // reconnect churn, no divergence noise under the single-server default.
     this.#sessions = this.#buildSessions(config);
@@ -7368,7 +7389,15 @@ export class CasparRuntime {
     //    watching: a bridge booted all-loopback and then given a remote backup
     //    through the settings dialog reaches exactly the broken state by apply
     //    alone, with no restart to make anyone suspicious.
-    this.#serveOptions = deriveServeOptions(configuredCasparHosts(next), this.#serveOverride);
+    //
+    //    C-024 — and it re-derives through the SAME three-layer merge as construction, reading the
+    //    serve address out of `next`. This is the line that makes the panel work at all: an apply
+    //    carrying a new `templateServeHost` puts it in force on the RUNNING bridge, with no
+    //    restart, because template serving is already torn down and rebuilt here.
+    this.#serveOptions = deriveServeOptions(
+      configuredCasparHosts(next),
+      resolveServeOverride(storedServeOverride(next), this.#serveOverride),
+    );
     let serveError: string | null = null;
     if (this.#servingDesired) {
       try {
@@ -7438,6 +7467,47 @@ export class CasparRuntime {
             },
           }
         : {}),
+    };
+  }
+
+  /**
+   * `C-024` — **the serve address IN FORCE, plus why: what a flag is masking, and what this
+   * machine's interfaces are.**
+   *
+   * The panel edits the STORED value (`connections.config`); this answers what is actually in
+   * effect. They are deliberately two reads, because the difference between them is exactly the
+   * thing an operator must be able to see — a panel showing a stored host the bridge is not using
+   * is this product's worst defect class, and precedence puts it one `--flag` away at all times.
+   *
+   * `flagOverrides` is computed from the flag layer alone ({@link #serveOverride}), never from the
+   * resolved options: the resolved host tells you WHAT is in force, not WHY, and a surface that
+   * inferred "a flag must be set" from a mismatch would be wrong every time the derivation and the
+   * store happened to differ.
+   */
+  templateServeInfo(): {
+    serveHost: string;
+    port: number;
+    exposed: boolean;
+    unreachable: readonly string[];
+    flagOverrides: { serveHost?: string; port?: number };
+    candidates: readonly string[];
+  } {
+    const serve = this.templateServe;
+    const options = serve ?? this.#serveOptions;
+    const exposed = options.bindHost !== '127.0.0.1' && options.bindHost !== 'localhost';
+    return {
+      serveHost: options.serveHost,
+      port: options.port,
+      exposed,
+      // B-162's ONE predicate, never a second local spelling of "who can reach us".
+      unreachable: hostsUnableToFetchTemplates(configuredCasparHosts(this.#config), options),
+      flagOverrides: {
+        ...(this.#serveOverride.serveHost !== undefined
+          ? { serveHost: this.#serveOverride.serveHost }
+          : {}),
+        ...(this.#serveOverride.port !== undefined ? { port: this.#serveOverride.port } : {}),
+      },
+      candidates: detectServeHostCandidates(),
     };
   }
 

@@ -184,6 +184,7 @@ export function createMockBridge(): RuntimeBridge {
     connections: {
       config: () => Promise.resolve(mock.config()),
       setConfig: (req) => Promise.resolve(mock.setConfig(req)),
+      templateServe: () => Promise.resolve(mock.templateServeInfo()),
       health: () => Promise.resolve(mock.health()),
       failover: () => Promise.resolve(mock.failover()),
       onHealthChanged: (handler) => mock.healthChanged.subscribe(handler),

@@ -69,3 +69,64 @@ test('settings panel: blocked while on air, Remove-All clears + unblocks, remote
   await panel.getByRole('button', { name: 'Apply server settings' }).click();
   await expect(panel.getByText(/^Applied\./)).toBeVisible();
 });
+
+/**
+ * `C-024` — **the template serve address is set HERE, not on a command line.**
+ *
+ * `B-162` gave the bridge `--template-serve-host` and no stored layer, so the address had to be
+ * re-typed at every start — and an address that must be re-typed is one that will one day not be
+ * typed, producing the silent failure `B-162` exists to prevent (`CG ADD` returns 200, health stays
+ * green, and the server shows live sources with no graphic over them).
+ *
+ * ⚠ Driven against the offline MockRuntime, so this proves the SURFACE: that the fields exist
+ * beside the server hosts, carry their meaning, and reach `connections.set-config`. The three-layer
+ * resolution itself is proved in `tools/caspar-bridge/tests/serve-host-config.test.ts`, where a
+ * command line exists to test against; the mock has none and must not pretend otherwise.
+ */
+test('settings panel: the serve address sits beside the server hosts, offers candidates as candidates, and applies without a restart', async ({
+  app,
+}) => {
+  const page = app.page;
+  const panel = page.getByRole('dialog', { name: 'Server connection settings' });
+
+  // The gate is the same one part 1 above proves; clear the stack so Apply is reachable.
+  await page.getByRole('button', { name: 'Remove all items' }).click();
+  await page
+    .getByRole('dialog', { name: 'Remove all items?' })
+    .getByRole('button', { name: 'Remove all', exact: true })
+    .click();
+
+  await page.getByRole('button', { name: 'Open server settings' }).click();
+  await expect(panel).toBeVisible();
+
+  /*
+    BESIDE THE SERVER HOSTS, NOT IN A SECTION OF ITS OWN — it is a fact about how THOSE servers
+    reach this machine, and the operator sets it in the same visit where they set the hosts it
+    depends on.
+  */
+  const serve = panel.getByRole('region', { name: 'Template serve address' });
+  await expect(serve).toBeVisible();
+  await expect(serve.getByText(/HOW THOSE SERVERS REACH THIS MACHINE/)).toBeVisible();
+
+  // The port's meaning is stated where it is set: empty is today's behaviour, pinning it is what
+  // makes a firewall rule possible — the only reason the field exists.
+  await expect(serve.getByText(/Empty = ephemeral/)).toBeVisible();
+
+  /*
+    🔴 NOTHING HERE OFFERS TO RESTART THE BRIDGE. Its lifetime is deliberately outside this
+    console: `connections.set-config` already re-derives template serving on the running process.
+    Pinned as an ABSENCE, because the tempting next feature is exactly the one that must not exist.
+  */
+  await expect(panel.getByRole('button', { name: /restart/i })).toHaveCount(0);
+
+  await panel.getByLabel('Template serve host').fill('192.168.21.93');
+  await panel.getByLabel('Template serve port').fill('7911');
+  await panel.getByRole('button', { name: 'Apply server settings' }).click();
+  await expect(panel.getByText(/^Applied\./)).toBeVisible();
+
+  // The value survives a close/reopen — which is the whole point of giving it a stored layer.
+  await panel.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('button', { name: 'Open server settings' }).click();
+  await expect(panel.getByLabel('Template serve host')).toHaveValue('192.168.21.93');
+  await expect(panel.getByLabel('Template serve port')).toHaveValue('7911');
+});

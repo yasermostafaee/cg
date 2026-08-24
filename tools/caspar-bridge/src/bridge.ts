@@ -9,6 +9,7 @@ import {
   ConnectionsHealthChangedChannel,
   ConnectionsHealthChannel,
   ConnectionsSetConfigChannel,
+  ConnectionsTemplateServeChannel,
   DEFAULT_BRIDGE_HOST,
   DEFAULT_BRIDGE_PORT,
   FixedLayersConfigChangedChannel,
@@ -125,6 +126,7 @@ import {
   templateServeUnreachableWarning,
   type TemplateServeOverride,
 } from './template-http-server.js';
+import { normalizeServeHost } from './serve-host-config.js';
 
 export interface BridgeOptions {
   /** Bind host. Defaults to loopback (`127.0.0.1`) — enforced at the socket bind. */
@@ -277,6 +279,16 @@ export interface BridgeHandle {
      * nothing else anywhere reports it.
      */
     unreachable: readonly string[];
+    /**
+     * `C-024` — **WHICH OF THE THREE LAYERS ANSWERED**, so the boot line can name it.
+     *
+     * The layers are flag > config file > derivation, and only the first and last used to exist.
+     * A boot line reporting a value that came from the CONFIG FILE as "the built-in derivation"
+     * would be a lie on the one line whose entire job is to answer "why this one, and what do I
+     * change?" — and the derivation is a GUESS, so the difference between "this machine guessed"
+     * and "you configured this" is exactly what the operator needs to see.
+     */
+    source: 'flag' | 'config' | 'derived';
   };
   /** The real `@cg/caspar-client`-backed runtime (Reconciler is the truth). */
   readonly runtime: CasparRuntime;
@@ -638,12 +650,27 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   // uses, over EVERY declared server rather than the primary alone.
   const unreachable =
     serve === null ? [] : hostsUnableToFetchTemplates(configuredCasparHosts(connection), serve);
+  /*
+    C-024 — WHICH LAYER ANSWERED, computed from the same two inputs the resolution used.
+
+    ⚠ Deliberately NOT inferred from the resulting value. A stored host can be byte-identical to
+    the derived one (`127.0.0.1` on an all-local install is the common case), so comparing them
+    would report "derived" for a value the operator explicitly configured — and would flip between
+    the two labels as the servers changed, with nothing in the address itself having moved.
+  */
+  const serveSource: 'flag' | 'config' | 'derived' =
+    options.templateServe?.serveHost !== undefined
+      ? 'flag'
+      : normalizeServeHost(connection.templateServeHost) !== undefined
+        ? 'config'
+        : 'derived';
   const templateServe = {
     url: `http://${serveHost}:${String(servePort)}`,
     serveHost,
     port: servePort,
     exposed,
     unreachable,
+    source: serveSource,
   };
   // Loud warning ONLY when the template server is LAN-exposed (remote CasparCG):
   // a wrong serve-host guess must be obvious. Loopback (the common case) is quiet.
@@ -925,6 +952,17 @@ export function buildRoutes(
       if (result.ok && persistPath !== undefined) savePersistedConnection(persistPath, r);
       return result;
     }),
+    /*
+      `C-024` — WHAT IS IN FORCE, as distinct from what is STORED.
+
+      `connections.config` above returns the stored intent the panel edits; this returns the serve
+      address actually in effect plus WHY — which fields a command-line flag is masking, and this
+      machine's interface candidates. Two reads rather than one because a panel that could only
+      learn about a mask by CHANGING something would show a wrong value for as long as the operator
+      merely looked at it, and a panel showing an address the bridge is not using is the defect this
+      whole item exists to remove.
+    */
+    route(ConnectionsTemplateServeChannel, () => b.templateServeInfo()),
     route(ConnectionsHealthChannel, () => b.health()),
     route(ConnectionsFailoverChannel, () => b.failover()),
 

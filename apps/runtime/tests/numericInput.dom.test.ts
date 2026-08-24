@@ -270,6 +270,16 @@ describe('ServerSettingsPanel ports — R-020 (B-077 interaction)', () => {
           }),
         onConfigChanged: () => () => undefined,
         setConfig,
+        // `C-024` — the panel reads what is IN FORCE on open; nothing is masked here.
+        templateServe: () =>
+          Promise.resolve({
+            serveHost: '127.0.0.1',
+            port: 0,
+            exposed: false,
+            unreachable: [],
+            flagOverrides: {},
+            candidates: [],
+          }),
       },
       stack: {
         snapshot: () => Promise.resolve([]),

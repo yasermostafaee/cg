@@ -1117,7 +1117,7 @@ it reads the assignment the Runtime already holds — while this item needs all 
 does not say which plate it belongs to, and a plate label that does not say whether the feed arrived,
 are each half an answer.
 
-## [~] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS — **CLI half LANDED 2026-08-23 by [[B-162]]**
+## [~] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS — **CLI half LANDED 2026-08-23 by [[B-162]]; PERSISTED + PANEL half LANDED 2026-08-24 (`serve-host-from-app`)**
 
 ⭐ **STATUS UPDATE 2026-08-23 — `--template-serve-host` EXISTS.** [[B-162]] needed the same seam
 (its §1c) and wired it: `bin/caspar-bridge.mjs` now passes `templateServe` to `createBridge`, so
@@ -1126,14 +1126,50 @@ line, a flag given without a value is a hard boot error (the `--reserved-layers`
 boot line names the advertised host **and where it came from**. Four of the five Acceptance bullets
 below are therefore met. **What is NOT met, and why this stays `[~]`:**
 
-- **No persisted-file layer.** The stated precedence is _explicit flag > persisted file > derived
-  default_; there is no `~/.cg-runtime/bridge-template-serve.json` and no settings-panel field, so
-  the middle term does not exist. The flag must be re-typed on every start.
+- ~~**No persisted-file layer.**~~ ✅ **CLOSED 2026-08-24** — see the status update below.
 - **The hack is still in the owner's working tree** and `.claude/never-stage` still lists
   `template-http-server.ts`. It CAN now be dropped in favour of
   `--template-serve-host 192.168.21.93`, but that is the owner's action on their own machine, not
   something a commit can perform — so the entry stays until they confirm, because removing the net
   while the hack is still present is strictly worse than leaving it.
+
+⭐ **STATUS UPDATE 2026-08-24 — THE MIDDLE LAYER AND THE PANEL EXIST (`serve-host-from-app`).** The
+precedence is now the full three every other bridge store has — **explicit flag > persisted
+connection config > built-in derivation** — resolved in ONE place
+(`tools/caspar-bridge/src/serve-host-config.ts`, called from construction and from `#applyConfig`)
+rather than at each derivation point.
+
+- **The store is the CONNECTION config, not a file of its own.** `ConnectionConfig` gained
+  `templateServeHost` / `templateServePort`, so the address is persisted by the same
+  `~/.cg-runtime/bridge-connection.json` that already names the servers it is a fact ABOUT. A
+  separate `bridge-template-serve.json` was considered and rejected: it would have been a second
+  file to keep in step with the one it depends on.
+- **The panel is the surface**, beside the server hosts rather than in a section of its own, and
+  Apply puts the value in force on the RUNNING bridge through `connections.set-config` (which
+  already tore down and rebuilt template serving). 🔴 **Nothing starts, stops or restarts the
+  bridge, by explicit instruction** — its lifetime stays outside the console.
+- **A flag still WINS, and the panel SAYS SO on the field it masks** — naming the flag, showing the
+  value in effect, striking the stored one through and labelling it _not in force_, while keeping
+  the control editable and never grey (grey reads as disabled, and the stored value is exactly what
+  takes over at the next boot without the flag).
+- **The detected interfaces are offered as CANDIDATES**, stated as candidates and not a verdict.
+  That wording is load-bearing: picking the wrong interface is precisely `guessLanHost()`'s
+  failure, and a list presented as an answer would reproduce it with more confidence.
+
+⚠ **THE `never-stage` ENTRY CANNOT BE DROPPED YET, and the reason is not the panel.** The entry
+exists because the HACK exists in the owner's working tree, where `git add <directory>` can sweep it
+up (that is how `dev` briefly carried the hardcoded IP on 2026-08-17). This change removes the
+REASON for the hack — the address is now configurable and persisted, so the early
+`return '192.168.21.93';` buys nothing the panel does not — but it cannot remove the hack itself,
+which is uncommitted and the owner's to delete by hand. **Drop the `never-stage` line in the same
+commit that removes the hack, never before**: removing the net while the hack is still present is
+strictly worse than leaving it, and that is the whole distinction [[P-035]] records.
+
+⚠ **One sentence is still flag-only, and it is in the file this change may not touch.**
+`templateServeUnreachableWarning` (`template-http-server.ts:147`) still ends _"Set
+--template-serve-host …"_, with no mention of the panel. It is correct but now incomplete advice.
+That file is the `never-stage` one, so it is left for the commit that removes the hack — the boot
+line and the panel's own message, which are not in that file, both name the panel already.
 
 Read the original item below unchanged; it is still the specification of the remaining half.
 

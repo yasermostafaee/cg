@@ -15,6 +15,7 @@ import type {
   ConnectionHealth,
   ConnectionsFailoverChannel,
   ConnectionsSetConfigChannel,
+  ConnectionsTemplateServeChannel,
   FixedLayerBank,
   FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
@@ -295,6 +296,16 @@ export interface RuntimeBridge {
     setConfig(
       req: ChannelRequest<typeof ConnectionsSetConfigChannel>,
     ): Promise<ChannelResponse<typeof ConnectionsSetConfigChannel>>;
+    /**
+     * `C-024` — the template serve address IN FORCE, plus why: which fields a command-line flag
+     * is masking, and this machine's interface candidates.
+     *
+     * Deliberately NOT folded into {@link config}. That returns the STORED intent this panel edits
+     * and writes back; this returns what is actually in effect. The gap between them is the whole
+     * point — precedence is flag > file, so a stored value can be masked at any time, and a surface
+     * that showed the stored one as though it were live would be confidently wrong.
+     */
+    templateServe(): Promise<ChannelResponse<typeof ConnectionsTemplateServeChannel>>;
     health(): Promise<ConnectionHealth>;
     failover(
       req: ChannelRequest<typeof ConnectionsFailoverChannel>,

@@ -35,6 +35,20 @@ const CONFIG: ConnectionConfig = {
   autoFailoverEnabled: true,
 };
 
+/**
+ * `C-024` — what `connections.template-serve` answers. Default: nothing masked, no candidates,
+ * which is a fresh install with no flags — the state every pre-existing test in this file was
+ * written against, so they keep asserting what they always did.
+ */
+const SERVE_INFO = {
+  serveHost: '127.0.0.1',
+  port: 0,
+  exposed: false,
+  unreachable: [] as string[],
+  flagOverrides: {} as { serveHost?: string; port?: number },
+  candidates: [] as string[],
+};
+
 function stubBridge(
   items: readonly StackItemState[],
   setConfigResult: {
@@ -44,13 +58,16 @@ function stubBridge(
     // B-162 — the bridge's own reachability verdict rides the apply response.
     templateServe?: { serveHost: string; port: number; exposed: boolean; unreachable?: string[] };
   } = { ok: true },
+  serveInfo: typeof SERVE_INFO = SERVE_INFO,
+  config: ConnectionConfig = CONFIG,
 ): { setConfig: Mock } {
   const setConfig = vi.fn(() => Promise.resolve(setConfigResult));
   const stub = {
     connections: {
-      config: () => Promise.resolve(CONFIG),
+      config: () => Promise.resolve(config),
       onConfigChanged: () => () => undefined,
       setConfig,
+      templateServe: () => Promise.resolve(serveInfo),
     },
     stack: {
       snapshot: () => Promise.resolve(items),
@@ -145,6 +162,14 @@ describe('ServerSettingsPanel — R-010', () => {
       servers: { A: { host: '192.168.1.50', amcpPort: 5250, oscPort: 6250 } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: true,
+      /*
+        `C-024` — AN EMPTY SERVE HOST IS SENT, NOT OMITTED, and that is the contract.
+
+        The field has to be CLEARABLE, so a cleared field must round-trip through the store; if the
+        panel omitted it the store could never be told to forget a host. `''` and absent both mean
+        "derive it" — resolved by the bridge's one normalizer, never here.
+      */
+      templateServeHost: '',
     });
   });
 
@@ -174,7 +199,18 @@ describe('ServerSettingsPanel — R-010', () => {
     });
     expect(el.textContent).toContain('192.168.21.50');
     expect(el.textContent).toContain('NO TEMPLATE');
-    expect(el.textContent).toContain('--template-serve-host');
+    /*
+      `C-024` — THE REMEDY MOVED, so the assertion moved with it.
+
+      This asserted `--template-serve-host`, because a restart with that flag WAS the only fix.
+      The address is now set in this dialog and applied to the running bridge, so the message points
+      at the field the operator is already looking at. 🔴 And it must NOT suggest a restart: the
+      bridge's lifetime is deliberately outside this console, and `set-config` already re-derived
+      serving before this message was written.
+    */
+    expect(el.textContent).toContain('Serve host');
+    expect(el.textContent).toContain('does not need restarting');
+    expect(el.textContent).not.toContain('Restart the bridge');
     // The false reassurance must be GONE, not merely accompanied.
     expect(el.textContent).not.toContain('All listeners remain loopback-only');
   });
@@ -276,5 +312,123 @@ describe('ServerSettingsPanel — R-010', () => {
     );
     // The race case: the bridge (authoritative) refused — its reason shows.
     expect(el.textContent).toContain('Remove All (or Out each item) first');
+  });
+
+  /*
+    ═══════════════════════════════════════════════════════════════════════════════════════════
+    `C-024` — THE SERVE ADDRESS IS SET HERE, AND A MASKED FIELD SAYS SO.
+    ═══════════════════════════════════════════════════════════════════════════════════════════
+  */
+
+  it('C-024: the serve host and a pinned port are submitted; an empty port is omitted', async () => {
+    const { setConfig } = stubBridge([]);
+    const el = await renderPanel();
+    await setInput(el, 'Template serve host', '192.168.21.93');
+    await setInput(el, 'Template serve port', '7911');
+    await act(async () => {
+      applyButton(el).click();
+      await Promise.resolve();
+    });
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateServeHost: '192.168.21.93',
+        templateServePort: 7911,
+      }),
+    );
+  });
+
+  it('C-024: an EMPTY port is absent from the payload, an empty HOST is present as an empty string', async () => {
+    /*
+      🔴 THE TWO EMPTIES ARE SPELLED DIFFERENTLY ON PURPOSE, and this test pins the difference so a
+      later "consistency" tidy cannot quietly erase it.
+
+      The HOST must be clearable — a cleared field has to reach the store as `''` or the clear can
+      never be persisted — so it is always sent. The PORT has no such problem and `0` already means
+      something specific (an explicit ephemeral bind), so an empty port field is simply omitted.
+      Both resolve to "derive it" at the bridge's single normalizer, which is where that decision
+      belongs.
+    */
+    const { setConfig } = stubBridge([]);
+    const el = await renderPanel();
+    await act(async () => {
+      applyButton(el).click();
+      await Promise.resolve();
+    });
+    const payload = setConfig.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload['templateServeHost']).toBe('');
+    expect('templateServePort' in payload).toBe(false);
+  });
+
+  it('C-024: a flag in force is NAMED on the field it masks, the stored value is struck through, and the input stays EDITABLE', async () => {
+    /*
+      🔴 THE DEFECT THIS FORBIDS: a panel showing a value the bridge is not using. Precedence is
+      flag > file and the file is what this panel edits, so a stored host can be masked at any time
+      — and a confidently-wrong readout is this product's worst defect class.
+
+      ⚠ NOT DISABLED AND NOT GREYED. Grey is this app's disabled signal, and disabling would be a
+      lie: the stored value is exactly what takes over at the next start without the flag, so the
+      operator must still be able to set it.
+    */
+    stubBridge(
+      [],
+      { ok: true },
+      { ...SERVE_INFO, serveHost: '10.0.0.7', flagOverrides: { serveHost: '10.0.0.7' } },
+      { ...CONFIG, templateServeHost: '192.168.21.93' },
+    );
+    const el = await renderPanel();
+    const masked = el.querySelector('[data-testid="serve-host-masked"]');
+    expect(masked).not.toBeNull();
+    expect(masked?.textContent).toContain('10.0.0.7');
+    expect(masked?.textContent).toContain('--template-serve-host');
+    expect(masked?.textContent).toContain('not in force');
+    // The STORED value is the one struck through — never the one in force.
+    const struck = el.querySelector<HTMLElement>(
+      '[data-testid="serve-host-masked"] span:nth-child(3)',
+    );
+    expect(struck?.textContent).toBe('192.168.21.93');
+    expect(struck?.style.textDecoration).toContain('line-through');
+
+    const input = el.querySelector<HTMLInputElement>('input[aria-label="Template serve host"]');
+    expect(input).not.toBeNull();
+    expect(input?.disabled).toBe(false);
+    expect(input?.value).toBe('192.168.21.93');
+  });
+
+  it('C-024: with NO flag set, nothing is masked — a derived host is not an override', async () => {
+    /*
+      The phantom-override guard. Inferring the mask by comparing the in-force host against the
+      stored one would fire on every fresh install, where the store is empty and the derivation
+      produced `127.0.0.1`. The mask comes from the bridge's flag layer or not at all.
+    */
+    stubBridge([], { ok: true }, { ...SERVE_INFO, serveHost: '127.0.0.1' }, CONFIG);
+    const el = await renderPanel();
+    expect(el.querySelector('[data-testid="serve-host-masked"]')).toBeNull();
+    expect(el.querySelector('[data-testid="serve-port-masked"]')).toBeNull();
+  });
+
+  it('C-024: candidates are offered as CANDIDATES, and picking one fills the field', async () => {
+    stubBridge([], { ok: true }, { ...SERVE_INFO, candidates: ['192.168.21.93', '172.17.0.1'] });
+    const el = await renderPanel();
+    // ⚠ The wording is the point: this list must never read as a verdict about which interface
+    // the plant can reach. That is exactly `guessLanHost()`'s failure.
+    expect(el.textContent).toContain('not a verdict');
+    const pick = el.querySelector<HTMLButtonElement>(
+      'button[aria-label="Use serve host 172.17.0.1"]',
+    );
+    expect(pick).not.toBeNull();
+    await act(async () => {
+      pick?.click();
+      await Promise.resolve();
+    });
+    const input = el.querySelector<HTMLInputElement>('input[aria-label="Template serve host"]');
+    expect(input?.value).toBe('172.17.0.1');
+  });
+
+  it('C-024: a non-integer serve port blocks Apply with a stated reason', async () => {
+    stubBridge([]);
+    const el = await renderPanel();
+    await setInput(el, 'Template serve port', '79x11');
+    expect(applyButton(el).disabled).toBe(true);
+    expect(el.textContent).toContain('Template serve port must be an integer');
   });
 });

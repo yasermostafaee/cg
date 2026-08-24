@@ -4,6 +4,7 @@ import {
   AuditRecentChannel,
   ConnectionsConfigChangedChannel,
   ConnectionsConfigChannel,
+  ConnectionsTemplateServeChannel,
   ConnectionsFailoverChannel,
   ConnectionsHealthChangedChannel,
   ConnectionsHealthChannel,
@@ -977,6 +978,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     config: (): Promise<ConnectionConfig> => this.#invoke(ConnectionsConfigChannel, undefined),
     setConfig: (req: ChannelRequest<typeof ConnectionsSetConfigChannel>) =>
       this.#invoke(ConnectionsSetConfigChannel, req),
+    templateServe: () => this.#invoke(ConnectionsTemplateServeChannel, undefined),
     health: (): Promise<ConnectionHealth> => this.#invoke(ConnectionsHealthChannel, undefined),
     failover: (req: ChannelRequest<typeof ConnectionsFailoverChannel>) =>
       this.#invoke(ConnectionsFailoverChannel, req),

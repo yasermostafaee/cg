@@ -159,6 +159,11 @@ const BRIDGE_SURFACE: {
     connections: [
       'config',
       'setConfig',
+      // `C-024` — WHAT IS IN FORCE, as distinct from what is STORED. Declared here because the
+      // mock owes an answer too: offline it reports nothing masked and no candidates, which is
+      // the TRUE answer in a browser rather than a stand-in, and a mock that invented either
+      // would teach test mode a surface air does not have.
+      'templateServe',
       'health',
       'failover',
       'onHealthChanged',
