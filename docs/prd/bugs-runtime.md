@@ -4471,6 +4471,28 @@ session rather than assumed silently.
 > a take again. If I'm on 2-box, change `l-1`'s source and press look-1, then when we go to solo **it
 > shows the OLD source for a moment and then switches to the new one.**"_
 
+### 2026-08-24 — QUALITATIVE CONFIRMATION FROM THE TWO-SERVER PLANT RUN: the flash is VISIBLE TO THE NAKED EYE
+
+On the owner's first real two-server plant run, the switch flash was **visible to the naked eye**.
+
+🔴 **This changes exactly one thing and it is worth being precise about which.** It confirms that the
+PHENOMENON IS REAL ON AIR — which was not previously established, since every assertion behind this
+item runs against `@cg/amcp-mock` and the sections below say at length why a green suite is not
+evidence. **It does NOT discharge the plant measurement, and it does not let anyone tick this box.**
+What is still owed is unchanged and is the whole remaining deliverable: `6.9a`, `§3b`, and **the
+frame count at 25 fps, reproduced twice, with the channel read EMPTY before and after.**
+
+⚠ **A naked-eye sighting is not a frame count, and the difference is the entire point of this item.**
+_"Visible"_ says the window is at least one frame; it does not say whether it is one frame or six,
+and it cannot say whether session BP's cause-removal shortened it. Recording the sighting here is so
+that the next session knows the phenomenon survives — not so that it can skip the measurement.
+
+⚠ **And note what was ALSO visible in the same run: the PAGE/MIXER SKEW, filed as [[B-174]].** That
+is a DIFFERENT artefact in the SAME window and the two must not be conflated when the recording is
+finally made. They are separable in the trace: this item's flash requires a `PLAY` inside the
+switch; B-174's skew is the gap between `MIXER FILL` and the following `CG UPDATE` in a switch with
+no `PLAY` at all. **One plant session with one recording can settle both, and should.**
+
 🔴 **TWO COMPLAINTS, ONE DEFECT, AND THAT IS THE FINDING.** They read as separate bugs — a dead
 button and a video glitch — and they are the same mechanism seen from each end.
 
@@ -4927,6 +4949,31 @@ That is a second-order tidy-up of an already-invisible span, not a reason to lif
 server **A** and not on server **B**. Switching to the look that uses it: **A switches, B does
 not** — B stays on the PREVIOUS look. The two servers then differ in **LAYOUT**, not merely in one
 box's content.
+
+### 🔴 2026-08-24 — THE SYMPTOM ABOVE FAILED TO REPRODUCE ON THE PLANT. RE-SCOPE THIS BEFORE IMPLEMENTING ANYTHING.
+
+On the owner's first real TWO-SERVER plant run (2026-08-24, after [[B-162]] landed), **B's template
+switches with the look.** The reported symptom — _"A switches, B does not"_ — did not happen.
+
+⚠ **Read what that does and does not mean, because both halves matter:**
+
+- **What it suggests.** [[B-162]] (the backup was never served the template at all, because template
+  hosting was derived from the PRIMARY alone) very likely accounts for **all** of the 2026-08-22
+  sighting. A backup with no page cannot switch a look, and that is indistinguishable at the SDI
+  seam from the per-input-failure-becomes-per-look-failure mechanism this item was written around.
+- **What it does NOT mean.** This item is **NOT disproven and is NOT closed.** The specific
+  condition — a media file present on A and absent on B — was **not re-created** in the 2026-08-24
+  run, so the mechanism §"What the code actually does" describes has been neither confirmed nor
+  ruled out. **Nobody may close this on the strength of a non-reproduction of an untested
+  condition.**
+- 🔴 **What the next session owes, before writing any code:** re-run the ORIGINAL condition — a
+  media input that resolves on A and fails on B — on the post-B-162 tree, and report what each
+  server does. If the layouts still diverge, this item stands as written. If they do not, its §1
+  shape needs rewriting around whatever remains, and THE RULE below (which is a decided rule about
+  what the product should do, not a claim about what it does) survives either way.
+
+**Status note:** the ⟨priority: high⟩ and the OPEN state are deliberately unchanged — the rule this
+item records is still the rule, and re-scoping is a design act, not a triage one.
 
 ### 🔴 THE RULE, recorded as DECIDED — not as a proposal
 
@@ -5713,3 +5760,678 @@ they exist and the absence of a divergence one is real, not a blind spot.
   a-warning-is-not-a-measurement rule this item's wording inherits), [[B-044]] (the journal bound
   that keeps each resend burst finite), [[B-046]] (the soak counters — the only existing consumer),
   [[B-100]]/[[B-101]] (reachable ≠ correct; the axis this surface must not confuse).
+
+<!--
+  ── THE 2026-08-24 TWO-SERVER PLANT TEST (session PLANT-FINDINGS-01) ────────────────────
+
+  B-166 … B-174 below were all filed from the owner's FIRST real two-server plant run. They are
+  filed SEPARATELY on purpose: they share a session, not a cause, and rolling them together is how
+  one fix comes to claim credit for eight symptoms.
+
+  Two results from that run are SETTLED and are not re-opened by any item here:
+    · B-161's fix HOLDS on the plant — UPDATE alone put nothing on air.
+    · B-162's fix HOLDS on the plant — the backup's template now switches with the look.
+
+  🔴 EVIDENCE DISCIPLINE FOR THIS BATCH. Every item below states, in its own words, what was
+  MEASURED and what was READ FROM THE CODE. Nothing here was measured on the SDI seam: the owner's
+  report is the only air-side evidence, and where an item's mechanism is a deduction from the source
+  it says so rather than borrowing the owner's sighting as proof of the mechanism. Two premises
+  handed to the session did NOT survive contact with the code and were filed as nothing at all —
+  they are recorded in B-167's §"What this is NOT" so the next reader does not re-derive them.
+-->
+
+## [ ] B-166 — 🔴 a REFUSED look switch has ALREADY MOVED live plates on the wire, and every surface says it did not happen ⟨priority: high — a mixed geometry on air, from a button that reported failure⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"With one source of a 3-box look faulty, pressing the 3-box button shows an error and the button
+> does not activate — but the boxes switch to 3-box anyway, and the faulty box renders black."_
+
+🔴 **THIS IS `B-161`'s FAMILY: A VERB THAT REFUSES AND ACTS.** `B-161` was a configuration verb
+reaching the wire; this is a playout verb that reaches the wire, fails partway, and then reports
+that it did nothing. The refusal is not a lie about the FAILURE — it is a lie about the SCOPE.
+
+### The mechanism — read from the code, not measured on air
+
+`setActiveLook` ([`caspar-runtime.ts:4704`](../../tools/caspar-bridge/src/caspar-runtime.ts)) runs
+its on-air branch as `reconcileLivePlates(mode: 'live')` → then `#tellPageLook`. The refusal path is
+where the damage is, and it has three steps:
+
+1. **`#applyLivePlates` BREAKS AT THE FIRST REFUSED PLATE** (`caspar-runtime.ts:5285`,
+   `if (failure !== undefined) break;`). Plates iterated BEFORE the faulty one have already had
+   their `MIXER FILL`/`CLIP` sent at the NEW look's geometry, and those sends LANDED. Plates AFTER
+   it are never processed at all and stay at the OLD geometry.
+2. **`'live'` mode deliberately does NOT roll back** (`reconcileLivePlates`'s own mode note:
+   _"Undoes only the plate that failed … blacking working boxes to punish a failing one is the
+   opposite of what the operator needs in that minute"_). That judgement is defensible for a SOURCE
+   SWAP, where one plate is the whole action. For a LOOK SWITCH the action is a single geometry
+   change across every plate, so "undo only the failed one" leaves a geometry that belongs to no
+   look at all.
+3. **The page is then never told** — `#tellPageLook` runs only on `reconciled.ok`, so the holes stay
+   on the OLD look, `#recordActiveLook` never fires, the picker does not move, and no `stackChanged`
+   is published.
+
+**The state on air after the refusal, stated exactly:** some fills at the NEW look's rects, some at
+the OLD look's, every hole at the OLD look, the faulty plate torn down to black
+(`out` + `MIXER CLEAR`, `caspar-runtime.ts:5362-5364`), and a picker plus a published stack that
+both say the row is still on the OLD look. **Every readout the operator has says the switch did not
+happen. Three of the four things on air moved.**
+
+**Repro:** two-server plant, a 3-box look, one of its three sources faulty (absent input / dead
+route). Row on air on a different look. Press the 3-box segment.
+**Expected:** either the switch happens completely, or nothing on the wire moves and the refusal is
+true.
+**Actual:** an error toast, an unmoved picker, and a partially-switched picture on air.
+**Env:** owner's two-server plant, 2026-08-24. Mechanism read from `caspar-runtime.ts`; NOT measured
+on the SDI seam and NOT reproduced against the AMCP mock in this session.
+
+### 🔴 What the fix must decide — and what it must NOT do
+
+- **The `'live'` no-rollback rule is not simply wrong, and must not simply be inverted.** It exists
+  because a swap must not black working plates. The question this item opens is narrower: **is a
+  LOOK SWITCH one action or N?** It is one — it is a single geometry, and a partial one is not a
+  smaller version of it. So the switch needs an outcome the swap does not: either all fills move or
+  none do.
+- ⚠ **A rollback here is a DESTRUCTIVE step on live layers, so `B-126`'s rule governs it.** Moving a
+  landed `MIXER FILL` back is not a `CLEAR` and does not destroy a producer, which is what makes
+  this tractable — the repair is re-fitting to the OLD look's rects, not tearing down. **Any
+  candidate that reaches for `out`/`MIXER CLEAR` on a working plate is the wrong candidate.**
+- ⚠ **Golden rule 7 applies to the refusal itself.** The message must be computed from what actually
+  landed, exactly as `#applyLivePlates`'s `playLanded` bookkeeping already does for the single-plate
+  case — not from the intent. A refusal that says "the look was not changed" while three fills moved
+  is the half-state the 7.9 work removed from ONE path and left in this one.
+
+**Regression test:** `tools/caspar-bridge/tests/live-look-reconcile.integration.test.ts`, asserting
+on the mock's NDJSON trace: with plate 2 of 3 refused, the wire after the refusal must contain no
+`MIXER FILL` at the new look's rects for plate 1 — or, if the chosen fix is a re-fit rollback, must
+contain plate 1's fill back at the OLD look's rect. `setHandler('MIXER', …)` is the injection hook.
+
+- **Cross-refs:** [[B-161]] (the same shape, one verb over — refuse and act), [[B-167]] (what the
+  operator hits NEXT, when they take this item's own advice and re-press), [[B-126]] (the rule any
+  rollback candidate must not break), [[B-155]] (the other defect living in this switch's window).
+
+## [ ] B-167 — 🔴 the RE-PRESS the product prescribes as the repair is a guaranteed NO-OP for a mis-fit plate, and it then reports SUCCESS ⟨priority: high — the holes move, one box does not, and the switch goes green⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"The holes switch but the boxes stay put, so pictures come out corrupted."_
+
+🔴 **THE PRODUCT NAMES ONE REMEDY FOR A HALF-APPLIED SWITCH, AND THAT REMEDY CANNOT WORK.**
+`setActiveLook`'s own refusal sentence ends _"Re-issue the switch."_, and `LookPicker`'s comment
+argues at length that a re-press must not be guarded because _"a re-press is not a redundant
+re-assert. It is the repair"_. For the plate whose `MIXER FILL` or `CLIP` was the thing refused, the
+re-press emits nothing at all.
+
+### The mechanism — read from the code, in three lines that have to be read together
+
+1. **A refused RE-FIT keeps the ATTEMPTED geometry in the ledger.**
+   `caspar-runtime.ts:5389-5397`: `revertToPrior` requires `failed.reseat`, and a re-fit has
+   `seatUnchanged === true`, so `reseat` is false. `tornDown` requires `!replacedInPlace`, and a
+   re-fit is on its own slot, so that is false too. Therefore `settledFailed = [failed.record]` —
+   and `record.fill` is the NEW look's rect, **for a `MIXER FILL` that was refused and never
+   landed.**
+2. **The delta guard then reads that record as truth.** `caspar-runtime.ts:5217`:
+   `if (!same(prior.fill, record.fill) || !same(prior.clip, record.clip))`. On a re-press of the
+   SAME look, `prior` is the lying record (NEW) and `record` is the freshly planned rect (NEW), so
+   `same()` is TRUE on both axes and **no `mixerFit` is pushed. The plate's `lines` array is
+   empty.**
+3. **So the reconcile succeeds** — nothing was sent, so nothing could fail — **and `#tellPageLook`
+   then runs and succeeds.** The holes move to the new look, `#recordActiveLook` fires, the picker
+   goes green, and no toast appears.
+
+**Result: the holes switch, that box stays where it was, and every surface reports success.** The
+first attempt at least had an error on it; the re-press removes the last thing that said anything
+was wrong.
+
+### 🔴 The comment at `caspar-runtime.ts:5382-5387` argues for this branch, and its reasoning is INVERTED
+
+It reads: _"The ATTEMPTED record is kept so that re-issuing the same switch computes a real delta
+and REPAIRS it — reverting to the prior geometry made the retry a no-op and left the plate black."_
+
+Both halves are backwards, and the arithmetic is one line each:
+
+| ledger keeps…                       | re-press: `prior.fill` vs `record.fill` | `same()` | `MIXER FILL` emitted? |
+| ----------------------------------- | --------------------------------------- | -------- | --------------------- |
+| the ATTEMPTED record (what it does) | NEW vs NEW                              | **true** | **no — the no-op**    |
+| the PRIOR record (what it rejected) | OLD vs NEW                              | false    | **yes — the repair**  |
+
+⚠ **This is worth stating plainly because the comment will be read as a reason not to touch the
+branch.** It is not a case of a comment drifting from its code; the comment describes the OPPOSITE
+behaviour to the one the code produces, and it is the more persuasive of the two. **Replace it, do
+not merely override it** — this repo has been bitten before by a warning that outlived its premise
+(see the `LooksBindingsSection` badge note for the same correction applied properly).
+
+**Repro:** as [[B-166]], then press the same look segment a second time.
+**Expected:** the re-press repairs the mis-fit plate, or refuses again.
+**Actual:** the holes move, the mis-fit plate does not, the picker goes green and nothing is
+reported.
+**Env:** owner's two-server plant, 2026-08-24. The three-step mechanism is READ FROM THE CODE and is
+deterministic; it was NOT measured on the wire in this session, and the measurement is what the fix
+owes.
+
+### What this is NOT — two premises that did not survive the code
+
+- ❌ **It is NOT [[B-149]]** (the mask hole taking the cell's POSITION and the AUTHORED SIZE because
+  `liveArrangementView` read back only `left`/`top`). **B-149 is `[x]` FIXED, 2026-08-19** —
+  `packages/template-runtime/src/arrangement-view.ts` now reads `width`/`height` back alongside
+  `left`/`top` and compares SIZE as well as position in the "only when it actually differs" guard.
+  The premise was checked in the file and does not hold.
+- ❌ **It is NOT simply [[B-166]]'s consequence.** B-166's refusal leaves fills at the NEW geometry
+  behind holes at the OLD look — the OPPOSITE direction to what the owner reports here. This item is
+  the direction the owner actually named, and it is reached FROM B-166 (a refused re-fit is what
+  plants the lying ledger record) without being the same defect. **Fixing B-166 does not fix this**:
+  any refused `MIXER FILL`/`CLIP` plants the same record, and the `mixerFit` pair is sent as two
+  lines on one connection (`command-builder.ts:269`), so a half-landed pair is an ordinary outcome.
+
+**Regression test:** `live-look-reconcile.integration.test.ts` — refuse `MIXER` once via
+`setHandler`, then re-issue the SAME look, and assert the trace CONTAINS a `MIXER FILL` for that
+plate. Assert the plate's rendered rect via `layerRenderedRect()`, not just `layerState().fill`:
+`FILL` and `CLIP` can be half-applied and only the intersection says what is on screen.
+
+- **Cross-refs:** [[B-166]] (the refusal that plants the record), [[B-155]] (the same switch window,
+  the other defect), [[B-149]] (the disproven premise, kept here so it is not re-derived),
+  [[B-126]] (why the failure path is this careful in the first place).
+
+## [ ] B-168 — the LOOK PICK is not part of UPDATE's transaction and is not staged, on a surface that teaches STAGED ≠ IN FORCE ⟨priority: medium — one surface, two contradictory commit models, nothing says which is which⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"After changing look, UPDATE does not put it in force — the operator must press the look button
+> on the row instead."_
+
+**The mechanism, and it is a DESIGN fact rather than a drop — established from the code.** The look
+pick is nowhere in UPDATE's transaction, and nothing loses it on the way:
+
+- `StackUpdateChannel`'s request schema (`packages/shared-ipc/src/channels/stack.ts:76`) is
+  `{ itemId, fields, mergeMode, lookBindings? }`. **There is no active-look field on the wire at
+  all.**
+- `applyDraft` / `sendUpdate` (`apps/runtime/src/renderer/features/inspector/applyDraft.ts`) build
+  exactly those four keys.
+- `draftStore.ts` has no look-pick staging — it stages fields, plate sources and per-look BINDINGS,
+  and nothing else.
+- The row's `LookPicker.onPick` → `LayerRow`'s `switchLook` calls `window.cg.stack.setActiveLook`
+  **immediately** (`LayerRow.tsx:348`).
+
+So the owner's observation is correct and the answer to _"not part of the transaction, or dropped
+somewhere?"_ is **the former, cleanly**.
+
+### 🔴 Why it is still a defect: ONE panel, TWO commit models, and no way to tell them apart
+
+The Inspector's Looks & Bindings section teaches the operator that a look's INPUT is staged, wears a
+`draft` chip, and lands on UPDATE. The row's LOOK segments — the control for the same feature, read
+in the same glance — are an immediate write with no staging and no chip. Nothing on either control
+says which model it follows.
+
+⚠ **The repo has already made this exact call once, in the opposite direction and with its reason
+written down.** `LooksBindingsSection`'s CLEAR PATCH button applies immediately, and its comment
+justifies that explicitly: _"the patch it undoes was applied immediately too (R-048 is an on-air
+emergency, not a draft), so making its removal wait for UPDATE would leave the two halves of one
+operator decision on different clocks."_ **That is the right shape of argument and the look pick has
+never had one.** The look pick is plausibly in the same class — a look switch on an on-air row is a
+CUT, and staging a cut would be strange — but that has never been decided out loud, and the
+operator has no way to read it off the surface.
+
+**Repro:** on-air row, change the look with the row's LOOK segment; separately, edit a look's input
+in the Inspector and press UPDATE. Note that one committed on press and the other on UPDATE, with
+nothing saying so.
+**Expected:** the surface makes its commit model legible, whichever way the decision goes.
+**Actual:** two models, no tell.
+**Env:** owner's two-server plant, 2026-08-24. Established entirely from the code; the schema, the
+draft store and the call site were each read.
+
+### The decision this item is really asking for
+
+**Do NOT default to "add the look to UPDATE's payload".** That would make a look switch on an
+on-air row wait for a second press, which is a worse cut. The likelier correct answer is the
+opposite — keep the immediate write and make the picker SAY it is immediate, the way the picker
+already says whether it targets `LOOK` or `PVW LOOK` (`B-151`'s precedent, on this very control).
+Either way the fix is a stated decision plus a word on the control, not a payload change made
+because the payload looked incomplete.
+
+- **Cross-refs:** [[B-151]] (the precedent: this control already learned to say what its press
+  changes), [[B-166]] (why an operator reaches for UPDATE here at all — a refused switch leaves them
+  hunting for another way to commit it), [[B-155]] (the item where _"press UPDATE, nothing happens"_
+  was a REAL defect — the two must not be confused).
+
+## [ ] B-169 — 🔴 an explicitly configured non-loopback `templateServeHost` does NOT widen the bind, so the bridge advertises an address it refuses to answer on ⟨priority: high — B-162's exact silent failure, reached from the surface built to prevent it⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"With a SINGLE local CasparCG and an explicit `serveHost` of `192.168.21.93`, the graphics do not
+> load while box videos do."_
+
+That is [[B-162]]'s signature exactly — live plates render, `CG ADD` returns 200, health stays
+green, and only the graphic is missing — arriving from the [[C-024]] panel that was built to end it.
+
+### 🔴 MEASURED, both halves, 2026-08-24
+
+Run against the built `tools/caspar-bridge/dist/template-http-server.js` plus a real socket on this
+machine:
+
+```
+deriveServeOptions(['127.0.0.1'], { serveHost: '192.168.21.93' })
+  = { bindHost: '127.0.0.1', port: 0, serveHost: '192.168.21.93' }
+hostsUnableToFetchTemplates(['127.0.0.1'], <those options>) = []      ← the diagnostic is SILENT
+
+bound 127.0.0.1:59353
+  fetch http://127.0.0.1:59353   -> HTTP 200
+  fetch http://172.18.0.1:59353  -> FAILED: ECONNREFUSED               ← this machine's own LAN IP
+```
+
+**The second fetch is the whole bug.** A socket bound to `127.0.0.1` refuses a connection to the
+machine's own routable address, so even the LOCAL CasparCG cannot fetch the URL the bridge tells it
+to fetch. `TemplateHttpServer.start` binds `options.bindHost` and `urlFor()` advertises
+`options.serveHost`; nothing reconciles the two.
+
+### The mechanism — the two halves are ONE decision, taken independently
+
+`deriveServeOptions` (`tools/caspar-bridge/src/template-http-server.ts:78`):
+
+```ts
+const allLocal = casparHosts.every(isLoopbackHost);
+return {
+  bindHost:  override.bindHost  ?? (allLocal ? '127.0.0.1' : '0.0.0.0'),
+  serveHost: override.serveHost ?? (allLocal ? '127.0.0.1' : guessLanHost()),
+  ...
+};
+```
+
+`allLocal` is computed once and then consulted TWICE, independently. An override supplies
+`serveHost` and leaves `bindHost` to the derivation, so an all-loopback install keeps a loopback
+BIND while advertising a LAN address. **The owner's reading of the cause was correct and is
+confirmed here.**
+
+⚠ **And `storedServeOverride` cannot rescue it** (`tools/caspar-bridge/src/serve-host-config.ts`):
+it returns `{ serveHost?, port? }` only. **There is no path — flag, panel or file — by which an
+operator can widen the bind.** `TemplateServeOverride` declares `bindHost`, and nothing populates
+it.
+
+### 🔴 Why the B-162 diagnostic cannot see this, which is the second half of the finding
+
+`hostsUnableToFetchTemplates` opens with `casparHosts.filter(h => !isLoopbackHost(h))` and returns
+`[]` when that is empty. Its question is **"is any configured server REMOTE?"** — and here none is.
+But unreachability was not caused by a remote server; it was caused by an advertised address
+**nobody** can reach, the local server included. **The predicate written to make this class of
+failure loud is structurally blind to the case where the operator configures the address by hand,**
+which is the case C-024 exists to support.
+
+**Expected:** an explicitly configured non-loopback `serveHost` FORCES a routable bind — the two
+halves are one decision and must be read once (golden rule 7's shape, at a pair of `??`s).
+**Actual:** loopback bind, LAN advertisement, `CG ADD` 200, no graphic, and the diagnostic silent.
+**Env:** owner's two-server plant, 2026-08-24, single local CasparCG + explicit `serveHost`.
+Function outputs and the TCP consequence MEASURED as above; the plant sighting is the owner's.
+
+### What the fix must cover — both directions, and the diagnostic
+
+1. A non-loopback `serveHost` from ANY layer (flag, stored config, panel) implies a routable
+   `bindHost` unless `bindHost` is itself explicitly overridden.
+2. `hostsUnableToFetchTemplates` must also answer the question it is named for when the SERVE HOST
+   is the unreachable half — "who cannot fetch the URL we advertise", not "is anyone remote". The
+   all-loopback-config case must be able to produce a warning.
+3. ⚠ **`template-http-server.ts` is in `.claude/never-stage`** while the owner's `guessLanHost()`
+   plant pin sits in it uncommitted (`P-035`). C-024 already composed ABOVE that seam in
+   `serve-host-config.ts` for exactly this reason, and half of this fix — the implication rule —
+   can live there too. The `hostsUnableToFetchTemplates` half cannot, and needs the pin resolved
+   first.
+
+**Regression test:** `tools/caspar-bridge/tests/template-http-server.test.ts` already covers
+`deriveServeOptions(['192.168.1.50'], {…})`; the missing case is
+`deriveServeOptions(['127.0.0.1'], { serveHost: '<non-loopback>' })` asserting a routable
+`bindHost`, plus a `hostsUnableToFetchTemplates` case with an all-loopback host list and a
+non-loopback serve host.
+
+- **Cross-refs:** [[B-162]] (the same silent failure, from the primary-only derivation), [[C-024]]
+  (the panel that made this reachable — and whose own doc names the `''`-as-an-address trap, which
+  is this trap's sibling), [[B-163]] (a warning is not a measurement).
+
+## [ ] B-170 — 🔴 after a manual FAILOVER the reconciler's link-down latch is NEVER cleared, so on-air rows stay demoted and PLAY never goes green while commands keep landing ⟨priority: high — the console cannot show air that genuinely exists, indefinitely⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"After a manual failover to B, looks do not render correctly and PLAY never goes green, though
+> graphics can be sent."_
+
+**The `PLAY never goes green` half has a precise mechanism and it explains the `though graphics can
+be sent` clause exactly. The `looks do not render correctly` half is NOT established — see §2.**
+
+### §1 · The latch — read from the code, and it is a four-step deduction with no branch in it
+
+1. `Reconciler.linkDown` is mutated by **`setLinkDown` and nothing else**
+   (`packages/caspar-client/src/reconciler/reconciler.ts:521`; a `git grep` for `linkDown` in that
+   file returns the declaration, that one assignment, two reads and a comment). OSC traffic does not
+   clear it.
+2. Its only production callers are the two `state-change` branches in `#wireAdapter`
+   (`caspar-runtime.ts:1299` and `:1347`), and **both are guarded by
+   `if (this.#adapter.currentPrimary !== label) return;`** — only the CURRENT primary may drive it.
+3. So when A (primary) dies, `from === 'healthy'` fires on A while A is still primary →
+   `setLinkDown(true)`. Correct, and this is [[B-086]] working.
+4. `failover()` then flips the role and **touches the reconciler not at all.**
+   `RedundancyAdapter.failover` sets `this.primary = to` and emits `failover-complete`; the bridge's
+   handler (`caspar-runtime.ts:1332-1341`) records `#lastFailover` and re-emits health. **B's
+   session state does not change** — it was already `healthy` and stays `healthy` — so **B never
+   fires a `state-change` into `healthy` again, and the one thing that could call
+   `setLinkDown(false)` can never fire.**
+
+**The latch is therefore stuck until B itself drops and recovers.** While it is stuck,
+`reconcileStatus` returns `'unverified'` for every on-air/playing row
+(`reconciler.ts:764`), so the row reads WAS ON AIR and `PLAY`'s `active` fill — which requires
+`status === 'on-air' || 'playing'` (`layerRowActions.ts`) — **can never light.**
+
+**And commands still land, which is why the operator sees the contradiction.** The refusal predicate
+is `#noServerReachable()` (`caspar-runtime.ts:2462`) — "no DECLARED server is reachable" — and B is
+live, so every verb is accepted. The owner's _"though graphics can be sent"_ is not a puzzle; it is
+the two predicates disagreeing, correctly on one side and not on the other.
+
+⚠ **Two further consequences fall out of the same gap and should be checked by whoever fixes it,
+not filed separately until they are:** `reconcileOnReconnect` and `#decidePendingRestores` are also
+reached only from that `to === 'healthy'` branch, so **neither is ever run against B's occupancy** —
+the console's belief about which layers are occupied is A's, from before the failover. The
+`session.on('healthy')` handler that clears `#loaded` (B-054) is likewise never fired for B.
+
+### §2 · The `looks do not render correctly` half is NOT ESTABLISHED, and is deliberately not given a mechanism here
+
+No code path was found that would make a look render wrongly on the new primary after a failover.
+Under the default `mirror-sync` strategy every `CG ADD`, `MIXER FILL` and `CG UPDATE` fanned out to
+BOTH servers all along, and the owner's own run confirms B's template switches with the look (the
+`B-162` fix holding). **Writing a mechanism here would be inventing one.** What the next session
+owes is a measurement, not a theory: after a manual failover, capture B's wire trace for one look
+switch and compare it against A's for the same switch before the failover.
+
+**Repro:** two declared servers, both healthy, row on air. Kill A. Press FAILOVER.
+**Expected:** the row's air state is re-verified against the new primary and PLAY reads normally.
+**Actual:** rows stay `unverified` / WAS ON AIR and PLAY never lights, while commands still reach B.
+**Env:** owner's two-server plant, 2026-08-24. §1's mechanism is READ FROM THE CODE — every hop was
+followed in source and no measurement was taken on the wire.
+
+### 🔴 What the fix must not do
+
+**Do NOT clear the latch on `failover-complete` unconditionally.** The `restore()` path's comment
+(`caspar-runtime.ts:1906-1917`) already refuses precisely that shortcut and its reasoning holds
+here: clearing the flag when the NEW primary is not verified would un-demote [[B-086]]'s
+`unverified` rows back to a confident red ON AIR that nothing backs. The correct move is to
+**re-evaluate the new primary the way a `to === 'healthy'` transition would** — its state, its
+occupancy sample, and the reconcile that follows — rather than to flip a boolean. A failover is a
+change of which server answers the question, so it must re-ASK the question.
+
+**Regression test:** a bridge-level test that drives A `healthy → disconnected`, calls `failover()`,
+and asserts `reconciler.isLinkDown === false` with the on-air row published as `on-air` rather than
+`unverified`, B having been healthy throughout and never transitioning.
+
+- **Cross-refs:** [[B-086]] (the honesty demotion this latch implements — the fix must keep it),
+  [[B-171]] (the other half of the failover story: what the console lets you press before you fail
+  over), [[B-092]] (the restore path that already reasons about this flag), [[B-100]]/[[B-101]]
+  (reachability and verifiability are different axes — this item is the verifiability one).
+
+## [ ] B-171 — 🔴 the console DISABLES every CasparCG verb while a healthy BACKUP is reachable, because the renderer re-derives reachability from the PRIMARY alone ⟨priority: high — it denies air that exists, against an archived R-006 acceptance the bridge already honours⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"PLAY is inert, and nothing says why. With A unreachable and B healthy, every PLAY is disabled
+> until FAILOVER is pressed."_
+
+The owner filed this as an operator-trust item and allowed that the behaviour might be correct.
+**It is not correct.** It contradicts an archived acceptance scenario, and the bridge on the other
+side of the wire already implements the opposite.
+
+### 🔴 R-006 decided this, in writing, and it is `[x]`
+
+> _"WHEN a mirror pair's PRIMARY is down but a BACKUP is healthy THEN the verbs still work (the
+> command reaches a real, rendering server — refusing would deny air that exists; see B-056)."_
+> — [R-006](runtime.md), archived `2026-07-18-runtime-offline-safety`
+
+### The two spellings, and which one the operator's hand touches
+
+| layer        | predicate                                                             | answer with A down, B healthy  |
+| ------------ | --------------------------------------------------------------------- | ------------------------------ |
+| **bridge**   | `#noServerReachable()` — `sessions.every(s => !isLiveState(s.state))` | reachable → **verb accepted**  |
+| **renderer** | `resolveCasparReach` — `isServerReachable(health.primary.state)`      | `'unreachable'` → **disabled** |
+
+`resolveCasparReach` (`apps/runtime/src/renderer/hooks/useCasparReachable.ts`) reads
+`health.primary.state` and nothing else. `health.primary` is ROLE-keyed — `health()` builds it from
+`this.#adapter.currentPrimary` (`caspar-runtime.ts:7529`) — so before the failover it IS A, the dead
+one. `health.backup` is published and carries B's `healthy`, and **no reachability path in the
+renderer reads it**: a `git grep` for `.backup` under `apps/runtime/src/renderer` returns only
+`StatusBar` pills and the FAILOVER button's own enablement.
+
+**This is golden rule 6 exactly.** The bridge's predicate is the canonical one and its header
+already names B-056 and spells out why the primary is the wrong question. The renderer keeps a
+second, narrower spelling of the same question, and the second one wins because it is the one
+attached to the button.
+
+### 🔴 And the command WOULD have landed — this is the part that makes it a denial rather than a courtesy
+
+Under the default `mirror-sync` strategy (`bridge.ts:378`, `seed.ts:69`), `sendMirrorSync` fans out
+to both and explicitly handles the primary-failed case
+(`packages/caspar-client/src/redundancy/redundancy-adapter.ts`):
+
+```ts
+if (bRes.status === 'fulfilled') {
+  this.journal.resolve(seq, 'err');
+  this.recordPrimaryFailure();
+  return { ...bRes.value, winner: this.primary === 'A' ? 'B' : 'A' };
+}
+```
+
+The send **succeeds on the backup and returns `winner: B`**. The console is refusing a command that
+the plumbing beneath it is built to complete.
+
+### The sentence is wrong too, and it points at the wrong remedy
+
+The disabled control's reason is `CASPAR_UNREACHABLE_REASON`:
+_"CasparCG cannot be reached — this command would not arrive. It returns as soon as the playout
+server is back."_ With B healthy and a FAILOVER button on the same screen, that sentence is
+confidently wrong on both clauses and **instructs the operator to WAIT when the remedy is one
+press away.** The owner's instinct that the fix is a sentence is right about half of it; the other
+half is the gate.
+
+⚠ **MEASURED, and it corrects the owner's report on one point.** The reason IS reachable: the
+console's delegated tooltip (`apps/runtime/src/renderer/ui/Tooltip.tsx`) listens for `pointerover`
+in the capture phase, and a real Chrome mouse-move over a `disabled` `<button>` **does** dispatch
+`pointerover` with the button as `e.target`, so `closest('[title]')` finds it. Measured with
+Playwright against system Chrome: hovering a `disabled` button carrying a `title` resolved that
+button and its text. **So "nothing says why" is not literally true — something says why after a
+450 ms dwell, and what it says is wrong.**
+
+**Repro:** two declared servers, `mirror-sync`. Take A offline, leave B healthy. Observe every
+AMCP-emitting control on every row disabled, with the sentence above.
+**Expected:** the verbs stay live (R-006), and any reason shown names the actual state.
+**Actual:** every verb disabled; the reason blames "CasparCG" and prescribes waiting.
+**Env:** owner's two-server plant, 2026-08-24. The predicate mismatch, the role-keyed `health()` and
+the `mirror-sync` backup-wins branch were all read in source; the tooltip reachability was measured
+in Chrome. Not measured on the plant wire.
+
+### 🔴 The one thing the fix must not do: add a THIRD spelling
+
+The renderer must not learn to compute `primary || backup` for itself — that is the same mistake
+one adapter wider, and it is wrong under `journal-replay` and `mirror-async`, where `send` goes to
+the primary only and genuinely would throw. **The answer to "can a command reach CasparCG right
+now?" has exactly one owner, and it is the bridge.** The fix is for the bridge to publish that
+answer (it already computes it) and for the renderer to render it — not for the renderer to derive
+it better.
+
+⚠ Note for whoever takes it: `#noServerReachable()` is itself strategy-blind, so under
+`journal-replay` it can answer "reachable" for a command that will fail on the dead primary. That is
+a real second question and belongs in the same fix's design, not in a separate item — but it must
+not become the reason to leave the renderer's copy in place.
+
+**Regression test:** `apps/runtime/tests/reachBootWindow.dom.test.ts` is the right neighbour — a
+case with `primary: disconnected` + `backup: healthy` asserting the verbs are ENABLED, plus a
+bridge-side test that a take under that health lands on the backup.
+
+- **Cross-refs:** [[R-006]] (the archived acceptance this breaks), [[B-056]] (the bug that
+  established the rule, and which the bridge's own comment cites), [[B-170]] (the other half of the
+  failover story — what happens after you press it), [[B-100]]/[[B-101]] (the same
+  one-predicate-one-owner rule, from the other direction).
+
+## [ ] B-172 — the failover banner is ALARM RED for a failover that SUCCEEDED, and it is a hard-coded hex on a full-width slab ⟨priority: medium — red is this product's alarm colour and a completed manual failover is information⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"The failover banner is RED although the failover SUCCEEDED."_
+
+**The mechanism, from the code** (`apps/runtime/src/renderer/features/connections/FailoverBanner.tsx`):
+the banner has ONE style. `background: '#7F1D1D'`, `borderBottom: '1px solid #B91C1C'`,
+`role="alert"`, hard-coded, painted identically for all three things it renders:
+
+| situation                                | what it means                      | painted |
+| ---------------------------------------- | ---------------------------------- | ------- |
+| `lastFailover.reason === 'manual'`       | the operator did it, and it worked | red     |
+| `lastFailover.reason` is an auto reason  | the system did it — worth noticing | red     |
+| `primary.state` is degraded/disconnected | a genuine alarm                    | red     |
+
+The message function already distinguishes the first two (`'Manual failover'` vs `'Auto-failover'`);
+only the colour refuses to.
+
+### ⚠ Constraints checked before proposing anything — because the owner asked, and one of them could not be found
+
+- **`R-006` says nothing about this banner's colour.** What it constrains is the TEST MODE banner
+  ("a persistent full-width TEST MODE banner states nothing is on air") and, decisively, that no
+  surface may claim a healthy link or a broadcast-red ON AIR that is not real. **Nothing in R-006
+  requires or forbids red here.** Its spirit points the other way: red is reserved for real air
+  claims and real alarms, so spending it on a successful operator action is the dilution R-006 is
+  about.
+- **The `CommandToast` file records that `role="alert"` is deliberately NOT unique** — _"the
+  connection banner is deliberately an alert too ('nothing can reach air' IS an alert)"_. That
+  justifies `role="alert"` for the UNHEALTHY-primary case. It does not reach the completed-failover
+  case.
+- ❌ **The owner's cited constraints — one banner at a time, a strip rather than a slab — COULD NOT
+  BE VERIFIED. They are not in this repo.** The `connection-alarm-gap` note they were attributed to
+  does not exist, and a search of `docs/prd` for that wording returns nothing. They are recorded
+  here as **the owner's stated constraints, on their authority**, not as something found: the
+  banner is `position: fixed; top/left/right: 0` — a full-width slab — and it is one of several
+  top-of-window banners (`BridgeSkewBanner`, `RasterMismatchBanner`, `OrphanLayersBanner`) with no
+  arbitration between them. ⚠ **Whoever implements this must get the constraints from the owner
+  before designing, not from this paragraph.**
+
+### 🔴 And the colour must come from a TOKEN, not a hex
+
+Three raw hexes in this file (`#7F1D1D`, `#B91C1C`, `#FEF2F2`) are exactly what
+`LooksBindingsSection`'s badge note forbids in the same breath as it explains why: _"TOKENS, NEVER
+THE HEX … Taking the wrong one compiles, looks identical today, and drifts the day either is
+retuned."_ That note also settles the palette question this item raises, because it has already been
+answered once for a state badge on the owner's call: **green for on air, violet for PVW, blue
+(`colors.ready`) for the normal state** — and a completed failover is a NORMAL state with a piece of
+news attached.
+
+**Repro:** declare two servers, press FAILOVER, let it succeed.
+**Expected:** an informational strip that says the failover happened and which server is primary
+now.
+**Actual:** the alarm palette, an `alert` role, and a full-width slab.
+**Env:** owner's two-server plant, 2026-08-24. Read entirely from the component; the constraint
+search was run and its negative result is reported above rather than assumed.
+
+- **Cross-refs:** [[R-006]] (checked, and it does not constrain this — recorded so the next reader
+  does not re-check), [[B-156]] (the precedent for taking a state's own colour, on the owner's
+  call), [[B-173]] (the other operator-legibility item from the same run).
+
+## [ ] B-173 — every designed refusal sentence needs 1.5×–2.9× the toast's 4-second life, there is no dismiss control, and a second refusal DESTROYS the first unread ⟨priority: medium — owner's decision: the operator dismisses them, not a timer⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"Toasts auto-dismiss while the operator is still reading them."_
+
+**Owner's decision, recorded here as the requirement: the operator dismisses them, not a timer.**
+
+**The mechanism** (`apps/runtime/src/renderer/features/status/CommandToast.tsx`): `DISMISS_MS = 4000`,
+a fixed `setTimeout` regardless of message length; **no close button, no click-to-dismiss, no hover
+pause**; and `show()` is last-write-wins — it calls `setFeedback` and `clearTimeout` on the previous
+timer, so **a second refusal replaces the first message outright.** The component's own doc says
+_"Last-write wins; auto-dismisses"_, which is accurate and is the defect.
+
+### 🔴 MEASURED — the product's own sentences against its own budget
+
+This product's error messages name the plate, both numbers and the next action, deliberately. Read
+at 200 wpm:
+
+| chars | words | ~read time | vs the 4 s budget | message                                                |
+| ----- | ----- | ---------- | ----------------- | ------------------------------------------------------ |
+| 207   | 38    | ~11.4 s    | **2.9×**          | `setActiveLook` — `CG UPDATE` refused                  |
+| 189   | 34    | ~10.2 s    | **2.5×**          | `#applyLivePlates` — the PLAY landed, the rest did not |
+| 168   | 32    | ~9.6 s     | **2.4×**          | `RESTORE_BLOCKED_REASON`                               |
+| 131   | 24    | ~7.2 s     | **1.8×**          | `CASPAR_CONNECTING_REASON`                             |
+| 113   | 21    | ~6.3 s     | **1.6×**          | `setActiveLook` — disconnected                         |
+| 109   | 20    | ~6.0 s     | **1.5×**          | `CASPAR_UNREACHABLE_REASON`                            |
+
+**Not one of them fits.** The shortest needs half again the budget; the one an operator most needs
+to read — the half-switch message that tells them the fills moved and the holes did not, and to
+re-issue — needs nearly three times it.
+
+⚠ **The last-write-wins half is the more dangerous of the two and is easy to miss.** [[B-166]]'s
+scenario produces a refusal; the operator's natural next act is to press again, which produces a
+second refusal that **erases the first before it has been read.** A timer at least expires
+predictably; this loses a message to the operator's own attempt to fix things.
+
+**Repro:** trigger any refusal on a row; start reading. Trigger a second within 4 s.
+**Expected:** the message stays until the operator dismisses it; a second message does not destroy
+an unread first.
+**Actual:** 4 s, no control, and the second replaces the first.
+**Env:** owner's two-server plant, 2026-08-24. The character/word counts and the ratios above are
+computed from the strings as they exist in the source; the 200 wpm figure is the assumption and is
+stated so it can be argued with.
+
+### What the fix owes beyond removing the timer
+
+- ⚠ **A queue or a stack, not just a longer life.** Removing the timer without addressing
+  last-write-wins turns a lost message into a stuck one that hides the next.
+- ⚠ **`reportCommandSuccess` shares this surface.** A success toast that never leaves is noise; the
+  owner's decision is about the messages an operator must act on. The split is part of the design,
+  not an implementation detail.
+
+- **Cross-refs:** [[B-166]] (the refusal whose sentence this loses, and the double-press that erases
+  it), [[B-171]] (the wording item — a sentence nobody can finish reading and a sentence that is
+  wrong are different defects over the same surface).
+
+## [ ] B-174 — the PAGE/MIXER skew is VISIBLE TO THE NAKED EYE on the plant, against a bench figure that says it is sub-frame ⟨priority: high — a measured 2.2–8.3 ms is being contradicted by air, and no item held this phenomenon⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner confirmed, on the plant.** The page/mixer skew is **visible to the naked eye**.
+That is qualitative confirmation that the phenomenon is real; **the frame count is still missing,
+and that is the whole of what this item owes.**
+
+### 🔴 Why this is filed as a new number rather than recorded against an existing item
+
+The session was asked to record this against `LOOK-SYNC-01`. **No such item exists** — a `git grep`
+for `LOOK-SYNC` across the whole tree returns nothing, and neither does one for `MIRROR-PAGE`. Both
+are SESSION-PROMPT labels, not PRD items, and the phenomenon they name had no home in the backlog.
+It has one now. **Nothing was lost and nothing was invented: the owner's confirmation is recorded
+verbatim above and the mechanism below is the one already written into the source.**
+
+### The phenomenon, and the bench figure it contradicts
+
+A look switch is two mutations on two machines, issued in a fixed order by `setActiveLook`: the
+bridge moves the producers' `MIXER FILL`/`CLIP` **first**, then tells the PAGE to move its holes via
+`CG UPDATE`. Between the two commands the fills and the holes disagree, and what shows through a
+mismatched hole is black.
+
+`setActiveLook`'s own comment states the measurement that made this acceptable:
+
+> _"`CG UPDATE` → `window.update` was measured at 2.2–8.3 ms (median ≈5 ms, §9.2) — under a quarter
+> of a 20 ms frame at 50i — and both commands go out back-to-back on ONE connection in the urgent
+> lane, so nothing queues between them. The cut itself is ~0.20 frames (§9.3)."_
+
+**A ≈5 ms skew is sub-frame and must not be visible.** The owner sees it. **Either the bench figure
+does not transfer to the plant, or the visible artefact is not the skew that figure measures.**
+Both are worth knowing and one measurement separates them.
+
+⚠ **Do not "fix" the ordering before measuring.** `setActiveLook` argues fills-first deliberately —
+_"a lost `CG UPDATE` leaves the page on a coherent previous look rather than on a new look whose
+boxes would never fill"_ — and reversing it on the strength of a naked-eye sighting would trade a
+reasoned choice for a guess. **The deliverable here is a number.**
+
+**What to measure:** a look switch at 25 fps on the plant, channel read EMPTY before and after,
+reproduced twice, counting the frames in which fills and holes disagree — the same protocol
+[[B-155]] already owes for the switch flash, and it can almost certainly be captured in the same
+session with the same recording.
+
+⚠ **This is NOT [[B-155]] and the two must not be merged.** B-155's flash requires a PRODUCER CHANGE
+inside the switch (a `PLAY`), and an ordinary switch has none. This skew is present in an ordinary,
+`PLAY`-free switch — it is the gap between two commands, not a replace. They are separable by the
+trace: if the window contains a `PLAY`, it is B-155's; if it contains only `MIXER FILL` then
+`CG UPDATE`, it is this one.
+
+**Env:** owner's two-server plant, 2026-08-24 — naked-eye confirmation only. The mechanism and the
+2.2–8.3 ms figure are quoted from `tools/caspar-bridge/src/caspar-runtime.ts`; nothing was measured
+in this session.
+
+- **Cross-refs:** [[B-155]] (the other artefact in the same window, and the item whose plant
+  protocol this shares — read its "what a green suite is not evidence of" section first),
+  [[B-167]] (a THIRD way this window goes wrong, by the fills not moving at all).

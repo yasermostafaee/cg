@@ -1267,3 +1267,52 @@ code first:
 
 **Filed at `[ ]`.** Nothing about `B-165` shipped — this was a filing session, and it wrote no
 product code, touched no living spec and touched no archive.
+
+## 2026-08-24 — `B-166` … `B-174` taken in ONE claim, from the first two-server plant run
+
+Session **PLANT-FINDINGS-01** filed the owner's first real two-server plant test. **Nine
+consecutive numbers, claimed as a RANGE** — the case this file's own derivation note warns about
+(_"never assume a claim is one number wide"_), recorded here so a concurrent snapshot cannot land on
+top of any of them.
+
+| Prefix | Claimed           | Items                                                                      | File                               |
+| ------ | ----------------- | -------------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-166` … `B-174` | the 2026-08-24 two-server plant batch (see the HTML comment above `B-166`) | [bugs-runtime.md](bugs-runtime.md) |
+
+- `B-166` a refused look switch has already moved plates on the wire · `B-167` the prescribed
+  re-press is a guaranteed no-op and reports success · `B-168` the look pick is not in UPDATE's
+  transaction · `B-169` a configured non-loopback `serveHost` does not widen the bind · `B-170` the
+  link-down latch survives a manual failover · `B-171` the console disables every verb while a
+  healthy backup is reachable · `B-172` the failover banner is alarm-red for a success · `B-173` the
+  toast outlives no message it carries · `B-174` the page/mixer skew is visible on air.
+
+**Verified free immediately before the headings were written**, by the derivation this file
+prescribes and then widened past this checkout:
+
+- The duplicate audit printed **exactly `B-056` and `B-080`** — the two known, accepted duplicates,
+  unchanged.
+- Highest `B-` heading in `docs/prd/` on `dev`: **`B-165`**.
+- Highest `B-` heading across **EVERY ref** (`git for-each-ref refs/remotes refs/heads`, after a
+  `git fetch origin`): **`B-165`** — so no unpushed or remote branch sits above it.
+- `git stash list` was **EMPTY**, so no stash holds a heading (both entries did on 2026-08-02, which
+  is why this line exists).
+
+`B-` stays contiguous `B-001` … `B-174`, **no gaps. Next free: `B-175`.**
+
+⚠ **Two premises the session was HANDED did not survive the code, and NOTHING was filed for either.**
+Recording them here as well as in the items, because a disproven premise that is only recorded
+inside the item that replaced it is a premise the next reader re-derives:
+
+- **The A2 finding was attributed to `designer-box-geometry`'s defect 1** — the mask hole taking the
+  cell's POSITION and the AUTHORED SIZE because `liveArrangementView` read back only `left`/`top`.
+  That is **[[B-149]], and it is `[x]` FIXED (2026-08-19)**: `arrangement-view.ts` reads all four
+  properties and compares size as well as position. No `designer-box-geometry` change exists in
+  `openspec/changes` or its archive. The real mechanism was found elsewhere and is `B-167`.
+- **`LOOK-SYNC-01` and `MIRROR-PAGE-01` were cited as items to record against.** Neither exists
+  anywhere in the tree — they are SESSION-PROMPT labels. The page/mixer skew they name had no home
+  in the backlog at all, so it was given one (`B-174`) rather than dropped; the B-155 half was
+  recorded against `B-155`, which does exist.
+
+**Filed at `[ ]`.** Nothing shipped — a filing session: no product code, no living spec, no archive.
+The one dirty file in the tree (`tools/caspar-bridge/src/template-http-server.ts`, the owner's
+uncommitted `guessLanHost()` plant pin — `P-035`) was read and deliberately left untouched.
