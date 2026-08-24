@@ -12,6 +12,7 @@ import {
   selectedElements,
 } from '../src/renderer/features/inspector/shared-properties.js';
 import { collectGroupMoveTargets } from '../src/renderer/features/canvas/group-move.js';
+import { renderedTransformAt } from '../src/renderer/state/slices/arrangements.js';
 import {
   effectiveAnimatableValue,
   hasKeyframeAt,
@@ -398,6 +399,9 @@ describe('group move (D-041)', () => {
       'el-1',
       0,
       d.resolution,
+      // B-175 — the resolver production passes. Not `effectiveTransformAt`: a test that
+      // injects a different read side than the app uses stops being a test of the app.
+      renderedTransformAt,
     );
     expect(t.movers.map((m) => m.id).sort()).toEqual(['el-1', 'el-2']);
     expect(t.anchor).not.toBeNull();
@@ -418,6 +422,7 @@ describe('group move (D-041)', () => {
       'el-1',
       0,
       d.resolution,
+      renderedTransformAt,
     );
     // Simulate the gesture: a boundary at start, fan-out static writes, a
     // boundary at end — exactly what beginGroupDrag does per pointer event.

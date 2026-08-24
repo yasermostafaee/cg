@@ -43,7 +43,7 @@ import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { probeStoredVideo } from '../assets/video-asset-probe.js';
-import { effectivePathBoxPoints, effectiveTransformAt } from '../timeline/keyframe-helpers.js';
+import { effectivePathBoxPoints } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
 import {
   PEN_CLOSE_PX,
@@ -69,7 +69,7 @@ import {
 import { Gizmo, MultiGizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
-import { arrangedTransform } from '../../state/slices/arrangements.js';
+import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
 import { lookGroupOf } from '@cg/shared-schema';
 
 /**
@@ -359,7 +359,10 @@ export function CanvasOverlay({
     return {
       ...el,
       // D-154 — hit-test the ARRANGED rect, so a click selects the box where it is drawn.
-      transform: arrangedTransform(el, effectiveTransformAt(el, currentFrame)),
+      // B-175 — through the ONE read side, the same one the gizmo draws and the gestures
+      // compute from. `drillTarget` reads its instance out of THIS list, which is why the
+      // double-click drill was already correct while the gestures were not.
+      transform: renderedTransformAt(el, currentFrame),
       ...(boxPoints !== null ? { points: boxPoints } : {}),
     };
   });
@@ -960,6 +963,10 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
     }
   }
   if (element === null) return;
+  // 🔴 B-175 — a box the active arrangement gives NO CELL is not on screen; a move gesture
+  // on it would drag the `NO_CELL` origin. Refused at the door, from the same predicate the
+  // resize/rotate doors and the write side all read.
+  if (hasNoActiveCell(elementId)) return;
   // Hold the move (arrow) cursor for the whole drag so it doesn't flip when the
   // pointer passes over the gizmo's resize/rotate handles.
   const unlockCursor = lockCursor(ARROW_CURSOR);
@@ -967,7 +974,11 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
   const startY = ev.clientY;
   // Drag from the *visually effective* start so the shape stays under
   // the cursor when the property is animated.
-  const t0 = effectiveTransformAt(element, currentFrame);
+  // 🔴 B-175 — and from the ARRANGED rect, through the ONE read side. "Visually effective"
+  // was already the intent of this line; with an arrangement active `effectiveTransformAt`
+  // stopped being visually effective, and the box jumped to its authored position on the
+  // first pointer-move. Same fault as `beginResize`, on the gesture the author uses most.
+  const t0 = renderedTransformAt(element, currentFrame);
   const startPos = { x: t0.position.x, y: t0.position.y };
   const w = t0.size.w * t0.scale.x;
   const h = t0.size.h * t0.scale.y;
@@ -981,7 +992,10 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
   for (const layer of doc.layers) {
     for (const el of layer.children) {
       if (el.id === elementId) continue;
-      const t = effectiveTransformAt(el, currentFrame);
+      // B-175 — snap to where a box IS DRAWN (the `buildSnapTargets` twin in `Gizmo.tsx`
+      // says the same thing): a target read off the authored rect is an alignment the
+      // author cannot see.
+      const t = renderedTransformAt(el, currentFrame);
       const ew = t.size.w * t.scale.x;
       const eh = t.size.h * t.scale.y;
       xTargets.push(t.position.x, t.position.x + ew / 2, t.position.x + ew);
@@ -1078,6 +1092,8 @@ function beginGroupDrag(
     anchorId,
     currentFrame,
     doc.resolution,
+    // B-175 — the ONE read side, the same resolver the nudge door passes.
+    renderedTransformAt,
   );
   if (anchor === null) return;
   const anc = anchor;

@@ -1,5 +1,4 @@
-import type { Layer } from '@cg/shared-schema';
-import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
+import type { Element, Layer, Transform } from '@cg/shared-schema';
 
 export interface GroupMoveTargets {
   /** Selected, existing, visible & unlocked members with their start positions. */
@@ -25,6 +24,20 @@ export interface GroupMoveTargets {
  * gesture in `CanvasOverlay` drives the per-tick deltas and applies them with
  * the keyframe-free base write. Locked/hidden members are skipped so they don't
  * move, consistent with single-element drag.
+ *
+ * 🔴 **`B-175` — `transformAt` IS THE READ SIDE, AND IT IS A REQUIRED PARAMETER RATHER THAN
+ * AN IMPORT.** This module read `effectiveTransformAt` directly, so a group move computed
+ * every member's start position from its AUTHORED rect while the canvas drew it at its
+ * arrangement CELL — the same fault as `beginResize`, on the multi-selection path.
+ *
+ * It is injected, not imported, because the sentence above this one says _"Pure given the
+ * layers + selection"_ and the ONE read side (`renderedTransformAt`) reads the store. Making
+ * this module store-coupled to fix a read bug would trade a stated contract for a silent one.
+ *
+ * ⚠ **Required, never defaulted.** A default is how the injection quietly becomes optional
+ * and a new caller gets the authored rect back by omission — which is exactly the shape of
+ * the defect being fixed. The type system asking the question at every call site IS the fix;
+ * production passes `renderedTransformAt` from both doors.
  */
 export function collectGroupMoveTargets(
   layers: readonly Layer[],
@@ -32,6 +45,7 @@ export function collectGroupMoveTargets(
   anchorId: string,
   currentFrame: number,
   resolution: { width: number; height: number },
+  transformAt: (el: Element, frame: number) => Transform,
 ): GroupMoveTargets {
   const movers: { id: string; x: number; y: number }[] = [];
   let anchor: GroupMoveTargets['anchor'] = null;
@@ -43,7 +57,7 @@ export function collectGroupMoveTargets(
   let maxY = -Infinity;
   for (const layer of layers) {
     for (const el of layer.children) {
-      const t = effectiveTransformAt(el, currentFrame);
+      const t = transformAt(el, currentFrame);
       const ew = t.size.w * t.scale.x;
       const eh = t.size.h * t.scale.y;
       if (selection.has(el.id)) {

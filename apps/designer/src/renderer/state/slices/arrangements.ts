@@ -10,6 +10,12 @@ import {
 } from '@cg/shared-schema';
 import { current, set } from '../store-core.js';
 import { activeDocOf, activeLayersOf, withActiveDoc } from '../scene-doc.js';
+// `B-175` — the ONE read side composes the arrangement over the ANIMATED value, so this
+// slice owns both halves rather than leaving each caller to remember the pair. The
+// direction (state → features) is the one `elements.ts` already takes for `group-move`
+// and `geometry`; `keyframe-helpers` imports only `@cg/shared-schema` and a type-only
+// sibling, so there is no cycle back.
+import { effectiveTransformAt } from '../../features/timeline/keyframe-helpers.js';
 
 /**
  * `multibox-layout-switch` stage C2 — the ARRANGEMENT authoring slice (`tasks.md` 5.3–5.6).
@@ -386,6 +392,10 @@ export function commitToActiveCell(elementId: string, property: string, value: u
  * `effectiveTransformAt`, so the selection rectangle is drawn where the element IS. Before
  * this, the gizmo was drawn at the authored rect while the element rendered at the cell —
  * the owner's handles sat in empty space and dragging them moved nothing he could see.
+ *
+ * ⚠ **Prefer {@link renderedTransformAt}.** This is the composition STEP; that is the whole
+ * answer. A caller that composes the two halves by hand is a caller that can compose only
+ * one of them, which is exactly how `B-175` happened.
  */
 export function arrangedTransform(element: Element, base: Transform): Transform {
   const cell = activeCellFor(current.scene, element.id);
@@ -395,4 +405,71 @@ export function arrangedTransform(element: Element, base: Transform): Transform 
     position: { x: cell.rect.x, y: cell.rect.y },
     size: { w: cell.rect.width, h: cell.rect.height },
   };
+}
+
+/**
+ * 🔴 **`B-175` — THE ONE READ SIDE: the transform an element ACTUALLY RENDERS AT, at this
+ * frame. Whatever the gizmo DRAWS from is what every gesture and every panel COMPUTES
+ * against, because it is this function.**
+ *
+ * ── WHY THIS EXISTS AS A FUNCTION AND NOT AS A CONVENTION ────────────────────
+ *
+ * `D-154` established that a box's geometry has a READ side and a WRITE side and that both
+ * must go through the arrangement. It then fixed the WRITE side at its one chokepoint
+ * (`commitAnimatable` → {@link commitToActiveCell}) and fixed the READ side by editing the
+ * three call sites it happened to be looking at. That asymmetry IS `B-175`: the write side
+ * could not drift because there was one door, and the read side drifted immediately because
+ * there were nine.
+ *
+ * The three it fixed drew things. The ones it did not fix COMPUTED things — the resize and
+ * rotate gestures' start rects, the move gesture's start rect, the snap targets, the
+ * multi-selection boxes — so the gizmo was drawn at the cell while the gesture beneath it
+ * solved against the authored rect. The handle the author grabbed was not the handle the
+ * math believed they had grabbed.
+ *
+ * ⚠ **So the rule is not "remember to call `arrangedTransform`". It is: NOTHING asks
+ * `effectiveTransformAt` a geometric question about an element of the active document.**
+ * `effectiveTransformAt` answers "what did the author write, interpolated to this frame",
+ * which is a real question with real callers (the timeline, the keyframe indicators, a
+ * composition's own interior). It is simply never the question a canvas gesture, a snap
+ * target or a geometry panel is asking.
+ *
+ * ── WHAT IT IS NOT ──────────────────────────────────────────────────────────
+ *
+ * ⛔ It is NOT `boxRelativeRect`'s business, and a reader arriving from `A′` should stop
+ * here. That export depends only on the plate's rect inside the box composition's own
+ * resolution, and the instance's authored X/Y/W/H cancels out of the exported hole
+ * entirely. **That cancellation is the correctness of A′, not a bug**, and it is pinned by
+ * `arrangement-geometry.test.ts`. This function changes what the EDITOR computes against;
+ * it changes nothing about what is exported.
+ */
+export function renderedTransformAt(element: Element, frame: number): Transform {
+  return arrangedTransform(element, effectiveTransformAt(element, frame));
+}
+
+/**
+ * 🔴 **`B-175` — this element is a box the ACTIVE arrangement gives NO CELL, so it renders
+ * NOWHERE and no gesture may start on it.**
+ *
+ * ── WHY A GESTURE MUST ASK, RATHER THAN LETTING THE MATH DECIDE ──────────────
+ *
+ * {@link NO_CELL} is a ZERO-SIZED sentinel, and `computeRectResize` divides by
+ * `Math.max(rect.w, 1e-6)`. So a gesture that started on a no-cell box would not throw and
+ * would not no-op — it would compute a ratio of roughly **one million** and commit it. The
+ * clamp that exists to keep the math finite is precisely what turns "this box is not on
+ * screen" into "this box is now a million times its size".
+ *
+ * ⚠ **This is the same refusal the WRITE side already makes**, and it reads the same two
+ * functions to make it ({@link activeCellFor} + {@link isNoCell}) rather than a second
+ * spelling of "has no cell". `commitToActiveCell` returns `true` having written nothing;
+ * this returns `true` so the gesture never opens. Two doors, one predicate — which is the
+ * whole point of `B-175` and would be undone by a local `rect.w === 0` test at either.
+ *
+ * ⚠ A NON-box element and a box under NO active arrangement both answer `false` here: they
+ * own their geometry, exactly as they always did. Only a declared box that this particular
+ * arrangement leaves out is refused.
+ */
+export function hasNoActiveCell(elementId: string): boolean {
+  const cell = activeCellFor(current.scene, elementId);
+  return cell !== null && isNoCell(cell.rect);
 }

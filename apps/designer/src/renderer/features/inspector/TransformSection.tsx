@@ -6,14 +6,13 @@ import {
   effectiveAnimatableValue,
   effectiveOpacityAt,
   effectivePathLocalRect,
-  effectiveTransformAt,
   hasKeyframeAt,
   keyframeVariantFor,
 } from '../timeline/keyframe-helpers.js';
 import { descriptorFor, isKeyframeable } from './field-registry.js';
 import { Seg, SingleField, transformFieldProps } from './transform-fields.js';
 import * as s from './TransformSection.css.js';
-import { arrangedTransform } from '../../state/slices/arrangements.js';
+import { renderedTransformAt } from '../../state/slices/arrangements.js';
 
 interface Props {
   element: Element;
@@ -40,7 +39,9 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
   // Option (b) (keep the authored numbers, mark them overridden) was refused: it leaves two
   // number sets on screen claiming to be the same thing, which is the shape this repo keeps
   // paying for. The write side needs nothing here — `commitAnimatable` routes to the cell.
-  const t = arrangedTransform(element, effectiveTransformAt(element, currentFrame));
+  // B-175 — through the ONE read side, so this panel's numbers and the canvas gestures are
+  // the same value by construction rather than by two call sites spelling it the same way.
+  const t = renderedTransformAt(element, currentFrame);
   const opacity = effectiveOpacityAt(element, currentFrame);
   const id = element.id;
 

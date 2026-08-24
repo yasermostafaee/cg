@@ -13,6 +13,7 @@ import {
 } from '../scene-doc.js';
 import { designerStore } from '../store.js';
 import { collectGroupMoveTargets } from '../../features/canvas/group-move.js';
+import { renderedTransformAt } from './arrangements.js';
 import {
   clampDeltaToPasteboard,
   pasteboardSceneBounds,
@@ -615,6 +616,10 @@ export const elementsSlice = {
       anchorId,
       current.currentFrame,
       resolution,
+      // B-175 — the ONE read side. A nudge starts from where each member IS DRAWN; with an
+      // arrangement active the authored rect is not that, and `commitAnimatable` below
+      // writes the CELL, so reading the authored value would nudge from the wrong origin.
+      renderedTransformAt,
     );
     // D-122 — at pixel-grid zoom (Snapping on, Alt not held) an arrow nudge lands the ANCHOR
     // on a whole scene pixel: the FIRST nudge of a fractional coordinate snaps to the next

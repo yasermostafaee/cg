@@ -66,9 +66,40 @@ Three spaces; the conversions are the crux of every interaction:
   `inverseToLocal` (hit-test) inverts it (undo scale, then rotation about the anchor
   pivot) so hit-testing and drilling reason in the element's own frame.
 
-Everything hit-tests at the **visually-effective transform for the current frame**
-(`effectiveTransformAt`), so animated elements are picked where the operator sees
-them, not at their static base.
+### 🔴 ONE READ SIDE — `renderedTransformAt` (`B-175`)
+
+Everything that asks a **geometric** question about an element of the active document —
+the gizmo's drawing, the hit-test, the resize / rotate / move gestures, the snap targets,
+the multi-selection boxes, and the Inspector's Transform panel — reads
+**`renderedTransformAt(element, frame)`** (`state/slices/arrangements.ts`). It composes the
+two halves that must never be applied separately: the **visually-effective transform for the
+current frame** (`effectiveTransformAt`, so an animated element is picked where the operator
+sees it) and, when an arrangement owns this box, its **CELL** (`arrangedTransform`).
+
+**Why it is a function and not a convention.** `D-154` fixed the WRITE side at its one
+chokepoint (`commitAnimatable` → `commitToActiveCell`) and the READ side by editing the three
+call sites it was looking at. The write side could not drift; the read side drifted
+immediately. The sites it missed all **computed** rather than drew, so the gizmo was rendered
+at the cell while the gesture underneath solved against the authored rect — the handle the
+author grabbed was not the handle the math thought they had grabbed (`B-175`).
+
+So the rule is not "remember to call `arrangedTransform`". It is: **nothing asks
+`effectiveTransformAt` a geometric question about an element of the active document.** That
+function answers "what did the author write, interpolated to this frame" — a real question
+with real callers (the timeline, the keyframe indicators, a composition's interior), and
+never the one a canvas gesture is asking.
+
+Two consequences worth knowing:
+
+- **`collectGroupMoveTargets` takes the resolver as a REQUIRED parameter** rather than
+  importing it, because that module is documented pure and the one read side reads the store.
+  It is deliberately not defaulted — a default is how a new caller silently gets the authored
+  rect back.
+- **A box the active arrangement gives NO CELL refuses every gesture at the door**
+  (`hasNoActiveCell`, the same `activeCellFor` + `isNoCell` pair the write side refuses with).
+  `NO_CELL` is zero-sized and `computeRectResize` divides by `Math.max(rect.w, 1e-6)`; the
+  zeros happen to cancel today, so this is defence in depth rather than the only thing
+  standing between that box and a four-million-times resize.
 
 **Gizmo on a content-sized box (D-060).** An auto-sized text element
 (`fitMode: 'autosize'`) is sized by the runtime from its content, so
@@ -311,7 +342,8 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
 - **Move** — `beginDrag` streams a single element's `position.x/y` via
   `commitAnimatable` (keyframe-aware). For a multi-selection, `beginGroupDrag`
   applies the SAME delta to every movable member (visible & unlocked —
-  `collectGroupMoveTargets` in `group-move.ts`) via the SAME **keyframe-aware**
+  `collectGroupMoveTargets` in `group-move.ts`, which takes `renderedTransformAt` as its
+  required resolver — see ONE READ SIDE above) via the SAME **keyframe-aware**
   `commitAnimatable` (D-054 — a member with a track on the moved axis keyframes at
   the playhead, others write their static base; `m.x/m.y` are evaluated-at-playhead
   so the keyframe holds start+delta, B-005-safe), snapping the grabbed anchor only;

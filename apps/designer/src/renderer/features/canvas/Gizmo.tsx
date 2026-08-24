@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { Element } from '@cg/shared-schema';
 import { designerStore, editSceneOf } from '../../state/store.js';
-import { effectivePathLocalRect, effectiveTransformAt } from '../timeline/keyframe-helpers.js';
+import { effectivePathLocalRect } from '../timeline/keyframe-helpers.js';
 import { measureElementSceneSize, subscribeMeasure, getMeasureVersion } from './measure-element.js';
 import { cx } from '../../cx.js';
 import {
@@ -26,7 +26,7 @@ import {
 } from './geometry.js';
 import { colors } from '../../theme.js';
 import * as s from './Gizmo.css.js';
-import { arrangedTransform } from '../../state/slices/arrangements.js';
+import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
 
 interface Props {
   element: Element;
@@ -148,7 +148,10 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   // 🔴 D-154 — the ARRANGED transform, not the authored one. With an arrangement active a
   // box renders at its CELL, and a gizmo drawn from `element.transform` sat in empty space
   // while the picture was elsewhere — the owner's handles did not touch what he could see.
-  let t = arrangedTransform(element, effectiveTransformAt(element, currentFrame));
+  // 🔴 B-175 — through the ONE read side, so this DRAW and the gestures below cannot be
+  // reading two different rects. They were, and that is the bug this call now shares a
+  // function with rather than a convention.
+  let t = renderedTransformAt(element, currentFrame);
   // D-060 §C — an auto-sized text box is content-driven, so `transform.size` is not
   // authoritative. Trace the RENDERED box (the element's local content size measured
   // from the iframe — `offsetWidth/Height`, unaffected by zoom or scale/rotate), and
@@ -330,7 +333,9 @@ export function MultiGizmo({ elements, scale, currentFrame }: MultiProps): JSX.E
   if (elements.length < 2) return null;
   const boxes = elements.map((el) => {
     // B-042 — same LayoutUnit quantization as the single-selection gizmo (visual only).
-    const t = quantizeBoxToLayout(effectiveTransformAt(el, currentFrame));
+    // B-175 — and the same ONE read side: a member box drawn at its authored rect while the
+    // single-selection gizmo drew the cell made the two gizmos disagree about one element.
+    const t = quantizeBoxToLayout(renderedTransformAt(el, currentFrame));
     // D-110 — a keyframed path's member box follows its live morph rect (same
     // axis-aligned fidelity as the other members — rotation is ignored here).
     const r = effectivePathLocalRect(el, currentFrame) ?? boxRect(t);
@@ -374,7 +379,10 @@ function buildSnapTargets(excludeId: string, currentFrame: number): { xs: number
     for (const layer of doc.layers) {
       for (const el of layer.children) {
         if (el.id === excludeId) continue;
-        const tr = effectiveTransformAt(el, currentFrame);
+        // B-175 — snap to where a box IS DRAWN, not to where it was authored. A target
+        // read from the authored rect is a guide line the author cannot see, pulling the
+        // dragged edge to an alignment that is not on screen.
+        const tr = renderedTransformAt(el, currentFrame);
         const ew = tr.size.w * tr.scale.x;
         const eh = tr.size.h * tr.scale.y;
         xs.push(tr.position.x, tr.position.x + ew / 2, tr.position.x + ew);
@@ -394,7 +402,14 @@ function beginResize(
   currentFrame: number,
   ev: PointerEvent,
 ): void {
-  const t0 = effectiveTransformAt(element, currentFrame);
+  // 🔴 B-175 — a box the active arrangement gives NO CELL renders nowhere, and starting a
+  // resize on it would divide by `NO_CELL`'s zero width. Refused at the door, from the SAME
+  // predicate the write side refuses with — see `hasNoActiveCell`.
+  if (hasNoActiveCell(element.id)) return;
+  // 🔴 B-175 — the ONE read side, the same call the gizmo DREW from. This read
+  // `effectiveTransformAt` — the AUTHORED rect — so `grabScene`, the fixed corner and both
+  // ratios were solved against a rect that was not where the handle was drawn.
+  const t0 = renderedTransformAt(element, currentFrame);
   // D-110 — a keyframed path resizes from its LIVE morph rect (what the handles
   // sit on); everything else from the plain element box. `computeRectResize`'s
   // ratio-based commits make either box mean "scale the shape so THIS extent
@@ -470,7 +485,12 @@ function beginRotate(
   currentFrame: number,
   ev: PointerEvent,
 ): void {
-  const t0 = effectiveTransformAt(element, currentFrame);
+  // 🔴 B-175 — as `beginResize`: no cell means the box is not on screen, so there is no
+  // pivot to rotate about and the gesture must not open.
+  if (hasNoActiveCell(element.id)) return;
+  // 🔴 B-175 — the ONE read side. Rotation pivots about `anchor ⊙ size`, so reading the
+  // AUTHORED size here spun the box about a pivot that was not inside the drawn box.
+  const t0 = renderedTransformAt(element, currentFrame);
   const startAngle = t0.rotation;
   // D-110 — the rotate zones sit just outside the LIVE rect corners for a
   // keyframed path; the pivot stays the element anchor (transform-origin).
