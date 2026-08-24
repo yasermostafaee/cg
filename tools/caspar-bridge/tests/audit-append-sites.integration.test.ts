@@ -228,7 +228,15 @@ describe('B-141 — every playout verb records exactly one entry, at its real ou
     async () => {
       const { r, file } = await onAir();
       expect((await r.out('item1')).accepted).toBe(true);
-      const rows = await entriesOnDisk(file, 3);
+      /*
+        FOUR, not three — the count this test ASSERTS. `entriesOnDisk` polls to `atLeast` and then
+        returns whatever is on disk, so a wait that stops short of the assertion turns a loaded box
+        into a red on the race rather than on the behaviour. Its own header says the rule: "a slow
+        box must fail on the ASSERTION, never on the wait." Every other call site in this file
+        already passes the number its assertion needs; this one did not, and only enough load to
+        delay `out`'s fire-and-forget append made it show.
+      */
+      const rows = await entriesOnDisk(file, 4);
       const seq = rows.map((e) => e.action);
       /*
         import → load → take → out, in the order they FINISHED. Two things make

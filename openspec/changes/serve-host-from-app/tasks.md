@@ -53,15 +53,17 @@
 - [x] 4.5 The port field: empty ⇒ ephemeral; pinned ⇒ that port appears in the served URL.
 - [x] 4.6 Panel DOM: the masked field shows the flag's value, strikes the stored one, and the input
       is NOT disabled.
-- [~] 4.7 E2E covering the panel's scenarios. **WRITTEN** —
-  `apps/runtime/tests/e2e/server-settings.spec.ts`, second test. Green on Windows locally, which
-  is NOT a discharge (a Windows run is non-authoritative by the rule that owes the debt).
+- [x] 4.7 E2E covering the panel's scenarios —
+      `apps/runtime/tests/e2e/server-settings.spec.ts`, second test. Discharged by the Linux run in
+      5.2 below.
 
 ## 5. Records
 
 - [x] 5.1 `C-024` updated — this is its remaining half; state whether the `.claude/never-stage`
       entry can be dropped.
-- [ ] 5.2 Linux `e2e` run URL written beside 4.7 when it completes green. A ticked box with no URL
-      is a claim, not a discharge. 🔴 **STILL OWED** — this change alters UI and rendering, so the
-      debt is real; it discharges only on a COMPLETED, GREEN `e2e` job for the commit that carries
-      it, cited by run URL.
+- [x] 5.2 ✅ **Linux `e2e` DISCHARGED** —
+      <https://github.com/yasermostafaee/cg/actions/runs/32713285569> — head `2c009507`, the commit
+      that carries the change, `completed` + `success`, with the **`E2E (Playwright)` job RUN, not
+      skipped** (checked in the run's job list, not inferred from the run's own conclusion). The
+      local Windows `gate:e2e` was green too (93 passed) and is noted only as a local signal: it is
+      non-authoritative by the very rule that owes this debt, and never discharges it.
