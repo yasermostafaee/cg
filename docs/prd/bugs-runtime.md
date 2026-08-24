@@ -4995,20 +4995,42 @@ of whether B is CORRECT.
 `journal-replay` but the **corrective resend**
 (`redundancy-adapter.ts` `triggerCorrectiveResend`), fired from `reportDivergence` once the
 divergence budget trips (3 in 30 s). It replays **every `'ok'` journal entry** to B, `await`ed
-one at a time, each failure swallowed by a bare `catch {}`. 🔴 **For a genuinely missing file this
-can never converge**: the replayed `PLAY` 404s again, which is a fresh divergence, which refills
-the budget, which fires another full replay. The journal itself is bounded (500 entries / 5 min,
-the B-044 fix recorded above in this file), so each burst is bounded — **the LOOP is not.** A
-permanently-missing file is a permanent divergence source, and retry cannot fix a missing file.
+one at a time, each failure swallowed by a bare `catch {}`.
+
+⚠ **CORRECTED 2026-08-24 (session MIRROR-SILENT-01) — the self-refilling loop this paragraph
+described does NOT exist, and it was asserted here as established fact.** The original read: _"the
+replayed `PLAY` 404s again, which is a fresh divergence, which refills the budget, which fires
+another full replay."_ It does not. The resend calls `queue.enqueue` **directly**
+(`redundancy-adapter.ts:427`), bypassing `send()`, and `reportDivergence` is reached ONLY from
+`sendMirrorSync` (`:257`, `:267`) and `sendMirrorAsync` (`:294`, `:298`). A replayed `PLAY` that
+404s therefore RESOLVES (`enqueue` resolves on a non-`2xx`), is compared against nothing, emits no
+`mirror-divergence`, and never touches `divergenceTimestamps`. **The replay cannot re-arm itself.**
+
+What is true, and is all that is true: **retry cannot create a missing file**, so the resend can
+never repair this cause; and every fresh burst of REAL traffic that diverges re-fires a full
+ok-journal replay to B, re-`PLAY`ing producers that were already correct there. The journal is
+bounded (500 entries / 5 min, the B-044 fix recorded above in this file) and so is each burst — the
+re-firing is driven by new sends, not by the replay. **The churn is real; the runaway is not.**
 
 **6. 🔴 DOES ANYTHING DETECT THAT THE TWO SERVERS ARE IN DIFFERENT STATES TODAY?**
 **Detected — yes, at the adapter. Surfaced — NO, to nobody.** `reportDivergence`
 (`redundancy-adapter.ts`) emits `mirror-divergence`, and every 3rd in 30 s emits
-`split-brain-persistent`. **A `git grep` for both event names across the whole repository finds
-NO listener in `tools/**`or`apps/**`** — every other hit is a doc, a living spec, an archived
-change, or a test. The events are emitted into a void. (Instrument checked: the same sweep for the
-sibling concept `failover` finds it wired through `intent.ts`, `audit.ts`, `tally.ts` and
-`caspar-runtime.ts:7104`, so the grep is live and the absence is real.)
+`split-brain-persistent`. **Nothing on the PRODUCTION path subscribes.** `CasparRuntime` wires
+exactly two adapter events — `#adapter.on('health', …)`
+(`tools/caspar-bridge/src/caspar-runtime.ts:1332`) and `#adapter.on('failover-complete', …)`
+(`:1333`). There is no third, and neither app subscribes either, because the browser only ever sees
+what the bridge publishes. (Instrument checked: the same sweep for the sibling concept `failover`
+finds it wired through `intent.ts`, `audit.ts`, `tally.ts` and `caspar-runtime.ts:7104`, so the
+grep is live and the absence is real.)
+
+⚠ **CORRECTED 2026-08-24 (session MIRROR-SILENT-01).** This paragraph used to claim that a repo-wide
+sweep found NO listener in the `tools` or `apps` trees, every other hit being a doc, a living spec,
+an archived change or a test. **That is false.** `tools/soak-runner/src/harness.ts` holds three real
+subscriptions (`:241`, `:244`, `:247`) that count these events into the soak report (`B-046`) — it
+is under `tools`, it is `src`, and it is not a test. The FINDING survives, because a soak harness
+driving mock servers is a measurement instrument rather than an operator surface and is not running
+when the plant is on air; the EVIDENCE as recorded did not. The silence is filed as [[B-165]], which
+owns it for every cause rather than for this one.
 
 ⚠ **So §1's shape is NOT what this path produces, and the difference matters for the fix.** Under
 `mirror-sync` B receives **every** `MIXER FILL`/`CLIP` and the `CG UPDATE` — they are separate
@@ -5591,3 +5613,103 @@ and absent-key both not audible and not merged; the state class present/absent; 
 - **Cross-refs:** [[C-026]] (multi-box audio: the monitor/VU work that would make a MEASUREMENT
   possible), [[B-154]]/[[B-155]] (the HELD plate's other consequences), `CLAUDE.md` golden rule 6
   (one predicate, reused — the rule this restores).
+
+## [ ] B-165 — every divergence event the adapter emits reaches NOBODY on the production path: the only subscriber in the tree is a soak counter ⟨priority: high — a backup that is silently wrong, from ANY cause, and every surface reports success⟩ — OPEN
+
+**Filed 2026-08-24 (session MIRROR-SILENT-01), from [[B-159]]'s §6.** Established from the code
+before filing, and **§6's stated evidence did NOT survive that check** — see "What BV got wrong"
+below. The FINDING holds; the sentence recording it does not, and it is corrected in place.
+
+### The mechanism, anchored
+
+The redundancy adapter detects divergence and announces it four ways:
+
+| Event                    | Emitted at                                                        | Meaning                                             |
+| ------------------------ | ----------------------------------------------------------------- | --------------------------------------------------- |
+| `mirror-divergence`      | `packages/caspar-client/src/redundancy/redundancy-adapter.ts:384` | this one command got different codes from A and B   |
+| `split-brain-persistent` | `redundancy-adapter.ts:391` (budget: 3 in 30 s)                   | the divergence is not a blip                        |
+| `corrective-resend`      | `redundancy-adapter.ts:425`, once per replayed line               | the adapter is re-sending the whole ok-journal to B |
+| `split-brain`            | `redundancy-adapter.ts:231`                                       | the two slot views differ by N slots                |
+
+**Nothing on the production path subscribes to any of the four.** `CasparRuntime` wires exactly two
+adapter events — `#adapter.on('health', …)` (`tools/caspar-bridge/src/caspar-runtime.ts:1332`) and
+`#adapter.on('failover-complete', …)` (`:1333`). There is no third. Neither runtime app subscribes
+either: the browser only ever sees what the bridge publishes, and the bridge publishes nothing about
+divergence.
+
+The **only** subscriber anywhere outside tests is `tools/soak-runner/src/harness.ts:241`, `:244`,
+`:247` — three counters incrementing a `SoakEventCounts` record for the soak report (`B-046`). That
+harness runs against mock servers inside a synthetic soak. **It is a measurement instrument, not an
+operator surface**, and it is not running when the plant is on air.
+
+### What it produces ON AIR
+
+A media file missing on B, a template B cannot fetch, a layer occupied on B, an AMCP build that
+answers one command differently — any of these leave **B structurally different from A** while:
+
+- `#send` computes `ok` from the adapter's return, which is the **primary's** response
+  (`redundancy-adapter.ts:260` returns `{ ...pRes.value, winner: this.primary }`), so `applyAck`
+  records success and the reconcile continues;
+- the connection-health surface reports whether B is **REACHABLE**, never whether B is **CORRECT** —
+  a live, healthy, answering backup that is wrong reads exactly like a live, healthy, correct one
+  (the `degraded`-is-reachable axis of [[B-100]]/[[B-101]], one layer up);
+- the operator gets a successful switch, a green server, and no toast.
+
+**The failure is discovered by cutting to the backup** — the moment they least want to discover it.
+A confidently-wrong surface is this product's worst defect class, and here the surface is not merely
+silent: it is actively affirming.
+
+⚠ **The corrective resend is silent too, and that is the sharpest edge.** Once the budget trips, the
+adapter replays **every retained `'ok'` journal entry** to B (`redundancy-adapter.ts:423-427`,
+bounded at 500 entries / 5 min by [[B-044]]) — including `PLAY`s for producers that were already
+correct on B, which a replay restarts. So the bridge can be re-seating every producer on the backup,
+repeatedly, and **no surface anywhere says it is happening.**
+
+### Reachable INDEPENDENTLY of [[B-159]]/[[B-160]] — schedule it apart
+
+**Yes, and this is the reason it is its own number.** [[B-159]] is one _cause_ of divergence (a
+missing media file) and [[B-160]] is that cause's _prevention_. This item is the **silence**, which
+applies to every cause equally:
+
+- Shipping [[B-160]] (preflight the file per server) removes one cause and leaves this untouched for
+  the other causes — a template the backup cannot fetch ([[B-162]]'s family), a channel configured
+  differently, a layer occupied by something else, a different CasparCG build.
+- Shipping [[B-159]] (behave correctly when a file is missing at the take) is about the per-input /
+  per-look blast radius on the server that failed. It does not make the divergence visible.
+- Conversely this item shipping alone is worth having: it converts every existing silent divergence
+  into a reported one, with no change to any playout path.
+
+**It is also the cheaper half.** The events already exist and already carry the payload
+(`seq`, `primaryCode`, `backupCode`, `primary`, `backup`, `divergencesInWindow`). What is missing is
+a subscriber in `CasparRuntime` beside the two at `:1332-1333`, a publish channel, and a surface.
+
+### What BV got wrong, recorded so it is not re-derived
+
+[[B-159]] §6 claimed that a repo-wide sweep for both event names found NO listener in the `tools`
+or `apps` trees, every other hit being a doc, a living spec, an archived change or a test. **That
+is false.** `tools/soak-runner/src/harness.ts` is `tools/**`, is `src`,
+is not a test, and holds three real `.on(…)` subscriptions. The finding survives because the soak
+harness is not an operator surface; the _evidence as recorded_ does not, and §6 is corrected in
+place. Instrument check for THIS sweep: the same `git grep` over `.on(` in `tools/caspar-bridge/src`
+returns the two `#adapter.on` lines at `:1332-1333`, so the tool sees adapter subscriptions where
+they exist and the absence of a divergence one is real, not a blind spot.
+
+### Acceptance
+
+- WHEN A and B answer the same command with different codes THEN the bridge learns of it (a
+  subscriber exists beside the two at `caspar-runtime.ts:1332-1333`) and the operator is told which
+  server diverged, on which command.
+- WHEN the divergence budget trips and a corrective resend fires THEN that fact is surfaced too — a
+  full-journal replay against a live plant is an event an operator must be able to see.
+- WHEN the backup is merely UNREACHABLE THEN this surface must not double-report it: reachability
+  already has an owner, and divergence is the CORRECTNESS axis (golden rule 8 — probe the axis you
+  intend to judge).
+- ⚠ WHEN the surface reports "no divergence" THEN that must not be read as proof the two servers
+  agree. It means no command answered differently; it is not a comparison of what is on air. The
+  wording must say so, on [[B-163]]'s precedent.
+
+- **Cross-refs:** [[B-159]] (one cause of the divergence this hides; its §6 is where this was found),
+  [[B-160]] (that cause's prevention), [[B-162]]/[[B-163]] (another cause, and the
+  a-warning-is-not-a-measurement rule this item's wording inherits), [[B-044]] (the journal bound
+  that keeps each resend burst finite), [[B-046]] (the soak counters — the only existing consumer),
+  [[B-100]]/[[B-101]] (reachable ≠ correct; the axis this surface must not confuse).

@@ -1234,3 +1234,36 @@ session and nothing else: `B-162` is the BRIDGE hosting a template at an address
 fetch; this is the RENDERER counting the wrong set on a chip. Rolling them together would have made
 one commit that a revert could not take apart, which is the branching policy's own rule about one
 logical change per commit.
+
+## 2026-08-24 — the divergence silence gets its number (`B-165`)
+
+| Prefix | Claimed | Item                                                                                           | File                               |
+| ------ | ------- | ---------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-165` | every divergence event the adapter emits reaches nobody: the only subscriber is a soak counter | [bugs-runtime.md](bugs-runtime.md) |
+
+**Verified free by the heading sweep immediately before the heading was written.** The duplicate
+audit printed **exactly `B-056` and `B-080`** over 167 headings — the same two this registry has
+recorded every time. Highest `B-` heading was `B-164`, by the registry's documented derivation AND
+by the `git grep` cross-check. `git grep "B-165"` across the whole tree returned **exactly ONE
+hit** — this file's own "Next free" line, the forward-reference POINTER that is not a heading and
+that this registry has now recorded from ten directions. `B-` stays contiguous `B-001` … `B-165`,
+**no gaps. Next free: `B-166`.**
+
+⚠ **ONE number where the session was sent to file TWO, and the second is the point.** Session
+MIRROR-SILENT-01 was asked to file two findings surfaced by session BV. Establishing them from the
+code first:
+
+- **The no-listener finding HELD in substance and its EVIDENCE did not.** `B-159` §6 recorded that a
+  repo-wide sweep found no listener in the `tools` or `apps` trees; `tools/soak-runner/src/harness.ts`
+  holds three. The finding survives (a soak harness is not an operator surface) and is filed here as
+  `B-165`; §6's sentence was corrected in place rather than left standing as an established fact that
+  is checkably wrong.
+- **The never-converges finding did NOT hold as stated, so NOTHING was filed for it.** `B-159` §5
+  described a self-refilling loop — replay 404s, refills the budget, fires another replay. The replay
+  calls `queue.enqueue` directly and bypasses `send()`, which is the only path to
+  `reportDivergence`, so it cannot re-arm itself. What remains is the tautology that retry cannot
+  create a missing file, which `B-159` already owns. A number for it would have been a number for a
+  mechanism that does not exist. §5 is corrected in place.
+
+**Filed at `[ ]`.** Nothing about `B-165` shipped — this was a filing session, and it wrote no
+product code, touched no living spec and touched no archive.
