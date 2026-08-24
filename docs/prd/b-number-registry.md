@@ -1362,6 +1362,31 @@ pointer above, the documented false positive.
 
 `D-` stays contiguous `D-001` … `D-156`, **no gaps. Next free: `D-157` and `B-176`.**
 
+## 2026-08-24 — `R-058`, from session PLANT-SILENT-01
+
+| Prefix | Claimed | Item                                                                         | File                     |
+| ------ | ------- | ---------------------------------------------------------------------------- | ------------------------ |
+| `R-`   | `R-058` | "reachable" is not "working" — a channel producing nothing, and a bare ERROR | [runtime.md](runtime.md) |
+
+⚠ **A near-miss worth recording, because it is the failure mode this file exists for.** The
+implementation was written citing **`R-062`**, picked without an audit. `R-062` was indeed free —
+and taking it would have opened a four-number GAP (`R-058` … `R-061`), which this registry's whole
+doctrine is against. The audit was run before the PRD item was written, the real next free number
+was `R-058`, and the code was renamed tree-wide (`git grep "R-062"` over the whole tree returns
+nothing; six files, fifteen occurrences). **Free is not the same as next**, and an unaudited number
+that happens to be unclaimed still damages the space.
+
+**Verified free immediately before the heading was written:** the `R-` duplicate audit printed
+**nothing** (as it must for every prefix but `B-`); the highest `R-` heading on `dev` and across
+**every ref** after a `git fetch origin` was `R-057`; `git grep "R-058"` over `docs` + `openspec`
+returned **no hits at all**.
+
+⚠ `git stash list` was **NOT empty** — it holds `D-155`'s parked aspect-lock WIP. Checked rather
+than skipped, per this file's own instruction that a stash can hold PRD headings: that entry
+touches five SOURCE files and no `docs/prd/**`, so it claims no number.
+
+`R-` stays contiguous `R-001` … `R-058`, **no gaps. Next free: `R-059`, `D-157` and `B-176`.**
+
 ⚠ **`B-175` is filed UNREPRODUCED, and its item says so in its own `Env:` line.** The mechanism is a
 straight read of the data flow across four files; the visual consequence is deduced from it and was
 NOT observed in the running app. It is filed at ⟨high⟩ on the strength of the mechanism, with an

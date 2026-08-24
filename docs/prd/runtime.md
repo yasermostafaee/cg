@@ -3163,3 +3163,109 @@ path could reach. ✅ Its DISPLAY half (change `tasks.md` 2.8) landed 2026-08-20
   [[R-048]] (the source swap this reconcile absorbs), [[C-015]] (Live Source routing and seating),
   [[C-023]] (the confidence thumbnails — with six live inputs nothing here detects a dead one),
   [[D-137]] (the Live Source element), [[R-028]] (the declared-rows model the control lives in).
+
+## [~] R-058 — "reachable" is not "working": a channel that produces nothing must be LOUD, and a bare ERROR must say WHY ⟨priority: high — the console read HEALTHY over a channel that was producing nothing at all⟩ — IMPLEMENTED 2026-08-24
+
+**What the owner saw, 2026-08-23.** He added a `<decklink>` consumer to `casparcg.config` for a
+device this machine does not have. CasparCG started, AMCP connected, and the console read
+**`BRIDGE LIVE` + `PRIMARY A HEALTHY`** while **the channel produced nothing at all** — not even on
+the `<screen />` consumer. The only signal anywhere was a bare **`ERROR`** on one row, with no
+reason attached.
+
+> _"if the config has a problem the operator must find out somehow, not just an empty error."_
+
+🔴 **Every signal the console had was about REACHABILITY, and every one of them was TRUE.** There
+was no signal anywhere about PRODUCTION. That is the gap.
+
+### Part A — the bare ERROR, which turned out to be four lines
+
+**The reason was on the row the whole time.** Established before writing anything: the bridge
+threads the AMCP code into the reconciler (`reconciler.ts` — `if (errorCode !== undefined)
+rec.errorCode = errorCode`), it is a published field on `StackItemState`
+(`item-state.ts`), and `errorCodeMessage` has worded it since [[B-070]], `amcp-NNN` fallback
+included. **Exactly ONE place in the runtime read `item.errorCode`** — `LayerRow`'s narrow
+`osc-unverifiable` check — so for every other code the sentence existed, arrived, and was dropped
+at the last inch.
+
+So Part A is not plumbing: `rowState` now words the `error` status through `errorCodeMessage`, in
+the same tooltip that already carries `readyDetail` and the wire's own occupancy report.
+
+⚠ **It claims exactly what it knows.** `amcp-404` becomes _"CasparCG refused the command (AMCP
+404)"_ — true and quotable to an engineer. It never says the config is wrong: the console cannot
+read `casparcg.config` and must not imply that it can.
+
+### Part B — a channel that stops ticking is an ALARM
+
+`/channel/N/framerate` is emitted on every channel tick and **nothing consumed it** (verified with
+`git grep` across `apps/runtime/src`, `tools/caspar-bridge/src`, `packages/caspar-client/src` and
+`packages/shared-ipc/src`: every hit was the OSC plumbing itself). It is now a liveness signal:
+
+- `OscChannelTickTap` (caspar-client) records which channels have ticked and when, fed at the same
+  point as the occupancy tap and **before** the 1 Hz rate limiter, so staleness is judged from what
+  CasparCG sent rather than from what our own throttle let through;
+- the **bridge decides** which are stale and publishes `ServerHealth.channels`, because the
+  judgement needs the tick clock and the session's reconnect history — a renderer re-deriving it
+  would be [[B-171]]'s second-authority shape;
+- the StatusBar shows `⚠ {label} NOT PRODUCING · CH n` beside its `⚠ NO OSC FROM` sibling, and the
+  server's pill **stops asserting** (mutes to the `stale` tone) so there is no confident green
+  HEALTHY beside the alarm — [[B-081]]/[[R-006]]'s rule, and the owner's exact complaint.
+
+### 🔴 SILENCE IS NOT PROOF, and it is enforced by the SHAPE rather than by a check
+
+Two reasons a channel is not in the stream, demanding opposite responses:
+
+| observation              | meaning       | response                |
+| ------------------------ | ------------- | ----------------------- |
+| **never ticked here**    | no evidence   | UNKNOWN, never an alarm |
+| **ticked, then STOPPED** | a real change | the alarm               |
+
+**A channel enters the published list only by TICKING**, so `ticking: false` can only ever be said
+about a channel that has proved it ticks. "Alarmed without ever having ticked" is not a case
+defended against — it is unrepresentable. A `now - lastAt > N` rule over a map that also held
+never-seen channels would be one `?? 0` from alarming on silence, which is [[B-163]]'s named trap
+and the shape [[B-101]] and [[B-053]] both shipped.
+
+`reset()` on reconnect returns every channel to never-seen, so a reconnect cannot manufacture an
+alarm about ticks that have merely not resumed.
+
+### Why the StatusBar and NOT a banner (decided, with the argument)
+
+`ConnectionBanner` owns "nothing can reach air" and renders **only while the link is NOT live** —
+its own header makes that a promise: _"When the link is live this renders nothing: no banner is
+itself the signal that the Runtime can actually reach air."_ An operator has been taught that.
+Rendering a banner while the link IS live would spend that learned signal. It also carries the
+recorded strip-not-a-slab regression (it once took the shell's `1fr` track and ate half the
+viewport), and a per-CHANNEL, per-SERVER fact does not fit a surface that is singular by design.
+
+The StatusBar is where the OSC axis already lives (`⚠ NO OSC FROM {label}`), it is per-server, and
+it scales to several channels. The two chips coexist rather than suppress each other: NO OSC means
+we cannot SEE this server's channels; NOT PRODUCING means we can see them and they have stopped.
+
+### ⚠ What this does NOT establish, and the measurement still owed
+
+**Whether the owner's specific incident lands in "stopped" or in "never ticked" is UNVERIFIED.** If
+CasparCG ticked before the consumer failed, the alarm fires. If the channel never started at all,
+the tap reports nothing and the console still says only what it can honestly say. That distinction
+needs a plant measurement — reproduce the broken-consumer config and read whether
+`/channel/N/framerate` ever arrives — and it was deliberately not guessed at. Part A improves that
+case regardless, because the row's ERROR now carries its reason.
+
+Out of scope by decision: the console does **not** read, fetch or validate `casparcg.config`. It is
+on the playout machine, may be remote, and AMCP does not expose it.
+
+**Acceptance:**
+
+- WHEN a channel's framerate ticks were arriving and STOP, with AMCP healthy THEN the alarm shows,
+  naming the server and the channels, and that server's pill stops asserting
+- WHEN a channel has NEVER ticked THEN nothing alarms, however long the wait
+- WHEN ticks resume THEN the alarm clears
+- WHEN the server is unreachable THEN this does NOT alarm — that fault already has an owner and a
+  different remedy
+- WHEN a row is in `error` THEN its state cell carries the bridge's reason, worded by
+  `errorCodeMessage`, and never claims a cause the console cannot see
+
+- **Cross-refs:** [[B-094]] (the NO OSC sibling this sits beside, and whose doctrine it reuses),
+  [[B-163]] (silence-as-evidence, the trap the shape makes unrepresentable), [[B-101]]/[[B-053]]
+  (the two times this repo shipped that trap), [[B-070]] (the `errorCode` vocabulary Part A
+  finally reads), [[B-081]]/[[R-006]] (the reassuring-claim-wins rule the pill muting follows),
+  [[B-171]] (why the bridge decides and the renderer renders).

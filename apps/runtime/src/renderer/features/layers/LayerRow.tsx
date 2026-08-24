@@ -630,6 +630,9 @@ export function LayerRow({
     oscBlind,
     rehearsing,
     restoreBlocked,
+    // R-058 Part A — the bridge's reason for an `error`, which was published on the item all
+    // along and read by nothing. See the title note in `rowState`.
+    ...(item?.errorCode !== undefined ? { errorCode: item.errorCode } : {}),
   });
 
   // The wire's occupancy report is no longer rendered as a column — `rowState` folds

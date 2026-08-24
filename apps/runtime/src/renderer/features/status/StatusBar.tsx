@@ -1,3 +1,4 @@
+import { stoppedChannelsOf } from '@cg/shared-ipc';
 import { useConnections } from '../../hooks/useConnections.js';
 import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
@@ -199,6 +200,44 @@ function noOscTitle(label: string): string {
   );
 }
 
+/**
+ * 🔴 **`R-058` — REACHABLE IS NOT WORKING. The sentence for a channel that has STOPPED
+ * producing frames.**
+ *
+ * The owner's 2026-08-23 incident: a `<decklink>` consumer in `casparcg.config` for a device
+ * the machine did not have. CasparCG started, AMCP connected, and this bar read
+ * **BRIDGE LIVE + PRIMARY A HEALTHY** while the channel produced nothing at all — not even on
+ * the `<screen />` consumer. Every signal the console had was about REACHABILITY, and every
+ * one of them was true.
+ *
+ * ⚠ **It sends the operator somewhere, and it stops short of what it cannot see.** The
+ * console cannot read `casparcg.config` — it is on the playout machine, may be remote, and
+ * AMCP does not expose it — so "the config is wrong" is a claim this surface has no standing
+ * to make. "The channel is not producing frames, check CasparCG's own log and its consumers"
+ * is both true and actionable, and a consumer that cannot start is only the most likely cause
+ * rather than the stated one.
+ *
+ * ⚠ **It says the server is UP**, for the same reason `noOscTitle` does: the fault is inside
+ * CasparCG, and an operator who restarts a playout box over this takes working channels off
+ * air to fix one.
+ */
+function deadChannelTitle(label: string, channels: readonly number[]): string {
+  const which =
+    channels.length === 1
+      ? `Channel ${String(channels[0])} on server ${label} was producing frames and has STOPPED.`
+      : `Channels ${channels.join(', ')} on server ${label} were producing frames and have STOPPED.`;
+  return (
+    `${which} AMCP on ${label} is still answering, so the server is UP and reachable — this ` +
+    'is not a connection failure and restarting the playout machine would take working ' +
+    'channels off air to fix it. ' +
+    'Nothing this channel is asked to play will appear on its output while this shows. ' +
+    "Check CasparCG's own log and the channel's consumers — a consumer that cannot start " +
+    '(a device that is not present, a format it will not take) stops the channel without ' +
+    'failing any command. ' +
+    'The console cannot read casparcg.config, so it cannot tell you which consumer.'
+  );
+}
+
 /** Hung off a deaf server's pill: its reading covers the command path only. */
 const AMCP_ONLY_TITLE =
   'AMCP only — no OSC is arriving from this server, so this reading covers the command ' +
@@ -249,6 +288,23 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
   const backupDeaf =
     !stale && !simulated && health.backup !== undefined && isDeafToServer(health.backup);
 
+  /*
+    🔴 R-058 — REACHABLE BUT PRODUCING NOTHING, read from the ONE authority.
+
+    `stoppedChannelsOf` lives in `@cg/shared-ipc` beside `isServerReachable`, not here: the
+    question is the same class and a second local copy is how a name comes to lie about what
+    it tests (golden rule 6). The bridge already DECIDED which channels are stale — this only
+    reads the verdict, which is `B-171`'s lesson applied before it could bite again.
+
+    ⚠ Silence is not proof, and the schema is what enforces it: a channel appears in
+    `health.*.channels` only once it has TICKED, so a `ticking: false` can only ever be said
+    about a channel that proved it ticks. An OSC-less install publishes an EMPTY list and
+    lights nothing — no rule here has to remember that.
+  */
+  const primaryDead = stale || simulated ? [] : stoppedChannelsOf(health.primary);
+  const backupDead =
+    stale || simulated || health.backup === undefined ? [] : stoppedChannelsOf(health.backup);
+
   // …and while a server is deaf, its pill STOPS ASSERTING. Leaving a confident green
   // HEALTHY beside the amber warning is the exact shape this repo has already
   // diagnosed twice (B-081, R-006): two contradictory claims, same size, same row —
@@ -256,9 +312,19 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
   // already means "health we cannot currently verify", and the warning carries the
   // attribution. The state WORD is unchanged (it is the FSM's, and still true on the
   // AMCP axis); only its confidence is withdrawn.
+  /*
+    🔴 R-058 — A STOPPED CHANNEL MUTES THE PILL TOO, for the reason stated directly above
+    for deafness, and this is the case that reason was written about.
+
+    The owner read `PRIMARY A HEALTHY` in confident green while the channel produced nothing.
+    That is B-081's and R-006's shape exactly — two claims of different sizes, and the
+    reassuring one wins — and it is the whole complaint. The state WORD stays, because it is
+    the FSM's and is still true on the AMCP axis; only its CONFIDENCE is withdrawn, and the
+    attribution goes on the chip beside it.
+  */
   const primary = stale
     ? UNKNOWN
-    : primaryDeaf
+    : primaryDeaf || primaryDead.length > 0
       ? { ...sessionLabel(health.primary.state), style: styles.stale }
       : sessionLabel(health.primary.state);
   // B-046 — `backup` is absent under a declared single-server config: render
@@ -269,7 +335,7 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
       ? null
       : stale
         ? UNKNOWN
-        : backupDeaf
+        : backupDeaf || backupDead.length > 0
           ? { ...sessionLabel(health.backup.state), style: styles.stale }
           : sessionLabel(health.backup.state);
 
@@ -369,6 +435,47 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
               aria-label={`No OSC from server ${health.backup.label}`}
             >
               <span style={styles.noOsc}>⚠ NO OSC FROM {health.backup.label}</span>
+            </span>
+          )}
+          {/*
+            🔴 R-058 — REACHABLE BUT PRODUCING NOTHING, beside its sibling and never instead
+            of it. The two are different faults with different remedies: NO OSC means we
+            cannot SEE this server's channels; this means we can see them and they have
+            STOPPED. Both can be true at once on a mirror pair, and neither suppresses the
+            other.
+
+            It is a chip on this bar and NOT a banner. `ConnectionBanner` owns "nothing can
+            reach air" and renders only while the link is NOT live — its own header makes
+            that a promise: *"When the link is live this renders nothing: no banner is itself
+            the signal that the Runtime can actually reach air."* An operator has been taught
+            that. Rendering a banner while the link IS live would spend that learned signal,
+            and a per-CHANNEL, per-SERVER fact does not fit a surface that is singular by
+            design.
+          */}
+          {primaryDead.length > 0 && (
+            <span
+              className="cg-pill"
+              title={deadChannelTitle(health.primary.label, primaryDead)}
+              aria-label={`Server ${health.primary.label} is not producing frames on ${
+                primaryDead.length === 1 ? 'channel' : 'channels'
+              } ${primaryDead.join(', ')}`}
+            >
+              <span style={styles.noOsc}>
+                ⚠ {health.primary.label} NOT PRODUCING · CH {primaryDead.join(', ')}
+              </span>
+            </span>
+          )}
+          {backupDead.length > 0 && health.backup !== undefined && (
+            <span
+              className="cg-pill"
+              title={deadChannelTitle(health.backup.label, backupDead)}
+              aria-label={`Server ${health.backup.label} is not producing frames on ${
+                backupDead.length === 1 ? 'channel' : 'channels'
+              } ${backupDead.join(', ')}`}
+            >
+              <span style={styles.noOsc}>
+                ⚠ {health.backup.label} NOT PRODUCING · CH {backupDead.join(', ')}
+              </span>
             </span>
           )}
           {/* The strategy is CONFIG, not health — it does not go stale with the link. */}

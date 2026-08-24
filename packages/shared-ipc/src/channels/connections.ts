@@ -9,12 +9,75 @@ import { definePublishChannel } from '../publish.js';
 
 const ServerLabelSchema = z.enum(['A', 'B']);
 
+/**
+ * 🔴 **`R-058` — ONE CHANNEL'S FRAME PRODUCTION, and the reason it is a LIST OF WHAT WE HAVE
+ * HEARD rather than a state per declared channel.**
+ *
+ * `ticking: false` is an ALARM: this channel was producing frames and has STOPPED.
+ * A channel we have never heard tick is **ABSENT from the list entirely** — not `false`, and
+ * not a third enum value.
+ *
+ * ⚠ **That absence is the whole safety property, and it is structural.** OSC may be blocked,
+ * aimed at another host, or simply not sent (`B-094`'s install did exactly that), so
+ * "no ticks" and "stopped ticking" are opposite facts with opposite remedies. Encoding the
+ * first as `ticking: false` would let a renderer alarm on an OSC-less install forever — the
+ * silence-as-evidence trap `B-163` names and `B-101` shipped. **A channel can only be
+ * reported not-ticking after it has proved it ticks**, so the bad state is unrepresentable
+ * rather than defended against.
+ *
+ * ⚠ **The BRIDGE decides this, not the renderer.** The staleness judgement needs the tick
+ * clock and the session's own reconnect history; a renderer re-deriving it from timestamps
+ * would be a second authority on one question — `B-171`'s exact shape, where the renderer's
+ * copy of "can a command reach CasparCG" disagreed with the bridge's and won because it was
+ * the one attached to the control.
+ */
+const ChannelTickSchema = z.object({
+  channel: z.number().int().positive(),
+  /** `false` ⇒ it ticked and STOPPED. Never "we have not heard it" — see the note above. */
+  ticking: z.boolean(),
+});
+
+export type ChannelTick = z.infer<typeof ChannelTickSchema>;
+
 const ServerHealthSchema = z.object({
   label: ServerLabelSchema,
   state: z.enum(['disconnected', 'connecting', 'handshaking', 'resyncing', 'healthy', 'degraded']),
   amcpAxisOk: z.boolean(),
   oscFreshAt: z.string().datetime().optional(),
+  /**
+   * `R-058` — every channel of THIS server we have heard tick since the last reconnect.
+   * Absent or empty means we have heard none, which is UNKNOWN and never an alarm.
+   */
+  channels: z.array(ChannelTickSchema).optional(),
 });
+
+export type ServerHealth = z.infer<typeof ServerHealthSchema>;
+
+/**
+ * 🔴 **`R-058` — THE ONE AUTHORITY for "is this server reachable but producing nothing?"**
+ *
+ * Lives here, beside {@link isServerReachable} and on the same wire types, because it is the
+ * same class of question and because a second copy is how the name comes to lie (golden
+ * rule 6). The StatusBar is its only consumer today; that is not a reason to define it in the
+ * StatusBar, which is exactly the argument `B-171` lost.
+ *
+ * TWO conditions, and both are load-bearing:
+ *
+ * 1. **The server is REACHABLE.** A disconnected server's channels are not "stopped" — they
+ *    are unknown, and the disconnection is already reported, loudly, by the surface that owns
+ *    it. Alarming here as well would be two alarms for one fault, and the operator's next
+ *    action for a dead link is not "check the consumers".
+ * 2. **At least one channel we HAVE heard is not ticking now.** Absence contributes nothing,
+ *    by the schema's construction above.
+ *
+ * ⚠ `degraded` counts as reachable, exactly as {@link isServerReachable} says: AMCP is up and
+ * OSC is merely silent. A degraded server whose channels are still ticking is producing
+ * frames, and this must not claim otherwise.
+ */
+export function stoppedChannelsOf(server: ServerHealth): readonly number[] {
+  if (!isServerReachable(server.state)) return [];
+  return (server.channels ?? []).filter((c) => !c.ticking).map((c) => c.channel);
+}
 
 /**
  * The session states a server can be in — the wire spelling, and the one the

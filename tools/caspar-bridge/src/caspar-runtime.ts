@@ -524,6 +524,21 @@ const SWEEP_MS = 5000;
  * repetition (~50 Hz), far below the sweep cadence doubling.
  */
 const OCCUPANCY_STALE_MS = 2500;
+/**
+ * `R-058` — how long a channel may go without a `/channel/N/framerate` tick before it is
+ * reported as having STOPPED.
+ *
+ * ⚠ **Its own constant, deliberately NOT `OCCUPANCY_STALE_MS`.** The two windows answer
+ * different questions on different clocks: occupancy ages out a LAYER's producer report,
+ * while this ages out a CHANNEL's heartbeat. Sharing one number would make a change made for
+ * one silently retune the other — and `hasFreshOsc`'s own header already argues that two
+ * signals which must decay together should say so explicitly rather than by coincidence.
+ *
+ * 3 s against a heartbeat the transport sees RAW (the tap is fed before the 1 Hz rate
+ * limiter): generous enough that a scheduler hiccup on a loaded machine cannot fake a
+ * stoppage, short enough that an operator learns of a dead channel within a breath.
+ */
+const CHANNEL_TICK_STALE_MS = 3000;
 
 /**
  * R-021 stage 2a (D7) — is a FIXED slot busy (a resident item or retained
@@ -944,6 +959,7 @@ export class CasparRuntime {
   #sweepTimer: ReturnType<typeof setInterval> | null = null;
   readonly #sweepMs: number;
   readonly #occupancyStaleMs: number;
+  readonly #channelTickStaleMs: number;
   readonly #orphanTracker = new OrphanTracker();
 
   // ── non-playout stub state ──────────────────────────────────────────
@@ -1099,6 +1115,7 @@ export class CasparRuntime {
       intentTimeoutMs?: number;
       sweepMs?: number;
       occupancyStaleMs?: number;
+      channelTickStaleMs?: number;
       /** TEST-ONLY seam: inject a template server (e.g. one whose start() fails). */
       templateServer?: TemplateHttpServer;
       /** TEST-ONLY seam (B-100): override each session's OSC health timers. */
@@ -1191,6 +1208,7 @@ export class CasparRuntime {
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
+    this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
     this.#sessionTuning = options.sessionTuning ?? {};
     this.#templateServer =
       options.templateServer ?? new TemplateHttpServer((id) => this.#templates.html(id));
@@ -7540,11 +7558,27 @@ export class CasparRuntime {
       // declared server, so another box's OSC cannot make this look healthy.
       // Deliberately not a second, divergent source of truth.
       const heardAt = session.osc.occupancy.lastOscTrafficAt;
+      /*
+        🔴 R-058 — WHICH OF THIS SERVER'S CHANNELS ARE PRODUCING FRAMES, decided HERE.
+
+        The bridge owns the judgement, not the renderer: the staleness call needs the tick
+        clock and this session's own reconnect history, and a renderer re-deriving it from
+        timestamps would be a second authority on one question. `B-171` is what that costs —
+        the renderer's own copy of "can a command reach CasparCG" disagreed with the bridge's
+        canonical predicate and won, because it was the one attached to the button.
+
+        ⚠ The list carries only channels this session has HEARD tick. A channel we have never
+        heard is ABSENT rather than `false`, so "alarmed without ever having ticked" cannot be
+        published at all — see `OscChannelTickTap` and `ChannelTickSchema` for why that is
+        structural rather than a check someone has to remember.
+      */
+      const channels = session.osc.channelTicks.channels(this.#channelTickStaleMs);
       return {
         label,
         state,
         amcpAxisOk: state === 'healthy',
         ...(heardAt !== null ? { oscFreshAt: new Date(heardAt).toISOString() } : {}),
+        ...(channels.length > 0 ? { channels } : {}),
       };
     };
     const primarySession = this.#sessions[cur];

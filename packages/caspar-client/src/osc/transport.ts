@@ -7,6 +7,7 @@ import { OscRateLimiter } from './rate-limiter.js';
 import { OscChangeTracker } from './change-tracker.js';
 import { OscInterestFilter } from './interest.js';
 import { OscOccupancyTap } from './occupancy-tap.js';
+import { OscChannelTickTap } from './channel-tick-tap.js';
 
 /**
  * OscTransport — UDP receiver for CasparCG 2.3.x's pushed OSC stream.
@@ -46,6 +47,12 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
    * bridge's periodic orphan sweep samples it.
    */
   readonly occupancy: OscOccupancyTap;
+  /**
+   * R-058 — passive CHANNEL-TICK tap, fed at the same point as `occupancy` and, like it,
+   * emitting nothing into the pipeline. Answers "is this channel producing frames", which no
+   * other signal in this product can: every other one is about REACHABILITY.
+   */
+  readonly channelTicks: OscChannelTickTap;
   private readonly expectedSourceHost: string | undefined;
 
   constructor(options: OscTransportOptions = {}) {
@@ -54,6 +61,7 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     this.rateLimiter = options.rateLimiter ?? new OscRateLimiter();
     this.changeTracker = options.changeTracker ?? new OscChangeTracker();
     this.occupancy = options.occupancy ?? new OscOccupancyTap();
+    this.channelTicks = options.channelTicks ?? new OscChannelTickTap();
     this.expectedSourceHost = options.expectedSourceHost;
     this.on('error', noop);
   }
@@ -104,6 +112,10 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     // R-009 — occupancy re-accumulates from the fresh session's stream
     // within a tick; carrying pre-reconnect ghosts would fake orphans.
     this.occupancy.reset();
+    // R-058 — and the channel-tick tap, for the SAME reason stated one line up and a
+    // sharper consequence: entries carried across a reconnect would report a channel
+    // STOPPED whose ticks have merely not resumed yet — an alarm we manufactured.
+    this.channelTicks.reset();
   }
 
   get port(): number {
@@ -165,6 +177,17 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
         // R-009 — the passive occupancy tap sees EVERY parsed producer
         // event, BEFORE the interest drop; it never adds to `events`.
         this.occupancy.note(event, recvAt);
+        /*
+          R-058 — and the channel-tick tap, at the same point and for a sharper reason.
+
+          BEFORE the rate limiter, which caps `osc.framerate` to 1 Hz. The cap is right for
+          the event stream (a 50 Hz firehose no consumer needs) and wrong for a liveness
+          question: reading the RAW tick means "has this channel stopped" is answered from
+          what CasparCG actually sent, not from what our own throttle let through. A tap fed
+          after the limiter would report a channel stale up to a full limiter window late,
+          and — worse — could never tell a slowed channel from a throttled one.
+        */
+        this.channelTicks.note(event, recvAt);
         if (!this.interest.shouldEmit(event)) continue;
         if (!this.rateLimiter.shouldEmit(event)) continue;
         if (!this.changeTracker.shouldEmit(event)) continue;
@@ -184,6 +207,7 @@ export interface OscTransportOptions {
   interest?: OscInterestFilter;
   rateLimiter?: OscRateLimiter;
   changeTracker?: OscChangeTracker;
+  channelTicks?: OscChannelTickTap;
   occupancy?: OscOccupancyTap;
   /**
    * The server this transport is supposed to be hearing from. When set, only OSC

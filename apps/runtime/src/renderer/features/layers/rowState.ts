@@ -16,6 +16,7 @@ import type { FixedSlotObservation } from '@cg/shared-ipc';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { airStateVisual, badgeTone, colors, readyDetail, type BadgeTone } from '../../theme.js';
 import { unverifiedTitle } from '../../ui/airStateWording.js';
+import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { occupancyLabel } from '../fixedLayers/occupancyLabel.js';
 
 /**
@@ -203,6 +204,13 @@ export interface RowStateInput {
   /** B-093 — this `unverified` came from a blind occupancy tap, not a dead link. */
   oscBlind: boolean;
   /**
+   * `R-058` — the bridge's reason for an `error` status, as published on the item.
+   *
+   * Optional because most statuses have none, and because an `error` with no code is a real
+   * (if rare) outcome the tooltip has to word honestly rather than leave blank.
+   */
+  errorCode?: string | undefined;
+  /**
    * R-022 — this row is in REHEARSE: the graphic renders locally in PVW and PLAY
    * to air is interlocked off. Bridge-owned, so it is the same for every browser.
    */
@@ -252,6 +260,7 @@ export function rowState({
   oscBlind,
   rehearsing,
   restoreBlocked,
+  errorCode,
 }: RowStateInput): RowStateVisual {
   const wire = occupancyLabel(observed, linkDown);
   /**
@@ -466,8 +475,35 @@ export function rowState({
     // render as READY now, and the difference between them — whether PLAY has to
     // build the producer first, which takes time and can fail — is what stops a
     // slow take reading as a bug.
+    /*
+      🔴 R-058 Part A — AN `ERROR` SAYS WHY, and the reason survived the whole way here.
+
+      The owner's words: *"if the config has a problem the operator must find out somehow,
+      not just an empty error."* He was looking at a row reading `ERROR` with nothing
+      attached — and the reason was ON that row the entire time.
+
+      Established rather than assumed: the bridge threads the AMCP code into the reconciler
+      (`reconciler.ts` — `if (errorCode !== undefined) rec.errorCode = errorCode`), it is a
+      published field on `StackItemState`, and `errorCodeMessage` has worded it since B-070,
+      `amcp-NNN` fallback included. Exactly ONE place in the runtime read `item.errorCode`
+      — `LayerRow`'s narrow `osc-unverifiable` check — so for every OTHER code the sentence
+      existed, arrived, and was dropped at the last inch.
+
+      ⚠ It goes in the TITLE beside `readyDetail` and the wire report rather than into a new
+      surface, because this cell already carries every other "why" it has and a second
+      mechanism for one status is how one row comes to explain itself two ways.
+
+      ⚠ It claims exactly what it knows. `errorCodeMessage('amcp-404')` says *"CasparCG
+      refused the command (AMCP 404)"* — true and quotable. It does NOT say the config is
+      wrong; the console cannot see `casparcg.config` and must never imply that it can.
+    */
     title: withWire(
-      status === 'unverified' ? unverifiedTitle(oscBlind, linkDown) : readyDetail(status),
+      status === 'unverified'
+        ? unverifiedTitle(oscBlind, linkDown)
+        : status === 'error'
+          ? (errorCodeMessage(errorCode) ??
+            'CasparCG did not accept this row, and reported no reason.')
+          : readyDetail(status),
       wire,
     ),
     ...(tone === 'transient' ? { transient: true } : {}),
