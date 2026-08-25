@@ -325,6 +325,51 @@ test.describe('Live Source (D-137 phase 1)', () => {
     // marks an explicit history boundary and asserts the real property.
   });
 
+  /**
+   * ⭐ `C-028` — maps `openspec/changes/live-plate-fit-mode/specs/designer-live-source/`,
+   * all three of its `#### Scenario`s.
+   *
+   * The mode's EFFECT — the fitted rect, and the mask hole punched at it rather than at
+   * the box — has no Designer surface to observe: the plate shows SMPTE bars while
+   * authoring and the hole is a property of the export. It is pinned across the package
+   * boundary in `packages/template-runtime/tests/live-fit-two-axis.test.ts`, which
+   * asserts the surface and the wire for one input in one test. What belongs HERE is what
+   * the AUTHOR can actually do: find the control, change it, and have the change stick.
+   */
+  test('C-028 — the fit mode is authored per plate, and defaults to `contain`', async ({ app }) => {
+    await app.newProject('LiveSourceFitMode');
+    await app.addLiveSource({ x: 200, y: 160 });
+
+    // Scenario: "An existing plate defaults to `contain`". A fresh plate stores NO value
+    // and the control reads the default — absent is `contain`, never `cover`.
+    await expect(app.liveSourceFitModeSelect).toBeVisible();
+    await expect(app.liveSourceFitModeSelect).toHaveValue('contain');
+    // …and the label says what happens to the PICTURE, not to the box: the natural
+    // misreading is that the box changes shape, and it does not.
+    await expect(app.liveSourceFitModeSelect.locator('option:checked')).toHaveText(
+      /whole picture/i,
+    );
+
+    // Scenario: "The fit mode is chosen in the Inspector" — both modes are offered.
+    await expect(app.liveSourceFitModeSelect.locator('option')).toHaveCount(2);
+    await app.setLiveSourceFitMode('cover');
+    await expect(app.liveSourceFitModeSelect).toHaveValue('cover');
+    await expect(app.liveSourceFitModeSelect.locator('option:checked')).toHaveText(/crop/i);
+
+    // Choosing a fit is not a geometry change, so nothing is a preflight error.
+    await expect(errorPill(app)).toHaveCount(0);
+
+    // …and it SURVIVES a reselect: the value is on the ELEMENT, not in the control's own
+    // state. That is the failure worth driving in a real browser — a control wired to
+    // `useState` reads correctly for as long as it stays mounted and silently loses the
+    // value the moment it does not.
+    const [elementId] = await app.timelineRowIds();
+    await app.deselect();
+    await expect(app.liveSourceFitModeSelect).toHaveCount(0);
+    await app.selectElementById(elementId as string);
+    await expect(app.liveSourceFitModeSelect).toHaveValue('cover');
+  });
+
   test('MULTIPLE independent Live Sources each get their own id', async ({ app }) => {
     await app.newProject('LiveSourceMulti');
     await app.addLiveSource({ x: 120, y: 100 });

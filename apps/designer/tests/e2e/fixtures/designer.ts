@@ -241,6 +241,16 @@ export class DesignerApp {
     await this.liveSourceAspectSelect.selectOption(value);
   }
 
+  /** `C-028` — the Live Source Inspector's FIT MODE picker (`contain` / `cover`). */
+  get liveSourceFitModeSelect(): Locator {
+    return this.inspector.getByRole('combobox', { name: 'fit' });
+  }
+
+  /** `C-028` — choose a fit mode by its option VALUE (`contain` / `cover`). */
+  async setLiveSourceFitMode(value: 'contain' | 'cover'): Promise<void> {
+    await this.liveSourceFitModeSelect.selectOption(value);
+  }
+
   /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). */
   async addTicker(pos: { x: number; y: number } = { x: 120, y: 260 }): Promise<void> {
     await this.selectTool('Ticker');

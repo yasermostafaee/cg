@@ -1,9 +1,14 @@
 import { useCallback, useState, useSyncExternalStore } from 'react';
-import { ChevronDown, ChevronRight, Maximize, Square } from 'lucide-react';
+import { ChevronDown, ChevronRight, Crop, Maximize, Scan, Square } from 'lucide-react';
 import { lottieClipMidpoint, lottieFollowWindow, lottieTiming } from '@cg/lottie-bridge';
 import type { LottieTiming } from '@cg/lottie-bridge';
-import { followWindowMs, followsComposition } from '@cg/shared-schema';
-import type { FollowAnchors, FollowWindow } from '@cg/shared-schema';
+import {
+  DEFAULT_LIVE_FIT_MODE,
+  LIVE_FIT_MODES,
+  followWindowMs,
+  followsComposition,
+} from '@cg/shared-schema';
+import type { FollowAnchors, FollowWindow, LiveFitMode } from '@cg/shared-schema';
 import type {
   AnimatableProperty,
   ClockElement,
@@ -657,6 +662,7 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
           />
         )}
         <AspectRow element={element} />
+        <FitModeRow element={element} />
         {/*
           D-137 — ONE line, said once, instead of a row of disabled controls saying
           it repeatedly and forever.
@@ -750,6 +756,72 @@ function LiveSourceFrameRow({ element }: { element: VideoPlaceholderElement }): 
         <strong>0</strong> means no frame; the colour is kept.
       </p>
     </CollapseSection>
+  );
+}
+
+/**
+ * ⭐ `C-028` — **the FIT MODE: how the picture is placed in this plate's box.**
+ *
+ * ── WHAT THE AUTHOR IS ACTUALLY CHOOSING ────────────────────────────────────
+ *
+ * The client's decision (2026-08-23, via the owner): **the picture must not be cut.** A
+ * live input keeps its own aspect, is centred on both axes, and the leftover margin shows
+ * **the template's own background** — never black, because the mask hole is punched at
+ * the FITTED rect rather than at the box. `cover` keeps the old centre-crop for the shots
+ * where losing the edges is the accepted cost.
+ *
+ * 🔴 **The label says what happens to the PICTURE, not to the BOX**, because the natural
+ * misreading is that the box changes shape. It does not: the box is exactly where the
+ * author drew it, and only the picture inside it moves. The owner accepted the visible
+ * consequence in advance — a stroke or frame authored tight around a box **no longer hugs
+ * the picture** when the source aspect differs.
+ *
+ * ── WHY THIS IS PER ELEMENT AND NOT PER SOURCE ──────────────────────────────
+ *
+ * The same catalog source seated in a 16:9 box and a 3:4 box needs DIFFERENT fits, so a
+ * per-source field would have to be wrong in one of them. The mode is a property of the
+ * PAIRING of a picture with a box, and this is where that pairing is authored.
+ *
+ * ⚠ **The operator can override it per assignment, and that is not a bug in this
+ * control.** The author states what the design wants; the operator, who is looking at the
+ * picture on the day, may revise it. Note the direction is the OPPOSITE of `D-147`'s
+ * aspect chain, where the installation outranks the author — that one resolves a
+ * measurable property of the feed, this one a presentation choice about it.
+ */
+function FitModeRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+  const id = element.id;
+  // Absent means `contain` — the shipped default. Read through the shared constant rather
+  // than a literal, so the control and the runtime cannot come to disagree about what an
+  // unset field means.
+  const mode: LiveFitMode = element.fitMode ?? DEFAULT_LIVE_FIT_MODE;
+  const options: readonly LiveFitMode[] = LIVE_FIT_MODES;
+  return (
+    <SelectField
+      label="fit"
+      value={mode}
+      options={options}
+      labels={options.map((m) => (m === 'contain' ? 'Fit whole picture' : 'Fill box (crop edges)'))}
+      onCommit={(value) => {
+        designerStore.updateElement(id, { fitMode: value } as Partial<Element>);
+      }}
+      trailing={
+        <span
+          className={dds.hint}
+          title={
+            mode === 'contain'
+              ? 'The WHOLE picture is shown, centred, at the source’s own aspect. Where the ' +
+                'source is a different shape from this box, the margin shows the template’s ' +
+                'own background — not black. Nothing is cropped, so a frame drawn tight ' +
+                'around this box will not hug the picture.'
+              : 'The picture is scaled until it FILLS the box and the overflow is cropped ' +
+                'evenly from both edges. The box is filled corner to corner, at the cost of ' +
+                'the edges of the source frame.'
+          }
+        >
+          <Icon icon={mode === 'contain' ? Scan : Crop} />
+        </span>
+      }
+    />
   );
 }
 
