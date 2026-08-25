@@ -92,6 +92,19 @@
 
 - [x] 10.1 `pnpm gate` green, uncached.
 - [x] 10.2 `CG_GATE_HOOK_E2E=1` run locally once before push.
-- [ ] 10.3 🔴 Linux `gate:e2e` OWED — cite the completed green GitHub Actions run URL for the commit
-      that carries the change, with the `E2E (Playwright)` job confirmed RUN, HERE beside this box.
-      A ticked box with no URL is a claim, not a discharge. - Run URL: _(not yet discharged — pending CI for the pushed commit)_
+- [x] 10.3 🔴 Linux `gate:e2e` OWED — **DISCHARGED**, evidence below.
+
+### The `gate:e2e` discharge
+
+**Run URL:** <https://github.com/yasermostafaee/cg/actions/runs/32870092879>
+
+|                                   |                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| Commit                            | `6b3433337bb2640b37d8da4448f254273bd852ac` on `dev` — carries the whole change |
+| Run                               | `status: completed`, `conclusion: success`                                     |
+| `E2E (Playwright)`                | **RAN**, 8m52s, `success`                                                      |
+| `Lint • Typecheck • Test • Build` | RAN, 8m21s, `success`                                                          |
+
+🔴 **The `e2e` job was confirmed by its DURATION, not merely by a green tick.** CI skips `e2e` for a
+diff it classifies as unable to affect rendering (`P-029`), and a skipped job reports green too — so
+a tick alone proves nothing about the suite. 8m52s is a job that ran.
