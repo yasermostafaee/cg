@@ -28,6 +28,36 @@ spec alone.
 - [ ] 1.11 ⏳ **OWNER-RUN. The walk is written; the numbers are not in it.** Nothing in sections
       3–6 may begin until this is filled in on the production plant (2.5.0, `69e8ad5`).
 
+      🔴 **STILL UNRUN AS OF 2026-08-25, and this is recorded so the date is not mistaken for
+      progress.** The owner DID visit the plant that day and ran a different sheet end to end —
+      `docs/recon/2026-08-25-decklink-model-walk.md`, all four DeckLink questions answered. **The
+      audio walk was NOT run. W1–W9 are all still empty**, and every gate in sections 3–6 holds.
+
+      🔴 **AND W5 CANNOT BE RUN ON THE CURRENT CONFIGURATION AT ALL — it needs a config edit and a
+      restart before it is even attemptable.** `INFO CONFIG`, read on the plant the same day,
+      shows a **SINGLE `<channel>`**:
+
+      - one channel, `1080p5000`;
+      - consumers `<decklink>` (device `23487013`, with `embedded-audio`), `<screen/>`,
+        `<system-audio/>`;
+      - **no `<osc>` block** — which is the state W9 was written to confirm, and it is now
+        confirmed from the config side (the walk still owes the wire-side half).
+
+      W5 is _"PGM on a real output + channel 2 on `<system-audio/>`"_. **There is no channel 2.**
+      Creating one is an edit to `casparcg.config` plus a server restart — not a console command —
+      so W5 cannot be slipped in opportunistically at the end of an unrelated visit. ⚠ **W2
+      depends on W5's two-channel config** (it says so itself: `route://1` on a single-channel
+      install is a feedback loop), so a visit that skips the config edit loses W2 as well.
+      **Plan the config block deliberately, or the next visit ends the same way.**
+
+      ⚠ **This does NOT change any gate and ticks nothing.** It records what a plant visit
+      produced and what it did not, because "the owner went to the plant on 2026-08-25" will
+      otherwise read as progress against this item. It is not.
+
+      **Also unmeasured after the same visit** (recorded here only so one list holds the plant
+      backlog): `B-155`'s frame count — `multibox-layout-switch` `tasks.md` **7.15** still owes
+      it — and [[B-174]]'s page/mixer skew `k`.
+
 ## 2. SHIPPED — the visible PGM audio surface
 
 ### 2a. The one new bridge verb

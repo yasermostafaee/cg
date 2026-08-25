@@ -972,6 +972,11 @@ candidate shapes.
 - [ ] 7.15 🔴 **`B-155` — THE SWITCH FLASH. OPEN, AND NOTHING ABOUT IT IS VERIFIED ON THE PLANT.**
       The owner, on air: _"change `l-1`'s source and press look-1, then when we go to solo it shows
       the OLD source for a moment and then switches to the new one."_
+      ⚠ **STILL UNMEASURED AFTER THE 2026-08-25 PLANT VISIT.** The owner was at the plant that day
+      and ran `docs/recon/2026-08-25-decklink-model-walk.md` end to end (the DeckLink source model,
+      four questions) — **but not `docs/recon/2026-08-22-b155-switch-flash-walk.md`.** The frame
+      counts this item owes are still owed. Noted because a visit date near this item will read as
+      progress otherwise; it is not, and nothing here is ticked.
       **The mechanism is established from the code and pinned on the wire** (`live-look-reconcile`,
       _"an assignment change LURKS…"_): `setSourceAssignments` does not reconcile, so the change
       lands at the next reconcile from any cause — a look press — which puts a producer change
