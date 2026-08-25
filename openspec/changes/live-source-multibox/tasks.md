@@ -1176,8 +1176,11 @@ beforehand: 85/85, `0 cached`.
       ⚠ **The NDI argument spelling is PARSE-VERIFIED ONLY** (no NDI source on this
       plant, module gated) — C-021's hardware debt, said in the method's own
       docstring rather than left to be discovered. ⭐ **Corrected 2026-08-24:
-      DECKLINK's INDEX form is MEASURED** on the plant's DeckLink SDI 4K; only the
-      persistent-ID form as a producer argument is still unproven.
+      DECKLINK's INDEX form is MEASURED** on the plant's DeckLink SDI 4K. ⭐ **And
+      2026-08-25: the PERSISTENT-ID form is measured too** (`PLAY 1-10 DECKLINK
+  DEVICE 23487013` → `Initialized`, recon walk Q1), so `n` may be either handle
+      and the schema already admits both. Nothing about DECKLINK is unproven at the
+      spelling level any more; what is open is device CONTENTION (**B-177**).
       Original: `playSource` / `mixerFit` / `mixerClear` on `command-builder.ts`, all layer-scoped
       through `target()`. Channel-scoped forms stay forbidden (`caspar-runtime.ts:2718-2724`).
       **`mixerFit` emits the `FILL` and the `CLIP` as a PAIR from one computation** — NOT two

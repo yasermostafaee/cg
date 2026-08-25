@@ -191,22 +191,30 @@ export class CommandBuilder {
    *                addressed with the layer form (§9a.2).
    *   `media`    — a bare file name, quoted. What CasparCG assumes for an
    *                argument carrying no scheme and no keyword.
-   *   `decklink` — `DECKLINK DEVICE <n>`. ⭐ **MEASURED in the INDEX form** on the
-   *                plant's 2.5.0 (`69e8ad5`), 2026-08-24: the card is a
-   *                **DeckLink SDI 4K**, enumeration index **1**, persistent ID
-   *                **23487013**, and `PLAY 1-10 DECKLINK DEVICE 1` returned
-   *                `Initialized` repeatedly with real signal on the input. That is
-   *                the same standing `stream` states below — one owner-run pass on
-   *                the plant, not a suite — and it is ahead of `ndi`.
-   *                ⚠ **What is emitted here is the INDEX form, and ONLY the index
-   *                form is measured.** The PERSISTENT-ID form as a PRODUCER
-   *                argument (`DECKLINK DEVICE 23487013`) is **UNPROVEN** — the
-   *                persistent ID is proven only in the CONSUMER's `<device>`
-   *                element (`DeckLink SDI 4K [1-23487013|1080p5000]`, same run),
-   *                and the consumer and the producer are different parsers.
-   *                `docs/recon/2026-08-25-decklink-model-walk.md` Q1 settles it.
-   *                The schema admits either integer, so nothing here changes when
-   *                it does.
+   *   `decklink` — `DECKLINK DEVICE <n>`. ⭐ **MEASURED on the plant's 2.5.0
+   *                (`69e8ad5`) in BOTH forms — the index AND the persistent ID.**
+   *                The card is a **DeckLink SDI 4K**, enumeration index **1**,
+   *                persistent ID **23487013**.
+   *                  - 2026-08-24: `PLAY 1-10 DECKLINK DEVICE 1` → `Initialized`,
+   *                    repeatedly, with real signal.
+   *                  - 2026-08-25: `PLAY 1-10 DECKLINK DEVICE 23487013` →
+   *                    `DeckLink SDI 4K [23487013|1080p5000] Initialized`, `202`,
+   *                    then `Input format changed from 1080p5000 to 1080i5000` —
+   *                    and THAT last line is what makes it a pass rather than a
+   *                    `202` over a dead producer, because only an open card can
+   *                    report the incoming raster changing under it. The log names
+   *                    the device by its ID, so the server resolved the argument AS
+   *                    an ID rather than coincidentally matching an index.
+   *                ⇒ **`n` may be EITHER an enumeration index or a persistent ID**,
+   *                and the schema (`z.number().int().positive()`) already admits
+   *                both, so this method needs no discrimination between them.
+   *                ⭐ Prefer the persistent ID where an operator has one: an index
+   *                moves when the PCIe order changes or a second card is fitted.
+   *                Evidence: `docs/recon/2026-08-25-decklink-model-walk.md` Q1.
+   *                ⚠ **What is NOT settled is CONTENTION, not spelling** — one
+   *                physical input admits ONE producer, and a `CLEAR` answers `202`
+   *                before the old producer is destroyed. See **B-177**; it bites
+   *                the caller that sequences these, never this formatter.
    *   `ndi`      — `NDI NAME "<source>"`. ⚠ **PARSE-VERIFIED ONLY** — no NDI source
    *                exists on this plant and the NDI module is gated, so nothing here
    *                has ever put an NDI producer on air. That debt is **C-021's**.

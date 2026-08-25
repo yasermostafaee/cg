@@ -93,12 +93,21 @@ describe('CommandBuilder — Live Source verbs (C-015 phase 6, task 6.1)', () =>
     });
 
     it('decklink: keywords and the index are AMCP SYNTAX, so they are NOT quoted', () => {
-      // The INDEX form is MEASURED on this plant's DeckLink SDI 4K (2.5.0,
-      // 2026-08-24): `PLAY 1-10 DECKLINK DEVICE 1` initialised with real signal.
-      // The PERSISTENT-ID form as a producer argument is still unproven — see
-      // `playSource`'s docstring and the recon walk's Q1.
+      // BOTH forms are MEASURED on this plant's DeckLink SDI 4K (2.5.0 `69e8ad5`):
+      // `DECKLINK DEVICE 1` (the index, 2026-08-24) and `DECKLINK DEVICE 23487013`
+      // (the persistent ID, 2026-08-25, recon walk Q1). This method needs no
+      // discrimination between them — the schema admits either positive integer.
       expect(builder.playSource(slot, { kind: 'decklink', device: 3 })).toBe(
         'PLAY 1-10 DECKLINK DEVICE 3',
+      );
+    });
+
+    it('decklink: a PERSISTENT ID is emitted like any other device number', () => {
+      // The plant's real ID, and the shape Q1 proved on the wire. It is only
+      // notable because it is large: nothing here special-cases it, which is
+      // exactly the finding — one integer field carries both handles.
+      expect(builder.playSource(slot, { kind: 'decklink', device: 23487013 })).toBe(
+        'PLAY 1-10 DECKLINK DEVICE 23487013',
       );
     });
 

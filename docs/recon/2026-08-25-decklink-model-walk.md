@@ -66,6 +66,9 @@ Decklink devices found:
 🔴 **The consumer and the producer are DIFFERENT PARSERS.** That last row is Q1 and it is the whole
 reason this sheet exists — do not let the consumer's success be read as the producer's.
 
+> ✅ **That last row was ANSWERED **YES** on 2026-08-25** — see Q1 below. The table above is the
+> 2026-08-24 state and is left as it stood; it is not the current answer.
+
 ---
 
 ## Three incidentals from the 2026-08-24 run — recorded so they are not re-discovered as defects

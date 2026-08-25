@@ -185,18 +185,24 @@ const SCHEME = /^([a-z][a-z0-9+.-]*):\/\//i;
  * `NDI` keyword — and then fails to parse is REFUSED, because there is no
  * reading of it under which the server would have done what was asked.
  *
- * ⭐ **`DECKLINK DEVICE <n>` is now MEASURED in its INDEX form** on this plant's
- * DeckLink SDI 4K (2.5.0 `69e8ad5`, 2026-08-24): `PLAY 1-10 DECKLINK DEVICE 1`
- * initialised with real signal. What this classifier models is therefore the form
- * the server accepts, not a guess about it.
+ * ⭐ **`DECKLINK DEVICE <n>` is MEASURED in BOTH forms** on this plant's DeckLink
+ * SDI 4K (2.5.0 `69e8ad5`): the enumeration INDEX (`DEVICE 1`, 2026-08-24) and the
+ * PERSISTENT ID (`DEVICE 23487013`, 2026-08-25 — recon walk Q1). What this
+ * classifier models is therefore the form the server accepts, not a guess about it,
+ * and it is right not to distinguish the two: they are one integer field.
  *
- * ⚠ **Still MODELLED, NOT MEASURED: the NDI spelling** (no NDI source exists on
- * this plant and the module is gated — C-021), and the DECKLINK **persistent-ID**
- * spelling (`DECKLINK DEVICE 23487013`), which is proven only in the CONSUMER's
- * `<device>` element and not as a producer argument. Both are integers here, so
- * this classifier does not distinguish them; the recon walk's Q1 decides whether
- * the model may. When hardware confirms or corrects either, this classifier and
- * the mapping schema change together.
+ * ⚠ **Still MODELLED, NOT MEASURED: the NDI spelling** — no NDI source exists on
+ * this plant and the module is gated (C-021). When hardware confirms or corrects it,
+ * this classifier and the mapping schema change together.
+ *
+ * 🔴 **WHAT THIS MOCK DOES NOT MODEL, AND MUST NOT BE READ AS EVIDENCE ABOUT: DEVICE
+ * CONTENTION.** On real hardware ONE physical input admits ONE producer, `CLEAR`
+ * answers `202` BEFORE the old producer is destroyed, and the new producer is
+ * constructed before the old one dies — so a `CLEAR`-then-`PLAY` on the same device
+ * can fail, and the failure surfaces as `404` + `File not found.` because the
+ * producer registry falls through to the FILE producer. Here every `PLAY` succeeds
+ * instantly and nothing contends. **B-177.** A green suite against this mock says
+ * nothing about that class of failure.
  */
 function classifyProducer(args: readonly string[]): ProducerVerdict {
   const first = args[1] ?? '';
