@@ -1415,3 +1415,40 @@ explicit instruction to reproduce before fixing — a non-reproduction would its
 **Filed at `[ ]`.** A filing session: no product code, no living spec, no archive, and **no OpenSpec
 change created** — `D-155` records WHY it needs its own change (three capabilities, two in-flight
 changes, one living spec) without creating one.
+
+## 2026-08-25 — fill/key seating gets its number (`C-027`), from session DECKLINK-MODEL-01
+
+| Prefix | Claimed | Item                                                                                  | File                   |
+| ------ | ------- | ------------------------------------------------------------------------------------- | ---------------------- |
+| `C-`   | `C-027` | fill/key SEATING for a `decklink` source: the modal stores a key device nothing sends | [caspar.md](caspar.md) |
+
+**Verified free by the heading sweep immediately before the heading was written, with `git grep`
+throughout** (the session was instructed not to use `grep -r`, which walks `node_modules` and has
+produced a phantom item number in this repo before). Highest `C-` heading was **`C-026`**, from
+`git grep -hoE "^## \[.\] C-[0-9]{3}" -- 'docs/prd/*.md' ':!docs/prd/README.md'` sorted on the
+NUMBER — the lexicographic trap this file already records was avoided the same way. The `C-`
+duplicate audit printed **nothing**. `git grep -n "C-027"` over the WHOLE TREE returned exactly
+**ONE** hit: this file's own `Next free: C-027` line at the `C-026` record — a forward-reference
+POINTER, not a heading, and the false positive this registry has now recorded from eight
+directions. `git grep -n "C-028"` returned **nothing at all**, which is the cross-check that the
+space is not merely contiguous but genuinely ends where it says. `C-` stays contiguous
+`C-001` … `C-027`, **no gaps. Next free: `C-028`.**
+
+⚠ **Filed at `[!]`, and the block is NARROWER than the one it replaces.** The same session
+disproved "this plant has no capture card" (the plant has a **DeckLink SDI 4K**, measured
+2026-08-24) and corrected `C-020`, `C-021`, `command-builder.ts`, the amcp-mock classifier and
+`live-source-multibox`'s design/tasks accordingly. `C-027` is nonetheless `[!]`: a fill/key pair is
+**two physical SDI inputs**, and whether this card exposes a second one is unknown — Q4 of
+[../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md).
+
+🔴 **Filed rather than folded into `C-021` arm (c), deliberately.** `C-027` is CODE to be written
+(two-layer seating, the shared geometry, the half-failed-pair decision, the ledger's `role`);
+`C-021` arm (c) is the HARDWARE pass that would verify it. Neither can serve as the other's
+acceptance, and collapsing them is how "fill+key works" would come to mean "someone typed a key
+device into a field".
+
+⚠ **`C-021` was NOT marked done and NOT moved off `[!]`.** Arm (a) DECKLINK is unblocked but
+undelivered and arms (b)/(c) are still blocked, so `[ ]` and `[~]` would both have been false. The
+PRD legend has no shape for _"one arm unblocked but unstarted"_; rather than round the checkbox up,
+the split is written into `C-021`'s heading and Notes. Recorded here because a future sweep reading
+only checkboxes would otherwise see an item that did not move and assume nothing happened.

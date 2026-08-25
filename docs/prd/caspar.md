@@ -1481,3 +1481,67 @@ pressure — "just this one" and "silence everything" — did not exist at all.
   [[C-019]] (audio authored INSIDE a template — the asset/packaging half, a different item from
   this one's per-box GAIN), [[C-018]] / [[C-020]] (the 2.5.0 cutover the monitor channel assumes),
   [[B-161]] (golden rule 10, the gate every verb here satisfies first).
+
+## [!] C-027 — fill/key SEATING for a `decklink` source: the modal stores a key device that nothing sends ⟨priority: medium⟩ — BLOCKED: needs a second SDI input on the card, [../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md) Q4
+
+**What:** actually SEAT a fill/key pair when a `decklink` source's mapping names one. Today
+`SourceProducerSchema`'s `decklink` arm carries an optional `keyDevice`, CG Control's Sources modal
+offers a **Key device (optional)** field and persists it, and `producerArgument`
+(`command-builder.ts`) emits `DECKLINK DEVICE <device>` and nothing else — so the value is stored,
+round-trips the bridge, and **never reaches the wire**. This item is the code that makes it mean
+something: the second `PLAY`, the layer it lands on, the `MIXER` geometry it shares with its fill,
+and what the ledger's existing `role: 'fill' | 'key'` records for the pair.
+
+**Why:** a fill/key pair is a real concept carried over from the plant's previous automation
+(MASTER + SLAVE on one entry), and the schema was deliberately shaped for it. What was missing is
+the seating, and the gap was **invisible to the operator**: the modal's summary line used to read
+`DECKLINK DEVICE 1 + KEY 2`, describing a wire the system does not send. That surface half is FIXED
+(2026-08-25, `DECKLINK-MODEL-01`): the summary now describes the fill alone and a stored `keyDevice`
+is reported in the modal as _"stored but not yet sent to CasparCG"_. **The honesty is shipped; the
+capability is this item.** It is filed rather than folded into [[C-021]] because it is CODE to be
+written, while C-021 arm (c) is the hardware pass that would VERIFY it — and neither can be the
+other's acceptance.
+
+**Acceptance:**
+
+- WHEN a `decklink` mapping names both `device` and `keyDevice` THEN **two** producers are seated —
+  the fill and the key — at layers derived from the declared Live Source band, and the ledger
+  records the pair with `role: 'fill'` and `role: 'key'` respectively
+- WHEN the pair is seated THEN both layers receive the **same** `MIXER FILL` + `CLIP` geometry from
+  **one** computation (golden rule 7's shape: one geometry, emitted once, never two call sites that
+  must agree)
+- WHEN **half** the pair fails to seat THEN the outcome is DECIDED and stated — not left to
+  whichever `PLAY` returned first. A key on air without its fill, or a fill without its key, is a
+  wrong picture rather than a missing one, so the decision must be recorded here before it is coded
+- WHEN the pair is released THEN **both** layers are cleared and both ledger records removed — a
+  half-released pair leaves a live producer nothing owns
+- WHEN a `decklink` mapping names NO `keyDevice` THEN the behaviour is **byte-identical to today's**
+  — one `PLAY`, one ledger record, `role: 'fill'`. This is the regression bullet and it is not
+  optional
+- WHEN the pair is verified on hardware THEN alpha is confirmed **by looking at the switcher**,
+  never inferred from the format's specification ([[B-066]] class: verify, never assume) — that pass
+  is [[C-021]] arm (c)'s, and this item hands it something to look at
+
+**Notes — why `[!]`, and what exactly blocks it.** A fill/key pair is **two physical SDI inputs**.
+The plant's card is a **DeckLink SDI 4K** (index `1`, persistent ID `23487013`, measured
+2026-08-24), and whether it exposes a **second** input for the pair at all is **not known** — it is
+question **Q4** of [../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md),
+which is one look at the back of the box. If the answer is no, this item does not become wrong, it
+becomes **unverifiable on this plant** and should be re-scoped or parked rather than built blind:
+two-layer seating whose second layer can never carry a real signal is a mechanism nobody can check.
+That is the whole of the block, and it is deliberately NARROWER than the "no capture card" that used
+to sit over this area — see [[C-021]]'s 2026-08-24 correction.
+
+**Deliberately NOT in scope:** removing the `keyDevice` field or refusing it at the config boundary.
+The operator may already have written a pair, and dropping the field would lose that configuration.
+The field stays, the schema stays, and the modal says plainly what does and does not reach the wire.
+
+- The number was verified free by the heading sweep immediately before this heading was written:
+  the highest `C-` heading was `C-026` (`git grep -hoE "^## \[.\] C-[0-9]{3}" -- 'docs/prd/*.md'
+':!docs/prd/README.md'` sorted on the NUMBER), the `C-` duplicate audit printed nothing, and
+  `git grep -n "C-027"` returned exactly ONE hit — [b-number-registry.md](b-number-registry.md)'s
+  own "next free" line, a forward-reference POINTER rather than a heading. `C-028` returned nothing
+  at all. Recorded in [b-number-registry.md](b-number-registry.md).
+- **Cross-refs:** [[C-021]] (arm (c) — the hardware pass this item feeds), [[C-015]] (the Live
+  Source model, the mapping store and the ledger this seats into), [[C-020]] (the air path fill+key
+  ultimately reaches).

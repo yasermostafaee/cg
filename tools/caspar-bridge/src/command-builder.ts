@@ -222,6 +222,14 @@ export class CommandBuilder {
    * is a decision about how many producers to seat and where — the caller's, from
    * the ledger's `role` — not a spelling this method can make. Reading it here would
    * put a key signal on the fill layer.
+   *
+   * ⚠ **That silence is a REAL GAP, and it has an item: C-027.** Nothing seats the
+   * key, so a mapping carrying `keyDevice` yields the fill alone. The operator is
+   * told this in CG Control's Sources modal rather than left to infer it from a
+   * missing picture — the modal's summary describes only what THIS method emits, and
+   * a stored `keyDevice` is reported there as not yet sent. If that sentence and this
+   * method ever disagree again, `apps/runtime/tests/decklinkKeyDeviceHonesty.dom.test.ts`
+   * is the test that fails: it asserts BOTH halves against the SAME value.
    */
   playSource(slot: CommandSlot, producer: SourceProducer): string {
     return `PLAY ${target(slot)} ${this.sourceArgument(producer)}`;

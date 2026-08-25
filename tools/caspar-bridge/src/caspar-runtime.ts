@@ -5245,8 +5245,10 @@ export class CasparRuntime {
         slot: placement.slot,
         sourceId: placement.plateId,
         // `'fill'` for every producer form this change can seat. A fill+key PAIR is
-        // two layers and is C-021's, blocked on hardware — the role is recorded
-        // rather than assumed so the ledger is already shaped for it.
+        // two layers, and seating it is C-027 — the role is recorded rather than
+        // assumed so the ledger is already shaped for it. A `decklink` mapping's
+        // `keyDevice` is stored and NOT sent (the Sources modal says so in the
+        // operator's own words); until C-027 lands, every record here is a fill.
         role: 'fill',
         producer,
         fill: placement.fit.fill,

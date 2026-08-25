@@ -59,8 +59,14 @@ export interface LiveLayerRecord {
   readonly sourceId: string;
   /**
    * Which half of a fill+key pair this layer carries. `'fill'` is every
-   * `route://` and media case; `'key'` exists only for a fill+key input pair,
-   * whose compositing is C-021's (hardware-blocked), not this change's.
+   * `route://` and media case; `'key'` exists only for a fill+key input pair.
+   *
+   * ⚠ **Nothing writes `'key'` yet.** The SEATING that would — two producers, one
+   * shared geometry, a decided outcome when half the pair fails — is **C-027**,
+   * blocked on whether this plant's DeckLink SDI 4K exposes a SECOND SDI input at
+   * all (`docs/recon/2026-08-25-decklink-model-walk.md` Q4). The hardware pass that
+   * verifies it is C-021 arm (c). The field is carried here rather than added later
+   * so the ledger is already shaped for the pair.
    */
   readonly role: 'fill' | 'key';
   /**
