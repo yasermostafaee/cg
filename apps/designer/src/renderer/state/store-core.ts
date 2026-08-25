@@ -150,6 +150,32 @@ export interface DesignerStoreState {
   /** View menu — snap element edges/centers while dragging on the canvas. */
   snappingEnabled: boolean;
   /**
+   * 🔴 `D-155` — **keep a declared aspect while resizing. A SESSION PREFERENCE, deliberately
+   * NOT authored state, and ONE value for both geometry editors.**
+   *
+   * ── WHY IT IS NOT IN THE SCENE ──────────────────────────────────────────
+   *
+   * Three reasons, and the first is the one that settles it:
+   *
+   * 1. **A `.vcg` that resizes differently for two people is the failure mode.** The lock is
+   *    a fact about how the AUTHOR works, not about the template. The aspect itself
+   *    (`expectedAspect`) IS authored and stays so; only the editor's treatment of it is here.
+   * 2. **The runtime can never read it.** Storing it would mean a schema field, a migration
+   *    and an export path for a value nothing downstream consumes.
+   * 3. **Per author, not per plate.** A per-plate session flag would be invisible state whose
+   *    extent the author cannot see.
+   *
+   * ⚠ **ONE value, two surfaces** — the Live Source aspect row and the arrangement `CELLS`
+   * fields both read and write THIS. They constrain different quantities (a plate's declared
+   * aspect; a cell's composition resolution — see `ArrangementsSection`), but "am I holding
+   * shape while I drag?" is one question and two toggles for it would be the two-spellings
+   * defect this repo keeps paying for.
+   *
+   * Defaults ON: the complaint that produced `D-155` is that the deformation happens by
+   * accident, and a lock that must be found before it helps does not answer that.
+   */
+  aspectLockEnabled: boolean;
+  /**
    * D-122 — the canvas's live zoom (scene-px → screen-px scale), MIRRORED from the
    * CanvasArea-local zoom state so the store-side move paths (the arrow-key nudge) can
    * decide whether the pixel grid is active. The pointer-drag path already has the zoom
@@ -201,6 +227,7 @@ export const initialState: DesignerStoreState = {
   timelineZoom: 1,
   rulerVisible: false,
   snappingEnabled: true,
+  aspectLockEnabled: true,
   canvasZoom: 1,
   snapGuides: { x: [], y: [] },
   guides: { x: [], y: [] },

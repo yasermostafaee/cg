@@ -45,6 +45,92 @@ export const RESIZE_CFG: Record<Handle, { fixed: Corner; freeW: boolean; freeH: 
   t: { fixed: 'bl', freeW: false, freeH: true },
 };
 
+/**
+ * 🔴 **`D-155` — the two free extents, reshaped to the locked `w : h` ratio, BEFORE the
+ * ratios are taken.**
+ *
+ * `lockRatio` is `w / h` in SIZE units and comes from `sizeRatioForAspect` — the ONE place
+ * that knows how an effective aspect relates to an authored size. Nothing here spells an
+ * aspect; this module only ever sees a scalar.
+ *
+ * ── EDGES: THE FREE AXIS LEADS, THE OTHER IS DERIVED ─────────────────────────
+ *
+ * A single-axis handle has one axis under the pointer and one the gesture owns, so there is
+ * nothing to choose.
+ *
+ * ── 🔴 CORNERS: PROJECT ONTO THE DIAGONAL — AND THE USUAL ARGUMENT FOR IT IS FALSE ───
+ *
+ * The corner solve projects `(w, h)` orthogonally onto the ray `h = w / lockRatio` — the line
+ * through the FIXED corner whose slope is the locked ratio.
+ *
+ * ⚠ **THIS COMMENT USED TO SAY THE ALTERNATIVE MAKES THE BOX JUMP. IT DOES NOT, AND THAT WAS
+ * MEASURED RATHER THAN REASONED.** The rejected alternative is the dominant-axis rule — _"take
+ * whichever extent is larger and derive the other"_ — and at the crossover `w / lockRatio === h`
+ * makes BOTH of its branches return the same pair, so it is **continuous there**. Sweeping a
+ * pointer across the diagonal, the largest step between consecutive outputs measured **1.76 px**
+ * for the projection and **5.33 px** for dominant-axis. Neither is a jump, and a continuity
+ * assertion passes for both.
+ *
+ * 🔴 **A comment that justifies a decision with a disproved fact is worse than no comment**: the
+ * next reader checks it, finds it false, and "fixes" the decision. So the REAL difference, which
+ * is feel rather than correctness:
+ *
+ * - **dominant-axis** returns the smallest box CONTAINING the pointer's larger extent, so the
+ *   grabbed corner tracks the pointer on the leading axis and overshoots on the other. At
+ *   extents `(1600, 200)` with a 16:9 lock it returns `1600 × 900`.
+ * - **projection** returns the NEAREST point on the diagonal, so the box follows the pointer's
+ *   overall direction and the corner drifts away from it. Same input: `1301 × 732`.
+ *
+ * Either is defensible; the projection is what `D-155`'s spec settled on. `aspect-lock.test.ts`
+ * therefore pins the CHOICE by VALUE, off the diagonal where the two disagree — not by a
+ * continuity property both of them satisfy.
+ *
+ * ── THE `MIN_SIZE` CLAMP SCALES THE PAIR, IT DOES NOT CLAMP AN AXIS ──────────
+ *
+ * Clamping one axis to `MIN_SIZE` and leaving the other is how a locked resize silently stops
+ * being locked at the bottom of its range. Both extents are scaled by one factor instead, so
+ * the ratio survives the clamp and the derived axis is recomputed from the CLAMPED value.
+ *
+ * ⚠ **The bottom-edge FLIP that `fitToAspect` performs is deliberately NOT here.** That
+ * function preserves `h` and solves for `w` when solving for `h` would push the plate past the
+ * bottom of the frame. That is right for a ONE-SHOT button, where the author sees a single
+ * result, and wrong for a LIVE gesture: swapping which axis is preserved part-way through a
+ * drag changes the solution the box is tracking, so the box relocates under a pointer that
+ * did not change direction. A plate dragged out of frame stays an ordinary preflight error.
+ * The flip is in the very function this feature reuses, so the next reader would otherwise
+ * assume it was forgotten rather than declined.
+ */
+function lockExtents(
+  w: number,
+  h: number,
+  freeW: boolean,
+  freeH: boolean,
+  lockRatio: number,
+): { w: number; h: number } {
+  let lw: number;
+  let lh: number;
+  if (freeW && freeH) {
+    // Orthogonal projection of (w, h) onto the direction (lockRatio, 1).
+    const t = (w * lockRatio + h) / (lockRatio * lockRatio + 1);
+    lw = lockRatio * t;
+    lh = t;
+  } else if (freeW) {
+    lw = w;
+    lh = w / lockRatio;
+  } else {
+    lh = h;
+    lw = lockRatio * h;
+  }
+  // A pointer exactly on the fixed corner projects to the origin; there is no ratio to
+  // preserve at zero, so start from the smallest box that HAS one.
+  if (!(lw > 0) || !(lh > 0) || !Number.isFinite(lw) || !Number.isFinite(lh)) {
+    lh = MIN_SIZE;
+    lw = lockRatio * MIN_SIZE;
+  }
+  const up = Math.max(1, MIN_SIZE / lw, MIN_SIZE / lh);
+  return { w: lw * up, h: lh * up };
+}
+
 /** Rotate a vector by the angle whose cos/sin are given (2-D rotation matrix). */
 export function rot(vx: number, vy: number, cos: number, sin: number): { x: number; y: number } {
   return { x: vx * cos - vy * sin, y: vx * sin + vy * cos };
@@ -158,8 +244,10 @@ export function computeResize(
   t: BoxTransform,
   handle: Handle,
   pointerScene: { x: number; y: number },
+  /** `D-155` — passed straight through; see {@link computeRectResize}. */
+  lockRatio?: number | undefined,
 ): { position: { x: number; y: number }; size: { w: number; h: number } } {
-  const r = computeRectResize(t, boxRect(t), handle, pointerScene);
+  const r = computeRectResize(t, boxRect(t), handle, pointerScene, lockRatio);
   return { position: r.position, size: r.size };
 }
 
@@ -179,6 +267,12 @@ export function computeRectResize(
   rect: LocalRect,
   handle: Handle,
   pointerScene: { x: number; y: number },
+  /**
+   * `D-155` — the locked `w : h` ratio in SIZE units (`sizeRatioForAspect`), or `undefined`
+   * for a free resize. Optional and last, so every existing caller and every element kind
+   * that has no aspect to lock keeps today's behaviour byte-for-byte.
+   */
+  lockRatio?: number | undefined,
 ): {
   position: { x: number; y: number };
   size: { w: number; h: number };
@@ -199,8 +293,24 @@ export function computeRectResize(
   // size delta is measured in the element's OWN units — `Δscene = Scale·Rotate·Δlocal`.
   const vx = (pointerScene.x - fixedScene.x) / scale.x;
   const vy = (pointerScene.y - fixedScene.y) / scale.y;
-  const wNew = cfg.freeW ? Math.max(MIN_SIZE, Math.abs(vx * ux.x + vy * ux.y)) : rect.w;
-  const hNew = cfg.freeH ? Math.max(MIN_SIZE, Math.abs(vx * uy.x + vy * uy.y)) : rect.h;
+  /*
+    🔴 D-155 — THE LOCK IS APPLIED HERE, to the free extents, and NOWHERE ELSE.
+
+    Everything below this point — the per-axis ratios, and the position solve that keeps the
+    FIXED corner still under rotation and non-uniform scale — is untouched by the lock. That
+    is the whole reason the constraint sits at this line: the fixed corner stays put because
+    the code that pins it never learns the resize was constrained. A lock applied to
+    `sizeNew`, or to `position`, would have to re-derive that pinning and would drift from it.
+  */
+  const rawW = cfg.freeW ? Math.abs(vx * ux.x + vy * ux.y) : rect.w;
+  const rawH = cfg.freeH ? Math.abs(vx * uy.x + vy * uy.y) : rect.h;
+  const locked =
+    lockRatio === undefined || !(lockRatio > 0) || !Number.isFinite(lockRatio)
+      ? null
+      : lockExtents(rawW, rawH, cfg.freeW, cfg.freeH, lockRatio);
+  // Unlocked: each axis clamps independently, exactly as before this feature existed.
+  const wNew = locked?.w ?? (cfg.freeW ? Math.max(MIN_SIZE, rawW) : rect.w);
+  const hNew = locked?.h ?? (cfg.freeH ? Math.max(MIN_SIZE, rawH) : rect.h);
   const ratioW = wNew / Math.max(rect.w, 1e-6);
   const ratioH = hNew / Math.max(rect.h, 1e-6);
   const sizeNew = { w: size.w * ratioW, h: size.h * ratioH };

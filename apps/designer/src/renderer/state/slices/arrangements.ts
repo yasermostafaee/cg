@@ -469,6 +469,79 @@ export function renderedTransformAt(element: Element, frame: number): Transform 
  * own their geometry, exactly as they always did. Only a declared box that this particular
  * arrangement leaves out is refused.
  */
+/**
+ * 🔴 **`D-155` §4 — THE ASPECT A CELL MUST PRESERVE, AND IT IS *NOT* A PLATE'S
+ * `expectedAspect`.**
+ *
+ * This is the load-bearing correction in `D-155`, and it lives in code as well as in the spec
+ * because the wrong rule is the intuitive one:
+ *
+ * - an arrangement's cells hold **COMPOSITION INSTANCES**, not plates ({@link boxInstanceIds}
+ *   filters `e.type === 'composition'`), and `expectedAspect` lives on a `video-placeholder`.
+ *   **A cell therefore has no `expectedAspect` at all.**
+ * - a plate inside a box is nonetheless deformed by a mis-shaped cell, because `preScale` is
+ *   computed **per axis** (`scene-flatten.ts`): an instance whose aspect differs from its
+ *   composition's own resolution applies a non-uniform pre-scale to everything inside it.
+ *
+ * So the quantity to preserve is the **composition's RESOLUTION aspect**. Preserve that and
+ * every plate inside renders at its authored shape — whatever that shape is, and however many
+ * plates there are.
+ *
+ * ⚠ Locking a cell to one plate's `expectedAspect` is right ONLY for a box holding exactly one
+ * plate that fills its composition, and **silently wrong for every other box**.
+ *
+ * `null` when there is no box for this cell, no composition behind it, or its resolution is
+ * degenerate — all of which mean "there is nothing to preserve", and the edit passes through.
+ */
+export function cellResolutionAspect(scene: Scene | null, index: number): number | null {
+  if (scene === null) return null;
+  const boxId = boxInstanceIds(scene)[index];
+  if (boxId === undefined) return null;
+  const box = activeLayersOf(scene)
+    .flatMap((l) => l.children)
+    .find((e) => e.id === boxId);
+  if (box === undefined || box.type !== 'composition') return null;
+  const comp = (scene.compositions ?? []).find((c) => c.id === box.compositionId);
+  const w = comp?.resolution.width ?? 0;
+  const h = comp?.resolution.height ?? 0;
+  if (!(w > 0) || !(h > 0)) return null;
+  return w / h;
+}
+
+/**
+ * 🔴 **`D-155` §4 — one `CELLS` field edit, with the lock applied.**
+ *
+ * `width` derives `height` and `height` derives `width`; `x` and `y` MOVE the cell and are
+ * left alone, because moving a box does not reshape it and constraining a position would be a
+ * lock on the wrong quantity.
+ *
+ * ⚠ **It reads the SAME session preference the plate's lock does** (`aspectLockEnabled`).
+ * "Am I holding shape while I drag?" is ONE question, and two toggles for it would be the
+ * two-spellings defect this repo keeps paying for — even though the two surfaces constrain
+ * different quantities (a plate's declared aspect; a cell's composition resolution).
+ *
+ * Rounded to 2 dp so the field shows a number an author can read: the residual aspect error
+ * is ~1e-4 on a 100 px cell, three orders inside `ASPECT_TOLERANCE`, and an unrounded derive
+ * would put `539.9999999` in a box the author then has to retype.
+ */
+export function lockedCellEdit(
+  scene: Scene | null,
+  index: number,
+  cell: LiveSourceRect,
+  key: 'x' | 'y' | 'width' | 'height',
+  value: number,
+  locked: boolean,
+): LiveSourceRect {
+  const next = { ...cell, [key]: value };
+  if (!locked || (key !== 'width' && key !== 'height')) return next;
+  const aspect = cellResolutionAspect(scene, index);
+  if (aspect === null) return next;
+  const round = (n: number): number => Math.round(n * 100) / 100;
+  return key === 'width'
+    ? { ...next, height: round(value / aspect) }
+    : { ...next, width: round(value * aspect) };
+}
+
 export function hasNoActiveCell(elementId: string): boolean {
   const cell = activeCellFor(current.scene, elementId);
   return cell !== null && isNoCell(cell.rect);

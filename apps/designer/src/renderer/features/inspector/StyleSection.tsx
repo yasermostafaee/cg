@@ -795,6 +795,15 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
   const frameH = useDesignerSelector((s) =>
     s.scene === null ? 0 : activeDocOf(s.scene).resolution.height,
   );
+  /**
+   * `D-155` — the SESSION preference, read from the store rather than from the element.
+   *
+   * It is per AUTHOR and never per plate: a `.vcg` that resizes differently for two people is
+   * the failure this decision avoids, and the runtime could never read it anyway. See
+   * `aspectLockEnabled` in `store-core.ts` for the full argument — including why the
+   * arrangement `CELLS` fields read this SAME value rather than growing a second toggle.
+   */
+  const locked = useDesignerSelector((s) => s.aspectLockEnabled);
 
   const options = [...ASPECT_PRESETS.map((p) => p.key), ASPECT_CUSTOM, ASPECT_UNSPECIFIED] as const;
 
@@ -830,16 +839,37 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
       : fitToAspect(element.transform, stored, { width: frameW, height: frameH });
   const already = stored !== undefined && matchesAspect(element.transform, stored);
   const fitDisabled = stored === undefined || already || fit === null;
+  /*
+    🔴 `D-155` task 3.4 — FIT IS A REPAIR NOW, AND THE WORDING SAYS SO.
+
+    With the lock on, a plate cannot be deformed by dragging, so this button is no longer the
+    normal path — it is for a plate authored BEFORE the lock, or one deformed with the lock
+    OFF. Leaving it worded as the ordinary way to reach an aspect would keep teaching a
+    workflow the feature exists to remove.
+
+    ⚠ And the already-matches state READS AS SATISFIED rather than as an action that happens
+    to be unavailable. "The plate already renders at this aspect" is a report, not a refusal;
+    with the lock on it is the state a plate is normally IN, so a sentence that sounded like a
+    disabled control would make the ordinary case look broken.
+  */
   const fitTitle =
     stored === undefined
       ? 'Pick an aspect first — “not specified” asserts nothing to fit to.'
       : already
-        ? 'The plate already renders at this aspect.'
+        ? // ⚠ Both spellings keep the word "already" — `D-155`'s own spec says the satisfied
+          // state reads "this plate already matches", and `D-147`'s test has asserted that
+          // word since the button existed. Re-wording FIT as a repair is a change to the
+          // ACTION's description, not a licence to drop the vocabulary the state is named in.
+          locked
+          ? '✓ This plate already matches its aspect, and the lock keeps it there while you resize.'
+          : '✓ This plate already renders at this aspect. Nothing to repair.'
         : fit === null
           ? 'This plate’s scale cannot be fitted (a zero or negative scale).'
           : fit.preserved === 'width'
-            ? 'Resize the plate to this aspect — keeps X, Y and W, solves for H.'
-            : 'Resize the plate to this aspect — keeps X, Y and H, solves for W ' +
+            ? 'REPAIR a plate that does not match its aspect — keeps X, Y and W, solves for H. ' +
+              'With the lock on, dragging cannot deform it, so this is only needed for a plate ' +
+              'authored before the lock or resized with it off.'
+            : 'REPAIR a plate that does not match its aspect — keeps X, Y and H, solves for W ' +
               '(solving for H would push the plate past the bottom of the frame).';
 
   function onFit(): void {
@@ -871,6 +901,45 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
           }
         />
       )}
+      {/*
+        🔴 `D-155` task 3.1/3.3 — THE LOCK, beside the aspect it locks to.
+
+        ON by default whenever an aspect is set: the complaint that produced this item is that
+        the deformation happens BY ACCIDENT, and a lock the author has to find first does not
+        answer that.
+
+        ⚠ **NO KEYBOARD OVERRIDE, and the tooltip says why rather than leaving it a mystery.**
+        Both plausible modifiers are already spent on ONE job — bypass snapping — and spelled
+        differently per gesture: `Shift` in resize/rotate (`Gizmo.tsx`), `Alt` in the move
+        gestures (`CanvasOverlay.tsx`, `D-122`'s free placement). Overloading either would put
+        two meanings on one key in one canvas, and inventing a third chord for a feature that
+        has a visible toggle is worse than having no keyboard path. (That `Shift` and `Alt`
+        mean the same thing in different gestures is real, and is `D-156` — not this item's.)
+      */}
+      {stored !== undefined && (
+        <div className={fieldCss.row}>
+          <span className={fieldCss.label}>keep aspect</span>
+          <Button
+            variant="secondary"
+            // `selected`, not `active` — this app's Button primitive spells the engaged state
+            // that way (the Runtime's spells it `active`; they are different design systems).
+            selected={locked}
+            aria-pressed={locked}
+            data-aspect-lock={locked ? 'on' : 'off'}
+            onClick={() => designerStore.setAspectLock(!locked)}
+            title={
+              locked
+                ? 'ON — dragging a handle keeps this plate at its aspect. Turn it off to resize ' +
+                  'freely. There is no keyboard override: Shift and Alt already bypass snapping.'
+                : 'OFF — dragging a handle can deform this plate. Turn it on to keep its aspect ' +
+                  'while you resize.'
+            }
+            aria-label="Keep aspect while resizing"
+          >
+            {locked ? 'LOCKED' : 'FREE'}
+          </Button>
+        </div>
+      )}
       <div className={fieldCss.row}>
         <span className={fieldCss.label} />
         <Button
@@ -880,7 +949,7 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
           title={fitTitle}
           aria-label="Fit plate to aspect"
         >
-          Fit plate to aspect
+          {already ? '✓ Matches its aspect' : 'Repair to aspect'}
         </Button>
       </div>
     </>

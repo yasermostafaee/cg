@@ -4736,7 +4736,7 @@ element's rect?", and every reader and writer goes through it:
   [[R-057]] (the arrangement feature), [[B-148]] (the other defect found in the same area — a missing
   refusal, not a control fault).
 
-## [ ] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩ — QUEUED. Change authored 2026-08-24 (`openspec/changes/aspect-lock-live-source/`) and precondition [[B-175]] landed, but NO implementation exists
+## [~] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩ — IMPLEMENTED 2026-08-25 (`openspec/changes/aspect-lock-live-source/`); Linux e2e owed
 
 <!--
   🔴 STATUS CORRECTION, 2026-08-24 — this item was briefly marked `[~]` and it was WRONG.
@@ -4820,18 +4820,30 @@ gone the wrong way and the fixed corner will drift.
 - WHEN the plate has no `expectedAspect`, or is not a Live Source, or the lock is OFF THEN the
   resize is byte-identical to today
 
-#### 🔴 The corner rule is PROJECTION, not "whichever axis moved more"
+#### 🔴 The corner rule is PROJECTION, not "whichever extent is larger"
 
-A dominant-axis rule reads as the simpler implementation and is a visible bug: it flips which axis
-drives the moment the pointer crosses the diagonal, and the box JUMPS mid-drag. **State in a comment
-why the dominant-axis rule was rejected** — it is the thing the next reader will propose.
+⚠ **CORRECTED AT IMPLEMENTATION, 2026-08-25 — this section claimed a fact that is FALSE.** It read:
+_"it flips which axis drives the moment the pointer crosses the diagonal, and the box JUMPS
+mid-drag."_ **Measured, it does not.** At the crossover `w / ratio === h` makes both branches of the
+dominant-axis rule return the same pair, so it is CONTINUOUS there; across a sweep the largest step
+between consecutive outputs was 1.76 px for the projection and 5.33 px for dominant-axis. Neither
+is a jump, and a continuity test passes for both.
+
+**The decision stands, the reason changes.** The two differ in FEEL: dominant-axis returns the
+smallest box containing the pointer's larger extent (at extents `(1600, 200)` with a 16:9 lock,
+`1600 × 900`), the projection the nearest point on the diagonal (`1301 × 732`). **State the
+CORRECTED reason in a comment** — a justification the next reader can disprove is an invitation to
+undo the decision — and **pin the choice by VALUE in a test**, off the diagonal, not by a continuity
+property both rules satisfy.
 
 #### 🔴 Do NOT port `fitToAspect`'s bottom-edge FLIP into the drag
 
 `fitToAspect` swaps which dimension it preserves when solving for `h` would push the plate past the
-bottom of the frame. **That is right for a one-shot button and wrong for a live gesture:** swapping
-the preserved axis mid-drag is the same jump the dominant-axis rule produces, arriving from a
-different direction. A plate dragged out of frame stays an ordinary preflight error.
+bottom of the frame. **That is right for a ONE-SHOT button, where the author sees a single result,
+and wrong for a LIVE gesture:** swapping which axis is preserved part-way through a drag changes the
+solution the box is tracking, so the box relocates under a pointer that did not change direction. A
+plate dragged out of frame stays an ordinary preflight error. (This reason was corrected with the
+one above — it previously appealed to the same non-existent jump.)
 
 ⚠ **Say this in a comment next to the drag path.** The flip is RIGHT THERE in the function being
 reused, and the next reader will assume it was forgotten rather than declined.

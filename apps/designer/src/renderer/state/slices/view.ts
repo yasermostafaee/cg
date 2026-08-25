@@ -21,6 +21,19 @@ export const viewSlice = {
   },
 
   /**
+   * `D-155` — keep a declared aspect while resizing. A SESSION preference (never the scene);
+   * see `aspectLockEnabled` in `store-core.ts` for why, and why it is ONE value shared by the
+   * Live Source aspect row and the arrangement `CELLS` fields.
+   *
+   * ⚠ Takes an explicit value rather than flipping, because two surfaces render this one
+   * toggle: a blind flip from a stale render would let the two disagree about which way they
+   * were moving it.
+   */
+  setAspectLock(enabled: boolean): void {
+    if (current.aspectLockEnabled !== enabled) set({ aspectLockEnabled: enabled });
+  },
+
+  /**
    * D-122 — mirror the canvas's live zoom into the store so the keyboard nudge path can
    * gate pixel snapping on it (the pointer drag already receives the zoom directly). No-op
    * when unchanged so it never churns subscribers.

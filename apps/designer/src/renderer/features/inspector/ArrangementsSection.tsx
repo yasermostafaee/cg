@@ -10,7 +10,11 @@ import { Star, Trash2 } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
-import { activeArrangements, boxInstanceIds } from '../../state/slices/arrangements.js';
+import {
+  activeArrangements,
+  boxInstanceIds,
+  lockedCellEdit,
+} from '../../state/slices/arrangements.js';
 import { activeLayersOf } from '../../state/scene-doc.js';
 import { CollapseSection } from './CollapseSection.js';
 import { NumberField, SelectField, TextField } from './controls.js';
@@ -120,6 +124,14 @@ function ArrangementRow({
 }): JSX.Element {
   const count = arrangementCount(arrangement);
   const t = arrangement.transition;
+  /**
+   * `D-155` §4 — the SAME session preference the Live Source aspect row toggles. ONE value,
+   * two surfaces: "am I holding shape while I drag?" is one question, and a second toggle for
+   * it would be this repo's two-spellings defect. What differs is the quantity each surface
+   * holds — a plate's declared aspect there, a cell's composition RESOLUTION here, for the
+   * reason `lockedCellEdit` sets out.
+   */
+  const aspectLocked = useDesignerSelector((st) => st.aspectLockEnabled);
 
   /**
    * Changing the MODE has to produce a WHOLE valid transition, because the schema is a
@@ -254,7 +266,14 @@ function ArrangementRow({
                       value={c[k]}
                       step={1}
                       onCommit={(v) =>
-                        designerStore.setArrangementCell(arrangement.id, i, { ...c, [k]: v })
+                        designerStore.setArrangementCell(
+                          arrangement.id,
+                          i,
+                          // D-155 §4 — the lock derives the OTHER axis, keeping the cell at
+                          // its box composition's RESOLUTION aspect (never a plate's
+                          // `expectedAspect` — see `lockedCellEdit`). `x`/`y` pass through.
+                          lockedCellEdit(scene, i, c, k, v, aspectLocked),
+                        )
                       }
                     />
                   ))}

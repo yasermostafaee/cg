@@ -27,6 +27,7 @@ import {
 import { colors } from '../../theme.js';
 import * as s from './Gizmo.css.js';
 import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
+import { sizeRatioForAspect } from '../inspector/aspect-presets.js';
 
 interface Props {
   element: Element;
@@ -429,6 +430,27 @@ function beginResize(
   // Snap the moving edge to other elements / canvas / guides — only when the
   // element is axis-aligned (snapping to H/V lines is undefined when rotated).
   const snapping = designerStore.get().snappingEnabled && t0.rotation === 0;
+  /*
+    🔴 `D-155` — THE LOCK, RESOLVED ONCE FOR THE WHOLE GESTURE.
+
+    Read here rather than per pointer-move on purpose: a lock that could be toggled MID-DRAG
+    would change which axis leads halfway through, which is the same visible jump the
+    dominant-axis rule produces and which `lockExtents` exists to avoid. The press decides.
+
+    The ratio is `sizeRatioForAspect`'s, never `aspect` itself — that function is the ONE
+    place that knows the effective aspect includes `scale`, and `geometry.ts` deliberately
+    never learns what an aspect is.
+
+    ⚠ NARROW BY CONSTRUCTION: a `video-placeholder` with `expectedAspect` SET, and nothing
+    else. Every other element kind, an unspecified aspect, and the lock switched off all
+    resolve to `undefined` and take the untouched free-resize path.
+  */
+  const lockRatio =
+    element.type === 'video-placeholder' &&
+    element.expectedAspect !== undefined &&
+    designerStore.get().aspectLockEnabled
+      ? (sizeRatioForAspect(element.expectedAspect, t0.scale) ?? undefined)
+      : undefined;
   const targets = snapping ? buildSnapTargets(element.id, currentFrame) : { xs: [], ys: [] };
   const thr = SNAP_PX / scale;
 
@@ -455,7 +477,7 @@ function beginResize(
         }
       }
     }
-    const next = computeRectResize(t0, rect0, handle, pScene);
+    const next = computeRectResize(t0, rect0, handle, pScene, lockRatio);
     designerStore.commitAnimatable(element.id, 'position.x', next.position.x);
     designerStore.commitAnimatable(element.id, 'position.y', next.position.y);
     designerStore.commitAnimatable(element.id, 'size.w', next.size.w);

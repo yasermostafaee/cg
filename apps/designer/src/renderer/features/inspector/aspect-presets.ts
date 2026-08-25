@@ -106,6 +106,39 @@ export function matchesAspect(t: Transform, aspect: number): boolean {
 }
 
 /**
+ * 🔴 **`D-155` — THE LOCKED `w : h` RATIO IN *SIZE* UNITS, and the ONE place that knows how
+ * an effective aspect relates to an authored size.**
+ *
+ * ── WHY THE RESIZE GESTURE TAKES A SCALAR FROM HERE, NOT AN ASPECT ───────────
+ *
+ * `effectiveAspect` is `(w · sx) / (h · sy)`. Solving it for the size gives
+ *
+ *     w / h = aspect · sy / sx
+ *
+ * and THAT number — not the aspect — is what a resize can actually constrain, because a
+ * resize writes `size` and never touches `scale`. Handing `geometry.ts` the aspect instead
+ * would force it to divide by the scale itself, which is a second spelling of the effective
+ * aspect living in a module with no aspect vocabulary. The first one to forget `scale` would
+ * hold a plate at "16:9" while it rendered at some other shape entirely — the exact
+ * arithmetic `D-147` exists to take off the author (golden rule 6).
+ *
+ * ⚠ **`sx === sy` is the case that hides the bug**, and it is the common one: there the size
+ * ratio and the aspect are the same number and a scale-blind implementation passes every test
+ * that does not deliberately set a non-uniform scale. `aspect-lock.test.ts` sets one.
+ *
+ * `null` for a target or a scale that cannot produce a positive ratio — a caller that gets
+ * `null` resizes freely rather than dividing by zero.
+ */
+export function sizeRatioForAspect(
+  aspect: number,
+  scale: { readonly x: number; readonly y: number },
+): number | null {
+  if (!(aspect > 0) || !(scale.x > 0) || !(scale.y > 0)) return null;
+  const ratio = (aspect * scale.y) / scale.x;
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : null;
+}
+
+/**
  * The rendered box's far edges in SCENE pixels, for an axis-aligned plate.
  *
  * Mirrors `off-frame.ts`'s `localToParent` with `rotation === 0` (a Live Source is

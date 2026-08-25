@@ -51,25 +51,51 @@ leaving the fixed-corner position solve untouched.
 ### Requirement: The corner rule is a projection, never a dominant axis
 
 The corner solve SHALL project the pointer onto the constrained diagonal. It SHALL NOT choose a
-driving axis by which one moved further.
+driving axis by which extent is larger.
 
-A dominant-axis rule flips which axis drives at the moment the pointer crosses the diagonal, and
-the box visibly JUMPS mid-drag. The rejection SHALL be recorded in a comment at the
-implementation, because a dominant-axis rule reads as the simpler implementation and is what the
-next reader will propose.
+⚠ **CORRECTED DURING IMPLEMENTATION, 2026-08-25.** This requirement was written justifying the
+projection on the grounds that a dominant-axis rule "flips which axis drives at the moment the
+pointer crosses the diagonal, and the box visibly JUMPS mid-drag". **That is FALSE and was
+measured to be false**: at the crossover `w / ratio === h` makes both branches of the
+dominant-axis rule return the same pair, so it is CONTINUOUS there. Across a sweep the largest
+step between consecutive outputs measured 1.76 px for the projection and 5.33 px for
+dominant-axis — neither is a jump.
 
-#### Scenario: the rejection is discoverable
+The requirement STANDS; only its reason changes. The two rules differ in FEEL, not in
+continuity: dominant-axis returns the smallest box containing the pointer's larger extent (at
+extents `(1600, 200)` with a 16:9 lock, `1600 × 900`), while the projection returns the nearest
+point on the diagonal (`1301 × 732`). The projection is the chosen behaviour.
+
+The rejection SHALL be recorded in a comment at the implementation — **with the corrected
+reason**, because a comment that justifies a decision with a disproved fact invites the next
+reader to undo the decision.
+
+The tests SHALL pin the CHOICE by VALUE, off the diagonal where the two rules disagree. A
+continuity assertion SHALL NOT be relied on to distinguish them, because both satisfy it.
+
+#### Scenario: the rejection is discoverable, and its reason is true
 
 - WHEN a reader opens the corner solve
-- THEN a comment states that the dominant-axis rule was considered and why it was rejected
+- THEN a comment states that the dominant-axis rule was considered, why it was rejected, and
+  that the continuity argument against it does not hold
+
+#### Scenario: the choice is pinned by value
+
+- WHEN a corner is dragged to extents where the two rules disagree
+- THEN the emitted rect is the projection's, and a test asserts that value specifically
 
 ### Requirement: The one-shot fit's bottom-edge flip is not ported into the drag
 
 The drag SHALL NOT swap which dimension it preserves, and a plate dragged out of frame SHALL
 remain an ordinary preflight error. `fitToAspect` does swap — it preserves `h` and solves for `w`
 when solving for `h` would push the plate past the bottom of the frame — and that is right for a
-one-shot button and wrong for a live gesture: swapping the preserved axis mid-gesture is the same
-visible jump a dominant-axis rule produces, arriving from a different direction.
+ONE-SHOT button, where the author sees a single result, and wrong for a LIVE gesture: swapping
+which axis is preserved part-way through a drag changes the solution the box is tracking, so the
+box relocates under a pointer that did not change direction.
+
+⚠ This reason was CORRECTED with the one above it (2026-08-25). It previously read "the same
+visible jump a dominant-axis rule produces" — an appeal to a jump that was measured and does not
+exist. The requirement is unchanged; only its justification is.
 
 A comment at the drag path SHALL say so, because the flip is present in the very function the drag
 reuses and would otherwise read as forgotten rather than declined.

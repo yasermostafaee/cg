@@ -2493,7 +2493,25 @@ plate scaled by the cell's 0.5 `preScale` — where the pre-fix value would have
   `Splitter.tsx:13-16`) — which is the pattern B-140 asks the Runtime to adopt.
 -->
 
-## [ ] B-175 — `D-154` fixed the gizmo's DRAW and its WRITE and left the RESIZE MATH reading the authored transform, so a handle on an arranged box computes against a rect that is not where it is drawn ⟨priority: high — the author grabs a handle they can see and the box jumps⟩ — OPEN, filed 2026-08-24 while scoping [[D-155]]
+## [~] B-175 — `D-154` fixed the gizmo's DRAW and its WRITE and left the RESIZE MATH reading the authored transform, so a handle on an arranged box computes against a rect that is not where it is drawn ⟨priority: high — the author grabs a handle they can see and the box jumps⟩ — FIXED 2026-08-24 (`8507fcf7`), Linux e2e discharged
+
+<!--
+  🔴 STATUS CORRECTED 2026-08-25 — this sat at `[ ]` OPEN for a day after it was FIXED.
+
+  The fix landed in `8507fcf7` (the ONE read side, `renderedTransformAt`) and its tests are in
+  `apps/designer/tests/arrangement-gizmo-read.dom.test.ts`, proven red by reverting. The
+  checkbox was simply never flipped, which is the same false-record class this project has now
+  corrected four times — and the one the owner caught on `D-155` when a `[~]` claimed an
+  implementation that did not exist. A stale `[ ]` is the cheaper direction of that error
+  (someone re-does finished work rather than shipping nothing) but it is the same fault.
+
+  ⚠ LINUX E2E: `8507fcf7` got NO run of its own — a `B-132`/`P-029` dropped run. It is
+  discharged by the run for `22bb2768`, which CONTAINS it:
+  **https://github.com/yasermostafaee/cg/actions/runs/32754736681** — `e2e` job conclusion
+  `success`, and the `E2E` step RAN (7m53s) rather than being skipped. That is legitimate under
+  the discharge rule's "a later `dev` HEAD that contains the change is fine", and it holds
+  because the `e2e` job is whole-tree rather than diff-scoped.
+-->
 
 **Found by inspection while scoping [[D-155]] (the aspect lock), not by a bug report.** [[D-154]]'s
 own question — _"does the resize COMMIT land on the arrangement's CELL, or still on the authored
