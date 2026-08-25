@@ -14,6 +14,25 @@ output) or **PENDING-OWNER** (needs human eyes or ears — collected in the
 
 ## 0. Environment — located and verified, not assumed
 
+> ⚠ **THE ENVIRONMENT BELOW IS 2026-07-28 AND NO LONGER DESCRIBES THE PLANT. Read it as history.**
+> Recorded 2026-08-25; the text below is left **verbatim**, as a dated record must be.
+>
+> | recorded here (2026-07-28)                                  | as of 2026-08-25                                                                   |
+> | ----------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+> | install `D:\programs\casparcg-server-v2.5.0-stable-windows` | **`D:\casparcg-server-v2.5.0-stable-windows`** — no `programs\`                    |
+> | channel `720p5000`                                          | `1080p5000`                                                                        |
+> | consumers `<screen/>` + `<system-audio/>`                   | `<decklink>` (device `23487013`, embedded-audio) + `<screen/>` + `<system-audio/>` |
+>
+> 🔴 **Do NOT read the path row as "this record was sloppy".** Both values were read off a RUNNING
+> PROCESS — this one via `netstat` → PID → image path, the 2026-08-25 one by the owner during the
+> DeckLink walk. Either the install MOVED between the two dates or one reading is a transcription
+> slip, and **this session could not tell which.** The other two rows show the box genuinely was
+> reconfigured in between, which makes a move entirely plausible. What is settled is only which
+> path is live NOW: see `2026-08-25-decklink-model-walk.md`.
+>
+> **`D:\programs\CasparCG` (the retired 2.3.2) is unaffected** — a different server, not a
+> different spelling.
+
 - **Running server found via** `netstat -ano | findstr :5250` → PID → image path:
   `D:\programs\casparcg-server-v2.5.0-stable-windows\casparcg.exe`, launched from
   Explorer (no `casparcg_auto_restart.bat` wrapper — verified via parent PID =

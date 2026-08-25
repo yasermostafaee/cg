@@ -28,7 +28,22 @@ import { inflateSync } from 'node:zlib';
  * `zlib` (built in) plus twenty lines of defilter rather than an image library.
  */
 
-export const INSTALL = 'D:\\programs\\casparcg-server-v2.5.0-stable-windows';
+/**
+ * The production 2.5.0 install directory on the plant's playout box.
+ *
+ * ⭐ **CORRECTED 2026-08-25.** This read `D:\programs\casparcg-server-v2.5.0-stable-windows`,
+ * with a `programs\` segment that is not there. The owner read the path off the RUNNING PROCESS
+ * during the DeckLink walk (`docs/recon/2026-08-25-decklink-model-walk.md`, host
+ * `192.168.21.114`, `VERSION SERVER` → `2.5.0 69e8ad5 Stable`).
+ *
+ * 🔴 **This is not cosmetic: {@link MEDIA} is `readdirSync`'d below.** A wrong root does not
+ * degrade, it throws `ENOENT` at the plant — during the one visit the probe exists to make use
+ * of, with the server already set up and the operator waiting.
+ *
+ * ⚠ **`D:\programs\CasparCG` is the RETIRED 2.3.2 and must never be probed.** It is a different
+ * server, not a different spelling of this path.
+ */
+export const INSTALL = 'D:\\casparcg-server-v2.5.0-stable-windows';
 export const MEDIA = path.join(INSTALL, 'media');
 export const TEMPLATE = path.join(INSTALL, 'template');
 

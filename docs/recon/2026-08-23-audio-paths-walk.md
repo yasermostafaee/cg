@@ -22,6 +22,26 @@ that reading of the source into a fact about this plant.**
 
 ## Before you start
 
+> 🔴 **PREMISE CORRECTED 2026-08-25 — THE INSTALL PATH IN THE SECOND BULLET BELOW IS WRONG.
+> USE THIS ONE:**
+>
+> ```
+> D:\casparcg-server-v2.5.0-stable-windows
+> ```
+>
+> There is **no `programs\` segment**. The owner read the path off the RUNNING PROCESS during the
+> DeckLink walk (`2026-08-25-decklink-model-walk.md`, host `192.168.21.114`, `VERSION SERVER` →
+> `2.5.0 69e8ad5 Stable`), which settles a conflict this repo had been carrying in three spellings.
+> The bullet is left **verbatim** because this is a dated record and editing what a session
+> concluded at the time would falsify it — but it must not be followed.
+>
+> ⚠ **`D:\programs\CasparCG` (the retired 2.3.2) is still correct as written** and still must never
+> be probed. It is a DIFFERENT SERVER, not a different spelling of the 2.5.0 path — do not "fix" it
+> to match.
+>
+> The server itself is unchanged: `2.5.0 69e8ad5`, the same build this walk was written against, so
+> nothing else on this sheet is affected.
+
 - ⚠ **The channel you use must carry NO air.** Every step assumes nobody is broadcasting from
   it. If the plant is on air on all channels, stop and do this another day.
 - 🔴 **Production is CasparCG 2.5.0** (`69e8ad5`), at
