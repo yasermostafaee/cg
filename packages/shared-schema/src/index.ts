@@ -14,6 +14,7 @@ export * from './control-payload.js';
 export * from './visibility.js';
 export * from './arrangements.js';
 export * from './looks.js';
+export * from './live-fit.js';
 export * from './live-geometry.js';
 export * from './scene.js';
 export * from './scene-flatten.js';
