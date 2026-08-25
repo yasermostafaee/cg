@@ -11,7 +11,7 @@ import type {
   TemplateInfo,
   TemplateLook,
 } from '@cg/shared-ipc';
-import { CG_CONTROL_KEY, readCgControl, type LiveSourceRect } from '@cg/shared-schema';
+import { readCgControl, type LiveFitMode, type LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 
@@ -144,7 +144,23 @@ function look(id: string, rects: Record<string, LiveSourceRect>): TemplateLook {
  * `collectLookCarrier` emits and what a bridge that has not learned looks would seat.
  */
 function sixBoxTemplate(
-  over: { looks?: TemplateLook[]; sources?: readonly string[]; defaultLookId?: string } = {},
+  over: {
+    looks?: TemplateLook[];
+    sources?: readonly string[];
+    defaultLookId?: string;
+    /**
+     * ⭐ `C-028` — the AUTHOR's fit mode for every plate of this fixture.
+     *
+     * Defaults to `cover`, and that is a decision about THIS FILE rather than about the
+     * product: these tests are a geometry suite whose assertions are written in crop
+     * arithmetic — a fill wider than its mask, starting left of it — and the shipped
+     * default is now `contain`, under which none of that happens. Pinning the fixture to
+     * `cover` keeps them testing the reconcile they were written for (which look's
+     * geometry reaches which layer, and when), and `C-028`'s own `contain` behaviour is
+     * asserted in its own tests rather than by silently re-reading these.
+     */
+    fitMode?: LiveFitMode;
+  } = {},
 ) {
   const keys = over.sources ?? ROUTE_KEYS;
   return {
@@ -159,6 +175,7 @@ function sixBoxTemplate(
         sourceId: k,
         rect: GRID[k] as LiveSourceRect,
         dynamic: false,
+        fitMode: over.fitMode ?? ('cover' as LiveFitMode),
       })),
       looks: over.looks ?? [
         look('six', GRID),
@@ -1130,9 +1147,29 @@ it('🔴 the switch tells the PAGE which look — the payload carries the id, be
   const updates = updateLines(lines);
   expect(updates, 'exactly one CG UPDATE — the page is told once').toHaveLength(1);
   const payload = dataArgOf(updates[0] as string, 'UPDATE');
-  expect(payload?.[CG_CONTROL_KEY]).toEqual({ look: 'solo' });
   // …read back through the SAME codec the page uses, so the two halves cannot drift.
   expect(readCgControl(payload)?.look).toBe('solo');
+
+  /*
+    ⭐ `C-028` — AND THE FIT FACTS RIDE THE SAME PAYLOAD, in the same ONE command.
+
+    A switch can change a plate's fit outright — two looks may bind one input to
+    different boxes and assert different shapes for it — so the id and the facts must
+    land together. Sent separately, there would be a frame in which the page punches the
+    NEW look's holes at the OLD look's aspects: the switch-specific spelling of the
+    divergence 6.7 closed for the look id itself.
+
+    Asserted through `readCgControl` rather than on the raw object, because that is the
+    function the PAGE reads with — a payload the page cannot parse would satisfy a raw
+    deep-equal and reach air punching nothing.
+  */
+  const control = readCgControl(payload);
+  expect(Object.keys(control?.plates ?? {}), 'every seated plate’s facts travel').toEqual(
+    expect.arrayContaining(['live-1']),
+  );
+  // This fixture's sources are `1080i5000` (16:9) and authored `cover`, so that is what
+  // the page must be told — the RESOLVED values, not the schema's defaults.
+  expect(control?.plates?.['live-1']).toEqual({ aspect: 16 / 9, mode: 'cover' });
 
   /*
     ORDER: the fills move FIRST, then the page is told. Between the two commands the fills and

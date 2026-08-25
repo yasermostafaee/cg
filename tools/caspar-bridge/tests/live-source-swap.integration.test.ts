@@ -186,15 +186,23 @@ it('6.9b — the FIT re-derives in the SAME action, with no second operator step
   await r.swapLiveSource('item-1', 'guest-1', 'src-sd');
 
   const after = mock?.layerState({ channel: 1, layer })?.fill;
-  // PAL is a 4:3 DISPLAY aspect, so crop-to-fill oversizes the picture on the HEIGHT axis to
-  // cover a 16:9 hole. The point is that it changed at all without a second step.
+  // PAL is a 4:3 DISPLAY aspect in a 16:9 hole. ⭐ `C-028` — under the `contain` default
+  // the picture is scaled to the hole's HEIGHT and NARROWED, where crop-to-fill used to
+  // oversize it on the height axis to cover. The claim this test makes is unchanged and
+  // is the one that matters: the fit re-derived at all, without a second operator step.
   expect(after).not.toEqual(before);
-  expect(after?.height).toBeGreaterThan(before?.height ?? 0);
-  // The CLIP still masks to the HOLE, which did not move: the two rects come from
-  // ONE computation, so a refit that moved the fill without re-emitting its mask
-  // would leave the picture rendering nothing at all (design.md §3).
+  expect(after?.width).toBeLessThan(before?.width ?? 0);
+  // …and NOTHING IS CUT: the fitted picture stays inside the hole on both axes.
+  expect(after?.height).toBeCloseTo(before?.height ?? 0, 6);
+
+  // 🔴 THE CLIP FOLLOWS THE PICTURE, and that is `C-028`'s on-air half. It used to stay
+  // on the hole (there was overflow to mask away); under `contain` there is no overflow,
+  // and a clip left at the hole would leave the margin a transparent hole onto the
+  // channel — BLACK, which is exactly what this item exists to prevent. The two rects
+  // still come from ONE computation, which is what this assertion is really pinning.
   const clipAfter = mock?.layerState({ channel: 1, layer })?.clip;
-  expect(clipAfter).toEqual(beforeClip);
+  expect(clipAfter).not.toEqual(beforeClip);
+  expect(clipAfter).toEqual(after);
   expect(mock?.layerRenderedRect({ channel: 1, layer })).not.toBeNull();
 });
 

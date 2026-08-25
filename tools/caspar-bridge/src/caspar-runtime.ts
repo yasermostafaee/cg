@@ -22,7 +22,10 @@ import {
 } from '@cg/shared-schema';
 import type {
   AuditEntry,
+  CgControl,
+  CgPlateFit,
   FieldValues,
+  LiveFitMode,
   LivePlateVolumes,
   LiveSourceDeclaration,
   LiveSourceOverride,
@@ -101,7 +104,7 @@ import {
 } from './live-layers.js';
 import { AuditWriter, readRecentEntries } from '@cg/audit';
 import { resolvePlateAssignments } from './live-plate-assignment.js';
-import { resolvePlateAspect } from './live-plate-fit.js';
+import { resolvePlateAspect, resolvePlateFitMode } from './live-plate-fit.js';
 import {
   allocateLiveLayers,
   liveBandExhaustedMessage,
@@ -272,6 +275,27 @@ type LiveSeatingPlan =
        * edited default.
        */
       readonly resolvedFrom: Readonly<Record<string, string>>;
+      /**
+       * ⭐ `C-028` — **the fit facts THIS PLAN resolved, for the PAGE to punch its holes
+       * with.** Plate id → `{ aspect, mode }`.
+       *
+       * 🔴 **Returned by the plan rather than re-derived at the send site, and that is
+       * golden rule 7's shape applied to a value.** The mask the page punches and the
+       * `MIXER FILL` the bridge sends must be ONE computation; they already are, because
+       * both are `fitPictureToBox` — but only if both are fed the SAME aspect and the
+       * SAME mode. A send site that walked the chains again would be a second
+       * evaluation, with this method's own `await`s available to interleave between
+       * them, and the page would punch for an assignment the plan never seated.
+       *
+       * Carries EVERY seat, parked ones included: a parked plate is one a look switch is
+       * about to reveal, and the page needs its facts before the switch rather than one
+       * payload after it.
+       *
+       * ⚠ Includes plates whose aspect is `null` (nothing states one). That is a real
+       * fact — "no fit" — and omitting it would let the page fall back to the AUTHOR's
+       * `expectedAspect` for a plate the bridge deliberately does not fit.
+       */
+      readonly plateFits: Readonly<Record<string, CgPlateFit>>;
     }
   | { readonly ok: false; readonly errorCode: string; readonly message: string };
 
@@ -774,6 +798,23 @@ export class CasparRuntime {
    * facts cannot share one store without one of them becoming unrepresentable.
    */
   readonly #activeLooks = new Map<string, string>();
+  /**
+   * ⭐ `C-028` — **itemId → the fit facts the last successful plan resolved for its
+   * plates**, which is what the PAGE is told so its holes are punched where the picture is.
+   *
+   * ABSENT means "no plan has resolved this item's plates yet", never "no fits". A page
+   * that is told nothing falls back to the scene's own statement, which is the honest
+   * answer for a template the bridge has not seated.
+   *
+   * 🔴 **Written from the PLAN's own `plateFits`, never re-derived at the send site.** The
+   * hole the page punches and the fill the bridge sends must be one computation
+   * (`design.md` §6/§12.2); they are, because both call `fitPictureToBox` — but only while
+   * both are fed the same aspect and the same mode. Re-walking the chains here would be a
+   * second evaluation with `await`s available to interleave, and the page would punch for
+   * an assignment the plan never seated. Same rule `#tellPageLook` already enforces for
+   * the look id, on a value instead of an id.
+   */
+  readonly #plateFits = new Map<string, Readonly<Record<string, CgPlateFit>>>();
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -2660,6 +2701,17 @@ export class CasparRuntime {
       product than the defect this closes.
     */
     this.#frozenAssignments.set(itemId, { ...plan.resolvedFrom });
+    /*
+      ⭐ `C-028` — THE PAGE'S HALF OF THE SAME FREEZE, recorded HERE and for the same
+      reason the line above is: from `plan`, once, on the far side of the refusal.
+
+      It must be written BEFORE the pre-roll `CG ADD` below, because that ADD is what
+      CARRIES these facts to the page (`#add`'s `__cg` payload). Recorded after it, the
+      first payload of a fresh take would go out without them and the page would punch its
+      holes from the AUTHOR's `expectedAspect` until some later update corrected it — the
+      hole in one place and the picture in another, which is `B-149`.
+    */
+    this.#plateFits.set(itemId, { ...plan.plateFits });
 
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'take', itemId }, seq);
@@ -3636,6 +3688,12 @@ export class CasparRuntime {
     sceneResolution: { width: number; height: number };
     carriedDefaultPosition?: Position | undefined;
     sourceAspect: number | null;
+    /**
+     * `C-028` — the RESOLVED fit mode (`resolvePlateFitMode`). Passed in for the same
+     * reason `sourceAspect` is: it comes from a chain — the operator's per-assignment
+     * override over the author's declaration — that is the caller's to walk.
+     */
+    fitMode?: LiveFitMode | undefined;
   }): LiveSourceFit {
     return liveSourceFit({
       rect: input.rect,
@@ -3643,6 +3701,7 @@ export class CasparRuntime {
       raster: this.#channelSettings.rasterFor(input.channel),
       position: this.#effectivePosition(input.itemId, input.carriedDefaultPosition),
       sourceAspect: input.sourceAspect,
+      fitMode: input.fitMode,
     });
   }
 
@@ -3935,6 +3994,10 @@ export class CasparRuntime {
         // EMPTY freeze, not the absent one, and it is the honest answer: this row's level 2
         // is "nothing", permanently, and pinning it costs nothing.
         resolvedFrom: {},
+        // Same reading for `C-028`'s fits: no plates, so no facts. An EMPTY map, never
+        // absent — `withCgControl` declines to attach an empty control object, so a
+        // plateless template's payload stays exactly as it is today.
+        plateFits: {},
       };
 
     /*
@@ -3959,6 +4022,21 @@ export class CasparRuntime {
       overrides: this.#sourceOverrides.get(itemId),
       argumentOf: (source) => this.#builder.sourceArgument(source.producer),
     });
+    /*
+      ⭐ `C-028` — THE OPERATOR'S FIT-MODE OVERRIDES, from the SAME level 2 everything
+      above was resolved against.
+
+      Read off `#assignmentsFor` rather than from a parallel map, because that is the ONE
+      door for this row's assignments (SESSION BP's note above) and a second source of
+      "how does this plate show its input" would eventually disagree with this one about a
+      plate on air. Filtered by `templateId` exactly as `resolvePlateAssignments` filters,
+      so a row cannot pick up another template's override for a same-named plate.
+    */
+    const fitOverrides = new Map<string, LiveFitMode>();
+    for (const a of this.#assignmentsFor(itemId, templateId, levelTwo).assignments) {
+      if (a.templateId !== templateId || a.fitMode === undefined) continue;
+      fitOverrides.set(a.plateId, a.fitMode);
+    }
     const desired = lookPlateRects(carrier, lookId);
     const entering = framesOfLook(bindings, lookId);
 
@@ -4009,6 +4087,9 @@ export class CasparRuntime {
     const resolved = new Map<string, SourceProducer>();
     const declared = new Set<string>();
     const offFrame = new Set<string>();
+    // `C-028` — accumulated as each frame's aspect and mode are resolved, so what the
+    // page is told is what this plan actually fitted with. See `LiveSeatingPlan.plateFits`.
+    const plateFits: Record<string, CgPlateFit> = {};
     const seated: {
       plateId: string;
       producerArg: string;
@@ -4032,10 +4113,18 @@ export class CasparRuntime {
       // 6.3 — the fit aspect through §3a's chain, where the author's assertion is VALIDATED
       // against the ASSIGNED source. Per FRAME, because two looks may crop one input
       // differently and may assert different shapes for it.
+      // `C-028` — the mode, resolved BEFORE the aspect because the aspect's refusal is
+      // conditional on it. Per FRAME for the same reason the aspect is: two looks may
+      // fit one input differently.
+      const fitMode = resolvePlateFitMode(
+        fitOverrides.get(frame.plateId),
+        frame.declaration.fitMode,
+      );
       const aspect = resolvePlateAspect({
         plateId: frame.plateId,
         source: frame.source,
         expectedAspect: frame.declaration.expectedAspect,
+        fitMode,
       });
       if (!aspect.ok) {
         /*
@@ -4054,6 +4143,15 @@ export class CasparRuntime {
         unresolved.add(frame.plateId);
         continue;
       }
+      /*
+        `C-028` — RECORDED HERE, off the same `aspect` and `fitMode` the geometry below
+        uses, and BEFORE the parked/punched split so a parked seat's facts travel too.
+
+        Placed after the refusal rather than before it on purpose: a frame that refused
+        has no fit, and telling the page about a plate the plan did not seat would put a
+        hole where nothing is going to be filled.
+      */
+      plateFits[frame.plateId] = { aspect: aspect.aspect, mode: fitMode };
 
       if (rect === undefined) {
         // PARKED — bound by some other look only. Its size comes from the look that DOES
@@ -4075,6 +4173,7 @@ export class CasparRuntime {
         sceneResolution: carrier.resolution,
         carriedDefaultPosition: carrier.defaultPosition,
         sourceAspect: aspect.aspect,
+        fitMode,
       });
       /*
         6.4 — a hole ENTIRELY outside the scene rect has an empty mask.
@@ -4135,6 +4234,7 @@ export class CasparRuntime {
         declared,
         unresolved,
         resolvedFrom,
+        plateFits,
       };
 
     const range = this.#sourceCatalog.layerRange;
@@ -4248,6 +4348,7 @@ export class CasparRuntime {
       placements: allocated.filter((p) => !p.held),
       parked: allocated.filter((p) => p.held),
       resolvedFrom,
+      plateFits,
     };
   }
 
@@ -4684,8 +4785,22 @@ export class CasparRuntime {
     slot: CommandSlot,
     lookId: string,
   ): Promise<{ ok: boolean; errorCode?: string }> {
+    /*
+      ⭐ `C-028` — THE FIT FACTS TRAVEL WITH THE LOOK ID, in the one payload.
+
+      A switch changes WHICH plates are punched, and may change a plate's fit outright: two
+      looks can bind one input to different boxes and assert different shapes for it, so the
+      entering look's aspects are not necessarily the outgoing look's. Sending the look
+      without them would move the fills to the new look's geometry while the page punched
+      the new look's holes at the OLD look's aspects — the switch-specific half of the same
+      divergence 6.7 closed for the look id itself.
+
+      One payload, not two: a second `CG UPDATE` would put a frame between the two halves
+      in which the page is punching for a state the bridge has left.
+    */
+    const fits = this.#plateFits.get(itemId);
     const told = await this.#send(
-      this.#builder.updateLook(slot, lookId),
+      this.#builder.updateLook(slot, lookId, {}, fits),
       this.#nextSeq(),
       'urgent',
     );
@@ -7421,6 +7536,11 @@ export class CasparRuntime {
     // re-used itemId must enter its template's AUTHORED default, never the look some
     // earlier row happened to leave behind.
     this.#activeLooks.delete(itemId);
+    // `C-028` — and its plate fits, by that same rule. A re-used itemId carrying the
+    // PREVIOUS template's aspects would tell its page to punch holes for a picture that is
+    // not there: the stale-mask failure `clearLiveSourceMask` exists for, arriving from the
+    // bridge instead of from the page.
+    this.#plateFits.delete(itemId);
     // B-092 — a restore awaiting its occupancy decision dies with the item too:
     // the operator removed it, so there is nothing left to adopt or re-ADD (the
     // urgent CLEAR below is the removal's own, and it is unconditional).
@@ -8831,9 +8951,29 @@ export class CasparRuntime {
       look is non-default: "both halves driven off the same id" should be true of a plain take
       as well, not merely of the cases we predicted.
     */
+    /*
+      ⭐ `C-028` — THE PLATE FIT FACTS RIDE THE SAME PAYLOAD, at the same ONE chokepoint
+      and for the same argument the look does.
+
+      The page punches its holes; the bridge fills them. Both are `fitPictureToBox`, so
+      they are one computation — but only while both are fed the same aspect and the same
+      mode, and NEITHER is in the scene: the aspect comes from the ASSIGNED source
+      (`D-147` puts it above the author's declaration) and the mode from the operator's
+      override. A page that was never told derives them from the element instead, which is
+      two aspects for one hole — `B-149` exactly.
+
+      Attached UNCONDITIONALLY for a template that has plates, like the look, so a plain
+      take carries them as surely as a re-take after a switch does. `withCgControl`
+      declines to attach an empty control object, so a plateless non-LOOKS template's
+      payload is byte-for-byte what it is today.
+    */
     const activeLook = this.#activeLookOf(itemId);
-    const addFields =
-      activeLook === undefined ? fields : withCgControl(fields, { look: activeLook.id });
+    const fits = this.#plateFits.get(itemId);
+    const control: CgControl = {
+      ...(activeLook !== undefined && { look: activeLook.id }),
+      ...(fits !== undefined && Object.keys(fits).length > 0 && { plates: { ...fits } }),
+    };
+    const addFields = withCgControl(fields, control);
     const { ok, errorCode } = await this.#send(
       this.#builder.load(slot, templateArg, addFields),
       seq,

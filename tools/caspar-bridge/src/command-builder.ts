@@ -1,6 +1,11 @@
 import { quote } from '@cg/caspar-client';
 import type { SourceProducer } from '@cg/shared-ipc';
-import { withCgControl, type FieldValues } from '@cg/shared-schema';
+import {
+  withCgControl,
+  type CgControl,
+  type CgPlateFit,
+  type FieldValues,
+} from '@cg/shared-schema';
 import type { NormalizedRect } from './live-layers.js';
 
 /** A CasparCG `(channel, layer)` coordinate. */
@@ -83,10 +88,25 @@ export class CommandBuilder {
    * rather than hard-coded because the payload merges page-side, and a caller that has fields
    * to send anyway must be able to send both in ONE command rather than two — a second command
    * is a second chance for the two to land apart.
+   *
+   * ⭐ `C-028` — `plates` rides the SAME payload for exactly that reason. A switch can change
+   * a plate's fit (two looks may bind one input to different boxes and assert different shapes
+   * for it), so the id and the facts must land together or the page punches the new look's
+   * holes at the old look's aspects. Absent — a non-`C-028` caller, or a template with no
+   * plates — leaves the payload byte-for-byte what it was.
    */
-  updateLook(slot: CommandSlot, lookId: string, fields: FieldValues = {}): string {
+  updateLook(
+    slot: CommandSlot,
+    lookId: string,
+    fields: FieldValues = {},
+    plates?: Readonly<Record<string, CgPlateFit>> | undefined,
+  ): string {
+    const control: CgControl = {
+      look: lookId,
+      ...(plates !== undefined && Object.keys(plates).length > 0 && { plates: { ...plates } }),
+    };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
-      serialize(withCgControl(fields, { look: lookId })),
+      serialize(withCgControl(fields, control)),
     )}`;
   }
 

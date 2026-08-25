@@ -10,6 +10,7 @@ import type {
   SourceCatalog,
   TemplateInfo,
 } from '@cg/shared-ipc';
+import type { LiveFitMode } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 
@@ -82,6 +83,8 @@ interface PlateSpec {
   id: string;
   rect: { x: number; y: number; width: number; height: number };
   expectedAspect?: number;
+  /** `C-028` — the AUTHOR's fit mode. Absent ⇒ `contain`, the shipped default. */
+  fitMode?: LiveFitMode;
 }
 
 /** A template declaring one hole per entry, each with its own rect. */
@@ -99,6 +102,7 @@ function template(plates: readonly PlateSpec[]): TemplateInfo {
         rect: p.rect,
         dynamic: false,
         ...(p.expectedAspect !== undefined && { expectedAspect: p.expectedAspect }),
+        ...(p.fitMode !== undefined && { fitMode: p.fitMode }),
       })),
     },
   };
@@ -320,10 +324,13 @@ it('an UNASSIGNED plate refuses the take by name, and NOTHING reaches the wire',
   expect(r.liveLayers().has('item-1')).toBe(false);
 });
 
-it('an aspect the assigned source contradicts refuses the take, with the wire untouched', async () => {
+it('an aspect the assigned source contradicts refuses a `cover` take, with the wire untouched', async () => {
   const r = await boot({
     // The author designed for 4:3; `src-a` is a 16:9 format — 33% apart.
-    template: template([{ id: 'guest-1', rect: BOX, expectedAspect: 4 / 3 }]),
+    // 🔴 `C-028` — the mode is now STATED. Cropping is what this refusal guards
+    // against, so the refusal belongs to `cover` and the fixture must say so; left
+    // implicit it would fall to the `contain` default and stop testing a refusal at all.
+    template: template([{ id: 'guest-1', rect: BOX, expectedAspect: 4 / 3, fitMode: 'cover' }]),
   });
   await r.load('item-1', 'lower-third', {});
   const before = (await recvLines()).length;
@@ -333,6 +340,29 @@ it('an aspect the assigned source contradicts refuses the take, with the wire un
   expect(verdict.accepted).toBe(false);
   expect(verdict.errorCode).toBe('live-source-aspect-mismatch');
   expect((await recvLines()).slice(before)).toEqual([]);
+});
+
+it('⭐ C-028 — the SAME contradiction under `contain` takes, and puts a FITTED picture up', async () => {
+  // The complement of the test above, on the same numbers: nothing is cropped under
+  // `contain`, so the harm the refusal guards against cannot occur and the take must
+  // proceed. Asserted at the WIRE, because "does not refuse" is only half the claim —
+  // a take that is accepted and seats nothing would pass a verdict-only assertion.
+  const r = await boot({
+    template: template([{ id: 'guest-1', rect: BOX, expectedAspect: 4 / 3, fitMode: 'contain' }]),
+  });
+  await r.load('item-1', 'lower-third', {});
+  const before = (await recvLines()).length;
+
+  const verdict = await r.take('item-1');
+
+  expect(verdict.accepted).toBe(true);
+  const sent = (await recvLines()).slice(before);
+  const fill = sent.find((l) => l.includes('MIXER') && l.includes('FILL'));
+  expect(fill, 'a fitted plate is still seated').toBeDefined();
+  // BOX is 960×540 in a 1920×1080 scene ⇒ 0.5 × 0.5 of the frame, and `src-a` is 16:9,
+  // which is exactly the box's own aspect. So the fitted rect IS the box: the fit
+  // changes nothing here, which is the point — the refusal was the only difference.
+  expect(fill).toContain('0.25 0.25 0.5 0.5');
 });
 
 it('no declared BAND refuses with its own code — there is nowhere to put a producer', async () => {

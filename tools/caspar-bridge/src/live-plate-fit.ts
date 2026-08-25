@@ -1,4 +1,5 @@
 import { aspectForFormat, type SourceDefinition } from '@cg/shared-ipc';
+import { DEFAULT_LIVE_FIT_MODE, type LiveFitMode } from '@cg/shared-schema';
 
 /**
  * C-015 phase 6 (task 6.3) — **THE FIT ASPECT: which number the crop is driven by,
@@ -53,6 +54,18 @@ export interface PlateAspectInput {
   readonly source: SourceDefinition;
   /** The author's assertion about the feed's shape, when they made one. */
   readonly expectedAspect: number | undefined;
+  /**
+   * ⭐ `C-028` — the RESOLVED fit mode ({@link resolvePlateFitMode}), which decides
+   * whether a contradicted aspect REFUSES the take or merely warns.
+   *
+   * 🔴 **REQUIRED, with no default, and that is deliberate.** A defaulted mode is how
+   * this becomes a silent no-op: default it to `cover` and every call site that has not
+   * learned about modes keeps refusing exactly as before while the feature looks
+   * shipped; default it to `contain` and a forgotten call site silently stops refusing a
+   * take that would genuinely crop. Requiring it makes the COMPILER enumerate the call
+   * sites, which is the one thing that cannot be forgotten.
+   */
+  readonly fitMode: LiveFitMode;
 }
 
 export type PlateAspectOutcome =
@@ -74,6 +87,23 @@ export type PlateAspectOutcome =
        * decision that deliberately does not refuse.
        */
       readonly assumed: boolean;
+      /**
+       * ⭐ `C-028` — **the mismatch that DID happen and was not refused, because the mode
+       * is `contain` and nothing is cropped.**
+       *
+       * 🔴 **The reason travels with the outcome in BOTH arms.** This carries the SAME
+       * `errorCode` and the SAME `message` the refusal would have — the mode decides the
+       * DISPOSITION, never the wording. A `contain` arm that returned a bare boolean, or
+       * no signal at all, would lose the one sentence that tells an operator which plate
+       * disagrees with which source; a refusal that loses its reason is a worse defect
+       * than the one it prevents, and so is a warning that loses it.
+       *
+       * Absent means no disagreement — never "a disagreement we decided not to mention".
+       */
+      readonly warning?: {
+        readonly errorCode: typeof LIVE_PLATE_ASPECT_MISMATCH;
+        readonly message: string;
+      };
     }
   | {
       readonly ok: false;
@@ -145,28 +175,88 @@ export function resolvePlateAspect(input: PlateAspectInput): PlateAspectOutcome 
    * Both must be present for a disagreement to exist: an absent `expectedAspect` is
    * "I am not asserting anything" (D-147's third state), not a claim of 0.
    */
+  let warning: NonNullable<Extract<PlateAspectOutcome, { ok: true }>['warning']> | undefined;
   if (stated !== null && expected !== undefined) {
     const relative = Math.abs(stated - expected) / expected;
     if (relative > ASPECT_MATCH_TOLERANCE) {
-      return {
-        ok: false,
+      /*
+        ⭐ `C-028` — ONE CONDITION, ONE STATEMENT OF FACT, TWO DISPOSITIONS.
+
+        🔴 The disagreement is detected identically in both modes and the FACTS are
+        written once: the plate, the author's number and the source's. That half is what
+        "the reason travels with the outcome" means, and building it above the branch is
+        what stops the warning drifting into saying something the refusal does not.
+
+        ⚠ **The CONSEQUENCE clause differs, and it must.** The shipped sentence —
+        _"Cropping it would cut a part of the picture the author never saw"_ — is FALSE
+        under `contain`, where nothing is cropped. Repeating it verbatim would hand the
+        operator a reason that does not apply to what they are looking at, which is a way
+        of losing the reason rather than keeping it. So `cover` keeps its wording
+        untouched and `contain` states its own true consequence: the picture will not
+        fill the box the author drew.
+
+        Under `contain` the harm this refusal guards against cannot occur, and a take
+        blocked on air for an impossible harm is a refusal that teaches operators to stop
+        stating the field at all. Under `cover` the harm is real and the refusal stands.
+      */
+      const detail = {
         errorCode: LIVE_PLATE_ASPECT_MISMATCH,
         // NAMES the plate and BOTH numbers. A bare "aspect mismatch" sends the
         // operator to guess which of several plates, and to guess which side to fix.
         message:
           `plate "${input.plateId}" is designed for a ${fmt(expected)} feed, but the ` +
           `assigned source "${input.source.name}" delivers ${fmt(stated)}. ` +
-          `Cropping it would cut a part of the picture the author never saw — ` +
-          `re-assign the plate, or correct the source's format.`,
-      };
+          (input.fitMode === 'cover'
+            ? `Cropping it would cut a part of the picture the author never saw — ` +
+              `re-assign the plate, or correct the source's format.`
+            : `Nothing is cropped — the picture is fitted whole and the margin shows the ` +
+              `template — but it will not fill the box the author drew.`),
+      } as const;
+      if (input.fitMode === 'cover') return { ok: false, ...detail };
+      warning = detail;
     }
   }
 
   // Step 3: the author's guess, for an undescribed source.
-  if (stated !== null) return { ok: true, aspect: stated, assumed: false };
+  if (stated !== null) {
+    return { ok: true, aspect: stated, assumed: false, ...(warning !== undefined && { warning }) };
+  }
   if (expected !== undefined) return { ok: true, aspect: expected, assumed: false };
   // Step 4: the D-147 decision. NO CROP, and say that we are assuming.
   return { ok: true, aspect: null, assumed: true };
+}
+
+/**
+ * ⭐ `C-028` — **THE FIT MODE for one plate: the operator's override, then the author's,
+ * then `contain`.**
+ *
+ * 🔴 **THIS CHAIN RUNS THE OPPOSITE WAY ROUND FROM {@link resolvePlateAspect}'S, AND
+ * THAT IS THE DECISION RATHER THAN AN INCONSISTENCY.** They resolve different kinds of
+ * fact and collapsing them would get one of the two wrong:
+ *
+ *  - The **aspect** is a MEASURABLE PROPERTY of the feed. The author cannot see the feed,
+ *    so their `expectedAspect` is a statement about what they DESIGNED FOR, and the
+ *    installation — which knows what actually arrives — outranks it (`D-147`).
+ *  - The **mode** is a PRESENTATION CHOICE about that feed. The author states what the
+ *    design wants, and the operator, who is looking at the picture on the day, is the
+ *    only party who can say the design's choice is wrong for this shot. So the operator
+ *    outranks the author here.
+ *
+ * Absent at BOTH levels is `contain` — the `C-028` default, and never `cover`. A caller
+ * that read `undefined` as `cover` would keep today's picture on air while looking
+ * entirely implemented, which is why the fall-through is a named constant rather than a
+ * literal at each site.
+ *
+ * ⚠ Deliberately NOT folded into `resolvePlateAspect`. That function's outcome is
+ * `ok`/refusal and this one cannot fail; giving it a second answer would make a total
+ * function partial for no reason, and would put the two chains where a later reader could
+ * "align" them.
+ */
+export function resolvePlateFitMode(
+  override: LiveFitMode | undefined,
+  authored: LiveFitMode | undefined,
+): LiveFitMode {
+  return override ?? authored ?? DEFAULT_LIVE_FIT_MODE;
 }
 
 /** An aspect as an operator reads it: `16:9` where it is a familiar one, else `1.85`. */

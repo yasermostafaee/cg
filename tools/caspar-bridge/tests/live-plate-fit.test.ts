@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import type { SourceDefinition } from '@cg/shared-ipc';
+import type { LiveFitMode } from '@cg/shared-schema';
 import {
   ASPECT_MATCH_TOLERANCE,
   LIVE_PLATE_ASPECT_MISMATCH,
   resolvePlateAspect,
+  resolvePlateFitMode,
 } from '../src/live-plate-fit.js';
 
 /**
  * C-015 phase 6 (task 6.3) — the fit-aspect chain, its refusal, and the D-147
  * decision for "neither side states anything".
+ *
+ * `C-028` — plus the MODE chain, and the refusal's conditionality on it. Every call
+ * below states a `fitMode` explicitly rather than leaning on a default: the whole point
+ * of making the field required was that the compiler enumerate these sites, and a test
+ * helper that filled one in would put the default back where it cannot be seen.
  */
 
 const source = (over: Partial<SourceDefinition> = {}): SourceDefinition => ({
@@ -18,14 +25,23 @@ const source = (over: Partial<SourceDefinition> = {}): SourceDefinition => ({
   ...over,
 });
 
+/** Both modes, for the assertions that must hold whichever is in force. */
+const BOTH: readonly LiveFitMode[] = ['contain', 'cover'];
+
 describe('§3a chain — the SOURCE outranks the author, and format outranks a typed number', () => {
   it('step 1: the format determines the aspect', () => {
-    const out = resolvePlateAspect({
-      plateId: 'guest-1',
-      source: source({ format: '1080i5000' }),
-      expectedAspect: undefined,
-    });
-    expect(out).toEqual({ ok: true, aspect: 16 / 9, assumed: false });
+    for (const fitMode of BOTH) {
+      const out = resolvePlateAspect({
+        plateId: 'guest-1',
+        source: source({ format: '1080i5000' }),
+        expectedAspect: undefined,
+        fitMode,
+      });
+      // 🔴 `C-028` leaves this chain UNTOUCHED, so the answer must not depend on the
+      // mode. Asserted across both rather than stated in a comment: the mode changes
+      // the DISPOSITION of a disagreement, never which number the fit is driven by.
+      expect(out, fitMode).toEqual({ ok: true, aspect: 16 / 9, assumed: false });
+    }
   });
 
   it('step 1 BEATS step 2 — a typed `aspect` never overrides a format', () => {
@@ -35,6 +51,7 @@ describe('§3a chain — the SOURCE outranks the author, and format outranks a t
       plateId: 'guest-1',
       source: source({ format: '1080i5000', aspect: 4 / 3 }),
       expectedAspect: undefined,
+      fitMode: 'cover',
     });
     expect(out).toMatchObject({ ok: true, aspect: 16 / 9 });
   });
@@ -44,6 +61,7 @@ describe('§3a chain — the SOURCE outranks the author, and format outranks a t
       plateId: 'guest-1',
       source: source({ format: 'AUTO', aspect: 2.35 }),
       expectedAspect: undefined,
+      fitMode: 'cover',
     });
     expect(out).toEqual({ ok: true, aspect: 2.35, assumed: false });
   });
@@ -53,6 +71,7 @@ describe('§3a chain — the SOURCE outranks the author, and format outranks a t
       plateId: 'guest-1',
       source: source(),
       expectedAspect: 4 / 3,
+      fitMode: 'cover',
     });
     // Not `assumed`: the author DID state something, so the fit is driven by a
     // stated number rather than by the hole's own shape.
@@ -66,17 +85,19 @@ describe('§3a chain — the SOURCE outranks the author, and format outranks a t
       plateId: 'guest-1',
       source: source({ format: 'PAL' }),
       expectedAspect: undefined,
+      fitMode: 'cover',
     });
     expect(out).toMatchObject({ aspect: 4 / 3 });
   });
 });
 
 describe('the expectedAspect VALIDATION — a different role from the fallback', () => {
-  it('refuses when the author’s assertion and the source disagree', () => {
+  it('refuses under `cover`, when the author’s assertion and the source disagree', () => {
     const out = resolvePlateAspect({
       plateId: 'guest-1',
       source: source({ format: 'PAL', name: 'Baku' }),
       expectedAspect: 16 / 9,
+      fitMode: 'cover',
     });
     expect(out.ok).toBe(false);
     expect(out).toMatchObject({ errorCode: LIVE_PLATE_ASPECT_MISMATCH });
@@ -89,6 +110,7 @@ describe('the expectedAspect VALIDATION — a different role from the fallback',
       plateId: 'guest-2',
       source: source({ format: 'PAL', name: 'Baku' }),
       expectedAspect: 16 / 9,
+      fitMode: 'cover',
     });
     if (out.ok) throw new Error('expected a refusal');
     expect(out.message).toContain('guest-2');
@@ -106,8 +128,12 @@ describe('the expectedAspect VALIDATION — a different role from the fallback',
       plateId: 'guest-1',
       source: source({ format: '1080i5000' }),
       expectedAspect: 1.78,
+      fitMode: 'cover',
     });
     expect(out).toMatchObject({ ok: true, aspect: 16 / 9 });
+    // …and a tolerated rounding is not a WARNING either. `C-028`'s warning is for a
+    // real disagreement; raising one here would put a notice on every rounded field.
+    expect(out).not.toHaveProperty('warning');
   });
 
   it('…and 1.33 against 4:3, the other rounding operators actually type', () => {
@@ -115,6 +141,7 @@ describe('the expectedAspect VALIDATION — a different role from the fallback',
       plateId: 'guest-1',
       source: source({ format: 'PAL' }),
       expectedAspect: 1.33,
+      fitMode: 'cover',
     });
     expect(out).toMatchObject({ ok: true });
   });
@@ -126,6 +153,7 @@ describe('the expectedAspect VALIDATION — a different role from the fallback',
       plateId: 'guest-1',
       source: source({ format: 'dci1080p2500' }),
       expectedAspect: 16 / 9,
+      fitMode: 'cover',
     });
     expect(out.ok).toBe(false);
   });
@@ -144,6 +172,7 @@ describe('the expectedAspect VALIDATION — a different role from the fallback',
       plateId: 'guest-1',
       source: source({ format: 'PAL' }),
       expectedAspect: undefined,
+      fitMode: 'cover',
     });
     expect(out).toMatchObject({ ok: true, aspect: 4 / 3 });
   });
@@ -155,19 +184,132 @@ describe('the expectedAspect VALIDATION — a different role from the fallback',
       plateId: 'guest-1',
       source: source({ format: 'AUTO' }),
       expectedAspect: 16 / 9,
+      fitMode: 'cover',
     });
     expect(out).toMatchObject({ ok: true, aspect: 16 / 9, assumed: false });
   });
 });
 
+/**
+ * ⭐ `C-028` — THE REFUSAL IS CONDITIONAL ON THE MODE.
+ *
+ * Its stated justification is that cropping would cut a part of the picture the author
+ * never saw. Under `contain` nothing is cropped, so that harm cannot occur — and a take
+ * blocked on air for an impossible harm is a refusal that teaches operators to stop
+ * stating the field at all.
+ */
+describe('C-028 — the aspect-mismatch refusal, per mode', () => {
+  const MISMATCH = {
+    plateId: 'guest-2',
+    source: source({ format: 'PAL', name: 'Baku' }),
+    expectedAspect: 16 / 9,
+  } as const;
+
+  it('`contain` does NOT refuse — it resolves the aspect and warns', () => {
+    const out = resolvePlateAspect({ ...MISMATCH, fitMode: 'contain' });
+    expect(out.ok).toBe(true);
+    // 🔴 And it resolves to the SOURCE's aspect, not the author's. `C-028` changes the
+    // DISPOSITION of the disagreement; `D-147`'s ordering is untouched.
+    expect(out).toMatchObject({ ok: true, aspect: 4 / 3, assumed: false });
+  });
+
+  it('🔴 the WARNING KEEPS THE REASON — the same facts the refusal names', () => {
+    // A refusal that loses its reason is a worse defect than the one it prevents, and
+    // so is a warning that loses it. The operator must still be able to see WHICH plate
+    // disagrees with WHICH source, and by how much.
+    const out = resolvePlateAspect({ ...MISMATCH, fitMode: 'contain' });
+    if (!out.ok) throw new Error('expected contain not to refuse');
+    expect(out.warning?.errorCode).toBe(LIVE_PLATE_ASPECT_MISMATCH);
+    expect(out.warning?.message).toContain('guest-2');
+    expect(out.warning?.message).toContain('Baku');
+    expect(out.warning?.message).toContain('16:9');
+    expect(out.warning?.message).toContain('4:3');
+  });
+
+  it('…and states the consequence that is TRUE under `contain`, not the crop one', () => {
+    // ⚠ The shipped sentence — "Cropping it would cut a part of the picture the author
+    // never saw" — is FALSE where nothing is cropped. Repeating it verbatim would hand
+    // the operator a reason that does not apply to what they are looking at, which is a
+    // way of losing the reason rather than keeping it.
+    const contain = resolvePlateAspect({ ...MISMATCH, fitMode: 'contain' });
+    if (!contain.ok) throw new Error('expected contain not to refuse');
+    expect(contain.warning?.message).not.toMatch(/cropping/i);
+    expect(contain.warning?.message).toMatch(/not fill the box/i);
+
+    const cover = resolvePlateAspect({ ...MISMATCH, fitMode: 'cover' });
+    if (cover.ok) throw new Error('expected cover to refuse');
+    // …while `cover`'s wording is untouched.
+    expect(cover.message).toMatch(/Cropping it would cut a part of the picture/);
+  });
+
+  it('`cover` still refuses, with the SAME code', () => {
+    const out = resolvePlateAspect({ ...MISMATCH, fitMode: 'cover' });
+    expect(out).toMatchObject({ ok: false, errorCode: LIVE_PLATE_ASPECT_MISMATCH });
+  });
+
+  it('🔴 the refusal is NOT deleted — the two modes genuinely differ on ONE input', () => {
+    // The regression this pins is "somebody removed the refusal while making it
+    // conditional". Both arms are asserted against the same input, so a `cover` path
+    // that stopped refusing could not pass by agreeing with `contain`.
+    const contain = resolvePlateAspect({ ...MISMATCH, fitMode: 'contain' });
+    const cover = resolvePlateAspect({ ...MISMATCH, fitMode: 'cover' });
+    expect(contain.ok).toBe(true);
+    expect(cover.ok).toBe(false);
+  });
+
+  it('no disagreement ⇒ no warning in either mode', () => {
+    for (const fitMode of BOTH) {
+      const out = resolvePlateAspect({
+        plateId: 'guest-1',
+        source: source({ format: '1080i5000' }),
+        expectedAspect: 16 / 9,
+        fitMode,
+      });
+      expect(out, fitMode).toEqual({ ok: true, aspect: 16 / 9, assumed: false });
+    }
+  });
+});
+
+/**
+ * ⭐ `C-028` — THE MODE CHAIN, which runs the OPPOSITE way round from the aspect chain.
+ *
+ * The aspect is a measurable property of the feed, so the installation outranks the
+ * author (`D-147`). The mode is a presentation choice about that feed, so the OPERATOR —
+ * who is looking at the picture on the day — outranks the author. Two chains, opposite
+ * orders, and this block exists so nobody "aligns" them later.
+ */
+describe('C-028 — resolvePlateFitMode: override → element → contain', () => {
+  it('the operator’s override wins over the author’s', () => {
+    expect(resolvePlateFitMode('cover', 'contain')).toBe('cover');
+    expect(resolvePlateFitMode('contain', 'cover')).toBe('contain');
+  });
+
+  it('the author’s value stands where the operator has not overridden', () => {
+    expect(resolvePlateFitMode(undefined, 'cover')).toBe('cover');
+    expect(resolvePlateFitMode(undefined, 'contain')).toBe('contain');
+  });
+
+  it('🔴 absent at BOTH levels is `contain` — the C-028 default, never `cover`', () => {
+    // The default is pinned BY VALUE at the one function that decides it. A chain that
+    // fell through to `cover` would keep today's picture on air while every other test
+    // in this change still passed.
+    expect(resolvePlateFitMode(undefined, undefined)).toBe('contain');
+  });
+});
+
 describe('⭐ the D-147 decision — neither side states an aspect', () => {
   it('does NOT refuse: it assumes the hole’s own shape and says it assumed', () => {
-    const out = resolvePlateAspect({
-      plateId: 'guest-1',
-      source: source({ format: 'AUTO' }),
-      expectedAspect: undefined,
-    });
-    expect(out).toEqual({ ok: true, aspect: null, assumed: true });
+    for (const fitMode of BOTH) {
+      const out = resolvePlateAspect({
+        plateId: 'guest-1',
+        source: source({ format: 'AUTO' }),
+        expectedAspect: undefined,
+        fitMode,
+      });
+      // `C-028`'s not-in-scope list: no aspect means no fit and no refusal in EITHER
+      // mode, and the picture fills the box exactly as today.
+      expect(out, fitMode).toEqual({ ok: true, aspect: null, assumed: true });
+    }
   });
 
   it('🔴 the argument from the CODE — refusing would outlaw `AUTO`', () => {
@@ -180,6 +322,7 @@ describe('⭐ the D-147 decision — neither side states an aspect', () => {
       plateId: 'guest-1',
       source: source({ format: 'AUTO' }),
       expectedAspect: undefined,
+      fitMode: 'cover',
     });
     expect(auto.ok).toBe(true);
     // Same for a source that states no format at all — the ordinary state of a
@@ -188,6 +331,7 @@ describe('⭐ the D-147 decision — neither side states an aspect', () => {
       plateId: 'guest-1',
       source: source(),
       expectedAspect: undefined,
+      fitMode: 'cover',
     });
     expect(bare.ok).toBe(true);
   });
@@ -202,11 +346,13 @@ describe('⭐ the D-147 decision — neither side states an aspect', () => {
       plateId: 'guest-1',
       source: source(),
       expectedAspect: undefined,
+      fitMode: 'cover',
     });
     const knownCase = resolvePlateAspect({
       plateId: 'guest-1',
       source: source({ format: '720p5000' }),
       expectedAspect: undefined,
+      fitMode: 'cover',
     });
     expect(assumedCase).toMatchObject({ assumed: true });
     expect(knownCase).toMatchObject({ assumed: false });
