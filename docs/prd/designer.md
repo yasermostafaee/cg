@@ -4736,7 +4736,7 @@ element's rect?", and every reader and writer goes through it:
   [[R-057]] (the arrangement feature), [[B-148]] (the other defect found in the same area — a missing
   refusal, not a control fault).
 
-## [~] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩ — IMPLEMENTED 2026-08-25 (`openspec/changes/aspect-lock-live-source/`); Linux e2e owed
+## [~] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩ — IMPLEMENTED 2026-08-25 (`openspec/changes/aspect-lock-live-source/`). Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/32834755257 (contains `4c4880c0`; `e2e` job `success`, step RAN). Scenario-level E2E still owed — see task 6.3
 
 <!--
   🔴 STATUS CORRECTION, 2026-08-24 — this item was briefly marked `[~]` and it was WRONG.

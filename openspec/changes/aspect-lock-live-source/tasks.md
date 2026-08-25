@@ -72,7 +72,15 @@
 ## 6. Gate
 
 - [x] 6.1 Full green gate for `@cg/designer`.
-- [ ] 6.2 User-facing UI change ⇒ an E2E mapping each `#### Scenario` above, and a Linux
-      `gate:e2e` discharged by a COMPLETED, GREEN `e2e` job on GitHub Actions for the commit that
-      carries the change. **Write the run URL here beside this box** — a tick with no URL is a
-      claim, not a discharge.
+- [x] 6.2 Linux `gate:e2e` DISCHARGED:
+      **https://github.com/yasermostafaee/cg/actions/runs/32834755257** — for `2b91f13f`, which
+      CONTAINS this change's commit `4c4880c0`. `E2E (Playwright)` job conclusion `success`, and
+      its `E2E` STEP ran (`success`) rather than being skipped, which is what the discharge rule
+      requires — a green run whose `e2e` was SKIPPED proves nothing about rendering. The `e2e`
+      job is whole-tree rather than diff-scoped, so a later `dev` HEAD containing the change is
+      a legitimate discharge for it.
+- [ ] 6.3 ⚠ STILL OWED — an E2E mapping each `#### Scenario` to Playwright steps. The run above
+      discharges the LINUX-RUN debt for the code that shipped; it does not mean scenario-level
+      E2E coverage exists. The 26 new unit tests cover the arithmetic and the cell rule; what has
+      no browser-level test is the author actually dragging a locked handle and the toggle
+      surviving a selection change. Do not read 6.2's tick as covering this.

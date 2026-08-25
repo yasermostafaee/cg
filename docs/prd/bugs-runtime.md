@@ -5978,7 +5978,7 @@ plate. Assert the plate's rendered rect via `layerRenderedRect()`, not just `lay
   the other defect), [[B-149]] (the disproven premise, kept here so it is not re-derived),
   [[B-126]] (why the failure path is this careful in the first place).
 
-## [~] B-168 — the LOOK PICKER does not SAY it commits immediately, on a surface where everything beside it waits for UPDATE ⟨priority: medium — the operator cannot tell which control has already changed air⟩ — RE-SCOPED and DECIDED 2026-08-25 (owner: option b)
+## [~] B-168 — the LOOK PICKER does not SAY it commits immediately, on a surface where everything beside it waits for UPDATE ⟨priority: medium — the operator cannot tell which control has already changed air⟩ — RE-SCOPED and DECIDED 2026-08-25 (owner: option b); shipped `2b91f13f`. Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/32834755257 (`e2e` job `success`, step RAN)
 
 <!--
   🔴 THE HEADING WAS RE-SCOPED IN PLACE ON 2026-08-25, AND THE OLD ONE IS QUOTED HERE BECAUSE
