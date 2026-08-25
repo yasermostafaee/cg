@@ -134,6 +134,20 @@ describe('collectLiveSources', () => {
     const [decl] = collectLiveSources(sceneWith([liveSource('guest-1', transform())]));
     expect(decl).toBeDefined();
     expect(Object.keys(decl ?? {})).not.toContain('expectedAspect');
+    // `C-028` — and `fitMode` is omitted on the same rule. The DEFAULT belongs at the one
+    // place that resolves it (the bridge's mode chain); a carrier that spelled `contain`
+    // out here would be a second place the default lives, and the two would drift.
+    expect(Object.keys(decl ?? {})).not.toContain('fitMode');
+  });
+
+  it('⭐ C-028 — the author’s fit mode reaches the DECLARATION', () => {
+    // The field travels schema → renderer UI → carrier → bridge. This is the middle link,
+    // and it is the one with no compiler to catch it: `collectLiveSources` builds a fresh
+    // object literal, so a field simply left out is silently absent all the way to air.
+    const [decl] = collectLiveSources(
+      sceneWith([liveSource('guest-1', transform(), { fitMode: 'cover' })]),
+    );
+    expect(decl).toMatchObject({ sourceId: 'guest-1', fitMode: 'cover' });
   });
 
   it('composes container ancestors, including their own scale', () => {

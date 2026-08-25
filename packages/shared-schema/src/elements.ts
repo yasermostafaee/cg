@@ -16,6 +16,7 @@ import {
 import { ElementAnimationSchema, FrameRangeSchema } from './animation.js';
 import { AnchorPointSchema, type AnchorPoint } from './path-points.js';
 import { ListItemSchema } from './fields.js';
+import { LiveFitModeSchema } from './live-fit.js';
 
 const TextDirectionSchema = z.enum(['auto', 'ltr', 'rtl']);
 
@@ -1149,6 +1150,30 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    * Inspector offers it as `— not specified —`.
    */
   expectedAspect: z.number().positive().optional(),
+  /**
+   * ⭐ `C-028` — **how the picture is placed in this plate's box: `contain` (fit the
+   * whole picture, centred, margins showing the template) or `cover` (scale to cover
+   * and centre-crop).**
+   *
+   * 🔴 **PER ELEMENT, and that is a decision rather than a default.** The same catalog
+   * source seated in a 16:9 box and a 3:4 box needs DIFFERENT fits, so a per-SOURCE
+   * field would have to be wrong in one of them. The mode is a property of the PAIRING
+   * of a picture with a box, and the element is where that pairing is authored.
+   *
+   * OPTIONAL, and absent means `contain` — the default, never `cover`. That flip
+   * changes what an existing template puts on air for any plate whose source aspect is
+   * both known and different from its box; permitted under `P-031`'s compatibility
+   * floor and named as an on-air change in the change's proposal rather than left to
+   * be discovered.
+   *
+   * ⚠ Distinct from {@link expectedAspect} and resolved by a different chain. That one
+   * is the author's ASSERTION about the feed and is outranked by the SOURCE (`D-147` —
+   * the author cannot see the feed). This one is a presentation choice the author
+   * states and the OPERATOR may revise on the day, so it is outranked by the
+   * per-assignment override instead. Two chains, opposite orders, deliberately
+   * separate concerns.
+   */
+  fitMode: LiveFitModeSchema.optional(),
   /** The FILL source's symbolic id, e.g. `guest-1`. */
   routeKey: LiveSourceIdSchema,
   /**

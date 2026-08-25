@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LiveSourceIdSchema } from './elements.js';
+import { LiveFitModeSchema } from './live-fit.js';
 import { IdSchema } from './primitives.js';
 
 /**
@@ -75,6 +76,19 @@ export const LookSourceSchema = z.object({
   routeKey: LiveSourceIdSchema,
   /** The aspect the design expects; a contradicting assignment is refused at take. */
   expectedAspect: z.number().positive().optional(),
+  /**
+   * `C-028` — the fit mode for this source's plates. Absent means `contain`.
+   *
+   * ⚠ **It lives HERE, on the group's declaration, for exactly the reason
+   * {@link expectedAspect} does** (see this module's header): under LOOKS the carrier is
+   * SOURCE-KEYED, so one input punched by plates in two looks is ONE declaration and
+   * there is nowhere for two modes to be carried. C-028's decision is that the mode is
+   * authored per ELEMENT rather than per catalog SOURCE — which this honours: a
+   * declared look source is not a catalog source, it is the template's own hole, and it
+   * is per-template exactly as the element is. A scene with NO look group keeps the
+   * mode on the plate element itself, where `collectLiveSources` reads it.
+   */
+  fitMode: LiveFitModeSchema.optional(),
   /** Whether this source carries a FILL role (see the declaration carrier). */
   dynamic: z.boolean().default(false),
 });

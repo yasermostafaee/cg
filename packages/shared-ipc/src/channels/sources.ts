@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IdSchema, LiveSourceIdSchema } from '@cg/shared-schema';
+import { IdSchema, LiveFitModeSchema, LiveSourceIdSchema } from '@cg/shared-schema';
 import type { FixedLayerBank } from './fixedLayers.js';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
@@ -375,6 +375,29 @@ export const TemplateSourceAssignmentSchema = z.object({
   templateId: IdSchema,
   plateId: LiveSourceIdSchema,
   sourceId: SourceDefinitionIdSchema,
+  /**
+   * ⭐ `C-028` — **the OPERATOR's fit-mode override for this plate, and the reason the
+   * mode chain runs the opposite way round from the aspect chain.**
+   *
+   * Absent means "the operator is not overriding" — the AUTHOR's `fitMode` on the
+   * declaration stands, and absent there means `contain`. It is a third state, not a
+   * missing value, exactly as an absent `expectedAspect` is.
+   *
+   * 🔴 **Why the operator outranks the author here, where `D-147` has the source
+   * outranking the author for the ASPECT.** The two chains resolve different kinds of
+   * fact and must not be collapsed. The aspect is a MEASURABLE PROPERTY of the feed —
+   * the author cannot see it, so their guess is about what they designed for and the
+   * installation's statement wins. The mode is a PRESENTATION CHOICE about that
+   * feed — the author states what the design wants, and the operator, who is looking
+   * at the picture on the day, is the only party who can say the design's choice is
+   * wrong for this shot. Neither chain is a template for the other.
+   *
+   * It lives on the ASSIGNMENT rather than in a parallel map for the reason
+   * `resolvePlateAssignments` gives for the source override: this is the same question
+   * ("how does this plate show its input") answered by a higher authority, and a second
+   * path answering it would eventually disagree with this one about a plate on air.
+   */
+  fitMode: LiveFitModeSchema.optional(),
 });
 export type TemplateSourceAssignment = z.infer<typeof TemplateSourceAssignmentSchema>;
 

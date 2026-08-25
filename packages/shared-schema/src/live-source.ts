@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { IdSchema } from './primitives.js';
 import { LiveSourceIdSchema } from './elements.js';
+import { LiveFitModeSchema } from './live-fit.js';
 
 /**
  * D-137 / C-015 — the flattened axis-aligned rect a Live Source occupies, in the
@@ -82,6 +83,15 @@ export const LiveSourceDeclarationSchema = z.object({
    * is not forced into a guess that can refuse a take on air.
    */
   expectedAspect: z.number().positive().optional(),
+  /**
+   * `C-028` — the AUTHOR's fit mode for this plate, carried verbatim to the bridge.
+   *
+   * Absent means `contain`. It is the middle link of the mode chain (operator's
+   * per-assignment override → this → `contain`), and it travels on the DECLARATION for
+   * the same reason `expectedAspect` does: it is a scene fact the installation must be
+   * able to read without opening the scene.
+   */
+  fitMode: LiveFitModeSchema.optional(),
   /**
    * Whether a field binding can retarget the FILL id at playout (the
    * `live-source-id` binding target with `role: 'fill'`).

@@ -210,6 +210,10 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
       sourceId: el.routeKey,
       rect: flat.rect,
       ...(el.expectedAspect !== undefined ? { expectedAspect: el.expectedAspect } : {}),
+      // `C-028` — omitted when absent rather than defaulted to `contain` here. The
+      // default belongs at the ONE resolution point (the bridge's mode chain), and a
+      // carrier that spelled it out would be a second place the default lives.
+      ...(el.fitMode !== undefined ? { fitMode: el.fitMode } : {}),
       dynamic: roles?.has('fill') ?? false,
       ...(boxRelativeRect !== null ? { boxRelativeRect } : {}),
     });
@@ -322,6 +326,10 @@ export function collectLookCarrier(scene: Scene): {
       sourceId: src.routeKey,
       rect,
       ...(src.expectedAspect !== undefined ? { expectedAspect: src.expectedAspect } : {}),
+      // `C-028` — from the DECLARED source, never from a plate element, for the same
+      // reason `expectedAspect` is: this carrier is source-keyed, so a per-plate read
+      // would silently pick one of two looks' plates and call it the answer.
+      ...(src.fitMode !== undefined ? { fitMode: src.fitMode } : {}),
       dynamic: src.dynamic,
     });
   }
