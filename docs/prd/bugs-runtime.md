@@ -6562,3 +6562,136 @@ in this session.
 - **Cross-refs:** [[B-155]] (the other artefact in the same window, and the item whose plant
   protocol this shares — read its "what a green suite is not evidence of" section first),
   [[B-167]] (a THIRD way this window goes wrong, by the fills not moving at all).
+
+## [ ] B-177 — a DeckLink input admits ONE producer, `CLEAR` returns before the destroy, and the failure arrives disguised as `404 File not found.` ⟨priority: high — the seating path re-`PLAY`s live layers, and the disguise sends the diagnosis to the wrong place⟩ — OPEN, filed 2026-08-25 from the DeckLink plant walk
+
+**Observed 2026-08-25** on the production plant (2.5.0 `69e8ad5`, host `192.168.21.114`) while
+running [`docs/recon/2026-08-25-decklink-model-walk.md`](../recon/2026-08-25-decklink-model-walk.md).
+Two independent instances, nine minutes apart.
+
+**Instance 1 — `CLEAR` immediately followed by `PLAY` on the same layer:**
+
+```
+16:01:05.594  CLEAR 1-10                    -> #202 CLEAR OK
+16:01:05.604  PLAY 1-10 DECKLINK DEVICE 1
+16:01:05.617  [error] EnableVideoInput - DeckLink SDI 4K [1|1080p5000] Could not enable video input.
+16:01:05.631  DeckLink SDI 4K [23487013|1080i5000] Destroyed.      <- 14 ms AFTER the failure
+```
+
+**Instance 2 — a plain re-`PLAY` over a decklink producer already live on that layer. No `CLEAR`
+is involved at all:**
+
+```
+16:10:15.776  PLAY 1-10 DECKLINK DEVICE 1   (a decklink producer was ALREADY live on layer 1-10)
+16:10:15.858  [error] EnableVideoInput - DeckLink SDI 4K [1|PAL] Could not enable video input.
+```
+
+Runs with a **~5 s gap** between `CLEAR` and `PLAY` initialised cleanly **every time**.
+
+**Expected:** re-seating a live source on a layer that already carries it either succeeds, or fails
+with an error that says what went wrong.
+**Actual:** the producer fails to open, and the operator is told a **file is missing**.
+**Env:** CasparCG 2.5.0 `69e8ad5`, DeckLink SDI 4K (index `1`, persistent ID `23487013`), single
+SDI input. Not reproducible against `@cg/amcp-mock`, which models `PLAY` as instantaneous and has
+no notion of device contention.
+
+### The three facts, from the log rather than from reasoning
+
+1. **`CLEAR` answers `202` BEFORE the producer is destroyed.** It is an acknowledgement, not a
+   destruction receipt. In instance 1 the `Destroyed.` line lands **14 ms after** the `202` — and
+   after the failure the `202` invited.
+2. **CasparCG constructs the NEW producer before destroying the OLD one** on the same layer. That
+   is why instance 2 fails with no `CLEAR` anywhere near it: a plain re-`PLAY` of the same device
+   collides **with itself**.
+3. ⇒ **Two producers cannot hold one physical input.** So **the same live source cannot be seated
+   on two boxes at once** on this hardware. That is a product-level constraint, not a timing bug,
+   and no amount of sequencing removes it.
+
+### 🔴 The disguise — this is its own hazard, and arguably the worse half
+
+The console answered:
+
+```
+#404 PLAY FAILED
+File not found.
+```
+
+When the decklink producer throws, CasparCG's producer registry **falls through to the FILE
+producer** and reports **that** producer's error. The failure therefore presents as a missing media
+file on a command that never mentioned a file.
+
+**Any code that reads a `404` from a live-source `PLAY` as "media missing" will mis-diagnose
+DeckLink contention** — and will send the operator to check a file path when the real answer is to
+wait for a destroy, or to stop asking one input to serve two boxes. A refusal message naming the
+wrong subsystem is worse than a bare failure, because it is actively followed.
+
+⚠ **This also means a `404` is NOT safely readable as "the argument was bad".** Any current or
+future preflight that classifies live-source failures by response code needs to know that `404` on
+a `DECKLINK` argument is ambiguous.
+
+### What the CODE does today — established by READING, not by guessing
+
+Both questions were answered by reading the seating path. Neither is a hypothesis.
+
+**(1) Does the seating path issue a `CLEAR` and a `PLAY` for the same device without waiting for
+the destroy? — YES, and in two distinct ways.**
+
+- **It re-`PLAY`s over an occupied layer with no `CLEAR` at all.** `CasparRuntime.#seatLiveLayers`
+  (`tools/caspar-bridge/src/caspar-runtime.ts`, the `else` branch of the `seatUnchanged` test)
+  pushes `playSource(...)` straight onto a layer that a previous seat may still hold. **That is
+  instance 2 exactly** — the plant reproduced this shape without any teardown involved.
+- **`teardownLiveLayers`** (same file) sends `out(slot)` — which is `CLEAR <ch>-<layer>`
+  (`command-builder.ts`) — then `mixerClear(slot)`, each `await`ed. 🔴 **The `await` is on the AMCP
+  ACK, and fact 1 says the ack precedes the destroy by ~14 ms.** So the code _does_ serialise, and
+  serialising is _not_ the same as waiting for the destroy. Nothing in the bridge waits for, or can
+  observe, `Destroyed.`.
+
+⚠ **FLAGGED AS A DESIGN DECISION, NOT A FACT — do not let a later reader take this as settled.**
+Whether any single flow performs `teardownLiveLayers` and then re-seats **the same device** with no
+intervening gap was **not** established here: it depends on take/swap orchestration above these two
+methods, and answering it properly means tracing the take path, not grepping. The re-`PLAY` case
+above is proven and sufficient to file; the teardown-then-seat case is **plausible and unverified**.
+
+**(2) Can two boxes be assigned the same live source today? — YES. Nothing prevents it.**
+
+`validateSourceAssignments` (`packages/shared-ipc/src/channels/sources.ts`) builds its duplicate key
+as `` `${assignment.templateId}\u0000${assignment.plateId}` `` and refuses only a **plate assigned
+twice**. **There is no constraint of any kind on two different plates sharing one `sourceId`**, and
+none anywhere else in the validator. An operator can assign the same DeckLink source to every box
+in a multibox template, the config validates, it persists, and the second seat cannot work on this
+hardware.
+
+⚠ **FLAGGED AS A DESIGN DECISION.** Whether that _should_ be refused is genuinely open and is
+**not** decided here:
+
+- refusing it at the config boundary is honest but **installation-specific** — a plant with two
+  cards, or a `route://`/NDI/stream source, has no such limit, and the validator is shared by every
+  installation;
+- allowing it and failing at the take is what happens today, except the failure says `File not
+found.`;
+- a third reading is that one source feeding several boxes should seat **once** and be routed, which
+  is a feature rather than a refusal.
+
+**This item does not choose. It records that nothing chooses today.**
+
+### Notes
+
+- **Priority `high` for the DISGUISE and the re-`PLAY`, not for the hardware limit.** The
+  one-producer-per-input constraint is physics and is fine once it is known. What is a defect is
+  that the product's own seating path can trigger it, and that when it does the operator is told to
+  look for a file.
+- **No fix is proposed here, deliberately.** A retry, a wait, a serialising gate and a config-time
+  refusal are all plausible and they are not equivalent; picking one needs the take-path trace
+  flagged above. Filing is the whole of this item.
+- ⚠ **`@cg/amcp-mock` cannot reproduce any of this** and its classifier docstring now says so. A
+  green suite is not evidence about this class of failure — which is precisely why it took a plant
+  visit to find, on a code path that has been green for weeks.
+- **Cross-refs:** [[C-021]] arm (a) — its owed on-air pass will meet this; [[C-015]] (the seating
+  path); [[C-027]] (parked by the same single-input finding); [[B-155]] (the other defect whose
+  evidence only a plant visit produces).
+- The number was verified free by the heading sweep immediately before this heading was written:
+  highest `B-` heading `B-176`; the duplicate audit printed exactly `B-056` and `B-080` and nothing
+  else; a whole-tree `git grep` for `B-177` returned only
+  [b-number-registry.md](b-number-registry.md)'s own "next free" pointer, and `B-178` returned
+  nothing. Filed in this file per [README.md](README.md)'s routing — a bridge/playout defect, not
+  cross-cutting tooling.
