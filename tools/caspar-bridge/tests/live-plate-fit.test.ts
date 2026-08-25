@@ -280,20 +280,60 @@ describe('C-028 — the aspect-mismatch refusal, per mode', () => {
  */
 describe('C-028 — resolvePlateFitMode: override → element → contain', () => {
   it('the operator’s override wins over the author’s', () => {
-    expect(resolvePlateFitMode('cover', 'contain')).toBe('cover');
-    expect(resolvePlateFitMode('contain', 'cover')).toBe('contain');
+    expect(resolvePlateFitMode('cover', 'contain').mode).toBe('cover');
+    expect(resolvePlateFitMode('contain', 'cover').mode).toBe('contain');
   });
 
   it('the author’s value stands where the operator has not overridden', () => {
-    expect(resolvePlateFitMode(undefined, 'cover')).toBe('cover');
-    expect(resolvePlateFitMode(undefined, 'contain')).toBe('contain');
+    expect(resolvePlateFitMode(undefined, 'cover').mode).toBe('cover');
+    expect(resolvePlateFitMode(undefined, 'contain').mode).toBe('contain');
   });
 
   it('🔴 absent at BOTH levels is `contain` — the C-028 default, never `cover`', () => {
     // The default is pinned BY VALUE at the one function that decides it. A chain that
     // fell through to `cover` would keep today's picture on air while every other test
     // in this change still passed.
-    expect(resolvePlateFitMode(undefined, undefined)).toBe('contain');
+    expect(resolvePlateFitMode(undefined, undefined).mode).toBe('contain');
+  });
+});
+
+/**
+ * ⭐ `B-178` — **THE PROVENANCE, which is the half that makes the mode READABLE.**
+ *
+ * `contain` is both the shipped default and a legitimate authored choice, so the mode alone is
+ * not evidence that anything the author said arrived. The owner had to infer "nothing authored
+ * reached me" from two plates agreeing when they had been set differently. That inference is
+ * what `from` turns into a readout.
+ */
+describe('B-178 — resolvePlateFitMode reports WHERE the answer came from', () => {
+  it('🔴 "nobody said" is `default`, and is NOT the same answer as an authored `contain`', () => {
+    // The distinction the whole item is about. Both produce the same picture; only one of them
+    // means the author was heard.
+    expect(resolvePlateFitMode(undefined, undefined)).toEqual({ mode: 'contain', from: 'default' });
+    expect(resolvePlateFitMode(undefined, 'contain')).toEqual({
+      mode: 'contain',
+      from: 'authored',
+    });
+  });
+
+  it('an authored `contain` and a defaulted one agree on MODE and differ on PROVENANCE', () => {
+    const authored = resolvePlateFitMode(undefined, 'contain');
+    const defaulted = resolvePlateFitMode(undefined, undefined);
+    expect(authored.mode).toBe(defaulted.mode);
+    expect(authored.from).not.toBe(defaulted.from);
+  });
+
+  it('an operator override reports `override`, whatever the author said', () => {
+    expect(resolvePlateFitMode('cover', 'contain')).toEqual({ mode: 'cover', from: 'override' });
+    expect(resolvePlateFitMode('contain', undefined)).toEqual({
+      mode: 'contain',
+      from: 'override',
+    });
+  });
+
+  it('the author reports `authored` for BOTH modes, not only the non-default one', () => {
+    expect(resolvePlateFitMode(undefined, 'cover').from).toBe('authored');
+    expect(resolvePlateFitMode(undefined, 'contain').from).toBe('authored');
   });
 });
 

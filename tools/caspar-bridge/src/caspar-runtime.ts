@@ -69,6 +69,7 @@ import {
   checkSourceCatalog,
   activeLookOf,
   liveSourceCarrierState,
+  lookPlateFits,
   lookPlateRects,
   pruneAssignmentsForCatalog,
   type SourceAssignments,
@@ -296,8 +297,32 @@ type LiveSeatingPlan =
        * `expectedAspect` for a plate the bridge deliberately does not fit.
        */
       readonly plateFits: Readonly<Record<string, CgPlateFit>>;
+      /**
+       * ⭐ `B-178` — **each plate's fit mode WITH WHERE IT CAME FROM**, for the operator-facing
+       * report. One entry per resolved frame, in binding order.
+       *
+       * 🔴 Separate from {@link plateFits} because they answer different audiences and only one
+       * of them belongs on the wire. The page needs the MODE to punch its hole; a human needs
+       * to know whether that mode is anything the author actually said. Widening the payload
+       * with provenance the page would never read is how a wire format accretes fields nobody
+       * consumes — the shape `B-143` already names.
+       */
+      readonly fitProvenance: readonly PlateFitReport[];
     }
   | { readonly ok: false; readonly errorCode: string; readonly message: string };
+
+/**
+ * ⭐ `B-178` — one plate's resolved fit mode and the link of the chain that answered.
+ *
+ * `from: 'default'` is the one that matters: it means NOBODY STATED A MODE, which is a
+ * different fact from an author who chose `contain` and had it honoured. Those two were
+ * indistinguishable on the wire, and that is why a dropped `cover` took a plant walk to find.
+ */
+interface PlateFitReport {
+  readonly plateId: string;
+  readonly mode: LiveFitMode;
+  readonly from: 'override' | 'authored' | 'default';
+}
 
 /**
  * 🔴 **SESSION BP — WHERE A PLAN GETS LEVEL 2 FROM, and the whole freeze is this one word.**
@@ -2712,6 +2737,10 @@ export class CasparRuntime {
       hole in one place and the picture in another, which is `B-149`.
     */
     this.#plateFits.set(itemId, { ...plan.plateFits });
+    // `B-178` — and SAY what each plate is running, where anything fell through to the
+    // default. At the take, off the same plan the wire is built from, so the log can never
+    // describe a resolution the payload did not carry.
+    this.#reportPlateFits(itemId, plan.fitProvenance);
 
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'take', itemId }, seq);
@@ -3998,6 +4027,8 @@ export class CasparRuntime {
         // absent — `withCgControl` declines to attach an empty control object, so a
         // plateless template's payload stays exactly as it is today.
         plateFits: {},
+        // `B-178` — no plates, so nothing to report. Empty, never absent.
+        fitProvenance: [],
       };
 
     /*
@@ -4090,6 +4121,14 @@ export class CasparRuntime {
     // `C-028` — accumulated as each frame's aspect and mode are resolved, so what the
     // page is told is what this plan actually fitted with. See `LiveSeatingPlan.plateFits`.
     const plateFits: Record<string, CgPlateFit> = {};
+    // `B-178` — the same resolutions, with WHERE EACH CAME FROM, for the operator-facing
+    // report. Kept beside `plateFits` rather than folded into it: the page has no use for
+    // provenance and putting it on the wire would widen a payload nothing would read.
+    //
+    // A MAP keyed by plateId, not an array, and for the same reason `plateFits` is: one plateId
+    // can own two seats, and the readout must name each plate once — with the seat that is
+    // actually on screen.
+    const fitProvenance = new Map<string, PlateFitReport>();
     const seated: {
       plateId: string;
       producerArg: string;
@@ -4113,18 +4152,31 @@ export class CasparRuntime {
       // 6.3 — the fit aspect through §3a's chain, where the author's assertion is VALIDATED
       // against the ASSIGNED source. Per FRAME, because two looks may crop one input
       // differently and may assert different shapes for it.
-      // `C-028` — the mode, resolved BEFORE the aspect because the aspect's refusal is
-      // conditional on it. Per FRAME for the same reason the aspect is: two looks may
-      // fit one input differently.
+      /*
+        `C-028` — the mode, resolved BEFORE the aspect because the aspect's refusal is
+        conditional on it. Per FRAME for the same reason the aspect is: two looks may fit one
+        input differently.
+
+        ⭐ `B-178` — **THE AUTHORED HALF COMES FROM THE FRAME'S OWN LOOK, not from the
+        declaration.** It read `frame.declaration.fitMode`, and under a look group that field
+        has no writer anywhere in the product — so every plate of every look-group template
+        resolved to the `contain` default however the author had set it, and the operator got
+        no signal. `lookPlateFits` is the exact sibling of the `lookPlateRects` call two
+        methods down: one function of the carrier, answering per look, with the pre-LOOKS
+        declaration as its fallback.
+
+        Per FRAME is now load-bearing rather than merely consistent: `frame.lookId` is what
+        selects the box, and the mode describes how the picture sits in THAT box.
+      */
       const fitMode = resolvePlateFitMode(
         fitOverrides.get(frame.plateId),
-        frame.declaration.fitMode,
+        lookPlateFits(carrier, frame.lookId)[frame.plateId],
       );
       const aspect = resolvePlateAspect({
         plateId: frame.plateId,
         source: frame.source,
         expectedAspect: frame.declaration.expectedAspect,
-        fitMode,
+        fitMode: fitMode.mode,
       });
       if (!aspect.ok) {
         /*
@@ -4151,7 +4203,42 @@ export class CasparRuntime {
         has no fit, and telling the page about a plate the plan did not seat would put a
         hole where nothing is going to be filled.
       */
-      plateFits[frame.plateId] = { aspect: aspect.aspect, mode: fitMode };
+      /*
+        🔴 **A PARKED SEAT MUST NOT OVERWRITE A PUNCHED ONE.** `plateFits` is keyed by plateId,
+        and ONE plateId can own TWO SEATS: a level-3 per-look binding (`swapLiveSource(item,
+        plate, source, lookId)`) points one plate at a different input in another look, and
+        `resolveLookBindings` emits seats looks-major, so a foreign look's frame can be visited
+        AFTER the punched one. Its `frame` is `seat.frames[0]` — the OTHER look's frame, carrying
+        the same plateId — so an unguarded write replaced the on-screen plate's facts with a
+        look nobody is showing.
+
+        Before `B-178` both frames read one shared `declaration.fitMode`, so the MODE could not
+        diverge and the clobber was invisible; making the mode per-look is exactly what gives it
+        something to differ about. The consequence is `B-149`'s: the wire fills at the punched
+        look's mode while the page punches its hole at the parked look's, so the margin is a
+        transparent hole onto the channel — BLACK on air.
+
+        ⚠ The ASPECT was clobbered the same way before this change, for the same reason. One
+        guard fixes both: **the punched seat wins, and a parked seat only fills a gap.**
+      */
+      if (rect !== undefined || !(frame.plateId in plateFits)) {
+        plateFits[frame.plateId] = { aspect: aspect.aspect, mode: fitMode.mode };
+        /*
+          ⭐ `B-178` half two — **THE PROVENANCE, KEPT so a human can be told.** `contain` is both
+          the shipped default and a legitimate authored choice, so the mode alone is not evidence
+          that anything the author said arrived. Recorded here, off the same resolution the wire
+          uses, and reported by {@link #reportPlateFits} once the plan is applied.
+
+          Inside the same guard, so the readout names each plate ONCE and names the seat that is
+          actually on screen — a line listing one plateId twice with two answers would be the
+          confusion this signal exists to remove.
+        */
+        fitProvenance.set(frame.plateId, {
+          plateId: frame.plateId,
+          mode: fitMode.mode,
+          from: fitMode.from,
+        });
+      }
 
       if (rect === undefined) {
         // PARKED — bound by some other look only. Its size comes from the look that DOES
@@ -4173,7 +4260,7 @@ export class CasparRuntime {
         sceneResolution: carrier.resolution,
         carriedDefaultPosition: carrier.defaultPosition,
         sourceAspect: aspect.aspect,
-        fitMode,
+        fitMode: fitMode.mode,
       });
       /*
         6.4 — a hole ENTIRELY outside the scene rect has an empty mask.
@@ -4235,6 +4322,7 @@ export class CasparRuntime {
         unresolved,
         resolvedFrom,
         plateFits,
+        fitProvenance: [...fitProvenance.values()],
       };
 
     const range = this.#sourceCatalog.layerRange;
@@ -4349,7 +4437,48 @@ export class CasparRuntime {
       parked: allocated.filter((p) => p.held),
       resolvedFrom,
       plateFits,
+      fitProvenance: [...fitProvenance.values()],
     };
+  }
+
+  /**
+   * ⭐ `B-178` — **SAY WHICH FIT EACH PLATE IS RUNNING, AND WHETHER ANYONE ASKED FOR IT.**
+   *
+   * ── THE FAILURE THIS EXISTS TO END ──────────────────────────────────────────
+   *
+   * The owner set two plates side by side, one `contain` and one `cover`, exported, took it on
+   * the plant — and both went to air `contain`. Nothing anywhere said so. The mode reached the
+   * wire correctly-shaped and simply wrong, because `contain` is BOTH the shipped default and a
+   * legitimate authored choice: reading `mode: "contain"` off a payload dump proves nothing
+   * about whether the author was heard. Diagnosing it took a plant walk, a `.vcg` unpack and a
+   * hand comparison of two `MIXER FILL` rects.
+   *
+   * 🔴 **The line goes to stderr at TAKE, beside the refusals, because a log is the artefact a
+   * human was reading when this bug was found.** ⚠ Stated precisely, because the loose version
+   * is not true: the payload and geometry that exposed `B-178` came from **CasparCG's own server
+   * log**, not from the bridge's stderr. What the evidence supports is that the person debugging
+   * a wrong picture reads LOGS — and of the two, this is the one that can name a mode's
+   * provenance at all, because only the bridge knows it. A signal in a place nobody opens is the
+   * defect one level up, so the claim is kept to what was observed.
+   *
+   * ── ⚠ WHY IT IS A READOUT AND NOT A WARNING ─────────────────────────────────
+   *
+   * The first draft raised a ⚠ whenever any plate fell through to the default, and it fired on
+   * essentially every take: most templates author no fit at all, and for them the default is
+   * simply correct. **A warning that is usually wrong is how a signal stops being read** — and
+   * this line exists precisely because the previous signal (none) was not read. So it states
+   * facts and gives no advice: the diagnostic power is the word `default` appearing where the
+   * author expected `authored`, which is the whole inference the owner had to make by hand.
+   *
+   * ⚠ **It is a LOG LINE and deliberately not a badge on the operator's row.** `B-143` already
+   * records that three per-plate facts want a row-level home and asks that the first of them
+   * build it deliberately rather than bolting on a private surface. This does not pre-empt that;
+   * it puts the fact where the person debugging a wrong picture is already looking.
+   */
+  #reportPlateFits(itemId: string, report: readonly PlateFitReport[]): void {
+    if (report.length === 0) return;
+    const shown = report.map((r) => `${r.plateId}=${r.mode} (${r.from})`).join(', ');
+    process.stderr.write(`[caspar-bridge] ${itemId} live-plate fit — ${shown}\n`);
   }
 
   /**
@@ -4663,6 +4792,14 @@ export class CasparRuntime {
    * the layer table sees the box this input is waiting to fill, not a zero. A frame whose
    * hole is off-frame in its own look has no fit at all and records a zero, which is the
    * true answer for it.
+   *
+   * ⚠ `B-178` — **the MODE is resolved here too, from the parked frame's OWN look.** It read no
+   * mode at all, so the recorded box was always the `contain` one; a plate parked in a look that
+   * authored `cover` reported a box narrower than the one it will actually fill. Harmless on the
+   * wire (parked geometry renders nothing) and a lie in the ledger, which is the one thing this
+   * method exists to keep honest. Resolved through the same `lookPlateFits` the punched path
+   * uses, against the same `frame.lookId` the rect above comes from — so the size and the shape
+   * can never describe different looks.
    */
   #parkedSize(
     itemId: string,
@@ -4680,6 +4817,7 @@ export class CasparRuntime {
       sceneResolution: carrier.resolution,
       carriedDefaultPosition: carrier.defaultPosition,
       sourceAspect,
+      fitMode: lookPlateFits(carrier, frame.lookId)[frame.plateId],
     });
     return { width: fit.fill.width, height: fit.fill.height };
   }
@@ -5173,7 +5311,38 @@ export class CasparRuntime {
       opts.mode === 'take' ? 'fresh' : 'pinned',
     );
     if (!plan.ok) return { ok: false, errorCode: plan.errorCode, message: plan.message };
-    return this.#applyLivePlates(itemId, plan, opts.mode);
+    const applied = await this.#applyLivePlates(itemId, plan, opts.mode);
+    /*
+      ⭐ `B-178` — **RE-RECORD WHAT THE PAGE MUST BE TOLD, ON EVERY SUCCESSFUL RECONCILE.**
+
+      🔴 The take used to be the only writer of `#plateFits`, and a LOOK SWITCH is precisely
+      where that breaks: the switch re-plans against the ENTERING look, moves the fills to that
+      look's modes — and then `#tellPageLook` sent the fits the TAKE had recorded, i.e. the
+      OUTGOING look's. The bridge filled at `cover` while the page punched at `contain`: the
+      fill in one shape and the hole in another, which is `B-149` arriving through the switch.
+
+      Written from THIS plan and only when the apply succeeded, so the record can never claim a
+      geometry the wire did not perform — the same rule `#tellPageLook` states for the look id
+      itself. It runs BEFORE `setActiveLook` sends, because that send reads this map.
+
+      ⚠ **AND IT IS DELIBERATELY NOT FUSED TO THE SEND, where the look ID is** (`7.9`:
+      `#recordActiveLook` fires only on `told.ok`). The two records answer different questions
+      and a failed page-tell wants different things of them:
+
+      - the LOOK ID says WHICH LOOK THE PAGE IS PUNCHING. A tell that never landed leaves the
+        page on the old look, so recording the new one would make the map lie about the page —
+        that is exactly what `7.9` closed.
+      - these FITS say WHAT THE WIRE WAS FILLED WITH, and the fills DID move: the apply
+        succeeded. Rolling them back would make this map disagree with the geometry actually on
+        the layers, and the very next payload — the re-ADD after a producer teardown, or the
+        next successful switch — would carry facts for a look the bridge has left.
+
+      A failed tell therefore leaves the page punching the OLD look's holes behind the NEW
+      look's fills, which is the outcome `7.9` chose knowingly: the switch is reported refused,
+      and the next reconcile repairs it. This map follows the FILLS because it describes them.
+    */
+    if (applied.ok) this.#plateFits.set(itemId, { ...plan.plateFits });
+    return applied;
   }
 
   /**

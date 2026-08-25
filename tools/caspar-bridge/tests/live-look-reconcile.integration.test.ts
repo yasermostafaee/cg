@@ -2,7 +2,7 @@ import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type {
   ConnectionConfig,
@@ -134,9 +134,24 @@ async function recvLines(): Promise<string[]> {
     .map((e) => e.line);
 }
 
-function look(id: string, rects: Record<string, LiveSourceRect>): TemplateLook {
-  return { id, name: id, entered: { mode: 'cut' }, rects };
+/**
+ * One look. `fits` is `B-178`'s per-look, per-routeKey fit modes — the map the AUTHOR's
+ * element-level choice now travels in. Absent means "authored nothing", which resolves to the
+ * `contain` default, so a caller that says nothing about fits gets the shipped behaviour.
+ */
+function look(
+  id: string,
+  rects: Record<string, LiveSourceRect>,
+  fits?: Record<string, LiveFitMode>,
+): TemplateLook {
+  return { id, name: id, entered: { mode: 'cut' }, rects, ...(fits !== undefined && { fits }) };
 }
+
+/** Every routeKey in `rects` authored the SAME mode — the common fixture shape. */
+const allFits = (
+  rects: Record<string, LiveSourceRect>,
+  mode: LiveFitMode,
+): Record<string, LiveFitMode> => Object.fromEntries(Object.keys(rects).map((k) => [k, mode]));
 
 /**
  * The multi-frame group as the bridge sees it: sources declared ONCE, looks referencing
@@ -158,11 +173,18 @@ function sixBoxTemplate(
      * `cover` keeps them testing the reconcile they were written for (which look's
      * geometry reaches which layer, and when), and `C-028`'s own `contain` behaviour is
      * asserted in its own tests rather than by silently re-reading these.
+     *
+     * ⚠ **`B-178` moved WHERE this is stamped, not what it means.** It used to be written onto
+     * each DECLARATION, which is the field the bug proved nothing ever writes and the bridge no
+     * longer reads under a look group. It is now stamped onto every LOOK's `fits` map, which is
+     * where an exported template really carries it. A caller passing per-look `looks` of its own
+     * carries its own fits — that is what the two-mode test below does.
      */
     fitMode?: LiveFitMode;
   } = {},
 ) {
   const keys = over.sources ?? ROUTE_KEYS;
+  const mode = over.fitMode ?? ('cover' as LiveFitMode);
   return {
     templateId: 'debate',
     templateType: 'debate',
@@ -175,13 +197,12 @@ function sixBoxTemplate(
         sourceId: k,
         rect: GRID[k] as LiveSourceRect,
         dynamic: false,
-        fitMode: over.fitMode ?? ('cover' as LiveFitMode),
       })),
       looks: over.looks ?? [
-        look('six', GRID),
-        look('solo', SOLO),
-        look('moved', MOVED),
-        look('resized', RESIZED),
+        look('six', GRID, allFits(GRID, mode)),
+        look('solo', SOLO, allFits(SOLO, mode)),
+        look('moved', MOVED, allFits(MOVED, mode)),
+        look('resized', RESIZED, allFits(RESIZED, mode)),
         look('empty', {}),
       ],
       defaultLookId: over.defaultLookId ?? 'six',
@@ -1184,6 +1205,236 @@ it('🔴 the switch tells the PAGE which look — the payload carries the id, be
   expect(lines.indexOf(updates[0] as string)).toBeGreaterThan(lastFill);
 });
 
+/**
+ * ⭐ **`B-178` — THE OWNER'S REPRO, AT THE WIRE.**
+ *
+ * Two live plates side by side, one authored `contain` and one authored `cover`. On the plant
+ * both went to air `contain`, and the `CG ADD` payload said so:
+ *
+ * ```
+ * "__cg":{"look":"look-2","plates":{
+ *    "l1":{"aspect":1.7777777777777777,"mode":"contain"},
+ *    "l2":{"aspect":1.7777777777777777,"mode":"contain"}}}
+ * ```
+ *
+ * 🔴 **The assertion that matters is that the two modes DIFFER.** Every other property of this
+ * payload was already correct — well-formed JSON, the right plate ids, a plausible aspect, a
+ * legal mode — which is why nothing caught it: `contain` is both the shipped default and a
+ * legitimate authored choice, so a payload dump could not be read as evidence either way.
+ */
+/**
+ * 🔴 **THE OWNER'S OWN BOXES.** The six-box GRID is 480×270 — 16:9, the same shape as the
+ * catalog's `1080i5000` sources — so `contain` and `cover` compute the SAME rect there and no
+ * assertion written against it could ever tell the two apart. That is not a detail: a fixture
+ * whose box already matches its source is exactly the fixture that cannot see this bug.
+ *
+ * These are the plant's real boxes, to the pixel: `943.6 × 1049.04` and `938.4 × 1049.04` in a
+ * 1920×1080 scene on a 1920×1080 channel. Tall, narrow, and nothing like 16:9.
+ */
+const TALL: Record<string, LiveSourceRect> = {
+  'live-1': { x: 0, y: 15.48, width: 943.6, height: 1049.04 },
+  'live-2': { x: 943.6, y: 15.48, width: 938.4, height: 1049.04 },
+};
+
+it('🔴 B-178 — TWO plates in ONE look, authored differently, reach air with DIFFERENT geometry', async () => {
+  const r = await boot({
+    template: sixBoxTemplate({
+      sources: ['live-1', 'live-2'],
+      // The author's two choices on the two plates of ONE look — the case the shipped
+      // per-declaration read could not express at all.
+      looks: [look('six', TALL, { 'live-1': 'contain', 'live-2': 'cover' })],
+      defaultLookId: 'six',
+    }),
+  });
+  await onAir(r);
+
+  const contained = mock?.layerState({ channel: 1, layer: layerOf(r, 'live-1') });
+  const covered = mock?.layerState({ channel: 1, layer: layerOf(r, 'live-2') });
+
+  /*
+    🔴 THE POSITIVE CONTROL — a contained picture lies wholly inside its box, so FILL and CLIP
+    are byte-identical. This is precisely what the owner measured for BOTH plates, and it is
+    what proved the `cover` had been dropped: the two rects agreeing IS the `contain` signature.
+  */
+  expect(contained?.fill).toEqual(contained?.clip);
+
+  // 🔴 AND THE DISCRIMINATOR — `cover` must overflow its box on the wide axis, so the two
+  // rects MUST differ. Before this fix both plates produced the assertion above.
+  expect(covered?.fill).not.toEqual(covered?.clip);
+
+  /*
+    BY VALUE, from the plant's own numbers. Box 938.4 × 1049.04, source 16:9:
+      contain → 938.40 × 527.85
+      cover   → 1864.96 × 1049.04
+    926.56 px apart on the width — nothing about this is a rounding question. (The plant's two
+    boxes differ slightly, so the OTHER plate's contain height is 530.78, asserted below; both
+    are what the wire actually carried when the `cover` was dropped.)
+  */
+  expect((covered?.fill?.width ?? 0) * SCENE.width).toBeCloseTo(1864.96, 1);
+  expect((covered?.fill?.height ?? 0) * SCENE.height).toBeCloseTo(1049.04, 1);
+  // …while the CLIP stays AT the box: the overflow is masked away, never punched.
+  expect((covered?.clip?.width ?? 0) * SCENE.width).toBeCloseTo(938.4, 1);
+  expect((covered?.clip?.height ?? 0) * SCENE.height).toBeCloseTo(1049.04, 1);
+  // …and the contained plate lands on the height the plant logged.
+  expect((contained?.fill?.height ?? 0) * SCENE.height).toBeCloseTo(530.77, 1);
+});
+
+it('🔴 B-178 — the same source in TWO looks is fitted per look, and the switch tells the page', async () => {
+  /*
+    The reason the mode is per-look and not per-source: ONE routeKey in two differently-shaped
+    boxes. A per-source answer would have to be wrong in one of them by construction — which is
+    the same argument `C-028` used to refuse a per-catalog-source home, applied one level in.
+  */
+  const r = await boot({
+    template: sixBoxTemplate({
+      sources: ['live-1'],
+      looks: [
+        look('six', { 'live-1': TALL['live-1'] as LiveSourceRect }, { 'live-1': 'contain' }),
+        look('solo', { 'live-1': TALL['live-1'] as LiveSourceRect }, { 'live-1': 'cover' }),
+      ],
+      defaultLookId: 'six',
+    }),
+  });
+  await onAir(r);
+  const layer = layerOf(r, 'live-1');
+  const beforeSwitch = mock?.layerState({ channel: 1, layer });
+  expect(beforeSwitch?.fill, 'look `six` authored contain').toEqual(beforeSwitch?.clip);
+
+  const before = (await recvLines()).length;
+  expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
+
+  // The SAME plate, in the SAME box, is now fitted the way the SOLO look authored it.
+  const after = mock?.layerState({ channel: 1, layer });
+  expect(after?.fill).not.toEqual(after?.clip);
+  // …and the page is told the new mode in the SAME payload as the new look id, so the hole it
+  // punches and the fill the bridge sent can never describe different looks.
+  const updates = updateLines(await since(before));
+  const control = readCgControl(dataArgOf(updates[0] as string, 'UPDATE'));
+  expect(control?.look).toBe('solo');
+  expect(control?.plates?.['live-1']?.mode).toBe('cover');
+});
+
+it('🔴 B-178 — "nobody said" resolves to the DEFAULT, and the take SAYS SO as `default`', async () => {
+  /*
+    The third state, and the half `B-178` exists to make legible. A look whose `fits` map is
+    absent authored nothing; that must resolve to `contain` at the ONE resolution point, and the
+    readout must say `default` rather than dress it up as an authored choice.
+
+    🔴 THE PROVENANCE IS ASSERTED, not just the geometry. `contain` is both the shipped default
+    and a legitimate authored choice, so a test that checked only the picture would pass whether
+    or not the signal existed — and an absent signal is the whole reason this bug took a plant
+    walk to find. The stderr line is captured because it is the deliverable.
+  */
+  const written: string[] = [];
+  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+    written.push(String(chunk));
+    return true;
+  });
+  try {
+    const r = await boot({
+      template: sixBoxTemplate({
+        sources: ['live-1'],
+        looks: [look('six', { 'live-1': TALL['live-1'] as LiveSourceRect })],
+        defaultLookId: 'six',
+      }),
+    });
+    await onAir(r);
+    const state = mock?.layerState({ channel: 1, layer: layerOf(r, 'live-1') });
+    expect(state?.fill, 'the default really is contain').toEqual(state?.clip);
+
+    const line = written.find((l) => l.includes('live-plate fit'));
+    expect(line, 'the take reports every plate’s fit').toBeDefined();
+    expect(line).toContain('live-1=contain (default)');
+  } finally {
+    stderr.mockRestore();
+  }
+});
+
+it('🔴 B-178 — an AUTHORED `contain` reports `authored`, distinguishing it from the default', async () => {
+  /*
+    The other half of the same distinction, and the one that makes the readout worth having. The
+    two produce an IDENTICAL picture, so only the provenance can tell an operator whether the
+    author was heard — which is exactly the inference the owner had to make by hand from two
+    plates agreeing when they had been set differently.
+  */
+  const written: string[] = [];
+  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+    written.push(String(chunk));
+    return true;
+  });
+  try {
+    const r = await boot({
+      template: sixBoxTemplate({
+        sources: ['live-1'],
+        looks: [
+          look('six', { 'live-1': TALL['live-1'] as LiveSourceRect }, { 'live-1': 'contain' }),
+        ],
+        defaultLookId: 'six',
+      }),
+    });
+    await onAir(r);
+    const line = written.find((l) => l.includes('live-plate fit'));
+    expect(line).toContain('live-1=contain (authored)');
+    // 🔴 The MODE is identical to the test above; only the provenance differs. That is the point.
+    expect(line).not.toContain('(default)');
+  } finally {
+    stderr.mockRestore();
+  }
+});
+
+it('🔴 B-178 — the readout names EVERY plate, with each one’s own mode', async () => {
+  const written: string[] = [];
+  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+    written.push(String(chunk));
+    return true;
+  });
+  try {
+    const r = await boot({
+      template: sixBoxTemplate({
+        sources: ['live-1', 'live-2'],
+        looks: [look('six', TALL, { 'live-1': 'contain', 'live-2': 'cover' })],
+        defaultLookId: 'six',
+      }),
+    });
+    await onAir(r);
+    const line = written.find((l) => l.includes('live-plate fit'));
+    expect(line).toContain('live-1=contain (authored)');
+    expect(line).toContain('live-2=cover (authored)');
+    // ONE line, and each plate named ONCE — two answers for one plateId is the confusion the
+    // parked-seat guard exists to prevent.
+    expect((line ?? '').match(/live-2=/g)).toHaveLength(1);
+  } finally {
+    stderr.mockRestore();
+  }
+});
+
+it('🔴 B-178 — the DECLARATION’s fitMode is IGNORED under a look group', async () => {
+  /*
+    The bug's mirror image, pinned so it cannot come back by the other road. `LookSource.fitMode`
+    is deleted, but `LiveSourceDeclaration.fitMode` still exists for the no-look carrier — and a
+    hand-authored package could set it on a look-group template. It must NOT win there: the looks
+    are the authority, and a declaration-level value would be a second home for one fact.
+  */
+  const template = sixBoxTemplate({
+    sources: ['live-1'],
+    looks: [look('six', { 'live-1': TALL['live-1'] as LiveSourceRect })],
+    defaultLookId: 'six',
+  });
+  const withDeclFit = {
+    ...template,
+    liveSources: {
+      ...template.liveSources,
+      sources: template.liveSources.sources.map((s) => ({ ...s, fitMode: 'cover' as LiveFitMode })),
+    },
+  } satisfies TemplateInfo;
+
+  const r = await boot({ template: withDeclFit });
+  await onAir(r);
+  const state = mock?.layerState({ channel: 1, layer: layerOf(r, 'live-1') });
+  // The look says nothing, so the answer is the DEFAULT — not the declaration's `cover`.
+  expect(state?.fill).toEqual(state?.clip);
+});
+
 it('🔴 a REFUSED switch tells the page NOTHING — the old look stays whole', async () => {
   /*
     The decisive half of the ordering, and the reason it is "after AND only on success". A
@@ -1619,6 +1870,60 @@ const OWNERS_ASSIGNMENTS = assign([
   ['live-2', 'src-2'],
   ['live-3', 'src-3'],
 ]);
+
+it('🔴 B-178 — a PARKED seat must NOT overwrite the punched plate’s facts on the wire', async () => {
+  /*
+    🔴 ONE plateId, TWO SEATS. A per-look binding points `live-2` at a different input in the
+    look that is NOT showing, so the plan visits two seats carrying the same plateId: the
+    punched one (the active look) and a parked one whose representative frame belongs to the
+    other look. `plateFits` is keyed by plateId, so an unguarded write let the PARKED seat's
+    facts replace the on-screen plate's.
+
+    Before B-178 both frames read one shared declaration `fitMode`, so the mode could not
+    diverge and the clobber was invisible. Making the mode per-look is exactly what gives the
+    two seats something to differ about — so the guard belongs to this change.
+
+    The consequence is B-149's: the wire fills at the punched look's mode while the page punches
+    its hole at the parked look's, leaving a transparent margin onto the channel — BLACK on air.
+  */
+  /*
+    ⚠ THE ORDER IS THE TEST. Seats are emitted looks-major in AUTHORED order, and the fixture's
+    looks are ['three', 'two', 'solo']. So the ACTIVE look must be `three` and the foreign
+    binding must live in `two` — that way the punched seat is visited FIRST and the parked one
+    LAST, which is the only arrangement in which an unguarded write actually clobbers. With the
+    active look second, the punched seat happens to write last and the bug hides.
+  */
+  const template = ownersTemplate();
+  const withFits = {
+    ...template,
+    liveSources: {
+      ...template.liveSources,
+      looks: template.liveSources.looks?.map(
+        (l) =>
+          l.id === 'three'
+            ? { ...l, fits: { 'live-2': 'contain' as LiveFitMode } } // the ACTIVE look
+            : { ...l, fits: { 'live-2': 'cover' as LiveFitMode } }, // the parked one
+      ),
+    },
+  } satisfies TemplateInfo;
+
+  const r = await boot({ template: withFits, assignments: OWNERS_ASSIGNMENTS });
+  await onAir(r);
+  // A second seat for `live-2`, bound only in the look that is NOT showing.
+  expect(await r.swapLiveSource('item-1', 'live-2', 'src-4', 'two')).toEqual({ ok: true });
+
+  const before = (await recvLines()).length;
+  // Enter the look whose seat is visited FIRST, so the parked seat writes after it.
+  expect(await r.setActiveLook('item-1', 'three')).toEqual({ ok: true });
+  const updates = updateLines(await since(before));
+  const control = readCgControl(dataArgOf(updates[0] as string, 'UPDATE'));
+
+  // 🔴 The PUNCHED look's answer, not the parked look's. Without the guard this reads `cover`.
+  expect(control?.plates?.['live-2']?.mode).toBe('contain');
+  // …and the wire agrees with it: contain keeps FILL === CLIP, so page and wire describe ONE look.
+  const state = mock?.layerState({ channel: 1, layer: layerOf(r, 'live-2') });
+  expect(state?.fill, 'the page and the wire describe ONE look').toEqual(state?.clip);
+});
 
 it('🔴 §8.1 — a PER-LOOK binding moves ONE frame of ONE look, and nothing else', async () => {
   const r = await boot({ template: ownersTemplate(), assignments: OWNERS_ASSIGNMENTS });

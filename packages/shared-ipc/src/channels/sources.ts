@@ -379,9 +379,14 @@ export const TemplateSourceAssignmentSchema = z.object({
    * ⭐ `C-028` — **the OPERATOR's fit-mode override for this plate, and the reason the
    * mode chain runs the opposite way round from the aspect chain.**
    *
-   * Absent means "the operator is not overriding" — the AUTHOR's `fitMode` on the
-   * declaration stands, and absent there means `contain`. It is a third state, not a
-   * missing value, exactly as an absent `expectedAspect` is.
+   * Absent means "the operator is not overriding" — the AUTHOR's mode stands, and absent
+   * there means `contain`. It is a third state, not a missing value, exactly as an absent
+   * `expectedAspect` is.
+   *
+   * ⚠ `B-178` — "the author's mode" is resolved by {@link lookPlateFits}, not read off one
+   * field: a look-group template carries it PER LOOK (the plate element serving that
+   * `routeKey` in the active look), and a template without looks carries it on the
+   * declaration. This override sits above whichever of the two answered.
    *
    * 🔴 **Why the operator outranks the author here, where `D-147` has the source
    * outranking the author for the ASPECT.** The two chains resolve different kinds of

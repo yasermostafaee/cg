@@ -251,12 +251,36 @@ export function resolvePlateAspect(input: PlateAspectInput): PlateAspectOutcome 
  * `ok`/refusal and this one cannot fail; giving it a second answer would make a total
  * function partial for no reason, and would put the two chains where a later reader could
  * "align" them.
+ *
+ * ── ⭐ `B-178` — IT RETURNS WHERE THE ANSWER CAME FROM, NOT ONLY WHAT IT IS ──
+ *
+ * 🔴 **A mode with no provenance is why `B-178` took a plant walk and a payload dump to
+ * find.** Every plate reported `contain`, and `contain` is both the shipped default AND a
+ * legitimate authored choice — so the wire could not be read as evidence either way. The
+ * owner had to infer "nothing authored reached me" from the fact that TWO plates agreed
+ * when they had been set differently. That inference should have been a readout.
+ *
+ * `from` is decided HERE, at the one place the chain is walked, so no reader has to
+ * re-derive it and no second walk can disagree with this one:
+ *
+ *  - `'override'` — the operator's per-assignment substitution is in force;
+ *  - `'authored'` — the scene stated a mode, even where that mode IS `contain`;
+ *  - `'default'`  — **nobody stated anything.** Distinct from an authored `contain`, and
+ *    keeping them distinct is the whole of `B-178`'s second half.
  */
+export interface PlateFitModeOutcome {
+  readonly mode: LiveFitMode;
+  /** Which link of the chain answered. See the note above — `'default'` is "nobody said". */
+  readonly from: 'override' | 'authored' | 'default';
+}
+
 export function resolvePlateFitMode(
   override: LiveFitMode | undefined,
   authored: LiveFitMode | undefined,
-): LiveFitMode {
-  return override ?? authored ?? DEFAULT_LIVE_FIT_MODE;
+): PlateFitModeOutcome {
+  if (override !== undefined) return { mode: override, from: 'override' };
+  if (authored !== undefined) return { mode: authored, from: 'authored' };
+  return { mode: DEFAULT_LIVE_FIT_MODE, from: 'default' };
 }
 
 /** An aspect as an operator reads it: `16:9` where it is a familiar one, else `1.85`. */
