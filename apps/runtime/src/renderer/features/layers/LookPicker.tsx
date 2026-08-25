@@ -112,7 +112,22 @@ const styles = {
     flex: '0 0 auto',
   },
   strip: { display: 'flex', gap: '0.25rem', flex: '0 0 auto' },
+  /**
+   * `B-168` — the immediacy mark. Dimmer than the label it follows, because it is a QUALIFIER
+   * on that word rather than a second signal competing with it: the operator reads `LOOK` and
+   * then, if they are asking "does this wait for UPDATE?", finds the answer already there.
+   * No new hue — this row's colour vocabulary belongs to air state.
+   */
+  now: { opacity: 0.65, fontWeight: 600 },
 } as const;
+
+/**
+ * `B-168` — what the label's tooltip says, in one sentence and naming the contrast that makes
+ * it worth saying: the fields beside it wait, this does not.
+ */
+const IMMEDIATE_TITLE =
+  'Pressing a look applies it IMMEDIATELY — on an on-air row that is a cut. It does not wait ' +
+  'for UPDATE, unlike the per-look inputs in the Inspector.';
 
 interface Props {
   looks: readonly LookOption[];
@@ -168,7 +183,27 @@ export function LookPicker({
         second thing to learn. The word the operator already reads on the PVW panel is the
         word that appears on the control that drives it.
       */}
-      <span style={styles.label}>{preview ? 'PVW LOOK' : 'LOOK'}</span>
+      {/*
+        🔴 **`B-168` — THE LABEL SAYS THIS CONTROL COMMITS IMMEDIATELY.**
+
+        Owner's decision 2026-08-25 (option b): the look pick STAYS immediate — it is not staged
+        and `UPDATE` is not involved. The decisive reason is that a STAGED look is the
+        confidently-wrong-surface class this product fears most: the operator stages a look,
+        forgets UPDATE, and the row SHOWS one look while the picker CLAIMS another. Immediacy
+        makes that disagreement unrepresentable.
+
+        ⚠ **But everything else on this panel waits for UPDATE**, so an operator had no way to
+        know this one control had already changed air. That was the whole of `B-168` once the
+        lying refusal (`B-166`) was fixed — and the fix is a WORD, not a behaviour change.
+
+        `· NOW` rather than a second colour: this row already spends its colour vocabulary on
+        air state, and a new hue here would be a second thing to learn (the same argument the
+        `PVW LOOK` label is built on). `LooksBindingsSection`'s CLEAR PATCH is the precedent for
+        an immediate control living beside staged ones and saying so.
+      */}
+      <span style={styles.label} title={IMMEDIATE_TITLE}>
+        {preview ? 'PVW LOOK' : 'LOOK'} <span style={styles.now}>· NOW</span>
+      </span>
       <span style={styles.strip}>
         {looks.map((look) => {
           const live = look.id === activeId;

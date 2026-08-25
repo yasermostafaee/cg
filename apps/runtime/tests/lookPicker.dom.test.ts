@@ -404,4 +404,36 @@ describe('B-151 — the picker names its TARGET, because one control serves two'
     );
     expect(seg(el, 'left')?.getAttribute('aria-label')).toContain('Preview look');
   });
+
+  /**
+   * 🔴 `B-168` — the picker SAYS it commits immediately.
+   *
+   * Owner's decision 2026-08-25 (option b): the look pick stays immediate rather than becoming
+   * staged, because a staged look lets the row SHOW one look while the picker CLAIMS another —
+   * the confidently-wrong-surface class this product fears most. What was missing was that
+   * nothing on the control said so, while every field beside it on that panel waits for UPDATE.
+   */
+  it('🔴 B-168: the label says the press applies NOW — on air', async () => {
+    const { el } = await render({ target: 'air' });
+    expect(el.textContent).toContain('NOW');
+  });
+
+  it('🔴 B-168: …and on preview, where the press is equally immediate', async () => {
+    // A rehearsing row's press reaches PVW at once for the same reason. Asserted separately
+    // rather than looped, because the harness tears down per test.
+    const { el } = await render({ target: 'preview' });
+    expect(el.textContent).toContain('NOW');
+  });
+
+  it('🔴 B-168: the reason names the CONTRAST — it does not wait for UPDATE', async () => {
+    // "Applies immediately" alone is not the useful half. The operator's question is why this
+    // control differs from the fields beside it, so the sentence has to name UPDATE.
+    const { el } = await render();
+    const label = [...el.querySelectorAll('[title]')]
+      .map((n) => n.getAttribute('title') ?? '')
+      .find((t) => t.includes('IMMEDIATELY'));
+    expect(label).toBeDefined();
+    expect(label).toMatch(/does not wait for UPDATE/i);
+    expect(label).toMatch(/cut/i);
+  });
 });

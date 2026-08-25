@@ -5780,7 +5780,7 @@ they exist and the absence of a divergence one is real, not a blind spot.
   they are recorded in B-167's §"What this is NOT" so the next reader does not re-derive them.
 -->
 
-## [~] B-166 — 🔴 a REFUSED look switch has ALREADY MOVED live plates on the wire, and every surface says it did not happen ⟨priority: high — a mixed geometry on air, from a button that reported failure⟩ — FIXED 2026-08-25 together with [[B-167]]; ONE fix, proven by a one-line revert
+## [~] B-166 — 🔴 a REFUSED look switch has ALREADY MOVED live plates on the wire, and every surface says it did not happen ⟨priority: high — a mixed geometry on air, from a button that reported failure⟩ — FIXED 2026-08-25 together with [[B-167]]; ONE fix, proven by a one-line revert. Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/32829920791 (commit `a80c2a9f`; `e2e` job conclusion `success`, and the step RAN rather than skipped)
 
 <!--
   🔴 FIXED 2026-08-25 — and read this before touching either item, because the SHAPE of the fix
@@ -5879,7 +5879,7 @@ contain plate 1's fill back at the OLD look's rect. `setHandler('MIXER', …)` i
   operator hits NEXT, when they take this item's own advice and re-press), [[B-126]] (the rule any
   rollback candidate must not break), [[B-155]] (the other defect living in this switch's window).
 
-## [~] B-167 — 🔴 the RE-PRESS the product prescribes as the repair is a guaranteed NO-OP for a mis-fit plate, and it then reports SUCCESS ⟨priority: high — the holes move, one box does not, and the switch goes green⟩ — FIXED 2026-08-25 by [[B-166]]'s fix; NOT a second change
+## [~] B-167 — 🔴 the RE-PRESS the product prescribes as the repair is a guaranteed NO-OP for a mis-fit plate, and it then reports SUCCESS ⟨priority: high — the holes move, one box does not, and the switch goes green⟩ — FIXED 2026-08-25 by [[B-166]]'s fix; NOT a second change. Linux e2e DISCHARGED on the same run: https://github.com/yasermostafaee/cg/actions/runs/32829920791
 
 <!--
   🔴 FIXED 2026-08-25, and NOT by a fix of its own — read this before writing one.
@@ -5978,9 +5978,56 @@ plate. Assert the plate's rendered rect via `layerRenderedRect()`, not just `lay
   the other defect), [[B-149]] (the disproven premise, kept here so it is not re-derived),
   [[B-126]] (why the failure path is this careful in the first place).
 
-## [!] B-168 — the LOOK PICK is not part of UPDATE's transaction and is not staged, on a surface that teaches STAGED ≠ IN FORCE ⟨priority: medium — one surface, two contradictory commit models, nothing says which is which⟩ — BLOCKED 2026-08-25 on an owner decision; see the note
+## [~] B-168 — the LOOK PICKER does not SAY it commits immediately, on a surface where everything beside it waits for UPDATE ⟨priority: medium — the operator cannot tell which control has already changed air⟩ — RE-SCOPED and DECIDED 2026-08-25 (owner: option b)
 
 <!--
+  🔴 THE HEADING WAS RE-SCOPED IN PLACE ON 2026-08-25, AND THE OLD ONE IS QUOTED HERE BECAUSE
+  DELETING IT WOULD HIDE THE CORRECTION.
+
+  It read: *"the LOOK PICK is not part of UPDATE's transaction and is not staged, on a surface
+  that teaches STAGED ≠ IN FORCE"*.
+
+  That wording says something is DROPPED. Nothing is dropped — **nothing is ever held**.
+  `stack.update` has no look field, `draftStore` has no look staging, and `LookPicker.onPick`
+  calls `stack.set-active-look` immediately. An item describing a missing transaction sends the
+  next reader to build one, which is the opposite of what was decided.
+
+  ⚠ This project has corrected a false record three times now (`B-159`'s disproven claims,
+  `B-175`'s AspectRow claim, `D-155`'s jump claim). Leaving the old wording standing while the
+  decision went the other way would have been the fourth.
+-->
+
+**Owner's decision, 2026-08-25 — option (b): the look pick STAYS IMMEDIATE.** It is not staged,
+and `UPDATE` is not touched. The reasons, in the owner's order of weight:
+
+1. 🔴 **A staged look is the confidently-wrong-surface class this product fears most.** The
+   operator stages a look, forgets UPDATE, and the row SHOWS one look while the picker CLAIMS
+   another. Immediacy makes that disagreement **unrepresentable**. This argument outranks the
+   rest.
+2. **The picker on an on-air row IS a cut**, already decided at [[B-151]] — _"an on-air row gets
+   the cut"_. Staging would turn a live cut control into a two-press control at exactly the
+   moment speed matters.
+3. **The complaint's cause was a LYING REFUSAL, not immediacy.** [[B-166]] closed it: the owner
+   reached for UPDATE because the refused switch had left him no honest route, and it now
+   refuses cleanly and the re-press works. Staging would treat a symptom that no longer exists.
+4. **Two commit models on one surface is a real cost — but it already exists and is
+   documented.** `LooksBindingsSection`'s CLEAR PATCH sets the precedent with its reason written
+   down: it applies immediately "because the patch it undoes was applied immediately too …
+   making its removal wait for UPDATE would leave the two halves of one operator decision on
+   different clocks." So the answer is that the surface **SAYS SO** — not that it becomes
+   uniform.
+
+**What is therefore missing, and it is the whole of the remaining work:** the picker does not
+say it commits immediately. Everything beside it on that panel waits for UPDATE, so an operator
+has no way to know this one control has already changed air. **A sentence on the surface, not a
+behaviour change.**
+
+<!--
+  ⚠ SUPERSEDED THE SAME DAY — the owner answered (b), and the decision with its full reasoning
+  is in the item body above. This note is KEPT rather than deleted because it records what was
+  ASKED FOR and why it was refused, which is the part a later reader would otherwise re-derive
+  from the prompt and re-implement.
+
   🔴 BLOCKED 2026-08-25 — STOPPED DELIBERATELY, and the reason is that the obvious fix would
   make an ON-AIR control worse.
 
