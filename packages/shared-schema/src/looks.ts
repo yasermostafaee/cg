@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { LiveSourceIdSchema } from './elements.js';
-import { LiveFitModeSchema } from './live-fit.js';
 import { IdSchema } from './primitives.js';
 
 /**
@@ -38,6 +37,14 @@ import { IdSchema } from './primitives.js';
  * input punched by two plates that assert different aspects is reachable, and it refuses the
  * look that asserts the contradiction rather than the other.
  *
+ * 🔴 **`fitMode` DOES NOT, and `B-178` is what it cost to assume it did.** The rule above is
+ * about facts that CANNOT differ between looks — an aspect is a property of the FEED, and a
+ * feed does not change shape when the operator presses a look. A fit mode is a property of how
+ * that feed is placed in a BOX, and a look is exactly a change of box, so one answer per source
+ * is one answer too few. It is carried per-look beside the rects
+ * (`TemplateLookCarrier.fits`), read off the plate ELEMENT that serves the routeKey in that
+ * look. See `docs/prd/bugs-runtime.md` `B-178`.
+ *
  * ── WHY `instanceId` AND NOT A CHILD LIST ──────────────────────────────────────
  *
  * A look names the ELEMENT ID of its composition instance rather than owning children,
@@ -74,21 +81,33 @@ export const CUT_LOOK_TRANSITION: LookTransition = { mode: 'cut' };
 export const LookSourceSchema = z.object({
   /** The symbolic id a plate's `routeKey` references. Never a device string. */
   routeKey: LiveSourceIdSchema,
-  /** The aspect the design expects; a contradicting assignment is refused at take. */
+  /**
+   * The aspect the design expects; a contradicting assignment is refused at take.
+   *
+   * ⚠ **NOTHING WRITES THIS FIELD** — `addLookSource` is the only producer of a `LookSource`
+   * and it emits `{ routeKey, dynamic: false }`. So an author's `expectedAspect` never reaches
+   * a look-group template's carrier, and the take's mismatch refusal — which needs BOTH the
+   * source's aspect and the author's — is disarmed for every such template. That is the same
+   * defect `B-178` fixes for `fitMode`, one field wider, and it is **filed separately** because
+   * its fix is not the same: an aspect asserts a property of the FEED, which cannot differ
+   * between looks, so it does NOT become per-look — it needs either a writer here or a hoist
+   * from the element with a refusal when two looks' elements disagree. See `B-179`.
+   */
   expectedAspect: z.number().positive().optional(),
   /**
-   * `C-028` — the fit mode for this source's plates. Absent means `contain`.
+   * 🔴 `B-178` — **`fitMode` IS DELETED FROM THIS SCHEMA, and the deletion is the point.**
    *
-   * ⚠ **It lives HERE, on the group's declaration, for exactly the reason
-   * {@link expectedAspect} does** (see this module's header): under LOOKS the carrier is
-   * SOURCE-KEYED, so one input punched by plates in two looks is ONE declaration and
-   * there is nowhere for two modes to be carried. C-028's decision is that the mode is
-   * authored per ELEMENT rather than per catalog SOURCE — which this honours: a
-   * declared look source is not a catalog source, it is the template's own hole, and it
-   * is per-template exactly as the element is. A scene with NO look group keeps the
-   * mode on the plate element itself, where `collectLiveSources` reads it.
+   * `C-028` put it here reasoning that a source-keyed carrier has "nowhere for two modes to be
+   * carried". There was nowhere on the DECLARATION — but there was always somewhere on each
+   * LOOK, beside its rects, and that is where it now lives (`TemplateLookCarrier.fits`). The
+   * field was never written by anything, so every look-group template exported since `C-028`
+   * put its plates on air at the `contain` default however the author had set them.
+   *
+   * It is removed rather than left optional-and-ignored: a field that looks like the place to
+   * write a fit mode, and is not, is precisely how this bug would return. Under `P-031`'s
+   * compatibility floor no shim is owed, and a stored scene carrying the key simply has it
+   * stripped by zod at load.
    */
-  fitMode: LiveFitModeSchema.optional(),
   /** Whether this source carries a FILL role (see the declaration carrier). */
   dynamic: z.boolean().default(false),
 });

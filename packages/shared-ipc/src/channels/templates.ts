@@ -4,13 +4,14 @@ import {
   DynamicFieldSchema,
   IdSchema,
   LiveSourceArrangementSchema,
+  LiveFitModeSchema,
   LiveSourceDeclarationSchema,
   LiveSourceRectSchema,
   LookTransitionSchema,
   PositionSchema,
   ResolutionSchema,
 } from '@cg/shared-schema';
-import type { LiveSourceRect } from '@cg/shared-schema';
+import type { LiveFitMode, LiveSourceRect } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -73,6 +74,21 @@ export const TemplateLookSchema = z.object({
   entered: LookTransitionSchema,
   /** routeKey → scene-px rect while this look is active. No entry = not in this look. */
   rects: z.record(z.string(), LiveSourceRectSchema),
+  /**
+   * ⭐ `B-178` — routeKey → the AUTHOR's fit mode while this look is active, from the plate
+   * ELEMENT that serves that routeKey here.
+   *
+   * **No entry means the author stated nothing** — a third state, distinct from an authored
+   * `contain`, which is exactly the distinction `B-178` exists to restore. The default is
+   * applied at the ONE place that resolves the mode, never here.
+   *
+   * ⚠ **OPTIONAL, and that is a compatibility decision rather than an oversight.** Zod STRIPS
+   * unknown keys, so a template packaged before this change carries no `fits` at all; making it
+   * required would refuse every such record at the IPC boundary and again at boot
+   * (`template-registry.ts`), taking a working installation off air over a field whose absence
+   * simply means "authored nothing".
+   */
+  fits: z.record(z.string(), LiveFitModeSchema).optional(),
 });
 export type TemplateLook = z.infer<typeof TemplateLookSchema>;
 
@@ -171,6 +187,41 @@ export function lookPlateRects(
   const look = activeLookOf(live, activeLookId);
   if (look !== undefined) return { ...look.rects };
   return Object.fromEntries(live.sources.map((s) => [s.sourceId, s.rect] as const));
+}
+
+/**
+ * ⭐ `B-178` — **`routeKey → the AUTHOR's fit mode`, resolved for the ACTIVE LOOK.** The exact
+ * sibling of {@link lookPlateRects}, and deliberately built in its image.
+ *
+ * ── WHY IT IS A SIBLING AND NOT A BRANCH AT THE CALL SITE ───────────────────────
+ *
+ * `lookPlateRects`'s own header states the rule this follows: it is *"a FUNCTION OF THE CARRIER,
+ * not a method on any runtime, so the bridge cannot drift from the console: both call this. Do
+ * not add a local spelling of it."* The mode has exactly the same two carriers and exactly the
+ * same fallback, so it gets the same treatment — one function, both shapes, no caller learning
+ * which kind of template it is holding.
+ *
+ * - **With a look group** the answer is the ACTIVE look's own `fits` map, because the mode
+ *   describes how a picture sits in a BOX and a look is precisely a change of box.
+ * - **Without one** it falls through to each declaration's `fitMode`, which `collectLiveSources`
+ *   copies straight off the plate element — the pre-`B-178` path, unchanged.
+ *
+ * ⚠ **An ABSENT entry means the author stated nothing, and callers must preserve that.** It is
+ * NOT `contain`: telling "nobody said" apart from "the author chose `contain`" is half of what
+ * `B-178` is for, and a `?? 'contain'` here would erase the distinction for every reader at
+ * once. A look with no `fits` at all (a package built before this change) yields an empty map,
+ * which reads as "nothing authored" — the honest answer for a record that could not carry one.
+ */
+export function lookPlateFits(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): Record<string, LiveFitMode> {
+  const look = activeLookOf(live, activeLookId);
+  if (look !== undefined) return { ...look.fits };
+  const stated = live.sources.filter(
+    (s): s is typeof s & { fitMode: LiveFitMode } => s.fitMode !== undefined,
+  );
+  return Object.fromEntries(stated.map((s) => [s.sourceId, s.fitMode] as const));
 }
 
 export const TemplateInfoSchema = z.object({

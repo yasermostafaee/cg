@@ -7,6 +7,7 @@ import {
 import type {
   FieldBinding,
   FlatElement,
+  LiveFitMode,
   LiveSourceArrangement,
   LiveSourceDeclaration,
   LiveSourceRect,
@@ -247,6 +248,22 @@ export interface TemplateLookCarrier {
   name: string;
   entered: LookTransition;
   rects: Record<string, LiveSourceRect>;
+  /**
+   * ⭐ `B-178` — **the AUTHOR's fit mode for each source IN THIS LOOK**, taken from the plate
+   * ELEMENT that serves that `routeKey` here.
+   *
+   * 🔴 It sits beside {@link rects} and not on the declaration because it is the SAME KIND OF
+   * FACT: a property of the pairing of a picture with a BOX, and the box is per-look. One
+   * `routeKey` appears in every look in a differently-shaped box, so a per-source mode would
+   * have to be wrong in one of them — the argument `C-028` already used to refuse a
+   * per-catalog-source home, applied one level in.
+   *
+   * A source ABSENT from this map authored nothing; that is a THIRD STATE and it must survive
+   * the wire, because `B-178`'s whole subject is that "nobody said" was indistinguishable from
+   * "the author chose `contain`". Never defaulted here — the default belongs at the one place
+   * that resolves the mode.
+   */
+  fits: Record<string, LiveFitMode>;
 }
 
 /**
@@ -261,7 +278,11 @@ export interface TemplateLookCarrier {
  *
  * - **`sources`** — ONE declaration per DECLARED source (the group's list, in its order).
  *   `expectedAspect` / `dynamic` come from the DECLARATION, never from a plate element —
- *   the group is where two looks are prevented from disagreeing. The declaration's `rect`
+ *   the group is where two looks are prevented from disagreeing. ⚠ **`fitMode` does NOT: it is
+ *   per-look, beside the rects** (`B-178`, and see {@link TemplateLookCarrier.fits}). The two
+ *   facts differ in kind — `expectedAspect` asserts a property of the FEED, which cannot change
+ *   between looks, while `fitMode` asserts how that feed is placed in a BOX, and the box is
+ *   exactly what a look changes. The declaration's `rect`
  *   is the source's rect in the DEFAULT look, falling back to the first look containing it
  *   (a bridge that has not learned looks yet seats what a fresh take will show);
  *   `elementId` is the first referencing plate's, document order (the bridge never reads
@@ -294,6 +315,22 @@ export function collectLookCarrier(scene: Scene): {
   const rectsByLook = new Map<string, Record<string, LiveSourceRect>>(
     group.looks.map((l) => [l.id, {}]),
   );
+  /**
+   * ⭐ `B-178` — the per-look fit modes, harvested in the SAME pass and under the SAME
+   * first-wins rule as {@link rectsByLook}.
+   *
+   * 🔴 **This loop already knew which element serves which `routeKey` in which look; it simply
+   * threw the element away and kept only its rect.** That is the whole of `B-178`: the author's
+   * `fitMode` was in scope, one line from where it was needed, and the carrier read a
+   * never-written field on the DECLARATION instead — so every plate under a look group reached
+   * air on the `contain` default however the author had set it.
+   *
+   * Keyed and gated identically to the rects so the two can never disagree about membership: a
+   * source with a rect in this look has its mode looked up here, and one without has neither.
+   */
+  const fitsByLook = new Map<string, Record<string, LiveFitMode>>(
+    group.looks.map((l) => [l.id, {}]),
+  );
   const firstPlateFor = new Map<string, string>();
 
   for (const flat of flattenElements(scene, 'document')) {
@@ -306,7 +343,21 @@ export function collectLookCarrier(scene: Scene): {
     const inLooks = owner === undefined ? group.looks : [owner];
     for (const look of inLooks) {
       const rects = rectsByLook.get(look.id);
-      if (rects !== undefined && !(el.routeKey in rects)) rects[el.routeKey] = flat.rect;
+      if (rects === undefined || el.routeKey in rects) continue;
+      rects[el.routeKey] = flat.rect;
+      /*
+        ⚠ WRITTEN ONLY WHEN THE AUTHOR STATED ONE. An absent entry is the third state —
+        "nobody said" — and it must reach the bridge as an absence rather than as a defaulted
+        `contain`, because telling those two apart is half of what `B-178` is for.
+
+        Inside the same `!(routeKey in rects)` gate on purpose: the rect decides which element
+        WINS this look, so reading the mode off any other element would seat one plate's picture
+        under another plate's fit.
+      */
+      if (el.fitMode !== undefined) {
+        const fits = fitsByLook.get(look.id);
+        if (fits !== undefined) fits[el.routeKey] = el.fitMode;
+      }
     }
   }
 
@@ -326,10 +377,21 @@ export function collectLookCarrier(scene: Scene): {
       sourceId: src.routeKey,
       rect,
       ...(src.expectedAspect !== undefined ? { expectedAspect: src.expectedAspect } : {}),
-      // `C-028` — from the DECLARED source, never from a plate element, for the same
-      // reason `expectedAspect` is: this carrier is source-keyed, so a per-plate read
-      // would silently pick one of two looks' plates and call it the answer.
-      ...(src.fitMode !== undefined ? { fitMode: src.fitMode } : {}),
+      /*
+        ⭐ `B-178` — **NO `fitMode` HERE ANY MORE, and its absence is the fix.**
+
+        `C-028` put it on the declaration with the comment "from the DECLARED source, never from
+        a plate element … a per-plate read would silently pick one of two looks' plates and call
+        it the answer". The instinct was right and the conclusion was wrong: the answer is not to
+        pick one plate, it is to answer PER LOOK, where there is exactly one plate to pick. The
+        field it read (`LookSource.fitMode`) had no writer anywhere in the product, so the author's
+        choice was dropped for every look-group template ever exported.
+
+        The mode now travels on each look's own `fits` map. It is NOT also emitted here, because a
+        second home for one fact is how the two come to disagree — golden rule 7's shape, and the
+        reason `LookSource.fitMode` is deleted from the schema in the same change rather than left
+        as a plausible-looking second place to write it.
+      */
       dynamic: src.dynamic,
     });
   }
@@ -341,6 +403,7 @@ export function collectLookCarrier(scene: Scene): {
       name: l.name,
       entered: l.entered,
       rects: rectsByLook.get(l.id) ?? {},
+      fits: fitsByLook.get(l.id) ?? {},
     })),
     ...(group.defaultLookId !== undefined ? { defaultLookId: group.defaultLookId } : {}),
   };

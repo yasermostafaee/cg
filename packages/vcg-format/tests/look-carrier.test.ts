@@ -25,7 +25,16 @@ const tf = (x: number, y: number, w: number, h: number) => ({
   anchor: { x: 0, y: 0 },
 });
 
-const plate = (id: string, routeKey: string, x: number, y: number, w: number, h: number): Element =>
+const plate = (
+  id: string,
+  routeKey: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  /** `B-178` — the AUTHOR's fit mode on the ELEMENT. Absent = authored nothing. */
+  fitMode?: 'contain' | 'cover',
+): Element =>
   ({
     ...baseElProps,
     id,
@@ -33,6 +42,7 @@ const plate = (id: string, routeKey: string, x: number, y: number, w: number, h:
     type: 'video-placeholder',
     transform: tf(x, y, w, h),
     routeKey,
+    ...(fitMode !== undefined ? { fitMode } : {}),
   }) as unknown as Element;
 
 const comp = (id: string, children: Element[]) => ({
@@ -256,6 +266,135 @@ describe('the source-keyed declaration list', () => {
       ],
     });
     expect(collectLookCarrier(s)?.sources.map((d) => d.sourceId)).toEqual(['guest-1', 'guest-2']);
+  });
+});
+
+/**
+ * ⭐ **`B-178` — THE FIT MODE IS PER LOOK, AND IT COMES OFF THE PLATE ELEMENT.**
+ *
+ * 🔴 **THE FIXTURE IS THE TEST.** `C-028` shipped with the mode read off the GROUP DECLARATION
+ * (`LookSource.fitMode`) — a field no code in the product ever wrote — so every plate of every
+ * look-group template went to air on the `contain` default however the author had set it. The
+ * owner put two plates side by side, one `contain` and one `cover`, and BOTH rendered `contain`.
+ *
+ * Nothing caught it because no test ever set a fit mode on a scene that HAD a look group: the one
+ * `C-028` carrier test exercises `collectLiveSources`, the no-look path, where the field was read
+ * off the element and worked. **A fixture without a look group cannot see this bug.** That is
+ * precisely how it shipped, and it is why these tests build the look group first and the
+ * assertion second.
+ */
+describe('B-178 — per-look fit modes, from the plate ELEMENT', () => {
+  /** Two plates in ONE look, authored DIFFERENTLY. The discriminating fixture. */
+  function twoModesInOneLook(): Scene {
+    return scene({
+      rootChildren: [instance('inst-a', 'comp-a', 0, 0, 1920, 1080)],
+      compositions: [
+        comp('comp-a', [
+          plate('a-1', 'guest-1', 0, 0, 640, 360, 'contain'),
+          plate('a-2', 'guest-2', 960, 0, 640, 360, 'cover'),
+        ]),
+      ],
+      lookGroups: [
+        {
+          id: 'g1',
+          sources: [
+            { routeKey: 'guest-1', dynamic: false },
+            { routeKey: 'guest-2', dynamic: false },
+          ],
+          looks: [look('look-a', 'inst-a')],
+          defaultLookId: 'look-a',
+        },
+      ],
+    });
+  }
+
+  it('🔴 TWO plates in ONE look with DIFFERENT authored modes carry BOTH to the carrier', () => {
+    const carrier = collectLookCarrier(twoModesInOneLook());
+    const fits = carrier?.looks.find((l) => l.id === 'look-a')?.fits;
+    // The whole bug, in one assertion: these were both `undefined` before, so the bridge
+    // defaulted both to `contain` and the two plates rendered identically on air.
+    expect(fits).toEqual({ 'guest-1': 'contain', 'guest-2': 'cover' });
+  });
+
+  it('🔴 ONE source in TWO looks can be fitted DIFFERENTLY — the reason it is not per-source', () => {
+    /*
+      This is the case a per-source `fitMode` cannot express, and it is why `B-178` put the mode
+      beside the per-look RECTS rather than on the declaration. `guest-1` appears in look-a in a
+      640×360 box and in look-solo in a 1280×720 box; the author may reasonably want the wide box
+      filled and the narrow one fitted whole. A single answer per source would be wrong in one of
+      them by construction.
+    */
+    const s = scene({
+      rootChildren: [
+        instance('inst-a', 'comp-a', 0, 0, 1920, 1080),
+        instance('inst-b', 'comp-solo', 0, 0, 1920, 1080),
+      ],
+      compositions: [
+        comp('comp-a', [plate('a-1', 'guest-1', 0, 0, 640, 360, 'contain')]),
+        comp('comp-solo', [plate('solo-1', 'guest-1', 320, 180, 1280, 720, 'cover')]),
+      ],
+      lookGroups: [
+        {
+          id: 'g1',
+          sources: [{ routeKey: 'guest-1', dynamic: false }],
+          looks: [look('look-a', 'inst-a'), look('look-solo', 'inst-b')],
+          defaultLookId: 'look-a',
+        },
+      ],
+    });
+    const carrier = collectLookCarrier(s);
+    expect(carrier?.looks.find((l) => l.id === 'look-a')?.fits).toEqual({ 'guest-1': 'contain' });
+    expect(carrier?.looks.find((l) => l.id === 'look-solo')?.fits).toEqual({ 'guest-1': 'cover' });
+    // …and the rects really do differ, so the two looks genuinely want different answers.
+    expect(carrier?.looks.find((l) => l.id === 'look-a')?.rects['guest-1']).toEqual({
+      x: 0,
+      y: 0,
+      width: 640,
+      height: 360,
+    });
+    expect(carrier?.looks.find((l) => l.id === 'look-solo')?.rects['guest-1']).toEqual({
+      x: 320,
+      y: 180,
+      width: 1280,
+      height: 720,
+    });
+  });
+
+  it('🔴 "NOBODY SAID" is an ABSENT entry, never a defaulted `contain`', () => {
+    /*
+      `B-178`'s second half. An unset field and a deliberate `contain` produce the same picture,
+      so if the carrier wrote `contain` for both, nothing downstream could ever tell an author
+      who was heard from one who was not — which is exactly the state that made this bug take a
+      plant walk to diagnose.
+    */
+    const carrier = collectLookCarrier(twoLookScene());
+    const fits = carrier?.looks.find((l) => l.id === 'look-a')?.fits;
+    expect(fits).toEqual({});
+    expect('guest-1' in (fits ?? {})).toBe(false);
+  });
+
+  it('an AUTHORED `contain` IS an entry — the other half of the same distinction', () => {
+    const carrier = collectLookCarrier(twoModesInOneLook());
+    const fits = carrier?.looks.find((l) => l.id === 'look-a')?.fits ?? {};
+    expect('guest-1' in fits).toBe(true);
+    expect(fits['guest-1']).toBe('contain');
+  });
+
+  it('the DECLARATION carries no fitMode at all — one fact, one home', () => {
+    // A second home is how the two come to disagree. The declaration keeps `expectedAspect`
+    // and `dynamic`; the mode lives only on the looks.
+    const carrier = collectLookCarrier(twoModesInOneLook());
+    for (const d of carrier?.sources ?? []) {
+      expect(Object.keys(d)).not.toContain('fitMode');
+    }
+  });
+
+  it('every look gets a fits map, including the EMPTY look', () => {
+    // Structural mirror of `rects`: absent would make a reader branch on which kind of look it
+    // is holding, which is the branch `lookPlateRects`'s own header forbids.
+    const carrier = collectLookCarrier(twoLookScene());
+    for (const l of carrier?.looks ?? []) expect(l.fits).toBeDefined();
+    expect(carrier?.looks.find((l) => l.id === 'look-empty')?.fits).toEqual({});
   });
 });
 
