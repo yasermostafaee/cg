@@ -433,9 +433,14 @@ function beginResize(
   /*
     🔴 `D-155` — THE LOCK, RESOLVED ONCE FOR THE WHOLE GESTURE.
 
-    Read here rather than per pointer-move on purpose: a lock that could be toggled MID-DRAG
-    would change which axis leads halfway through, which is the same visible jump the
-    dominant-axis rule produces and which `lockExtents` exists to avoid. The press decides.
+    Read here rather than per pointer-move on purpose: a lock toggled MID-DRAG would change
+    which solution the box is tracking halfway through, so the box would relocate under a
+    pointer that did not change direction. The press decides.
+
+    ⚠ This comment previously justified that by appeal to "the same visible jump the
+    dominant-axis rule produces". **That jump does not exist** — it was measured, and both
+    candidate corner rules are continuous at the diagonal. See `lockExtents` in `geometry.ts`
+    for the full correction. The reason above stands on its own and does not borrow it.
 
     The ratio is `sizeRatioForAspect`'s, never `aspect` itself — that function is the ONE
     place that knows the effective aspect includes `scale`, and `geometry.ts` deliberately
