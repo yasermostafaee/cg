@@ -5780,7 +5780,36 @@ they exist and the absence of a divergence one is real, not a blind spot.
   they are recorded in B-167's §"What this is NOT" so the next reader does not re-derive them.
 -->
 
-## [ ] B-166 — 🔴 a REFUSED look switch has ALREADY MOVED live plates on the wire, and every surface says it did not happen ⟨priority: high — a mixed geometry on air, from a button that reported failure⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+## [~] B-166 — 🔴 a REFUSED look switch has ALREADY MOVED live plates on the wire, and every surface says it did not happen ⟨priority: high — a mixed geometry on air, from a button that reported failure⟩ — FIXED 2026-08-25 together with [[B-167]]; ONE fix, proven by a one-line revert
+
+<!--
+  🔴 FIXED 2026-08-25 — and read this before touching either item, because the SHAPE of the fix
+  is not the shape the brief predicted.
+
+  THE §0 VERDICT: B-166 and B-167 are TWO FACES OF ONE DEFECT. One fix closes both, and that is
+  not an argument — it is measured. Reverting a SINGLE LINE (`mode: 'switch'` back to
+  `mode: 'live'` at `setActiveLook`'s reconcile) turns BOTH items' tests red together.
+
+  ⚠ THE BRIEF'S DIAGNOSIS WAS WRONG, AND CORRECTING IT CHANGED THE FIX. It read: "the verb
+  mutates before it decides". It does not. `setActiveLook` → `reconcileLivePlates` →
+  `#planLiveSeating` is pure and refuses BEFORE anything is written or sent — the same
+  plan/decide/apply shape `take` uses, already in place on this path. What a plan cannot decide
+  is a WIRE outcome: a source that resolves fine and that CasparCG then refuses to open. The
+  owner's plant case is exactly that (a box that renders black is one whose command was
+  attempted), so "plan before apply" was never the missing piece.
+
+  THE FIX IS ALL-OR-NOTHING APPLY: a refused switch puts the geometry back. `#applyLivePlates`
+  gained a third mode, `'switch'`, which PLANS byte-identically to `'live'` (same
+  `already-live` scope, same `pinned` level 2, same UNION pre-seat — §3's constraint held and
+  asserted) and differs only in what a failure MEANS.
+
+  🔴 WHY THAT IS SAFE HERE AND NOT FOR A SWAP, which is the reason `'live'` is right to refuse
+  a rollback: a plain switch issues NO `PLAY` at all. Every punched plate is already seated by
+  the union pre-seat, so the only traffic is `MIXER FILL`/`CLIP` (plus a `MIXER VOLUME` leaving
+  HELD). Undoing that is re-emitting the PRIOR fit — no `out`, no `MIXER CLEAR`, no producer
+  destroyed, nothing taken off air. `B-126`'s never-CLEAR-before-a-repair rule is not engaged.
+  A plate this action genuinely `PLAY`ed is deliberately NOT rolled back.
+-->
 
 **What the owner saw, on the plant.**
 
@@ -5850,7 +5879,24 @@ contain plate 1's fill back at the OLD look's rect. `setHandler('MIXER', …)` i
   operator hits NEXT, when they take this item's own advice and re-press), [[B-126]] (the rule any
   rollback candidate must not break), [[B-155]] (the other defect living in this switch's window).
 
-## [ ] B-167 — 🔴 the RE-PRESS the product prescribes as the repair is a guaranteed NO-OP for a mis-fit plate, and it then reports SUCCESS ⟨priority: high — the holes move, one box does not, and the switch goes green⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+## [~] B-167 — 🔴 the RE-PRESS the product prescribes as the repair is a guaranteed NO-OP for a mis-fit plate, and it then reports SUCCESS ⟨priority: high — the holes move, one box does not, and the switch goes green⟩ — FIXED 2026-08-25 by [[B-166]]'s fix; NOT a second change
+
+<!--
+  🔴 FIXED 2026-08-25, and NOT by a fix of its own — read this before writing one.
+
+  The lying ledger record this item is built on — the ATTEMPTED geometry kept for a plate whose
+  `MIXER FILL` was refused — is not an independent defect. It is the RESIDUE of a partial apply
+  that was never undone. Once a refused switch puts the geometry back and writes the previous
+  ledger back verbatim ([[B-166]]), the next press computes a real delta against the truth
+  instead of `same() === true`, so it either works or refuses again for the same reason.
+
+  A guaranteed no-op that answers `ok` stops being REPRESENTABLE rather than being defended
+  against — which is why there is no second guard anywhere for it.
+
+  ⚠ MEASURED, not argued: reverting the one line that makes a switch all-or-nothing turns THIS
+  item's test red alongside B-166's. If a future change makes them fail independently, the two
+  have come apart and this item needs its own fix again.
+-->
 
 **What the owner saw, on the plant.**
 
@@ -5932,7 +5978,41 @@ plate. Assert the plate's rendered rect via `layerRenderedRect()`, not just `lay
   the other defect), [[B-149]] (the disproven premise, kept here so it is not re-derived),
   [[B-126]] (why the failure path is this careful in the first place).
 
-## [ ] B-168 — the LOOK PICK is not part of UPDATE's transaction and is not staged, on a surface that teaches STAGED ≠ IN FORCE ⟨priority: medium — one surface, two contradictory commit models, nothing says which is which⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+## [!] B-168 — the LOOK PICK is not part of UPDATE's transaction and is not staged, on a surface that teaches STAGED ≠ IN FORCE ⟨priority: medium — one surface, two contradictory commit models, nothing says which is which⟩ — BLOCKED 2026-08-25 on an owner decision; see the note
+
+<!--
+  🔴 BLOCKED 2026-08-25 — STOPPED DELIBERATELY, and the reason is that the obvious fix would
+  make an ON-AIR control worse.
+
+  `LOOK-VERB-01` §2 asked for "UPDATE carries the look pick into force, and the row does not
+  need the look button pressed afterwards". That cannot be implemented as written, because
+  THERE IS NO STAGED LOOK PICK FOR UPDATE TO CARRY: `stack.update`'s payload has no look field,
+  `draftStore` has no look staging, and `LookPicker.onPick` → `LayerRow.switchLook` calls
+  `stack.set-active-look` IMMEDIATELY. Nothing is ever dropped, because nothing is ever held.
+
+  ⚠ WHAT THE OWNER ACTUALLY HIT IS NOW GONE. His sequence was: press look → "failed" (but the
+  boxes moved) → press UPDATE (nothing) → press the look button again, "the very press that had
+  just failed". With [[B-166]] fixed, the first press is cleanly refused, nothing moves, and
+  the message names the plate — so the re-press IS the route, and it works. He reached for
+  UPDATE because the switch had left him with no honest one.
+
+  THE DECISION THIS NEEDS, which is the owner's and not a session's:
+
+  (a) The look pick becomes STAGED like the per-look bindings, and UPDATE commits it.
+      🔴 This makes a look switch on an ON-AIR row take TWO presses. The picker is a live CUT
+      control — `B-151`'s own note says an on-air row "gets the cut" — so this trades a
+      one-press cut for a two-press one on the surface that most needs immediacy.
+
+  (b) The look pick STAYS immediate, and the surface SAYS so, so the two commit models on one
+      panel stop being indistinguishable. `LooksBindingsSection`'s CLEAR PATCH already sets
+      this precedent and states its reason: it applies immediately "because the patch it undoes
+      was applied immediately too … making its removal wait for UPDATE would leave the two
+      halves of one operator decision on different clocks."
+
+  This session recommends (b) and did NOT implement either. Implementing (a) on an on-air
+  control without the owner's call is exactly the kind of unasked-for behaviour change that
+  golden rule 10's neighbours exist to prevent.
+-->
 
 **What the owner saw, on the plant.**
 

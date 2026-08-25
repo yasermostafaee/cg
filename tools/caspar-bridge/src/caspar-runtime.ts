@@ -4825,7 +4825,17 @@ export class CasparRuntime {
       `design.md` §6/§12.2 asks for and what routing them through shared mutable state was
       quietly costing.
     */
-      const reconciled = await this.reconcileLivePlates(itemId, { mode: 'live', lookId: look.id });
+      /*
+        🔴 `B-166` — `'switch'`, not `'live'`. A look switch is ONE GEOMETRY across every plate,
+        so a failure part-way through must put the boxes back rather than leave the row in a
+        shape no look authored while every surface reports the switch was refused. The PLAN is
+        byte-identical to `'live'`'s (same `already-live` scope, same `pinned` level 2, same
+        UNION pre-seat) — only what a failure MEANS differs. See `#applyLivePlates`.
+      */
+      const reconciled = await this.reconcileLivePlates(itemId, {
+        mode: 'switch',
+        lookId: look.id,
+      });
       if (!reconciled.ok) {
         return {
           ok: false,
@@ -5006,7 +5016,25 @@ export class CasparRuntime {
   async reconcileLivePlates(
     itemId: string,
     opts: {
-      mode: 'take' | 'live';
+      /**
+       * 🔴 **`B-166`/`B-167` — `'switch'` PLANS EXACTLY AS `'live'` AND FAILS DIFFERENTLY.**
+       *
+       * Three actions, and the mode names WHICH ACTION IT IS rather than what it should do —
+       * the rule this argument already carried for two. A look SWITCH is not a source SWAP,
+       * and the difference is entirely in what a failure means:
+       *
+       * - a SWAP is about ONE plate, so undoing only that plate is the whole action undone;
+       * - a SWITCH is ONE GEOMETRY across every plate, and a partial one belongs to no look
+       *   at all. Undoing "only the failed plate" leaves the row in a shape nobody authored,
+       *   while every surface says the switch did not happen (`B-166`).
+       *
+       * ⚠ **The PLAN is identical for `'live'` and `'switch'` and MUST stay identical.** Both
+       * resolve `'already-live'` + `'pinned'` below, so the UNION PRE-SEAT is untouched —
+       * every look's inputs stay seated, including the looks that are not punched. Narrowing
+       * that set would put a `PLAY` back inside a switch and reintroduce `B-155` case 3. A
+       * change here that alters the pre-seat SET is the wrong change.
+       */
+      mode: 'take' | 'live' | 'switch';
       /**
        * The look being ENTERED. Omit for the one this row is already showing.
        *
@@ -5096,7 +5124,7 @@ export class CasparRuntime {
       readonly declared: ReadonlySet<string>;
       readonly unresolved: ReadonlySet<string>;
     },
-    mode: 'take' | 'live',
+    mode: 'take' | 'live' | 'switch',
   ): Promise<{ ok: boolean; errorCode?: string; message?: string }> {
     const { placements, parked, resolved, offFrame, declared, unresolved } = plan;
     const previous = this.#liveLayers.get(itemId) ?? [];
@@ -5135,6 +5163,19 @@ export class CasparRuntime {
     const next: LiveLayerRecord[] = [];
     /** Records this action actually sent a `PLAY` for — the rollback set. */
     const touched: LiveLayerRecord[] = [];
+    /**
+     * 🔴 `B-166` — the plates whose GEOMETRY this action moved, with the fit they had BEFORE.
+     *
+     * The switch's rollback set, and deliberately a different set from {@link touched}: that
+     * one holds plates we CREATED and undoing it destroys a producer, while this one holds
+     * plates that were already on air and undoing it is a re-fit. Re-emitting a `MIXER
+     * FILL`/`CLIP` is non-destructive by construction — no `out`, no `MIXER CLEAR`, nothing
+     * torn down — which is what makes an all-or-nothing switch safe where an all-or-nothing
+     * SWAP would not be (`B-126`).
+     */
+    const moved: { slot: CommandSlot; fill: NormalizedRect; clip: NormalizedRect }[] = [];
+    /** Plates this action un-muted on the way out of HELD — re-muted by the same rollback. */
+    const unmuted: CommandSlot[] = [];
     let failure: string | undefined;
     let failedPlate:
       | {
@@ -5192,7 +5233,10 @@ export class CasparRuntime {
         the server has destroyed, so the repair verb must send rather than reason.
       */
       const seatUnchanged =
-        mode === 'live' &&
+        // `!== 'take'` and never `=== 'live'`: the question is "is this a re-assert from
+        // nothing", and a SWITCH is as much a delta as a swap is (`B-166`). Spelling it as an
+        // allow-list of one is how the third action silently became a re-seat.
+        mode !== 'take' &&
         prior !== undefined &&
         key(prior) === key(placement) &&
         prior.producer === producer;
@@ -5226,6 +5270,20 @@ export class CasparRuntime {
       const recordIndex = next.length;
 
       const lines: string[] = [];
+      if (seatUnchanged && prior !== undefined) {
+        /*
+          🔴 `B-166` — REMEMBER WHAT THIS PLATE LOOKED LIKE BEFORE WE MOVED IT.
+
+          Captured HERE, at the only point the prior fit is in hand next to the decision to
+          change it. A rollback that re-derived "where was it?" from the ledger later would be
+          reading a map this action is in the middle of rewriting — and the record it would
+          find is the ATTEMPTED one, which is exactly the lie `B-167` is made of.
+        */
+        if (!same(prior.fill, record.fill) || !same(prior.clip, record.clip)) {
+          moved.push({ slot: placement.slot, fill: prior.fill, clip: prior.clip });
+        }
+        if (prior.held === true) unmuted.push(placement.slot);
+      }
       if (seatUnchanged && prior !== undefined) {
         // 6.4 — THE FIT, RE-DERIVED PER LOOK. Emitted only when the geometry actually
         // moved, so an unchanged plate costs the wire nothing; but when it moved this is
@@ -5341,6 +5399,92 @@ export class CasparRuntime {
         );
         return { ok: false, errorCode: failure };
       }
+      if (mode === 'switch') {
+        /*
+          🔴 **`B-166`/`B-167` — A REFUSED SWITCH PUTS THE GEOMETRY BACK. ALL OR NOTHING.**
+
+          ── WHY THE SWITCH GETS A ROLLBACK THE SWAP IS RIGHT TO REFUSE ──────────────
+
+          The `'live'` branch below declines to roll back, and its reasoning is correct FOR A
+          SWAP: the row is on air, and blacking working boxes to punish a failing one is the
+          opposite of what the operator needs. A SWITCH is a different action. It is ONE
+          geometry across every plate, so "undo only the failed plate" does not leave the row
+          on the old look or the new one — it leaves it in a shape **no look authored**, while
+          the picker, the published stack and the toast all say the switch did not happen.
+          That is `B-166`: the operator is told it did not happen, and three of the four things
+          on air moved.
+
+          ── WHY THIS IS SAFE, WHICH IS THE WHOLE REASON IT IS POSSIBLE ─────────────
+
+          🔴 **A plain switch issues NO `PLAY`.** Every punched plate is already seated by the
+          union pre-seat, so `seatUnchanged` holds and the only traffic is `MIXER FILL`/`CLIP`
+          (and a `MIXER VOLUME` for a plate leaving HELD). Undoing that means re-emitting the
+          PRIOR fit: no `out`, no `MIXER CLEAR`, no producer destroyed, nothing taken off air.
+          It is a geometry restore, and `B-126`'s rule — never `CLEAR` before a repair — is not
+          engaged at all.
+
+          ⚠ A plate this action genuinely `PLAY`ed (a preset that was not seated) is NOT rolled
+          back: destroying a producer we created would be exactly the destructive step B-126
+          forbids, and it is handled by the honest-ledger path below. It is also rare by
+          construction — a `PLAY` inside a switch is `B-155` case 3, which the union pre-seat
+          exists to prevent.
+
+          ── AND THIS IS WHAT CLOSES `B-167` ────────────────────────────────────────
+
+          The lying ledger record — the ATTEMPTED geometry kept for a plate whose `MIXER FILL`
+          was refused — is not an independent bug. It is the RESIDUE of a partial apply that
+          was never undone. Put the geometry back and write `previous` back verbatim, and the
+          next press computes a real delta against the truth instead of `same() === true`, so
+          it either works or refuses again. **A guaranteed no-op that answers `ok` stops being
+          representable**, rather than being defended against.
+
+          ⚠ The page was never told (`setActiveLook` calls `#tellPageLook` only on `ok`), so
+          the holes never left the previous look. Restoring the fills to that same look is what
+          makes the two agree again — which is the definition of "the switch did not happen".
+        */
+        for (const m of moved) {
+          // Line by line, the same way every other `mixerFit` on this path is sent — the pair
+          // is FILL then CLIP and each is its own command. A refused line here is not retried:
+          // the next reconcile re-sends both, and under-claiming is the safe direction.
+          for (const line of this.#builder.mixerFit(m.slot, { fill: m.fill, clip: m.clip })) {
+            await this.#send(line, this.#nextSeq(), 'urgent');
+          }
+        }
+        for (const slot of unmuted) {
+          await this.#send(
+            this.#builder.mixerVolume(slot, CREATED_MUTED_VOLUME),
+            this.#nextSeq(),
+            'urgent',
+          );
+        }
+        /*
+          🔴 AND THE RECORDS FOLLOW THE WIRE. Not the other way round.
+
+          The wire has just been put back, so a record still carrying the ATTEMPTED geometry
+          would be the `B-167` lie re-created by the very code that exists to end it. Each
+          restored plate's record goes back to its prior fill/clip — and to `held`, because a
+          plate we un-muted on the way out of HELD has just been re-muted above.
+
+          ⚠ THIS DELIBERATELY DOES NOT RETURN. Everything below — the teardown of a plate this
+          action CREATED and could not play, and the honest-ledger rules for the failed plate —
+          is correct as it stands and is reused verbatim. A `PLAY` that left this process may
+          have made a producer, and one left unmasked at FULL FRAME is a guest blown up across
+          the programme; an early return here would have skipped that, which is exactly the
+          regression `live-look-reconcile`'s "blacks nothing that was working" test caught.
+        */
+        const restoredSlots = new Set(moved.map((m) => adoptionKey(m.slot)));
+        for (const [i, rec] of next.entries()) {
+          if (!restoredSlots.has(key(rec))) continue;
+          const was = priorByProducer.get(rec.producer);
+          if (was === undefined) continue;
+          next[i] = {
+            ...rec,
+            fill: was.fill,
+            clip: was.clip,
+            ...(was.held === true ? { held: true } : {}),
+          };
+        }
+      }
       /*
         LIVE — undo the ONE plate that failed and leave every other plate exactly as it is.
         The row is on air; blacking working boxes to punish a failing one is the opposite of
@@ -5404,8 +5548,22 @@ export class CasparRuntime {
           delta and REPAIRS it — reverting to the prior geometry made the retry a no-op and
           left the plate black.
       */
+      /*
+        🔴 `B-167` — AND A SWITCH'S FAILED RE-FIT REVERTS TOO, because the switch just put its
+        geometry back on the wire.
+
+        A re-fit has `reseat === false`, so the first clause never fires for it, and the
+        `'live'` reasoning above is right that keeping the ATTEMPTED record makes a retry
+        compute a real delta — **for a swap, which does not restore anything**. Under a
+        `'switch'` the wire has been restored, so keeping the attempted record would make the
+        record and the wire disagree, and the re-press would compute `same()` against a
+        geometry that is no longer there. That is `B-167` exactly, and this is where it would
+        come back.
+      */
       const revertToPrior =
-        failed !== undefined && replacedInPlace && failed.reseat && !failed.playLanded;
+        failed !== undefined &&
+        replacedInPlace &&
+        ((failed.reseat && !failed.playLanded) || (mode === 'switch' && !failed.reseat));
       const settledFailed =
         failed === undefined
           ? []
@@ -5466,6 +5624,24 @@ export class CasparRuntime {
             `plate "${failed.record.sourceId}" IS now on its new source, but CasparCG refused ` +
             `the command that followed it, so its geometry or volume may be wrong. Nothing was ` +
             `cleared — re-issue the change to correct it.`,
+        };
+      }
+      if (mode === 'switch') {
+        /*
+          🔴 `B-166` — THE SENTENCE SAYS THE ROW DID NOT MOVE, because now it did not.
+
+          The old one said the look was refused while three of the four things on air had
+          changed, which is the half-state this whole fix removes. This one is a statement
+          about STATE the operator can act on: the boxes are back, nothing was cleared, and
+          the graphic is on the look it was on before they pressed.
+        */
+        return {
+          ok: false,
+          errorCode: failure,
+          message:
+            `the look was NOT changed — CasparCG refused one of its plates, so every box was ` +
+            `put back where it was and the graphic is still on the previous look. Nothing was ` +
+            `cleared and nothing is on air that was not before. Fix the source, then re-issue.`,
         };
       }
       return { ok: false, errorCode: failure };
