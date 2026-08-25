@@ -1775,12 +1775,20 @@ harm it guarded returns without anyone noticing.
 - ⭐ **Where the mode LIVES — DECIDED 2026-08-25 (session `FIT-MODE-01`), and implemented.** This
   was recorded as OPEN rather than guessed at. It is settled from the client's own recorded words —
   the mode is _"choosable in the Designer and overridable by the operator"_:
-  - **Authored per ELEMENT** (`VideoPlaceholderElementSchema.fitMode`; on the group's declared
-    source for a LOOKS template, where the carrier is source-keyed and `expectedAspect` already
-    lives for the same reason). **NOT per catalog SOURCE:** one source seated in a 16:9 box and a
-    3:4 box needs different fits, so a per-source field would have to be wrong in one of them. The
-    mode is a property of the PAIRING of a picture with a box, and the element is where that
-    pairing is authored.
+  - **Authored per ELEMENT** (`VideoPlaceholderElementSchema.fitMode`). **NOT per catalog SOURCE:**
+    one source seated in a 16:9 box and a 3:4 box needs different fits, so a per-source field would
+    have to be wrong in one of them. The mode is a property of the PAIRING of a picture with a box,
+    and the element is where that pairing is authored.
+  - 🔴 **CORRECTED BY [[B-178]] (2026-08-25).** This bullet originally continued _"on the group's
+    declared source for a LOOKS template, where the carrier is source-keyed and `expectedAspect`
+    already lives for the same reason"_ — and that half was **a defect, not a decision.**
+    `LookSource.fitMode` had no writer anywhere in the product, so for **every look-group template
+    ever exported** the author's choice was dropped and every plate reached air on the `contain`
+    default. It is now carried **PER LOOK**, beside the rects (`TemplateLookCarrier.fits`), read off
+    the plate element serving that `routeKey` in that look; `LookSource.fitMode` is deleted. The
+    per-element decision above is unchanged — `B-178` applies its own argument one level in, since a
+    `routeKey` appears in every look in a differently-shaped box. ⚠ `expectedAspect` does NOT follow
+    it and is dead in the same way — [[B-179]].
   - **Overridable per ASSIGNMENT** at run time (`TemplateSourceAssignment.fitMode`) — the operator
     half, on the record that already answers "how does this plate get its input".
   - **Resolution order: assignment override → element → `contain`** (`resolvePlateFitMode`).

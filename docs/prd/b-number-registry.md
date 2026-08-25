@@ -1498,3 +1498,69 @@ established that, and the real precedent is **[[B-149]]** (`[x]` FIXED 2026-08-1
 `C-021` keeps `[!]` with per-arm status in its heading; `C-027` keeps `[!]` and is re-stated as
 **PARKED — unverifiable on this plant** (the card has one SDI input). Recorded because a future
 sweep reading only checkboxes would see two items that did not move and conclude nothing happened.
+
+---
+
+## 2026-08-25 — the fit control's inert half and its aspect twin (`B-178`, `B-179`), from session FITMODE-WIRE-01
+
+| Prefix | Claimed | Item                                                                       | File                               |
+| ------ | ------- | -------------------------------------------------------------------------- | ---------------------------------- |
+| `B-`   | `B-178` | the fit control is INERT under a look group — element written, source read | [bugs-runtime.md](bugs-runtime.md) |
+| `B-`   | `B-179` | `expectedAspect` dropped the same way, DISARMING the mismatch refusal      | [bugs-runtime.md](bugs-runtime.md) |
+
+**Both verified free by the heading sweep immediately before each heading was written, with
+`git grep` throughout** — never `grep -r`.
+
+- **`B-178`.** Highest `B-` heading was **`B-177`**. The duplicate audit printed **exactly `B-056`
+  and `B-080`**, the two known accepted duplicates and nothing else; `B-001` … `B-177` was
+  contiguous with **no gaps** (179 headings, 177 distinct). `git grep -n "B-178"` over the whole
+  tree returned **3 hits, all forward-reference POINTERS and never a heading**: this file's
+  `Next free: B-178` line, this file's `B-177` provenance bullet (which records that `B-178`
+  returned nothing when `B-177` was claimed), and the same sentence quoted inside `B-177` itself
+  in `bugs-runtime.md`. `git grep -n "B-179"` and `"B-180"` returned **nothing at all**, the
+  cross-check that the space ends where it says.
+- **`B-179`.** Claimed in the same session, directly after `B-178` was written. Same audit, same
+  result; `B-180` still returns nothing.
+
+`B-` stays contiguous `B-001` … `B-179`, **no gaps. Next free: `B-180`, `R-059` and `D-157`.**
+
+**`B-178` is filed `[~]` — FIXED in the same session.** `B-179` is filed `[ ]`: its fix is a product
+decision (where an aspect is authored) and it re-arms a refusal that BLOCKS takes on air, so it was
+deliberately not folded into `B-178`'s silent-drop fix.
+
+### ⚠ A FIFTH phantom label, and this one was a NUMBER rather than a session name
+
+Session `FITMODE-WIRE-01`'s brief cited two items as existing, and asked that the new item
+cross-reference them as prior instances of the same pattern:
+
+- **`D-157`** — described as _"the blocked Export that names nothing"_;
+- **`B-178`** — described as _"the snap guide drawn at the pointer instead of the edge"_.
+
+**Neither exists.** At `9247e7cd` the highest real headings are `D-156` (the `Shift`/`Alt` snapping
+bypass, `designer.md:4979`) and `B-177`; both `D-157` and `B-178` appear in the tree ONLY as this
+file's own "next free" pointers. A search by DESCRIPTION rather than by number found nothing either:
+no item anywhere concerns a snap guide's placement (the implementation at
+`canvas/geometry.ts:452-463` and `CanvasArea.tsx:1141-1166` draws at the snapped TARGET, not the
+pointer), and the only "Export blocked" text in `docs/prd/` is the HTML-commented filing template
+`B-0NN` at `bugs.md:1135-1144`.
+
+🔴 **This is the fifth phantom label recorded here** — after `FIT-MODE-01`, `LOOK-SYNC-01`,
+`MIRROR-PAGE-01` and `designer-box-geometry` "defect 1" — and it is the first that is a NUMBER in
+this registry's own namespace. That makes it sharper than the others: `B-178` was simultaneously
+**the next free number** and **claimed to be an existing item**, so a session that trusted the brief
+would either have collided with a real item or, as happened, had to stop and prove the collision was
+not there.
+
+**What the session did about it:** took `B-178` for its own item (the registry is the tree's
+authority and said it was free), and cited the pattern's REAL anchors instead — `B-141`, `B-143`,
+`B-144`, `B-146`, `B-147` and `R-053`, which already name the class verbatim as _"the system knows
+something and does not say it"_. ⚠ **If those two defects are real, they are unfiled and want
+numbers** — `B-180` and `D-157` are free.
+
+### ⭐ The pattern has an existing HOME, and no rival name was minted
+
+Worth recording because the brief asked for the pattern to be "named once": it already is.
+`bugs-runtime.md:3663` / `:3762` / `:3847` carry the sentence _"the system knows something and does
+not say it"_ across `B-141`, `B-143` and `B-144`; `runtime.md:2492` calls it _"the same zero-reader
+shape as [[B-143]]'s `assumed` flag"_; `B-146:4120` states the cost — _"A control that silently does
+nothing is the worst of the three outcomes"_. `B-178` extends that set rather than starting one.

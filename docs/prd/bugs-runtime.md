@@ -6695,3 +6695,337 @@ found.`;
   [b-number-registry.md](b-number-registry.md)'s own "next free" pointer, and `B-178` returned
   nothing. Filed in this file per [README.md](README.md)'s routing — a bridge/playout defect, not
   cross-cutting tooling.
+
+---
+
+## [~] B-178 — the Designer's fit control is INERT under a look group: the author writes `fitMode` on the ELEMENT, the wire reads it off a source entry nothing ever writes ⟨priority: high⟩ — FIXED in this session
+
+**What:** a live plate authored `cover` reaches air as `contain`, for **every look-group template
+ever exported**. The Designer's fit control writes `fitMode` onto the plate ELEMENT; the look-group
+carrier reads it off `lookGroups[].sources[].fitMode`; and **nothing in the product ever writes that
+field.** The two never meet, so `resolvePlateFitMode` sees `undefined` at the authored level and
+falls through to the `contain` default for every plate.
+
+**The owner's repro, 2026-08-25:** two live plates side by side, left `contain`, right `cover`.
+Exported, loaded on the plant, taken. **Both rendered `contain`**, and nothing anywhere said so.
+
+### The evidence, from the artefacts
+
+`CG ADD` payload, plant log 20:28:32 (Tehran):
+
+```
+"__cg":{"look":"look-2","plates":{
+   "l1":{"aspect":1.7777777777777777,"mode":"contain"},
+   "l2":{"aspect":1.7777777777777777,"mode":"contain"}}}
+```
+
+The mixer geometry agrees exactly — channel `1920×1080`, boxes `943.6 × 1049.04` and
+`938.4 × 1049.04`:
+
+| plate | `FILL` sent          | contain would be     | cover would be      |
+| ----- | -------------------- | -------------------- | ------------------- |
+| `l1`  | `943.60 × 530.77 px` | `943.60 × 530.77` ✅ | `1864.96 × 1049.04` |
+| `l2`  | `938.40 × 527.85 px` | `938.40 × 527.85` ✅ | `1864.96 × 1049.04` |
+
+`FILL` and `CLIP` were **byte-identical** for both — the `contain` signature, since a contained
+picture lies wholly inside its box. Under `cover` they must differ.
+
+🔴 **The author's choice IS in the export — this is not a stale template.** The `.vcg`
+(`manifest.authoring.exportedAt = 2026-08-25T16:49:47Z`, nine minutes before the take) carries
+`fitMode: "cover"` on element `el-1787676336354-663598` in `compositions[1]` — one of the two plates
+that went to air.
+
+🔴 **And the carrier the wire is keyed by has no such field:**
+
+```json
+"lookGroups[0].sources": [
+  { "routeKey": "l1", "dynamic": false },
+  { "routeKey": "l2", "dynamic": false }
+]
+```
+
+`routeKey` and `dynamic`. `__cg.plates` is keyed by exactly those `routeKey`s.
+
+### The chain, confirmed at file:line
+
+⚠ **Every line number in this table is AT `9247e7cd`, the commit that carried the bug** — this is a
+diagnosis of the shipped state, so the pre-fix anchors are the evidence and re-pointing them at the
+repaired code would destroy it. Rows 4–7 no longer describe the tree; read them with
+`git show 9247e7cd:<path>`. The anchors elsewhere in this item, and all of `B-179`'s, describe the
+CURRENT tree and are named by symbol where the line is volatile.
+
+| #   | site                                                                 | what it does                                                                                                                                    |
+| --- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `apps/designer/src/renderer/features/inspector/StyleSection.tsx:805` | `updateElement(id, { fitMode: value })` — onto the **ELEMENT**                                                                                  |
+| 2   | `apps/designer/src/renderer/state/slices/looks.ts:110`               | `sources: [...group.sources, { routeKey: key, dynamic: false }]` — the **only** creator of a `LookSource`, writing neither field                |
+| 3   | `apps/designer/src/renderer/features/inspector/LooksSection.tsx:64`  | the look-group editor's prop type is `{ routeKey, dynamic }` — the UI does not even **model** a fit mode                                        |
+| 4   | `packages/vcg-format/src/live-sources.ts:332`                        | reads the never-written `src.fitMode`                                                                                                           |
+| 5   | `packages/vcg-format/src/live-sources.ts:299-311`                    | the element loop harvests `el.id` and `flat.rect` and **drops `el.fitMode`**                                                                    |
+| 6   | `packages/vcg-format/src/live-sources.ts:363`                        | `lookCarrier === null ? collectLiveSources(scene) : lookCarrier.sources` — mutually exclusive, so the element-reading collector is never called |
+| 7   | `tools/caspar-bridge/src/caspar-runtime.ts:4119`                     | `resolvePlateFitMode(override, frame.declaration.fitMode)` — always `undefined` ⇒ `DEFAULT_LIVE_FIT_MODE`                                       |
+
+Two aggravating facts found while confirming it:
+
+- ⚠ **The control renders unconditionally** (`StyleSection.tsx:665`, outside the look-group ternary
+  two lines above), so the author operates a live, responsive control that is a silent no-op.
+- 🔴 **The wire OUTRANKS the element on the page**, so the element-level fallback cannot rescue it:
+  `packages/shared-schema/src/scene-flatten.ts:586` reads `fit?.mode ?? el.fitMode ?? DEFAULT`, and
+  `CgPlateFit.mode` is non-optional and always sent. The bridge's `contain` actively overrides an
+  element that says `cover`.
+- The fault is confined to the AUTHOR's level: the operator's per-assignment override still works
+  (`caspar-runtime.ts:4037-4038`).
+
+**Why nothing caught it:** `collectLookCarrier` is exercised only by
+`packages/vcg-format/tests/look-carrier.test.ts` and `hidden-look-suppression.test.ts`, and **neither
+ever set a fit mode**. The one `C-028` carrier test drives `collectLiveSources` — the no-look path,
+where the field was read off the element and worked. **A fixture without a look group cannot see this
+bug**, which is exactly how it shipped.
+
+### ⭐ THE DECISION — the mode is PER LOOK, read off the element that serves that routeKey there
+
+The naive fix is to add `fitMode` to `lookGroups[].sources[]` beside `dynamic`, since the wire is
+keyed by `routeKey`. **That is wrong, and for the reason `C-028` already gave:** one `routeKey`
+appears in EVERY look, in a differently-shaped box each time. `l2` sits in `look-1` and `look-2`; a
+per-source mode forces one answer for boxes that may want different ones. It would also require a
+NEW per-source Designer control while leaving the existing per-element one inert — two controls for
+one concept, which is worse than the bug.
+
+**DECIDED: keep the mode on the ELEMENT, and carry it per LOOK, beside the rects.**
+
+- `TemplateLookCarrier.fits: Record<routeKey, LiveFitMode>` — a structural mirror of `rects`, which
+  is already per-look and per-routeKey.
+- `TemplateLookSchema.fits` on the wire, **optional**, because zod strips unknown keys and a
+  template packaged before this change carries none; requiring it would refuse every such record at
+  the IPC boundary and again at boot.
+- `lookPlateFits(live, activeLookId)` in `packages/shared-ipc/src/channels/templates.ts` — a
+  deliberate **sibling of `lookPlateRects`**, whose own header forbids a local spelling: _"a FUNCTION
+  OF THE CARRIER, not a method on any runtime, so the bridge cannot drift from the console."_
+- `LookSource.fitMode` is **DELETED**. A field that looks like the place to write a fit mode, and is
+  not, is precisely how this returns.
+
+**It is buildable because the mapping already existed and was thrown away.** `collectLookCarrier`'s
+element loop computes (look, routeKey) → element at `live-sources.ts:304-310`; `el.fitMode` was in
+scope on the same statement that wrote `rects[el.routeKey] = flat.rect`. It is a genuine FUNCTION,
+not a choice: a within-look duplicate `routeKey` is refused at export with `severity: 'error'`
+(`live-source-preflight.ts:481-496` + `Exporter.ts:370-376`), while the import path stays tolerant
+(first-wins) so the carrier remains total for a hand-crafted package.
+
+⚠ **`firstPlateFor` is NOT that mapping and must not be used for it** — it is keyed by `routeKey`
+alone and holds the globally-first plate in document order, so for a routeKey shared by two looks it
+returns look A's element and look B's authored mode would be unreachable.
+
+**A look switch had the same defect one layer up, found by the new tests:** `#plateFits` was written
+only by the TAKE, so `#tellPageLook` sent the OUTGOING look's modes while the reconcile had already
+moved the fills to the ENTERING look's. Fill in one shape, hole in another — `B-149` arriving through
+the switch. `reconcileLivePlates` now re-records from its own plan, on success only.
+
+### Does it generalise to `expectedAspect`? NO — and the reason is the point
+
+`LookSource.expectedAspect` is equally dead (same `addLookSource`, same zero writers), so an author's
+aspect assertion is dropped for look-group templates too — **and that disarms the take's
+aspect-mismatch refusal**, which needs BOTH the source's aspect and the author's
+(`live-plate-fit.ts:179`). Same class, one field wider.
+
+🔴 **But it must NOT become per-look.** `expectedAspect` asserts a property of the **FEED** — "this
+source delivers 16:9" — and a feed does not change shape when the operator presses a look. Two looks
+asserting different aspects for one source would be a contradiction about an external fact, which is
+exactly why `looks.ts`'s header keeps it on the declaration _"so two looks cannot disagree about what
+a HOLE asserts"_. `fitMode` asserts how that feed is **placed in a box**, and a look is precisely a
+change of box. **The two facts differ in kind, so they differ in carrier.** Filed separately as
+[[B-179]].
+
+### ⭐ THE PATTERN — "the system knows something and does not say it"
+
+This is the same class the repo has already named three times, verbatim, and it should not get a
+rival name: [[B-141]] (`bugs-runtime.md:3663`), [[B-143]] (`:3762`), [[B-144]] (`:3847`) — _"the
+system knows something and does not say it"_ — and [[R-053]] (`runtime.md:2492`) calls it _"the same
+zero-reader shape as [[B-143]]'s `assumed` flag"_. [[B-146]] (heading `:4086`, the sentence at `:4120`) carries the sharpest statement
+of the cost: _"A control that silently does nothing is the worst of the three outcomes."_ [[B-147]]
+is the near-exact twin — a control writing a field nothing reads.
+
+**Here, three things knew and none of them said:** the Designer knew the author had chosen `cover`;
+the exporter knew it was discarding an element-level field; the bridge knew it was defaulting rather
+than honouring. The operator got a well-formed payload with a legal value and no way to tell it apart
+from an authored `contain`.
+
+⚠ **A prior brief cited this pattern's other instances as `D-157` (a blocked Export that names
+nothing) and `B-178` (a snap guide drawn at the pointer). NEITHER EXISTS** — both appear in the tree
+only as "next free" pointers in [b-number-registry.md](b-number-registry.md), and a whole-tree sweep
+found no item describing either defect under any number. That is a further instance of the
+phantom-label failure the registry already records four times. If those two defects are real, they
+want filing; this item cites the pattern's REAL anchors above instead.
+
+### The signal — a per-take readout, with PROVENANCE
+
+`resolvePlateFitMode` now returns `{ mode, from }` where `from` is
+`'override' | 'authored' | 'default'`, decided at the one place the chain is walked. `'default'`
+means **nobody stated anything** — distinct from an authored `contain`, which produces the same
+picture and, before this, the same bytes. The bridge writes one line per take:
+
+```
+[caspar-bridge] item-1 live-plate fit — l1=contain (authored), l2=cover (authored)
+```
+
+**Why the bridge log:** it is demonstrably where a human already looks — the log that caught this bug
+is the artefact the owner was reading when they found it.
+
+**Why a readout and not a warning:** the first draft raised a ⚠ whenever any plate defaulted, and it
+fired on essentially every take, because most templates author no fit and for them the default is
+correct. A warning that is usually wrong is how a signal stops being read — and this exists precisely
+because the previous signal (none) was not read. It states facts and gives no advice; the diagnostic
+power is the word `default` appearing where the author expected `authored`.
+
+⚠ **Deliberately a log line and not a badge on the operator's row.** [[B-143]] already records that
+three per-plate facts want a row-level home and asks that the first of them build it deliberately
+rather than bolting on a private surface. This does not pre-empt that.
+
+**Acceptance:**
+
+- WHEN two plates in ONE look are authored with DIFFERENT fit modes THEN `__cg.plates` carries a
+  different `mode` for each, and their `MIXER FILL` rects differ accordingly
+- WHEN one `routeKey` appears in TWO looks with different authored modes THEN each look resolves to
+  its own, and a look switch carries the new mode in the same payload as the new look id
+- WHEN a plate's mode is `cover` THEN its `MIXER FILL` and `MIXER CLIP` DIFFER, `FILL` overflowing
+  the box on the wide axis and `CLIP` staying at the box
+- WHEN a plate's mode is `contain` THEN `FILL` and `CLIP` are byte-identical — the positive control
+- WHEN nobody authored a mode THEN the plate resolves to `contain` and the take log reports it as
+  `default`, distinguishably from an authored `contain`
+- WHEN a look-group template's DECLARATION carries a `fitMode` THEN it is IGNORED — the looks are the
+  authority, and a second home for one fact is what caused this
+
+**Where each bullet is pinned** (a bullet with no test is a claim, and this item is about claims
+that were never checked):
+
+| bullet                            | test                                                                                                                                |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| two modes in one look             | `look-carrier.test.ts` "TWO plates in ONE look…" · `live-look-reconcile…` "…reach air with DIFFERENT geometry"                      |
+| one routeKey, two looks           | `look-carrier.test.ts` "ONE source in TWO looks…" · `look-plate-fits.test.ts` · `live-look-reconcile…` "…the switch tells the page" |
+| `cover` FILL ≠ CLIP, by value     | `live-look-reconcile…` "…reach air with DIFFERENT geometry" (1864.96 × 1049.04 asserted)                                            |
+| `contain` FILL === CLIP (control) | same test, and "…resolves to the DEFAULT"                                                                                           |
+| defaulted vs authored, reported   | `live-look-reconcile…` "…the take SAYS SO as `default`" and "…an AUTHORED `contain` reports `authored`" (stderr captured)           |
+| the declaration is ignored        | `live-look-reconcile…` "the DECLARATION's fitMode is IGNORED under a look group"                                                    |
+| the parked-seat guard             | `live-look-reconcile…` "a PARKED seat must NOT overwrite the punched plate's facts"                                                 |
+| `fits` survives the wire schema   | `look-plate-fits.test.ts` "B-178 — `fits` survives the wire schema"                                                                 |
+
+### Notes
+
+- **Priority `high` because it reaches air and is silent.** The multibox look group is exactly the
+  feature the fit control was built for, so the control was inert in its own primary case.
+- **On-air behaviour change:** a look-group template whose author set `cover` will now render `cover`
+  where it rendered `contain`. That is the fix, and it is what the author always asked for.
+- 🔴 **THE TEMPLATE MUST BE RE-IMPORTED for the fix to reach an existing installation, and nothing
+  says so.** The bridge persists `TemplateInfo` and re-reads it at boot, so a registry written
+  before this change carries no `fits` at all. Such a record resolves every plate to `contain` and
+  the take readout reports `default` — which is TRUE of the record and FALSE of the author, who did
+  state a mode. Re-importing the `.vcg` rebuilds the carrier. ⚠ Same shape as this bug one level
+  out: the system knows the record predates the field and does not say so. Not fixed here (a
+  carrier-version stamp is its own decision); named so the first person to meet it is not misled by
+  a readout that is locally honest.
+- **Cross-refs:** [[C-028]] (the feature, and the comment that reasoned its way into this);
+  [[B-149]] (hole ≠ picture, the precedent); [[B-143]] / [[B-141]] / [[B-144]] / [[B-146]] /
+  [[B-147]] / [[R-053]] (the named pattern); [[B-179]] (`expectedAspect`, the same defect one field
+  wider); [[D-147]] (the aspect chain this deliberately does not touch).
+- The number was verified free by the heading sweep immediately before this heading was written:
+  highest `B-` heading `B-177`; the duplicate audit printed exactly `B-056` and `B-080` and nothing
+  else; `B-001` … `B-177` contiguous with no gaps; a whole-tree `git grep` for `B-178` returned only
+  [b-number-registry.md](b-number-registry.md)'s own "next free" pointer and `B-177`'s provenance
+  note, never a heading; `B-179` and `B-180` returned nothing at all.
+
+---
+
+## [ ] B-179 — `expectedAspect` is dropped for every look-group template, which DISARMS the aspect-mismatch refusal, and the aspect that reaches air is the CATALOG's guess with nothing checking it ⟨priority: high⟩
+
+**What:** two joined findings from the [[B-178]] investigation, filed here rather than folded into
+it because their fix is a different shape and touches a refusal that stops takes on air.
+
+1. **`LookSource.expectedAspect` has ZERO WRITERS**, exactly as `fitMode` did. `addLookSource`
+   (`apps/designer/src/renderer/state/slices/looks.ts:110`) is the only producer of a `LookSource`
+   and emits `{ routeKey, dynamic: false }`; the look-group editor's prop type
+   (`LooksSection.tsx:64`) does not model the field. `collectLookCarrier` copies `src.expectedAspect`
+   (`packages/vcg-format/src/live-sources.ts` — the `src.expectedAspect` spread in `collectLookCarrier`) and therefore always copies nothing.
+2. ⇒ **The take's aspect-mismatch refusal is DISARMED for every look-group template.** It fires only
+   when BOTH the source's aspect and the author's are present
+   (`tools/caspar-bridge/src/live-plate-fit.ts:179`); the author's half can never arrive. So a plate
+   whose feed is a different shape than the design assumed reaches air with no refusal, no warning,
+   and — under `contain`, the default — a picture quietly smaller than its box.
+
+### Where the aspect on the wire actually came from
+
+The plant payload carried `aspect: 1.7777777777777777` for both plates while **neither on-air
+element nor either source entry stated one**. Traced: it is **step 1** of `resolvePlateAspect`'s
+chain — the operator's `format` on the CATALOG entry, through `aspectForFormat`
+(`packages/shared-ipc/src/channels/sources.ts:127-159`). That is designed behaviour ([[D-147]]: the
+source outranks the author), not a defect in the chain. The other steps are excluded:
+
+- **step 2** (`SourceDefinition.aspect`) has **no input control anywhere** — `SourcesModal` renders
+  Name / Kind / Format plus a read-only derived aspect line, so it is reachable only by hand-editing
+  `bridge-source-catalog.json`;
+- **step 3** (the element's `expectedAspect`) is structurally dead under looks — finding 1 above;
+- **step 4** returns `aspect: null`, not a number.
+
+⚠ **`1.7777777777777777` does not pin the format**: `576p*`, `720p*`, `1080p*`, `1080i*` and
+`2160p*` all divide to the same IEEE double, and so does the Designer's own `expectedAspect: 16/9`
+element default (`element-defaults.ts:301`) — a red herring, since under looks that element field is
+never read.
+
+### 🔴 The measured disagreement, and why nothing can catch it
+
+CasparCG's own log for plate `l2` reported a clip of **`w: 1280 h: 608` — aspect 2.105**, against the
+bridge's assumed **1.778**. The picture was fitted to a shape the feed does not have.
+
+**And nothing in the product can notice.** Searched and NOT FOUND: the bridge never learns a live
+source's real dimensions. The only server-read geometry is the CHANNEL's raster via `INFO <channel>`
+(`caspar-runtime.ts`'s `videoModeRaster` read), which `channel-settings-store.ts:121-133` explicitly forbids feeding
+into placement; OSC maps framerate / producer / file-path / paused only
+(`packages/caspar-client/src/osc/event-mapper.ts`, and a grep for `width|height|aspect|resolution`
+across that package returns nothing). So the catalog's declared `format` is an unverified assertion
+that drives real geometry, and [[B-143]]'s `assumed` flag — the one fact that would say so — still
+has no readers.
+
+### The fix is NOT [[B-178]]'s
+
+🔴 **`expectedAspect` must NOT become per-look.** It asserts a property of the **FEED** — "this source
+delivers 16:9" — and a feed does not change shape when the operator presses a look. Two looks
+asserting different aspects for one source would be a contradiction about an external fact, which is
+why `looks.ts`'s header keeps it on the declaration _"so two looks cannot disagree about what a HOLE
+asserts"_. [[B-178]]'s `fitMode` moved per-look because it describes how a feed is placed in a BOX,
+and a look is precisely a change of box. **The two facts differ in kind, so they differ in carrier.**
+
+**Two candidate fixes, and this item deliberately does not choose:**
+
+- **(a) a writer on the declaration** — expose `expectedAspect` in the look-group sources editor, so
+  the author states it once for the group, where it belongs. Simple; but it is a SECOND place to
+  author an aspect beside the plate element's own field, and two spellings of one fact is the shape
+  this repo keeps paying for.
+- **(b) HOIST it from the elements, with a refusal on disagreement** — `collectLookCarrier` reads
+  every plate that serves a routeKey, and refuses at export when two of them assert different
+  aspects. Keeps one authoring surface; costs a new preflight refusal, and a refusal that blocks
+  Export needs the care [[B-146]]'s class demands.
+
+**Acceptance:**
+
+- WHEN an author sets `expectedAspect` on a plate in a look-group template THEN it reaches the
+  carrier, by whichever of (a)/(b) is chosen
+- WHEN the assigned source's aspect contradicts it THEN the take is refused under `cover` exactly as
+  it is for a non-look template — the refusal is armed again
+- WHEN two plates serving one routeKey assert DIFFERENT aspects THEN that is named at authoring
+  time, not resolved silently by document order
+
+### Notes
+
+- **Priority `high`** because a disarmed refusal is worse than an absent one: the guard exists, the
+  tests pass, and it cannot fire in the configuration the product's flagship feature uses.
+- **Same class as [[B-178]], [[B-141]], [[B-143]], [[B-144]], [[B-146]], [[B-147]] and [[R-053]] —
+  _the system knows something and does not say it._** Here the system does not even know it: the
+  author's assertion is discarded before anyone could check it.
+- ⚠ **Not fixed alongside [[B-178]] on purpose.** Re-arming a refusal changes which takes are
+  BLOCKED on air, and choosing between (a) and (b) is a product decision about where an aspect is
+  authored. [[B-178]] was a silent drop with an unambiguous fix; this is not.
+- **Cross-refs:** [[B-178]] (the same dead-field defect, one field over, fixed); [[D-147]] (the
+  aspect chain and why the source outranks the author); [[B-143]] (`assumed` has no readers — the
+  honesty half that would surface this); [[R-053]] (the mismatch refusal's operator surface);
+  [[C-028]] (the fit modes the aspect drives).
+- The number was verified free immediately before this heading was written: highest `B-` heading was
+  `B-178` (filed in the same session, directly above); the duplicate audit printed exactly `B-056`
+  and `B-080`; a whole-tree `git grep` for `B-179` returned only [[B-178]]'s own forward reference
+  and this file's pointer, never a heading; `B-180` returned nothing at all.

@@ -87,9 +87,11 @@ default look; the ADD payload moves it). It is not a new class of exposure.
 
 ## §3 — ⭐ ORDERING CONSTRAINTS (`tasks.md` under-states these — read this section, not the boxes)
 
-1. **The schema field lands BEFORE anything reads it.** `fitMode` on the element, the declaration
-   and the look-group source are one commit; the collectors that emit it, the bridge that resolves
-   it and the UI that authors it all depend on the type existing. Golden rule 3.
+1. **The schema field lands BEFORE anything reads it.** `fitMode` on the element and the
+   declaration, and — as corrected by `B-178`, see §6 — the per-look `fits` map, are one commit;
+   the collectors that emit it, the bridge that resolves it and the UI that authors it all depend
+   on the type existing. Golden rule 3. ⚠ This constraint originally named "the look-group source";
+   that field is deleted, and §6 says why.
 2. **`fitPictureToBox` lands BEFORE `liveSourceFit` is refactored onto it**, and `liveSourceFit`'s
    refactor must be VALUE-IDENTICAL under `cover` before any `contain` path is wired. The positive
    control (`cover` is byte-identical to today) is what makes the rest of the change safe to
@@ -139,3 +141,31 @@ Stated in the proposal and repeated here because it is the decision most likely 
 later: the same catalog source can be seated in a 16:9 box in one template and a 3:4 box in
 another. A per-source mode would have to be wrong in one of them. The mode is a property of the
 PAIRING of a picture with a box, and the element is where that pairing is authored.
+
+## §6 — 🔴 CORRECTED BY `B-178`: the LOOK-GROUP carrier, which this change got wrong
+
+**This change shipped the mode on `LookSource.fitMode` — the look group's declared source — and
+that was a defect, not a simplification.** The reasoning recorded at the time was that a source-keyed
+carrier has "nowhere for two modes to be carried". It was right that there was nowhere on the
+DECLARATION and wrong that there was nowhere at all: each LOOK already carries a per-`routeKey`
+`rects` map, and the mode belongs beside it.
+
+**The consequence was total for the feature's primary case.** Nothing in the product ever writes
+`LookSource.fitMode` — `addLookSource` emits `{ routeKey, dynamic: false }` and the look-group editor
+does not model the field — so for **every look-group template ever exported**, the author's choice
+was dropped and every plate reached air on the `contain` default. The owner set two plates
+side by side, one `contain` and one `cover`, and both rendered `contain`.
+
+**As corrected:** `TemplateLookCarrier.fits: Record<routeKey, LiveFitMode>` per look, read off the
+plate ELEMENT that serves that `routeKey` in that look; `lookPlateFits` as a sibling of
+`lookPlateRects`; `LookSource.fitMode` deleted so there is no second home. §5's argument is not
+weakened by this — it is applied one level in: a `routeKey` appears in every look in a
+differently-shaped box, so per-source is one answer too few there too.
+
+⚠ **`expectedAspect` does NOT follow it**, and the difference is the useful part: an aspect asserts a
+property of the FEED, which cannot change between looks, while a mode asserts how that feed is placed
+in a BOX, and a look is exactly a change of box. `LookSource.expectedAspect` is dead in the same way
+and is filed separately as `B-179` — its fix re-arms a refusal that blocks takes on air, which is not
+this change's to make.
+
+Full evidence, the decision and its alternatives: `docs/prd/bugs-runtime.md` `B-178`.
