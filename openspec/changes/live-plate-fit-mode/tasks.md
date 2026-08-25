@@ -123,8 +123,8 @@ replaced it. Full evidence and the decision: `docs/prd/bugs-runtime.md` `B-178`.
 
 - [x] 10.1 `pnpm gate` green, uncached.
 - [x] 10.2 `CG_GATE_HOOK_E2E=1` run locally once before push.
-- [ ] 10.3 🔴 Linux `gate:e2e` — **OWED AGAIN for the `B-178` work.** The discharge below is REAL
-      but covers only the commit it names; `B-178` landed after it.
+- [x] 10.3 🔴 Linux `gate:e2e` — **DISCHARGED TWICE, once per half.** Two runs, because the first
+      covers only the commit it names and `B-178` landed after it. Both are recorded below.
 
 ### The `gate:e2e` discharge — for the `C-028` half only
 
@@ -142,7 +142,17 @@ whole change", which stopped being true the moment §11 landed. The `B-178` run 
 
 ### The `gate:e2e` discharge — for the `B-178` work
 
-- Run URL: _(pending — recorded after the push that carries §11)_
+**Run URL:** <https://github.com/yasermostafaee/cg/actions/runs/32889767678>
+
+|                                   |                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| Commit                            | `45291fc8656c86707003e4947b5400439c6143bc` on `dev` — carries all of §9b |
+| Run                               | `status: completed`, `conclusion: success`                               |
+| `E2E (Playwright)`                | **RAN**, 8m36s, `success`                                                |
+| `Lint • Typecheck • Test • Build` | RAN, 8m04s, `success`                                                    |
+
+🔴 Confirmed by DURATION, not by a green tick: CI skips `e2e` for a diff classified as unable to
+affect rendering (`P-029`), and a skipped job reports green too. 8m36s is a job that ran.
 
 🔴 **The `e2e` job was confirmed by its DURATION, not merely by a green tick.** CI skips `e2e` for a
 diff it classifies as unable to affect rendering (`P-029`), and a skipped job reports green too — so
