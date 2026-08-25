@@ -1643,7 +1643,7 @@ The field stays, the schema stays, and the modal says plainly what does and does
   Source model, the mapping store and the ledger this seats into), [[C-020]] (the air path fill+key
   ultimately reaches).
 
-## [ ] C-028 — live-plate FIT MODE: `contain` by default, so the picture is never cut and the margin shows the TEMPLATE, never black ⟨priority: high⟩ — the client's 2026-08-23 decision; premise MEASURED 2026-08-25
+## [~] C-028 — live-plate FIT MODE: `contain` by default, so the picture is never cut and the margin shows the TEMPLATE, never black ⟨priority: high⟩ — the client's 2026-08-23 decision; premise MEASURED 2026-08-25; implemented in `openspec/changes/live-plate-fit-mode/`
 
 **What:** a live plate's picture is fitted into its box by a **selectable mode**:
 
@@ -1772,10 +1772,24 @@ harm it guarded returns without anyone noticing.
 
 **Notes.**
 
-- 🔴 **Where the mode LIVES is a design question this item does not settle** — per-element
-  (authored), per-source (installation), or per-plate-assignment. It interacts directly with
-  [[D-147]]'s source-outranks-author decision and deserves its own design pass. Recorded as OPEN
-  rather than guessed at, because guessing it is how a field lands in the wrong schema.
+- ⭐ **Where the mode LIVES — DECIDED 2026-08-25 (session `FIT-MODE-01`), and implemented.** This
+  was recorded as OPEN rather than guessed at. It is settled from the client's own recorded words —
+  the mode is _"choosable in the Designer and overridable by the operator"_:
+  - **Authored per ELEMENT** (`VideoPlaceholderElementSchema.fitMode`; on the group's declared
+    source for a LOOKS template, where the carrier is source-keyed and `expectedAspect` already
+    lives for the same reason). **NOT per catalog SOURCE:** one source seated in a 16:9 box and a
+    3:4 box needs different fits, so a per-source field would have to be wrong in one of them. The
+    mode is a property of the PAIRING of a picture with a box, and the element is where that
+    pairing is authored.
+  - **Overridable per ASSIGNMENT** at run time (`TemplateSourceAssignment.fitMode`) — the operator
+    half, on the record that already answers "how does this plate get its input".
+  - **Resolution order: assignment override → element → `contain`** (`resolvePlateFitMode`).
+  - 🔴 **It runs the OPPOSITE way round from [[D-147]]'s aspect chain, and that is the decision
+    rather than an inconsistency.** The ASPECT is a measurable property of the feed, so the
+    installation outranks the author (the author cannot see the feed). The MODE is a presentation
+    choice about that feed: the author states what the design wants, and the operator — who is
+    looking at the picture on the day — is the only party who can say it is wrong for this shot.
+    Two chains, opposite orders, resolved by two functions so nobody later "aligns" them.
 - **The default FLIPS to `contain`**, which changes what existing scenes put on air — but only for
   plates whose source aspect is both KNOWN and DIFFERENT from the box. Where nothing is known, or
   where the two already agree, nothing changes (the last two acceptance bullets). That is the blast

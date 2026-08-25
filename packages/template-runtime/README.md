@@ -122,6 +122,27 @@ label (or a poster), `'output'` paints nothing inside the rect at all. What the 
 declares — `transform`, flattened by `collectLiveSources` at export — is the rect
 CasparCG composites a live input into, so **nothing may change that box**.
 
+**…and the HOLE is the PICTURE, not the box (C-028).** The box is where CasparCG is told
+to draw, but what is PUNCHED through the backdrop is where the picture actually lands
+inside it. One function decides both — `fitPictureToBox` in `@cg/shared-schema`, which
+returns a `picture` rect (the bridge's `MIXER FILL`) and a `visible` rect (`picture ∩ box`
+— the bridge's `MIXER CLIP` **and** this package's mask hole). Under the default
+`contain` mode the picture is smaller than its box on one axis, and punching at the box
+would leave that margin a transparent hole showing the channel behind the CG layer: black,
+on air. Punching at `visible` makes the template's own background fill the margin for
+free. Under `cover`, `visible` IS the box, so the shipped behaviour is unchanged.
+
+**The page is TOLD what it cannot know.** The fitted rect depends on the assigned source's
+aspect and the operator's mode override — installation facts the scene does not carry — so
+`sceneMaskHoles` takes them as a `PlateFits` argument rather than reading them off the
+element. The bridge sends them over the reserved `__cg` control key on `CG UPDATE`
+(`CgControl.plates`), the same transport the active look rides; `createRuntime` records
+them and re-punches. **The wire carries the FACTS, never the rect** — each side applies the
+one fit function to the box IT holds, because the page's box moves under an arrangement and
+is read back from the live layout. With no facts received (a Designer preview, a page
+before its first take) the mask falls back to the scene's own `expectedAspect` / `fitMode`,
+and an absent aspect means no fit at all.
+
 That constraint is why the plate's optional `stroke` renders as a CSS **`outline`**
 rather than the `border` every other box kind gets. An outline is painted outside the
 box and takes **no layout**, so the hole stays exactly `transform` under any box model

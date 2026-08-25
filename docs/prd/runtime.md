@@ -2473,6 +2473,31 @@ that already existed in that app.
 
 ## [ ] R-053 — an aspect-mismatched plate must be TAKEABLE, with operator-confirmed CENTRE CROP ⟨priority: high⟩
 
+⭐ **RE-SCOPED BY [[C-028]] (2026-08-25) — READ THIS BEFORE PICKING THE ITEM UP. Its opening
+premise is now FALSE BY DEFAULT and the rest of the item has not been rewritten.**
+
+C-028 shipped a per-plate FIT MODE and made `contain` the default, and it made the
+`live-source-aspect-mismatch` refusal **conditional on that mode**: a refusal under `cover`, a
+non-blocking warning under `contain`. So the sentence below — _"the take is refused"_ — now
+describes only the `cover` path.
+
+What that leaves of this item, honestly:
+
+- **Reason 1 (one mismatched plate refuses the entire take) is answered for the default**, because
+  the default no longer refuses. It still stands, unchanged, for a plate authored `cover`.
+- **Reason 2 (the operator has no on-air remedy) is PARTLY answered and is the half worth keeping.**
+  The operator now HAS a remedy — the per-assignment `fitMode` override — but it is a CG Control
+  edit, not the row-level, per-run consent this item asks for, and nothing surfaces the warning
+  C-028 attaches to a `contain` mismatch. **The warning has no reader**, which is the same
+  zero-reader shape as [[B-143]]'s `assumed` flag and is the most useful thing left here.
+- **The DRAFT message below now needs a `contain` arm**, and its remedy list is wrong for that mode:
+  under `contain` nothing is cropped, so _"confirm the centre crop"_ is not the remedy — switching
+  the plate to `cover` is. C-028 already splits the consequence clause per mode in
+  `resolvePlateAspect`; a rewrite here must not collapse them back into one sentence.
+
+**Not re-scoped by the C-028 session on purpose** — deciding what remains of a `[ ] high` item is
+the owner's call, not a ripple to absorb quietly. What is recorded here is the fact that moved.
+
 **What:** when a live plate's `expectedAspect` disagrees with the assigned source's shape, the take
 is refused. Keep the refusal — but let the operator **consent to a centre crop from the row** and
 take again. The consent is **per-item, per-run**: it never edits the template's assignment nor the
