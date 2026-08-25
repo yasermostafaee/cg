@@ -16,6 +16,8 @@ import {
   type Playout,
   type Scene,
   sceneMaskHoles,
+  type PlateFitFacts,
+  type PlateFits,
   type ArrangementView,
   defaultLookOf,
   lookGroupOf,
@@ -482,7 +484,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     applyArrangementToNodes(scene, built.elementMap, view, arrangementView);
     arrangementView = view;
     const live = liveArrangementView(scene, built.elementMap, view);
-    repunchLiveSourceHoles(built.punchTargets, sceneMaskHoles(scene, live));
+    // `C-028` — the third input, and the one the page cannot derive. `plateFits` is
+    // whatever the bridge last told us (see `applyPlateFits`); `undefined` until it has
+    // spoken, which `sceneMaskHoles` answers from the scene's own statement.
+    repunchLiveSourceHoles(built.punchTargets, sceneMaskHoles(scene, live, plateFits));
     /*
       🔴 `B-150` — THE MEDIA PARK IS DERIVED FROM THE SAME `view`, HERE, and not at
       `applyLook`. Both statements of visibility flow through this one function — the look
@@ -510,6 +515,44 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     }
   };
   let arrangementView: ArrangementView | undefined;
+
+  /**
+   * ⭐ `C-028` — **the fit facts the bridge has told this page, or `undefined`.**
+   *
+   * 🔴 The page CANNOT derive these. The fitted rect depends on the assigned source's
+   * aspect (an installation fact `D-147` puts above the author's declaration) and on the
+   * operator's mode override — neither of which is in the scene. Deriving them here from
+   * the element while the bridge derives them from the assigned source is `B-149`: two
+   * machines, two aspects, ONE hole, and a live layer open where no picture is.
+   *
+   * `undefined` is a real state, not a missing value: a Designer preview, a rehearsal
+   * frame and a freshly-built page have never been told, and `sceneMaskHoles` answers
+   * them from the scene's own statement instead.
+   */
+  let plateFits: PlateFits | undefined;
+
+  /**
+   * Record what a control payload said about plate fits, and answer whether anything
+   * CHANGED — so a caller re-punches only when there is something to re-punch.
+   *
+   * ⚠ MERGED, never replaced. A payload carries the plates the bridge resolved for THIS
+   * take or THIS look; a plate absent from it is one this payload says nothing about, not
+   * one whose fit has been retracted. Replacing would drop a parked look's plates on
+   * every update and re-punch their holes at the box.
+   */
+  const applyPlateFits = (plates: Record<string, PlateFitFacts> | undefined): boolean => {
+    if (plates === undefined) return false;
+    const next = new Map(plateFits);
+    let changed = false;
+    for (const [plateId, fit] of Object.entries(plates)) {
+      const prev = next.get(plateId);
+      if (prev?.aspect === fit.aspect && prev.mode === fit.mode) continue;
+      next.set(plateId, fit);
+      changed = true;
+    }
+    if (changed) plateFits = next;
+    return changed;
+  };
 
   // ── LOOKS (`design.md` §14, phase 1D) — the look-state driver ─────────────────────────
   //
@@ -2387,7 +2430,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         implementation, three entry points, so the page cannot grow a second answer to "which
         look is active".
       */
+      /*
+        `C-028` — THE FIT FACTS ARE RECORDED BEFORE THE LOOK IS ENTERED, so the re-punch
+        `enterLook` performs already has them. Recorded FIRST and re-punched at most once:
+        `enterLook` re-punches on its own, and a plain `repunch` here as well would paint
+        the holes twice — work that can only be seen if it goes wrong.
+
+        🔴 This is the payload that closes the build-time window. A fresh build punched
+        from the SCENE's statement (the author's `expectedAspect`), because that is all it
+        had; the bridge's `CG ADD` carries the ASSIGNED source's aspect, and this is where
+        the page learns it. The window is entirely inside the bridge's own
+        `ADD → (muted) → PLAY` sequence, so nothing wrong reaches air — the same shape the
+        active look already has.
+      */
+      const fitsChanged = applyPlateFits(control?.plates);
       if (control?.look !== undefined) enterLook(control.look);
+      else if (fitsChanged) repunch(arrangementView);
       bus.emit('play.end');
     },
 
@@ -2437,6 +2495,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         can only be seen if it goes wrong. When the payload names no look, or names one this
         template does not have, the ordinary re-punch is what happens, exactly as before.
       */
+      // `C-028` — recorded BEFORE the dispatch below, so whichever re-punch runs sees the
+      // new facts. `applyPlateFits` returns whether anything changed but the answer is
+      // unused here: `update()` re-punches unconditionally when no look is named, and a
+      // second condition would only be able to SUPPRESS a punch this method already owes.
+      applyPlateFits(control?.plates);
       if (control?.look === undefined || !enterLook(control.look)) repunch(arrangementView);
       bus.emit('update');
     },

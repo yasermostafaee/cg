@@ -1,4 +1,5 @@
 import type { FieldValues } from './fields.js';
+import { LIVE_FIT_MODES, type LiveFitMode } from './live-fit.js';
 
 /**
  * `multibox-layout-switch` `tasks.md` 6.7 — **the BRIDGE→PAGE control channel, carried inside
@@ -47,6 +48,25 @@ import type { FieldValues } from './fields.js';
  */
 export const CG_CONTROL_KEY = '__cg';
 
+/**
+ * ⭐ `C-028` — **the two INSTALLATION facts one plate's fit depends on.**
+ *
+ * The page cannot know either. `aspect` comes from the ASSIGNED source through `D-147`'s
+ * chain (the source outranks the author, because the author cannot see the feed), and
+ * `mode` comes from the operator's override over the author's declaration. Both are
+ * resolved by the bridge at take time, from state the scene does not carry.
+ */
+export interface CgPlateFit {
+  /**
+   * The source's display aspect (width ÷ height), or `null` when NOTHING in the chain
+   * states one — `resolvePlateAspect`'s `assumed` case. `null` means NO FIT: the hole
+   * stays at the box, exactly as today.
+   */
+  aspect: number | null;
+  /** `contain` or `cover`, already resolved. Never absent — the bridge resolved it. */
+  mode: LiveFitMode;
+}
+
 /** Bridge→page control data. Every member optional: a payload may carry any subset. */
 export interface CgControl {
   /**
@@ -58,6 +78,24 @@ export interface CgControl {
    * changes nothing.
    */
   look?: string;
+  /**
+   * ⭐ `C-028` — **each plate's resolved fit facts, keyed by PLATE ID** (the template's
+   * declared `sourceId`, which is the element's `routeKey`).
+   *
+   * 🔴 **THE FACTS CROSS THE WIRE, NEVER THE RECT.** Each side then calls the SAME
+   * `fitPictureToBox` on the box rect IT holds. That is deliberate and it is the shape
+   * {@link CgControl.look} already has — *"one id, sent once, read by one function on
+   * each side"*. Sending the fitted rect instead would fight a rule the page already
+   * enforces: `liveArrangementView` reads the page's CURRENT layout back so the mask is
+   * computed against where the nodes now ARE, and a plate moved by an arrangement has a
+   * box the bridge's rect would be stale about. **The box is the page's fact; the
+   * aspect and the mode are the bridge's; the fit is one function applied to both.**
+   *
+   * Absent means "this payload says nothing about fits" — never "no plates". A page that
+   * receives none keeps whatever it was last told, and a page that has never been told
+   * falls back to the scene's own statement.
+   */
+  plates?: Record<string, CgPlateFit>;
 }
 
 /** Attach control data to a field payload. The ONE writer — the bridge calls this. */
@@ -65,7 +103,19 @@ export function withCgControl(fields: FieldValues, control: CgControl): FieldVal
   // An EMPTY control object is not attached: it would put a reserved key on every update for
   // nothing, and a reader cannot tell "no control data" from "control data saying nothing".
   if (Object.keys(control).length === 0) return fields;
-  return { ...fields, [CG_CONTROL_KEY]: { ...control } } as FieldValues;
+  /*
+    ⚠ THROUGH `unknown`, and that widening is honest rather than a silenced error.
+
+    Control data is deliberately NOT a field value — it is JSON riding the same payload,
+    lifted off by `stripCgControl` before anything treats the payload as fields, which is
+    half of the reserved key's collision proof above. It therefore does not have to fit
+    `FieldValues`'s value union, and `C-028`'s `plates` is the first member that visibly
+    does not: `aspect` is `number | null`, and `null` is not a field value.
+
+    A direct assertion compiled only while every control member HAPPENED to look like a
+    field. Making the widening explicit says which of the two it is.
+  */
+  return { ...fields, [CG_CONTROL_KEY]: { ...control } } as unknown as FieldValues;
 }
 
 /**
@@ -80,7 +130,41 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   const raw = (payload as Record<string, unknown>)[CG_CONTROL_KEY];
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
   const look = (raw as Record<string, unknown>)['look'];
-  return typeof look === 'string' && look !== '' ? { look } : {};
+  const plates = readPlateFits((raw as Record<string, unknown>)['plates']);
+  return {
+    ...(typeof look === 'string' && look !== '' ? { look } : {}),
+    ...(plates === undefined ? {} : { plates }),
+  };
+}
+
+/**
+ * `C-028` — the plate fit map, validated MEMBER BY MEMBER.
+ *
+ * Same defensive standard as the rest of this module and for the same reason: this
+ * arrives over AMCP from a process that may be a different version, and a page that
+ * throws inside `update()` takes the whole graphic off air. A malformed entry is DROPPED
+ * rather than thrown on or coerced — the page then falls back to the scene's own
+ * statement for that plate, which is a worse picture than the truth but is still a
+ * picture.
+ *
+ * ⚠ `aspect` accepts `null` and rejects a non-finite number. `null` is a MEANINGFUL
+ * value here ("nothing states an aspect ⇒ no fit"), so it must survive the walk, while a
+ * `NaN` arriving from a bad serialization must not: `NaN` would flow into the fit as a
+ * legal-looking number and produce a rect of `NaN`, i.e. a hole nothing can see.
+ */
+function readPlateFits(raw: unknown): Record<string, CgPlateFit> | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+  const out: Record<string, CgPlateFit> = {};
+  for (const [plateId, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
+    const entry = value as Record<string, unknown>;
+    const mode = entry['mode'];
+    if (typeof mode !== 'string' || !(LIVE_FIT_MODES as readonly string[]).includes(mode)) continue;
+    const aspect = entry['aspect'];
+    if (aspect !== null && (typeof aspect !== 'number' || !Number.isFinite(aspect))) continue;
+    out[plateId] = { aspect: aspect as number | null, mode: mode as LiveFitMode };
+  }
+  return Object.keys(out).length === 0 ? undefined : out;
 }
 
 /**
