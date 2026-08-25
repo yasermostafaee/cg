@@ -2158,8 +2158,10 @@ installation with one channel gets today's model unchanged, and §4 is what make
 
 **The reason is C-020, and it is not a preference.** `docs/prd/caspar.md:775-826` establishes that
 this plant's **entire picture** reaches air over `<newtek-ivga />` into a TriCaster — the production
-config declares `<system-audio />` + `<newtek-ivga />` + `<screen />` and there is no Decklink card
-(`:803-806`) — that **2.4.0 removed the iVGA consumer** and 2.5.0 inherits the removal, that
+config declares `<system-audio />` + `<newtek-ivga />` + `<screen />` and so declares no Decklink
+CONSUMER (`:803-806`; corrected 2026-08-24 — this said "there is no Decklink card", and a card IS
+fitted, it is simply not the air path) — that **2.4.0 removed the iVGA consumer** and 2.5.0
+inherits the removal, that
 `Processing.AirSend.x64.dll` is **absent** from the 2.5.0 install, and that starting 2.5.0 against
 today's config stops output **entirely: the whole picture, not just audio**. C-020 is `high`,
 **deferred** pending the playout integration, and it **BLOCKS C-018**. The air path is the most
@@ -2288,19 +2290,21 @@ task moves until they land.**
 
 ## 10. Phasing — each phase landable and verifiable without capture hardware
 
-Only `route://` is provable on a dev machine (`route` needs no card; DECLINK has no card in this
-plant per C-020, and NDI is module-gated). Every phase below is verifiable with a looping media file
-plus two `route://` producers.
+Only `route://` is provable on a DEV MACHINE (`route` needs no card; a dev box has no DeckLink in
+it, and NDI is module-gated). Every phase below is verifiable with a looping media file plus two
+`route://` producers. ⭐ **Corrected 2026-08-24: this said "DECLINK has no card in this plant per
+C-020", which is false — the PLANT has a DeckLink SDI 4K.** The phasing argument is unaffected,
+because it was always about what a dev machine can prove, not about what the plant is fitted with.
 
-| Phase                                    | Content                                                                                                                         | Verifiable how                                                 |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| **1 — Schema + authoring**               | additive schema fields, the id refinement (§3), the creation path (C2), SMPTE bars behind the §9 mode seam, preflight codes     | unit + Designer E2E; no bridge                                 |
-| **2 — Declaration + carrier**            | `collectLiveSources`, `resolution` + `liveSources` on `TemplateInfo`, the ledger type, the `reservedLayers` comment corrections | unit + integration against the mock                            |
-| **3 — Mock**                             | §8's three additions                                                                                                            | the mock's own suite; **blocks phase 4**                       |
-| **4 — Mapping store + settings surface** | `SourceMappingStore`, `sources.*` channel, CG Control modal, boot validation                                                    | integration + DOM tests                                        |
-| **5 — Ownership**                        | `#liveLayers`, the three door exemptions, the `live-source` clear reason                                                        | integration against the mock — **only possible after phase 3** |
-| **6 — Producer + geometry + audio**      | `playSource` / `mixerFit` / `mixerClear`, the §6 chain, the §7 mute rule                                                        | integration; then the two-box `route://` demo on real hardware |
-| **7 — Hardware**                         | fill+key, DECKLINK, NDI                                                                                                         | **cannot be closed on this installation** — see §12.1          |
+| Phase                                    | Content                                                                                                                         | Verifiable how                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **1 — Schema + authoring**               | additive schema fields, the id refinement (§3), the creation path (C2), SMPTE bars behind the §9 mode seam, preflight codes     | unit + Designer E2E; no bridge                                       |
+| **2 — Declaration + carrier**            | `collectLiveSources`, `resolution` + `liveSources` on `TemplateInfo`, the ledger type, the `reservedLayers` comment corrections | unit + integration against the mock                                  |
+| **3 — Mock**                             | §8's three additions                                                                                                            | the mock's own suite; **blocks phase 4**                             |
+| **4 — Mapping store + settings surface** | `SourceMappingStore`, `sources.*` channel, CG Control modal, boot validation                                                    | integration + DOM tests                                              |
+| **5 — Ownership**                        | `#liveLayers`, the three door exemptions, the `live-source` clear reason                                                        | integration against the mock — **only possible after phase 3**       |
+| **6 — Producer + geometry + audio**      | `playSource` / `mixerFit` / `mixerClear`, the §6 chain, the §7 mute rule                                                        | integration; then the two-box `route://` demo on real hardware       |
+| **7 — Hardware**                         | fill+key, DECKLINK, NDI                                                                                                         | C-021, and no longer one verdict — see §12.1's 2026-08-24 correction |
 
 ---
 
@@ -2325,15 +2329,31 @@ decision (§12.4) was made at the same time. §12.3 remains open on its own term
 §9a.2's studio plate. They are recorded here rather than left in the prompt that carried them,
 because a prompt is ephemeral and the spec is the memory. **Do not re-open 12.1, 12.2 or 12.4.**
 
-### 12.1 C-015's acceptance on a plant with no Decklink card — DECIDED 2026-08-08
+### 12.1 C-015's acceptance is about ASSIGNMENT, not about capture hardware — DECIDED 2026-08-08
+
+> 🔴 **PREMISE CORRECTED 2026-08-24. The DECISION below stands unchanged; one FACT it was argued
+> from was wrong.** This section was titled _"C-015's acceptance on a plant with no Decklink card"_,
+> and the paragraph below concluded "this plant has no Decklink card" from C-020's reading of the
+> production config's CONSUMER list. A consumer list is not a hardware inventory. The plant has a
+> **DeckLink SDI 4K** (index `1`, persistent ID `23487013`); on 2026-08-24 the owner ran
+> `PLAY 1-10 DECKLINK DEVICE 1` on the production 2.5.0 and it initialised with real signal, and a
+> `<decklink>` consumer with `<device>23487013</device>` initialised on the same card at the same
+> time.
+>
+> **Why the decision is untouched.** It never rested on the card's absence — it rests on _"the
+> Designer never names a concrete device"_, which is true whatever is fitted to the playout box.
+> What DOES change is the accounting in "What is split OUT" below: the DECKLINK arm is no longer
+> parse-verified only. Corrected in full at `docs/prd/caspar.md`'s [[C-021]]; the outstanding
+> questions are `docs/recon/2026-08-25-decklink-model-walk.md`.
 
 **The question as it was asked.** C-015 makes real-hardware verification part of done
 (`docs/prd/caspar.md:405`, and the Notes at `:404`: _"On-air behavior throughout ⇒ real-hardware
-verification is part of done."_). But **this plant has no Decklink card** — C-020 records the config
-declares `<system-audio />` + `<newtek-ivga />` + `<screen />`, and fill+key reaches air over NewTek
-iVGA into a TriCaster (`docs/prd/caspar.md:753-754`). C-020 is itself **deferred** pending that
-integration. So the DECKLINK arm can only ever be parse-verified here, and fill+key cannot be
-validated at all.
+verification is part of done."_). The premise taken at the time was that **this plant has no
+Decklink card** — C-020 records the config declares `<system-audio />` + `<newtek-ivga />` +
+`<screen />`, and fill+key reaches air over NewTek iVGA into a TriCaster
+(`docs/prd/caspar.md:753-754`). C-020 is itself **deferred** pending that integration. So — on that
+premise — the DECKLINK arm could only ever be parse-verified here, and fill+key not validated at
+all. **See the correction above: the DECKLINK half of that conclusion is now void.**
 
 **DECIDED, in the owner's framing: the Designer never names a concrete device, so C-015's
 done-condition is about ASSIGNMENT, not about capture hardware.** A template declares **symbolic**
@@ -2347,11 +2367,12 @@ therefore narrows to two conditions, and **both are dischargeable on this plant*
 - **(b)** the two-box `route://` demo runs on the plant's real CasparCG **2.3.2**, which needs no
   capture card (§10, `tasks.md` 6.8).
 
-**What is split OUT, and where it went.** The DECKLINK and NDI arms are **parse-verified only** on
-this installation, and **fill+key cannot be validated here at all**. Those three are filed as their
-own item — **C-021** (`docs/prd/caspar.md`), `[!]` blocked on hardware, cross-referenced from C-015
-in both directions. They are not deleted from the product; they are moved to the item that can
-actually own a hardware debt.
+**What is split OUT, and where it went.** All three arms are filed as their own item — **C-021**
+(`docs/prd/caspar.md`), cross-referenced from C-015 in both directions. They are not deleted from
+the product; they are moved to the item that can actually own a hardware debt. As of 2026-08-24
+their standing DIFFERS and C-021 states each separately: **DECKLINK** is measured in its index form
+and no longer blocked, **NDI** is parse-verified only, and **fill+key** waits on a second SDI input
+being confirmed on the card (the seating code it would verify is split again, to **C-027**).
 
 🔴 **The consequence worth stating plainly, because it is what the decision buys: with that split,
 phases 1–6 carry NO undischargeable hardware debt.** The two mixer facts the geometry rests on —

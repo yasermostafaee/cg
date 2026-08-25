@@ -191,21 +191,32 @@ export class CommandBuilder {
    *                addressed with the layer form (§9a.2).
    *   `media`    — a bare file name, quoted. What CasparCG assumes for an
    *                argument carrying no scheme and no keyword.
-   *   `decklink` — `DECKLINK DEVICE <n>`. ⚠ **PARSE-VERIFIED ONLY** on this
-   *                installation: it has no capture card (C-020 records
-   *                `<system-audio/> + <newtek-ivga/> + <screen/>`), so nothing here has
-   *                ever put a real device on air. That debt is **C-021's**, blocked
-   *                on hardware, and it is deliberately not a fog over this method —
-   *                see design.md §12.1.
-   *   `ndi`      — `NDI NAME "<source>"`. Same standing as `decklink`: no NDI source
-   *                exists on this plant, and the NDI module is gated. C-021.
-   *   `stream`   — the URL alone, quoted, exactly as `media` is (C-025). ⭐ Its
-   *                standing DIFFERS from its neighbours and is stated honestly:
-   *                the owner ran `PLAY 1-<layer> "<url>"` BY HAND on the plant
-   *                and it PLAYED — one manual run, not a suite, and more than
-   *                `decklink`/`ndi` have ever had here. The scheme allowlist is
-   *                `validateSourceCatalog`'s (the config boundary); by the time a
-   *                URL reaches this method it has already been accepted there.
+   *   `decklink` — `DECKLINK DEVICE <n>`. ⭐ **MEASURED in the INDEX form** on the
+   *                plant's 2.5.0 (`69e8ad5`), 2026-08-24: the card is a
+   *                **DeckLink SDI 4K**, enumeration index **1**, persistent ID
+   *                **23487013**, and `PLAY 1-10 DECKLINK DEVICE 1` returned
+   *                `Initialized` repeatedly with real signal on the input. That is
+   *                the same standing `stream` states below — one owner-run pass on
+   *                the plant, not a suite — and it is ahead of `ndi`.
+   *                ⚠ **What is emitted here is the INDEX form, and ONLY the index
+   *                form is measured.** The PERSISTENT-ID form as a PRODUCER
+   *                argument (`DECKLINK DEVICE 23487013`) is **UNPROVEN** — the
+   *                persistent ID is proven only in the CONSUMER's `<device>`
+   *                element (`DeckLink SDI 4K [1-23487013|1080p5000]`, same run),
+   *                and the consumer and the producer are different parsers.
+   *                `docs/recon/2026-08-25-decklink-model-walk.md` Q1 settles it.
+   *                The schema admits either integer, so nothing here changes when
+   *                it does.
+   *   `ndi`      — `NDI NAME "<source>"`. ⚠ **PARSE-VERIFIED ONLY** — no NDI source
+   *                exists on this plant and the NDI module is gated, so nothing here
+   *                has ever put an NDI producer on air. That debt is **C-021's**.
+   *   `stream`   — the URL alone, quoted, exactly as `media` is (C-025). Its
+   *                standing is stated honestly: the owner ran
+   *                `PLAY 1-<layer> "<url>"` BY HAND on the plant and it PLAYED —
+   *                one manual run, not a suite, and more than `ndi` has ever had
+   *                here. The scheme allowlist is `validateSourceCatalog`'s (the
+   *                config boundary); by the time a URL reaches this method it has
+   *                already been accepted there.
    *
    * `keyDevice` is deliberately NOT read here. A fill+key pair is TWO layers, so it
    * is a decision about how many producers to seat and where — the caller's, from

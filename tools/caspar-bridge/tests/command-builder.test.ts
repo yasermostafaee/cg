@@ -93,7 +93,10 @@ describe('CommandBuilder — Live Source verbs (C-015 phase 6, task 6.1)', () =>
     });
 
     it('decklink: keywords and the index are AMCP SYNTAX, so they are NOT quoted', () => {
-      // Parse-verified only on this installation — no capture card exists (C-021).
+      // The INDEX form is MEASURED on this plant's DeckLink SDI 4K (2.5.0,
+      // 2026-08-24): `PLAY 1-10 DECKLINK DEVICE 1` initialised with real signal.
+      // The PERSISTENT-ID form as a producer argument is still unproven — see
+      // `playSource`'s docstring and the recon walk's Q1.
       expect(builder.playSource(slot, { kind: 'decklink', device: 3 })).toBe(
         'PLAY 1-10 DECKLINK DEVICE 3',
       );

@@ -616,9 +616,12 @@ sources }`, with `defaultPosition` REQUIRED **inside** it. ⚠ **A top-level req
   REFUSED, because there is no reading of it under which the server would have done what was asked.
   A refused `PLAY` leaves the layer **untouched**: writing the producer and then refusing would be
   the "looks acked, renders nothing" gap in reverse.
-  ⚠ **The DECKLINK and NDI argument spellings are MODELLED, NOT MEASURED** — no capture card or NDI
-  source exists on this plant, which is exactly what C-021 is blocked on. Said in the classifier's
-  own docstring rather than left to be discovered.
+  ⚠ **The NDI argument spelling is MODELLED, NOT MEASURED** — no NDI source exists on this plant
+  and the module is gated, which is one of the things C-021 is still blocked on. Said in the
+  classifier's own docstring rather than left to be discovered.
+  ⭐ **Corrected 2026-08-24: DECKLINK is no longer in that sentence.** The plant has a DeckLink
+  SDI 4K and `PLAY 1-10 DECKLINK DEVICE 1` initialises with real signal, so the INDEX form the
+  classifier models is measured. The persistent-ID form as a producer argument is not.
 - **3.3** `fill` and `clip` on `LayerState`, both channel-normalized, both SURVIVING `CLEAR` (mixer
   state belongs to the channel's mixer — which is why teardown must emit `MIXER … CLEAR`, and a test
   can only catch the omission if the mock keeps the state to be caught). `MIXER … CLEAR` resets both
@@ -1170,9 +1173,11 @@ beforehand: 85/85, `0 cached`.
       string. Zero-is-falsy caught a third time: `route.layer` is `nonnegative()`, so a
       truthiness check would have emitted `route://1` — the WHOLE CHANNEL — which on a
       single-channel install is exactly §9a.2's feedback loop.
-      ⚠ **DECKLINK and NDI argument spellings are PARSE-VERIFIED ONLY** (no capture
-      card, no NDI source on this plant) — C-021's hardware debt, said in the
-      method's own docstring rather than left to be discovered.
+      ⚠ **The NDI argument spelling is PARSE-VERIFIED ONLY** (no NDI source on this
+      plant, module gated) — C-021's hardware debt, said in the method's own
+      docstring rather than left to be discovered. ⭐ **Corrected 2026-08-24:
+      DECKLINK's INDEX form is MEASURED** on the plant's DeckLink SDI 4K; only the
+      persistent-ID form as a producer argument is still unproven.
       Original: `playSource` / `mixerFit` / `mixerClear` on `command-builder.ts`, all layer-scoped
       through `target()`. Channel-scoped forms stay forbidden (`caspar-runtime.ts:2718-2724`).
       **`mixerFit` emits the `FILL` and the `CLIP` as a PAIR from one computation** — NOT two
@@ -1755,7 +1760,9 @@ question. **No task in this file changes on the strength of it**, §9a's punch w
       (`designer.md`, _"design.md §9, C8"_).
 - [x] 8.2 Flip D-137 and C-015 to `[~]` naming this change dir. **DONE 2026-08-08.** C-015's
       hardware acceptance bullet is NARROWED in the same edit per `design.md` §12.1, and the
-      arms it drops are filed as **C-021** (`[!]` blocked on hardware), cross-referenced from
+      arms it drops are filed as **C-021** (`[!]` blocked on hardware — ⭐ as of 2026-08-24 the
+      DECKLINK arm is UNBLOCKED and only NDI and fill+key still are; C-021 states each arm
+      separately now), cross-referenced from
       C-015 in both directions. R-029, R-042 and B-121 also flip to `[~]` naming this change
       dir per §12.4 — R-029 carrying its undischarged head bullet in writing (6.5e).
 - [ ] 8.3 Engine doc-sync: `packages/template-runtime/README.md` for the `mode` seam, and

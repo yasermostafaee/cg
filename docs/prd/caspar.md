@@ -473,12 +473,19 @@ NDI producer exists on the client's 2.3.2 build at all"_. The reasoning is the o
 structural, not a concession: **the Designer never names a concrete device.** A template declares
 SYMBOLIC ids only, and binding an id to a producer is an INSTALLATION act performed in CG Control —
 so this item's done-condition is about ASSIGNMENT, which is fully testable here, not about capture
-hardware, which is not. The DECKLINK and NDI arms are **parse-verified only** on this installation
-and **fill+key cannot be validated here at all** (no Decklink card; fill+key reaches air over
-NewTek iVGA into a TriCaster, [[C-020]]); all three moved to **[[C-021]]**, `[!]` blocked on
-hardware. With that split, `live-source-multibox` phases 1–6 carry **no undischargeable hardware
-debt** — the two mixer facts the geometry rests on (`FILL`'s per-axis normalization and `CLIP`'s
-masking semantics) are already confirmed on 2.3.2.
+hardware, which is not. All three arms moved to **[[C-021]]**. With that split,
+`live-source-multibox` phases 1–6 carry **no undischargeable hardware debt** — the two mixer facts
+the geometry rests on (`FILL`'s per-axis normalization and `CLIP`'s masking semantics) are already
+confirmed.
+
+⭐ **CORRECTED 2026-08-24 — this paragraph used to say "no Decklink card" and file all three arms
+as blocked on hardware.** The plant HAS a **DeckLink SDI 4K** (index `1`, persistent ID
+`23487013`), and `PLAY 1-10 DECKLINK DEVICE 1` initialises with real signal on the production
+2.5.0, so the DECKLINK arm is **no longer parse-verified only** — see [[C-021]]'s corrected block
+for exactly which half of it is now measured and which is not. The NARROWING above is unaffected
+and stands on its own reasoning: the Designer never names a concrete device, whether or not a card
+is in the building. NDI is still parse-verified only, and fill+key still cannot be validated here
+until a second SDI input is confirmed.
 
 **Notes:** **THE structural risk, flag it loudly:** "non-html OSC producer kind" is the PRIMARY
 foreign/owned discriminator ([[R-015]], [[C-014]]). **CORRECTED 2026-08-03: this said "SOLE" and
@@ -669,9 +676,12 @@ semantics unchanged — this adds a TRIGGER, not a verb).
 **What:** Move the project's target server from **2.3.3 LTS to 2.5.0 Stable** (released
 2025-12-10) and validate it on the real Windows playout machine — screen consumer first, then a
 pass over the plant's REAL air path before anything on-air depends on it. That path is **NewTek
-iVGA into a TriCaster, not Decklink** (this plant has no Decklink card at all), and 2.5.0 has
-removed the iVGA consumer — see [[C-020]], which now owns that pass and BLOCKS this item's
-cutover. OWNER DECISION, 2026-07-28. The owner
+iVGA into a TriCaster, not Decklink** (corrected 2026-08-24: this said "this plant has no Decklink
+card at all", which is false — a **DeckLink SDI 4K** is fitted and drives output on 2.5.0. What is
+true is that the AIR PATH is iVGA; whether a Decklink consumer should replace it is [[C-020]]'s
+open question, and the card's presence makes that a live option rather than a hypothetical), and
+2.5.0 has removed the iVGA consumer — see [[C-020]], which now owns that pass and BLOCKS this
+item's cutover. OWNER DECISION, 2026-07-28. The owner
 installs 2.5.0 **side-by-side** with 2.3.3 so rollback is preserved, and rebuilds the config
 from the 2.5 defaults (1080i5000 channel, AMCP 5250, OSC predefined-client) rather than
 copying the 2.3 config forward — a copied config is how a defaults change becomes an
@@ -817,8 +827,12 @@ including the two conclusions this pass corrects.
     property of the server build; containing it is a matter of where the box's default device
     goes. Carry this into the cutover runbook.
 - **The "Decklink pass" this item originally asked for does not apply to this plant** and has
-  been rewritten in **What** above. There is no Decklink card here; the air path is NewTek
-  iVGA into a TriCaster, and 2.5.0 has removed the iVGA consumer. That pass — and the cutover
+  been rewritten in **What** above — because the AIR PATH is NewTek iVGA into a TriCaster and
+  2.5.0 has removed that consumer. ⭐ **CORRECTED 2026-08-24: this bullet also said "There is no
+  Decklink card here", and that is false** — a **DeckLink SDI 4K** is fitted, and on 2026-08-24 a
+  `<decklink>` consumer with `<device>23487013</device>` reached `Initialized.` on it. The pass is
+  still not what this item needs (it needs the path that actually reaches the TriCaster), but the
+  reason is the DESTINATION, not the absence of a card. That pass — and the cutover
   blocker it turned into — is now [[C-020]]. The OWNER CHECKLIST wording in the #425 block
   above still says "Decklink pass"; it is left as written, and this bullet is its correction.
 
@@ -920,8 +934,24 @@ depended on is not shipped, so the failure at cutover is total output loss, disc
   landed in 2.4.0 and 2.5.0 inherits it — the plant skipped the release that would have
   warned it.
 - The production install's config `D:\programs\CasparCG\casparcg.config:15-19` declares
-  consumers `<system-audio />` + `<newtek-ivga />` + `<screen />`. **There is no Decklink in
-  this plant.** Fill+key reaches air over NewTek iVGA, into a TriCaster.
+  consumers `<system-audio />` + `<newtek-ivga />` + `<screen />` — so no Decklink CONSUMER is
+  declared, and today's air path is NewTek iVGA into a TriCaster. That much still stands and
+  is what BLOCKS the cutover.
+
+  🔴 **CORRECTED 2026-08-24 — this bullet used to conclude "There is no Decklink in this
+  plant", and that conclusion was FALSE.** It read a config's consumer list as an inventory of
+  the box's hardware, which it is not: a card can be fitted and simply not declared as a
+  consumer. The plant's own 2.5.0 startup log enumerates
+  `DeckLink SDI 4K [1] (23487013)`, and on 2026-08-24 the owner drove it in BOTH directions —
+  `PLAY 1-10 DECKLINK DEVICE 1` initialised with real signal on the INPUT, and a `<decklink>`
+  consumer with `<device>23487013</device>` reached `Initialized.` on the OUTPUT
+  (`DeckLink SDI 4K [1-23487013|1080p5000]`), both at once on the same card. The false
+  inference propagated into [[C-021]]'s block, `command-builder.ts` and the
+  `live-source-multibox` design; all are corrected. **What this does NOT settle** is whether a
+  Decklink consumer is the right REPLACEMENT for `<newtek-ivga />` — that is still this item's
+  work, and it is now a question about the destination rather than about whether a card exists.
+  Full sheet: [../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md).
+
 - `Processing.AirSend.x64.dll` — the library iVGA requires (`CHANGELOG.md:1007` and
   `:1062-1066`) — is **absent** from the 2.5.0 install directory.
 - The 2.5.0 config's shipped-defaults comment documents consumers `decklink` / `screen` /
@@ -942,7 +972,7 @@ Until then [[C-018]] stays open and **nothing on air depends on 2.5.0**: the pla
 running 2.3.2, the 2.5.0 install is side-by-side, and no config is cut over. The cost of the
 delay is only that [[C-019]] stays blocked.
 
-## [!] C-021 — DECKLINK, NDI and fill+key for Live Sources: the arms this installation cannot validate ⟨priority: high⟩ — BLOCKED: no capture card, and fill+key rides [[C-020]]
+## [!] C-021 — DECKLINK, NDI and fill+key for Live Sources: the arms this installation cannot validate ⟨priority: high⟩ — arm (a) DECKLINK is **UNBLOCKED** (2026-08-24: the card exists and its input is proven); arms (b) NDI and (c) fill+key stay BLOCKED
 
 **What:** the three Live Source producer arms that [[C-015]] cannot discharge on this plant, split
 out so C-015 can close on what it CAN prove. Verify, on hardware: (a) the **DECKLINK** producer form
@@ -968,7 +998,11 @@ building rather than on anything anyone can code.
 **Acceptance:**
 
 - WHEN a Decklink card is present THEN a Live Source mapped to a `DECKLINK DEVICE <n>` producer
-  plays behind the hole, its `MIXER FILL` + `CLIP` geometry correct, verified on real CasparCG 2.3.2
+  plays behind the hole, its `MIXER FILL` + `CLIP` geometry correct, verified on the production
+  **2.5.0** (corrected 2026-08-24; this said 2.3.2, which is retired and must never be probed).
+  ⭐ The card is present as of 2026-08-24 and `PLAY 1-10 DECKLINK DEVICE 1` initialises with real
+  signal — so this bullet's PRECONDITION is met and only its subject (a plate behind the hole,
+  geometry correct, seen on air) is still owed
 - WHEN NDI is attempted THEN the FIRST step is verifying the NDI producer exists on the client's
   build at all — record the finding either way, including a negative
 - WHEN a MAPPING names a fill/key DEVICE PAIR THEN fill and key are composited as a pair and alpha
@@ -980,13 +1014,56 @@ building rather than on anything anyone can code.
 - WHEN any arm is verified THEN the exact AMCP producer form it was verified with is recorded here
   verbatim — a form that was reasoned about is not a form that was verified
 
-**Notes — why this is `[!]` and not `[ ]`.** The block is physical. `D:\programs\CasparCG\casparcg.config:15-19`
-declares consumers `<system-audio />` + `<newtek-ivga />` + `<screen />`: **there is no Decklink in
-this plant**, and fill+key reaches air over NewTek iVGA into a TriCaster, which is exactly the path
-[[C-020]] is deferred on. So the DECKLINK arm can only be parse-verified here, and fill+key cannot
-be validated here at all — running it against a guessed destination would produce evidence about the
-guess. **Ordering:** this item is downstream of [[C-015]]'s phases 1–6 (`live-source-multibox`
-`tasks.md` §10, phase 7) and does not block any of them; its own unblocking rides [[C-020]]'s
+🔴 **CORRECTED 2026-08-24 — the premise this item was filed on is GONE. This plant HAS a Decklink
+card.** CasparCG's own startup log on the production 2.5.0 (`69e8ad5`) enumerates
+`DeckLink SDI 4K [1] (23487013)`, and the owner drove it in BOTH directions in one sitting:
+
+- **INPUT — arm (a) is no longer "cannot validate".** `PLAY 1-10 DECKLINK DEVICE 1` returned
+  `Initialized` repeatedly with real signal. That is the INDEX form, and it is now MEASURED.
+- **OUTPUT.** A `<decklink>` consumer with `<device>23487013</device>` logged
+  `Enabled embedded-audio.` then `Initialized.`, and named the card
+  `DeckLink SDI 4K [1-23487013|1080p5000]` — so the **persistent ID is accepted in the CONSUMER's
+  `<device>` element**. Both directions ran at once on the same card.
+- ⚠ **NOT proven: the persistent ID as a PRODUCER argument** (`DECKLINK DEVICE 23487013`). The
+  consumer and the producer are different parsers, and this has not been tried.
+- ⚠ Incidentals from the same run, recorded so they are not re-discovered as defects: the input
+  auto-detected `1080i5000` against a `1080p5000` channel and produced an `in-sync`/`out-sync`
+  drift flood (fix: match the channel to the incoming signal); `Failed to enable external keyer.`
+  fires on every start, is **non-fatal**, and `<keyer>default</keyer>` does not silence it on
+  2.5.0; `Reference signal: not detected` — no genlock on this card today.
+
+**Where the old claim came from, so it is not re-derived.** [[C-020]]'s evidence block read the
+production config's CONSUMER list (`<system-audio />` + `<newtek-ivga />` + `<screen />`) as an
+inventory of the box's hardware. It is not one — a card can be fitted and not declared. That single
+inference is what put "no capture card" into this heading, `command-builder.ts` and
+`live-source-multibox` design.md; all three are corrected.
+
+**Notes — why this is STILL `[!]` and not `[ ]`, and why it is not `[~]` either.** Two of the three
+arms remain genuinely blocked, so `[ ]` (queued, nothing in the way) would be false; nothing has
+been implemented against this item, so `[~]` (in progress) would be false too. The PRD legend has
+no shape for _"one arm unblocked but unstarted"_, and rather than round the checkbox up, the split
+is stated here and in the heading:
+
+- **(a) DECKLINK — UNBLOCKED, NOT DELIVERED.** The card is present and its input is proven at the
+  AMCP level. What this item still owes for (a) is the acceptance bullet's own subject: a Live
+  Source mapped to that producer, playing **behind the hole** with its `MIXER FILL` + `CLIP`
+  geometry correct, seen on air. An `Initialized` on layer 10 is not that.
+- **(b) NDI — STILL BLOCKED.** No NDI source exists on this plant and the module is gated. Nothing
+  on 2026-08-24 touched this.
+- **(c) fill+key — STILL BLOCKED**, and now on a NARROWER and checkable question than "no card":
+  whether a **second SDI input** exists on this DeckLink SDI 4K for the pair at all
+  ([../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md) Q4).
+  The SEATING work that (c) verifies — which layer the key lands on, what a half-failed pair means,
+  what the ledger's `role` records — is split out to [[C-027]], because it is code that must be
+  written before there is anything for this arm to look at.
+
+**The measurement sheet that closes the rest:**
+[../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md) — the
+persistent-ID producer form (Q1), device enumeration over AMCP (Q2), the producer's letterbox-vs-
+stretch behaviour (Q3) and the second SDI input (Q4).
+
+**Ordering:** this item is downstream of [[C-015]]'s phases 1–6 (`live-source-multibox`
+`tasks.md` §10, phase 7) and does not block any of them; arm (c)'s unblocking rides [[C-020]]'s
 integration with the company's playout software. **Parse-verification is still worth doing before
 the hardware arrives** and is not this item's acceptance: it proves the command is well-formed, not
 that a picture appeared.

@@ -185,11 +185,18 @@ const SCHEME = /^([a-z][a-z0-9+.-]*):\/\//i;
  * `NDI` keyword — and then fails to parse is REFUSED, because there is no
  * reading of it under which the server would have done what was asked.
  *
- * ⚠ **The DECKLINK and NDI argument spellings are MODELLED, NOT MEASURED.** No
- * capture card or NDI source exists on this plant — that is precisely what C-021
- * is blocked on. The forms accepted here (`DECKLINK DEVICE <n>`, `NDI NAME
- * <source>`) are what the bridge will emit; when hardware confirms or corrects
- * them, this classifier and the mapping schema change together.
+ * ⭐ **`DECKLINK DEVICE <n>` is now MEASURED in its INDEX form** on this plant's
+ * DeckLink SDI 4K (2.5.0 `69e8ad5`, 2026-08-24): `PLAY 1-10 DECKLINK DEVICE 1`
+ * initialised with real signal. What this classifier models is therefore the form
+ * the server accepts, not a guess about it.
+ *
+ * ⚠ **Still MODELLED, NOT MEASURED: the NDI spelling** (no NDI source exists on
+ * this plant and the module is gated — C-021), and the DECKLINK **persistent-ID**
+ * spelling (`DECKLINK DEVICE 23487013`), which is proven only in the CONSUMER's
+ * `<device>` element and not as a producer argument. Both are integers here, so
+ * this classifier does not distinguish them; the recon walk's Q1 decides whether
+ * the model may. When hardware confirms or corrects either, this classifier and
+ * the mapping schema change together.
  */
 function classifyProducer(args: readonly string[]): ProducerVerdict {
   const first = args[1] ?? '';
