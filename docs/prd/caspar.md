@@ -1498,7 +1498,9 @@ the seating, and the gap was **invisible to the operator**: the modal's summary 
 `DECKLINK DEVICE 1 + KEY 2`, describing a wire the system does not send. That surface half is FIXED
 (2026-08-25, `DECKLINK-MODEL-01`): the summary now describes the fill alone and a stored `keyDevice`
 is reported in the modal as _"stored but not yet sent to CasparCG"_. **The honesty is shipped; the
-capability is this item.** It is filed rather than folded into [[C-021]] because it is CODE to be
+capability is this item.** The surface half's Linux `e2e` debt is DISCHARGED by
+https://github.com/yasermostafaee/cg/actions/runs/32840461445 — the `E2E (Playwright)` job **RAN**
+(not skipped) and passed on `a1b5f5d5`, the commit that carries the change. It is filed rather than folded into [[C-021]] because it is CODE to be
 written, while C-021 arm (c) is the hardware pass that would VERIFY it — and neither can be the
 other's acceptance.
 
