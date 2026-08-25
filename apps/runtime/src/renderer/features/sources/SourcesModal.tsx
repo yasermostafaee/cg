@@ -17,6 +17,7 @@ import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
+import { Notice } from '../../ui/Notice.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import {
@@ -160,7 +161,26 @@ function emptyProducer(kind: SourceProducer['kind']): SourceProducer {
   }
 }
 
-/** What this source resolves to, in the words the bridge will send. */
+/**
+ * What this source resolves to, **in the words the bridge will send**.
+ *
+ * 🔴 **THAT SENTENCE IS THE CONTRACT, NOT A DESCRIPTION OF ONE.** This line's only
+ * job is to be the wire text an operator can check a config against, so it may
+ * carry a term ONLY when `producerArgument` (`@cg/caspar-bridge`'s
+ * `command-builder.ts`) actually emits it. The two functions live in different
+ * packages and each package's suite was green while they disagreed — which is
+ * exactly how this line came to render `DECKLINK DEVICE 1 + KEY 2` for a wire
+ * that has never carried more than `DECKLINK DEVICE 1`. An operator who
+ * configured a fill/key pair was shown a signal path that does not exist, got
+ * the fill alone, and had nothing on any surface saying so.
+ *
+ * `apps/runtime/tests/decklinkKeyDeviceHonesty.dom.test.ts` asserts BOTH halves
+ * against the SAME value and is what fails if they drift again.
+ *
+ * ⚠ **A term dropped from here must reappear somewhere the operator reads.**
+ * Being silent about a stored `keyDevice` would trade a line that overclaims for
+ * one that hides — see {@link ProducerFields}, which says it in plain words.
+ */
 function describeProducer(p: SourceProducer): string {
   switch (p.kind) {
     case 'route':
@@ -168,9 +188,10 @@ function describeProducer(p: SourceProducer): string {
         ? `route://${String(p.channel)}`
         : `route://${String(p.channel)}-${String(p.layer)}`;
     case 'decklink':
-      return p.keyDevice === undefined
-        ? `DECKLINK DEVICE ${String(p.device)}`
-        : `DECKLINK DEVICE ${String(p.device)} + KEY ${String(p.keyDevice)}`;
+      // The FILL alone, `keyDevice` set or not: `producerArgument` emits exactly
+      // this and nothing else. Seating the key is a second producer on its own
+      // layer, which is C-027 and is not built.
+      return `DECKLINK DEVICE ${String(p.device)}`;
     case 'ndi':
       return `NDI ${p.source}`;
     case 'stream':
@@ -535,6 +556,14 @@ export function SourcesModal({ onClose }: { onClose: () => void }): JSX.Element 
  * rather than a layout choice: a fill/key pair is two physical SDI inputs, so
  * offering the field beside a route or an NDI name would invite an operator to
  * configure a pair that cannot exist.
+ *
+ * ⚠ **The field is KEPT even though nothing sends it, and it is kept on purpose.**
+ * A fill/key pair is a real concept carried over from the plant's previous
+ * automation, the schema is deliberately shaped for it, and an operator may
+ * already have written one — removing the field would DELETE that configuration.
+ * What is not acceptable is keeping it silently, so where a `keyDevice` is stored
+ * this component says in plain words that it does not reach CasparCG. Seating the
+ * pair is **C-027**.
  */
 function ProducerFields({
   source,
@@ -605,22 +634,46 @@ function ProducerFields({
       );
     case 'decklink':
       return (
-        <div style={styles.row}>
-          {numeric('Fill device', 'Decklink fill device', p.device, 1, (n) =>
-            onChange({ ...p, device: n ?? 1 }),
+        <>
+          <div style={styles.row}>
+            {numeric('Fill device', 'Decklink fill device', p.device, 1, (n) =>
+              onChange({ ...p, device: n ?? 1 }),
+            )}
+            {numeric(
+              'Key device (optional)',
+              'Decklink key device',
+              p.keyDevice,
+              1,
+              (n) =>
+                onChange(
+                  n === undefined ? { kind: 'decklink', device: p.device } : { ...p, keyDevice: n },
+                ),
+              true,
+            )}
+          </div>
+          {/*
+            🔴 THE GAP, SAID OUT LOUD. The value above is accepted, validated and
+            persisted — and then `producerArgument` emits the FILL alone. Without
+            this the operator's only evidence would be a picture with no key in
+            it, discovered at take.
+
+            `noticeRole="notice"` and NOT `refusal`, deliberately: nothing was
+            refused. The device is stored, it is in force as configuration, and it
+            will be used the moment C-027 lands. Dressing that as a refusal would
+            spend the amber attention treatment on a state that is not an error —
+            the mistake `Notice`'s own table was written to stop. The sentence is
+            what carries the weight, and it names the device rather than gesturing
+            at "a key device" so a second operator can match it to the field.
+          */}
+          {p.keyDevice !== undefined && (
+            <Notice
+              noticeRole="notice"
+              aria="status"
+              text={`Key device ${String(p.keyDevice)} is stored, but it is not sent to CasparCG yet.`}
+              detail={`This source goes to air as its fill alone — DECKLINK DEVICE ${String(p.device)}. Seating a fill/key pair needs a second producer on its own layer, which is not built yet; the device is kept so nothing is lost when it is.`}
+            />
           )}
-          {numeric(
-            'Key device (optional)',
-            'Decklink key device',
-            p.keyDevice,
-            1,
-            (n) =>
-              onChange(
-                n === undefined ? { kind: 'decklink', device: p.device } : { ...p, keyDevice: n },
-              ),
-            true,
-          )}
-        </div>
+        </>
       );
     case 'ndi':
       return (

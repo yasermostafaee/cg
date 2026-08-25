@@ -101,10 +101,19 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   await expect(dialog.getByText('stream srt://10.0.0.20:9000')).toBeVisible();
 
   // ONE source, a fill/key DEVICE PAIR: the pair is a property of the
-  // INSTALLATION, and no template ever names it (design.md §1a).
+  // INSTALLATION, and no template ever names it (design.md §1a). The pair is
+  // STORED — and, C-027, it is not yet SENT: `producerArgument` emits the fill
+  // alone, so the summary must describe the fill alone and the modal must say
+  // out loud that the key device does not reach CasparCG. Asserting the absence
+  // AND the sentence together is the point: dropping the term without saying
+  // anything would trade a line that overclaims for one that hides.
   await dialog.getByLabel('Producer kind for Studio A').selectOption('decklink');
   await dialog.getByLabel('Decklink key device for Studio A').fill('2');
-  await expect(dialog.getByText('DECKLINK DEVICE 1 + KEY 2')).toBeVisible();
+  await expect(dialog.getByText('DECKLINK DEVICE 1', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('DECKLINK DEVICE 1 + KEY 2')).toHaveCount(0);
+  await expect(
+    dialog.getByText(/Key device 2 is stored, but it is not sent to CasparCG/),
+  ).toBeVisible();
 
   // A duplicate NAME is refused, and the refusal is a SENTENCE — never a wire
   // identifier and never a reason code.
@@ -128,11 +137,18 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   await expect(dialog.getByText(/Currently 10–59/)).toBeVisible();
 
   // Durable: the catalog survives closing and reopening the surface, because the
-  // value lives on the bridge (here, the mock's store) and not in the modal.
+  // value lives on the bridge (here, the mock's store) and not in the modal. The
+  // stored `keyDevice` survives with it — C-027 keeps the FIELD precisely so a
+  // pair the operator already wrote is not deleted — and the not-sent sentence
+  // comes back with it rather than being a one-shot toast at edit time.
   await dialog.getByRole('button', { name: 'Done' }).click();
   await expect(dialog).toBeHidden();
   await page.getByRole('button', { name: 'Open live sources' }).click();
-  await expect(dialog.getByText('DECKLINK DEVICE 1 + KEY 2')).toBeVisible();
+  await expect(dialog.getByText('DECKLINK DEVICE 1', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Decklink key device for Studio A')).toHaveValue('2');
+  await expect(
+    dialog.getByText(/Key device 2 is stored, but it is not sent to CasparCG/),
+  ).toBeVisible();
   await expect(dialog.getByText(/Currently 10–59/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Done' }).click();
 });
