@@ -1452,3 +1452,49 @@ undelivered and arms (b)/(c) are still blocked, so `[ ]` and `[~]` would both ha
 PRD legend has no shape for _"one arm unblocked but unstarted"_; rather than round the checkbox up,
 the split is written into `C-021`'s heading and Notes. Recorded here because a future sweep reading
 only checkboxes would otherwise see an item that did not move and assume nothing happened.
+
+## 2026-08-25 — the DeckLink walk's results get their numbers (`C-028`, `B-177`), from session WALK-RESULT-01
+
+| Prefix | Claimed | Item                                                                | File                               |
+| ------ | ------- | ------------------------------------------------------------------- | ---------------------------------- |
+| `C-`   | `C-028` | live-plate FIT MODE: `contain` by default, hole at the FITTED rect  | [caspar.md](caspar.md)             |
+| `B-`   | `B-177` | DeckLink single-open contention, disguised as `404 File not found.` | [bugs-runtime.md](bugs-runtime.md) |
+
+**Both verified free by the heading sweep immediately before each heading was written, with
+`git grep` throughout** — never `grep -r`, which walks `node_modules` and has produced a phantom
+item number in this repo before.
+
+- **`C-028`.** Highest `C-` heading was **`C-027`**, from
+  `git grep -hoE "^## \[.\] C-[0-9]{3}" -- 'docs/prd/*.md' ':!docs/prd/README.md'` sorted on the
+  NUMBER. The `C-` duplicate audit printed **nothing**. `git grep -n "C-028"` over the whole tree
+  returned only forward-reference POINTERS — this file's own "next free" line and `C-027`'s
+  provenance note — never a heading. `git grep -n "C-029"` returned **nothing at all**, the
+  cross-check that the space ends where it says. `C-` stays contiguous `C-001` … `C-028`, **no
+  gaps. Next free: `C-029`.**
+- **`B-177`.** Highest `B-` heading was **`B-176`**. The duplicate audit printed **exactly `B-056`
+  and `B-080`**, the two known accepted duplicates and nothing else. `git grep -n "B-177"` returned
+  only this file's own `Next free: B-177` pointer; `git grep -n "B-178"` returned nothing.
+  Filed in [bugs-runtime.md](bugs-runtime.md) per [README.md](README.md)'s own routing
+  (_"`runtime.md` + `caspar.md` + `bugs-runtime.md` — Runtime"_): it is a bridge/playout defect,
+  not cross-cutting tooling. `B-` stays contiguous `B-001` … `B-177`, **no gaps. Next free:
+  `B-178`, `R-059` and `D-157`.**
+
+**Both filed at `[ ]`.** No code was written for either — this was a recording session for the
+2026-08-25 DeckLink plant walk (`docs/recon/2026-08-25-decklink-model-walk.md`).
+
+⭐ **`C-028` is the home a walk question had to be GIVEN, not one it was recorded against.** The
+walk's Q3 (letterbox vs stretch) was cited to sessions as blocking `FIT-MODE-01`. **No such item
+exists** — it is a SESSION-PROMPT label, like `LOOK-SYNC-01` and `MIRROR-PAGE-01` before it (see
+the 2026-08-24 note above). A measured, blocking premise with no item to land on is exactly how a
+dependency goes missing, so it was given one.
+
+⚠ **A THIRD phantom label surfaced in the same session and is recorded here so the pattern is
+visible:** `designer-box-geometry` "defect 1" was handed over again as the precedent for a mask
+hole disagreeing with its picture. It still does not exist — the 2026-08-24 note above already
+established that, and the real precedent is **[[B-149]]** (`[x]` FIXED 2026-08-19). `C-028` cites
+`B-149` and carries a warning not to go looking for the phantom.
+
+⚠ **`C-021` and `C-027` were NOT renumbered, re-filed or ticked**, though the walk changed both.
+`C-021` keeps `[!]` with per-arm status in its heading; `C-027` keeps `[!]` and is re-stated as
+**PARKED — unverifiable on this plant** (the card has one SDI input). Recorded because a future
+sweep reading only checkboxes would see two items that did not move and conclude nothing happened.

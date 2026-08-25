@@ -1642,3 +1642,158 @@ The field stays, the schema stays, and the modal says plainly what does and does
 - **Cross-refs:** [[C-021]] (arm (c) — the hardware pass this item feeds), [[C-015]] (the Live
   Source model, the mapping store and the ledger this seats into), [[C-020]] (the air path fill+key
   ultimately reaches).
+
+## [ ] C-028 — live-plate FIT MODE: `contain` by default, so the picture is never cut and the margin shows the TEMPLATE, never black ⟨priority: high⟩ — the client's 2026-08-23 decision; premise MEASURED 2026-08-25
+
+**What:** a live plate's picture is fitted into its box by a **selectable mode**:
+
+- **`contain`** — the NEW DEFAULT. The whole picture, its own aspect intact, centred on both axes.
+  Nothing is cropped; the leftover margin on the short axis shows **the template's own background**.
+- **`cover`** — today's behaviour, kept: scale to cover the box and centre-crop the overflow.
+
+🔴 **ONE function computes the fitted rect, and BOTH consumers read it** — the bridge's
+`MIXER FILL` + `MIXER CLIP` **and** the template's mask-hole rect. Not two implementations that
+must agree; golden rule 7's shape, for the same reason `mixerFit` already emits `FILL` and `CLIP`
+as one pair from one computation.
+
+**Why:** the **client's decision, 2026-08-23, relayed by the owner** — the picture must not be cut,
+and the leftover margin must show **the template's own background, never black**. The owner
+accepted the consequence in advance: a stroke or frame authored tight around a box **will no longer
+hug the picture** when the source aspect differs from the box, because the picture is then smaller
+than the box on one axis. That is a trade the client made, not a defect to be engineered away.
+
+### 🔴 The measured premise — CasparCG STRETCHES; there is no double-count
+
+Measured on the plant 2026-08-25, production 2.5.0 `69e8ad5`
+([../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md) **Q3**).
+A `1080i5000` (16:9) input into a channel set to `SET 1 MODE PAL` (720×576, 4:3), with
+`MIXER 1-10 FILL 0.25 0.25 0.5 0.5`:
+
+```
+picture rect as a fraction of the channel frame
+   x  0.2500 .. 0.7500      width  0.5000
+   y  0.2497 .. 0.7503      height 0.5006
+MIXER FILL 0.25 0.25 0.5 0.5 expects exactly 0.2500..0.7500 on both axes
+```
+
+The picture filled the `FILL` box **edge to edge on both axes**. Had the producer letterboxed
+first, it would have occupied 405/576 = **70.31 %** of the box height — **291 px** against a
+measured **415 px**. The two hypotheses are 124 px apart; this is not a close call. A red probe
+layer beneath showed in the margin OUTSIDE the box, confirming the plate does not paint outside its
+own rect.
+
+⇒ **CasparCG applies NO aspect correction of its own.** The source-aspect correction in
+`MIXER FILL` is therefore **REQUIRED**, and computing the fitted rect from the source aspect does
+**NOT** double-count. This was the blocking unknown; it is now a measurement.
+
+### 🔴 The MASK-HOLE consequence — the half that reaches air
+
+The hole is a **CSS luminance mask** on the backdrop: `MaskHole[]` + `liveSourceMask`
+(`packages/shared-schema/src/scene.ts`), built by `sceneMaskHoles`
+(`packages/shared-schema/src/scene-flatten.ts`) and applied by
+`packages/template-runtime/src/live-source-punch.ts`.
+
+**If the hole stays at the BOX rect while the picture covers only part of it under `contain`, the
+margin is a TRANSPARENT HOLE with no picture behind it — and what shows through is the channel
+behind the CG layer: BLACK. Exactly what the client rejected.** The feature would deliver the
+opposite of its own requirement.
+
+**Punching the hole at the FITTED rect instead makes the template's own background fill the margin
+for free** — no new compositing, no second layer, no extra command. That is why the fitted rect
+must come from one function both consumers read.
+
+⚠ **Hole ≠ picture has reached air here before: [[B-149]]** — the arrangement mask punched every
+hole at the cell's POSITION and the AUTHORED SIZE, opening the live layer where no box existed
+(`[x]` FIXED 2026-08-19, on-air crosstalk). This item re-opens the exact coupling B-149 closed, so
+it must be built with that failure in view.
+
+⚠ **Do not go looking for `designer-box-geometry` "defect 1"** — that name has now been handed to
+sessions twice and **no such change exists** anywhere in the tree;
+[b-number-registry.md](b-number-registry.md) already records it as a false lead. The real precedent
+is [[B-149]].
+
+### 🔴 The REFUSAL consequence — `LIVE_PLATE_ASPECT_MISMATCH` must become mode-conditional
+
+`tools/caspar-bridge/src/live-plate-fit.ts` refuses a take with `LIVE_PLATE_ASPECT_MISMATCH` when
+the author's `expectedAspect` and the source's real aspect differ by more than
+`ASPECT_MATCH_TOLERANCE` (1 %). Its own message states the justification:
+
+> _"Cropping it would cut a part of the picture the author never saw — re-assign the plate, or
+> correct the source's format."_
+
+**Under `contain` NOTHING IS CROPPED, so the harm that refusal guards cannot occur.** A refusal
+whose stated reason is impossible is a take blocked on air for nothing.
+
+- Under **`cover`** — the refusal STANDS, unchanged. The harm is real there.
+- Under **`contain`** — at most a **non-blocking warning** (the picture will be smaller than the box
+  and the author may want to know); never a refused take.
+
+🔴 **It must NOT be deleted.** The `cover` path still needs it, and deleting a refusal is how the
+harm it guarded returns without anyone noticing.
+
+### Deliberately NOT in scope, and why
+
+- **`resolvePlateAspect`'s chain is UNCHANGED** — source `format` → source `aspect` → element
+  `expectedAspect` → nothing (`assumed: true`). The [[D-147]] decision that **the SOURCE outranks
+  the AUTHOR** stands on its own reasoning (the author cannot see the feed, so their guess is about
+  what they designed for, not about what arrives) and is untouched by this item.
+- **The "nobody stated an aspect" case is UNCHANGED** — no aspect means no fit and no refusal, and
+  the picture fills the box exactly as it does today. `contain` changes what happens when an aspect
+  IS known; it does not invent one. This is also why the default flip is safe for every existing
+  scene whose sources are undescribed.
+- **Fill/key, NDI and device enumeration** — [[C-021]] / [[C-027]] / the walk's Q2. Nothing here
+  depends on them.
+
+**Acceptance** — each bullet is written to become one OpenSpec `#### Scenario`:
+
+- WHEN a plate's fit mode is `contain` and the source aspect is WIDER than the box THEN the picture
+  is scaled to the box's WIDTH, centred vertically, and the whole picture is visible — no crop on
+  either axis
+- WHEN a plate's fit mode is `contain` and the source aspect is TALLER than the box THEN the picture
+  is scaled to the box's HEIGHT, centred horizontally, and the whole picture is visible
+- WHEN a plate is fitted under `contain` THEN the template's mask hole is punched at the **FITTED**
+  rect, not the box rect, so the margin shows the template's own background and **never the channel
+  behind the CG layer**
+- WHEN the fitted rect is computed THEN the bridge's `MIXER FILL` / `MIXER CLIP` and the template's
+  mask hole are derived from **the same single computation** — a test asserts the two agree for the
+  same plate, in the same units
+- WHEN a plate's fit mode is `cover` THEN the behaviour is **byte-identical to today's**: scale to
+  cover, centre-crop, hole at the box rect, refusal on aspect mismatch. **This is the regression
+  bullet and it is not optional**
+- WHEN a plate's fit mode is `contain` and `expectedAspect` disagrees with the source beyond
+  `ASPECT_MATCH_TOLERANCE` THEN the take is **NOT refused** — at most a non-blocking warning is
+  reported, because nothing is cropped
+- WHEN a plate's fit mode is `cover` and the same disagreement exists THEN the take is **still
+  refused** with `LIVE_PLATE_ASPECT_MISMATCH` and the same message
+- WHEN **no** aspect is known for a plate (`resolvePlateAspect` returns `assumed: true`) THEN there
+  is no fit in either mode, no refusal, and the picture fills the box exactly as today
+- WHEN a plate's aspect MATCHES its box within tolerance THEN `contain` and `cover` produce the
+  **same** rect, and it is byte-identical to today's
+
+**Notes.**
+
+- 🔴 **Where the mode LIVES is a design question this item does not settle** — per-element
+  (authored), per-source (installation), or per-plate-assignment. It interacts directly with
+  [[D-147]]'s source-outranks-author decision and deserves its own design pass. Recorded as OPEN
+  rather than guessed at, because guessing it is how a field lands in the wrong schema.
+- **The default FLIPS to `contain`**, which changes what existing scenes put on air — but only for
+  plates whose source aspect is both KNOWN and DIFFERENT from the box. Where nothing is known, or
+  where the two already agree, nothing changes (the last two acceptance bullets). That is the blast
+  radius and it belongs in the change's proposal.
+- ⚠ **`liveSourceFit`'s docstring currently argues AGAINST this**
+  (`packages/shared-schema/src/live-geometry.ts`): it records that pillarbox was _"weighed and
+  REJECTED"_ because _"black bars inside a frame the designer drew do not read as 'the source is
+  4:3', they read as a fault on air"_, and its `Math.max` carries the comment _"`max`, never `min`:
+  `min` is pillarbox"_. **That reasoning is not wrong — it is ANSWERED**: the margin under this
+  item is not black, it is the template's own background, which removes the objection's premise.
+  The docstring must be rewritten in the same change rather than left contradicting the code
+  around it.
+- The number was verified free by the heading sweep immediately before this heading was written:
+  the highest `C-` heading was `C-027`; the `C-` duplicate audit printed nothing; a whole-tree
+  `git grep` for `C-028` returned only forward-reference POINTERS (the registry's "next free" line
+  and [[C-027]]'s provenance note), never a heading; and the same grep for `C-029` returned nothing
+  at all. Recorded in [b-number-registry.md](b-number-registry.md).
+- **Cross-refs:** [[C-015]] (the Live Source model and the fit chain), [[D-147]] (the aspect chain
+  and the `expectedAspect` decision), [[B-149]] (the on-air precedent for hole ≠ picture),
+  [[B-143]] (`resolvePlateAspect`'s `assumed` flag has no readers — the honesty half that a
+  `contain` default makes more visible).
