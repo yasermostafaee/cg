@@ -1,5 +1,24 @@
 # DECKLINK — the source-model plant walk (owner-run, one sitting)
 
+> ✅ **RUN ON THE PLANT 2026-08-25 BY THE OWNER. ALL FOUR QUESTIONS ANSWERED.**
+> Host `192.168.21.114`, install `D:\casparcg-server-v2.5.0-stable-windows`, server
+> `2.5.0 69e8ad5 Stable`, startup enumeration at `15:53:18`. Answers are recorded **under each
+> question**, in an `ANSWER` block, with the log verbatim.
+>
+> | Q      | Answer                                         | Where it landed                                              |
+> | ------ | ---------------------------------------------- | ------------------------------------------------------------ |
+> | **Q1** | **YES** — the producer takes the persistent ID | `command-builder.ts` `playSource`; [[C-021]] arm (a)         |
+> | **Q2** | **NO** — nothing enumerates                    | the negative recorded on [[C-021]]; **no picker item filed** |
+> | **Q3** | **STRETCH** — no letterbox                     | **[[C-028]]**, filed from this answer                        |
+> | **Q4** | **NO** — one input only                        | [[C-027]] **parked**; [[C-021]] arm (c) parked               |
+>
+> 🔴 **The walk also uncovered a DEFECT that was not one of its questions** — DeckLink
+> single-open contention, filed as **[[B-177]]**. See _"The defect this walk uncovered"_ below.
+>
+> ⚠ **The prose below is left as it was WRITTEN, before the answers were known** — this is a dated
+> record and rewriting its reasoning would falsify what was believed at the time. Only the blanks
+> are filled and the `ANSWER` blocks added.
+
 **What this settles:** the four things about the `decklink` producer model that **cannot be decided
 from source**, now that the card itself is proven. They gate, in order: whether the model may hold a
 persistent device identity ([[C-021]] arm (a)), whether CG Control can offer a device **picker**
@@ -71,7 +90,15 @@ reason this sheet exists — do not let the consumer's success be read as the pr
 - ⚠ **The install PATH is recorded two ways in this repo** and one of them is a transcription slip:
   the 2026-08-24 note says `D:\casparcg-server-v2.5.0-stable-windows`, the audio walk says
   `D:\programs\casparcg-server-v2.5.0-stable-windows`. Same server. **Write the real one here once
-  and for all:** `install path: ______________________________________`
+  and for all:** `install path: D:\casparcg-server-v2.5.0-stable-windows`
+
+  ✅ **SETTLED 2026-08-25** — read off the RUNNING PROCESS by the owner, on host
+  `192.168.21.114`. **The 2026-08-24 note was right; the audio walk's
+  `D:\programs\casparcg-server-v2.5.0-stable-windows` is the transcription slip.** The audio walk
+  carries a dated `PREMISE CORRECTED` block saying so rather than being edited in place.
+  ⚠ Do NOT confuse this with the **retired 2.3.2 at `D:\programs\CasparCG`**, which must never be
+  probed — that path is a different server, not a different spelling of this one.
+
 - **You will need:** a live SDI feed into the card (any camera), one **4:3** or otherwise
   non-16:9 source for Q3 (a camera set to 4:3, or a `1080i` feed into a `720p` channel — anything
   whose aspect differs from the channel's), and physical access to the **back of the box** for Q4.
@@ -93,9 +120,17 @@ reason this sheet exists — do not let the consumer's success be read as the pr
 
 Type: `VERSION`
 
-- **Pass:** the reply contains `2.5.0`. Write it: `VERSION reply: ____________________`
+- **Pass:** the reply contains `2.5.0`. Write it: `VERSION reply: 2.5.0 69e8ad5 Stable`
 - **Fail:** anything else — **STOP.** You are pointed at the retired 2.3.2. Fix the host and start
   over; nothing below means anything against the wrong server.
+
+> **ANSWER — 2026-08-25.** `VERSION SERVER` → `#201 VERSION OK` + `2.5.0 69e8ad5 Stable`, typed
+> directly into the CasparCG server console.
+>
+> ⚠ **The build is UNCHANGED, and this matters because a contradicting claim was made.** A chat
+> report said the plant was on **2.5.2**. The server's own reply says `2.5.0 69e8ad5`. **The
+> server's reply wins** — every measurement on this sheet is against `2.5.0 69e8ad5`, the same
+> build as 2026-08-24, so nothing recorded on either date is a cross-version comparison.
 
 ---
 
@@ -124,10 +159,32 @@ PLAY 1-10 DECKLINK DEVICE 23487013
 `Initialized` is a FAILURE that looks like a success, and it is the most likely shape of a No here.
 
 ```
-reply to DECKLINK DEVICE 1        : ____________________  log: ____________________
-reply to DECKLINK DEVICE 23487013 : ____________________  log: ____________________
-picture on 23487013? (yes / no / black) : ____________
+reply to DECKLINK DEVICE 1        : #202 PLAY OK          log: Initialized (same shape as below)
+reply to DECKLINK DEVICE 23487013 : #202 PLAY OK          log: Initialized, then Input format changed
+picture on 23487013? (yes / no / black) : YES
 ```
+
+> ## ✅ ANSWER — **YES. The producer accepts the persistent ID.** (2026-08-25)
+>
+> The known-good index form was run FIRST, as the sheet instructs, and gave the same shape. Then:
+>
+> ```
+> PLAY 1-10 DECKLINK DEVICE 23487013
+> DeckLink SDI 4K [23487013|1080p5000] Initialized
+> #202 PLAY OK
+> DeckLink SDI 4K [23487013|1080p5000] Input format changed from 1080p5000 to 1080i5000
+> ```
+>
+> 🔴 **The `Input format changed` line is what makes this a PASS rather than a `202` over a dead
+> producer** — the exact failure shape this question was written to guard against. A producer that
+> had not opened the card could not report the incoming signal's raster changing under it. Note
+> also that the log names the device by its **persistent ID**, not by an index, so the server
+> resolved the argument as an ID rather than coincidentally matching an index.
+>
+> **⇒ Decided:** the model may hold an identity that survives a PCIe reshuffle or a second card
+> being fitted. `SourceProducerSchema`'s `z.number().int().positive()` already admits `23487013`,
+> so this costs **no schema change**. `command-builder.ts`'s `playSource` docstring no longer says
+> "unproven"; [[C-021]] arm (a) records the proof.
 
 **What each answer decides:**
 
@@ -167,12 +224,32 @@ INFO CONFIG
 VERSION SERVER
 ```
 
-```
-                                    (paste raw replies here — verbatim, including errors)
-
-
-
-```
+> ## ❌ ANSWER — **NO. Nothing enumerates the devices.** (2026-08-25)
+>
+> All four were actually typed. The value here is that they were RUN, not reasoned about:
+>
+> | command tried    | reply                                                                                                  |
+> | ---------------- | ------------------------------------------------------------------------------------------------------ |
+> | `INFO SYSTEM`    | `#200 INFO OK` + `1 1080p5000 PLAYING` — 2.5.0 **IGNORES the `SYSTEM` token** and answers plain `INFO` |
+> | `INFO`           | the same channel line — no device information of any kind                                              |
+> | `INFO CONFIG`    | `#201 INFO CONFIG OK` + the configuration XML                                                          |
+> | `VERSION SERVER` | `#201 VERSION OK` + `2.5.0 69e8ad5 Stable`                                                             |
+>
+> 🔴 **`INFO SYSTEM` silently degrading to `INFO` is the trap here.** It answers `#200 INFO OK`, so
+> a caller checking only the response CODE would read it as a supported query that found no
+> devices. It is not — the token is discarded and a different question is answered.
+>
+> ⭐ **ONE PARTIAL, and it is not an enumeration.** `INFO CONFIG` **does** return
+> `<decklink><device>23487013</device>` — but that is **what the operator wrote into
+> `casparcg.config`**, not what the card reports. It can seed a _hint_ (the ID this installation
+> already uses for output), never a picker: it cannot list a device nobody configured, cannot give
+> a name or an index, and would go stale the moment the config and the hardware disagree — which
+> is precisely the case a picker exists to catch.
+>
+> **⇒ Decided:** the real device list exists **only in the startup log**, and the bridge does not
+> read the server's disk and must not start. **No picker item is filed** — there is nothing to
+> publish. The modal keeps its bare numeric input, and Q1's YES softens the cost: the number the
+> operator types can be a persistent ID that does not move.
 
 **Look for:** the string `DeckLink`, the number `23487013`, or a `<decklink>` / `<devices>` element.
 
@@ -211,15 +288,15 @@ PLAY 1-10 DECKLINK DEVICE 1
 Then, with NO mixer geometry applied at all, look at the full-frame output.
 
 ```
-channel video mode : ____________________
-source signal      : ____________________
+channel video mode : PAL — 720×576, 4:3   (set with `SET 1 MODE PAL`)
+source signal      : 1080i5000 — 16:9
 ```
 
 **Look at the picture and tick ONE:**
 
 - [ ] **PILLARBOXED** — the 4:3 image sits in the middle with black bars left and right; circles are
       round; nothing is distorted.
-- [ ] **STRETCHED** — the image fills the frame edge to edge; circles are ovals; faces are wide.
+- [x] **STRETCHED** — the image fills the frame edge to edge; circles are ovals; faces are wide.
 - [ ] **CROPPED** — the image fills the frame and the top/bottom (or sides) are cut off.
 
 Then confirm it survives a mixer box — this is the case the code actually emits:
@@ -230,7 +307,36 @@ MIXER 1-10 FILL 0.25 0.25 0.5 0.5
 
 - [ ] the bars **scaled with the box** (the producer letterboxes, and `FILL` moves the letterboxed
       result) — this is the DOUBLE-COUNT case
-- [ ] the box is **filled edge to edge** by the image
+- [x] the box is **filled edge to edge** by the image
+
+> ## ✅ ANSWER — **STRETCH. CasparCG does NOT correct aspect.** (2026-08-25)
+>
+> **Setup**, deliberately mismatched: `SET 1 MODE PAL` (720×576, 4:3) with a `1080i5000` (16:9)
+> input; `PLAY 1-5 #FF0000` on a LOWER layer as a transparency probe; then
+> `MIXER 1-10 FILL 0.25 0.25 0.5 0.5`. Measured off the screen-consumer output:
+>
+> ```
+> picture rect as a fraction of the channel frame
+>    x  0.2500 .. 0.7500      width  0.5000
+>    y  0.2497 .. 0.7503      height 0.5006
+> MIXER FILL 0.25 0.25 0.5 0.5 expects exactly 0.2500..0.7500 on both axes
+> ```
+>
+> **The picture fills the FILL box edge to edge on BOTH axes. There are no bars inside the box.**
+>
+> 🔴 **The discriminating arithmetic, so this is not an eyeball verdict.** Had the producer
+> letterboxed the 16:9 source into the 4:3 channel first, the picture would have occupied
+> 405/576 = **70.31 %** of the box height — **291 px** against a measured **415 px**. The two
+> hypotheses are 124 px apart on a 415 px box; nothing about this is a close call.
+>
+> **The red probe layer showed in the margin OUTSIDE the box**, which proves the plate does not
+> paint outside its own rect — the `CLIP` is doing its job and the measurement is of the fill, not
+> of a spill.
+>
+> **⇒ Decided:** the source-aspect correction in `MIXER FILL` is **REQUIRED**, and there is **NO
+> DOUBLE-COUNT**. This is the branch the "What each answer decides" list below calls _"the case
+> the current model assumes"_ — it is now **measured** rather than assumed, and that is the whole
+> value of having run it. **Filed as [[C-028]]**, which this answer is the premise of.
 
 **What each answer decides:**
 
@@ -265,10 +371,37 @@ PLAY 1-11 DECKLINK DEVICE 2
 (If Q2 gave you an enumeration, use the real second device number it reported instead of `2`.)
 
 ```
-physical SDI IN connectors on the card : ______
-reply + log for DECKLINK DEVICE 2      : ____________________________________
-second picture? (yes / no)             : ____________
+physical SDI IN connectors on the card : ONE (DeckLink SDI 4K is a single-channel card)
+reply + log for DECKLINK DEVICE 2      : NOT RUN — the command never executed, see below
+second picture? (yes / no)             : NO
 ```
+
+> ## ❌ ANSWER — **NO. There is one input, and only one.** (2026-08-25)
+>
+> The startup enumeration at `15:53:18` lists **exactly one device**:
+>
+> ```
+> Decklink devices found:
+>  - DeckLink SDI 4K [1] (23487013)
+> ```
+>
+> A DeckLink SDI 4K is a **single-channel card**. One device enumerated, one SDI input.
+>
+> ⚠ **DISCLOSED HONESTLY: the `PLAY 1-11 DECKLINK DEVICE 2` probe NEVER EXECUTED.** The console
+> concatenated the pasted lines into `CLEAR 1-10PLAY 1-11 DECKLINK DEVICE 2` and ran only the
+> `CLEAR`. **Do not cite a `DEVICE 2` result — there isn't one.** The question is nonetheless
+> ANSWERED, because the enumeration is the stronger evidence and it is same-day, same-boot: a
+> device the server did not enumerate is not a device a `PLAY` could have opened. Recorded rather
+> than quietly rounded up, because "the command was run and failed" and "the command never ran"
+> are different facts and only one of them is true here.
+>
+> ⚠ **A lesson for every sheet in this folder:** multi-line paste into the CasparCG server console
+> can SILENTLY CONCATENATE lines. Paste one command at a time, or check the echo before trusting a
+> result — a step that never ran looks exactly like a step that produced nothing.
+>
+> **⇒ Decided:** [[C-027]] (fill/key seating) is **PARKED — unverifiable on this plant**, per this
+> sheet's own instruction below. [[C-021]] arm (c) is parked for the same reason. The `keyDevice`
+> field, the schema arm and the modal's honesty notice are **unchanged**.
 
 **What each answer decides:**
 
@@ -283,14 +416,75 @@ second picture? (yes / no)             : ____________
 
 ---
 
+## 🔴 The defect this walk uncovered — DeckLink single-open contention
+
+**Not one of the four questions.** It fell out of running them, and it is filed as **[[B-177]]**
+(`docs/prd/bugs-runtime.md`). Recorded here because this is where the evidence was taken.
+
+**Instance 1 — a `CLEAR` immediately followed by a `PLAY` on the same layer:**
+
+```
+16:01:05.594  CLEAR 1-10                    -> #202 CLEAR OK
+16:01:05.604  PLAY 1-10 DECKLINK DEVICE 1
+16:01:05.617  [error] EnableVideoInput - DeckLink SDI 4K [1|1080p5000] Could not enable video input.
+16:01:05.631  DeckLink SDI 4K [23487013|1080i5000] Destroyed.      <- 14 ms AFTER the failure
+```
+
+**Instance 2 — a plain re-`PLAY` over a decklink producer already live on that layer:**
+
+```
+16:10:15.776  PLAY 1-10 DECKLINK DEVICE 1   (a decklink producer was ALREADY live on layer 1-10)
+16:10:15.858  [error] EnableVideoInput - DeckLink SDI 4K [1|PAL] Could not enable video input.
+```
+
+Runs with a **~5 s gap** between `CLEAR` and `PLAY` initialised cleanly **every time**. Three facts:
+
+1. **`CLEAR` answers `202` BEFORE the producer is destroyed** — it is an acknowledgement, not a
+   destruction receipt. The `Destroyed.` line lands 14 ms after the `202` and, in instance 1,
+   **after** the failure it caused.
+2. **CasparCG constructs the NEW producer before destroying the OLD one** on the same layer, so
+   even a plain re-`PLAY` of the same device collides with itself (instance 2 — no `CLEAR`
+   involved at all).
+3. ⇒ **Two producers cannot hold one physical input.** So **the same live source cannot be seated
+   on two boxes at once** on this hardware. That is a product-level constraint, not a timing bug.
+
+🔴 **And the failure DOES NOT LOOK LIKE ITSELF.** The console answered:
+
+```
+#404 PLAY FAILED
+File not found.
+```
+
+When the decklink producer throws, CasparCG's producer registry **falls through to the FILE
+producer** and reports _that_ one's error. **Any code that reads a `404` from a live-source `PLAY`
+as "media missing" will mis-diagnose DeckLink contention** — and will tell the operator to check a
+file path when the real answer is to wait for a destroy.
+
+---
+
 ## When you are done
 
-- Fill the blanks **in this file** and commit it — an answer that lives only in someone's memory is
-  an answer this sheet will ask for again.
-- Q1 → update `command-builder.ts`'s `playSource` docstring and [[C-021]] arm (a).
-- Q2 → if positive, it becomes a new item (bridge read + modal picker); if negative, record the
-  commands tried on [[C-021]].
-- Q3 → record it wherever the fit-mode work lands, and **file an item for it if none exists** — as
-  of 2026-08-25 nothing in the tree holds this question, which is exactly how a blocking dependency
-  goes missing.
-- Q4 → flip [[C-027]] off `[!]`, or record why it is parked.
+- [x] Fill the blanks **in this file** and commit it — an answer that lives only in someone's memory
+      is an answer this sheet will ask for again. **DONE 2026-08-25.**
+- [x] Q1 → update `command-builder.ts`'s `playSource` docstring and [[C-021]] arm (a).
+      ⚠ The real path is `tools/caspar-bridge/src/command-builder.ts` — there is no
+      `command-builder.ts` under `packages/caspar-client`.
+- [x] Q2 → if positive, it becomes a new item (bridge read + modal picker); if negative, record the
+      commands tried on [[C-021]]. **Negative — recorded on [[C-021]]; no picker item filed.**
+- [x] Q3 → record it wherever the fit-mode work lands, and **file an item for it if none exists** —
+      as of 2026-08-25 nothing in the tree holds this question, which is exactly how a blocking
+      dependency goes missing. **Filed as [[C-028]].**
+- [x] Q4 → flip [[C-027]] off `[!]`, or record why it is parked. **Parked — reason recorded on
+      [[C-027]] and on [[C-021]] arm (c).**
+- [x] The contention defect the walk uncovered → filed as **[[B-177]]**.
+
+### What this visit did NOT produce
+
+- **The audio walk (`docs/recon/2026-08-23-audio-paths-walk.md`) was NOT run.** W1–W9 remain
+  unanswered and `add-multibox-audio` `tasks.md` **1.11** stays unticked. ⚠ **W5 cannot be run on
+  the current configuration at all:** `INFO CONFIG` shows a **single `<channel>`** (`1080p5000`;
+  consumers `<decklink>` `23487013` with `embedded-audio`, `<screen/>`, `<system-audio/>`; **no
+  `<osc>` block**). A second channel is a **config edit plus a restart**, not a console command.
+- **`B-155`'s frame count was NOT measured** — `multibox-layout-switch` `tasks.md` **7.15** still
+  owes it.
+- **[[B-174]]'s skew `k` was NOT measured.**
