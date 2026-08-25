@@ -52,11 +52,20 @@ const px = (
   height: r.height * raster.height,
 });
 
-describe('crop-to-fill (6.3) — cover the hole, keep the proportions, mask the overflow', () => {
+/**
+ * 🔴 **`C-028`'s POSITIVE CONTROL, and it is this whole block.**
+ *
+ * Every assertion below is the one that shipped, VALUE-FOR-VALUE — only `fitMode:
+ * 'cover'` is new, because `cover` IS the shipped behaviour and `contain` is now the
+ * default. If any number here had to move to accommodate the new mode, the refactor
+ * would have changed what `cover` puts on air, which is the one thing C-028's
+ * regression bullet forbids.
+ */
+describe('crop-to-fill (6.3, now `cover`) — cover the hole, keep the proportions, mask the overflow', () => {
   it('a source WIDER than the hole overflows HORIZONTALLY, matched on height', () => {
     // Hole 1000×500 (aspect 2). A 16:9 source (1.778) is NARROWER, so this case is
     // the other one — use 2.5 to get a genuinely wider source.
-    const fit = liveSourceFit(base({ sourceAspect: 2.5 }));
+    const fit = liveSourceFit(base({ sourceAspect: 2.5, fitMode: 'cover' }));
     const fill = px(fit.fill);
     // Heights match: the covering scale is set by the axis that needs the most.
     expect(fill.height).toBeCloseTo(500, 6);
@@ -69,7 +78,7 @@ describe('crop-to-fill (6.3) — cover the hole, keep the proportions, mask the 
 
   it('a source NARROWER than the hole overflows VERTICALLY, matched on width', () => {
     // 16:9 source into a 2:1 hole: the source is relatively taller, so widths match.
-    const fit = liveSourceFit(base({ sourceAspect: 16 / 9 }));
+    const fit = liveSourceFit(base({ sourceAspect: 16 / 9, fitMode: 'cover' }));
     const fill = px(fit.fill);
     expect(fill.width).toBeCloseTo(1000, 6);
     expect(fill.height).toBeCloseTo(562.5, 6);
@@ -83,14 +92,14 @@ describe('crop-to-fill (6.3) — cover the hole, keep the proportions, mask the 
     // that the fill would be SMALLER than the hole on one axis, leaving bars inside
     // a frame the designer drew — which reads on air as a fault, not as a 4:3 feed.
     for (const aspect of [0.5, 1, 4 / 3, 16 / 9, 2.5, 4]) {
-      const fill = px(liveSourceFit(base({ sourceAspect: aspect })).fill);
+      const fill = px(liveSourceFit(base({ sourceAspect: aspect, fitMode: 'cover' })).fill);
       expect(fill.width, `aspect ${String(aspect)}`).toBeGreaterThanOrEqual(1000 - 1e-9);
       expect(fill.height, `aspect ${String(aspect)}`).toBeGreaterThanOrEqual(500 - 1e-9);
     }
   });
 
   it('an EXACTLY matching aspect crops nothing — the fill IS the hole', () => {
-    const fill = px(liveSourceFit(base({ sourceAspect: 2 })).fill);
+    const fill = px(liveSourceFit(base({ sourceAspect: 2, fitMode: 'cover' })).fill);
     expectRect(fill, { x: 460, y: 270, width: 1000, height: 500 });
   });
 
@@ -98,7 +107,7 @@ describe('crop-to-fill (6.3) — cover the hole, keep the proportions, mask the 
     // The mask is what decides what is SEEN, so it stays on the authored rect while
     // the fill grows past it. This is the pairing `mixerFit` emits together.
     for (const aspect of [null, 16 / 9, 2.5]) {
-      const fit = liveSourceFit(base({ sourceAspect: aspect }));
+      const fit = liveSourceFit(base({ sourceAspect: aspect, fitMode: 'cover' }));
       expect(fit.clip, `aspect ${String(aspect)}`).not.toBeNull();
       expectRect(px(fit.clip as NonNullable<typeof fit.clip>), {
         x: 460,
@@ -114,16 +123,113 @@ describe('crop-to-fill (6.3) — cover the hole, keep the proportions, mask the 
     // confused with 0. An aspect of 0 is not a legal aspect but IS falsy, so a
     // truthiness test would read it as "no aspect" and silently stretch instead of
     // failing where the caller can see it.
-    expectRect(px(liveSourceFit(base({ sourceAspect: null })).fill), {
+    expectRect(px(liveSourceFit(base({ sourceAspect: null, fitMode: 'cover' })).fill), {
       x: 460,
       y: 270,
       width: 1000,
       height: 500,
     });
     // A degenerate 0 is refused by the same guard rather than dividing by zero.
-    const zero = px(liveSourceFit(base({ sourceAspect: 0 })).fill);
+    const zero = px(liveSourceFit(base({ sourceAspect: 0, fitMode: 'cover' })).fill);
     expect(Number.isFinite(zero.width)).toBe(true);
     expectRect(zero, { x: 460, y: 270, width: 1000, height: 500 });
+  });
+});
+
+describe('`C-028` — `contain`, the new DEFAULT: the picture is fitted, never cut', () => {
+  it('is what an input with NO stated mode gets', () => {
+    // The default is asserted THROUGH `liveSourceFit` rather than by reading the
+    // constant, because "absent ⇒ contain" is the behaviour that ships; a caller that
+    // read `undefined` as `cover` would keep the old picture on air while every unit
+    // test of the constant still passed.
+    const implicit = liveSourceFit(base({ sourceAspect: 2.5 }));
+    const explicit = liveSourceFit(base({ sourceAspect: 2.5, fitMode: 'contain' }));
+    expect(implicit).toEqual(explicit);
+  });
+
+  it('a source WIDER than the hole is scaled to its WIDTH and centred vertically', () => {
+    // Hole 1000×500 (aspect 2), source 2.5 ⇒ 1000 wide, 400 tall, 50px of TEMPLATE
+    // showing above and below. Under `cover` the same input gives 1250×500 at x=335 —
+    // the two modes disagree on both axes, in both position and size.
+    const fit = liveSourceFit(base({ sourceAspect: 2.5, fitMode: 'contain' }));
+    expectRect(px(fit.fill), { x: 460, y: 320, width: 1000, height: 400 });
+    // 🔴 AND THE CLIP FOLLOWS THE PICTURE. This is the half that reaches air: a clip
+    // left at the hole would leave 50px of transparent hole top and bottom, showing
+    // the channel behind the CG layer — BLACK, which is what the client rejected.
+    expectRect(px(fit.clip as NonNullable<typeof fit.clip>), {
+      x: 460,
+      y: 320,
+      width: 1000,
+      height: 400,
+    });
+  });
+
+  it('a source NARROWER than the hole is scaled to its HEIGHT and centred horizontally', () => {
+    // 16:9 into a 2:1 hole ⇒ 888.89 × 500, with 55.56px of template each side.
+    const fit = liveSourceFit(base({ sourceAspect: 16 / 9, fitMode: 'contain' }));
+    const fill = px(fit.fill);
+    expect(fill.height).toBeCloseTo(500, 6);
+    expect(fill.width).toBeCloseTo(8000 / 9, 6);
+    expect(fill.x).toBeCloseTo(460 + (1000 - 8000 / 9) / 2, 6);
+    expect(fill.y).toBeCloseTo(270, 6);
+    expectRect(px(fit.clip as NonNullable<typeof fit.clip>), fill);
+  });
+
+  it('🔴 it never exceeds the hole — the complement of the `cover` assertion above', () => {
+    for (const aspect of [0.5, 1, 4 / 3, 16 / 9, 2.5, 4]) {
+      const fit = liveSourceFit(base({ sourceAspect: aspect, fitMode: 'contain' }));
+      const fill = px(fit.fill);
+      expect(fill.width, `aspect ${String(aspect)}`).toBeLessThanOrEqual(1000 + 1e-9);
+      expect(fill.height, `aspect ${String(aspect)}`).toBeLessThanOrEqual(500 + 1e-9);
+      // and nothing is cropped: what is seen IS the whole picture.
+      expectRect(px(fit.clip as NonNullable<typeof fit.clip>), fill);
+    }
+  });
+
+  it('🔴 THE POSITIVE CONTROL — a matching aspect is IDENTICAL under both modes', () => {
+    // C-028's regression bullet. A plate whose aspect already agrees with its box must
+    // be byte-identical to today, whichever mode is selected, or the default flip
+    // changes air for scenes it was promised not to touch.
+    const contain = liveSourceFit(base({ sourceAspect: 2, fitMode: 'contain' }));
+    const cover = liveSourceFit(base({ sourceAspect: 2, fitMode: 'cover' }));
+    expect(contain).toEqual(cover);
+    expectRect(px(contain.fill), { x: 460, y: 270, width: 1000, height: 500 });
+    expectRect(px(contain.clip as NonNullable<typeof contain.clip>), {
+      x: 460,
+      y: 270,
+      width: 1000,
+      height: 500,
+    });
+  });
+
+  it('no stated aspect is UNCHANGED — no fit, no difference between the modes', () => {
+    // D-147's fall-through, untouched by C-028: a fit is impossible without an aspect,
+    // so the picture fills the box exactly as it does today.
+    for (const aspect of [null, 0]) {
+      const contain = liveSourceFit(base({ sourceAspect: aspect, fitMode: 'contain' }));
+      const cover = liveSourceFit(base({ sourceAspect: aspect, fitMode: 'cover' }));
+      expect(contain, `aspect ${String(aspect)}`).toEqual(cover);
+      expectRect(px(contain.fill), { x: 460, y: 270, width: 1000, height: 500 });
+    }
+  });
+
+  it('the scene-rect clamp still applies ON TOP of the fit', () => {
+    // The two clamps compose: the picture is fitted into its hole, and what of THAT is
+    // outside the stage is still cut away. A fit that bypassed the clamp would put the
+    // live layer outside the template's own box.
+    const fit = liveSourceFit(
+      base({
+        sceneResolution: { width: 960, height: 540 },
+        rect: { x: 800, y: 100, width: 400, height: 200 },
+        sourceAspect: 1,
+        fitMode: 'contain',
+      }),
+    );
+    // 400×200 hole, square source ⇒ 200×200 picture centred at scene x 900…1100.
+    // Stage ends at scene x 960 ⇒ raster 1440; picture starts at raster 480+900=1380.
+    const clip = px(fit.clip as NonNullable<typeof fit.clip>);
+    expect(clip.x).toBeCloseTo(1380, 6);
+    expect(clip.width).toBeCloseTo(60, 6);
   });
 });
 

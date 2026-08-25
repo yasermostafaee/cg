@@ -2,6 +2,7 @@ import type { Composition, Layer, MaskHole, Scene } from './scene.js';
 import type { Element } from './elements.js';
 import type { Transform } from './primitives.js';
 import type { LiveSourceRect } from './live-source.js';
+import { DEFAULT_LIVE_FIT_MODE, fitPictureToBox, type LiveFitMode } from './live-fit.js';
 import { resolveVisibilityOf, type VisibilitySubject } from './visibility.js';
 
 /**
@@ -491,9 +492,38 @@ export function applyArrangementGeometry(
  * a rotated quad and is re-bounded — an OVER-punch, never an under-punch, so the
  * live picture is never cropped by it.
  */
+/**
+ * ⭐ `C-028` — **what one plate's fit is driven by, as the PAGE receives it.**
+ *
+ * Structurally the bridge's `CgPlateFit`, and deliberately declared here as its own
+ * type: this module is below `control-payload.ts` in every sense that matters (it is
+ * pure geometry and knows nothing about a wire), and a mask that imported the transport's
+ * type would be a mask coupled to the transport.
+ */
+export interface PlateFitFacts {
+  /** The source's display aspect, or `null` for NO FIT — the hole stays at the box. */
+  readonly aspect: number | null;
+  /** The resolved mode. */
+  readonly mode: LiveFitMode;
+}
+
+/**
+ * `C-028` — plate id (`routeKey`) → the facts its fit is driven by.
+ *
+ * 🔴 **This is the one thing the mask CANNOT derive from the scene**, and saying so is
+ * the point of the type. `sceneMaskHoles`'s own rule is that a condition belongs in the
+ * mask only if it can be evaluated from the SCENE ALONE — which is why the aspect and
+ * the mode arrive as an ARGUMENT rather than being read off the element here. Under
+ * `D-147` the ASSIGNED source outranks the author for the aspect, and the assignment is
+ * an installation fact; deriving it from the element here while the bridge derives it
+ * from the source is `B-149` exactly: two machines, two aspects, one hole.
+ */
+export type PlateFits = ReadonlyMap<string, PlateFitFacts>;
+
 export function sceneMaskHoles(
   scene: Scene,
   view: ArrangementView | undefined = undefined,
+  fits: PlateFits | undefined = undefined,
 ): Map<string, MaskHole[]> {
   const flat = applyArrangementGeometry(flattenElements(scene, 'paint'), view?.geometry);
   const context = {
@@ -524,9 +554,43 @@ export function sceneMaskHoles(
   // Paint order is the array order of `flat`: `flattenElements` emits an element
   // before its children and sorts siblings by `zIndex`, which is exactly what
   // `buildLayer` appends. So "above" is simply "at a higher index".
+  /**
+   * ⭐ `C-028` — **THE HOLE IS THE PICTURE, NOT THE BOX.**
+   *
+   * 🔴 Under `contain` the picture covers only part of its box. A hole left at the BOX
+   * rect would leave the margin a TRANSPARENT HOLE with no picture behind it — and what
+   * shows through is the channel behind the CG layer: **BLACK, which is exactly what the
+   * client rejected.** The feature would deliver the opposite of its own requirement.
+   * Punching at the fitted rect makes the template's own background fill the margin for
+   * free: no new compositing, no second layer, no extra command.
+   *
+   * ⚠ And under `cover` this must give back the BOX unchanged — `fitPictureToBox`'s
+   * `visible` is `picture ∩ box`, which is the box itself when the picture covers it.
+   * The same call therefore serves both modes without a branch here, which is what stops
+   * a `cover` hole drifting from what shipped.
+   *
+   * The `intersects` test above still runs on the BOX rect, deliberately: which elements
+   * a plate masks is a z-order-and-overlap question about the authored layout, and
+   * narrowing it to the fitted picture would un-mask a backdrop the plate still sits on
+   * top of the moment a source's aspect changed.
+   */
+  const punchRect = (f: FlatElement): LiveSourceRect => {
+    const el = f.element;
+    if (el.type !== 'video-placeholder') return f.rect;
+    const fit = fits?.get(el.routeKey);
+    // No facts for this plate ⇒ the SCENE's own statement. `expectedAspect` is what the
+    // author declared this hole is designed for, which is the honest answer for an
+    // authoring preview and for a page the bridge has not spoken to yet; absent, the
+    // aspect is `null` and there is no fit at all — the hole is the box, as today.
+    const aspect = fit?.aspect ?? el.expectedAspect ?? null;
+    const mode = fit?.mode ?? el.fitMode ?? DEFAULT_LIVE_FIT_MODE;
+    return fitPictureToBox(f.rect, aspect, mode).visible;
+  };
+
   const plates = flat
     .map((f, index) => ({ f, index }))
-    .filter(({ f }) => f.element.type === 'video-placeholder' && onScreen(f));
+    .filter(({ f }) => f.element.type === 'video-placeholder' && onScreen(f))
+    .map(({ f, index }) => ({ f, index, punch: punchRect(f) }));
 
   const holes = new Map<string, MaskHole[]>();
   if (plates.length === 0) return holes;
@@ -546,8 +610,11 @@ export function sceneMaskHoles(
     if (toLocal === null) continue;
     holes.set(
       target.key,
-      above.map(({ f }) => {
-        const local = rectThrough(toLocal, f.rect);
+      above.map(({ punch }) => {
+        // `punch`, not `f.rect` — the FITTED rect (C-028). Pulled back through the same
+        // inverse as before: the fit happens in SCENE px and the pull-back is a plain
+        // affine, so the two compose in either order.
+        const local = rectThrough(toLocal, punch);
         return { x: local.x, y: local.y, width: local.width, height: local.height };
       }),
     );

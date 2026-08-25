@@ -5,6 +5,7 @@ import {
   type Position,
   type Raster,
 } from './scene.js';
+import { DEFAULT_LIVE_FIT_MODE, fitPictureToBox, type LiveFitMode } from './live-fit.js';
 import type { LiveSourceRect } from './live-source.js';
 
 /**
@@ -94,6 +95,21 @@ export interface LiveSourceFitInput {
    * geometry is once that decision is made.
    */
   readonly sourceAspect: number | null;
+  /**
+   * `C-028` — how the picture is placed in the hole: `contain` (the default — the whole
+   * picture, centred, margins showing the template) or `cover` (scale to cover and
+   * centre-crop).
+   *
+   * Optional, defaulting to {@link DEFAULT_LIVE_FIT_MODE}, so a caller that has not
+   * learned about modes gets the shipped default rather than a compile error — and
+   * `undefined` can never be read as `cover` by accident, which is the way this would
+   * silently keep the old behaviour while looking implemented.
+   *
+   * RESOLVED by the caller, exactly as `position` is: the chain is the operator's
+   * per-assignment override → the element's authored value → `contain`, and only the
+   * bridge holds the override.
+   */
+  readonly fitMode?: LiveFitMode | undefined;
 }
 
 /** The two rects, always produced together — see `CommandBuilder.mixerFit`. */
@@ -141,15 +157,31 @@ function holeInRaster(input: LiveSourceFitInput): {
  * moves out from under its clip window renders NOTHING AT ALL (measured, design.md
  * §3). `CommandBuilder.mixerFit` takes exactly this shape and emits both.
  *
- * ── CROP-TO-FILL (6.3), and why not pillarbox ──────────────────────────────
+ * ── ⭐ THE FIT (6.3, as REVERSED by `C-028`) — AND WHAT CHANGED THE ANSWER ──
  *
- * The picture is scaled to COVER the hole with its proportions intact — matched
- * scale factors on both axes, sized by the LARGER of the two required ratios — and
- * the overflow is masked away by the clip. Pillarbox was weighed and REJECTED: a
- * multi-box guest window is a designed graphic element, not a video player viewport,
- * and black bars inside a frame the designer drew do not read as "the source is 4:3",
- * they read as a fault on air. The cost of crop-to-fill is losing the edges of the
- * source frame, which is the cost every broadcaster already accepts for this shot.
+ * This function used to argue AGAINST the behaviour it now implements, and the old
+ * text is quoted here rather than deleted because its reasoning was not wrong — it was
+ * ANSWERED, and the next reader deserves to see which premise moved:
+ *
+ * > _"Pillarbox was weighed and REJECTED: a multi-box guest window is a designed
+ * > graphic element, not a video player viewport, and black bars inside a frame the
+ * > designer drew do not read as 'the source is 4:3', they read as a fault on air."_
+ *
+ * 🔴 **THE PREMISE THAT MOVED: THE MARGIN IS NOT BLACK.** That argument rests entirely
+ * on the bars being BLACK, and they were — because the mask hole was punched at the
+ * BOX, so the margin was a transparent hole with the channel showing through it. Under
+ * `C-028` the hole is punched at the FITTED rect ({@link fitPictureToBox}'s `visible`),
+ * so the margin is **the template's own background**: the designed graphic, continuing
+ * across the space the picture does not fill. There is no bar to read as a fault.
+ *
+ * With that premise gone the objection has nothing left to stand on, and the client's
+ * decision (2026-08-23, via the owner) governs: **the picture must not be cut.**
+ * `contain` is the default; the old crop-to-fill survives verbatim as `cover`, for the
+ * shots where losing the edges is the accepted cost. The choice is the AUTHOR's, and
+ * the operator's to revise.
+ *
+ * The arithmetic is NOT here. It is {@link fitPictureToBox}, which the template's mask
+ * hole reads too — two implementations that must agree is the defect, not the design.
  *
  * ── THE CLAMP (6.4), and why it lands on the CLIP and not on the FILL ──────
  *
@@ -169,30 +201,20 @@ export function liveSourceFit(input: LiveSourceFitInput): LiveSourceFit {
   const raster = input.raster;
   const hole = holeInRaster(input);
 
-  // ── the fill box, in raster px: cover the hole, keep the proportions ──────
+  // ── the fit, in raster px: THE ONE COMPUTATION (`C-028`) ──────────────────
   //
-  // `null` is NO CROP — the picture is drawn into the hole exactly. Tested with
-  // `=== null` rather than by truthiness: an aspect of 0 is not a legal aspect but
-  // IS falsy, and reading it as "no aspect stated" would silently stretch instead of
-  // failing where the caller can see it.
-  let fillBox = hole;
-  if (input.sourceAspect !== null && input.sourceAspect > 0 && hole.height > 0) {
-    // The source's natural box is `aspect × 1`. `k` is the smallest scale at which
-    // it covers the hole on BOTH axes — `max`, never `min`: `min` is pillarbox.
-    const k = Math.max(hole.width / input.sourceAspect, hole.height);
-    const width = k * input.sourceAspect;
-    const height = k;
-    fillBox = {
-      // Centred on the hole, so the crop takes evenly from both edges. An
-      // off-centre crop would cut one side of a face and not the other.
-      x: hole.x + (hole.width - width) / 2,
-      y: hole.y + (hole.height - height) / 2,
-      width,
-      height,
-    };
-  }
+  // `picture` is where the whole picture is drawn — the FILL, oversized under `cover`.
+  // `visible` is what is SEEN — `picture ∩ hole`, which is the picture itself under
+  // `contain` and the hole itself under `cover`. The template's mask punches `visible`
+  // through this same function, in scene px; see `fitPictureToBox` for why the two
+  // spaces agree.
+  const fitted = fitPictureToBox(hole, input.sourceAspect, input.fitMode ?? DEFAULT_LIVE_FIT_MODE);
 
-  // ── the mask: the hole ∩ the scene rect, both in raster px ────────────────
+  // ── the mask: what is VISIBLE ∩ the scene rect, both in raster px ──────────
+  //
+  // 🔴 `fitted.visible`, NOT the hole. Under `cover` they are the same rect and this is
+  // byte-identical to what shipped; under `contain` the clip shrinks to the picture,
+  // which is what stops the margin being a transparent hole onto the channel.
   const s = outputScale(raster);
   const pad = outputLetterbox(raster);
   const t = outputTranslate({ resolution: input.sceneResolution }, input.position);
@@ -202,13 +224,14 @@ export function liveSourceFit(input: LiveSourceFitInput): LiveSourceFit {
     width: s * input.sceneResolution.width,
     height: s * input.sceneResolution.height,
   };
-  const left = Math.max(hole.x, stage.x);
-  const top = Math.max(hole.y, stage.y);
-  const right = Math.min(hole.x + hole.width, stage.x + stage.width);
-  const bottom = Math.min(hole.y + hole.height, stage.y + stage.height);
+  const seen = fitted.visible;
+  const left = Math.max(seen.x, stage.x);
+  const top = Math.max(seen.y, stage.y);
+  const right = Math.min(seen.x + seen.width, stage.x + stage.width);
+  const bottom = Math.min(seen.y + seen.height, stage.y + stage.height);
 
   return {
-    fill: normalize(fillBox, raster),
+    fill: normalize(fitted.picture, raster),
     // Strictly greater-than on BOTH axes. A hole touching the scene edge exactly
     // produces a zero-width intersection, which shows nothing — reported as `null`
     // (nothing to seat) rather than as a rect of width 0, which a naive reader would
