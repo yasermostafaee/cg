@@ -972,7 +972,7 @@ Until then [[C-018]] stays open and **nothing on air depends on 2.5.0**: the pla
 running 2.3.2, the 2.5.0 install is side-by-side, and no config is cut over. The cost of the
 delay is only that [[C-019]] stays blocked.
 
-## [!] C-021 — DECKLINK, NDI and fill+key for Live Sources: the arms this installation cannot validate ⟨priority: high⟩ — arm (a) DECKLINK is **UNBLOCKED** (2026-08-24: the card exists and its input is proven); arms (b) NDI and (c) fill+key stay BLOCKED
+## [!] C-021 — DECKLINK, NDI and fill+key for Live Sources: the arms this installation cannot validate ⟨priority: high⟩ — walk-run 2026-08-25: arm (a) DECKLINK **UNBLOCKED, both producer spellings proven**; arm (b) NDI **still BLOCKED**; arm (c) fill+key **PARKED — no second SDI input exists on this card**
 
 **What:** the three Live Source producer arms that [[C-015]] cannot discharge on this plant, split
 out so C-015 can close on what it CAN prove. Verify, on hardware: (a) the **DECKLINK** producer form
@@ -1026,6 +1026,7 @@ card.** CasparCG's own startup log on the production 2.5.0 (`69e8ad5`) enumerate
   `<device>` element**. Both directions ran at once on the same card.
 - ⚠ **NOT proven: the persistent ID as a PRODUCER argument** (`DECKLINK DEVICE 23487013`). The
   consumer and the producer are different parsers, and this has not been tried.
+  ✅ **ANSWERED 2026-08-25 — YES, it works. This bullet is superseded; see the walk block below.**
 - ⚠ Incidentals from the same run, recorded so they are not re-discovered as defects: the input
   auto-detected `1080i5000` against a `1080p5000` channel and produced an `in-sync`/`out-sync`
   drift flood (fix: match the channel to the incoming signal); `Failed to enable external keyer.`
@@ -1038,29 +1039,86 @@ inventory of the box's hardware. It is not one — a card can be fitted and not 
 inference is what put "no capture card" into this heading, `command-builder.ts` and
 `live-source-multibox` design.md; all three are corrected.
 
-**Notes — why this is STILL `[!]` and not `[ ]`, and why it is not `[~]` either.** Two of the three
-arms remain genuinely blocked, so `[ ]` (queued, nothing in the way) would be false; nothing has
-been implemented against this item, so `[~]` (in progress) would be false too. The PRD legend has
-no shape for _"one arm unblocked but unstarted"_, and rather than round the checkbox up, the split
-is stated here and in the heading:
+## ⭐ THE WALK WAS RUN — 2026-08-25. Q1 and Q2 land on this item.
 
-- **(a) DECKLINK — UNBLOCKED, NOT DELIVERED.** The card is present and its input is proven at the
-  AMCP level. What this item still owes for (a) is the acceptance bullet's own subject: a Live
-  Source mapped to that producer, playing **behind the hole** with its `MIXER FILL` + `CLIP`
-  geometry correct, seen on air. An `Initialized` on layer 10 is not that.
-- **(b) NDI — STILL BLOCKED.** No NDI source exists on this plant and the module is gated. Nothing
-  on 2026-08-24 touched this.
-- **(c) fill+key — STILL BLOCKED**, and now on a NARROWER and checkable question than "no card":
-  whether a **second SDI input** exists on this DeckLink SDI 4K for the pair at all
-  ([../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md) Q4).
-  The SEATING work that (c) verifies — which layer the key lands on, what a half-failed pair means,
-  what the ledger's `role` records — is split out to [[C-027]], because it is code that must be
-  written before there is anything for this arm to look at.
+[../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md), owner-run
+on the plant. Host `192.168.21.114`, install `D:\casparcg-server-v2.5.0-stable-windows`,
+`VERSION SERVER` → `2.5.0 69e8ad5 Stable`. Q3 went to [[C-028]] and Q4 to [[C-027]]; **Q1 and Q2
+are this item's, and this is the "recorded here verbatim" the last acceptance bullet asks for.**
 
-**The measurement sheet that closes the rest:**
-[../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md) — the
-persistent-ID producer form (Q1), device enumeration over AMCP (Q2), the producer's letterbox-vs-
-stretch behaviour (Q3) and the second SDI input (Q4).
+### ✅ Q1 — arm (a): the PERSISTENT ID works as a PRODUCER argument
+
+```
+PLAY 1-10 DECKLINK DEVICE 23487013
+DeckLink SDI 4K [23487013|1080p5000] Initialized
+#202 PLAY OK
+DeckLink SDI 4K [23487013|1080p5000] Input format changed from 1080p5000 to 1080i5000
+```
+
+The known-good `DECKLINK DEVICE 1` was run first and gave the same shape. 🔴 **The
+`Input format changed` line is what makes this a PASS and not a `202` over a dead producer** —
+only an open card reports the incoming raster changing under it. The log names the device by its
+**ID**, so the server resolved the argument AS an ID rather than coincidentally matching an index.
+
+⇒ **`DECKLINK DEVICE <n>` accepts EITHER handle**, and `SourceProducerSchema`'s
+`z.number().int().positive()` already admitted both — **no schema change was needed**. Prefer the
+persistent ID where the operator has one: an index moves when the PCIe order changes or a second
+card is fitted. Corrected in `command-builder.ts`, its test, the amcp-mock classifier and
+`live-source-multibox` `tasks.md` 6.1.
+
+### ❌ Q2 — nothing enumerates the devices. No picker is possible.
+
+All four commands were **actually typed** — that is the value of the record:
+
+| command tried    | reply                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| `INFO SYSTEM`    | `#200 INFO OK` + `1 1080p5000 PLAYING` — 2.5.0 **IGNORES the `SYSTEM` token** and answers plain `INFO` |
+| `INFO`           | the same channel line; no device information of any kind                                               |
+| `INFO CONFIG`    | `#201 INFO CONFIG OK` + the configuration XML                                                          |
+| `VERSION SERVER` | `#201 VERSION OK` + `2.5.0 69e8ad5 Stable`                                                             |
+
+🔴 **`INFO SYSTEM` degrading silently to `INFO` is the trap.** It answers `#200 INFO OK`, so a
+caller checking only the response CODE would record it as a supported query that found no devices.
+
+⭐ **One partial, and it is NOT an enumeration.** `INFO CONFIG` does return
+`<decklink><device>23487013</device>` — but that is **what the operator wrote into
+`casparcg.config`**, not what the card reports. It cannot list a device nobody configured, carries
+no name or index, and goes stale exactly when config and hardware disagree, which is the case a
+picker exists to catch. A _hint_, never a picker.
+
+⇒ **No picker item is filed, and that is a decision rather than an omission.** The device list
+exists only in the startup log, and the bridge does not read the server's disk and must not start.
+The modal keeps its bare numeric input; Q1's YES softens the cost, because the number typed there
+can be an ID that does not move.
+
+**Notes — why this is STILL `[!]` and not `[ ]`, and why it is not `[~]` either.** Arms (b) and (c)
+remain blocked, so `[ ]` (queued, nothing in the way) would be false; nothing has been implemented
+against this item, so `[~]` (in progress) would be false too. The PRD legend has no shape for
+_"one arm unblocked but unstarted"_, and rather than round the checkbox up, the split is stated
+here and in the heading:
+
+- **(a) DECKLINK — UNBLOCKED, NOT DELIVERED.** The card is present and BOTH producer spellings are
+  proven at the AMCP level (2026-08-24 index, 2026-08-25 persistent ID). What this item still owes
+  for (a) is the acceptance bullet's own subject: a Live Source mapped to that producer, playing
+  **behind the hole** with its `MIXER FILL` + `CLIP` geometry correct, seen on air. An
+  `Initialized` on layer 10 is not that.
+  ⚠ **And a new obstacle sits in front of it: [[B-177]].** One physical input admits ONE producer,
+  and `CLEAR` answers `202` before the old one is destroyed — so the seating path's own
+  `CLEAR`-then-`PLAY` can lose that race on this hardware. Arm (a)'s on-air pass will meet it.
+- **(b) NDI — STILL BLOCKED.** No NDI source exists on this plant and the module is gated. Neither
+  the 2026-08-24 nor the 2026-08-25 run touched this.
+- **(c) fill+key — PARKED, NOT MERELY BLOCKED. Q4 answered NO.** The 2026-08-25 startup
+  enumeration lists **exactly one device** (`DeckLink SDI 4K [1] (23487013)`) and a DeckLink SDI 4K
+  is a **single-channel card**: there is no second SDI input for a pair. So this arm is not waiting
+  on a measurement any more — **it is unverifiable on this plant**, and it stays that way until the
+  hardware changes. It is NOT cancelled: the concept is real, the schema carries it, and a plant
+  with two inputs would make it live again. The SEATING code it would verify is [[C-027]], parked
+  for the same reason.
+  ⚠ **Do not read this as "fill+key was rejected".** Nothing about it was judged; a measurement
+  came back and the hardware cannot host the test. **[[C-021]]'s `MIXER CHROMA` alternative below
+  becomes materially more interesting because of this**, and is still unevaluated.
+
+**What the walk did NOT settle for this item:** arm (b) entirely, and arm (a)'s on-air pass.
 
 **Ordering:** this item is downstream of [[C-015]]'s phases 1–6 (`live-source-multibox`
 `tasks.md` §10, phase 7) and does not block any of them; arm (c)'s unblocking rides [[C-020]]'s
@@ -1482,7 +1540,7 @@ pressure — "just this one" and "silence everything" — did not exist at all.
   this one's per-box GAIN), [[C-018]] / [[C-020]] (the 2.5.0 cutover the monitor channel assumes),
   [[B-161]] (golden rule 10, the gate every verb here satisfies first).
 
-## [!] C-027 — fill/key SEATING for a `decklink` source: the modal stores a key device that nothing sends ⟨priority: medium⟩ — BLOCKED: needs a second SDI input on the card, [../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md) Q4
+## [!] C-027 — fill/key SEATING for a `decklink` source: the modal stores a key device that nothing sends ⟨priority: medium⟩ — **PARKED 2026-08-25: this card has NO second SDI input, so the work is UNVERIFIABLE on this plant** ([../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md) Q4)
 
 **What:** actually SEAT a fill/key pair when a `decklink` source's mapping names one. Today
 `SourceProducerSchema`'s `decklink` arm carries an optional `keyDevice`, CG Control's Sources modal
@@ -1524,15 +1582,52 @@ other's acceptance.
   never inferred from the format's specification ([[B-066]] class: verify, never assume) — that pass
   is [[C-021]] arm (c)'s, and this item hands it something to look at
 
-**Notes — why `[!]`, and what exactly blocks it.** A fill/key pair is **two physical SDI inputs**.
-The plant's card is a **DeckLink SDI 4K** (index `1`, persistent ID `23487013`, measured
-2026-08-24), and whether it exposes a **second** input for the pair at all is **not known** — it is
-question **Q4** of [../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md),
-which is one look at the back of the box. If the answer is no, this item does not become wrong, it
-becomes **unverifiable on this plant** and should be re-scoped or parked rather than built blind:
-two-layer seating whose second layer can never carry a real signal is a mechanism nobody can check.
-That is the whole of the block, and it is deliberately NARROWER than the "no capture card" that used
-to sit over this area — see [[C-021]]'s 2026-08-24 correction.
+🔴 **PARKED 2026-08-25 — Q4 came back NO, and this item's own Notes said what to do in that case.**
+
+The startup enumeration on the production 2.5.0, same day, lists **exactly one device**:
+
+```
+Decklink devices found:
+ - DeckLink SDI 4K [1] (23487013)
+```
+
+A **DeckLink SDI 4K is a single-channel card**. There is no second SDI input, so a fill/key pair
+cannot exist on this plant — and two-layer seating whose second layer can never carry a real signal
+is **a mechanism nobody can check**. Building it would produce code that passes its own tests and
+has never met a signal.
+
+⚠ **DISCLOSED: the `PLAY 1-11 DECKLINK DEVICE 2` probe never executed.** The plant console
+concatenated the pasted lines into `CLEAR 1-10PLAY 1-11 DECKLINK DEVICE 2` and ran only the
+`CLEAR`. **Do not cite a `DEVICE 2` failure — there isn't one.** The enumeration is the evidence
+this park rests on, and it is same-day and same-boot: a device the server did not enumerate is not
+a device a `PLAY` could have opened.
+
+**What PARKED means here, precisely:**
+
+- **NOT cancelled and NOT wrong.** The concept is real (the plant's previous automation ran
+  MASTER + SLAVE on one entry), the schema carries it, the acceptance bullets above stand as
+  written. A plant with two inputs makes this item live again with no rework of its scope.
+- **NOT started, and must not be.** Nothing here may be built "ready for later" — see the harm
+  above.
+- **Unparks on hardware, not on a decision.** The trigger is a second SDI input existing: a
+  different card, a second card, or a different plant. `INFO CONFIG`-style enumeration will not
+  produce one (Q2 — nothing enumerates devices at all), so the signal is physical.
+- ⚠ **The `keyDevice` field, the schema arm and the modal's honesty notice are UNCHANGED.** An
+  operator may already have configured a pair; the field keeps it, and the modal already says in
+  plain words that it is stored and not sent. Parking the seating does not park the honesty.
+
+⭐ **This raises the stakes on [[C-021]]'s `MIXER CHROMA` alternative**, which needs neither a
+fill/key path nor a second input. It remains unevaluated, and it is now the only route to a
+transparent live plate that this hardware could actually carry.
+
+**Notes — the original block, why `[!]`, and what blocked it.** A fill/key pair is **two physical
+SDI inputs**. The plant's card is a **DeckLink SDI 4K** (index `1`, persistent ID `23487013`,
+measured 2026-08-24), and whether it exposes a **second** input for the pair at all was **not
+known** — question **Q4** of
+[../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md), one look
+at the back of the box. _"If the answer is no, this item does not become wrong, it becomes
+**unverifiable on this plant** and should be re-scoped or parked rather than built blind."_ **The
+answer was no, and that instruction is what the block above carries out.**
 
 **Deliberately NOT in scope:** removing the `keyDevice` field or refusing it at the config boundary.
 The operator may already have written a pair, and dropping the field would lose that configuration.
