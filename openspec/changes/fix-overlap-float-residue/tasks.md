@@ -51,12 +51,23 @@
 - [x] 4.2 `D-122`'s archived change directory (`2026-07-08-add-pixel-snap-drag`) NOT rewritten
 - [x] 4.3 `B-180` flipped to `[x]` with the decision, why (a) alone was insufficient, and the
       measured fixture value
-- [ ] 4.4 Canvas engine doc (`features/canvas/README.md`) updated if the gate is described there
+- [x] 4.4 Canvas engine doc (`features/canvas/README.md`) updated — it described the gate and
+      carried two sentences this change makes false ("below the threshold nothing snaps" and
+      "resize-handle snapping is a deliberate follow-up"), both found by the tree-wide sweep
 
 ## 5. Gate
 
-- [ ] 5.1 Full green gate as plain `pnpm gate` (never `--force`)
-- [ ] 5.2 `CG_GATE_HOOK_E2E=1` once before the push
-- [ ] 5.3 Pushed to `dev`; `git ls-remote origin dev` verified and the SHA quoted
-- [ ] 5.4 **Linux `gate:e2e` owed** — this change alters what a drag commits and adds an E2E.
-      Run URL: _pending_ · `E2E (Playwright)` confirmed RAN (minutes, not 0 s): _pending_
+- [x] 5.1 Full green gate as plain `pnpm gate` — **89 successful, 0 cached, 89 total**; `format:check`
+      clean; `openspec validate --all --strict` 66 passed, 0 failed
+- [x] 5.2 Local `pnpm gate:e2e` run (Windows, non-authoritative): designer **275 passed / 12 skipped**,
+      runtime **93 passed**, 23/23 tasks. ⚠ One earlier run of the same suite reported
+      `@cg/runtime#test:e2e` failed AFTER all 93 tests passed, with
+      `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), src\win\async.c:94` — a libuv
+      teardown abort on Windows, not a test failure; it did not reproduce
+- [x] 5.3 Pushed to `dev` as **`f0568bc6`** (`f0568bc62089e88bdfb19a069d4c9b22999e01ae`);
+      `git ls-remote origin dev` matches local `HEAD`
+- [x] 5.4 **Linux `gate:e2e` DISCHARGED** for the exact commit that carries the change.
+      Run: <https://github.com/yasermostafaee/cg/actions/runs/32971549298> — `head_sha`
+      `f0568bc62089e88bdfb19a069d4c9b22999e01ae`, `status=completed`, `conclusion=success`.
+      **`E2E (Playwright)` RAN**: `12:59:20Z → 13:08:21Z` = **9 m 01 s** (not skipped, not 0 s);
+      `Lint · Typecheck · Test · Build` also ran, 10 m 01 s
