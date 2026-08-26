@@ -38,8 +38,24 @@
 
 - [x] 5.1 `pnpm gate` green, uncached.
 - [x] 5.2 `CG_GATE_HOOK_E2E=1` run locally once before push.
-- [ ] 5.3 🔴 Linux `gate:e2e` OWED — evidence below. A ticked box with no URL is a claim.
+- [x] 5.3 🔴 Linux `gate:e2e` — **DISCHARGED**, evidence below.
 
 ### The `gate:e2e` discharge
 
-- Run URL: _(not yet discharged)_
+**Run URL:** <https://github.com/yasermostafaee/cg/actions/runs/32957665797>
+
+|                                   |                                                     |
+| --------------------------------- | --------------------------------------------------- |
+| Commit                            | `340e98c7b2e0e31e337f78c5c98f43c559a133d2` on `dev` |
+| Run                               | `status: completed`, `conclusion: success`          |
+| `E2E (Playwright)`                | **RAN**, 9m10s, `success`                           |
+| `Lint • Typecheck • Test • Build` | RAN, 3m35s, `success`                               |
+
+🔴 Confirmed by DURATION, not by a green tick: CI skips `e2e` for a diff classified as unable to
+affect rendering (`P-029`), and a skipped job reports green too.
+
+⚠ **A local note worth keeping.** A full local Playwright run showed 15 failures in the `video-*`
+specs — all of them my own fault: I invoked `pnpm exec playwright test` DIRECTLY in
+`apps/designer`, which bypasses `bounded-turbo-cli` and so drops the `P-034` worker cap. Under the
+bound (`pnpm gate:e2e`) the same tree passes 273 + 93. Exactly the load-flake class `B-098` and
+`P-034` exist to prevent, reproduced by ignoring their own rule.
