@@ -354,6 +354,25 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
   element's edges + centre, and the operator's ruler guides**, within ~6–7 screen px
   (converted to scene px by `/zoom`). Snapping is suppressed while rotated (H/V snap
   is undefined) and while Shift is held; matched snaps draw a guide line.
+- **Resize snapping is decided in EDGE space, not pointer space (B-181)** — and the
+  distinction only matters under an aspect lock, which is why it went unseen. `beginResize`
+  solves a candidate rect from the raw pointer with the lock applied, asks
+  `movingCornerScene` where that rect's moving edge LANDED, tests THAT against the targets,
+  and realises a hit by re-solving through the same `computeRectResize` via the inverse
+  `pointerForMovingEdge` ("which pointer would have produced the rect I want"). **There is no
+  second solver**: the snap is expressed as a choice of INPUT, so the `B-175` fixed-corner pin,
+  the `MIN_SIZE` clamp and the `D-155` lock all keep working untouched.
+  Unlocked, `movingEdge.x ≡ pointer.x` identically — the element's own `scale` cancels — so
+  that path is byte-identical to before. Locked, an EDGE handle also still lands on the pointer
+  (`lockExtents` passes its driven extent through), but a locked CORNER is projected onto the
+  locked diagonal and separates the two by construction: measured, a `br` drag to `(900, 300)`
+  puts the corner at `(793.18, 489.91)`.
+  🔴 **The guide is a function of the COMMITTED rect** — emitted only where the final edge is
+  within `noiseFloor` (B-180's) of a target, never from the snap's intent. Before this, `guideX`
+  was the snapped POINTER, so the canvas drew lines announcing snaps the geometry had refused.
+  Where the lock ties two extents and a corner is in range on both axes, `chooseEdgeSnap` picks
+  the **nearer** target (tie → `x`) and the FORCED axis gets a guide only if it lands genuinely
+  on one. Root: `openspec/changes/resize-snaps-the-edge`.
 - **Pixel snap at grid zoom (D-122)** — when the pixel grid is visible
   (`pixelGridVisible(zoom)`, zoom ≥ 800%), the Snapping preference is on, and **Alt**
   is not held, a MOVE lands on WHOLE scene pixels so a moved element's edges sit on the

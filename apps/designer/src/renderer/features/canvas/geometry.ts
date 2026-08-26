@@ -332,6 +332,198 @@ export function computeRectResize(
   };
 }
 
+/** What {@link computeRectResize} returns — named so the edge helpers can take it. */
+export interface ResizeSolution {
+  readonly position: { x: number; y: number };
+  readonly size: { w: number; h: number };
+  readonly ratioW: number;
+  readonly ratioH: number;
+}
+
+/**
+ * The corner a handle MOVES — the one diagonally opposite {@link RESIZE_CFG}'s fixed corner.
+ *
+ * For a corner handle this is the grabbed corner itself. For an EDGE handle it is a corner
+ * that shares the moving edge: `r` pins `tl` and moves `br`, whose `x` IS the right edge. The
+ * other axis of that corner is meaningless for an edge handle and the caller ignores it —
+ * `cfg.freeW` / `cfg.freeH` already say which axis the handle drives.
+ */
+export function resizeMovingCorner(handle: Handle): Corner {
+  switch (RESIZE_CFG[handle].fixed) {
+    case 'tl':
+      return 'br';
+    case 'br':
+      return 'tl';
+    case 'tr':
+      return 'bl';
+    case 'bl':
+      return 'tr';
+  }
+}
+
+/**
+ * ⭐ **`B-181` — WHERE THE MOVING EDGE ACTUALLY LANDED, in scene px.**
+ *
+ * The rect a resize commits scales about the LOCAL ORIGIN by `(ratioW, ratioH)` — that is the
+ * commit model {@link computeRectResize} documents — so the moving corner of the new rect is
+ * the old one times the ratios, projected through the NEW transform.
+ *
+ * 🔴 **This is a function of the SOLVED rect, never of the pointer**, and that is the whole
+ * point of it. Under an aspect lock the solver returns a rect that satisfies the ratio, so the
+ * moving edge is NOT under the pointer; asking the pointer where the edge is was `B-181`.
+ */
+export function movingCornerScene(
+  t: BoxTransform,
+  rect: LocalRect,
+  handle: Handle,
+  solved: ResizeSolution,
+): { x: number; y: number } {
+  const mc = rectCorner(resizeMovingCorner(handle), rect);
+  const t2: BoxTransform = { ...t, position: solved.position, size: solved.size };
+  return localToScene(t2, mc.x * solved.ratioW, mc.y * solved.ratioH);
+}
+
+/**
+ * ⭐ **`B-181` — THE INVERSE: the pointer that puts the moving edge EXACTLY on `targetScene`,
+ * with the lock still satisfied.**
+ *
+ * ── WHY AN INVERSE AND NOT A NUDGE ──────────────────────────────────────────
+ *
+ * The gesture must snap the EDGE, but {@link computeRectResize} is the one place the geometry
+ * is solved and must stay so — re-deriving the rect in the gizmo would be a second solver, and
+ * this repo has paid for those. So the snap is expressed as *"which pointer would have produced
+ * the rect I want"*, and the answer is fed back through the SAME solver. The fixed-corner pin,
+ * the `MIN_SIZE` clamp and the lock all keep working because none of them is bypassed.
+ *
+ * ── THE ALGEBRA (axis-aligned only — see the guard) ─────────────────────────
+ *
+ * At `rotation === 0` the solver reduces to `rawW = |p.x − fixed.x| / scale.x` and the moving
+ * edge lands at `fixed.x + sgn·scale.x·wNew`. So a desired edge coordinate `T` fixes the
+ * extent, `wNew = (T − fixed.x) / (scale.x·sgn)`, and the pointer that produces it is
+ * `fixed.x + sgn·wNew·scale.x` — which for an UNLOCKED resize simplifies to exactly `T`,
+ * reproducing today's behaviour byte-for-byte. That identity is why the bug was invisible
+ * without the lock, and it is asserted by test.
+ *
+ * Under the lock the two extents are tied, so the answer depends on the handle:
+ *
+ * - **edge handle** (one free axis): `lockExtents` passes the driven extent through unchanged
+ *   and derives the other, so the driven raw extent IS `wNew`.
+ * - **corner handle** (both free): `lockExtents` PROJECTS `(rawW, rawH)` onto the locked
+ *   diagonal, so infinitely many pointers give the same result. The one chosen is the point
+ *   ON that diagonal — `(wNew, wNew / lockRatio)` — which is both the nearest such pointer and
+ *   the corner of the very rect being committed, so the pointer ends up back on the handle.
+ *
+ * ⚠ **Returns `null`, never an approximation**, when the algebra has no answer: a rotated
+ * element (the caller already refuses to snap one), an axis this handle does not drive, or a
+ * target on the wrong side of the fixed corner — which would need a negative extent, and
+ * whose `Math.abs` in the solver would silently mirror it onto the wrong side instead.
+ *
+ * 🔴 **The caller MUST still verify the result against the re-solved rect.** `lockExtents`
+ * owns a `MIN_SIZE` up-scale that can override any target — a locked pair whose DERIVED axis
+ * falls under the floor is scaled back up, moving the driven axis with it. This function
+ * deliberately does NOT re-implement that clamp: a second copy of it here is exactly how the
+ * two would drift. So the contract is *"the pointer that solves the algebra"*, and the gizmo
+ * confirms the edge really landed before drawing anything. A guide for a snap that did not
+ * happen is the other half of `B-181`, and measuring beats predicting.
+ */
+export function pointerForMovingEdge(
+  t: BoxTransform,
+  rect: LocalRect,
+  handle: Handle,
+  axis: 'x' | 'y',
+  targetScene: number,
+  pointerScene: { x: number; y: number },
+  lockRatio?: number | undefined,
+): { x: number; y: number } | null {
+  // Axis-aligned only: with a rotation there is no "x edge" to put on a vertical guide. The
+  // gizmo already gates snapping on `rotation === 0`; this is the same rule, stated where the
+  // algebra depends on it rather than trusted from a caller.
+  if (t.rotation !== 0) return null;
+  if (!(t.scale.x > 0) || !(t.scale.y > 0)) return null;
+  const cfg = RESIZE_CFG[handle];
+  if (axis === 'x' ? !cfg.freeW : !cfg.freeH) return null;
+
+  const fc = rectCorner(cfg.fixed, rect);
+  const mc = rectCorner(resizeMovingCorner(handle), rect);
+  const fixedScene = localToScene(t, fc.x, fc.y);
+  // Which side of the fixed corner the moving corner sits on, in LOCAL rect coords. The
+  // ratios are positive, so the sign survives the scale-about-origin commit.
+  const sgnX = Math.sign(mc.x - fc.x) || 1;
+  const sgnY = Math.sign(mc.y - fc.y) || 1;
+
+  // The rect extent the target demands on the driven axis.
+  const driven =
+    axis === 'x'
+      ? (targetScene - fixedScene.x) / (t.scale.x * sgnX)
+      : (targetScene - fixedScene.y) / (t.scale.y * sgnY);
+  // A target on the far side of the fixed corner would need a negative extent — the box
+  // cannot reach it by growing, and `Math.abs` in the solver would silently mirror it.
+  if (!(driven > 0) || !Number.isFinite(driven)) return null;
+
+  // A LOCKED CORNER is the only case that needs the other axis aimed too: an edge handle
+  // passes its driven extent straight through `lockExtents`, and an unlocked corner leaves the
+  // other axis exactly where the author is holding it — which is what keeps the unlocked path
+  // byte-identical to before this change.
+  const lr =
+    lockRatio !== undefined && lockRatio > 0 && Number.isFinite(lockRatio) && cfg.freeW && cfg.freeH
+      ? lockRatio
+      : null;
+  const rawW = axis === 'x' ? driven : lr === null ? null : lr * driven;
+  const rawH = axis === 'y' ? driven : lr === null ? null : driven / lr;
+
+  return {
+    x: rawW === null ? pointerScene.x : fixedScene.x + sgnX * rawW * t.scale.x,
+    y: rawH === null ? pointerScene.y : fixedScene.y + sgnY * rawH * t.scale.y,
+  };
+}
+
+/**
+ * ⭐ **`B-181` task 3 — WHICH AXIS LEADS when a locked CORNER could snap on either.**
+ *
+ * 🔴 **This is a design DECISION, not a spelling, and it is recorded as one.** With an aspect
+ * lock the two extents are tied, so satisfying a target on one axis FORCES the other; a corner
+ * drag generally cannot land on two targets at once. Something has to choose, and the wrong
+ * choice makes the box fight the author.
+ *
+ * **The rule: the NEAREST target wins; a tie goes to `x`.**
+ *
+ * Why nearest rather than the alternatives:
+ *
+ * - It is the same currency the THRESHOLD already uses. `thr` is `SNAP_PX / scale` — screen
+ *   pixels — and both axes are tested against that one value, so a scene-px distance is a
+ *   screen-px distance times the same constant on both axes. "Nearest" therefore means nearest
+ *   *on screen*, which is what the author is looking at.
+ * - The obvious alternative — "the axis with the larger pointer delta drives" — is actively
+ *   wrong HERE, because `lockExtents` projects a corner pointer onto the locked diagonal. The
+ *   larger delta is then an artefact of that projection rather than a statement of intent, so
+ *   it would routinely snap the axis the author was not aiming at.
+ * - The tie-break is fixed (`x`) rather than "keep the previous axis", so the result depends
+ *   only on where the pointer is. A stateful tie-break makes the same pointer position mean
+ *   two different things depending on how it was reached, which is how a box starts to feel
+ *   like it is fighting back.
+ *
+ * ⚠ The FORCED axis gets no guide from this function, and deliberately: it did not snap, it
+ * was derived. Whether it happens to land on a target too is a question about the COMMITTED
+ * rect, which the caller answers by measuring — see `B-181`'s guide rule.
+ */
+export function chooseEdgeSnap(
+  edge: { x: number; y: number },
+  handle: Handle,
+  targets: { xs: readonly number[]; ys: readonly number[] },
+  thr: number,
+): { axis: 'x' | 'y'; target: number } | null {
+  const cfg = RESIZE_CFG[handle];
+  const tx = cfg.freeW ? snapValue(edge.x, targets.xs, thr) : null;
+  const ty = cfg.freeH ? snapValue(edge.y, targets.ys, thr) : null;
+  if (tx === null && ty === null) return null;
+  if (ty === null) return { axis: 'x', target: tx as number };
+  if (tx === null) return { axis: 'y', target: ty };
+  // Both in range: nearest wins, `x` on a tie.
+  return Math.abs(ty - edge.y) < Math.abs(tx - edge.x)
+    ? { axis: 'y', target: ty }
+    : { axis: 'x', target: tx };
+}
+
 /**
  * Recover the rotation pivot's client position from the grabbed handle's client
  * position and the handle's element-local offset from the pivot (pre-zoom). The offset is
@@ -429,7 +621,15 @@ export function computeRotationAngle(
   return Number(next.toFixed(2));
 }
 
-/** Nearest target to `v` within `thr`, or null. Used to snap a single resize edge. */
+/**
+ * Nearest target to `v` within `thr`, or null. Used to snap a single resize edge.
+ *
+ * ⚠ **`B-181` — that last sentence was already right, and the CALLER was wrong.** For a year the
+ * gizmo handed this function the POINTER and named the result an edge snap. The name stated the
+ * contract correctly; nothing enforced it. It is honest again now that `chooseEdgeSnap` feeds it
+ * `movingCornerScene`'s answer, and it is left unchanged deliberately — see CLAUDE.md's rule that
+ * a predicate's NAME is part of its contract.
+ */
 export function snapValue(v: number, targets: readonly number[], thr: number): number | null {
   let best: { t: number; d: number } | null = null;
   for (const t of targets) {
