@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
+import type { ExportIssue } from '@cg/shared-ipc';
 import type { Element, Scene } from '@cg/shared-schema';
 import { lookGroupOf } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -74,6 +75,12 @@ interface Props {
    * single header row reads:  [tools] ……… [zoom controls].
    */
   showToolbar?: boolean;
+  /**
+   * D-157 — the live preflight issues, so the canvas can MARK the boxes that are blocking
+   * the export. Passed rather than recomputed: the same list the status bar counts and the
+   * Export button refuses on, so the three surfaces cannot disagree about which boxes.
+   */
+  issues?: readonly ExportIssue[];
 }
 
 // B-027 — the minimum zoom is DYNAMIC (the cover-fit of the pasteboard over the viewport,
@@ -208,6 +215,7 @@ export function CanvasArea({
   editingTextId,
   bindModeFieldId,
   showToolbar = false,
+  issues = [],
 }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
@@ -1025,6 +1033,7 @@ export function CanvasArea({
                   frameOffset={frameOffset}
                   currentFrame={currentFrame}
                   onPan={applyPan}
+                  issues={issues}
                 />
               </div>
             </div>

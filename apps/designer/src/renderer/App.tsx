@@ -577,6 +577,10 @@ export function App(): JSX.Element {
                   editingTextId={editingTextId}
                   bindModeFieldId={bindModeFieldId}
                   showToolbar
+                  // `D-157` — the SAME live issue list the status bar and the action bar read, so
+                  // the canvas mark, the pill's count and the Export refusal can never disagree
+                  // about which boxes are blocking the export.
+                  issues={issues}
                 />
               </div>
               <TransportBar scene={editScene} />

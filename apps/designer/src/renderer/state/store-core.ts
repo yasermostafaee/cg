@@ -150,6 +150,12 @@ export interface DesignerStoreState {
   /** View menu — snap element edges/centers while dragging on the canvas. */
   snappingEnabled: boolean;
   /**
+   * `D-157` — is the Issues panel showing? Lifted out of `StatusBar`'s local state so the
+   * control that was REFUSED can open it: the status-bar pill used to be the only opener, and
+   * it exists only while there are issues.
+   */
+  issuesOpen: boolean;
+  /**
    * 🔴 `D-155` — **keep a declared aspect while resizing. A SESSION PREFERENCE, deliberately
    * NOT authored state, and ONE value for both geometry editors.**
    *
@@ -227,6 +233,7 @@ export const initialState: DesignerStoreState = {
   timelineZoom: 1,
   rulerVisible: false,
   snappingEnabled: true,
+  issuesOpen: false,
   aspectLockEnabled: true,
   canvasZoom: 1,
   snapGuides: { x: [], y: [] },

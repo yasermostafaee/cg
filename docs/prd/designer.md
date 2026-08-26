@@ -5016,3 +5016,142 @@ PAIR — a different job on a different surface, and out of scope.
 
 - **Cross-refs:** [[D-122]] (the item that introduced `Alt` free placement), [[D-155]] (where this
   was noticed, and which deliberately adds no binding), [[D-041]] (the group move).
+
+---
+
+## [~] D-157 — a blocked Export goes GREY and names nothing: the offending box is not marked, the only string that names the Issues panel is unreachable, and the tooltip is on a disabled button that cannot show one ⟨priority: high⟩
+
+**What:** the owner reports —
+
+> _"In the Designer, if two Live Source boxes overlap by even 1 px, or a box leaves the canvas, the
+> Export button goes dead and I cannot tell why."_
+
+Make the refusal **visible on the thing that is wrong**. Every element that is the subject of an
+error-severity preflight issue is marked on the canvas, and the blocked Export button answers with the
+real reason instead of going inert.
+
+🔴 **The RULE does not change.** `live-source-overlap` was deliberately promoted from `warning` to
+`error` on 2026-08-03 (`live-source-multibox` design.md §9, C8) and only `severity: 'error'` blocks an
+export; `live-source-off-frame` exists because `dropFullyOffFrameForExport` used to DELETE such an
+element silently. Neither is softened, and no "export anyway" escape is added. **The complaint is
+about the surface, not the policy.**
+
+### Why — the reason already exists in the data and dies on the way to the eye
+
+Almost nothing here needed computing. All of it was already true before this item:
+
+- **Every issue already carries the offender's id.** `liveSourceIssues`
+  (`apps/designer/src/renderer/state/live-source-preflight.ts:175`) pushes
+  `{ severity, code, message, elementId }`, and `label()` (`:170`) already puts the element's **name,
+  else its id**, into the message text. 14 of the 15 push sites set `elementId`; the one exception,
+  `look-second-group` (`:414`), is a template-level refusal with no element to point at.
+- **An overlap already files TWO issues, one per participant** — `[a, b]` and `[b, a]` at `:336-349`
+  (document scope) and `:387-400` (per-arrangement scope), each with its own `elementId`. So a
+  highlight driven off `elementId` marks **both** offenders for free.
+- **The messages are already good** and are not rewritten: _"Live Source "X" overlaps "Y". Each is
+  composited on its own CasparCG layer, so overlapping holes put two live sources over the same pixels
+  and which one shows is a z-order accident."_
+- **The issue list is already LIVE** — `useIssues` (`apps/designer/src/renderer/hooks/useIssues.ts:11`)
+  re-runs the preflight on every scene change, debounced 200 ms. A canvas mark driven off it clears the
+  instant the author fixes the geometry, with no new plumbing.
+
+### 🔴 What was measured about the SURFACE — the task-0 finding
+
+- **`IssuesPanel` has exactly ONE mount in the repo**: `StatusBar.tsx:117`, rendered `embedded` inside
+  a `Modal` gated on local `issuesOpen` state. It is never visible by default.
+- **The only control that can open it is the status-bar pill** (`StatusBar.tsx:57-73`), which is itself
+  conditionally rendered — it exists only while `issues.length > 0`. The door appears and disappears
+  with the problem rather than being a stable place an author learns to look. It sits in the bottom-left
+  wearing the **same `s.pill` class** as the inert fps / duration / resolution chips beside it,
+  differing only by an inline colour.
+- **`IssuesPanel`'s own non-embedded branch (`IssuesPanel.tsx:71-82`, the bordered "ISSUES" section) is
+  DEAD CODE** — no caller passes anything but `embedded`. ⚠ `live-source.spec.ts:57` still carries a
+  comment asserting that a sidebar Issues panel exists; it does not.
+- **Click distance: 1 click to READ the message, 2 to reach the box — and never both at once.**
+  Clicking an issue row selects the element **and closes the modal** (`IssuesPanel.tsx:92-97` +
+  `StatusBar.tsx:117`'s `onPick`), so the author can never see the explanation and the offending box on
+  screen together.
+- **`!hasComp` is ORed into the same boolean** (`CompositionActionBar.tsx:41`), so with no composition
+  active the Export button is grey with **no issues at all** — hence no pill, hence no explanation
+  reachable by any number of clicks.
+
+### 🔴 And the two strings that were supposed to explain it cannot appear
+
+1. **The `window.alert` is unreachable.** `CompositionActionBar.tsx:59` and `:69` say
+   `Export blocked: N validation error(s) in Issues panel.` — the only text in the app that names the
+   Issues panel. But `errorCount > 0` is what sets `disabled` on the same buttons in the same render
+   (`:41`, `:101`, `:116`), so `onClick` can never fire while the alert's condition holds. **It reads
+   as coverage and is dead.**
+2. **The tooltip cannot render either.** `title="Resolve validation errors first"` (`:104`, `:120`)
+   sits on a **natively disabled** `<button>` — browsers suppress `title` tooltips on disabled form
+   controls, and the app's own `InputTooltip` resolves off `pointerover`, which disabled controls do
+   not dispatch. Even if it did show, it names no count, no element and no destination.
+
+⇒ **This is the pattern this repo has already named three times, verbatim: [[B-141]], [[B-143]] and
+[[B-144]] — _"the system knows something and does not say it"._** [[B-146]] states the cost:
+_"A control that silently does nothing is the worst of the three outcomes."_ No new label is minted.
+
+### The decision on the Export button — option (b), and the reason is measurable
+
+The two candidates were (a) keep it disabled and enrich the tooltip, or (b) stop disabling it and
+answer the click with the real refusal.
+
+🔴 **(a) is not implementable on this control.** Its entire delivery mechanism is a `title` on a
+disabled button, which — as measured above — the browser suppresses and the app's own tooltip cannot
+see. Enriching a string that never renders would reproduce exactly the defect this item exists to
+remove, one layer up.
+
+**DECIDED: (b).** The error-blocked buttons stay visibly refused (`aria-disabled="true"`, so assistive
+technology still hears "unavailable") but remain clickable, and the click:
+
+- **opens the Issues panel** — the one-click route from the button the author actually pressed to the
+  full message, and
+- **selects the offending elements**, so the canvas marks are the thing under the cursor.
+
+⚠ The refusal is delivered by opening the panel rather than by a toast, deliberately: `showNotice` is a
+5-second transient and [[B-173]] already records that designed refusal sentences need longer than that.
+A short notice names the count and the first offender; the panel holds the full text for as long as the
+author wants it.
+
+⚠ **`!hasComp` keeps a genuinely `disabled` button** — there is no composition to export and no issue
+to explain, so there is nothing for a click to say.
+
+**Acceptance** — each bullet is written to become one OpenSpec `#### Scenario`:
+
+- WHEN an element is the subject of an ERROR-severity preflight issue THEN it is marked on the canvas
+  with the design system's `danger` treatment, whether or not it is selected
+- WHEN two Live Sources overlap THEN **BOTH** participants are marked, not just one
+- WHEN the author fixes the geometry THEN the marks clear without any further action
+- WHEN a box is marked THEN the mark carries a NON-CHROMATIC signal too — an icon badge and an
+  accessible description naming the problem — so colour is not the only channel
+- WHEN the Export is blocked by validation errors THEN the button is NOT inert: clicking it opens the
+  Issues panel and selects the offenders, and the refusal names the count and the first offender
+- WHEN the Export is blocked THEN no unreachable string remains in the component
+- WHEN there is no composition open THEN Export is genuinely disabled and says so, since there is
+  nothing to explain
+- WHEN a composition has no error-severity issues THEN nothing is marked and Export is live
+
+### Notes
+
+- **Priority `high`** because the author cannot proceed and nothing on screen says why — the same
+  standard [[D-154]] was rated at (_"the owner could not author, and nothing on screen said why"_).
+- **The mark is a DESIGNER-SIDE overlay, not a change to the rendered plate.** The plate's visible box
+  on the canvas is painted inside the preview iframe by `@cg/template-runtime`; a mark added there
+  could not be asserted in the same test as the rule, because the two live in different workspaces with
+  different DOM environments. As a designer overlay in the `canvas-surface` frame box, rule and surface
+  are one test — which is what this item's tests do.
+- **The colour is the existing `danger` token** (`renderer/theme.ts:34`, `#F87171`), whose own comment
+  says _"red is reserved for real errors"_. Nothing on the canvas used it before: the canvas's other
+  chromatic signals are the sky selection outline, the snap guides and the marker colours. ⚠ The
+  status-bar pill uses an inline `#fda4af` rose, which `theme.ts:8` says is _"sacred to the Runtime"_ —
+  an existing inconsistency, not touched here.
+- ⚠ **A second, separate defect was found while reading the geometry and is filed as [[B-180]]** — the
+  overlap rule is violable INVISIBLY. Do not fold it in.
+- **Cross-refs:** [[B-141]] / [[B-143]] / [[B-144]] / [[B-146]] (the named pattern); [[B-173]] (the
+  toast's life, which is why the refusal is not a toast); [[D-154]] (canvas chrome drawn where the
+  element is not); [[B-180]] (the invisible-overlap defect); [[D-137]] (the Live Source element and the
+  overlap rule).
+- The number was verified free by the heading sweep immediately before this heading was written:
+  highest `D-` heading was **`D-156`**; `D-001` … `D-156` contiguous with no gaps; a whole-tree
+  `git grep` for `D-157` returned only [b-number-registry.md](b-number-registry.md)'s own "next free"
+  pointers, never a heading; `D-158` returned nothing at all.

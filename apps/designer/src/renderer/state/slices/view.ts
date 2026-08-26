@@ -34,6 +34,21 @@ export const viewSlice = {
   },
 
   /**
+   * ⭐ `D-157` — **open or close the Issues panel, from anywhere.**
+   *
+   * 🔴 This was local `useState` inside `StatusBar`, which made the status-bar pill the ONLY
+   * thing in the app that could open the panel — and that pill is itself rendered only while
+   * `issues.length > 0`. So the door to the explanation appeared and disappeared with the
+   * problem, and the control that was actually REFUSED (Export) had no way to point at it. The
+   * unreachable `window.alert` naming "Issues panel" was reaching for exactly this seam.
+   *
+   * Session-only editor state, never the scene, like every other flag in this slice.
+   */
+  setIssuesOpen(open: boolean): void {
+    if (current.issuesOpen !== open) set({ issuesOpen: open });
+  },
+
+  /**
    * D-122 — mirror the canvas's live zoom into the store so the keyboard nudge path can
    * gate pixel snapping on it (the pointer drag already receives the zoom directly). No-op
    * when unchanged so it never churns subscribers.

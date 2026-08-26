@@ -2587,3 +2587,110 @@ that only asserts the final committed cell will pass against the current code.
   whichever ships second must not re-derive the other's decision), [[D-153]] (the legibility half of
   the same surface), [[B-149]] (the other place a plate's rendered rect and its authored rect came
   apart, that one on air).
+
+---
+
+## [ ] B-180 — the Live Source overlap rule is violable INVISIBLY: a sub-ULP residue blocks the Export, the Inspector prints it as a clean integer, and no reachable drag removes it ⟨priority: high⟩
+
+**What:** two Live Source plates can overlap by an amount the author **cannot see, cannot read and
+cannot drag away** — and the export is blocked for it. Found while building [[D-157]] (which marks the
+offending box on the canvas): the mark would then point at two boxes that look perfectly fine and are
+perfectly fine to every surface the author has.
+
+**Why it is not theoretical:** the overlap predicate is a strict `<` with **no epsilon anywhere**, over
+**pure floating-point** rects, and three ordinary authoring actions manufacture residue the author
+never typed.
+
+### The three parts, each measured
+
+**1. The predicate fires on ANY positive area, including 1e-17 px.** All three copies use a strict
+inequality and none has a tolerance (`git grep` for `EPSILON` / `1e-6` / `tolerance` across the files
+returns nothing):
+
+```ts
+// live-source-preflight.ts:158 — "Do two AABBs share any area? Edge-touching is NOT an overlap"
+function overlaps(a: Aabb, b: Aabb): boolean {
+  return a.minX < b.maxX && b.minX < a.maxX && a.minY < b.maxY && b.minY < a.maxY;
+}
+// live-source-preflight.ts:545 — the same rule on LiveSourceRects
+```
+
+⚠ The strict `<` is **correct** and is not the defect: edge-touching must not be an overlap, or flush
+abutment would be unbuildable. The defect is that the numbers reaching it carry residue.
+
+**2. The rects are floats, and three generators produce residue from all-integer authored values.**
+`Vec2Schema` / `SizeSchema` are bare `z.number()` — unlike `ResolutionSchema`, which is `.int()`. The
+residue comes from ordinary division:
+
+- a composition instance's `preScale = size.w / comp.resolution.width`;
+- the arrangement flattener's `fitAffine` (`sx = to.width / from.width`);
+- the Inspector's scale field, `fromPercent = n / 100`.
+
+The class in one line: `0.1 + 0.2 === 0.30000000000000004`, so a box whose right edge is computed as a
+sum landing there **overlaps** a neighbour starting at `0.3` by `5.55e-17` px. That is 14 orders of
+magnitude below one pixel at 800 % zoom.
+
+**3. 🔴 Nothing the author can look at will show it, and nothing they can do will remove it.**
+
+- **The Inspector rounds it away.** `formatNumberDisplay` (`controls.tsx:449`) is
+  `Number.isInteger(v) ? String(v) : Number(v.toFixed(2)).toString()`, and `position.x/y` + `size.w/h`
+  use an identity `toDisplay`. A stored `124.00000000000001` is printed **`124`**. The only numeric
+  surface the author has agrees with them that the box is where they put it.
+- **The drag does not round.** `pixelSnapActive` (`geometry.ts:651`) gates whole-pixel snapping on
+  `pixelGridVisible(zoom)` — i.e. **800 % zoom and above**. At every ordinary zoom `commitAnimatable`
+  receives a raw float.
+- **And dragging cannot land on zero residue**, because drag positions are quantised in `1/scale`
+  steps: no reachable pointer position makes the difference exactly `0`.
+- **Every existing boundary test is blind to it.** Three tests pin "exactly touching is not an
+  overlap", and each runs on exactly-representable arithmetic — `preScale` 1, scale 1, anchor 0,
+  integer positions — so none can produce residue and none can see this class.
+
+### 🔴 NO TOLERANCE IS ADDED HERE, and that is deliberate
+
+An epsilon on a rule whose whole justification is _"two live sources over the same pixels and which one
+shows is a z-order accident"_ is a decision with on-air consequences, and it is the owner's. It also
+would not be a small decision: the same predicate governs whether two plates may sit **flush**, which is
+exactly the gesture [[B-181]] is about. Pick the wrong epsilon and flush abutment becomes an overlap, or
+a genuine 1-px collision stops being one.
+
+**The candidate fixes, none chosen here:**
+
+- **(a) QUANTISE AT THE SOURCE** — round committed geometry to whole scene pixels on every drag/resize,
+  not only at 800 % zoom. Removes the residue rather than tolerating it, and matches what the Inspector
+  already claims is stored. ⚠ Changes what every drag writes, for every element kind.
+- **(b) QUANTISE AT THE PREDICATE** — compare rounded rects inside the preflight only. Narrow and safe
+  for authoring, but leaves the scene carrying values the Inspector misreports, and the exported rect
+  still differs from what was shown.
+- **(c) AN EPSILON IN THE PREDICATE** — smallest change, and the one that most needs the owner's call,
+  because the number chosen IS the product decision about how close two holes may sit.
+
+**Acceptance:**
+
+- WHEN two plates are authored at values that produce sub-pixel residue THEN either the residue does not
+  reach the rect (a), or the rule does not fire on it (b/c) — by whichever the owner picks
+- WHEN two plates genuinely overlap by 1 px THEN the rule still fires — the fix must not blunt the real
+  case, which is [[D-137]]'s reason for the rule
+- WHEN two plates are authored exactly flush THEN there is still no overlap error
+- WHEN the Inspector prints a geometry value THEN it does not disagree with what is stored, or it is
+  honest that it is rounding
+
+### Notes
+
+- **Priority `high` because it BLOCKS the author with no way out.** The export is refused, the Issues
+  panel names two boxes that look correct, and [[D-157]]'s new canvas mark will now draw a red outline
+  around geometry the author cannot fault. A refusal nobody can act on is worse than a silent one.
+- ⚠ **Found by reading, not by an owner report** — the owner's report was "1 px triggers it", which is
+  the rule working as designed. This is the case one order of magnitude further down, where the rule
+  works as designed and the author cannot tell.
+- **Connected to [[B-181]]**: with the snap fixed to land on the box EDGE, an author who snaps two
+  plates flush gets an exactly-equal coordinate and no residue. So the snap fix makes the good path
+  reliable — it does not make this case unreachable, because free (unsnapped, or `Shift`-held)
+  placement still commits raw floats.
+- **Cross-refs:** [[D-157]] (the canvas mark that would point at it); [[D-137]] (the overlap rule and
+  why it is an error); [[B-181]] (the snap that makes exact abutment reachable); [[D-122]] (the
+  pixel-grid snapping whose 800 % gate is why the drag does not round).
+- The number was verified free by the heading sweep immediately before this heading was written:
+  highest `B-` heading was **`B-179`**; the duplicate audit printed exactly `B-056` and `B-080` and
+  nothing else; a whole-tree `git grep` for `B-180` returned only
+  [b-number-registry.md](b-number-registry.md)'s own "next free" pointers, never a heading; `B-181`
+  and `B-182` returned nothing at all.

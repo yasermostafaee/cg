@@ -258,6 +258,76 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(issueRows(app, /overlaps/)).toHaveCount(2);
   });
 
+  /**
+   * ⭐ `D-157` — the refusal is VISIBLE on the boxes that cause it, and the dead Export button
+   * answers instead of shrugging. Maps
+   * `openspec/changes/designer-export-block-visible/specs/designer-live-source/`.
+   */
+  test('D-157 — overlapping boxes are MARKED on the canvas, and the marks clear when fixed', async ({
+    app,
+  }) => {
+    await app.newProject('ExportBlockMarks');
+    await app.addLiveSource({ x: 200, y: 160 });
+    await app.addLiveSource({ x: 230, y: 190 });
+    await expect(holes(app)).toHaveCount(2);
+
+    // 🔴 BOTH participants are marked — the whole point. One mark would name a culprit where
+    // there is a pair. The marks are a designer overlay, so they are plain page locators.
+    const marks = app.page.locator('[data-testid^="canvas-error-mark-"]');
+    await expect(marks).toHaveCount(2);
+
+    // …and the mark carries the reason non-chromatically, so colour is not the only channel.
+    await expect(marks.first().getByRole('img')).toHaveAttribute('aria-label', /overlaps/);
+
+    // Remove the second plate — the marks clear with no further action from the author, because
+    // they are driven by the live preflight rather than by anything the author must re-press.
+    await app.undo();
+    await expect(holes(app)).toHaveCount(1);
+    await expect(marks).toHaveCount(0);
+  });
+
+  test('D-157 — a blocked Export names the offender and opens the Issues panel', async ({
+    app,
+  }) => {
+    await app.newProject('ExportBlockRefusal');
+    await app.addLiveSource({ x: 200, y: 160 });
+    await app.addLiveSource({ x: 230, y: 190 });
+
+    const exportBtn = app.page.getByRole('button', { name: 'Export .vcg' });
+    // 🔴 NOT inert. A natively disabled button can show no tooltip at all — which is how the old
+    // generic sentence managed to be both useless and invisible — and `aria-disabled` would tell
+    // a screen-reader user not to press the one control that explains the problem.
+    await expect(exportBtn).toBeEnabled();
+    await expect(exportBtn).not.toHaveAttribute('aria-disabled', 'true');
+    // The "blocked" appearance is a data attribute, so styling never depends on a lie to AT.
+    await expect(exportBtn).toHaveAttribute('data-export-blocked', 'errors');
+    // The tooltip now carries the COUNT and the FIRST OFFENDER, not "Resolve validation errors".
+    // ⚠ The offender is named exactly as the Issues panel names it — the element's NAME, via the
+    // preflight's own `label()`. Lifting it from the message rather than re-deriving it is what
+    // stops the tooltip naming a different box from the panel it points at.
+    await expect(exportBtn).toHaveAttribute('title', /Export blocked — \d+ error/);
+    await expect(exportBtn).toHaveAttribute('title', /Live Source/);
+    await expect(exportBtn).not.toHaveAttribute('title', 'Resolve validation errors first');
+
+    // ONE action from the control the author pressed to the full message.
+    await exportBtn.click();
+    await expect(app.page.getByRole('dialog', { name: 'Issues' })).toBeVisible();
+    await expect(app.page.getByText(/overlaps/).first()).toBeVisible();
+  });
+
+  test('D-157 — the POSITIVE CONTROL: a clean composition marks nothing and Export is live', async ({
+    app,
+  }) => {
+    await app.newProject('ExportBlockClean');
+    await app.addLiveSource({ x: 120, y: 120 });
+
+    await expect(app.page.locator('[data-testid^="canvas-error-mark-"]')).toHaveCount(0);
+    const exportBtn = app.page.getByRole('button', { name: 'Export .vcg' });
+    await expect(exportBtn).toBeEnabled();
+    await expect(exportBtn).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(errorPill(app)).toHaveCount(0);
+  });
+
   test('the aspect is chosen by NAME, and “not specified” is a real third state', async ({
     app,
   }) => {

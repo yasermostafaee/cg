@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { ZoomIn, ZoomOut } from 'lucide-react';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
@@ -24,11 +24,17 @@ const ZOOM_MAX = 20;
 export function StatusBar({ scene, issues }: Props): JSX.Element {
   const timelineZoom = useDesignerSelector((s) => s.timelineZoom);
   const errorCount = issues.filter((i) => i.severity === 'error').length;
-  const [issuesOpen, setIssuesOpen] = useState(false);
+  /*
+    `D-157` — LIFTED TO THE STORE. The pill below used to be the only thing in the app that could
+    open this panel, and it is itself rendered only while `issues.length > 0` — so the door to the
+    explanation appeared and disappeared with the problem, and the control that was actually
+    REFUSED (Export, in the opposite corner of the window) had no way to point at it.
+  */
+  const issuesOpen = useDesignerSelector((st) => st.issuesOpen);
 
   // Nothing to show once the issues clear — auto-close the modal.
   useEffect(() => {
-    if (issues.length === 0) setIssuesOpen(false);
+    if (issues.length === 0) designerStore.setIssuesOpen(false);
   }, [issues.length]);
 
   // Replace the (now-unused) template-type chip with the frame rate + total
@@ -57,7 +63,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
       {issues.length > 0 && (
         <Button
           variant="bare"
-          onClick={() => setIssuesOpen(true)}
+          onClick={() => designerStore.setIssuesOpen(true)}
           aria-label="Show issues"
           title="Show issues"
           className={s.pill}
@@ -109,12 +115,14 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
       {issuesOpen && (
         <Modal
           title="Issues"
-          onClose={() => setIssuesOpen(false)}
+          onClose={() => designerStore.setIssuesOpen(false)}
           width="min(560px, 92vw)"
           minBodyHeight={220}
-          footer={<ModalButton onClick={() => setIssuesOpen(false)}>Close</ModalButton>}
+          footer={
+            <ModalButton onClick={() => designerStore.setIssuesOpen(false)}>Close</ModalButton>
+          }
         >
-          <IssuesPanel issues={issues} embedded onPick={() => setIssuesOpen(false)} />
+          <IssuesPanel issues={issues} embedded onPick={() => designerStore.setIssuesOpen(false)} />
         </Modal>
       )}
     </footer>

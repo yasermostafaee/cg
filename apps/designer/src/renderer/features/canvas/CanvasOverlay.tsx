@@ -7,7 +7,8 @@ import type {
   Scene,
   TextElement,
 } from '@cg/shared-schema';
-import type { AssetMeta } from '@cg/shared-ipc';
+import type { AssetMeta, ExportIssue } from '@cg/shared-ipc';
+import { ErrorMarkOverlay } from './ErrorMarkOverlay.js';
 import {
   importLottie,
   lottieClipMeta,
@@ -283,6 +284,8 @@ interface Props {
   currentFrame: number;
   /** Hand-tool drag delta callback (deltaX, deltaY in scene pixels). */
   onPan?: (dx: number, dy: number) => void;
+  /** `D-157` — live preflight issues, so the canvas MARKS what is blocking the export. */
+  issues?: readonly ExportIssue[];
 }
 
 /**
@@ -305,6 +308,7 @@ export function CanvasOverlay({
   frameOffset,
   currentFrame,
   onPan,
+  issues = [],
 }: Props): JSX.Element {
   // D-124 — the path in point-edit mode (anchors/handles shown, gizmo hidden).
   // Self-subscribed (like TransformSection's currentFrame) rather than drilled.
@@ -782,6 +786,11 @@ export function CanvasOverlay({
       >
         {/* A′'s cell overlay is DISABLED, not deleted (owner, 2026-08-19) — under LOOKS
             there are no cells to draw; `tasks.md` §1b P2.DEL deletes the component. */}
+        {/* ⭐ `D-157` — MARK the boxes that are blocking the export. Inside the frame box so
+            the marks track scene coords like every other overlay, and BEFORE the gizmo so a
+            selected offender's resize handles stay on top: the author's next move is to drag
+            this box apart, and the mark must never be in the way of doing so. */}
+        <ErrorMarkOverlay scene={scene} issues={issues} scale={scale} />
         {/* B-037 — no gizmo while the pen is armed: addElement auto-selects the
             in-progress draft, and the gizmo's corner/edge/rotation hit-zones sit
             exactly where pen clicks go (the first anchor is always on the draft's
