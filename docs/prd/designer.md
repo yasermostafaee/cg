@@ -3149,7 +3149,7 @@ The 5 templates (owner-refreshed 2026-07-12; supersedes the original list):
 
 **Notes:** Export/packaging change — the Designer `.vcg` writer (`apps/designer/src/platform/Exporter.ts`, which already validates `font-no-path` and collects `fontDeps`) supplies the font bytes to the existing `@cg/vcg-format` `pack()` `fonts` seam; the loader/runtime side resolves the packaged `fonts/` paths (mirror how packaged image assets resolve, and how the single-file HTML inlines fonts). Mind package size (prefer woff2) and the licensed-font edge. Spec: `## ADDED`/`## MODIFIED` on the export capability (`.vcg` bundles fonts). Tests: an exporter test (a non-system-font template yields a `.vcg` containing the font bytes + CSS reference); a measurement test/fixture asserting crawl width/duration is font-correct without the system font; the warning-suppression case.
 
-## [x] D-122 — snap dragging to integer scene pixels while the pixel grid is active ⟨priority: medium⟩ — merged (#264, `19eee69`), archived (`openspec/changes/archive/2026-07-08-add-pixel-snap-drag`): full pixel snap on drag + first-nudge-to-integer at grid zoom (direction-aware), Alt bypass, Snapping-preference master switch; Inspector values free and below-threshold unchanged. Owner-verified on the affected machine. Resize-handle snapping deferred (follow-up, noted in the change's `design.md`)
+## [x] D-122 — snap dragging to integer scene pixels while the pixel grid is active ⟨priority: medium⟩ — merged (#264, `19eee69`), archived (`openspec/changes/archive/2026-07-08-add-pixel-snap-drag`): full pixel snap on drag + first-nudge-to-integer at grid zoom (direction-aware), Alt bypass, Snapping-preference master switch; Inspector values free and below-threshold unchanged. Owner-verified on the affected machine. Resize-handle snapping deferred (follow-up, noted in the change's `design.md`). ⭐ **Its 800 % THRESHOLD is superseded by [[B-180]] (2026-08-26)** — a drag/resize now commits whole scene pixels at EVERY zoom, and resize snapping ships there too; the `Alt` bypass and free Inspector values are unchanged (see the supersession block below)
 
 **What:** At pixel-grid zoom (zoom ≥ the 800% grid threshold), make drag placement land on INTEGER scene coordinates, and make the first arrow-nudge of a fractional coordinate land on the next integer in the nudge direction. Surfaced by the owner during B-042 verification (2026-07-07): dragging writes continuous FRACTIONAL scene X/Y, so at pixel-grid zoom a drag can park an element between two pixels — the selection border honestly shows it sitting between two grid lines. This is a separate product gap from B-042 (which is only about grid↔content ALIGNMENT at integer coords), so it is filed on its own.
 
@@ -3157,13 +3157,39 @@ The 5 templates (owner-refreshed 2026-07-12; supersedes the original list):
 
 **Decision (owner, 2026-07-07 — decided, not pending): full snap at pixel-grid zoom.** At zoom ≥ the grid threshold: (i) dragging lands on integer scene coords; (ii) the FIRST nudge of a fractional coordinate moves it to the next integer in the nudge direction (x=0.68 → right → 1, left → 0), after which nudges step by whole pixels — accelerated nudge variants follow the same rule; (iii) holding **Alt** during a drag or nudge BYPASSES the snap (free sub-pixel placement / relative nudge). Values typed in the Inspector stay free either way. Below the grid threshold, today's behavior is unchanged.
 
+### ⭐ SUPERSEDED IN PART by [[B-180]] (2026-08-26) — the THRESHOLD, not the rule
+
+**What changed:** the sentence above — _"Below the grid threshold, today's behavior is unchanged"_ —
+and the last acceptance bullet no longer describe shipped behaviour. A drag or resize now commits
+whole scene pixels at **every** zoom, and resize-handle snapping (deferred by this item) ships with
+it. Everything else this item decided is intact and re-asserted by [[B-180]]'s own tests: **`Alt` is
+still the momentary bypass** — now the only way to place sub-pixel by drag — and **values typed in
+the Inspector are still stored exactly as typed, at any zoom.**
+
+**Why the scope was wrong, in one line:** this item gated on the pixel GRID because the grid is what
+the author is aiming at, which is sound reasoning about intent and silent about arithmetic. Below the
+threshold a drag committed `startPos + clientDelta / scale` — a division by an arbitrary zoom — so
+every ordinary drag wrote a coordinate with a fractional tail the Inspector then rounded away. That
+is [[B-180]]'s first named generator, and it blocked the Export over geometry the author could
+neither see nor correct.
+
+⚠ **The nudge is untouched.** [[B-180]] deliberately did NOT widen `pixelSnapActive`, because that
+predicate also gates the arrow-nudge's first-snap and sits in an `else if` chain where it supersedes
+smart-guide snapping entirely — widening it would have deleted guide snapping from the Designer with
+every test still green. The new gate (`quantiseDragCommit`) runs AFTER the guides have had their say
+and quantises only the axes a guide did not claim.
+
+⚠ **This entry is amended in place; the archived change directory
+(`openspec/changes/archive/2026-07-08-add-pixel-snap-drag`) is a dated record of what shipped on
+2026-07-08 and is deliberately NOT rewritten.**
+
 **Acceptance:**
 
 - WHEN the zoom is ≥ the pixel-grid threshold and an element is dragged THEN its committed position is integer scene X/Y (the drag lands ON grid lines), unless Alt is held
 - WHEN an element sits at a fractional coordinate (e.g. x=0.68) at grid zoom and an arrow nudge fires THEN the coordinate moves to the NEXT integer in the nudge direction (right → 1, left → 0), and subsequent nudges step by whole pixels; accelerated nudge variants obey the same first-snap rule
 - WHEN Alt is held during a drag or nudge at grid zoom THEN the snap is bypassed (free sub-pixel drag / relative ±1 nudge preserving the fraction)
 - WHEN a value is typed in the Inspector THEN it is stored as typed (fractional allowed), at any zoom
-- WHEN the zoom is below the grid threshold THEN drag and nudge behave exactly as today (no new snapping)
+- ~~WHEN the zoom is below the grid threshold THEN drag and nudge behave exactly as today (no new snapping)~~ — **superseded by [[B-180]]:** below the threshold the NUDGE still behaves exactly as this bullet says, but a DRAG or RESIZE now commits whole scene pixels there too
 
 **Notes:** Queued, NOT scheduled — implementation is a later change, not part of B-042 (do not fold into `fix-pixel-grid-content-alignment`). Touch points when picked up: the drag-commit path and the arrow-nudge handler in the canvas feature (`CanvasOverlay`/group-move + the D-073 nudge), gated on `pixelGridVisible(zoom)`; Alt-bypass must not collide with existing Alt gestures; multi-select drags snap the anchor and preserve relative offsets (B-027 clamp still applies). Spec: extend the canvas-viewport (or a pointer-editing) capability with a snapping requirement mirroring the decision above.
 

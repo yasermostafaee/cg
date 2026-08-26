@@ -2590,7 +2590,7 @@ that only asserts the final committed cell will pass against the current code.
 
 ---
 
-## [ ] B-180 — the Live Source overlap rule is violable INVISIBLY: a sub-ULP residue blocks the Export, the Inspector prints it as a clean integer, and no reachable drag removes it ⟨priority: high⟩
+## [x] B-180 — the Live Source overlap rule is violable INVISIBLY: a sub-ULP residue blocks the Export, the Inspector prints it as a clean integer, and no reachable drag removes it ⟨priority: high⟩ — fixed on `dev` (`openspec/changes/fix-overlap-float-residue`): the owner chose **(a) + a comparison-side guard**; a drag/resize now commits whole scene pixels at EVERY zoom (`Alt` bypass preserved, Inspector-typed values free), and one ULP-relative `lessThanBeyondNoise` guards the inputs of all three predicate copies with the strict `<` unchanged. Inspector display deliberately left rounding — see the decision below
 
 **What:** two Live Source plates can overlap by an amount the author **cannot see, cannot read and
 cannot drag away** — and the export is blocked for it. Found while building [[D-157]] (which marks the
@@ -2664,6 +2664,69 @@ a genuine 1-px collision stops being one.
 - **(c) AN EPSILON IN THE PREDICATE** — smallest change, and the one that most needs the owner's call,
   because the number chosen IS the product decision about how close two holes may sit.
 
+### ⭐ THE OWNER'S DECISION (2026-08-26) — (a), **plus** a comparison-side guard
+
+The owner chose **(a)**; on being shown that (a) alone cannot work, he chose **(a) plus a guard at the
+comparison**. Both halves shipped in `openspec/changes/fix-overlap-float-residue`.
+
+**🔴 Why (a) alone was insufficient — the reason is recorded here so nobody re-derives it.** All three
+generators listed above are **DIVISIONS, not drags**, and two of them run every time the scene is
+READ, long after the author's value is stored:
+
+| generator                                                   | when it runs | reachable by rounding the drag? |
+| ----------------------------------------------------------- | ------------ | ------------------------------- |
+| `startPos + clientDelta / scale` (the drag commit)          | at commit    | **yes — (a) fixes this**        |
+| `preScale = size.w / comp.resolution.width` (the flattener) | every read   | no                              |
+| `fitAffine`'s `sx = to.width / from.width` (arrangements)   | every read   | no                              |
+
+A perfectly integer authored rect times `1234 / 1920` still carries residue. The number reaching the
+predicate is always the product of a division, so **no amount of upstream rounding cleans it.**
+
+**Half 1 — quantise at the source, at EVERY zoom.** A drag or resize commits whole scene pixels
+regardless of zoom, superseding [[D-122]]'s 800 % threshold (its PRD entry is amended in place; its
+archived change directory is a dated record and was not rewritten). `Alt` is preserved as the
+momentary bypass and is now the ONLY way to place sub-pixel by drag; `Shift` is the resize gesture's
+bypass; Inspector-typed values are still stored exactly as typed. Only the axes a smart guide did NOT
+claim are quantised — a guide has landed the box on a real target, which inside a scaled instance is
+very often legitimately fractional.
+
+**Half 2 — a NOISE GUARD, and in the owner's own terms it is NOT a product tolerance.** One
+`lessThanBeyondNoise` in `@cg/shared-schema` is used by all three copies of the predicate. It is
+expressed in **ULPs relative to the magnitudes being compared** — `EPSILON · 8 · max(1, |a|, |b|)` —
+and never as an absolute pixel figure. That is the whole point of the owner's choice: a ULP-scaled
+guard is provably a **noise filter, not a product tolerance**, so **no on-air decision about how close
+two holes may sit is being made here.** It says only that two numbers the arithmetic cannot
+distinguish are not evidence of a collision. **The strict `<` is unchanged** — exactly touching is
+still not an overlap, so flush abutment stays buildable; only the inputs are guarded. A genuine
+`0.01` px overlap is ten orders of magnitude above the floor and still fires, asserted by test.
+
+**The measured fixture, by value.** Two plates abutting at exactly `x = 350` in their composition's
+units, inside an instance 1234 px wide of a 1920-wide composition, flatten to
+`a.maxX = 224.94791666666669` against `b.minX = 224.94791666666666` — a **`2.842170943040401e-14` px**
+"overlap" nobody authored, 13 orders of magnitude below one pixel. Pinned by value in
+`packages/shared-schema/tests/overlap-residue.test.ts`, beside the flattener that produces it.
+
+**Each of the three copies is proved end to end by a test that was measured to FAIL with that copy's
+guard reverted to a bare `<`.** Two earlier fixtures in this change passed either way and proved
+nothing — the traps are recorded in the change's `design.md` §5.
+
+### The fourth acceptance bullet (the Inspector) — DECIDED: no change
+
+`formatNumberDisplay` keeps rounding to 2 dp. **Half 1 stops the display ever having to lie about a
+new drag** (a drag now commits an integer, which it prints exactly); **half 2 removes the consequence**
+for residue already stored in an older project, and this item's complaint was precisely that the
+display CONTRADICTED a refusal — with the refusal gone the rounded reading describes a box that
+behaves exactly as it reads. Making it honest would be a **regression in this item's own scenario**:
+printing `124.00000000000001` in a narrow cell, for a box that is correct and now exports fine, turns
+invisible dust into visible alarm.
+
+🔴 **Verified, not assumed:** a rounded display is only harmless while the rounded TEXT cannot become
+the value. It cannot — `onChange` (real typing) is the only path that commits from the buffer, `onBlur`
+merely resyncs it, and Arrow up/down computes from the true value. Pinned by
+`apps/designer/tests/inspector-residue-display.dom.test.ts`, including a focus-then-blur that must
+commit nothing. **Nothing was filed separately**, because with that round-trip ruled out there is no
+residual defect.
+
 **Acceptance:**
 
 - WHEN two plates are authored at values that produce sub-pixel residue THEN either the residue does not
@@ -2682,10 +2745,16 @@ a genuine 1-px collision stops being one.
 - ⚠ **Found by reading, not by an owner report** — the owner's report was "1 px triggers it", which is
   the rule working as designed. This is the case one order of magnitude further down, where the rule
   works as designed and the author cannot tell.
-- **Connected to [[B-181]]**: with the snap fixed to land on the box EDGE, an author who snaps two
+- ~~**Connected to [[B-181]]**: with the snap fixed to land on the box EDGE, an author who snaps two
   plates flush gets an exactly-equal coordinate and no residue. So the snap fix makes the good path
   reliable — it does not make this case unreachable, because free (unsnapped, or `Shift`-held)
-  placement still commits raw floats.
+  placement still commits raw floats.~~
+  ⚠ **`B-181` DOES NOT EXIST** (2026-08-26). The number was reserved for the resize-snapping defect
+  (the `SNAP-EDGE-01` brief) and the item was never filed, so every `[[B-181]]` on this page is a
+  cross-reference to nothing — including the one in the Cross-refs line below. Recorded rather than
+  deleted, because the reservation is still the right number for that defect when someone files it.
+  **This fix did not depend on it:** the residue reaching the predicate comes from the flattener's
+  divisions, which no snapping change can remove, and half 2 is what handles them.
 - **Cross-refs:** [[D-157]] (the canvas mark that would point at it); [[D-137]] (the overlap rule and
   why it is an error); [[B-181]] (the snap that makes exact abutment reachable); [[D-122]] (the
   pixel-grid snapping whose 800 % gate is why the drag does not round).
