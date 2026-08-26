@@ -1564,3 +1564,48 @@ Worth recording because the brief asked for the pattern to be "named once": it a
 not say it"_ across `B-141`, `B-143` and `B-144`; `runtime.md:2492` calls it _"the same zero-reader
 shape as [[B-143]]'s `assumed` flag"_; `B-146:4120` states the cost — _"A control that silently does
 nothing is the worst of the three outcomes"_. `B-178` extends that set rather than starting one.
+
+## 2026-08-27 — the resize-snap defect and its audit fallout (`B-181`, `B-182`), from session SNAP-EDGE-01 — and the `B-180` hole this found
+
+**Claimed:** `B-181` (`bugs-designer.md`) — resize snapping computed on the pointer rather than the
+box edge, exposed by the aspect lock. `B-182` (`bugs-designer.md`) — the eight remaining holes in
+`B-180`'s whole-pixel commit.
+
+**Derivation, by this file's own documented method** (headings are truth; there is no pointer):
+
+- highest `B-` heading in local `docs/prd/` (README excluded, `{3}`-anchored): **`B-180`**;
+- widened across every ref — `dev` and `origin/dev` → `B-180`; `main`, `origin/main`,
+  `origin/HEAD` → `B-132`; `ai-stale` → `B-137`; `design/live-source-multibox` → `B-131`;
+- `git stash list` empty; `git worktree list --porcelain` → this checkout only;
+- duplicate audit printed exactly `B-056` and `B-080`, nothing else; `B-001` … `B-180` contiguous;
+- `B-181` returned six hits tree-wide, **all prose cross-references inside `B-180`**, never a
+  heading — this file's documented forward-reference false-positive class. `B-182` returned zero.
+
+⇒ next free was `B-181`; `B-182` taken immediately after it in the same session.
+
+### 🔴 THE SIXTH PHANTOM — and the first one this registry can be said to have invited
+
+`B-180` (filed 2026-08-26) cites `[[B-181]]` **six times as though it were an existing item**,
+because the brief that commissioned `B-180` said the NEXT session would file the resize defect and
+take that number. That session (`SNAP-EDGE-01`) was queued behind two others and **skipped**, so for
+one day a closed `[x]` item pointed six times at nothing.
+
+The prior session did the right thing as far as it could: it detected the dangle, wrote
+"⚠ `B-181` DOES NOT EXIST" into `B-180`, and left the links rather than deleting them. **That note
+is now itself stale and has been corrected in place** — the item exists and every link resolves.
+
+**The lesson is the one this file already states and it is worth restating with a sixth instance:**
+_reading the pointer is not claiming it, and writing the pointer is not reserving it._ A brief that
+says "the next session will take `B-181`" has reserved nothing. **Write forward-references as a
+DESCRIPTION** ("the resize-snapping defect, unfiled") **and never as a number**, because the number
+only becomes true if a session that may never run does what the brief expected.
+
+### ⚠ `B-180` never got a claim section here, and this one records it retroactively
+
+This file's last dated section before today was 2026-08-25 (`B-178`, `B-179`), closing with
+"Next free: `B-180`, `R-059` and `D-157`". `B-180` was then filed at `bugs-designer.md:2593` with a
+provenance bullet written **into the bug item** and no dated claim appended here. Per this file's
+own doctrine that is harmless to any derivation — the headings are the authority and the retirement
+note prescribes re-deriving from them — but the append-only claim log had a hole, and a reader
+auditing the log rather than the headings would have found `B-180` unexplained. **Recorded here so
+the log is complete: `B-180` was claimed 2026-08-26 by session `OVERLAP-RESIDUE-01`.**

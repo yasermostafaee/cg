@@ -2590,7 +2590,7 @@ that only asserts the final committed cell will pass against the current code.
 
 ---
 
-## [x] B-180 — the Live Source overlap rule is violable INVISIBLY: a sub-ULP residue blocks the Export, the Inspector prints it as a clean integer, and no reachable drag removes it ⟨priority: high⟩ — fixed on `dev` (`openspec/changes/fix-overlap-float-residue`): the owner chose **(a) + a comparison-side guard**; a drag/resize now commits whole scene pixels at EVERY zoom (`Alt` bypass preserved, Inspector-typed values free), and one ULP-relative `lessThanBeyondNoise` guards the inputs of all three predicate copies with the strict `<` unchanged. Inspector display deliberately left rounding — see the decision below
+## [x] B-180 — the Live Source overlap rule is violable INVISIBLY: a sub-ULP residue blocks the Export, the Inspector prints it as a clean integer, and no reachable drag removes it ⟨priority: high⟩ — fixed on `dev` (`openspec/changes/fix-overlap-float-residue`): the owner chose **(a) + a comparison-side guard**; a drag/resize now QUANTISES ITS POINTER to a whole scene pixel at EVERY zoom (`Alt` bypass preserved, Inspector-typed values free), and one ULP-relative `lessThanBeyondNoise` guards the inputs of all three predicate copies with the strict `<` unchanged. Inspector display deliberately left rounding — see the decision below. ⚠ This heading first said "commits whole scene pixels", which is stronger than what was built; corrected 2026-08-27 with the exceptions enumerated in the body
 
 **What:** two Live Source plates can overlap by an amount the author **cannot see, cannot read and
 cannot drag away** — and the export is blocked for it. Found while building [[D-157]] (which marks the
@@ -2682,13 +2682,50 @@ READ, long after the author's value is stored:
 A perfectly integer authored rect times `1234 / 1920` still carries residue. The number reaching the
 predicate is always the product of a division, so **no amount of upstream rounding cleans it.**
 
-**Half 1 — quantise at the source, at EVERY zoom.** A drag or resize commits whole scene pixels
-regardless of zoom, superseding [[D-122]]'s 800 % threshold (its PRD entry is amended in place; its
-archived change directory is a dated record and was not rewritten). `Alt` is preserved as the
-momentary bypass and is now the ONLY way to place sub-pixel by drag; `Shift` is the resize gesture's
-bypass; Inspector-typed values are still stored exactly as typed. Only the axes a smart guide did NOT
-claim are quantised — a guide has landed the box on a real target, which inside a scaled instance is
-very often legitimately fractional.
+**Half 1 — quantise at the source, at EVERY zoom.** The drag and resize gestures round their
+POINTER to a whole scene pixel regardless of zoom, superseding [[D-122]]'s 800 % threshold (its PRD
+entry is amended in place; its archived change directory is a dated record and was not rewritten).
+`Alt` is preserved as the momentary bypass on a drag and is the ONLY way to place sub-pixel by one;
+`Shift` is the resize gesture's bypass; Inspector-typed values are still stored exactly as typed.
+Only the axes a smart guide did NOT claim are quantised — a guide has landed the box on a real
+target, which inside a scaled instance is very often legitimately fractional.
+
+### ⚠ WHAT "WHOLE PIXELS" ACTUALLY GUARANTEES — corrected 2026-08-27 ([[B-181]] session)
+
+**The sentence this item shipped with — _"a drag/resize now commits whole scene pixels at EVERY
+zoom"_ — is too strong, and the owner caught it:** _"drag and resize at ordinary zoom produce far
+fewer decimals than with Alt, but sometimes it is still fractional."_
+
+**What was actually built is a quantised POINTER**, at every zoom. What the COMMIT then contains is
+whole pixels only where the geometry between the pointer and the commit is itself exact — and for
+several gestures it deliberately is not. **The fix itself is unaffected**: half 2's ULP guard is
+what stops residue reaching the overlap rule, and no fraction below is a defect in it.
+
+⚠ **Note first what the owner is NOT seeing.** `formatNumberDisplay` prints a non-integer through
+`toFixed(2)`, so a sub-ULP residue displays as a clean integer. **Every fraction he can read is
+≥ 0.005 — a real number, not dust.** That rules the whole sub-ULP class out of his report.
+
+**DELIBERATE — consequences of decisions already taken, and they stay:**
+
+| #   | path                                                               | why it must stay                                                                                                                                                                                                                                                      |
+| --- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **an axis a guide/snap CLAIMED** takes the target's value verbatim | 🔴 the load-bearing one. Quantising it would pull the box back off a real target and **destroy the exact flush abutment [[B-181]] exists to deliver.** Not a gap; the point.                                                                                          |
+| 2   | **the aspect LOCK's derived axis** (`lockExtents`)                 | the lock's entire purpose. A 16:9 lock on an integer width is almost never an integer height — measured, width `900` ⇒ height `506.25`. **This is the readable fraction the owner is most likely reading**, since he tests with live plates and the lock defaults ON. |
+| 3   | **a ROTATED element**                                              | a quantised pointer cannot yield integer position AND size; `Gizmo.tsx` already says so.                                                                                                                                                                              |
+| 4   | **`Alt` (drag) / `Shift` (resize)**                                | the bypasses, by design.                                                                                                                                                                                                                                              |
+| 5   | **a fraction inherited from the START transform**                  | [[B-175]]'s fixed-corner pin _guarantees_ it survives — a resize can never clean one.                                                                                                                                                                                 |
+
+**GAPS — real, and filed separately as [[B-182]] rather than grown into that session:** the element
+`scale ≠ 1` division inside the gesture; group-drag members other than the anchor; the pasteboard
+clamp running _after_ the quantise; the keyframed-path morph rect; `cfg.freeW`/`freeH` (element-local
+flags) gating a SCENE pointer axis under rotation; path anchor/handle drags, which were never in
+scope at all; the Inspector scrub; and `lockedCellEdit`'s division.
+
+🔴 **One shipped COMMENT was falsified and is corrected in the same commit.** `Gizmo.tsx` claimed
+_"for an unrotated element that also makes the committed size and position whole"_. It does not:
+`sizeNew.w = size.w * (wNew / rect.w)` is not an identity in IEEE754, so the plainest possible
+resize can commit e.g. `62.00000000000001`. Sub-ULP and invisible — but a future reader would have
+trusted the comment.
 
 **Half 2 — a NOISE GUARD, and in the owner's own terms it is NOT a product tolerance.** One
 `lessThanBeyondNoise` in `@cg/shared-schema` is used by all three copies of the predicate. It is
@@ -2745,16 +2782,17 @@ residual defect.
 - ⚠ **Found by reading, not by an owner report** — the owner's report was "1 px triggers it", which is
   the rule working as designed. This is the case one order of magnitude further down, where the rule
   works as designed and the author cannot tell.
-- ~~**Connected to [[B-181]]**: with the snap fixed to land on the box EDGE, an author who snaps two
+- **Connected to [[B-181]]**: with the snap fixed to land on the box EDGE, an author who snaps two
   plates flush gets an exactly-equal coordinate and no residue. So the snap fix makes the good path
   reliable — it does not make this case unreachable, because free (unsnapped, or `Shift`-held)
-  placement still commits raw floats.~~
-  ⚠ **`B-181` DOES NOT EXIST** (2026-08-26). The number was reserved for the resize-snapping defect
-  (the `SNAP-EDGE-01` brief) and the item was never filed, so every `[[B-181]]` on this page is a
-  cross-reference to nothing — including the one in the Cross-refs line below. Recorded rather than
-  deleted, because the reservation is still the right number for that defect when someone files it.
-  **This fix did not depend on it:** the residue reaching the predicate comes from the flattener's
-  divisions, which no snapping change can remove, and half 2 is what handles them.
+  placement still commits raw floats.
+  ⚠ **This paragraph was struck through on 2026-08-26 with a note that `B-181` DID NOT EXIST, and
+  that note is now itself out of date — restored 2026-08-27.** The reference was written forward to
+  a number an earlier brief said the next session would take; that session was queued behind two
+  others and skipped, so for one day the six `[[B-181]]` links on this page pointed at nothing. The
+  item is now filed at [B-181](#b-181) and every one of them resolves. **This fix still did not
+  depend on it:** the residue reaching the predicate comes from the flattener's divisions, which no
+  snapping change can remove, and half 2 is what handles them.
 - **Cross-refs:** [[D-157]] (the canvas mark that would point at it); [[D-137]] (the overlap rule and
   why it is an error); [[B-181]] (the snap that makes exact abutment reachable); [[D-122]] (the
   pixel-grid snapping whose 800 % gate is why the drag does not round).
@@ -2763,3 +2801,226 @@ residual defect.
   nothing else; a whole-tree `git grep` for `B-180` returned only
   [b-number-registry.md](b-number-registry.md)'s own "next free" pointers, never a heading; `B-181`
   and `B-182` returned nothing at all.
+
+---
+
+## [~] B-181 — resize snapping is computed on the POINTER, not on the box edge, so under an aspect lock the box lands nowhere near the guide the canvas drew ⟨priority: high — it breaks the one gesture a multibox layout is built with⟩ — FIXED on `dev` (`openspec/changes/resize-snaps-the-edge`)
+
+**What:** one defect with two faces, both reported by the owner, both in the Designer canvas.
+
+> _"When a live box is aspect-locked and you grab an edge and drag, the mouse pointer drifts away
+> from the box, and it is the POINTER that reacts to the guides and the canvas corners and snaps —
+> not the box. With other shapes, and with a live box when it is NOT locked, the pointer and the
+> grabbed edge move together and nothing goes wrong."_
+
+> _"Making the boxes touch each other is very hard — you have to zoom in a lot so the edges do not
+> overlap or leave the frame."_
+
+**These are the same bug.** The aspect lock applies to exactly one thing — a `video-placeholder`
+with an `expectedAspect` ([[D-155]]) — so the broken path is the one an author uses to build a
+multibox layout, which is why "make two boxes touch" was the symptom that surfaced.
+
+### The cause, read from the code
+
+`apps/designer/src/renderer/features/canvas/Gizmo.tsx`, the resize `onMove` (**`:463`** — the brief
+that commissioned this said `~:461`, which is the `thr = SNAP_PX / scale` line one above). The order
+of operations was:
+
+```ts
+const pScene = { x: grabScene.x + (e.clientX - startX) / scale, ... };   // the POINTER, in scene units
+if (snapping && e.shiftKey !== true) {
+  if (cfg.freeW) { const sx = snapValue(pScene.x, targets.xs, thr); if (sx !== null) { pScene.x = sx; guideX = sx; } }
+  if (cfg.freeH) { const sy = snapValue(pScene.y, targets.ys, thr); if (sy !== null) { pScene.y = sy; guideY = sy; } }
+}
+const next = computeRectResize(t0, rect0, handle, pScene, lockRatio);    // the LOCK is applied HERE, AFTER
+```
+
+🔴 **`snapValue` is given `pScene` — the pointer — and the lock is applied afterwards.**
+
+### 🔴 WHY IT ONLY SHOWS UNDER THE LOCK — and, measured, only at CORNERS
+
+- **Unlocked** (`lockRatio === undefined`): `computeRectResize` puts the grabbed edge exactly at
+  `pScene`. The identity is exact and survives a non-uniform element scale, because
+  `rawW = |p.x − fixed.x| / scale.x` and the edge is `fixed.x + scale.x · rawW` — the scale divides
+  back out. So snapping the pointer **is** snapping the edge. This is why nobody saw it.
+- **Locked EDGE handle** (`r` / `l` / `t` / `b`): `lockExtents` takes its `freeW`-only branch and
+  passes the driven extent through unchanged (`lw = w`, `lh = w / lockRatio`), so **the driven edge
+  is still exactly at the pointer.** Measured, plate `(100, 100, 640, 360)` at 16:9, handle `r`,
+  pointer `x ∈ {900, 1000, 300}` ⇒ committed right edge **900, 1000, 300**. ⚠ **An aspect-locked
+  edge handle therefore CANNOT see this bug**, and it is the fixture anybody will reach for first.
+- **Locked CORNER handle**: `lockExtents` **projects `(rawW, rawH)` onto the locked diagonal**,
+  which separates pointer from corner by construction whenever the pointer is off that diagonal.
+  Same plate, handle `br`, pointer `(900, 300)` ⇒ the moving corner lands at
+  **`(793.18, 489.91)`** — **106.8 px away in `x`, 189.9 px in `y`.** The pointer lands on the
+  target; the box does not.
+
+⚠ **The owner's "the pointer drifts away from the box" is real for EDGE handles too**, and is a
+different thing: the DERIVED axis changes, which moves the handle's own midpoint out from under the
+cursor. That is inherent to the lock and is not a defect. What was a defect is the sentence after
+it — _"it is the POINTER that … snaps, not the box"_ — and that part is the corner case.
+
+### 🔴 The guide announced a snap that never happened
+
+`guideX` / `guideY` were set to the snapped **pointer** coordinate, so the canvas drew a line
+claiming a snap the geometry had refused. **The surface reported success for something that did not
+occur.**
+
+That is this repo's named pattern — **"the system knows something and does not say it"**
+([[B-141]], [[B-143]], [[B-144]]) — in its inverted form: the system saying something it does not
+know. Measured, with the old code and a ruler guide at `y = 600`: a single corner drag published
+guides on **both** axes (`x: [1000]`, `y: [600]`) while the box was on neither.
+
+### The fix
+
+Snapping is evaluated in **box-edge space**, on the rect that will actually be committed:
+
+1. solve from the raw pointer with the lock applied → a candidate rect;
+2. read that candidate's **moving edge** (`movingCornerScene`, beside the solver);
+3. test those coordinates against the existing `targets` at the existing `thr`;
+4. re-solve through the **same** `computeRectResize` via an inverse (`pointerForMovingEdge`) — never
+   by nudging the pointer and hoping;
+5. **draw the guide from the FINAL rect**, and only where the edge is genuinely ON a target.
+
+Step 5 is what makes the lie structurally impossible: the guide is a function of the committed
+geometry rather than of the intent, so it cannot outrun what the box did. `lockExtents`'s `MIN_SIZE`
+up-scale can still override a target, and only measuring can tell.
+
+### 🔴 The corner DECISION (a real design choice, not a spelling)
+
+Under a lock the two extents are tied, so satisfying one axis **forces** the other and a corner drag
+generally cannot land on two targets at once. **The rule adopted: the NEARER target wins; a tie goes
+to `x`.**
+
+- It is the same currency the threshold already uses. `thr` is `SNAP_PX / scale`, and both axes are
+  tested against that one value, so a scene-px distance is a screen-px distance times the same
+  constant on both axes — "nearest" means nearest **on screen**, which is what the author sees.
+- The alternative "the axis with the larger pointer delta drives" is actively wrong here, because
+  `lockExtents` projects a corner pointer onto the diagonal: the larger delta is then an artefact of
+  that projection rather than a statement of intent.
+- The tie-break is fixed rather than "keep whichever axis led last", so the same pointer position
+  always means the same thing. A stateful tie-break is how a box starts to feel like it is fighting
+  the author.
+- **The FORCED axis gets no guide** — it did not snap, it was derived. It gets one only if the
+  committed edge lands genuinely ON a target (within the floating-point noise floor, reusing
+  [[B-180]]'s `noiseFloor`), in which case both lines are true and both are drawn.
+
+**Acceptance:**
+
+- WHEN an aspect-locked plate's corner is dragged within the snap threshold of a neighbour's edge
+  THEN the committed rect's moving edge is EXACTLY on that target, not the pointer
+- WHEN a snap is taken THEN the guide is drawn at the committed edge's coordinate
+- WHEN no snap is taken THEN no guide is drawn, even if the pointer is near a target
+- WHEN a locked corner is in range of targets on both axes THEN the nearer one wins and the forced
+  axis is not given a guide it did not earn
+- WHEN the element is unlocked THEN the gesture is unchanged
+- WHEN `Shift` is held THEN nothing snaps and nothing is drawn
+
+### What was deliberately NOT changed
+
+Each verified against the tree before the work started, and each left alone:
+
+- **`SNAP_PX = 7`** (`Gizmo.tsx:47`) and **`thr = SNAP_PX / scale`** (`:461`) — the catch radius is
+  already a constant 7 SCREEN px at every zoom. ⚠ The gloss "the threshold is in screen pixels" is
+  worth stating precisely: the CONSTANT is screen px, `thr` is in SCENE units, and the division is
+  what makes the effective radius zoom-independent.
+- **`buildSnapTargets`** (`:373-398`) already returns canvas edges + centre, every other element's
+  edges + centre, and the ruler guides — so a neighbour's opposite edge was always a target and
+  flush abutment was always expressible. No new target set was needed.
+- **[[B-175]]'s rule inside it** — targets read from `renderedTransformAt`, i.e. where a box IS
+  DRAWN, never the authored rect.
+- **`lockRatio` resolved ONCE at press** (`:454-459`) — a lock toggled mid-drag would relocate the
+  box under a pointer that never moved.
+- **The `t0.rotation === 0` gate** (`:433`) on snapping.
+- **`Shift` as this gesture's bypass.**
+
+### Notes
+
+- **Priority `high` because it breaks the gesture the feature exists for.** [[D-155]] added the lock
+  so a Live Source keeps its shape while being resized; this defect means that as soon as the lock
+  is on, the author can no longer place the box accurately by hand.
+- **The second face needed no separate fix and no tolerance.** Once the edge is what snaps, an
+  aspect-locked plate abuts its neighbour exactly at 100 % zoom in a single drag — asserted in
+  `resize-edge-snap.dom.test.ts`, which mounts the gizmo at `scale: 1`. No epsilon, no new
+  threshold, no widened catch radius.
+- **Cross-refs:** [[D-155]] (the aspect lock, whose `lockExtents` projection is what exposes this);
+  [[D-122]] (the pixel-snap item — ⚠ **not** [[D-015]], which is the View-menu ruler/snapping
+  TOGGLES and is a different thing); [[B-180]] (the sub-ULP residue next door, whose `noiseFloor`
+  this reuses for the "is the edge genuinely on the target" test); [[D-157]] (the canvas mark for a
+  blocked Export — ⚠ `[~]`, in progress, not shipped); [[B-175]] (the ONE read side these targets
+  obey); [[D-137]] (the Live Source element, inside which the overlap rule lives).
+- The number was verified free immediately before this heading was written, by the registry's own
+  documented method: highest `B-` heading anywhere was **`B-180`**, across all seven refs
+  (`dev`, `origin/dev`, `main`, `origin/main`, `origin/HEAD`, `ai-stale`,
+  `design/live-source-multibox`), with `git stash list` empty and `git worktree list --porcelain`
+  showing this checkout only. `B-001` … `B-180` is contiguous; the duplicate audit printed exactly
+  `B-056` and `B-080` and nothing else. `B-181`'s only prior occurrences tree-wide were six prose
+  cross-references inside [[B-180]] — the registry's documented forward-reference false-positive
+  class, a mention and never a heading.
+
+---
+
+## [ ] B-182 — the whole-pixel commit has eight holes `B-180` did not cover: a division inside the gesture, the clamp that runs after the rounding, and three canvas paths never in scope ⟨priority: medium⟩
+
+**What:** [[B-180]] half 1 quantises the drag/resize POINTER at every zoom. Several paths between
+that pointer and the committed value still introduce a fraction the author did not type. Five of
+them are deliberate consequences and are enumerated as such in [[B-180]]; **these eight are not
+consequences of any stated decision — nobody decided them.**
+
+**Why it is filed rather than fixed:** found while auditing [[B-180]]'s guarantee during [[B-181]],
+after the owner reported _"drag and resize at ordinary zoom produce far fewer decimals than with
+Alt, but sometimes it is still fractional."_ Fixing them would have grown that session well past
+its brief, and several need a decision rather than a patch.
+
+⚠ **None of these is a defect in [[B-180]]'s actual fix.** The ULP guard at the overlap predicate is
+what keeps residue from blocking the Export, and it is unaffected. This item is about the OTHER
+half — the promise that what a gesture commits is a number the author can read back.
+
+### The eight, each measured
+
+| #   | path                                             | file:line                                           | what it does                                                                                                                                                                                                                                                                                                                                                                                            |
+| --- | ------------------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **element `scale ≠ 1`**                          | `geometry.ts:294-295`                               | `vx = (pointerScene.x − fixedScene.x) / scale.x` — a DIVISION inside the very gesture [[B-180]] set out to clean, and its own named residue class. Measured: scale 1.25, anchor .5, `tl` ⇒ `pos=(132.4, 123.4) size=(171.2, 99.2)`.                                                                                                                                                                     |
+| 2   | **group-drag members**                           | `CanvasOverlay.tsx:1207-1213`                       | only the ANCHOR is quantised; every other member commits `m.x + fdx`. Measured: anchor start `100.4` ⇒ `fdx = 33.599999999999994`, so an untouched member at `12` lands on `45.599999999999994`.                                                                                                                                                                                                        |
+| 3   | **the pasteboard clamp runs AFTER the quantise** | `CanvasOverlay.tsx:1084-1092`, `:1203-1206`         | `B-027`'s clamp is applied to the rounded value. When it bites the result is `bounds.maxX − w`, and `w` is the SCALED width — measured `w = 173.5` ⇒ `nx = 6746.5`. The oversized branch (`geometry.ts:544-547`) is an explicit halving.                                                                                                                                                                |
+| 4   | **the ratio round-trip**                         | `geometry.ts:314-316`                               | `sizeNew.w = size.w * (wNew / rect.w)`; `w · (n / w)` is not an identity in IEEE754. Measured: unrotated, scale 1, integer start, `tl` at a whole-pixel pointer commits `size.h = 62.00000000000001`. Exact only when `size.w` is a power of two. 🔴 **This is the one that falsified a shipped comment** (`Gizmo.tsx`, corrected under [[B-181]]). Sub-ULP, so invisible behind `formatNumberDisplay`. |
+| 5   | **a SCENE axis gated on an ELEMENT-LOCAL flag**  | `Gizmo.tsx` (the `cfg.freeW`/`freeH` quantise gate) | those flags are element-local axes; `pointer.x`/`.y` are scene axes. Under rotation they do not correspond, so one scene component the size still depends on is left un-quantised. Measured at 30°, handle `t`: `h = 175.2855…` vs `175.4160…` if both axes were rounded. At rotation 0 they agree, which is why no test catches it.                                                                    |
+| 6   | **path anchor / handle drags**                   | `PathEditor.tsx:207-226`, `:228`, `:272`            | a whole canvas drag class that writes `transform.position` AND `transform.size` (through `normalizePathPoints`' Bézier bbox) with no quantisation and no `Alt`/`Shift` bypass. **Never in [[B-180]]'s scope at all.**                                                                                                                                                                                   |
+| 7   | **Inspector SCRUB**                              | `controls.tsx:65-78`                                | [[D-122]]'s carve-out says _"Inspector-TYPED values stay free"_, but the fields are also drag surfaces. Measured: **Shift** ⇒ `100 → 100.7`; a fractional start ⇒ `100.37 → 107.37`. The wording never contemplated the scrub.                                                                                                                                                                          |
+| 8   | **`lockedCellEdit`**                             | `arrangements.ts:527-543`                           | `height: round(value / aspect)` — a division on a `NumberField` that is itself a scrub-drag, and the cell rect IS the box's rendered position/size. Measured (16:9): width `641` ⇒ height `360.56`.                                                                                                                                                                                                     |
+
+### 🔴 The two to take first, and why
+
+- **#4**, because a shipped comment asserted the opposite and a future reader would have trusted it.
+  The comment is already corrected; the arithmetic is not. It is sub-ULP, so it is a correctness-of-
+  documentation problem more than a user-visible one — but it is also the reason the "unrotated ⇒
+  whole numbers" intuition is false, and that intuition will be reached for again.
+- **#6**, because it is an entire gesture class writing geometry with no rounding, no bypass and no
+  test, and nothing in [[B-180]] or [[D-122]] ever claimed to cover it.
+
+**Acceptance:**
+
+- WHEN a drag or resize commits at ordinary zoom THEN the enumerated paths either produce a value
+  the author can read back, or the item records WHY they cannot and that becomes the documented
+  guarantee
+- WHEN a group of elements is dragged THEN every member lands on the same lattice as the anchor, or
+  the item states why only the anchor can
+- WHEN a path anchor is dragged THEN the same rule as every other canvas drag applies, including the
+  bypass modifier
+- WHEN the whole-pixel guarantee is stated anywhere in the PRD THEN it names its own exceptions
+
+### Notes
+
+- **Not `high`:** none of these blocks anything. [[B-180]]'s Export refusal is fixed by half 2, and
+  [[B-181]] delivers exact flush abutment through the snap, which is the gesture that actually needs
+  exactness. These are honesty-and-polish debts on the commit path.
+- ⚠ **Do not "fix" the DELIBERATE five** listed in [[B-180]] while working here. In particular, an
+  axis a guide claimed must keep the target's value verbatim — quantising it would destroy exact
+  abutment, which is precisely what [[B-181]] was built to deliver.
+- **Cross-refs:** [[B-180]] (the quantise, and the enumeration this item is the other half of);
+  [[B-181]] (the edge-space snap, and the audit that produced this list); [[D-122]] (the original
+  pixel-snap decision and its Inspector carve-out); [[B-175]] (the fixed-corner pin, which is why #4
+  cannot be fixed by rounding the solver's output); [[B-027]] (the pasteboard clamp in #3).
+- The number was verified free immediately before this heading was written: highest `B-` heading
+  anywhere was `B-181` (this session's own, one heading above), `B-182` returned zero hits tree-wide
+  and on every ref, `git stash list` was empty and `git worktree list --porcelain` showed this
+  checkout only.
