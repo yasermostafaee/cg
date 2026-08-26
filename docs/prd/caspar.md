@@ -1643,7 +1643,31 @@ The field stays, the schema stays, and the modal says plainly what does and does
   Source model, the mapping store and the ledger this seats into), [[C-020]] (the air path fill+key
   ultimately reaches).
 
-## [~] C-028 — live-plate FIT MODE: `contain` by default, so the picture is never cut and the margin shows the TEMPLATE, never black ⟨priority: high⟩ — the client's 2026-08-23 decision; premise MEASURED 2026-08-25; implemented in `openspec/changes/live-plate-fit-mode/`
+## [x] C-028 — live-plate FIT MODE: `contain` by default, so the picture is never cut and the margin shows the TEMPLATE, never black ⟨priority: high⟩ — the client's 2026-08-23 decision; premise MEASURED 2026-08-25; **CONFIRMED ON AIR by the owner 2026-08-25**; archived `openspec/changes/archive/2026-08-26-live-plate-fit-mode/`
+
+### ⭐ CLOSED — the owner's on-air confirmation, 2026-08-25, in THREE parts
+
+All three are recorded because **the third is the client's actual acceptance criterion and the first
+two do not imply it.** A picture can be correctly fitted and still put black in the margin — that is
+precisely the failure `B-149`'s coupling produces — so "the crop is right" and "the margin is right"
+are two observations, not one.
+
+1. a **`cover`** plate rendered **the middle of the picture, cropped left and right, at full height** —
+   roughly the middle half of the frame for a `938.4 × 1049.04` box on a 16:9 source;
+2. a **`contain`** plate rendered **the whole picture**, uncropped;
+3. 🔴 with a template that paints a visible background, the `contain` **margin showed the TEMPLATE'S
+   BACKGROUND, not black** — the client's requirement of 2026-08-23 verbatim (_"the leftover margin
+   shows the template's own background, never black"_), and the whole reason the mask hole had to
+   shrink to the FITTED rect rather than stay at the box.
+
+**Linux `gate:e2e` discharged** — <https://github.com/yasermostafaee/cg/actions/runs/32870092879>
+(commit `6b343333`, `E2E (Playwright)` RAN 8m52s, `success`) for the `C-028` work, and
+<https://github.com/yasermostafaee/cg/actions/runs/32889767678> (commit `45291fc8`, RAN 8m36s,
+`success`) for [[B-178]]'s correction to it.
+
+⚠ **This closes `C-028` ONLY.** [[B-178]] (the fit control was inert under a look group) is `[~]`
+FIXED; [[B-179]] (`expectedAspect` dropped the same way, disarming the mismatch refusal) is **`[ ]`
+OPEN** and is not closed by this archive.
 
 **What:** a live plate's picture is fitted into its box by a **selectable mode**:
 
