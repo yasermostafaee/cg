@@ -94,7 +94,22 @@
       (`git diff --name-only b7c90afc..HEAD -- .github/` is empty) and the immediately preceding
       commit's run started normally, so it reads as a GitHub-side transient. `gh run rerun` was
       issued and sat in `queued` with no jobs.
-- [ ] 6.5 **Linux `gate:e2e` discharged instead by the run on the next `dev` HEAD that CONTAINS
-      this change** — which the rule allows explicitly ("a later `dev` HEAD that contains the
-      change is fine").
-      Run URL: _pending_ · `E2E (Playwright)` confirmed RAN (minutes, not 0 s): _pending_
+- [ ] 6.5 🔴 **STILL OWED — GitHub Actions is wedged for this branch and I could not obtain a run.**
+      What was tried, in order, and what each did: 1. the push run for `05318016` → **`startup_failure`**, both heavy jobs `skipped`; 2. `gh run rerun 32984155276` → reset it to `run_attempt: 1, status: queued` and it has sat
+      there since, with **no jobs created**; 3. a second push (`309d3b67`) → **no run was created at all**
+      (`GET /actions/runs?head_sha=309d3b67…` returns `total_count: 0`). The wedged run holds
+      the `PR-refs/heads/dev` concurrency group, which is the one-pending-run-per-group hole
+      CLAUDE.md already documents; 4. `gh run cancel` → _"Cannot cancel a workflow run that is completed"_ (while the API
+      reports it `queued` — the two disagree, which is the shape of the wedge); 5. `POST /actions/runs/32984155276/force-cancel` → **HTTP 409**, _"Cannot cancel a workflow
+      re-run that has not yet queued."_ 6. polled for a further 8 minutes: no change on either side.
+
+      `pr.yml` has no `workflow_dispatch` trigger, so there is no manual route either. This is a
+      GitHub-side fault, not a property of the change, and **it is recorded as OWED rather than
+      worked around.** The local Windows `gate:e2e` (275 + 93) is a useful signal and by the rule
+      discharges nothing.
+
+      ⇒ **Discharge route:** the next run on any `dev` HEAD that contains this change — which the
+      rule allows explicitly ("a later `dev` HEAD that contains the change is fine") — or, failing
+      that, the owner's `dev` → `main` merge run, which classifies the whole span since the last
+      merge and is the documented completeness backstop for exactly this case.
+      Run URL: _NOT OBTAINED_ · `E2E (Playwright)` confirmed RAN: _NO_
