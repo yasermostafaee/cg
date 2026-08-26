@@ -80,8 +80,21 @@
 
 ## 6. Gate
 
-- [ ] 6.1 Full green gate as plain `pnpm gate` (never `--force`)
-- [ ] 6.2 `CG_GATE_HOOK_E2E=1` once before the push
-- [ ] 6.3 Pushed to `dev`; `git ls-remote origin dev` verified and the SHA quoted
-- [ ] 6.4 **Linux `gate:e2e` owed** — this change alters canvas gesture behaviour.
+- [x] 6.1 Full green gate as plain `pnpm gate` — **89 successful, 0 cached, 89 total**;
+      `format:check` clean; `openspec validate --all --strict` 67 passed, 0 failed
+- [x] 6.2 Local `pnpm gate:e2e` (Windows, non-authoritative): designer **275 passed**, runtime
+      **93 passed**, 23/23 tasks
+- [x] 6.3 Pushed to `dev` as **`05318016`** (`053180168de345a0739674ad9e174deb8fe485ff`);
+      `git ls-remote origin dev` matches local `HEAD`
+- [ ] 6.4 ⚠ **The push run for `05318016` did NOT discharge anything.**
+      <https://github.com/yasermostafaee/cg/actions/runs/32984155276> came back
+      **`startup_failure`** with both heavy jobs **`skipped`**. Under the discharge rule that is
+      neither a pass nor a fail and proves nothing — a SKIPPED `e2e` is a statement about the run,
+      not evidence about the suite. Nothing in `.github/` was touched by this change
+      (`git diff --name-only b7c90afc..HEAD -- .github/` is empty) and the immediately preceding
+      commit's run started normally, so it reads as a GitHub-side transient. `gh run rerun` was
+      issued and sat in `queued` with no jobs.
+- [ ] 6.5 **Linux `gate:e2e` discharged instead by the run on the next `dev` HEAD that CONTAINS
+      this change** — which the rule allows explicitly ("a later `dev` HEAD that contains the
+      change is fine").
       Run URL: _pending_ · `E2E (Playwright)` confirmed RAN (minutes, not 0 s): _pending_
