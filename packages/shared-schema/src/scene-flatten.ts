@@ -2,6 +2,7 @@ import type { Composition, Layer, MaskHole, Scene } from './scene.js';
 import type { Element } from './elements.js';
 import type { Transform } from './primitives.js';
 import type { LiveSourceRect } from './live-source.js';
+import { lessThanBeyondNoise } from './float-noise.js';
 import { DEFAULT_LIVE_FIT_MODE, fitPictureToBox, type LiveFitMode } from './live-fit.js';
 import { resolveVisibilityOf, type VisibilitySubject } from './visibility.js';
 
@@ -343,9 +344,22 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
   return out;
 }
 
-/** Do two axis-aligned rects share any AREA? Touching edges do not count. */
+/**
+ * Do two axis-aligned rects share any AREA? Touching edges do not count.
+ *
+ * ⚠ `B-180` — the strict `<` is spelled through {@link lessThanBeyondNoise}, so arithmetic dust
+ * from the flattener's own divisions cannot register as a share. The OPERATOR is unchanged
+ * (touching is still not sharing); only inputs that differ by less than the double's own noise
+ * floor are treated as equal. One guard, used by all three copies of this predicate — this one,
+ * and the two in the Designer's export preflight.
+ */
 function intersects(a: LiveSourceRect, b: LiveSourceRect): boolean {
-  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  return (
+    lessThanBeyondNoise(a.x, b.x + b.width) &&
+    lessThanBeyondNoise(b.x, a.x + a.width) &&
+    lessThanBeyondNoise(a.y, b.y + b.height) &&
+    lessThanBeyondNoise(b.y, a.y + a.height)
+  );
 }
 
 /**

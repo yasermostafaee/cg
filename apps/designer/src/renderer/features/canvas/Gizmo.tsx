@@ -17,6 +17,7 @@ import {
   rectHandleLocal,
   screenAngleDeg,
   screenDistance,
+  snapDragToPixel,
   snapValue,
   RESIZE_CFG,
   type Corner,
@@ -481,6 +482,40 @@ function beginResize(
           guideY = sy;
         }
       }
+    }
+    /*
+      ⭐ `B-180` half 1 — QUANTISE WHAT THE RESIZE COMMITS, at every zoom.
+
+      The resize solver works in floats and never rounded, so every drag of a handle wrote an
+      arbitrary fractional rect — the same dust the move path writes, one gesture over.
+
+      🔴 **QUANTISE THE POINTER, NOT THE SOLVED RECT — and this is the whole subtlety.** The first
+      attempt rounded `next.position` and `next.size` after the solve, on the reasoning that a
+      resize makes no promise about the opposite edge. **It does, and `B-175` is that promise:** the
+      FIXED corner stays glued while the grabbed one moves. `position` and `size` are not
+      independent of where that corner lands — under rotation, a non-uniform `scale` or a centred
+      anchor the solver derives `position` precisely so the pin holds — so rounding the two
+      separately walks the pinned corner off by up to half a pixel. Measured, not reasoned: it broke
+      `arrangement-gizmo-read.dom.test.ts`'s rotated + non-uniformly-scaled case by 0.108 px.
+
+      Rounding the POINTER instead is free of that. `computeRectResize` pins the fixed corner for
+      ANY pointer position, so moving the pointer to the nearest whole scene pixel lands the grabbed
+      edge on the lattice and leaves the pin exactly where it was. For an unrotated element that
+      also makes the committed size and position whole; for a rotated one it cannot (a rotated box's
+      axis-aligned numbers are not all integers), and there the pin is the invariant that matters.
+
+      ⚠ **The axes a SNAP claimed are left alone**, exactly as in the move path: a snapped edge has
+      landed on a real target and rounding would pull it back off. `guideX`/`guideY` are non-null
+      precisely when this move took a snap, so they are the flag.
+
+      ⚠ **`Shift` is this gesture's bypass, not `Alt`.** Each canvas gesture already spells free
+      placement its own way (`D-156` records that this inconsistency exists and is its own item);
+      inventing a second modifier here would make it worse. Shift already suppresses the snap just
+      above, so it suppresses the quantisation with it.
+    */
+    if (e.shiftKey !== true) {
+      if (cfg.freeW && guideX === null) pScene.x = snapDragToPixel(pScene.x);
+      if (cfg.freeH && guideY === null) pScene.y = snapDragToPixel(pScene.y);
     }
     const next = computeRectResize(t0, rect0, handle, pScene, lockRatio);
     designerStore.commitAnimatable(element.id, 'position.x', next.position.x);

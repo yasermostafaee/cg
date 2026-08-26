@@ -125,6 +125,77 @@ test.describe('D-122 pixel-snap drag', () => {
   });
 });
 
+test.describe('B-180 drag commits whole pixels at ORDINARY zoom', () => {
+  /*
+    ⭐ **`B-180` half 1 — the supersession of `D-122`'s THRESHOLD, not of its rule.**
+
+    `D-122` snapped a drag to whole pixels only at pixel-grid zoom (≥ 800%), on the reasoning that
+    the grid is what the author is aiming at. Below it, a drag committed `startPos + delta / scale`
+    — and `scale` is an arbitrary fraction, so EVERY ordinary drag committed an arbitrary
+    fractional coordinate that the Inspector then rounded to 2 dp for display. Two boxes the author
+    dragged flush both read "350"; the geometry underneath differed in the 14th decimal, and the
+    Export died on an overlap nobody could see. That is `B-180`'s first named generator.
+
+    ⚠ The test that matters is THIS one — at the zoom a project actually opens at. The grid-zoom
+    drag above still passes unchanged, which is the point: the rule did not change, its scope did.
+  */
+  test('a drag at default zoom lands on whole pixels; Alt-drag stays free', async ({ app }) => {
+    test.setTimeout(90_000);
+    await app.newProject('B180Drag');
+    const cb = (await app.canvas.boundingBox())!;
+    await app.addRectangle({ x: cb.width / 2, y: cb.height / 2 });
+    await app.selectTool('Select');
+
+    // Deliberately NO zoom step: whatever the project opens at is the zoom under test, and it is
+    // below `D-122`'s 800% threshold — so before this fix nothing here snapped at all.
+    const pct = Number(
+      (await app.page.getByTestId('zoom-readout').textContent())!.replace('%', ''),
+    );
+    expect(pct, 'this case must be BELOW the D-122 grid threshold').toBeLessThan(800);
+
+    const beforeX = await app.getInspectorNumber('X position');
+    const p1 = await pressPointOnSelected(app);
+    expect(p1, 'element not visible for the drag').not.toBeNull();
+    await app.page.mouse.move(p1!.x, p1!.y);
+    await app.page.mouse.down();
+    // An odd screen delta, so `delta / scale` is fractional at any plausible fit zoom.
+    await app.page.mouse.move(p1!.x + 53, p1!.y + 41, { steps: 10 });
+    await app.page.mouse.up();
+    const sx = await app.getInspectorNumber('X position');
+    const sy = await app.getInspectorNumber('Y position');
+    expect(sx, 'sanity: the drag moved X').not.toBe(beforeX);
+    expect(Number.isInteger(sx), `X (${String(sx)}) must be a whole scene pixel`).toBe(true);
+    expect(Number.isInteger(sy), `Y (${String(sy)}) must be a whole scene pixel`).toBe(true);
+
+    // `Alt` remains the momentary free-placement bypass — unchanged from `D-122`, and now the
+    // ONLY way to place sub-pixel by drag. Asserted here so half 1 cannot be read as removing it.
+    const p2 = await pressPointOnSelected(app);
+    expect(p2).not.toBeNull();
+    await app.page.keyboard.down('Alt');
+    await app.page.mouse.move(p2!.x, p2!.y);
+    await app.page.mouse.down();
+    await app.page.mouse.move(p2!.x + 33, p2!.y + 27, { steps: 8 });
+    await app.page.mouse.up();
+    await app.page.keyboard.up('Alt');
+    const ax = await app.getInspectorNumber('X position');
+    const ay = await app.getInspectorNumber('Y position');
+    expect(
+      Number.isInteger(ax) && Number.isInteger(ay),
+      `Alt-drag must stay free — X ${String(ax)}, Y ${String(ay)} must not both be integer`,
+    ).toBe(false);
+  });
+
+  test('an Inspector-typed fractional value is left alone', async ({ app }) => {
+    test.setTimeout(90_000);
+    await app.newProject('B180Typed');
+    await app.addRectangle({ x: 260, y: 220 });
+    // The half-1 gate is on the DRAG COMMIT, never on the model, so a number the author typed
+    // deliberately survives untouched. `D-122` made the same promise; `B-180` must not break it.
+    await app.setInspectorNumber('X position', 6.69);
+    expect(await app.getInspectorNumber('X position')).toBeCloseTo(6.69, 6);
+  });
+});
+
 test.describe('D-122 pixel-snap nudge', () => {
   /** Common setup: a rectangle set to a fractional X, zoomed to `zoomPct`. The element stays
    *  selected throughout (nudge acts on the selection); focus is irrelevant (see `nudge`). */

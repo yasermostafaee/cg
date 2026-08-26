@@ -63,6 +63,7 @@ import {
   clampDeltaToPasteboard,
   pasteboardSceneBounds,
   pixelSnapActive,
+  quantiseDragCommit,
   screenToScene,
   snapAxis,
   snapDragToPixel,
@@ -1040,17 +1041,44 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
       // element snapping below, whose ~6-screen-px threshold is sub-0.1 scene px at this zoom.
       nx = snapDragToPixel(nx);
       ny = snapDragToPixel(ny);
-    } else if (snapping) {
-      const threshold = 6 / scale; // ~6 screen px regardless of zoom
-      const sx = snapAxis(nx, w, xTargets, threshold);
-      if (sx !== null) {
-        nx = sx.value;
-        guides.x.push(sx.guide);
+    } else {
+      let snappedX = false;
+      let snappedY = false;
+      if (snapping) {
+        const threshold = 6 / scale; // ~6 screen px regardless of zoom
+        const sx = snapAxis(nx, w, xTargets, threshold);
+        if (sx !== null) {
+          nx = sx.value;
+          guides.x.push(sx.guide);
+          snappedX = true;
+        }
+        const sy = snapAxis(ny, h, yTargets, threshold);
+        if (sy !== null) {
+          ny = sy.value;
+          guides.y.push(sy.guide);
+          snappedY = true;
+        }
       }
-      const sy = snapAxis(ny, h, yTargets, threshold);
-      if (sy !== null) {
-        ny = sy.value;
-        guides.y.push(sy.guide);
+      /*
+        ⭐ `B-180` — QUANTISE THE AXES A GUIDE DID NOT CLAIM, at every zoom.
+
+        A free drag computes `startPos + (clientDelta / scale)`, and `scale` is an arbitrary
+        fraction, so every free drag commits an arbitrary fractional coordinate. Rounding it is
+        the owner's half-1 decision: `Alt` becomes the only way to place sub-pixel by drag.
+
+        🔴 **Only the axes that did NOT snap.** A guide snap has landed the box exactly on a REAL
+        target — a neighbour's edge, the frame centre, a ruler guide — and rounding after it would
+        pull the box back off by up to half a pixel, breaking the flush abutment the author just
+        made. That matters most where the target is legitimately fractional: inside a scaled
+        composition instance, every flattened edge is `size.w / comp.resolution.width` times
+        something, so the guides an author snaps to there are almost never integers.
+
+        ⚠ Which is also why half 1 cannot fix `B-180` alone, and why the noise guard exists: the
+        residue comes from DIVISIONS, not from drags.
+      */
+      if (quantiseDragCommit(e.altKey)) {
+        if (!snappedX) nx = snapDragToPixel(nx);
+        if (!snappedY) ny = snapDragToPixel(ny);
       }
     }
     // B-027 — clamp AFTER snapping: the element's full box [pos, pos+size] can never
@@ -1142,17 +1170,31 @@ function beginGroupDrag(
       // member, so the anchor lands on the grid and relative offsets are preserved.
       ax = snapDragToPixel(ax);
       ay = snapDragToPixel(ay);
-    } else if (snapping) {
-      const threshold = 6 / scale; // ~6 screen px regardless of zoom
-      const sx = snapAxis(ax, anc.w, xTargets, threshold);
-      if (sx !== null) {
-        ax = sx.value;
-        guides.x.push(sx.guide);
+    } else {
+      let snappedX = false;
+      let snappedY = false;
+      if (snapping) {
+        const threshold = 6 / scale; // ~6 screen px regardless of zoom
+        const sx = snapAxis(ax, anc.w, xTargets, threshold);
+        if (sx !== null) {
+          ax = sx.value;
+          guides.x.push(sx.guide);
+          snappedX = true;
+        }
+        const sy = snapAxis(ay, anc.h, yTargets, threshold);
+        if (sy !== null) {
+          ay = sy.value;
+          guides.y.push(sy.guide);
+          snappedY = true;
+        }
       }
-      const sy = snapAxis(ay, anc.h, yTargets, threshold);
-      if (sy !== null) {
-        ay = sy.value;
-        guides.y.push(sy.guide);
+      // `B-180` — the ANCHOR is quantised, exactly as the grid-zoom branch above quantises it,
+      // and for the same reason the anchor is what snaps: its delta moves every member, so
+      // relative offsets are preserved. Guide-claimed axes are left alone (see the single-drag
+      // handler for why).
+      if (quantiseDragCommit(e.altKey)) {
+        if (!snappedX) ax = snapDragToPixel(ax);
+        if (!snappedY) ay = snapDragToPixel(ay);
       }
     }
     let fdx = ax - anc.x;

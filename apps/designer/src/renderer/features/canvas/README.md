@@ -367,12 +367,30 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
   guide); the anchor is snapped for a group so relative offsets are preserved. The
   arrow-key nudge (`nudgeSelection` in `state/slices/elements.ts`, driven by the App.tsx
   window keydown) snaps the anchor's active axis. **Alt** bypasses all snapping (free
-  sub-pixel move); below the threshold nothing snaps; Inspector-typed values are always
-  free. The nudge path has no direct access to the CanvasArea-local zoom, so it reads a
-  `canvasZoom` MIRROR the store keeps (`view.setCanvasZoom`, published by a CanvasArea
-  effect); the drag path already has the zoom as its `scale`. Resize-handle snapping is a
-  deliberate follow-up (out of scope). Root: `openspec/specs/designer-canvas-view`
-  (D-122 delta).
+  sub-pixel move); Inspector-typed values are always free. The nudge path has no direct
+  access to the CanvasArea-local zoom, so it reads a `canvasZoom` MIRROR the store keeps
+  (`view.setCanvasZoom`, published by a CanvasArea effect); the drag path already has the
+  zoom as its `scale`. Root: `openspec/specs/designer-canvas-view` (D-122 delta).
+- **Drag/resize commit quantise at EVERY zoom (B-180)** — the threshold above governs
+  the LIVE pixel-grid snap and the nudge; it no longer governs what a drag COMMITS. A free
+  drag computes `startPos + clientDelta / scale`, so below the threshold every drag wrote a
+  fractional coordinate the Inspector then rounded away — `B-180`'s first residue generator,
+  and it blocked the Live Source Export over geometry the author could not see. A second
+  gate, `quantiseDragCommit(alt)`, rounds the COMMIT in `beginDrag` / `beginGroupDrag` and
+  in the Gizmo's resize (which is why resize snapping is no longer a follow-up; **Shift** is
+  that gesture's bypass, as it already was for its other snapping). 🔴 In the resize the
+  quantise is applied to the POINTER before `computeRectResize`, never to the rect it returns:
+  the solver pins the corner opposite the grabbed handle (`B-175`) for any pointer position, and
+  rounding its `position` / `size` separately walks that pin off by up to half a pixel under
+  rotation, a non-uniform scale or a centred anchor.
+  🔴 **It is a separate gate, not a widened `pixelSnapActive`, and that is deliberate:**
+  `pixelSnapActive` sits in an `else if` chain where it SUPERSEDES the smart-guide branch,
+  so relaxing it to all zooms would delete guide snapping from the Designer with every unit
+  test of that function still green — and it also gates the nudge's first-snap, which
+  `D-122` deliberately kept relative below the threshold. The quantise therefore runs AFTER
+  `snapAxis` and applies only to the axes NO guide claimed: a guide has landed the box on a
+  real target, which inside a scaled composition instance is very often legitimately
+  fractional. Root: `openspec/changes/fix-overlap-float-residue`.
 
 ## Tools system
 

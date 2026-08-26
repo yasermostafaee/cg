@@ -646,10 +646,50 @@ export function pixelGridVisible(zoom: number): boolean {
  * land on), the operator's Snapping preference is on (the master snap switch also governs
  * pixel-grid snapping — so "snapping off" still drags freely), and `alt` — the momentary
  * free-placement bypass — is NOT held. Pure so the drag path, the nudge path, and the unit
- * tests share ONE gate. Below the threshold this is always false (today's free move).
+ * tests share ONE gate. Below the threshold this is always false.
+ *
+ * ⚠ `B-180` — "false below the threshold" no longer means the drag COMMITS a fraction there.
+ * This gate governs the LIVE grid snap and the nudge; what a drag/resize commits is gated by
+ * {@link quantiseDragCommit}, at every zoom. Do NOT widen this one to close that gap — the
+ * reasons are in that function's docstring, and both are load-bearing.
  */
 export function pixelSnapActive(zoom: number, snappingEnabled: boolean, alt: boolean): boolean {
   return snappingEnabled && !alt && pixelGridVisible(zoom);
+}
+
+/**
+ * ⭐ **`B-180` — should this drag COMMIT a whole scene pixel? At EVERY zoom.**
+ *
+ * ── WHY THIS IS A SECOND GATE AND NOT A WIDER {@link pixelSnapActive} ───────
+ *
+ * `D-122` scoped whole-pixel snapping to grid zoom and said so explicitly — *"below the grid
+ * threshold, today's behavior is unchanged"* — and `B-180`'s fix supersedes that scope. But the
+ * supersession CANNOT be spelled by relaxing `pixelSnapActive`, and finding out why is most of
+ * this function's reason to exist:
+ *
+ *  1. 🔴 **It would silently delete smart-guide snapping.** The drag handler is an `else if`
+ *     chain in which `pixelSnapActive` SUPERSEDES the element/canvas/ruler guides (correctly, at
+ *     grid zoom, where the grid is a finer target). True at every zoom, that branch would swallow
+ *     the guides at every zoom, and snapping a box flush to its neighbour would stop working —
+ *     while every test of `pixelSnapActive` still passed.
+ *  2. **It would change the arrow-NUDGE too.** `snapNudgeToPixel`'s first-nudge-to-the-next-integer
+ *     rule is gated on the same predicate and is `D-122`'s deliberate design, not incidental.
+ *
+ * So the grid-zoom gate is left exactly as it was, and quantisation is a POST-STEP applied to the
+ * axes a guide did NOT claim. See the drag handler for the ordering.
+ *
+ * ── THE GATE IS JUST `!alt`, AND THAT IS THE OWNER'S DECISION ───────────────
+ *
+ * `Alt` is `D-122`'s momentary free-placement bypass and is PRESERVED — it now matters at every
+ * zoom, because it is **the only way to place sub-pixel by drag**. That is why the master
+ * snapping switch is deliberately NOT consulted here: if "snapping off" also bypassed, there
+ * would be two ways, and the owner's decision names one.
+ *
+ * ⚠ Inspector-TYPED values stay free, exactly as `D-122` decided. A typed `124.5` is a value the
+ * author can see and meant; it is not dust. This gates the DRAG only.
+ */
+export function quantiseDragCommit(alt: boolean): boolean {
+  return !alt;
 }
 
 /**

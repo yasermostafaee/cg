@@ -10,6 +10,7 @@ import {
   LiveSourceIdSchema,
   applyArrangementGeometry,
   flattenElements,
+  lessThanBeyondNoise,
   liveSourcesInStampedScopes,
   lookContaining,
   resolveVisibilityOf,
@@ -154,9 +155,27 @@ function isNotFullyInsideFrame(box: Aabb, w: number, h: number): boolean {
   return minX < 0 || minY < 0 || maxX > w || maxY > h;
 }
 
-/** Do two AABBs share any area? Edge-touching is NOT an overlap (zero area). */
+/**
+ * Do two AABBs share any area? Edge-touching is NOT an overlap (zero area).
+ *
+ * ⭐ `B-180` — the strict `<` is spelled through {@link lessThanBeyondNoise}, the ONE guard this
+ * predicate shares with its two siblings (`rectsOverlap` below, and `intersects` in
+ * `@cg/shared-schema`'s flattener). Three spellings that must agree is the defect this repo keeps
+ * re-learning, so there is one.
+ *
+ * 🔴 **The rule is NOT loosened.** The operator is still strict, so flush abutment is still not an
+ * overlap and a genuine 0.01 px collision still fires. What no longer fires is arithmetic dust: a
+ * composition instance's `preScale`, the flattener's `fitAffine` and the Inspector's `n / 100` are
+ * DIVISIONS, so an authored-integer rect reaches here carrying residue nobody typed. See
+ * `float-noise.ts` for why the guard is in ULPs and never in pixels.
+ */
 function overlaps(a: Aabb, b: Aabb): boolean {
-  return a.minX < b.maxX && b.minX < a.maxX && a.minY < b.maxY && b.minY < a.maxY;
+  return (
+    lessThanBeyondNoise(a.minX, b.maxX) &&
+    lessThanBeyondNoise(b.minX, a.maxX) &&
+    lessThanBeyondNoise(a.minY, b.maxY) &&
+    lessThanBeyondNoise(b.minY, a.maxY)
+  );
 }
 
 /** Whether the element carries a keyframe on any geometry-affecting track. */
@@ -541,7 +560,15 @@ function hiddenInArrangement(flat: FlatElement, view: ArrangementView | undefine
   return flat.ancestry.some((a) => !resolveVisibilityOf(a, context));
 }
 
-/** The same "do two rects share area" rule as {@link overlaps}, on `LiveSourceRect`s. */
+/**
+ * The same "do two rects share area" rule as {@link overlaps}, on `LiveSourceRect`s — and
+ * `B-180`'s same single noise guard, for the same reason.
+ */
 function rectsOverlap(a: LiveSourceRect, b: LiveSourceRect): boolean {
-  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  return (
+    lessThanBeyondNoise(a.x, b.x + b.width) &&
+    lessThanBeyondNoise(b.x, a.x + a.width) &&
+    lessThanBeyondNoise(a.y, b.y + b.height) &&
+    lessThanBeyondNoise(b.y, a.y + a.height)
+  );
 }
