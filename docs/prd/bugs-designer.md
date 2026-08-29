@@ -3417,3 +3417,178 @@ reproduced from its stated fields rather than read from the ZIP:
   headings anywhere** and no forward references (the only tree-wide hits for that range are this
   registry's and `B-183`'s own prose about the range being clear). `git stash list` empty;
   `git worktree list --porcelain` showed this checkout only. **Nothing is implemented by this item.**
+
+---
+
+## [ ] B-188 — the group's source DECLARATION stores a fact the plates already carry, and `look-source-undeclared` is the cost of storing it twice ⟨priority: medium — an architectural decision, ADOPT WITH CONDITIONS; nothing implemented⟩
+
+**The proposal, in the owner's words:**
+
+> _"Instead of declaring sources for a multi-box group in the Designer, we should just define a source
+> id for each frame, like a plain plate. The source isn't a fixed thing — the operator decides it in
+> CG Control."_
+
+### 🔴 VERDICT: **ADOPT, WITH THREE CONDITIONS.** The declaration is not load-bearing downstream.
+
+The four readings support it, and one measurement decides it: **what the operator and the bridge
+already receive is the DERIVED set, not the declared one.** The declaration is authoring-side
+machinery whose only surviving downstream contribution is list ORDER.
+
+**The conditions are in `§ Conditions` below and are not optional** — one of them ([[B-179]]) must be
+answered first, because this proposal deletes the only place its answer could live.
+
+### Section 1 — the four readings, by value
+
+**1. `dynamic` has ONE reader, and it is a pass-through. The flag is INERT end to end.**
+
+| where           | what                                                                                                                                                                                                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| written         | `addLookSource` (`slices/looks.ts:110`) — hardcoded `{ routeKey, dynamic: false }`, always                                                                                                                                                      |
+| read            | **`packages/vcg-format/src/live-sources.ts:409`** — `dynamic: src.dynamic`, copied onto the exported carrier. **The only read in the tree.**                                                                                                    |
+| read downstream | 🔴 **NONE.** `grep -rn dynamic tools/caspar-bridge/src/` returns only layer-allocation prose ("dynamic ranges", "dynamic pool") — **the bridge never mentions the flag.** `apps/runtime/src` has one hit, a `MockRuntime` fixture _writing_ it. |
+
+⚠ And its docstring claims a consumer that does not exist: `live-source.ts:95-104` says _"**The bridge
+needs this** to know whether `sourceId` is the FINAL answer or merely the authored default"_. Nothing
+reads it.
+
+⚠ **A latent asymmetry, recorded because deleting the declaration would silently erase it:** the
+GROUPLESS path computes the flag from field bindings (`dynamic: roles?.has('fill') ?? false`,
+`live-sources.ts:228`) while the GROUP path hardcodes `false` (`:409` ← `addLookSource`). So a
+look-group template whose plate is retargeted by a field binding already exports `dynamic: false`.
+That is the same _"nothing writes this field"_ shape as [[B-178]] and [[B-179]], one field wider — and
+it **costs nothing today only because nothing reads it.** If a reader is ever added, it is a defect on
+arrival.
+
+**2. CG Control consumes the CARRIER, never the declaration.** `lookGroups` does not appear anywhere
+in `apps/runtime/src/` or `tools/caspar-bridge/src/` — verified, zero hits. The operator surface reads
+`info.liveSources.sources` (`LivePlatesSection.tsx:118`, `Inspector.tsx:453`,
+`useTemplatePicker.tsx:197`, `LooksBindingsSection.tsx:234/256`), i.e. `TemplateInfo.sources`, which is
+the EXPORTED `LiveSourceDeclaration[]`. ⇒ **the change is authoring-side; the operator surface and the
+bridge are already downstream of a derivation.**
+
+Fact 3 of the brief re-verified at both anchors: `sources.ts:370` does document `plateId` as _"the
+template's DECLARED `sourceId`, read as the PLATE IDENTIFIER"_, and `live-sources.ts:221` does emit
+`sourceId: el.routeKey`.
+
+**3. Everything that reads `lookGroups[].sources` — the complete set, five readers, four of them
+authoring-side:**
+
+| reader                                             | what it does                                                                  |
+| -------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `LooksSection.tsx:55` (`SourcesPart`)              | the `+ Source` list the author adds to / removes from                         |
+| `StyleSection.tsx:660`                             | the Inspector `source` picker's option list                                   |
+| `live-source-preflight.ts:493-497`                 | `look-source-undeclared`'s `declared` set **and** its message's declared list |
+| `LookGroupSchema.superRefine` (`looks.ts:139-152`) | refuses a source declared twice                                               |
+| `vcg-format/live-sources.ts:380-409`               | 🔴 the **only** one that reaches anything outside the Designer                |
+
+**4. 🔴 THE MEASUREMENT THAT DECIDES IT — the export already reduces the declaration to the used set.**
+`collectLookCarrier` on the owner's scene shape (3 looks using `l1` / `l1,l2` / `l1,l2,l3`):
+
+| declared            | carrier `sourceId`s                                              |
+| ------------------- | ---------------------------------------------------------------- |
+| `l1,l2,l3`          | `["l1","l2","l3"]`                                               |
+| `l1,l2,l3,`**`l9`** | `["l1","l2","l3"]` — 🔴 **`l9` is DROPPED**                      |
+| `l3,l9,l1,l2`       | `["l3","l1","l2"]` — order follows the DECLARATION, minus unused |
+
+The loop skips any declared source with no rect in any look (`if (rect === undefined) continue;`,
+`:388`), and `rectsByLook` is populated only for plates whose `routeKey` **is** declared (`:339`).
+Since the preflight refuses undeclared plates, `used ⊆ declared`, therefore
+**carrier ≡ used ≡ the derived set.**
+
+⇒ **The declaration contributes exactly ONE thing downstream: the ORDER of the operator's list.**
+Everything else about it is an authoring-time constraint on the Designer.
+
+### Section 2 — the questions, answered from the code
+
+- **Ordering.** Today the operator's list is in the author's DECLARATION order (measured above:
+  `l3,l9,l1,l2` ⇒ `l3,l1,l2`). Derived, it would need a defined order — document order of first use is
+  the obvious one. ⚠ **It is stable under APPEND and not under deletion**: removing the plate that
+  first used a key moves that key later. **Assignments survive regardless** — they key on
+  `{templateId, plateId}` (`sources.ts:715`), never on index — so the cost is the operator's list
+  visibly reordering, not a lost mapping. **This is condition (b).**
+- **A typo.** 🔴 **This is the one real loss, and it must be accepted deliberately rather than
+  discovered.** Today `cam1` for `cam-1` is `look-source-undeclared`, an exact, cheap, hard error that
+  names the plate. Derived, it silently becomes a fourth source the operator sees and must map — the
+  system knowing something (that this key is used by exactly one plate and resembles another) and not
+  saying it, which is the [[B-141]] / [[B-143]] / [[B-144]] family. **Arguing the other way:** the
+  declaration only catches a typo because it is a second copy of the same fact, and a second copy is
+  what golden rule 6 and [[B-100]] / [[B-101]] exist to warn about — the check and the defect class are
+  the same mechanism. A derived world can still warn (a key used by exactly one plate, near-matching
+  another), but that is a HEURISTIC where today's is EXACT. **Honest verdict: derivation is more
+  honest about what the data IS, and less helpful about one class of mistake. Condition (c).**
+- **Renaming — 🔴 THE BRIEF'S PREMISE IS WRONG, and it inverts this argument.** The brief says a rename
+  is _"one edit today, N plate edits after"_. **There is no rename today.** The store has only
+  `addLookSource` and `removeLookSource` (`slices/looks.ts:103,120`); no `renameLookSource` exists
+  anywhere; and `LooksSection.tsx:35` states it as policy — _"The routeKey is FIXED at declaration (no
+  in-place rename): a rename would have to rewrite every referencing plate in every look, and a missed
+  one is a dangling reference that surfaces only at export."_ So `l1` → `cam1` today is **N plate
+  edits PLUS two declaration edits, with a window in which the scene is red.** Derived it is N plate
+  edits. ⇒ **renaming is a cost the declaration ADDS.**
+- **Declared but unused.** Possible today, and **nothing downstream depends on it** — measured above,
+  it is dropped at export. It is purely an authoring affordance (declare the inputs up front, build
+  looks against them). Derivation removes that workflow; the item records it as a real, small loss.
+- **[[R-059]] is UNAFFECTED.** Its override key is `{templateId, plateId, sourceId, fitMode?}` and
+  `plateId` is the carrier's `sourceId` — which is already derived. Deriving the list changes no key
+  it uses.
+- **`.vcg` format.** Removing `lookGroups[].sources` is a scene-format change. Under `P-031`'s
+  compatibility floor no shim is owed before first delivery, and the precedent is in this very schema:
+  [[B-178]] deleted `fitMode` from `LookSourceSchema` on the reasoning that _"a stored scene carrying
+  the key simply has it stripped by zod at load"_. **What would break at the plant: nothing that is
+  already imported.** CG Control holds `TemplateInfo.sources` from import time; a template is only
+  re-derived when re-imported, and because carrier ≡ used the re-derived set is **identical in
+  content** — only possibly in ORDER. Assignments are keyed by `plateId`, so they survive the reorder.
+
+### Section 1 Q4 / the [[B-179]] collision — 🔴 THIS IS CONDITION (a), AND IT BLOCKS
+
+[[B-179]] exists because `LookSource.expectedAspect` is never written, so a look-group template exports
+no aspect and the take's mismatch refusal is disarmed. `looks.ts:92-94` states its two possible fixes:
+_"it needs **either a writer here or a hoist from the element** with a refusal when two looks' elements
+disagree."_
+
+**The declaration is the natural home for a per-FEED property** — an aspect is a property of the feed
+and cannot differ between looks, which is exactly why `looks.ts:35` keeps `expectedAspect` there and
+why [[B-178]] moved `fitMode` OUT (a fit is per-box, an aspect is not).
+
+⇒ **This proposal deletes the "writer here" option outright.** It does not merely interact with
+[[B-179]] — it decides it, in favour of the hoist. **[[B-179]] must therefore be decided FIRST, or
+adopted here as decided-by-consequence and said so out loud.** It is not decided in this item.
+
+### § Conditions
+
+- **(a)** [[B-179]] answered first — the hoist-from-element mechanism, with its refusal when two looks'
+  plates disagree about one feed's aspect. Without it, adopting this deletes the aspect's only home.
+- **(b)** A defined and documented ORDER for the derived list (document order of first use), with the
+  reorder-on-delete behaviour stated where the operator can find it.
+- **(c)** The typo trade accepted explicitly — either a replacement warning, or a recorded decision
+  that near-miss keys become the operator's problem. **Not left to be discovered.**
+
+### ⚠ Supersession
+
+**If adopted, this SUPERSEDES [[B-187]]'s two-half rule** (grouped = next free declared source in that
+look; groupless = a generated label), because grouped and groupless collapse into one case: there is no
+declaration to be contradicted anywhere, so the groupless answer becomes the only answer. `B-187` is
+filed at `docs/prd/bugs-designer.md` — **anchor verified**, and it remains correct as written **until**
+this item is adopted. ⚠ [[B-183]] is unaffected either way: a plate must still be pointed at something
+deliberately, and `live-source-unset` is document-scoped and needs no group.
+
+### Open questions — RECORDED, not answered
+
+- Does the Looks panel keep a source list at all afterwards — read-only, derived, as an overview? Or
+  does the section lose its first half entirely?
+- Does anything still need "declare before you author", and if so what replaces it?
+- The `dynamic` asymmetry above: delete the field with the declaration, or fix the group path's writer
+  first so the history is not lost? (Nothing reads it either way.)
+- Does the Looks panel's stated guarantee survive derivation — _"two looks referencing the same source
+  start on the same input"_? On the face of it yes: `l1` in look-1 and `l1` in look-3 are one key
+  whether or not a declaration lists it, and seats dedupe on the resolved WIRE ARGUMENT
+  (`live-look-bindings.ts`, per `looks.ts:31`), not on the declaration. **Read that file before
+  relying on this** — it was not opened for this item.
+
+- **Cross-refs:** [[B-179]] (condition (a) — this proposal deletes its only home and decides it by
+  consequence); [[B-183]] (unaffected — unset is document-scoped); [[B-187]] (superseded if adopted);
+  [[R-059]] (unaffected — its key is already derived); [[C-028]] / [[B-178]] (the precedent for moving
+  a field OFF the declaration, and for deleting one under the compatibility floor);
+  [[B-141]] / [[B-143]] / [[B-144]] (the family the typo trade belongs to).
+- **Number:** highest `B-` HEADING across every ref was `B-187`; `B-188` … `B-195` returned **no
+  headings anywhere** and no forward references (the only tree-wide hits are this registry's own prose
+  about the range being clear). `git stash list` empty; one worktree. **Nothing is implemented.**

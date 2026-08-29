@@ -1769,3 +1769,50 @@ citation before building on the number** — the same discipline the phantom-num
 record for item numbers, applied to measurements.
 
 ⇒ **Next free is unchanged: `B-188`.**
+
+### 2026-08-29 (later still) — `B-188`, from `SOURCE-DECLARATION-DROP-01`
+
+**Claimed:** `B-188` ([bugs-designer.md](bugs-designer.md)) — should the multi-frame group's source
+DECLARATION exist at all. Verdict **ADOPT WITH CONDITIONS**. **Docs only; nothing implemented.**
+
+**Derivation:** highest `B-` HEADING across every ref was **`B-187`**; `B-188` … `B-195` returned **no
+headings anywhere** and no forward references — the only tree-wide hits in that range are this file's
+own prose recording that the range was clear. `git stash list` empty; one worktree. ⇒ `B-` stays
+contiguous `B-001` … `B-188`, no gaps.
+
+**Filed under `B-` deliberately, though it is a PROPOSAL rather than a defect.** The subject is a
+defect CLASS — `look-source-undeclared` exists only because one fact is stored twice — and the brief
+directed the `B-` space. Recorded so a later reader does not treat it as a mis-file.
+
+### ⭐ The measurement that decided it, kept here because it is short and load-bearing
+
+`collectLookCarrier` was run on the owner's scene shape with a declared-but-UNUSED source added:
+
+| declared      | carrier `sourceId`s                                  |
+| ------------- | ---------------------------------------------------- |
+| `l1,l2,l3`    | `["l1","l2","l3"]`                                   |
+| `l1,l2,l3,l9` | `["l1","l2","l3"]` — `l9` DROPPED                    |
+| `l3,l9,l1,l2` | `["l3","l1","l2"]` — declaration ORDER, minus unused |
+
+⇒ **the export already reduces the declaration to the used set**, so the operator and the bridge have
+always consumed a derived list. The declaration's only downstream contribution is ORDER. Everything
+else it does is an authoring-time constraint.
+
+### ⚠ Two brief premises FAILED verification, and both are recorded in the item
+
+- **"Renaming is one edit today."** It is not — there is **no rename**. `addLookSource` and
+  `removeLookSource` are the only mutators, and `LooksSection.tsx:35` states the policy: _"The routeKey
+  is FIXED at declaration (no in-place rename)."_ A rename today is N plate edits PLUS two declaration
+  edits, with a red window between. **This inverts the argument: renaming is a cost the declaration
+  ADDS.**
+- **`dynamic` "sits on every declaration"** — true, and it has **one reader in the whole tree**
+  (`live-sources.ts:409`, a pass-through onto the carrier) whose own output **nothing reads**. Its
+  docstring claims _"the bridge needs this"_; the bridge never mentions it.
+
+### 🔴 It DECIDES `B-179` by consequence, and that is the blocking condition
+
+`B-179`'s two candidate fixes are _"either a writer here or a hoist from the element"_ (`looks.ts:93`).
+Deleting the declaration deletes the first. **`B-179` must be answered before this is adopted**, or
+adopted here as decided-by-consequence — and this item does neither, it records the dependency.
+
+⇒ **Next free after this session is `B-189`.**
