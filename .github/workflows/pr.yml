@@ -2,6 +2,21 @@ name: PR
 
 on:
   pull_request:
+  # Manual re-run lever. Actions wedged on `dev` on 2026-08-26: run 32984155276
+  # came back `startup_failure`, `gh run rerun` reset it to `queued` with ZERO
+  # jobs, and it then held the `PR-refs/heads/dev` concurrency group so two later
+  # pushes produced no run at all. `gh run cancel` reported it "completed" while
+  # the API reported `queued`, and force-cancel returned HTTP 409 ("cannot cancel
+  # a workflow re-run that has not yet queued") — it is STILL unkillable. With no
+  # `workflow_dispatch` the only routes left were another push or waiting for the
+  # owner's `dev` -> `main` merge, so a Linux `e2e` debt sat undischarged with no
+  # way to pay it.
+  #
+  # A dispatch run classifies as neither `push` nor `pull_request`, so the
+  # `decide` step below takes its FAIL-SAFE branch (`code=true`) and `needs_e2e`
+  # keeps its `true` default: a manual run always runs BOTH heavy jobs. That is
+  # the correct behaviour for a recovery lever — it can only ever over-run.
+  workflow_dispatch:
   # `dev` is where ALL work lands (see CLAUDE.md "Branching"): there are no
   # per-change branches and no PRs, so without `dev` here CI fired only on the
   # owner's end-of-day merge to `main` — always AFTER the fact. This job graph
