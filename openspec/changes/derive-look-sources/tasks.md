@@ -127,5 +127,8 @@
 - [x] 6.2 `pnpm openspec validate --all --strict`
 - [x] 6.3 Local E2E run (`CG_GATE_HOOK_E2E=1`) — a Windows pass discharges nothing, and catches a
       real break
-- [ ] 6.4 🔴 **Linux `e2e` on GitHub Actions, `conclusion: success`, job RAN not skipped, run URL
-      written HERE beside this box.** OWED until then — this change alters what renders.
+- [x] 6.4 🔴 **Linux `e2e` DISCHARGED** —
+      <https://github.com/yasermostafaee/cg/actions/runs/33265505070>, for `cd9583a3` (the commit
+      that carries this change). `conclusion: success`, and the **`E2E (Playwright)` job RAN**:
+      its own conclusion is `success`, not `skipped`, so this is evidence about the suite and not
+      merely about the diff (`P-029`). `Lint • Typecheck • Test • Build` green in the same run.
