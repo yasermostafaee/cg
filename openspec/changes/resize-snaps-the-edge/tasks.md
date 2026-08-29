@@ -94,7 +94,30 @@
       (`git diff --name-only b7c90afc..HEAD -- .github/` is empty) and the immediately preceding
       commit's run started normally, so it reads as a GitHub-side transient. `gh run rerun` was
       issued and sat in `queued` with no jobs.
-- [ ] 6.5 🔴 **STILL OWED — GitHub Actions is wedged for this branch and I could not obtain a run.**
+- [x] 6.5 ✅ **DISCHARGED 2026-08-29** —
+      <https://github.com/yasermostafaee/cg/actions/runs/33246214343>, `completed` + `success`,
+      with **`E2E (Playwright)` CONFIRMED RAN** (`success`, not skipped) alongside
+      `Lint • Typecheck • Test • Build`.
+
+      The run is on `9a6e0eff`, a LATER `dev` HEAD than the `aa01681c` that carries this change
+      — which the rule allows in as many words: _"a later `dev` HEAD that contains the change is
+      fine"_. **Verified rather than assumed**, both ways: `git merge-base --is-ancestor
+      aa01681c 9a6e0eff` passes, AND `git grep -c pointerForMovingEdge 9a6e0eff -- …/geometry.ts`
+      returns 1, so the code itself is present in the tree that was tested. The jobs are
+      whole-tree (`ci` runs bare workspace-wide turbo tasks, `e2e` runs the entire Playwright
+      suite), so a green run at that SHA verifies this change's code as surely as one on its own
+      commit would.
+
+      ⚠ The wedge that caused the debt has also cleared: `32984155276` is no longer `queued` —
+      GitHub reaped it to `completed` / `cancelled` at `2026-08-29T00:13:06Z`. It was still
+      refusing force-cancel with HTTP 409 at every attempt made while it was stuck. `pr.yml` now
+      carries a `workflow_dispatch` trigger (`f5d6f1c8`) so the next wedge has a manual route out.
+
+      **The original OWED record is kept below verbatim**, because what was tried and what each
+      attempt did is the useful half and a discharge does not make it untrue.
+
+- [ ] 6.5a 🔴 **(HISTORICAL — the OWED record, superseded by 6.5 above.)** GitHub Actions was
+      wedged for this branch and no run could be obtained.
       What was tried, in order, and what each did: 1. the push run for `05318016` → **`startup_failure`**, both heavy jobs `skipped`; 2. `gh run rerun 32984155276` → reset it to `run_attempt: 1, status: queued` and it has sat
       there since, with **no jobs created**; 3. a second push (`309d3b67`) → **no run was created at all**
       (`GET /actions/runs?head_sha=309d3b67…` returns `total_count: 0`). The wedged run holds
@@ -112,4 +135,5 @@
       rule allows explicitly ("a later `dev` HEAD that contains the change is fine") — or, failing
       that, the owner's `dev` → `main` merge run, which classifies the whole span since the last
       merge and is the documented completeness backstop for exactly this case.
-      Run URL: _NOT OBTAINED_ · `E2E (Playwright)` confirmed RAN: _NO_
+      Run URL: _not obtained AT THE TIME_ · `E2E (Playwright)` confirmed RAN: _no, then_
+      ⇒ **both answered in 6.5 above: run `33246214343`, `E2E (Playwright)` RAN and passed.**

@@ -117,9 +117,14 @@
 ## 7. Gate
 
 - [x] 7.1 `pnpm gate` — see the commit message for the count; `openspec validate --strict` clean
-- [ ] 7.2 ⚠ **Linux `gate:e2e` — see `docs/prd/bugs-designer.md` `B-183` for the discharge state.**
-      This change alters what renders (the plate's bars label, the Looks panel's colours), so the
-      debt is owed. A Windows pass discharges nothing.
+- [x] 7.2 ✅ **Linux `gate:e2e` DISCHARGED** —
+      <https://github.com/yasermostafaee/cg/actions/runs/33246214343> on `9a6e0eff`, the commit
+      that carries this change. `completed` + `success`, with **`E2E (Playwright)` CONFIRMED RAN**
+      (`success`, not skipped) alongside `Lint • Typecheck • Test • Build`. The classifier
+      correctly read the diff as render-affecting — this change alters the plate's bars label and
+      the Looks panel's colours — so both heavy jobs ran rather than being skipped under `P-029`.
+      ⚠ The local Windows `gate:e2e` (23/23 tasks, designer 275 + 12 skipped, runtime 93) is a
+      useful signal and by the rule discharges nothing; the URL above is the discharge.
 
 ## 8. Found on the way, filed not fixed
 

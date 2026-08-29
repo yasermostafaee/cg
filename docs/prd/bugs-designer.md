@@ -3134,6 +3134,10 @@ that the offending plate in his template genuinely is full-frame.
 - The number was verified free before this heading was written: highest `B-` heading across every
   ref was `B-182`; `B-183` … `B-190` returned **zero** hits tree-wide (no forward references this
   time); `git stash list` empty; `git worktree list --porcelain` showed this checkout only.
+- ✅ **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/33246214343>
+  on `9a6e0eff`, `completed` + `success`, **`E2E (Playwright)` CONFIRMED RAN** (not skipped). The
+  same run discharges [[B-184]] and, because `9a6e0eff` is a later `dev` HEAD containing
+  `aa01681c`, [[B-181]]'s long-owed debt as well.
 
 ---
 
