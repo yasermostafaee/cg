@@ -16,9 +16,9 @@ import { designerStore } from '../store.js';
  *
  * A LOOK is a full sub-scene: a real COMPOSITION, instanced once at root level in the
  * multi-frame group's home document, and registered in the group by that instance's
- * element id. SOURCES are declared ONCE on the group; a plate REFERENCES a declared
- * source through a picker (never a free-typed routeKey — identity stays structural).
- * Exactly one look is active; the switch is a cut.
+ * element id. SOURCES are DERIVED from the plates (`deriveLookSources`) — `B-188` deleted the
+ * group's declaration, so a source comes into existence by pointing a plate at a key and this
+ * slice owns no source mutators at all. Exactly one look is active; the switch is a cut.
  *
  * ── WHY THE ACTIVE LOOK IS EDITOR STATE AND NOT SCENE STATE ─────────────────
  *
@@ -27,13 +27,18 @@ import { designerStore } from '../store.js';
  * IS scene state, and the two must not be conflated: storing the session's pick in the
  * scene would put a value in the `.vcg` that the runtime must then be careful to ignore.
  *
- * ── WHY A SOURCE'S routeKey IS FIXED AT DECLARATION (add/remove, no rename) ─
+ * ── 🔴 `B-188` — WHY THERE ARE NO SOURCE MUTATORS HERE ANY MORE ───────────
  *
- * Plates reference a source BY its routeKey. An in-place rename would have to rewrite
- * every referencing plate across every look's composition, and a missed one is a dangling
- * reference that surfaces only at export. Add + remove keeps the failure mode legible:
- * removing a referenced source leaves plates the preflight names one by one
- * (`look-source-undeclared`), which is exactly the surface built to carry that news.
+ * `addLookSource` / `removeLookSource` are DELETED. They wrote a list that stored what the
+ * plates already carried, and the cost of the second copy was `look-source-undeclared` — a
+ * refusal that could only exist because two lists were able to disagree. Adding a source is now
+ * pointing a plate at a key, in the Inspector; removing one is the last plate stopping.
+ *
+ * ⚠ **This also retires the no-rename policy, and it retires it in the author's favour.**
+ * That policy read: _"a rename would have to rewrite every referencing plate in every look, and
+ * a missed one is a dangling reference"_ — true, and it meant renaming `l1` to `cam1` was N
+ * plate edits PLUS two declaration edits, with a window in which the scene was red. It is N
+ * plate edits now, and no window: nothing can be dangling when the list IS the plates.
  */
 
 /** The multi-frame group of the document being edited, or undefined. */
@@ -95,36 +100,7 @@ export const looksSlice = {
     // second group the preflight then refuses. Idempotent, so the toolbar button is
     // safe to press twice.
     if (projectLookGroup(current.scene) !== undefined) return;
-    const scene = writeGroup({ id: 'group-1', sources: [], looks: [] });
-    if (scene !== null) set({ scene });
-  },
-
-  /** Declare a source ONCE on the group. Empty or duplicate routeKeys are no-ops. */
-  addLookSource(routeKey: string): void {
-    const group = activeLookGroup(current.scene);
-    const key = routeKey.trim();
-    if (group === undefined || key === '') return;
-    if (group.sources.some((s) => s.routeKey === key)) return;
-    const scene = writeGroup({
-      ...group,
-      sources: [...group.sources, { routeKey: key, dynamic: false }],
-    });
-    if (scene !== null) set({ scene });
-  },
-
-  /**
-   * Remove a declared source. Plates still referencing it become the preflight's
-   * `look-source-undeclared` refusals — deliberately allowed, so removal is always
-   * possible and the consequences are named per plate rather than blocked wholesale.
-   */
-  removeLookSource(routeKey: string): void {
-    const group = activeLookGroup(current.scene);
-    if (group === undefined) return;
-    if (!group.sources.some((s) => s.routeKey === routeKey)) return;
-    const scene = writeGroup({
-      ...group,
-      sources: group.sources.filter((s) => s.routeKey !== routeKey),
-    });
+    const scene = writeGroup({ id: 'group-1', looks: [] });
     if (scene !== null) set({ scene });
   },
 

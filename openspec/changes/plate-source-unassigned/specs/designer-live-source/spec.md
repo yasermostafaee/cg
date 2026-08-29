@@ -1,5 +1,23 @@
 # designer-live-source
 
+🔴 **SUPERSEDED IN PART by `derive-look-sources` (`B-188`), 2026-08-29.** The multi-frame group no
+longer DECLARES its sources — the list is derived from the plates — so every clause below that
+turns on a declared list has been overtaken. Specifically:
+
+- _"A look group's DECLARED source SHALL keep requiring one"_ — there is no `LookSource` to require it.
+- The refusal's two-way remedy (_"the `source` list"_ with a group, _"the `source id` box"_ without)
+  — there is ONE control now, and one sentence.
+- _"a source the group does not declare, shown as itself and marked as undeclared"_ — the
+  `(undeclared)` mark is gone with the concept it named.
+- The whole requirement _"A Live Source refusal names the remedy, not only the rule"_ — its subject,
+  `look-source-undeclared`, is DELETED.
+
+⚠ **The text is left INTACT rather than rewritten**, because this change is the record of what IT
+shipped and its `tasks.md` is ticked against these words. `derive-look-sources`'s own delta carries
+the replacements. What survives here unchanged and is NOT superseded: a new plate is born with no
+source; `live-source-unset` blocks the export in DOCUMENT scope; the control never substitutes a value
+and never repairs the scene; an export refusal is drawn in `danger`.
+
 ## ADDED Requirements
 
 ### Requirement: A new Live Source plate is created with NO source, and the refusal says so

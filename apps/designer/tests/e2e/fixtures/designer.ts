@@ -209,9 +209,21 @@ export class DesignerApp {
     await this.canvas.click({ position: pos });
   }
 
-  /** D-137 — the Live Source Inspector's source-id input. */
+  /**
+   * D-137 — the Live Source Inspector's source-id input.
+   *
+   * 🔴 **`combobox`, NOT `textbox`, since `B-188`, and the role change is not cosmetic.** The
+   * field now carries a `list` attribute (a `<datalist>` offering the source ids the template
+   * already uses), and per HTML-AAM an `<input type="text">` WITH a `list` has the implicit role
+   * **combobox**. Nothing about the markup looks different; twelve specs went red at once on
+   * `element(s) not found`, which is exactly the failure a Windows E2E run exists to catch and
+   * `pnpm gate` cannot.
+   *
+   * ⚠ `exact: true` is load-bearing. Playwright's `name` match is a case-insensitive
+   * SUBSTRING by default, so an un-exact `{ name: 'source' }` elsewhere now matches this field too.
+   */
   get liveSourceIdInput(): Locator {
-    return this.inspector.getByRole('textbox', { name: 'Live Source source id' });
+    return this.inspector.getByRole('combobox', { name: 'Live Source source id', exact: true });
   }
 
   /**

@@ -229,21 +229,21 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
   ];
 
   /*
-    ⭐ `B-183` — WHERE THE AUTHOR GOES TO FIX IT, resolved once and shared by both messages
-    below, because the control's own label differs by template.
+    ⭐ `B-183` — WHERE THE AUTHOR GOES TO FIX IT, resolved once and shared by every message
+    below that has to name the remedy.
 
     A message that states a rule and stops leaves the author to work out the remedy; both
-    refusals here now name the panel, the row, and what belongs in it. Which row exists
-    depends on whether the project declares a multi-frame group — `StyleSection` renders the
-    `source` PICKER when it does and the free-text `source id` box when it does not — so
-    naming the wrong one would be worse than naming none.
+    refusals here name the panel, the row, and what belongs in it.
+
+    ⭐ `B-188` — **ONE sentence now, not two.** It branched on whether the project declared a
+    multi-frame group, because `StyleSection` rendered a PICKER over the declared list in that
+    case and a free-text box otherwise. There is no declared list any more, so both cases are
+    the same control and the same remedy, and the branch is gone with the thing it branched on.
   */
-  const hasLookGroup = (scene.lookGroups ?? []).length > 0;
-  const chooseASource = hasLookGroup
-    ? 'Pick one in the Inspector\'s "Live Source" panel, from the "source" list — it offers ' +
-      'the sources the multi-frame group declares.'
-    : 'Set one in the Inspector\'s "Live Source" panel, in the "source id" box — a symbolic ' +
-      'name such as "guest-1", never a device.';
+  const chooseASource =
+    'Set one in the Inspector\'s "Live Source" panel, in the "source id" box — a symbolic ' +
+    'name such as "guest-1", never a device. Existing sources are offered as you type; ' +
+    'typing a new name is how a new source comes into existence.';
 
   const seen = new Set<string>();
   for (const doc of docs) {
@@ -258,9 +258,11 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
         a message about a typo, shown for a deliberate state, naming a value the author never
         typed. The two are split so each says the true thing and names its own remedy.
 
-        🔴 Checked in DOCUMENT scope, so it fires whether or not the template declares a
-        group. `look-source-undeclared` is group-scoped by nature; being pointed at nothing is
-        not — a plate with no source can never be seated by anyone.
+        🔴 Checked in DOCUMENT scope, so it fires whether or not the template has a
+        multi-frame group — a plate with no source can never be seated by anyone. That was
+        already true when `look-source-undeclared` sat beside it in GROUP scope, and `B-188`
+        deleting that one changes nothing here: this is the refusal that makes an unset plate
+        block Export, and it is the reason the derived list does not need one.
 
         ⚠ **THE CODE IS `live-source-unset`, NOT `live-source-unassigned`, AND THAT IS NOT A
         STYLE CHOICE.** `live-source-unassigned` is ALREADY TAKEN, by the bridge
@@ -490,53 +492,30 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
   }
   const group = groups[0];
   if (group !== undefined) {
-    const declared = new Set(group.sources.map((s) => s.routeKey));
-    const declaredList =
-      group.sources.length === 0
-        ? '(none)'
-        : group.sources.map((s) => `"${s.routeKey}"`).join(', ');
     const flatPlates = flattenElements(scene, 'document').filter(
       (f) => f.element.type === 'video-placeholder',
     );
     const ancestorIds = (f: FlatElement): string[] => f.ancestry.map((a) => a.id);
 
-    // B.1 — every plate in a group-bearing template references a DECLARED source. An
-    // undeclared plate would be invisible to the carrier: never declared, never seated —
-    // the 4.6 cancel-and-vanish failure by another door.
-    for (const f of flatPlates) {
-      const routeKey = (f.element as { routeKey?: string }).routeKey;
-      /*
-        ⭐ `B-183` — AN UNASSIGNED PLATE IS NOT AN UNDECLARED ONE, and is skipped here.
+    /*
+      🔴 `B-188` — **B.1 (`look-source-undeclared`) IS DELETED, and the deletion is the point.**
 
-        This read `?? ''` and then asked whether `''` was declared, so a plate with no source
-        was reported as *referencing source ""* — a claim about a reference that does not
-        exist. `live-source-unset` (document scope, above) owns that state and says the
-        true thing about it. Skipping is not a hole: the unassigned check runs for EVERY
-        plate, group or no group, so the plate is still refused — once, with the right words.
-      */
-      if (routeKey === undefined) continue;
-      if (!declared.has(routeKey)) {
-        issues.push({
-          severity: 'error',
-          code: 'look-source-undeclared',
-          message:
-            `Live Source "${label(f.element)}" references source "${routeKey}", which the ` +
-            `multi-frame group does not declare. Declared sources: ${declaredList}. A group ` +
-            `declares each source ONCE and every plate references a declared one — an ` +
-            `undeclared plate would never be seated, and nothing else would say so. ` +
-            // `B-183` / B3 — the message names the REMEDY, and there are legitimately two:
-            // the plate is wrong, or the declaration is missing. Naming only the first would
-            // push an author who meant the name toward retyping it somewhere it still is not
-            // declared. No one-click fix — the owner declined it (it needs an undoable scene
-            // mutation and is its own item).
-            `Either pick a declared source in the Inspector's "Live Source" panel, from the ` +
-            `"source" list — or, if "${routeKey}" is the name you meant, declare it with ` +
-            `"+ Source" in the Looks panel.`,
-          elementId: f.element.id,
-        });
-      }
-    }
+      It refused any plate whose `routeKey` was not in `lookGroups[].sources`. That list is gone:
+      the group's source list is DERIVED from the plates (`deriveLookSources`), so a plate can no
+      longer reference something the list lacks — there is nothing left for it to contradict. The
+      refusal existed only because one fact was stored twice, which is golden rule 6's shape and
+      the whole subject of `B-188`.
 
+      ⚠ **What was NOT deleted, because it is a different rule:** `live-source-unset` (a plate
+      pointed at NOTHING, DOCUMENT scope, above) still refuses the export — an unassigned plate
+      can never be seated by anyone, group or no group — and `look-source-duplicate` (B.2 below)
+      still refuses two PLATES sharing one key in one look. Neither is about a list.
+
+      ⚠ **The cost, accepted deliberately by the owner (`B-188` condition (c)):** a TYPO used to
+      land here as an exact, hard error naming the plate. It is now an ordinary new source. The
+      near-miss WARNING in document scope replaces it — softer on purpose, and it must never be
+      promoted to an error, because a check that can block is a second copy of the truth again.
+    */
     for (const look of group.looks) {
       const visibleSet = flatPlates.filter((f) => {
         const owner = lookContaining(group, ancestorIds(f));
@@ -560,11 +539,22 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
       */
       const byRoute = new Map<string, FlatElement[]>();
       for (const f of visibleSet) {
-        const routeKey = (f.element as { routeKey?: string }).routeKey ?? '';
+        /*
+          ⭐ `B-188` — UNASSIGNED PLATES ARE NOT GROUPED, and this line is why that matters.
+
+          It read `?? ''`, which bucketed every unassigned plate under one empty key. That was
+          harmless only because the loop below then required the key to be DECLARED, and `''`
+          never is. With the declaration gone that guard went with it, so two unassigned plates
+          in one look would have been reported as "source “” appears 2 times" — `B-183`'s exact
+          defect, reintroduced through the door the deletion opened. They are skipped instead;
+          `live-source-unset` already refuses each of them by name.
+        */
+        const routeKey = (f.element as { routeKey?: string }).routeKey;
+        if (routeKey === undefined) continue;
         byRoute.set(routeKey, [...(byRoute.get(routeKey) ?? []), f]);
       }
       for (const [routeKey, plates] of byRoute) {
-        if (plates.length < 2 || !declared.has(routeKey)) continue;
+        if (plates.length < 2) continue;
         for (const f of plates) {
           issues.push({
             severity: 'error',
@@ -616,7 +606,118 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
       }
     }
   }
+  issues.push(...nearMissIssues(scene));
   return issues;
+}
+
+/**
+ * 🔴 **`B-188` condition (c) — THE NEAR-MISS NUDGE, AND IT IS A WARNING FOREVER.**
+ *
+ * Deriving the source list from the plates gave up one thing that was genuinely useful: a typo.
+ * `cam1` for `cam-1` used to be `look-source-undeclared`, an exact hard error naming the plate,
+ * because the declaration was a second copy of the truth to check against. There is no second
+ * copy now, so the check cannot be exact — it is a HEURISTIC over what the plates say, and a
+ * heuristic that BLOCKS is worse than no heuristic at all.
+ *
+ * ⚠ **It must never be promoted to an error.** The owner accepted the typo trade explicitly and
+ * asked for a nudge; an error here would recreate the very thing `B-188` deleted, this time
+ * without even the excuse of being right. `severity: 'warning'` is what keeps `Exporter.produce`
+ * (which filters on `'error'`) and `ErrorMarkOverlay` (same filter) from treating it as a block.
+ *
+ * ── THE RULE, and why it is narrower than "a character or two" ────────────
+ *
+ * Two keys are a near miss when their NORMALISED forms — lower-cased with `-` and `_` removed —
+ * are within ONE Damerau edit (insert / delete / substitute / transpose).
+ *
+ * 🔴 **Minus the numbering exclusion, which is the whole reason this is usable.** A plain
+ * edit-distance rule fires on `l1` vs `l2` — the owner's own scene declares `l1`, `l2`, `l3` —
+ * and a warning that shouts at correct work is a warning authors learn to ignore. So a pair whose
+ * DIGIT-RUN SKELETONS are equal (`cam-1` and `cam-2` are both `cam#`) and whose digits differ is
+ * a family member, never a typo, and is silent.
+ *
+ * Two edits are deliberately NOT covered. At distance 2 the false-positive rate on short
+ * symbolic ids climbs faster than the catch rate, and separator/case differences — the most
+ * common real slip, `cam1` vs `cam-1` — are already free because normalisation folds them out
+ * before the distance is measured. Distance 0 after normalisation (a pure separator or case
+ * difference) always warns; distance 1 warns only when the longer form is at least 4 characters,
+ * so `a` and `b` are left alone.
+ */
+function nearMissIssues(scene: Scene): ExportIssue[] {
+  const first = new Map<string, string>();
+  for (const flat of flattenElements(scene, 'document')) {
+    const el = flat.element;
+    if (el.type !== 'video-placeholder') continue;
+    const routeKey = el.routeKey;
+    if (routeKey === undefined || first.has(routeKey)) continue;
+    first.set(routeKey, el.id);
+  }
+  const keys = [...first.keys()];
+  const out: ExportIssue[] = [];
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      const a = keys[i];
+      const b = keys[j];
+      if (a === undefined || b === undefined) continue;
+      if (!isNearMiss(a, b)) continue;
+      out.push({
+        severity: 'warning',
+        code: 'live-source-near-miss',
+        // The LATER key is named as the suspect and carries the mark: in document order of
+        // first use it is the one just typed, so the sentence reads the way the author acted.
+        message:
+          `Live Source id "${b}" is one character from "${a}", which this template already ` +
+          `uses. If they are meant to be the same input, make them the same id — two spellings ` +
+          `are two sources, and the operator would have to map both. If they really are two ` +
+          `inputs, nothing is wrong and the export is not blocked.`,
+        elementId: first.get(b) ?? '',
+      });
+    }
+  }
+  return out;
+}
+
+/** Lower-cased with separators removed — what the near-miss distance is measured on. */
+function normaliseKey(key: string): string {
+  return key.toLowerCase().replace(/[-_]/g, '');
+}
+
+/** Every maximal digit run collapsed to `#`, so `cam1` and `cam12` share a skeleton. */
+function digitSkeleton(key: string): string {
+  return normaliseKey(key).replace(/[0-9]+/g, '#');
+}
+
+/** See {@link nearMissIssues} for the rule and why it is shaped this way. */
+function isNearMiss(a: string, b: string): boolean {
+  const na = normaliseKey(a);
+  const nb = normaliseKey(b);
+  if (na === nb) return true;
+  // Same family, different number — `cam-1` vs `cam-2`. Never a typo, always silent.
+  if (digitSkeleton(a) === digitSkeleton(b)) return false;
+  if (Math.max(na.length, nb.length) < 4) return false;
+  return damerauWithin1(na, nb);
+}
+
+/** Whether `a` and `b` are within ONE insert, delete, substitution or transposition. */
+function damerauWithin1(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (a.length === b.length) {
+    const diff: number[] = [];
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) diff.push(i);
+    if (diff.length === 1) return true;
+    if (diff.length !== 2) return false;
+    const [p, q] = diff as [number, number];
+    return q === p + 1 && a[p] === b[q] && a[q] === b[p];
+  }
+  const long = a.length > b.length ? a : b;
+  const short = a.length > b.length ? b : a;
+  let i = 0;
+  let skipped = false;
+  for (const ch of long) {
+    if (short[i] === ch) i++;
+    else if (skipped) return false;
+    else skipped = true;
+  }
+  return true;
 }
 
 /** Is this flattened element hidden by the arrangement (itself or through an ancestor)? */

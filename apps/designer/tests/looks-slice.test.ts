@@ -13,9 +13,13 @@ import { activeLayersOf } from '../src/renderer/state/scene-doc.js';
  * `multibox-layout-switch` §14 (LOOKS) phase 2 — **the LOOK authoring slice.**
  *
  * The model under test: a LOOK is a real COMPOSITION instanced once at root level and
- * registered in the group by that instance's element id; SOURCES are declared once on
- * the group; the session's active look is editor state, the group's default is scene
- * state, and the two never conflate.
+ * registered in the group by that instance's element id; the session's active look is editor
+ * state, the group's default is scene state, and the two never conflate.
+ *
+ * 🔴 `B-188` — **the group DECLARES NO SOURCES, so this slice has no source mutators.**
+ * `addLookSource` / `removeLookSource` are deleted; the list is derived from the plates
+ * (`deriveLookSources`, covered in `@cg/shared-schema`'s `look-sources.test.ts`) and a source
+ * comes into existence by pointing a plate at a key.
  */
 
 afterEach(() => {
@@ -37,8 +41,11 @@ describe('createLookGroup — the toolbar action', () => {
     designerStore.createLookGroup();
     designerStore.createLookGroup();
     const group = projectLookGroup(scene());
-    expect(group?.sources).toEqual([]);
     expect(group?.looks).toEqual([]);
+    // `B-188` — a fresh group carries NO source list at all. Asserted on the object rather
+    // than on a typed field, because the field is gone from the type: `toEqual([])` on a
+    // deleted key would pass vacuously as `undefined === undefined` and prove nothing.
+    expect('sources' in (group ?? {})).toBe(false);
     // A fresh project opens INSIDE its entry composition, so the group lands on that
     // composition (the projection carries it to the export path) — count every home.
     const all = [
@@ -64,23 +71,31 @@ describe('createLookGroup — the toolbar action', () => {
   });
 });
 
-describe('sources — declared once, add/remove, routeKey fixed at declaration', () => {
-  it('adds unique sources; duplicates and blanks are no-ops', () => {
-    fresh();
-    designerStore.createLookGroup();
-    designerStore.addLookSource('live-1');
-    designerStore.addLookSource('live-1');
-    designerStore.addLookSource('  ');
-    designerStore.addLookSource('live-2');
-    expect(activeLookGroup(scene())?.sources.map((s) => s.routeKey)).toEqual(['live-1', 'live-2']);
+/**
+ * 🔴 **`B-188` — THE SOURCE MUTATORS ARE GONE, and this describe is what replaced them.**
+ *
+ * It held two tests: `addLookSource` deduping and rejecting blanks, and `removeLookSource`
+ * leaving the referencing plates for the preflight to name. Both tested a list that no longer
+ * exists. What survives is the property they were really protecting — that a source is a fact
+ * about the plates and cannot be edited into or out of existence anywhere else.
+ */
+describe('B-188 — a group owns no source list, and nothing can write one', () => {
+  it('🔴 the store exposes NO source mutators — the door is closed, not merely unused', () => {
+    // Named explicitly: an `addLookSource` that came back as a no-op would satisfy every
+    // behavioural assertion in this file while quietly reopening the second copy of the truth.
+    const store = designerStore as unknown as Record<string, unknown>;
+    expect(store['addLookSource']).toBeUndefined();
+    expect(store['removeLookSource']).toBeUndefined();
   });
 
-  it('removes a source; the plates that still reference it are for the PREFLIGHT to name', () => {
+  it('a group with looks still carries no `sources` key after the looks are authored', () => {
     fresh();
     designerStore.createLookGroup();
-    designerStore.addLookSource('live-1');
-    designerStore.removeLookSource('live-1');
-    expect(activeLookGroup(scene())?.sources).toEqual([]);
+    designerStore.addLook();
+    designerStore.addLook();
+    const group = activeLookGroup(scene());
+    expect(group?.looks).toHaveLength(2);
+    expect('sources' in (group ?? {})).toBe(false);
   });
 });
 

@@ -88,10 +88,11 @@ test.describe('Live Source (D-137 phase 1)', () => {
       ⭐ `B-183` — IT EXISTS ON THE CANVAS AND POINTS AT NOTHING.
 
       This asserted `toHaveValue('live-1')`. That default was the placeholder text of the
-      Looks panel's `+ Source` input — a suggestion the author had not accepted, which
-      nothing declared — so a freshly drawn plate was born referencing an undeclared
-      source and the preflight then blamed the author for it. The owner's principle:
-      nothing lands unconfirmed.
+      Looks panel's source input — a suggestion the author had not accepted — so a freshly
+      drawn plate was born pointed at something the owner never typed. ⚠ `B-188` has since
+      deleted the DECLARATION the guess used to contradict; the reason survives it unchanged,
+      because it was never about the declaration. The owner's principle: nothing lands
+      unconfirmed.
     */
     await expect(holes(app)).toHaveCount(1);
     await expect(app.liveSourceIdInput).toHaveValue('');

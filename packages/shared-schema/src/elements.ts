@@ -1179,26 +1179,25 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    *
    * ⭐ **`B-183` — a new plate points at NOTHING until the author says otherwise.** It used
    * to default to `live-1` (and, from the canvas tool, to `nextLiveSourceId`'s first free
-   * `live-N`), which is the placeholder text of the Looks panel's `+ Source` input — a
-   * SUGGESTION the author had not accepted. Nothing declared it, so every freshly drawn
-   * plate was born referencing an undeclared source, and the group-scope preflight then
-   * reported it as the author's mistake. The owner's principle: **nothing lands
+   * `live-N`), which was the placeholder text of the Looks panel's source input — a
+   * SUGGESTION the author had not accepted. The owner's principle: **nothing lands
    * unconfirmed.**
    *
-   * 🔴 **Optional on the ELEMENT only — `LookSource.routeKey` stays REQUIRED.** A plate may
-   * not yet have a source; a DECLARATION always names one. Widening the shared
-   * {@link LiveSourceIdSchema} instead would let a group declare an empty source, which is
-   * the one thing this must not permit.
+   * 🔴 **`B-188` — THIS FIELD IS THE ONLY PLACE A SOURCE ID IS WRITTEN NOW.** The multi-frame
+   * group used to declare a list beside it and `LookSource.routeKey` was the required half of
+   * an asymmetry recorded here. That declaration is deleted: the group's source list is
+   * DERIVED from these fields (`deriveLookSources`), so this optional field is the whole truth
+   * and there is no second copy for it to contradict. A source comes into existence by being
+   * typed here.
    *
-   * ⚠ **Absent is not "invalid", and it is not "declared".** The export refuses it — see
-   * `live-source-unset` in `live-source-preflight.ts`, whose message is separate from
-   * `look-source-undeclared` precisely because "you have not chosen yet" and "you chose
-   * something that does not exist" are different mistakes with different remedies.
+   * ⚠ **Absent is not "invalid".** The export refuses it — `live-source-unset` in
+   * `live-source-preflight.ts`, in DOCUMENT scope, so it refuses whether or not the template
+   * has a group. (Its companion `look-source-undeclared` — "you chose something that does not
+   * exist" — went with the declaration; there is nothing left to not-exist.)
    *
-   * Two rejected alternatives, recorded so they are not relitigated: defaulting to the
-   * FIRST DECLARED source silently binds two plates to one input and the error is never
-   * seen; keeping `live-N` and auto-declaring it means drawing a box edits the group's
-   * source list without being asked.
+   * Two rejected alternatives, recorded so they are not relitigated: defaulting to the first
+   * source already in use silently binds two plates to one input and the error is never seen;
+   * keeping `live-N` means drawing a box invents a source the author never asked for.
    */
   routeKey: LiveSourceIdSchema.optional(),
   /**

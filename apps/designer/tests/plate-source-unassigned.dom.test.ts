@@ -14,25 +14,31 @@ import { liveSourceIssues } from '../src/renderer/state/live-source-preflight.js
 import { editSceneOf } from '../src/renderer/state/scene-doc.js';
 
 /**
- * ⭐ **`B-183` / `B-184` — THE PLATE, THE PREFLIGHT AND THE INSPECTOR, MEASURED TOGETHER.**
+ * ⭐ **`B-183` / `B-184` / `B-188` — THE PLATE, THE PREFLIGHT AND THE INSPECTOR, TOGETHER.**
  *
- * ── 🔴 WHY THE FIXTURE IS AN UNDECLARED PLATE, AND WHY THAT IS NOT OPTIONAL ──
+ * ── 🔴 WHY THE FIXTURE IS A PLATE NO DECLARATION MENTIONS ────────
  *
  * **A fixture in which every plate is declared cannot see any of this**, which is exactly how
- * it shipped: the existing look tests build scenes whose plates all reference declared
- * sources, so nothing ever exercised the disagreement between what a plate holds and what a
- * group declares. Every test below therefore builds a plate whose `routeKey` is NOT in its
- * group's declared list, and asserts the scene, the preflight and the Inspector **by value,
- * in the same test** — because the defect was never in any one of them, it was in whether
- * they agreed.
+ * `B-183` shipped: the existing look tests built scenes whose plates all referenced declared
+ * sources, so nothing ever exercised the disagreement between what a plate held and what a
+ * group declared. Every test below therefore builds a plate whose `routeKey` is NOT in the
+ * group's (now retired) declared list, and asserts the scene, the preflight and the Inspector
+ * **by value, in the same test** — because the defect was never in any one of them, it was
+ * in whether they agreed.
  *
- * ── ⚠ WHAT THE MEASUREMENT KILLED, AND WHY THAT IS PINNED HERE TOO ──────────
+ * 🔴 **`B-188` INVERTED THE ANSWER AND THE FIXTURE IS UNCHANGED, WHICH IS THE POINT.** The
+ * group no longer declares sources: the list is derived from the plates, so this same plate is
+ * now an ORDINARY SOURCE and `look-source-undeclared` is deleted. The fixtures still write the
+ * retired `sources` array, because a scene stored before the change carries it and "the field
+ * is ignored" is only asserted by a fixture that contains one.
  *
- * The brief that commissioned this work carried a second hypothesis: that the Inspector
- * renders the group's DECLARED list and falls back to its first option, which is why it
- * showed `l1` for an element holding `live-1`. **That is FALSE and was false before this
- * change** — the select already rendered the real value labeled `(undeclared)`. It is pinned
- * below anyway: an honest control that nothing tests is one refactor from becoming a
+ * ── ⚠ WHAT THE MEASUREMENT KILLED, AND WHY THAT IS PINNED HERE TOO ──────
+ *
+ * The brief that commissioned `B-183` carried a second hypothesis: that the Inspector renders
+ * the group's DECLARED list and falls back to its first option, which is why it showed `l1` for
+ * an element holding `live-1`. **That was FALSE then and is unreachable now** — the control
+ * shows what the element holds, and after `B-188` it is a text box that cannot substitute at
+ * all. Pinned anyway: an honest control that nothing tests is one refactor from becoming a
  * dishonest one, and this is the file where that would be noticed.
  */
 
@@ -68,8 +74,38 @@ afterEach(() => {
 
 const src = (routeKey: string) => ({ routeKey, dynamic: false });
 
-/** The DECLARED list for every fixture here — deliberately NOT `live-*`, as the owner's is. */
-const DECLARED = ['l1', 'l2'] as const;
+const baseElProps = { opacity: 1, visible: true, locked: false, zIndex: 0 };
+
+/**
+ * A SIBLING plate holding a key — which, after `B-188`, is the only way a source exists.
+ *
+ * Placed clear of the plate under test at `(0, 0, 640, 360)`, so an OVERLAP refusal (a
+ * different rule) can never be mistaken for this file's subject.
+ */
+const sibling = (id: string, routeKey: string, x: number): Element =>
+  ({
+    ...baseElProps,
+    id,
+    name: id,
+    type: 'video-placeholder',
+    transform: {
+      position: { x, y: 0 },
+      size: { w: 600, h: 340 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      anchor: { x: 0, y: 0 },
+    },
+    routeKey,
+  }) as unknown as Element;
+
+/**
+ * The keys the template already uses — deliberately NOT `live-*`, as the owner's are.
+ *
+ * 🔴 `B-188`: these are held by SIBLING PLATES now, not by a declaration. They are also
+ * written into the group's retired `sources` array by {@link seed}, so every assertion below
+ * runs against a scene that still carries the old field.
+ */
+const IN_USE = ['l1', 'l2'] as const;
 
 /**
  * A project holding ONE composition that carries both the look group and the plate.
@@ -86,7 +122,7 @@ const DECLARED = ['l1', 'l2'] as const;
  * root layers into a composition with a TIMESTAMPED id and leaves `scene.layers` empty, which
  * is neither addressable nor reachable by the document walk.
  */
-function seed(plate: Element, declared: readonly string[] | null = DECLARED): void {
+function seed(plate: Element, declared: readonly string[] | null = IN_USE): void {
   const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
   const { scene } = projects.newScene('demo', 'custom');
   designerStore.setScene(
@@ -107,7 +143,11 @@ function seed(plate: Element, declared: readonly string[] | null = DECLARED): vo
               visible: true,
               locked: false,
               blendMode: 'normal',
-              children: [plate],
+              children: [
+                plate,
+                // `B-188` — the keys exist because PLATES hold them.
+                ...(declared ?? []).map((k, i) => sibling(`sib-${k}`, k, 660 + i * 620)),
+              ],
             },
           ],
           fields: [],
@@ -156,13 +196,36 @@ function renderStyle(el: Element): HTMLDivElement {
   return container;
 }
 
-/** The `source` picker, or the free-text `source id` box when there is no group. */
+/**
+ * The `source id` box.
+ *
+ * 🔴 **`B-188` — THERE IS ONLY ONE CONTROL NOW.** It used to be a `<select>` over the
+ * group's declared sources when a group existed and a text box otherwise. The group declares
+ * nothing, so a picker could only ever offer what other plates already chose and there would be
+ * no way to create a source at all. Typing a new key IS how one comes into existence.
+ */
+function sourceInput(host: HTMLElement): HTMLInputElement | null {
+  return host.querySelector('input[aria-label="Live Source source id"]');
+}
+/** ⚠ There must be NO `<select>` here — asserted, so the picker cannot creep back. */
 function sourceSelect(host: HTMLElement): HTMLSelectElement | null {
   return host.querySelector('select[aria-label="source"]');
 }
-/** Every option as `value|label`, so a substitution cannot hide behind a matching label. */
-function optionsOf(sel: HTMLSelectElement): string[] {
-  return Array.from(sel.options).map((o) => `${o.value}|${o.textContent ?? ''}`);
+/** The keys OFFERED by the field's datalist — a suggestion, never a constraint. */
+function suggestionsOf(host: HTMLElement): string[] {
+  const list = host.querySelector('datalist');
+  return Array.from(list?.querySelectorAll('option') ?? []).map((o) => o.value);
+}
+/**
+ * Type a value into the box and blur, which is how `TextField` commits.
+ *
+ * ⚠ `focusout`, not `blur`. React attaches `onBlur` to the DELEGATED `focusout` event; a
+ * plain non-bubbling `blur` reaches no handler and the assertion then fails as "the commit
+ * did nothing" when the commit was simply never invoked.
+ */
+function typeInto(input: HTMLInputElement, value: string): void {
+  input.value = value;
+  input.dispatchEvent(new Event('focusout', { bubbles: true }));
 }
 
 /** The same edit scene the app renders and preflights — see {@link issuesNow}. */
@@ -188,57 +251,57 @@ function issuesNow(): readonly { code: string; message: string; elementId?: stri
 }
 
 describe('B-183 — a new plate is created UNASSIGNED', () => {
-  it('holds no routeKey, and the Inspector offers the unassigned state as its own option', () => {
+  it('holds no routeKey, and the box is EMPTY while the keys in use are offered beside it', () => {
     seed(defaultLiveSource('p1', 0, 0) as unknown as Element);
     const el = held('p1');
     expect((el as { routeKey?: string }).routeKey).toBeUndefined();
 
-    const sel = sourceSelect(renderStyle(el));
-    expect(sel).not.toBeNull();
-    // 🔴 By value: the unassigned sentinel is SELECTED and labeled, and the declared options
-    // are offered beside it — never selected in its place.
-    expect(sel?.value).toBe('');
-    expect(optionsOf(sel as HTMLSelectElement)).toEqual(['|— no source —', 'l1|l1', 'l2|l2']);
+    const host = renderStyle(el);
+    const box = sourceInput(host);
+    expect(box).not.toBeNull();
+    // 🔴 By value: unassigned reads as an EMPTY box, and the keys the template already uses
+    // are OFFERED — never substituted into the field.
+    expect(box?.value).toBe('');
+    expect(suggestionsOf(host)).toEqual(['l1', 'l2']);
+    // 🔴 `B-188` — and there is no picker, on a template that HAS a group. A select here
+    // would mean a control that cannot create the source it is being asked for.
+    expect(sourceSelect(host)).toBeNull();
   });
 
-  it('is refused with live-source-unset, and the message names the picker', () => {
+  it('is refused with live-source-unset, and the message names the row and the remedy', () => {
     seed(defaultLiveSource('p1', 0, 0) as unknown as Element);
     const mine = issuesNow().filter((i) => i.elementId === 'p1');
     expect(mine.map((i) => i.code)).toEqual(['live-source-unset']);
     const m = mine[0]?.message ?? '';
     expect(m).toContain('has no source');
-    // B3 — WITH a group the remedy is the picker, and the message says so.
-    expect(m).toContain('"source" list');
-    expect(m).not.toContain('"source id" box');
+    expect(m).toContain('"source id" box');
+    // `B-188` — and it says that typing a new name is legitimate, because it now is.
+    expect(m).toContain('comes into existence');
     // 🔴 It must not be the old wrong messages an absent value used to produce.
     expect(m).not.toContain('not symbolic');
     expect(m).not.toContain('references source');
   });
 
-  it('names the FREE-TEXT row instead when the template declares no group', () => {
+  it('🔴 `B-188` — the message is the SAME with and without a group; there is no branch left', () => {
+    seed(defaultLiveSource('p1', 0, 0) as unknown as Element);
+    const withGroup = issuesNow().find((i) => i.elementId === 'p1')?.message;
+    designerStore._reset();
     seedNoGroup(defaultLiveSource('p1', 0, 0) as unknown as Element);
-    const mine = issuesNow().filter((i) => i.elementId === 'p1');
-    expect(mine.map((i) => i.code)).toEqual(['live-source-unset']);
-    expect(mine[0]?.message).toContain('"source id" box');
-    expect(mine[0]?.message).not.toContain('"source" list');
+    const without = issuesNow().find((i) => i.elementId === 'p1')?.message;
+    expect(withGroup).toBe(without);
+    expect(withGroup).toContain('"source id" box');
   });
 
-  it('choosing a declared source clears the refusal; choosing no source restores it', () => {
+  it('typing a key clears the refusal; emptying the box restores it', () => {
     seed(defaultLiveSource('p1', 0, 0) as unknown as Element);
-    const sel = sourceSelect(renderStyle(held('p1'))) as HTMLSelectElement;
+    const box = sourceInput(renderStyle(held('p1'))) as HTMLInputElement;
 
-    act(() => {
-      sel.value = 'l1';
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    act(() => typeInto(box, 'l1'));
     expect((held('p1') as { routeKey?: string }).routeKey).toBe('l1');
     expect(issuesNow().filter((i) => i.elementId === 'p1')).toEqual([]);
 
-    // Back to unassigned — the sentinel must round-trip to `undefined`, never to `''`.
-    act(() => {
-      sel.value = '';
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    // Back to unassigned — the empty box must round-trip to `undefined`, never to `''`.
+    act(() => typeInto(box, ''));
     expect((held('p1') as { routeKey?: string }).routeKey).toBeUndefined();
     expect(
       issuesNow()
@@ -246,52 +309,98 @@ describe('B-183 — a new plate is created UNASSIGNED', () => {
         .map((i) => i.code),
     ).toEqual(['live-source-unset']);
   });
+
+  /**
+   * 🔴 **`B-188` — TYPING A KEY NOBODY ELSE USES IS HOW A SOURCE COMES INTO EXISTENCE.**
+   *
+   * This is the act the old model made impossible: the picker could only offer what the group
+   * declared, and typing was not available at all on a template with a group. The assertion is
+   * end to end — the scene holds it, the preflight is clean, and it joins the derived list.
+   */
+  it('🔴 typing a BRAND-NEW key is accepted and creates the source', () => {
+    seed(defaultLiveSource('p1', 0, 0) as unknown as Element);
+    const box = sourceInput(renderStyle(held('p1'))) as HTMLInputElement;
+    act(() => typeInto(box, 'presenter'));
+
+    expect((held('p1') as { routeKey?: string }).routeKey).toBe('presenter');
+    expect(issuesNow().filter((i) => i.elementId === 'p1')).toEqual([]);
+    // It is now one of the template's sources, offered to the NEXT plate.
+    expect(suggestionsOf(renderStyle(held('sib-l1')))).toContain('presenter');
+  });
 });
 
-describe('B-183 — the DISCRIMINATING fixture: a plate the group does not declare', () => {
+describe('B-188 — the DISCRIMINATING fixture: a plate the stale declaration does not mention', () => {
   /**
-   * 🔴 THE ONE TEST THE BRIEF ASKED FOR: scene, preflight and Inspector, by value, together.
-   * This is the owner's exact situation — a plate holding `live-1` under a group declaring
-   * `l1`/`l2` — and it is the shape a fixture of all-declared plates can never produce.
+   * 🔴 **THE TEST THAT INVERTED, AND THE FIXTURE THAT DID NOT.**
+   *
+   * This is the owner's exact situation — a plate holding `live-1` while the group's retired
+   * array lists `l1`/`l2`. Under `B-183` it asserted an export-blocking `look-source-undeclared`
+   * naming the declared list. Under `B-188` there IS no declared list: the same plate is an
+   * ordinary source, and the assertion is that the scene, the preflight and the Inspector agree
+   * about that — which is the property the file has always been for.
    */
-  it('the scene, the preflight and the Inspector all say live-1 — none of them substitutes', () => {
+  it('the scene, the preflight and the Inspector all say live-1, and NOTHING refuses it', () => {
     const plate = { ...defaultLiveSource('p1', 0, 0), routeKey: 'live-1' } as unknown as Element;
     seed(plate);
 
     // 1. what the SCENE holds
     expect((held('p1') as { routeKey?: string }).routeKey).toBe('live-1');
 
-    // 2. what the PREFLIGHT says — by value, including the declared list and the remedy
-    const mine = issuesNow().filter((i) => i.elementId === 'p1');
-    expect(mine.map((i) => i.code)).toEqual(['look-source-undeclared']);
-    const m = mine[0]?.message ?? '';
-    expect(m).toContain('references source "live-1"');
-    expect(m).toContain('Declared sources: "l1", "l2"');
-    // B3 — BOTH legitimate remedies are named: fix the plate, or declare the name.
-    expect(m).toContain('"source" list');
-    expect(m).toContain('declare it with "+ Source" in the Looks panel');
+    // 2. what the PREFLIGHT says — nothing, and specifically not the deleted code
+    expect(issuesNow().filter((i) => i.elementId === 'p1')).toEqual([]);
+    expect(issuesNow().map((i) => i.code)).not.toContain('look-source-undeclared');
 
-    // 3. what the INSPECTOR renders — the real value, marked, and NOT replaced by `l1`
-    const sel = sourceSelect(renderStyle(held('p1'))) as HTMLSelectElement;
-    expect(sel.value).toBe('live-1');
-    expect(optionsOf(sel)).toEqual(['live-1|live-1 (undeclared)', 'l1|l1', 'l2|l2']);
+    // 3. what the INSPECTOR renders — the real value, unmarked, with the other keys OFFERED
+    const host = renderStyle(held('p1'));
+    expect(sourceInput(host)?.value).toBe('live-1');
+    expect(suggestionsOf(host)).toEqual(['l1', 'l2']);
+    // 🔴 The `(undeclared)` mark is GONE with the concept. A label that says a key is not
+    // declared, on a template that declares nothing, would be a control telling a falsehood.
+    expect(host.textContent ?? '').not.toContain('(undeclared)');
   });
 
-  it('POSITIVE CONTROL — a declared plate: no issue, no marking, no extra option', () => {
+  it('POSITIVE CONTROL — a plate on a key others use: no issue, and it is not offered to itself', () => {
     const plate = { ...defaultLiveSource('p1', 0, 0), routeKey: 'l1' } as unknown as Element;
     seed(plate);
     expect(issuesNow().filter((i) => i.elementId === 'p1')).toEqual([]);
-    const sel = sourceSelect(renderStyle(held('p1'))) as HTMLSelectElement;
-    expect(sel.value).toBe('l1');
-    expect(optionsOf(sel)).toEqual(['l1|l1', 'l2|l2']);
+    const host = renderStyle(held('p1'));
+    expect(sourceInput(host)?.value).toBe('l1');
+    // Its own key is filtered out of its own suggestions — offering it is offering a no-op.
+    expect(suggestionsOf(host)).toEqual(['l2']);
   });
 
-  it('the undeclared plate is NOT repaired — the scene keeps the author value', () => {
+  it('the plate is NOT repaired — the scene keeps the author value', () => {
     const plate = { ...defaultLiveSource('p1', 0, 0), routeKey: 'live-1' } as unknown as Element;
     seed(plate);
     renderStyle(held('p1'));
-    // Rendering the Inspector is not a write. The value is the author's to fix.
+    // Rendering the Inspector is not a write. The value is the author's.
     expect((held('p1') as { routeKey?: string }).routeKey).toBe('live-1');
+  });
+
+  /**
+   * 🔴 **`B-188` condition (c) — THE TYPO TRADE, WITH THE NUDGE THAT REPLACED THE ERROR.**
+   *
+   * The commonest real slip is a separator or a case, which normalisation folds out — so `l-1`
+   * beside `l1` is a distance-0 near miss. It is a WARNING and must stay one: `severity` is
+   * asserted rather than merely the presence of a message, because an error here would recreate
+   * the second copy of the truth this whole change deleted.
+   */
+  it('🔴 a NEAR-MISS key warns and does NOT block; a numbered sibling is silent', () => {
+    const plate = { ...defaultLiveSource('p1', 0, 0), routeKey: 'l-1' } as unknown as Element;
+    seed(plate);
+    const near = issuesNow().filter((i) => i.code === 'live-source-near-miss');
+    expect(near).toHaveLength(1);
+    expect((near[0] as { severity?: string }).severity).toBe('warning');
+    expect(near[0]?.message).toContain('"l1"');
+    // 🔴 Nothing about it blocks: no error anywhere in the scene.
+    expect(issuesNow().filter((i) => (i as { severity?: string }).severity === 'error')).toEqual(
+      [],
+    );
+
+    // POSITIVE CONTROL — `l3` is the owner's own numbering convention, and must be silent.
+    designerStore._reset();
+    seed({ ...defaultLiveSource('p2', 0, 0), routeKey: 'l3' } as unknown as Element);
+    expect(issuesNow().filter((i) => i.code === 'live-source-near-miss')).toEqual([]);
   });
 });
 
@@ -308,8 +417,11 @@ describe('B-184 — an export refusal is drawn in danger, not caution', () => {
   }
 
   it('the issue block uses issueSummary + issue, and neither is groupLabel', () => {
-    const plate = { ...defaultLiveSource('p1', 0, 0), routeKey: 'live-1' } as unknown as Element;
-    seed(plate);
+    // ⚠ `B-188` — an UNDECLARED plate is no longer a refusal, so this fixture is an UNSET
+    // one. The subject is the colour of an export refusal, and `live-source-unset` is the
+    // refusal that survived; using a plate that no longer refuses would have made the whole
+    // block vanish and the assertion pass on `null`.
+    seed(defaultLiveSource('p1', 0, 0) as unknown as Element);
     const host = renderLooks();
 
     const block = host.querySelector('[aria-label="Look issues"]');

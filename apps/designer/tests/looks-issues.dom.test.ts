@@ -9,10 +9,12 @@ import { LooksSection } from '../src/renderer/features/inspector/LooksSection.js
 /**
  * LOOKS phase 2 step 6 — **the refusal family, surfaced where the author works.**
  *
- * One test per family member: an undeclared reference, a within-look duplicate, the
- * cross-boundary overlap, and the v1 second group — each must appear in the Looks
- * section's issue block, in the preflight's own wording. A clean template is the
- * positive control: no issue block at all.
+ * One test per family member: a within-look duplicate, the cross-boundary overlap, the v1
+ * second group and — `B-188` — the near-miss NUDGE, each in the preflight's own wording. A
+ * clean template is the positive control: no issue block at all.
+ *
+ * 🔴 `B-188` deleted `look-source-undeclared`; the test that covered it now asserts its
+ * ABSENCE, and the near-miss warning is asserted to be a warning rather than a refusal.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -112,6 +114,11 @@ function scene(options: {
   } as unknown as Scene;
 }
 
+/**
+ * ⚠ `B-188` — the RETIRED `sources` array is written here ON PURPOSE. It is how a scene
+ * stored before the change looks on disk, and its presence is what makes the deletion tests
+ * below discriminate rather than assert a vacuous absence.
+ */
 const GROUP = (over: Record<string, unknown> = {}): unknown => ({
   id: 'g1',
   sources: [
@@ -135,7 +142,7 @@ describe('the LOOKS refusal family appears in the section, in the wording of the
     expect(text).not.toContain('export will refuse');
   });
 
-  it('🔴 an UNDECLARED source reference is surfaced, naming source and declared list', () => {
+  it('🔴 `B-188` — a source the stale declaration omits surfaces NOTHING at all', () => {
     const text = render(
       scene({
         rootChildren: [instance('inst-a', 'comp-a')],
@@ -143,9 +150,45 @@ describe('the LOOKS refusal family appears in the section, in the wording of the
         lookGroups: [GROUP()],
       }),
     );
-    expect(text).toContain('export will refuse');
-    expect(text).toContain('"nope-9"');
-    expect(text).toContain('does not declare');
+    expect(text).not.toContain('export will refuse');
+    expect(text).not.toContain('does not declare');
+  });
+
+  /**
+   * 🔴 **`B-188` condition (c) — THE NEAR MISS IS A NUDGE, AND THE HEADING SAYS SO.**
+   *
+   * The two halves are asserted together deliberately: a warning listed under an "export will
+   * refuse" heading would be a warning that reads as an error to everyone looking at the
+   * screen, which is how it later gets "fixed" into one.
+   */
+  it('🔴 a NEAR-MISS id is surfaced as a nudge — named, and explicitly NOT blocking', () => {
+    const text = render(
+      scene({
+        rootChildren: [instance('inst-a', 'comp-a')],
+        compositions: [
+          lookComp('comp-a', [plate('a-1', 'live-1', 0, 0), plate('a-2', 'live1', 960, 0)]),
+        ],
+        lookGroups: [GROUP()],
+      }),
+    );
+    expect(text).toContain('export is not blocked');
+    expect(text).toContain('"live1"');
+    expect(text).toContain('"live-1"');
+    expect(text).not.toContain('export will refuse');
+  });
+
+  it('⚠ a numbered FAMILY is silent — live-1 and live-2 are not a near miss', () => {
+    const text = render(
+      scene({
+        rootChildren: [instance('inst-a', 'comp-a')],
+        compositions: [
+          lookComp('comp-a', [plate('a-1', 'live-1', 0, 0), plate('a-2', 'live-2', 960, 0)]),
+        ],
+        lookGroups: [GROUP()],
+      }),
+    );
+    expect(text).not.toContain('export is not blocked');
+    expect(text).not.toContain('export will refuse');
   });
 
   it('🔴 the same source TWICE in one look is surfaced, teaching the across-looks case', () => {

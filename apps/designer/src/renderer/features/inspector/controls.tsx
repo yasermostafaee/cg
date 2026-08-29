@@ -471,9 +471,27 @@ interface TextFieldProps {
    * the other (B-009). Defaults to the value alone (legacy behavior).
    */
   resetKey?: string;
+  /**
+   * ⭐ `B-188` — values OFFERED but not REQUIRED, through a native `<datalist>`.
+   *
+   * A `<select>` can only offer what already exists, which is the wrong shape for a field
+   * whose whole job is that typing something NEW is how it comes into existence (the Live
+   * Source id, once the multi-frame group stopped declaring a list). A datalist offers the
+   * existing values on focus and still accepts anything typed — one control, both jobs —
+   * and it degrades to a plain text box wherever it is unsupported.
+   *
+   * ⚠ Requires {@link datalistId} so two fields on screen cannot share one list.
+   */
+  suggestions?: readonly string[];
+  /** DOM id for the {@link suggestions} datalist. Must be unique on the page. */
+  datalistId?: string;
 }
 
 export function TextField(props: TextFieldProps): JSX.Element {
+  const listId =
+    props.suggestions === undefined || props.datalistId === undefined
+      ? undefined
+      : props.datalistId;
   return (
     <div className={s.row}>
       <span className={s.label}>{props.label}</span>
@@ -483,6 +501,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
           type="text"
           defaultValue={props.value}
           aria-label={props.ariaLabel}
+          list={listId}
           onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => props.onCommit(e.target.value)}
           onKeyDown={(e) => {
@@ -490,6 +509,13 @@ export function TextField(props: TextFieldProps): JSX.Element {
           }}
           key={`${props.label}-${props.resetKey ?? ''}-${props.value}`}
         />
+        {listId !== undefined && (
+          <datalist id={listId}>
+            {(props.suggestions ?? []).map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        )}
         {props.trailing}
       </div>
     </div>

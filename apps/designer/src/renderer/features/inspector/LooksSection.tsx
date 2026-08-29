@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { LiveSourceIdSchema, type Look, type Scene } from '@cg/shared-schema';
+import { deriveLookSources, type Look, type Scene } from '@cg/shared-schema';
 import { PencilLine, Star, Trash2 } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -18,25 +17,24 @@ import * as cls from './LooksSection.css.js';
  * switches to element properties the moment the author selects something, so the
  * selector sits in the canvas header (the `ArrangementPicker` precedent).
  *
- * ── SOURCES — DECLARED ONCE, the load-bearing half ──────────────────────────
+ * ── SOURCES — DERIVED FROM THE PLATES, READ-ONLY HERE (`B-188`) ────────────
  *
- * This list is the DECLARATION mechanism: a plate in any look REFERENCES one of these
- * declared sources through a picker, so two looks referencing one source get the same
- * DEFAULT input.
+ * 🔴 **This list used to be an EDITOR and is now a MIRROR, and that is the change.** A group
+ * declared its sources here through a `+ Source` field, and every plate had to reference a
+ * declared one or go red under `look-source-undeclared`. The list stored what the plates
+ * already carried; the export had always reduced it to the used set before the bridge ever saw
+ * it. So it is derived instead — the distinct `routeKey`s the plates carry, in document order
+ * of first use — and a source now comes into existence by pointing a plate at a key in the
+ * Inspector. Nothing here can be edited, because there is nothing here to edit.
  *
- * 🔴 **REWORDED BY SESSION BM, and the old sentence is kept because it was load-bearing.**
- * It said _"the same source in two looks is ONE seat held across the switch"_ — true while a
- * plate's producer was a property of the plate. It no longer is: the operator may point one
- * look's frame at a different input, so what a shared `routeKey` guarantees is the same
- * default, not the same seat. Whether two looks share a producer is decided at RUNTIME, by
- * the input each is bound to (`live-look-bindings.ts`), and this list is what supplies the
- * starting point.
+ * Two looks whose plates share a key still get the same DEFAULT input: they resolve to one
+ * carrier entry, and the seat is decided at RUNTIME by the input each frame is bound to
+ * (`live-look-bindings.ts`, which dedupes on the resolved wire argument and never saw the
+ * declaration). The operator may still point either look's frame elsewhere.
  *
- * The routeKey is FIXED at declaration (no in-place rename): a
- * rename would have to rewrite every referencing plate in every look, and a missed one
- * is a dangling reference that surfaces only at export. Removal is always allowed —
- * plates left referencing a removed source are named ONE BY ONE by the export
- * preflight (`look-source-undeclared`), which is the surface built for that news.
+ * ⚠ The wording _"the same source in two looks is ONE seat held across the switch"_ was
+ * corrected by session BM before `B-188` and stays corrected: a shared key promises the same
+ * default, not the same seat.
  */
 export function LooksSection({ scene }: { scene: Scene }): JSX.Element | null {
   const group = activeLookGroup(scene);
@@ -47,84 +45,52 @@ export function LooksSection({ scene }: { scene: Scene }): JSX.Element | null {
   return (
     <CollapseSection title="Looks" defaultExpanded>
       <p className={cls.summary}>
-        One multi-frame group: sources are declared ONCE here, and every look references them — two
-        looks referencing the same source start on the same input, and the operator can point either
-        one elsewhere.
+        One multi-frame group. Sources are not declared here — this list is what the plates use, and
+        a source appears the moment a plate is pointed at it. Two looks using the same source start
+        on the same input, and the operator can point either one elsewhere.
       </p>
       <IssuesPart scene={scene} />
-      <SourcesPart sources={group.sources} />
+      <SourcesPart />
       <LooksPart scene={scene} />
     </CollapseSection>
   );
 }
 
-function SourcesPart({
-  sources,
-}: {
-  sources: readonly { routeKey: string; dynamic: boolean }[];
-}): JSX.Element {
-  const [draft, setDraft] = useState('');
-  const commit = (): void => {
-    const value = draft.trim();
-    if (value === '') return;
-    if (!LiveSourceIdSchema.safeParse(value).success) {
-      designerStore.showNotice(
-        `“${value}” is not a Live Source id. Use letters, digits, “_” and “-”, starting ` +
-          'with a letter or digit — a template names sources SYMBOLICALLY (e.g. “live-1”).',
-      );
-      return;
-    }
-    if (sources.some((s) => s.routeKey === value)) {
-      designerStore.showNotice(
-        `“${value}” is already declared. A group declares each source ONCE — reference it ` +
-          'from as many looks as you like; that is the point.',
-      );
-      return;
-    }
-    designerStore.addLookSource(value);
-    setDraft('');
-  };
+/**
+ * The derived source list — a MIRROR of the plates, in document order of first use.
+ *
+ * ⚠ **Derived from the PROJECT scene, not from the section's `scene` prop.** The prop is the
+ * edit projection of the ACTIVE composition; a look's plates live inside that look's own
+ * composition and are reachable only by walking from the project root, which is what
+ * `deriveLookSources` does — the same walk, in the same order, the exported carrier is built
+ * from, so this list and the operator's list can never disagree.
+ */
+function SourcesPart(): JSX.Element {
+  const projectScene = useDesignerSelector((st) => st.scene);
+  const sources = projectScene === null ? [] : deriveLookSources(projectScene);
   return (
     <>
-      <p className={cls.groupLabel}>Sources — declared once</p>
+      <p className={cls.groupLabel}>Sources — used by the plates</p>
       {sources.length === 0 && (
         <p className={cls.empty}>
-          No sources yet. Declare each live input ONCE (e.g. “live-1”); plates in every look then
-          reference a declared source.
+          No sources yet. Point a plate at one in the Inspector’s “Live Source” panel — typing a
+          name such as “live-1” is what creates it, and it appears here.
         </p>
       )}
-      {sources.map((s) => (
-        <div key={s.routeKey} className={cls.row}>
+      {sources.map((routeKey) => (
+        <div key={routeKey} className={cls.row}>
           <div className={cls.rowHead}>
-            <span className={cls.rowName}>{s.routeKey}</span>
-            <Button
-              variant="bare"
-              onClick={() => designerStore.removeLookSource(s.routeKey)}
-              title={`Remove “${s.routeKey}” — plates still referencing it are named by the export preflight`}
-              aria-label={`Remove source ${s.routeKey}`}
-            >
-              <Icon icon={Trash2} size={13} />
-            </Button>
+            <span className={cls.rowName}>{routeKey}</span>
           </div>
         </div>
       ))}
-      <div className={cls.addRow}>
-        <div className={`cg-field ${cls.addField}`}>
-          <input
-            type="text"
-            value={draft}
-            placeholder="live-1"
-            aria-label="New source id"
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commit();
-            }}
-          />
-        </div>
-        <Button variant="secondary" onClick={commit} title="Declare this source on the group">
-          + Source
-        </Button>
-      </div>
+      {sources.length > 0 && (
+        <p className={cls.hint}>
+          In the order the plates first use them. A source disappears when the last plate using it
+          stops — the operator’s mappings are keyed by source id, not by position, so they survive
+          the list changing shape.
+        </p>
+      )}
     </>
   );
 }
@@ -253,37 +219,66 @@ function LookRow({
 function IssuesPart({ scene }: { scene: Scene }): JSX.Element | null {
   const issues = liveSourceIssues(scene).filter(
     (i) =>
-      i.code === 'look-source-undeclared' ||
       /*
         ⭐ `B-183` — LISTED HERE BECAUSE THE SPLIT WOULD OTHERWISE SHRINK THIS PANEL.
 
         A plate pointed at nothing used to arrive as `look-source-undeclared` (its absent
-        routeKey read as `""`, which no group declares) and so appeared in this list.
+        routeKey read as `""`, which no group declared) and so appeared in this list.
         `B-183` gives that state its own truthful code, and without this line the very
         plate a fresh draw produces would have vanished from the panel the author works in
         — a surface regression hidden inside a message fix.
+
+        ⭐ `B-188` — `look-source-undeclared` is DELETED and no longer listed; the near-miss
+        WARNING joins in its place, under its own heading below.
       */
       i.code === 'live-source-unset' ||
+      i.code === 'live-source-near-miss' ||
       i.code === 'look-source-duplicate' ||
       i.code === 'look-second-group' ||
       (i.code === 'live-source-overlap' && i.message.includes('look "')),
   );
-  const unique = [...new Set(issues.map((i) => i.message))];
-  if (unique.length === 0) return null;
+  /*
+    🔴 `B-188` — **ERRORS AND WARNINGS ARE COUNTED AND HEADED SEPARATELY.**
+
+    One list under one "export will refuse" heading would state a falsehood about the near-miss
+    nudge, which never blocks anything. A heading that overstates its own severity is how a
+    warning gets treated as an error by everyone reading the screen — including whoever later
+    "fixes" it by making it one.
+  */
+  const errors = [...new Set(issues.filter((i) => i.severity === 'error').map((i) => i.message))];
+  const warnings = [...new Set(issues.filter((i) => i.severity !== 'error').map((i) => i.message))];
+  if (errors.length === 0 && warnings.length === 0) return null;
   return (
     <div role="alert" aria-label="Look issues">
-      {/* `B-184` — `issueSummary`, not `groupLabel`: this heading states an export REFUSAL and
-          is drawn in `danger`, matching the status bar's red count for the same facts. */}
-      <p className={cls.issueSummary}>
-        {unique.length} issue{unique.length === 1 ? '' : 's'} — export will refuse
-      </p>
-      {unique.slice(0, 6).map((m) => (
-        <p key={m} className={cls.issue}>
-          {m}
-        </p>
-      ))}
-      {unique.length > 6 && (
-        <p className={cls.hint}>…and {unique.length - 6} more, in the export preflight.</p>
+      {errors.length > 0 && (
+        <>
+          {/* `B-184` — `issueSummary`, not `groupLabel`: this heading states an export REFUSAL and
+              is drawn in `danger`, matching the status bar's red count for the same facts. */}
+          <p className={cls.issueSummary}>
+            {errors.length} issue{errors.length === 1 ? '' : 's'} — export will refuse
+          </p>
+          {errors.slice(0, 6).map((m) => (
+            <p key={m} className={cls.issue}>
+              {m}
+            </p>
+          ))}
+          {errors.length > 6 && (
+            <p className={cls.hint}>…and {errors.length - 6} more, in the export preflight.</p>
+          )}
+        </>
+      )}
+      {warnings.length > 0 && (
+        <>
+          <p className={cls.groupLabel}>{warnings.length} to check — export is not blocked</p>
+          {warnings.slice(0, 6).map((m) => (
+            <p key={m} className={cls.hint}>
+              {m}
+            </p>
+          ))}
+          {warnings.length > 6 && (
+            <p className={cls.hint}>…and {warnings.length - 6} more, in the export preflight.</p>
+          )}
+        </>
       )}
     </div>
   );

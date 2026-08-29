@@ -34,6 +34,8 @@ const plate = (
   h: number,
   /** `B-178` — the AUTHOR's fit mode on the ELEMENT. Absent = authored nothing. */
   fitMode?: 'contain' | 'cover',
+  /** `B-179` — the AUTHOR's expected aspect on the ELEMENT. Absent = asserted nothing. */
+  expectedAspect?: number,
 ): Element =>
   ({
     ...baseElProps,
@@ -43,6 +45,7 @@ const plate = (
     transform: tf(x, y, w, h),
     routeKey,
     ...(fitMode !== undefined ? { fitMode } : {}),
+    ...(expectedAspect !== undefined ? { expectedAspect } : {}),
   }) as unknown as Element;
 
 const comp = (id: string, children: Element[]) => ({
@@ -82,6 +85,8 @@ function scene(options: {
   rootChildren: Element[];
   compositions: unknown[];
   lookGroups?: unknown[];
+  /** `B-179` — `live-source-id` field bindings, which is where `dynamic` comes from. */
+  bindings?: unknown[];
 }): Scene {
   return {
     schemaVersion: 1,
@@ -106,7 +111,7 @@ function scene(options: {
     compositions: options.compositions,
     fonts: [],
     fields: [],
-    bindings: [],
+    bindings: options.bindings ?? [],
     ...(options.lookGroups !== undefined ? { lookGroups: options.lookGroups } : {}),
   } as unknown as Scene;
 }
@@ -192,8 +197,21 @@ describe('the per-look rect flows through the instance chain — each axis separ
   });
 });
 
-/** Two looks + a root plate: the dedup, absence and empty-look contracts. */
-function twoLookScene(over: { sources?: unknown[]; rootExtra?: Element[] } = {}): Scene {
+/**
+ * Two looks + a solo + an empty: the dedup, absence and empty-look contracts.
+ *
+ * 🔴 `B-188` — **THE GROUP DECLARES NOTHING.** `over.staleSources` exists to write the
+ * RETIRED `sources` array into the fixture anyway, which is how a scene stored before this
+ * change looks on disk. Every assertion that uses it asserts the same thing: it is ignored.
+ */
+function twoLookScene(
+  over: {
+    staleSources?: unknown[];
+    rootExtra?: Element[];
+    compA?: Element[];
+    bindings?: unknown[];
+  } = {},
+): Scene {
   return scene({
     rootChildren: [
       instance('inst-a', 'comp-a', 0, 0, 1920, 1080),
@@ -202,20 +220,21 @@ function twoLookScene(over: { sources?: unknown[]; rootExtra?: Element[] } = {})
       ...(over.rootExtra ?? []),
     ],
     compositions: [
-      comp('comp-a', [
-        plate('a-1', 'guest-1', 0, 0, 640, 360),
-        plate('a-2', 'guest-2', 960, 0, 640, 360),
-      ]),
+      comp(
+        'comp-a',
+        over.compA ?? [
+          plate('a-1', 'guest-1', 0, 0, 640, 360),
+          plate('a-2', 'guest-2', 960, 0, 640, 360),
+        ],
+      ),
       SOLO_COMP,
       comp('comp-empty', []),
     ],
+    ...(over.bindings !== undefined ? { bindings: over.bindings } : {}),
     lookGroups: [
       {
         id: 'g1',
-        sources: over.sources ?? [
-          { routeKey: 'guest-1', dynamic: false },
-          { routeKey: 'guest-2', expectedAspect: 16 / 9, dynamic: true },
-        ],
+        ...(over.staleSources !== undefined ? { sources: over.staleSources } : {}),
         looks: [
           look('look-a', 'inst-a'),
           look('look-solo', 'inst-b'),
@@ -250,19 +269,80 @@ describe('the source-keyed declaration list', () => {
     });
   });
 
-  it('expectedAspect and dynamic come from the GROUP declaration, not from any plate element', () => {
-    const carrier = collectLookCarrier(twoLookScene());
+  /**
+   * 🔴 **`B-179` — THE AUTHOR'S ASPECT REACHES THE CARRIER NOW, AND THIS IS THE FIXTURE
+   * THAT COULD NOT PASS BEFORE.**
+   *
+   * Both fields used to be read off the GROUP DECLARATION — `src.expectedAspect` and
+   * `src.dynamic` — and NEITHER had a writer anywhere in the product, so every look-group
+   * template exported no aspect at all and the take's mismatch refusal could not fire for the
+   * product's flagship feature. They come off the plate ELEMENT now, through the same
+   * `dynamicRoleIndex` the groupless path uses.
+   */
+  it('🔴 `B-179` — expectedAspect and dynamic come from the PLATE ELEMENT, not from any declaration', () => {
+    const s = twoLookScene({
+      compA: [
+        plate('a-1', 'guest-1', 0, 0, 640, 360),
+        plate('a-2', 'guest-2', 960, 0, 640, 360, undefined, 21 / 9),
+      ],
+      bindings: [
+        { fieldId: 'f1', target: { kind: 'live-source-id', elementId: 'a-2', role: 'fill' } },
+      ],
+    });
+    const carrier = collectLookCarrier(s);
     const guest2 = carrier?.sources.find((d) => d.sourceId === 'guest-2');
-    expect(guest2?.expectedAspect).toBeCloseTo(16 / 9);
+    expect(guest2?.expectedAspect).toBeCloseTo(21 / 9);
     expect(guest2?.dynamic).toBe(true);
+    // The un-bound, un-asserting plate stays honest in BOTH fields — absent is a third state.
+    const guest1 = carrier?.sources.find((d) => d.sourceId === 'guest-1');
+    expect(guest1?.expectedAspect).toBeUndefined();
+    expect(guest1?.dynamic).toBe(false);
   });
 
-  it('a declared source REFERENCED NOWHERE yields no declaration — an unplaced source cannot be shown', () => {
+  /**
+   * ⚠ The FIRST plate in document order wins, and it is the same element `elementId` names.
+   *
+   * The owner rejected `B-179`'s premise that an aspect is a per-FEED fact two looks may not
+   * disagree about — _"aspect and fit are per-plate right now and have nothing to do with the
+   * source"_ — so this is a RESOLUTION rule, not a refusal, and the carrier entry describes one
+   * element rather than two halves of two.
+   */
+  it('two plates on one key with DIFFERENT aspects: the first in document order wins, and elementId names that same plate', () => {
     const s = twoLookScene({
-      sources: [
+      compA: [
+        plate('a-1', 'guest-1', 0, 0, 640, 360, undefined, 16 / 9),
+        plate('a-2', 'guest-1', 960, 0, 640, 360, undefined, 4 / 3),
+      ],
+    });
+    const guest1 = collectLookCarrier(s)?.sources.find((d) => d.sourceId === 'guest-1');
+    expect(guest1?.expectedAspect).toBeCloseTo(16 / 9);
+    expect(guest1?.elementId).toBe('a-1');
+  });
+
+  it('🔴 `B-188` — a stale `sources` array naming a source NO PLATE USES is IGNORED, not carried', () => {
+    const s = twoLookScene({
+      staleSources: [
         { routeKey: 'guest-1', dynamic: false },
         { routeKey: 'guest-2', dynamic: false },
         { routeKey: 'never-placed', dynamic: false },
+      ],
+    });
+    expect(collectLookCarrier(s)?.sources.map((d) => d.sourceId)).toEqual(['guest-1', 'guest-2']);
+  });
+
+  /**
+   * 🔴 **THE ORDER RULE (`B-188` condition (b)) — DOCUMENT ORDER OF FIRST USE, asserted
+   * against a stale declaration that says the OPPOSITE.**
+   *
+   * The old carrier followed the author's declaration order. A fixture whose stale array lists
+   * `guest-2` first therefore discriminates: if anything still read that field the order would
+   * flip, and no other assertion in this file would notice.
+   */
+  it('🔴 the order is DOCUMENT ORDER OF FIRST USE — a stale declaration in the opposite order changes nothing', () => {
+    const s = twoLookScene({
+      staleSources: [
+        { routeKey: 'guest-2', dynamic: false },
+        { routeKey: 'guest-1', dynamic: false },
       ],
     });
     expect(collectLookCarrier(s)?.sources.map((d) => d.sourceId)).toEqual(['guest-1', 'guest-2']);
@@ -423,10 +503,19 @@ describe('per-look maps: absence is NO ENTRY, and the empty look is valid', () =
     }
   });
 
-  it('an UNDECLARED plate is skipped at import — the preflight refuses it at export, import stays tolerant', () => {
-    const s = twoLookScene({ sources: [{ routeKey: 'guest-1', dynamic: false }] });
-    expect('guest-2' in rectsOf(s, 'look-a')).toBe(false);
-    expect(collectLookCarrier(s)?.sources.map((d) => d.sourceId)).toEqual(['guest-1']);
+  /**
+   * 🔴 **`B-188`'S DISCRIMINATING FIXTURE, AT THE CARRIER: a plate whose key is in no
+   * declaration.**
+   *
+   * Under the old model this plate was skipped at import and refused at export
+   * (`look-source-undeclared`). Under the new one it is an ORDINARY SOURCE, because the list IS
+   * the plates. The stale array is written into the fixture deliberately: if any reader of it
+   * survived anywhere, `guest-2` would vanish from both assertions below.
+   */
+  it('🔴 `B-188` — a plate the stale declaration OMITS is an ordinary source: it gets a rect AND a declaration', () => {
+    const s = twoLookScene({ staleSources: [{ routeKey: 'guest-1', dynamic: false }] });
+    expect('guest-2' in rectsOf(s, 'look-a')).toBe(true);
+    expect(collectLookCarrier(s)?.sources.map((d) => d.sourceId)).toEqual(['guest-1', 'guest-2']);
   });
 });
 

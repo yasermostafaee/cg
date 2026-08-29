@@ -42,6 +42,16 @@ const plate = (id: string, routeKey: string, x = 0, y = 0, w = 640, h = 360): El
     routeKey,
   }) as unknown as Element;
 
+/** `B-183` — a plate pointed at NOTHING. The state a freshly drawn plate starts in. */
+const unsetPlate = (id: string, x = 0, y = 0, w = 640, h = 360): Element =>
+  ({
+    ...baseElProps,
+    id,
+    name: id,
+    type: 'video-placeholder',
+    transform: tf(x, y, w, h),
+  }) as unknown as Element;
+
 /** A full-frame LOOK composition holding the given children. */
 const lookComp = (id: string, children: Element[]) => ({
   id,
@@ -116,7 +126,12 @@ function twoLookScene(over: {
   rootChildren?: Element[];
   lookAChildren?: Element[];
   lookBChildren?: Element[];
-  sources?: unknown[];
+  /**
+   * 🔴 `B-188` — the RETIRED `lookGroups[].sources` array, written into the fixture on
+   * purpose. It is how a scene stored before the change looks on disk, and every test that
+   * passes it is asserting that nothing reads it any more.
+   */
+  staleSources?: unknown[];
   lookGroups?: unknown[];
 }): Scene {
   return scene({
@@ -135,7 +150,7 @@ function twoLookScene(over: {
     lookGroups: over.lookGroups ?? [
       {
         id: 'g1',
-        sources: over.sources ?? [src('guest-1'), src('guest-2')],
+        ...(over.staleSources !== undefined ? { sources: over.staleSources } : {}),
         looks: [look('look-a', 'inst-a'), look('look-b', 'inst-b')],
         defaultLookId: 'look-a',
       },
@@ -147,24 +162,71 @@ const codesOf = (s: Scene): string[] => liveSourceIssues(s).map((i) => i.code);
 const byCode = (s: Scene, code: string): ReturnType<typeof liveSourceIssues> =>
   liveSourceIssues(s).filter((i) => i.code === code);
 
-describe('B.1 — a plate referencing an UNDECLARED source is refused, naming it and the declared list', () => {
+/**
+ * 🔴 **`B-188` — B.1 IS DELETED, AND THIS IS THE DESCRIBE THAT PROVES IT.**
+ *
+ * `look-source-undeclared` refused any plate whose `routeKey` was not in the group's declared
+ * list. The list is derived from the plates now, so there is nothing left to contradict — the
+ * refusal existed only because one fact was stored twice.
+ *
+ * ⚠ **The fixtures below write the retired array anyway.** Without it these tests would be
+ * asserting nothing more than "a field we deleted is absent"; with it they assert the harder
+ * and more useful thing — that a scene which STILL CARRIES a contradicting declaration is
+ * clean, which is the only shape a stale `.vcg` can arrive in.
+ */
+describe('B-188 — look-source-undeclared is gone: a plate no declaration mentions is an ordinary source', () => {
   it('POSITIVE CONTROL — the well-formed two-look template is clean', () => {
     expect(codesOf(twoLookScene({}))).toEqual([]);
   });
 
-  it('an undeclared reference is an export-blocking error naming source and list', () => {
-    const s = twoLookScene({ lookBChildren: [plate('b-1', 'guest-9', 320, 180, 1280, 720)] });
-    const issues = byCode(s, 'look-source-undeclared');
-    expect(issues).toHaveLength(1);
-    expect(issues[0]?.severity).toBe('error');
-    expect(issues[0]?.message).toContain('"guest-9"');
-    expect(issues[0]?.message).toContain('"guest-1", "guest-2"');
-    expect(issues[0]?.elementId).toBe('b-1');
+  it('🔴 THE DISCRIMINATING FIXTURE — a plate whose key the stale declaration omits raises NOTHING', () => {
+    const s = twoLookScene({
+      lookBChildren: [plate('b-1', 'guest-9', 320, 180, 1280, 720)],
+      staleSources: [src('guest-1'), src('guest-2')],
+    });
+    expect(codesOf(s)).toEqual([]);
   });
 
-  it('a ROOT-LEVEL plate outside every look must reference a declared source too', () => {
-    const s = twoLookScene({ rootChildren: [plate('root-1', 'presenter', 0, 720, 640, 360)] });
-    expect(byCode(s, 'look-source-undeclared')).toHaveLength(1);
+  it('🔴 the code no longer exists at all — not merely unraised on this fixture', () => {
+    // Named explicitly so a rename cannot quietly keep the rule alive under another spelling.
+    const s = twoLookScene({
+      lookAChildren: [plate('a-1', 'zzz-1', 0, 0), plate('a-2', 'zzz-2', 960, 0)],
+      lookBChildren: [plate('b-1', 'zzz-3', 320, 180, 1280, 720)],
+      staleSources: [src('guest-1')],
+    });
+    expect(byCode(s, 'look-source-undeclared')).toHaveLength(0);
+    expect(codesOf(s)).toEqual([]);
+  });
+
+  it('a ROOT-LEVEL plate outside every look raises nothing either', () => {
+    const s = twoLookScene({
+      // Clear of every look's plates — an OVERLAP here would be a different rule's finding
+      // and would mask the one this test is about.
+      rootChildren: [plate('root-1', 'presenter', 1650, 920, 260, 150)],
+      staleSources: [src('guest-1'), src('guest-2')],
+    });
+    expect(codesOf(s)).toEqual([]);
+  });
+
+  it('⚠ live-source-unset SURVIVES — an UNSET plate still blocks the export, group or no group', () => {
+    const s = twoLookScene({
+      rootChildren: [unsetPlate('root-unset', 0, 720)],
+      staleSources: [src('guest-1'), src('guest-2')],
+    });
+    const issues = byCode(s, 'live-source-unset');
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.severity).toBe('error');
+    expect(issues[0]?.elementId).toBe('root-unset');
+  });
+
+  it('🔴 two UNSET plates in one look are NOT reported as a duplicate of source ""', () => {
+    // The `?? ''` bucket used to be harmless only because `''` was never DECLARED. With the
+    // declaration gone that guard went too, so this is the door `B-183` came back through.
+    const s = twoLookScene({
+      lookAChildren: [unsetPlate('a-1', 0, 0), unsetPlate('a-2', 960, 0)],
+    });
+    expect(byCode(s, 'look-source-duplicate')).toHaveLength(0);
+    expect(byCode(s, 'live-source-unset')).toHaveLength(2);
   });
 });
 

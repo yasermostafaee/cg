@@ -19,6 +19,7 @@ export * from './live-fit.js';
 export * from './live-geometry.js';
 export * from './scene.js';
 export * from './scene-flatten.js';
+export * from './look-sources.js';
 export * from './composition-fields.js';
 export * from './path-migration.js';
 export * from './manifest.js';

@@ -1,10 +1,9 @@
 import { z } from 'zod';
-import { LiveSourceIdSchema } from './elements.js';
 import { IdSchema } from './primitives.js';
 
 /**
  * `multibox-layout-switch` `design.md` §14 (LOOKS, adopted 2026-08-19) — **the multi-frame
- * GROUP: sources declared once, looks referencing them.**
+ * GROUP: looks over one shared set of live sources.**
  *
  * ⚠ **Vocabulary, and it is load-bearing.** A **LOOK** is a full sub-scene — plates, titles,
  * decor, freely placed — authored as a real nested COMPOSITION INSTANCE in the scene. Exactly
@@ -12,38 +11,41 @@ import { IdSchema } from './primitives.js';
  * meanings already: scene layer, CasparCG video layer, cg-layer) and never "arrangement"
  * (that word means A′'s cell list, a different and incompatible schema).
  *
- * ── SOURCES ARE DECLARED ONCE, ON THE GROUP — a correctness condition ──────────
+ * ── SOURCES ARE DERIVED FROM THE PLATES — `B-188` DELETED THE DECLARATION ─────
  *
- * A look's plate REFERENCES a declared source: the plate keeps its ordinary `routeKey`
- * field, and the reference is set-membership against {@link LookGroupSchema}'s `sources`
- * (enforced by the export preflight, tolerated at import). This is what dissolves §0.5's
- * third refusal ground: **never N producers on one route.**
+ * A group used to DECLARE its sources here (`sources: LookSource[]`) and every plate had to
+ * reference a declared one. **That list is gone.** The group's source list is now derived from
+ * the distinct `routeKey`s the plates themselves carry, in document order of first use
+ * (`deriveLookSources`, `look-sources.ts`), and a source comes into existence by pointing a
+ * plate at a key.
  *
- * 🔴 **THAT CLAUSE SURVIVES SESSION BM; THE ONE IN FRONT OF IT DID NOT, AND THE OLD WORDING
- * IS KEPT HERE BECAUSE IT IS QUOTED IN THREE PLACES.** It read: _"the same source referenced
- * in two looks is ONE declaration and ONE seat, held across switches."_ That is a conjunction
- * over a 1:1 between a declaration and a producer, and (B′) breaks it in BOTH directions:
- * once the operator may bind each look's frame separately, one declaration bound differently
- * in two looks is TWO seats, and two declarations bound alike are ONE. What a shared
- * `routeKey` guarantees is the same DEFAULT binding, not the same seat.
+ * 🔴 **WHY, in one measurement.** The EXPORT already reduced the declaration to the used
+ * set — `collectLookCarrier` dropped any declared source no look placed, and only recorded
+ * rects for plates whose key was declared — so the carrier the operator and the bridge consume
+ * was ALWAYS the derived set. Declaring `l1,l2,l3` and declaring `l1,l2,l3,l9` produced the
+ * identical carrier `["l1","l2","l3"]`. The declaration's only surviving downstream
+ * contribution was ORDER, and `deriveLookSources` now owns that. Everything else it bought was
+ * an authoring-time constraint whose cost was `look-source-undeclared` — a refusal that
+ * existed only because one fact was stored twice (golden rule 6, one schema up).
  *
- * The anti-goal is untouched, and is in fact now enforced where it can actually be tested:
- * seats dedupe on the resolved WIRE ARGUMENT (`live-look-bindings.ts`), so one route gets one
- * producer however many frames point at it — and two frames of ONE look pointing at the same
- * input is refused at the moment the operator does it.
+ * The anti-goal is untouched, and is enforced where it can actually be tested: seats dedupe on
+ * the resolved WIRE ARGUMENT (`live-look-bindings.ts`), so one route gets one producer however
+ * many frames point at it — and two frames of ONE look pointing at the same input is refused
+ * at the moment the operator does it. Two looks whose plates share a `routeKey` still resolve
+ * to ONE carrier entry and therefore one default binding; deriving the list changes nothing
+ * about that, because the bridge never saw the declaration in the first place.
  *
- * ⚠ `expectedAspect` and `dynamic` still live on the DECLARATION, so two looks cannot
- * disagree about what a HOLE asserts. They can now disagree about what is BEHIND it: one
- * input punched by two plates that assert different aspects is reachable, and it refuses the
- * look that asserts the contradiction rather than the other.
- *
- * 🔴 **`fitMode` DOES NOT, and `B-178` is what it cost to assume it did.** The rule above is
- * about facts that CANNOT differ between looks — an aspect is a property of the FEED, and a
- * feed does not change shape when the operator presses a look. A fit mode is a property of how
- * that feed is placed in a BOX, and a look is exactly a change of box, so one answer per source
- * is one answer too few. It is carried per-look beside the rects
- * (`TemplateLookCarrier.fits`), read off the plate ELEMENT that serves the routeKey in that
- * look. See `docs/prd/bugs-runtime.md` `B-178`.
+ * 🔴 **NEITHER `expectedAspect` NOR `fitMode` LIVES ON A SOURCE ANY MORE, and the owner
+ * settled the question rather than this change assuming it (`B-179`).** `B-178` had already
+ * moved `fitMode` per-look. The remaining argument for a per-SOURCE `expectedAspect` was that
+ * an aspect asserts a property of the FEED, which cannot differ between looks. The owner
+ * rejected that premise: _"aspect and fit are per-plate right now and have nothing to do with
+ * the source — which I think is correct."_ `expectedAspect` is the author's intention for the
+ * BOX, and the real feed wins when it is known — `resolvePlateAspect` runs source `format` →
+ * source `aspect` → the element's `expectedAspect` → `assumed`. So both facts are read off the
+ * plate ELEMENT: the fit per look beside the rects (`TemplateLookCarrier.fits`), the aspect
+ * from the first plate serving that key in document order — the same element whose id the
+ * declaration already carries. See `docs/prd/bugs-runtime.md` `B-179`.
  *
  * ── WHY `instanceId` AND NOT A CHILD LIST ──────────────────────────────────────
  *
@@ -77,42 +79,6 @@ export type LookTransition = z.infer<typeof LookTransitionSchema>;
 /** The one v1 transition, for writers that need a value. */
 export const CUT_LOOK_TRANSITION: LookTransition = { mode: 'cut' };
 
-/** One declared source — declared ONCE for the whole group, referenced by plates. */
-export const LookSourceSchema = z.object({
-  /** The symbolic id a plate's `routeKey` references. Never a device string. */
-  routeKey: LiveSourceIdSchema,
-  /**
-   * The aspect the design expects; a contradicting assignment is refused at take.
-   *
-   * ⚠ **NOTHING WRITES THIS FIELD** — `addLookSource` is the only producer of a `LookSource`
-   * and it emits `{ routeKey, dynamic: false }`. So an author's `expectedAspect` never reaches
-   * a look-group template's carrier, and the take's mismatch refusal — which needs BOTH the
-   * source's aspect and the author's — is disarmed for every such template. That is the same
-   * defect `B-178` fixes for `fitMode`, one field wider, and it is **filed separately** because
-   * its fix is not the same: an aspect asserts a property of the FEED, which cannot differ
-   * between looks, so it does NOT become per-look — it needs either a writer here or a hoist
-   * from the element with a refusal when two looks' elements disagree. See `B-179`.
-   */
-  expectedAspect: z.number().positive().optional(),
-  /**
-   * 🔴 `B-178` — **`fitMode` IS DELETED FROM THIS SCHEMA, and the deletion is the point.**
-   *
-   * `C-028` put it here reasoning that a source-keyed carrier has "nowhere for two modes to be
-   * carried". There was nowhere on the DECLARATION — but there was always somewhere on each
-   * LOOK, beside its rects, and that is where it now lives (`TemplateLookCarrier.fits`). The
-   * field was never written by anything, so every look-group template exported since `C-028`
-   * put its plates on air at the `contain` default however the author had set them.
-   *
-   * It is removed rather than left optional-and-ignored: a field that looks like the place to
-   * write a fit mode, and is not, is precisely how this bug would return. Under `P-031`'s
-   * compatibility floor no shim is owed, and a stored scene carrying the key simply has it
-   * stripped by zod at load.
-   */
-  /** Whether this source carries a FILL role (see the declaration carrier). */
-  dynamic: z.boolean().default(false),
-});
-export type LookSource = z.infer<typeof LookSourceSchema>;
-
 /** One look: a named reference to the composition INSTANCE that is its sub-scene. */
 export const LookSchema = z.object({
   id: IdSchema,
@@ -127,8 +93,18 @@ export type Look = z.infer<typeof LookSchema>;
 export const LookGroupSchema = z
   .object({
     id: IdSchema,
-    /** Declared ONCE. The preflight refuses a plate referencing anything else. */
-    sources: z.array(LookSourceSchema),
+    /*
+      🔴 `B-188` — **THERE IS NO `sources` FIELD, and its absence is the change.**
+
+      A group declared its sources here and the preflight refused any plate referencing
+      something else. The list is derived from the plates now (`deriveLookSources`), so there is
+      nothing here for a plate to contradict and `look-source-undeclared` is deleted with it.
+
+      A stored scene or `.vcg` written before this still parses: `z.object` STRIPS unknown keys,
+      so the old `sources` array is dropped at load and nothing downstream misses it — the
+      carrier was already the derived set. This is `B-178`'s precedent applied to the whole
+      declaration rather than to one of its fields, under `P-031`'s compatibility floor.
+    */
     looks: z.array(LookSchema),
     /**
      * Which look a fresh take enters. REQUIRED as soon as the group has any look — an
@@ -137,19 +113,14 @@ export const LookGroupSchema = z
     defaultLookId: IdSchema.optional(),
   })
   .superRefine((group, ctx) => {
-    const routeKeys = new Set<string>();
-    for (const [i, s] of group.sources.entries()) {
-      if (routeKeys.has(s.routeKey)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['sources', i, 'routeKey'],
-          message:
-            `source "${s.routeKey}" is declared twice — a group declares each source ONCE; ` +
-            `looks REFERENCE it`,
-        });
-      }
-      routeKeys.add(s.routeKey);
-    }
+    /*
+      🔴 `B-188` — the DUPLICATE-DECLARATION refusal is deleted with the list it guarded.
+
+      It refused the same `routeKey` declared twice on one group. A derived list is distinct by
+      construction, so the condition it tested can no longer arise. ⚠ It is NOT the same rule
+      as `look-source-duplicate`, which survives untouched: that one refuses two PLATES sharing
+      a key in one look — two frames, one seat — and is about the plates, not the list.
+    */
     const lookIds = new Set<string>();
     const instanceIds = new Set<string>();
     for (const [i, look] of group.looks.entries()) {

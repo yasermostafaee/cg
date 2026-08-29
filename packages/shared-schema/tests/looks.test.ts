@@ -11,32 +11,38 @@ import {
 import { SceneSchema } from '../src/scene.js';
 
 /**
- * `multibox-layout-switch` §14 (LOOKS) phase 1 — the GROUP schema: sources declared once,
- * looks referencing instances, cut-only v1, and the refinements that make the illegal
- * states unparseable rather than detectable.
+ * `multibox-layout-switch` §14 (LOOKS) phase 1 — the GROUP schema: looks referencing
+ * instances, cut-only v1, and the refinements that make the illegal states unparseable rather
+ * than detectable.
+ *
+ * 🔴 `B-188` — the group no longer DECLARES sources; the list is derived from the plates
+ * (`deriveLookSources`, covered in `look-sources.test.ts`).
  */
 
-const src = (routeKey: string) => ({ routeKey });
 const look = (id: string, instanceId: string) => ({ id, name: id, instanceId });
 
 const group = (over: Record<string, unknown> = {}): unknown => ({
   id: 'g1',
-  sources: [src('guest-1'), src('guest-2')],
   looks: [look('look-a', 'inst-a'), look('look-b', 'inst-b')],
   defaultLookId: 'look-a',
   ...over,
 });
 
 describe('LookGroupSchema — the multi-frame group', () => {
-  it('parses a valid group, applying the defaults (dynamic false, entered cut)', () => {
+  it('parses a valid group, applying the defaults (entered cut)', () => {
     const parsed = LookGroupSchema.parse(group());
-    expect(parsed.sources[0]).toEqual({ routeKey: 'guest-1', dynamic: false });
     expect(parsed.looks[0]?.entered).toEqual(CUT_LOOK_TRANSITION);
   });
 
-  it('🔴 a source declared TWICE is refused — a group declares each source ONCE', () => {
-    const r = LookGroupSchema.safeParse(group({ sources: [src('guest-1'), src('guest-1')] }));
-    expect(r.success).toBe(false);
+  it('🔴 `B-188` — a stored group carrying the OLD `sources` array still parses, and the array is STRIPPED', () => {
+    const parsed = LookGroupSchema.parse(
+      group({ sources: [{ routeKey: 'guest-1', dynamic: false }, { routeKey: 'guest-1' }] }),
+    );
+    // Not merely tolerated — GONE. A key that survives parsing is a key some later reader
+    // finds and believes, which is how the second copy of a fact comes back.
+    expect('sources' in parsed).toBe(false);
+    // And the duplicate that used to be a REFUSAL is now simply not a question the schema asks.
+    expect(parsed.looks).toHaveLength(2);
   });
 
   it('a duplicated look id is refused', () => {

@@ -100,10 +100,12 @@ function logoSize(image: AssetMeta): { width: number; height: number } {
   ⭐ `B-183` — `nextLiveSourceId` WAS HERE AND IS DELETED, not merely unused.
 
   It swept the scene for the first free `live-N` and handed it to every newly drawn plate.
-  The id looked authoritative and was a GUESS: `live-N` is the placeholder text of the Looks
-  panel's `+ Source` input, so the tool was accepting a suggestion on the author's behalf and
+  The id looked authoritative and was a GUESS: `live-N` was the placeholder text of the Looks
+  panel's source input, so the tool was accepting a suggestion on the author's behalf and
   nothing declared the result. A new plate is now UNASSIGNED (see the creation path below),
-  and there is no id to pick.
+  and there is no id to pick. ⚠ `B-188` has since deleted the DECLARATION the guess was wrong
+  against — the reason survives it unchanged: the author never typed the id, and a plate that
+  starts pointed at something nobody chose is the defect, group or no group.
 
   Recorded rather than silently removed because its docstring made a real argument — a
   scene-wide rather than composition-local sweep, because the bridge resolves ids against one
@@ -593,10 +595,10 @@ export function CanvasOverlay({
 
         ⭐ **`B-183` — the new plate is UNASSIGNED, and choosing its source is the author's
         first act.** This used to hand it `nextLiveSourceId(scene)`, the first free `live-N`.
-        That id is the PLACEHOLDER TEXT of the Looks panel's `+ Source` input — a suggestion,
-        not an acceptance — and nothing declared it, so drawing a box created a plate already
-        referencing an undeclared source and the group-scope preflight reported it as the
-        author's mistake. The owner never typed `live-1`; the tool did.
+        That id was the PLACEHOLDER TEXT of the Looks panel's source input — a suggestion, not
+        an acceptance — so drawing a box created a plate already pointed at something the owner
+        never typed. `B-188` has since removed the declaration this used to contradict, and the
+        reason is unchanged without it: the tool chose, not the author.
 
         The uniqueness argument the deleted generator rested on ("two holes sharing an id
         would map to ONE producer") is not lost: it now applies to ids the author actually

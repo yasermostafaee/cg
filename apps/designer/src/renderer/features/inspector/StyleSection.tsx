@@ -52,10 +52,9 @@ import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
-import { projectLookGroup } from '../../state/slices/looks.js';
 import { activeDocOf, activeFieldData, activeLayersOf } from '../../state/scene-doc.js';
 import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/follow-attach.js';
-import { videoFollowClipFacts } from '@cg/shared-schema';
+import { deriveLookSources, videoFollowClipFacts } from '@cg/shared-schema';
 import { contentStartDefaultFrom } from './content-start-default.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { useAssetUrl, useAssets } from '../assets/useAssets.js';
@@ -608,15 +607,18 @@ function ImageSections({
 /**
  * `B-183` — the UI-only sentinel for "this plate has no source".
  *
- * The scene stores absence as `routeKey: undefined`; a `<select>` needs a string. `''` is
- * safe as that string because {@link LiveSourceIdSchema} is `.min(1)` — no real id can ever
- * equal it — and it is converted back at the single commit point, so it never reaches the
- * store. Kept beside the control that uses it rather than exported: a second reader would be
- * a second place the sentinel's meaning lives.
+ * The scene stores absence as `routeKey: undefined`; the control needs a string. `''` is safe
+ * as that string because {@link LiveSourceIdSchema} is `.min(1)` — no real id can ever equal
+ * it — and it is converted back at the single commit point, so it never reaches the store.
+ * Kept beside the control that uses it rather than exported: a second reader would be a second
+ * place the sentinel's meaning lives.
+ *
+ * ⚠ `B-188` retired its companion `UNASSIGNED_LABEL` (“— no source —”). That text existed to
+ * NAME the empty option of a `<select>`; the control is a text box now, where the unassigned
+ * state is simply an empty field and a label inside it would be a value the author had to
+ * delete before typing.
  */
 const UNASSIGNED = '';
-/** What the author reads for {@link UNASSIGNED}. Em-dashes, so it cannot be mistaken for an id. */
-const UNASSIGNED_LABEL = '— no source —';
 
 function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const id = element.id;
@@ -653,11 +655,24 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
     }
     designerStore.updateElement(id, { routeKey: value } as Partial<Element>);
   };
-  // LOOKS phase 2 (§14) — with a multi-frame group in the project, a plate REFERENCES a
-  // DECLARED source through a picker; a free-typed routeKey is not possible, so identity
-  // stays structural (the same source in two looks is one seat). A dangling legacy value
-  // is shown as itself, labeled undeclared, so the select never lies about the scene.
-  const declared = projectLookGroup(sceneForPicker)?.sources.map((src) => src.routeKey);
+  /*
+    🔴 `B-188` — **ONE CONTROL NOW, AND IT IS THE FREE-TEXT ONE.**
+
+    There were two: a `<select>` over the group's DECLARED sources when the project had a
+    multi-frame group, and a free-text box when it did not. The group declares nothing any more
+    — the source list is derived from the plates — so a picker would be a control that can only
+    ever offer what other plates already chose, and there would be no way to create the first
+    source, or the next one, at all. **Typing a new key IS how a source comes into existence.**
+
+    The existing keys are still OFFERED, through the field's datalist: the common act is
+    pointing this plate at a source the template already uses, and that must stay one click.
+    They are a suggestion, never a constraint — which is the whole difference from the picker
+    this replaces, and the reason `look-source-undeclared` no longer exists to punish the gap.
+  */
+  const suggestions =
+    sceneForPicker === null
+      ? []
+      : deriveLookSources(sceneForPicker).filter((k) => k !== element.routeKey);
   /*
     ⭐ `B-183` — THE UNASSIGNED STATE IS REPRESENTABLE IN THE CONTROL, because it is now
     representable in the scene.
@@ -674,34 +689,18 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
     that option is named in the schema's docstring rather than left to be rediscovered.
   */
   const holds = element.routeKey ?? UNASSIGNED;
-  const optionsFor = (list: readonly string[]): readonly string[] =>
-    list.includes(holds) ? list : [holds, ...list];
-  const labelFor = (k: string, list: readonly string[]): string =>
-    k === UNASSIGNED ? UNASSIGNED_LABEL : list.includes(k) ? k : `${k} (undeclared)`;
   return (
     <>
       <CollapseSection title="Live Source" defaultExpanded>
-        {declared === undefined ? (
-          <TextField
-            label="source id"
-            ariaLabel="Live Source source id"
-            value={holds}
-            resetKey={`${id}-${String(rejectSeq)}`}
-            onCommit={commitId}
-          />
-        ) : (
-          <SelectField
-            label="source"
-            value={holds}
-            options={optionsFor(declared)}
-            labels={optionsFor(declared).map((k) => labelFor(k, declared))}
-            onCommit={(value) => {
-              designerStore.updateElement(id, {
-                routeKey: value === UNASSIGNED ? undefined : value,
-              } as Partial<Element>);
-            }}
-          />
-        )}
+        <TextField
+          label="source id"
+          ariaLabel="Live Source source id"
+          value={holds}
+          resetKey={`${id}-${String(rejectSeq)}`}
+          onCommit={commitId}
+          suggestions={suggestions}
+          datalistId={`live-source-ids-${id}`}
+        />
         <AspectRow element={element} />
         <FitModeRow element={element} />
         {/*

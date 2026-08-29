@@ -4,10 +4,15 @@ import { expect, test } from './fixtures/designer.js';
  * ⭐ **LOOKS phase 2 — the 6-box debate, authored the LOOKS way (`design.md` §14).**
  *
  * This is session BB's ACCEPTANCE: the walk the owner will do by hand — create the
- * multi-frame group from the toolbar, declare six sources ONCE, author a 6-box look and
- * a solo look as full sub-scenes, and switch between them with the selector, with the
- * canvas visibly changing through `runtime.setActiveLook` (phase 1's D.5 seam, whose
- * first production caller is this UI).
+ * multi-frame group from the toolbar, author a 6-box look and a solo look as full
+ * sub-scenes, and switch between them with the selector, with the canvas visibly changing
+ * through `runtime.setActiveLook` (phase 1's D.5 seam, whose first production caller is
+ * this UI).
+ *
+ * 🔴 **`B-188` changed the FIRST step of that walk.** It used to be _"declare six sources
+ * ONCE"_, before any look existed. There is no declaration: each source comes into existence
+ * as its plate is pointed at a key, and the Looks panel mirrors the result. The walk is one
+ * step shorter and the assertions below are otherwise unchanged.
  *
  * 🔴 What a SCREENSHOT cannot show, asserted by DOM instead: the stage is transparent,
  * so a hidden look and an absent one photograph identically — the hidden looks' plates
@@ -88,14 +93,14 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
   await app.addRectangle(at(0.5, 0.5));
   await app.deselect();
 
-  // ── the multi-frame group + six declared sources ──────────────────────────
+  // ── the multi-frame group ──────────────────────────────────────────
+  //
+  // 🔴 `B-188` — THERE IS NOTHING TO DECLARE. The group used to be given its six sources
+  // here, through a `+ Source` field, before any look existed. The list is derived from the
+  // plates now, so the sources come into existence below, as each plate is pointed at a key,
+  // and the panel MIRRORS them rather than owning them.
   await app.page.getByRole('button', { name: 'Add multi-frame group' }).click();
-  const sourceInput = app.inspector.getByLabel('New source id');
-  for (let i = 1; i <= 6; i++) {
-    await sourceInput.fill(`live-${String(i)}`);
-    await app.inspector.getByRole('button', { name: '+ Source' }).click();
-  }
-  await expect(app.inspector.getByText('live-6', { exact: true })).toBeVisible();
+  await expect(app.inspector.getByText('Sources — used by the plates')).toBeVisible();
 
   // ── look-1: the 6-box, authored freely as a full sub-scene ────────────────
   await app.inspector.getByRole('button', { name: '+ Look' }).click();
@@ -107,12 +112,15 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
   };
   for (const [i, cell] of GRID_SCENE.entries()) {
     await app.addLiveSource(at(0.4, 0.4));
-    // The plate REFERENCES a declared source through the picker — with a group in the
-    // project there is no free-text routeKey control at all.
-    await expect(app.liveSourceIdInput).toHaveCount(0);
-    await app.inspector
-      .getByRole('combobox', { name: 'source' })
-      .selectOption(`live-${String(i + 1)}`);
+    // 🔴 `B-188` — ONE control, and it is the free-text one, WITH a group in the project.
+    // A picker here could only offer what other plates already chose, so the first source could
+    // never be created at all. Typing the key is what brings it into existence.
+    //
+    // ⚠ Asserted on the `<select>` ELEMENT, not on `getByRole('combobox')`. The free-text field
+    // is ITSELF a combobox now (it carries a `<datalist>`), so a role assertion would be satisfied
+    // by the very control this line exists to prove is absent.
+    await expect(app.inspector.locator('select[aria-label="source"]')).toHaveCount(0);
+    await app.setLiveSourceId(`live-${String(i + 1)}`);
     await writeField('X position', cell.x);
     await writeField('Y position', cell.y);
     await writeField('Width', PLATE_W);
@@ -128,7 +136,8 @@ test('the 6-box debate: group → six sources → two looks → the selector swi
   await app.inspector.getByRole('button', { name: '+ Look' }).click();
   await app.inspector.getByRole('button', { name: 'Edit contents of look-2' }).click();
   await app.addLiveSource(at(0.4, 0.4));
-  await app.inspector.getByRole('combobox', { name: 'source' }).selectOption('live-1');
+  // The SAME key look-1 uses — one carrier entry, one default input, two looks.
+  await app.setLiveSourceId('live-1');
 
   // §6.6 — panel→canvas coherence, asserted by WRITING: set X/Y to known values and
   // require the RENDERED box to land there. A screenshot cannot witness this.

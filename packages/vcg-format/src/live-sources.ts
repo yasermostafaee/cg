@@ -1,5 +1,6 @@
 import {
   defaultLookOf,
+  deriveLookSources,
   flattenElements,
   lookGroupOf,
   resolveDefaultPosition,
@@ -286,17 +287,21 @@ export interface TemplateLookCarrier {
  * claim 1 — double-seat + first-match addressing). This derivation is source-keyed by
  * construction:
  *
- * - **`sources`** — ONE declaration per DECLARED source (the group's list, in its order).
- *   `expectedAspect` / `dynamic` come from the DECLARATION, never from a plate element —
- *   the group is where two looks are prevented from disagreeing. ⚠ **`fitMode` does NOT: it is
- *   per-look, beside the rects** (`B-178`, and see {@link TemplateLookCarrier.fits}). The two
- *   facts differ in kind — `expectedAspect` asserts a property of the FEED, which cannot change
- *   between looks, while `fitMode` asserts how that feed is placed in a BOX, and the box is
- *   exactly what a look changes. The declaration's `rect`
- *   is the source's rect in the DEFAULT look, falling back to the first look containing it
- *   (a bridge that has not learned looks yet seats what a fresh take will show);
- *   `elementId` is the first referencing plate's, document order (the bridge never reads
- *   it — AZ-verified — it survives as the operator-facing handle).
+ * - **`sources`** — ONE declaration per DERIVED source. 🔴 `B-188`: the group no longer
+ *   declares a list, so this is `deriveLookSources(scene)` — the distinct `routeKey`s the
+ *   plates carry, in document order of first use. **The set is unchanged by that switch**: this
+ *   loop already dropped every declared source no look placed, and only recorded rects for
+ *   plates whose key was declared, so `used ⊆ declared` and the carrier was always exactly the
+ *   derived set. Only the ORDER moved, from the author's declaration order to first use.
+ *   **`expectedAspect` and `dynamic` are now read off the plate ELEMENT** — the first one
+ *   serving that key in document order, the same element whose id `elementId` already names, so
+ *   the two facts cannot describe different elements. ⚠ `fitMode` stays per-look beside the
+ *   rects (`B-178`, {@link TemplateLookCarrier.fits}): a fit is a property of a picture in a
+ *   BOX and a look is exactly a change of box. The declaration's `rect` is the source's rect in
+ *   the DEFAULT look, falling back to the first look containing it (a bridge that has not
+ *   learned looks yet seats what a fresh take will show); `elementId` is the first referencing
+ *   plate's, document order (the bridge never reads it — AZ-verified — it survives as the
+ *   operator-facing handle).
  * - **per-look `rects`** — the look's VISIBLE SET: its own plates plus every root-level
  *   plate (a plate outside every look is on screen in EVERY look; so is one inside an
  *   instance the group does not register, which the switch never hides). 🔴 A source
@@ -304,13 +309,13 @@ export interface TemplateLookCarrier {
  *   outright ("seat NO PRODUCER AT ALL rather than to emit a zero-area rect"); zero-area
  *   holes belong to the PARKED animated phase (§13.4/§14.6). The EMPTY look is valid and
  *   carries an empty map — background alone.
- * - A declared source REFERENCED NOWHERE yields no declaration: an unplaced source cannot
- *   be shown, and declaring it would seat a producer no look can reveal.
+ * - A source no look places yields no declaration: it cannot be shown, and declaring it would
+ *   seat a producer no look can reveal. (Reachable only with zero looks now that the list is
+ *   derived from the plates — it used to be the `l9` case, a declared-but-unused key.)
  *
- * Tolerant on purpose where the PREFLIGHT refuses at export (an undeclared reference is
- * skipped; a within-look duplicate is first-wins in document order): import must not
- * refuse a whole template over what the preflight already guards — the zod-strip
- * philosophy, one level up.
+ * Tolerant on purpose where the PREFLIGHT refuses at export (a within-look duplicate is
+ * first-wins in document order): import must not refuse a whole template over what the
+ * preflight already guards — the zod-strip philosophy, one level up.
  */
 export function collectLookCarrier(scene: Scene): {
   sources: LiveSourceDeclaration[];
@@ -321,7 +326,16 @@ export function collectLookCarrier(scene: Scene): {
   if (group === undefined) return null;
 
   const lookByInstance = new Map(group.looks.map((l) => [l.instanceId, l] as const));
-  const declared = new Map(group.sources.map((s) => [s.routeKey, s] as const));
+  /*
+    🔴 `B-188` — THE SOURCE LIST IS DERIVED, AND THIS IS ITS ONE DEFINITION'S ONE CALL SITE.
+
+    It was `group.sources` — the group's declared list — with every plate gated on membership
+    of it. Both are gone: the list comes from the plates, so a plate cannot reference something
+    the list lacks and there is nothing to gate on. `deriveLookSources` walks the SAME flattener
+    in the SAME `'document'` order this loop does, which is what keeps the Designer's list, this
+    carrier's order and this loop's membership one answer rather than three.
+  */
+  const derived = deriveLookSources(scene);
   const rectsByLook = new Map<string, Record<string, LiveSourceRect>>(
     group.looks.map((l) => [l.id, {}]),
   );
@@ -342,16 +356,47 @@ export function collectLookCarrier(scene: Scene): {
     group.looks.map((l) => [l.id, {}]),
   );
   const firstPlateFor = new Map<string, string>();
+  /**
+   * ⭐ `B-179` — **the AUTHOR's `expectedAspect` and the FILL-binding flag, per source, from
+   * the plate ELEMENT that first serves it.**
+   *
+   * Both used to be read off the declaration (`src.expectedAspect`, `src.dynamic`) and NEITHER
+   * had a writer: `addLookSource` emitted `{ routeKey, dynamic: false }` and nothing anywhere
+   * set an aspect. So every look-group template exported no aspect at all, which DISARMED the
+   * take's mismatch refusal (it fires only when both the source's aspect and the author's are
+   * present) — that is `B-179`, and reading the element is its fix.
+   *
+   * 🔴 The owner settled WHERE an aspect belongs rather than this change assuming it:
+   * _"aspect and fit are per-plate right now and have nothing to do with the source — which I
+   * think is correct."_ It is the author's intention for the BOX, and the real feed still wins
+   * when known (`resolvePlateAspect`: source `format` → source `aspect` → this → `assumed`).
+   * So there is no refusal when two looks' plates assert different aspects for one key: the
+   * FIRST in document order wins, which is the same element `elementId` already names, so the
+   * carrier entry describes one element rather than two halves of two.
+   *
+   * `dynamic` comes from the same element through the same {@link dynamicRoleIndex} the
+   * groupless path uses — closing the asymmetry where that path computed it from the field
+   * bindings and this one hardcoded `false` for every look-group template ever exported.
+   */
+  const dynamicRoles = dynamicRoleIndex(scene);
+  const aspectFor = new Map<string, number>();
+  const dynamicFor = new Map<string, boolean>();
 
   for (const flat of flattenElements(scene, 'document')) {
     const el = flat.element;
     if (el.type !== 'video-placeholder') continue;
-    // `B-183` — narrowed once, at the top, so the four reads below cannot disagree about
-    // whether this plate has a source. An UNASSIGNED plate serves no declared source and is
-    // therefore not a candidate for any look; the export refuses it separately.
+    // `B-183` — narrowed once, at the top, so the reads below cannot disagree about whether
+    // this plate has a source. An UNASSIGNED plate has no key to contribute and is therefore
+    // not a candidate for any look; `live-source-unset` refuses the export separately.
     const routeKey = el.routeKey;
-    if (routeKey === undefined || !declared.has(routeKey)) continue;
-    if (!firstPlateFor.has(routeKey)) firstPlateFor.set(routeKey, el.id);
+    if (routeKey === undefined) continue;
+    if (!firstPlateFor.has(routeKey)) {
+      firstPlateFor.set(routeKey, el.id);
+      // Gated on FIRST-PLATE identity, not written unconditionally: a later plate serving the
+      // same key must not overwrite the aspect belonging to the element `elementId` names.
+      if (el.expectedAspect !== undefined) aspectFor.set(routeKey, el.expectedAspect);
+      dynamicFor.set(routeKey, dynamicRoles.get(el.id)?.has('fill') ?? false);
+    }
     const ownerInstanceId = flat.ancestry.map((a) => a.id).find((id) => lookByInstance.has(id));
     const owner = ownerInstanceId === undefined ? undefined : lookByInstance.get(ownerInstanceId);
     const inLooks = owner === undefined ? group.looks : [owner];
@@ -377,20 +422,21 @@ export function collectLookCarrier(scene: Scene): {
 
   const fallback = defaultLookOf(group);
   const sources: LiveSourceDeclaration[] = [];
-  for (const src of group.sources) {
-    let rect = fallback === undefined ? undefined : rectsByLook.get(fallback.id)?.[src.routeKey];
+  for (const routeKey of derived) {
+    let rect = fallback === undefined ? undefined : rectsByLook.get(fallback.id)?.[routeKey];
     if (rect === undefined) {
       for (const look of group.looks) {
-        rect = rectsByLook.get(look.id)?.[src.routeKey];
+        rect = rectsByLook.get(look.id)?.[routeKey];
         if (rect !== undefined) break;
       }
     }
     if (rect === undefined) continue;
+    const expectedAspect = aspectFor.get(routeKey);
     sources.push({
-      elementId: firstPlateFor.get(src.routeKey) ?? src.routeKey,
-      sourceId: src.routeKey,
+      elementId: firstPlateFor.get(routeKey) ?? routeKey,
+      sourceId: routeKey,
       rect,
-      ...(src.expectedAspect !== undefined ? { expectedAspect: src.expectedAspect } : {}),
+      ...(expectedAspect !== undefined ? { expectedAspect } : {}),
       /*
         ⭐ `B-178` — **NO `fitMode` HERE ANY MORE, and its absence is the fix.**
 
@@ -406,7 +452,7 @@ export function collectLookCarrier(scene: Scene): {
         reason `LookSource.fitMode` is deleted from the schema in the same change rather than left
         as a plausible-looking second place to write it.
       */
-      dynamic: src.dynamic,
+      dynamic: dynamicFor.get(routeKey) ?? false,
     });
   }
 

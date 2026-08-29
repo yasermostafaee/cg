@@ -285,12 +285,10 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
  * there is something to set".
  *
  * 🔴 **The first half was true and is now false** — the schema makes `routeKey` optional
- * precisely so absence is storable. **The second half was the defect.** `live-N` is the
- * PLACEHOLDER TEXT of the Looks panel's `+ Source` input: a suggestion the author had not
- * accepted, which nothing declared. So the label did not say "there is something to set", it
- * said "this is set, to `live-1`" — and on a template with a multi-frame group the preflight
- * then reported the author's own tool's guess as the author's mistake. The bars now read
- * `no source`, which says what the old default only pretended to.
+ * precisely so absence is storable. **The second half was the defect.** `live-N` was the
+ * PLACEHOLDER TEXT of the Looks panel's source input: a suggestion the author had not
+ * accepted. So the label did not say "there is something to set", it said "this is set, to
+ * `live-1`". The bars now read `no source`, which says what the old default only pretended to.
  *
  * ⭐ The owner's principle, stated on 2026-08-26: **nothing lands unconfirmed.**
  *
