@@ -1609,3 +1609,101 @@ own doctrine that is harmless to any derivation — the headings are the authori
 note prescribes re-deriving from them — but the append-only claim log had a hole, and a reader
 auditing the log rather than the headings would have found `B-180` unexplained. **Recorded here so
 the log is complete: `B-180` was claimed 2026-08-26 by session `OVERLAP-RESIDUE-01`.**
+
+## 2026-08-29 — four numbers in one session, from the bundle `EDGE-DRAG-AUDIT-01` + `PLATE-SOURCE-01`
+
+**Claimed, all in [bugs-designer.md](bugs-designer.md):** `B-183` (a new Live Source plate is born
+holding an undeclared `live-N`), `B-184` (an export refusal drawn amber in one panel and red in
+another), `B-185` (the locked-resize handle slides out from under the pointer — filed as a DECISION,
+nothing implemented), `B-186` (the Designer's tests are never typechecked).
+
+**Derivation, by this file's own documented method** (headings are truth; there is no pointer):
+
+- highest `B-` heading in local `docs/prd/`, `^## \[.\] B-\d{3}`, README excluded: **`B-182`**;
+- widened across **every** ref, not a hand-picked list — `dev` and `origin/dev` → `B-182`; `main`,
+  `origin`, `origin/main` → `B-132`; `ai-stale` → `B-137`; `design/live-source-multibox` → `B-131`;
+  `snapshot/2026-07-20-runtime-head` → `B-099`;
+- `git stash list` empty; `git worktree list --porcelain` → this checkout only;
+- **`B-183` through `B-190` each returned ZERO hits tree-wide** — no forward references at all this
+  time, which is the first clean sweep since the phantom class was named.
+
+⇒ next free was `B-183`; `B-184`, `B-185` and `B-186` taken after it in the same session.
+
+### ⚠ The numbers are NOT in the order the brief listed the items, and that is deliberate
+
+The bundle put the edge-drag audit first, so a reader may expect it to hold `B-183`. It does not —
+it holds **`B-185`**. Numbers were taken in the order the WORK reached the point of needing one, and
+the plate-source item's code landed first, so its two numbers were already written into source
+comments and a spec delta before the audit item was filed. Renumbering afterwards would have meant
+editing committed identifiers to satisfy a reading order, which is how a cross-reference starts
+pointing at the wrong thing. **The claim log is the authority on which number is which, not the
+brief's running order.**
+
+### ⭐ On the brief's instruction to "claim from the registry's own `Next free:` line"
+
+There is no such line to claim from any more, and following that instruction literally would have
+produced a wrong number: the last `Next free:` in this file is from the **2026-08-25** section and
+reads `B-180`, three numbers stale. **The pointer is RETIRED** — this file's own doctrine says the
+headings are the authority and prescribes re-deriving from them, which is what was done. Recorded
+because the instruction has now appeared in a brief AFTER the retirement, and will again.
+
+### ⚠ `B-185` is filed for a defect that is NOT being fixed, and the entry says so in its heading
+
+Filed at the owner's explicit instruction: three anchorings are costed, a recommendation is given,
+and nothing is implemented. The number reserves the DECISION, not a fix. ⚠ It is therefore a real
+item, not a phantom — the distinction this file exists to keep: a filed heading is claimed, whatever
+its state; a number named only in a brief is not.
+
+### 🔴 A number was DECLINED this session — and that is the point of recording it
+
+The bundle also asked for the canvas error mark to be filed as marking the whole 1920×1080 frame
+rather than the offending nested plate. **It did not reproduce**: measured, `flattenElements` returns
+the nested plate at its own composed rect `{x:100,y:100,width:640,height:360}`, the issue carries
+`elementId: "nested-plate"`, and `ErrorMarkOverlay` draws there.
+
+No number was taken. **Filing it would have reserved a number for a defect nobody has shown to
+exist**, and an item whose evidence is "a brief said so" is exactly the shape that produced six
+phantoms. The measurement is recorded inside [[B-183]] instead, with what would settle it (the
+owner's actual scene file). ⇒ **Next free after this session is `B-187`.**
+
+### 2026-08-29 (same session) — `R-059`, from `FITMODE-CONTROL-FILE-01`
+
+**Claimed:** `R-059` ([runtime.md](runtime.md)) — the operator overrides a live plate's fit mode from
+CG Control, staged onto UPDATE, remembered per look. **Docs only; nothing implemented.**
+
+**Derivation:** highest `R-` HEADING across every ref (`^## \[.\] R-\d{3}`) was **`R-058`**; `R-059`
+… `R-064` returned **no headings anywhere**. `R-059` does occur tree-wide — nine times — but every
+occurrence is **this file's own retired `Next free:` pointer**, never an item, which is the
+documented false-positive class for this namespace. `R-060` returned zero; `R-061`/`R-062` occur only
+in this file's 2026-08-2x account of a near-miss where an implementation was written citing `R-062`
+before an audit. `git stash list` empty; one worktree.
+
+⇒ `R-` stays contiguous `R-001` … `R-059`, no gaps.
+
+**Filed under `R-` and in `runtime.md` deliberately**, by the [[R-053]] precedent: most of the work is
+CG Control SURFACE even though the mechanism sits in `tools/caspar-bridge`. `R-053` itself sits here
+while its refusal and fit chain live in `live-plate-fit.ts`.
+
+### ⚠ The brief's `R-054` precedent DID NOT EXIST, and the item says so instead of inheriting it
+
+The prompt instructed the item to record, as settled precedent, _"`R-054`'s decision that a tab switch
+with unapplied edits **keeps** the edits and marks it dirty"_, and to verify it first. **It is not a
+decision.** `runtime.md:2835` lists _"Does the modal keep per-tab dirty state, and what happens on tab
+switch with an unapplied edit?"_ among `R-054`'s OPEN QUESTIONS, under an explicit
+_"A tab switch must decide which behaviour it inherits."_
+
+`R-059` therefore records the question as **open in two places that must be answered consistently**,
+rather than citing a decision nobody made. ⭐ **This is the same failure mode as the phantom-number
+class one level up:** a brief asserting that something exists is not evidence that it does, whether
+the something is a NUMBER or a DECISION. The check is identical — go and read it.
+
+### ⚠ And the feature's attachment point exists, but at the WRONG GRANULARITY
+
+Recorded here because it changes what the item costs, and a later reader skimming the claim log
+should not have to rediscover it: the per-assignment `fitMode` override is already in the schema
+(`sources.ts:405`), the bridge (`caspar-runtime.ts:4068-4069`) and the resolver
+(`live-plate-fit.ts:277-284`, which even returns a `from` provenance). But
+`TemplateSourceAssignmentSchema` is `{templateId, plateId, sourceId, fitMode?}` — **no look
+dimension** — so the existing override is one value per plate, in force in EVERY look. The owner's
+decision that it be remembered PER LOOK is therefore a storage-shape change, not a surface. The item
+leads with that.

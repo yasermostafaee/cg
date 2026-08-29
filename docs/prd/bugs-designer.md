@@ -3024,3 +3024,276 @@ half — the promise that what a gesture commits is a number the author can read
   anywhere was `B-181` (this session's own, one heading above), `B-182` returned zero hits tree-wide
   and on every ref, `git stash list` was empty and `git worktree list --porcelain` showed this
   checkout only.
+
+---
+
+## [~] B-183 — a new Live Source plate is born pointing at `live-1`, a name the author never chose and nothing declares, so drawing a box creates a preflight error and blames the author for it ⟨priority: high⟩ — FIXED on `dev` (`openspec/changes/plate-source-unassigned`)
+
+**What:** the owner opened a template on the root composition and found a plate flagged
+`look-source-undeclared`: its `routeKey` was `live-1` while the group declared `l1` and `l2`.
+
+> _"I never used `live-1`. I declared `l1` and `l2`."_
+
+He is right, and the surface was not lying to him — **the tool was.** Two independent paths handed
+every new plate a `live-N`:
+
+| path                                               | value                               |
+| -------------------------------------------------- | ----------------------------------- |
+| `defaultLiveSource(id, x, y, routeKey = 'live-1')` | `live-1`                            |
+| `nextLiveSourceId(scene)`, from the canvas tool    | the first free `live-N`, scene-wide |
+
+🔴 **`live-N` is the PLACEHOLDER TEXT of the Looks panel's `+ Source` input** — the panel's
+suggested next name, a suggestion the author had not accepted. Nothing declared it. So drawing a box
+created a plate already referencing an undeclared source, and the group-scope preflight then
+reported the tool's own guess as the author's mistake.
+
+⭐ **The owner's decision, 2026-08-26: a new plate defaults to NO source.** His principle, stated in
+the same breath: **nothing lands unconfirmed.**
+
+**Rejected by the owner, with his reasons — recorded so they are not relitigated:**
+
+- **default to the first DECLARED source** — silently binds two plates to one input, and the error
+  is never seen;
+- **keep `live-N` and auto-declare it** — creating a box would edit the group's source list without
+  being asked.
+
+### 🔴 What was MEASURED first — and the half of the brief it killed
+
+The brief carried a second, independent hypothesis: that the Inspector's `source` control renders
+the group's DECLARED list and falls back to its first option, which is why it showed `l1` for an
+element holding `live-1`. Both were tested against one fixture — a plate holding `live-1` under a
+group declaring `l1`/`l2` — comparing the scene, the preflight and the Inspector **in the same
+test**.
+
+| hypothesis                                          | verdict                                                                                                   |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| the creation default is an undeclared `live-N`      | **CONFIRMED**                                                                                             |
+| the Inspector substitutes the first declared option | 🔴 **FALSE** — `select.value = "live-1"`; `options = ["live-1\|live-1 (undeclared)", "l1\|l1", "l2\|l2"]` |
+
+⚠ **The Inspector was already honest, and its own comment already said so** — _"A dangling legacy
+value is shown as itself, labeled undeclared, so the select never lies about the scene."_ **Nothing
+about that rendering is changed.** It is now pinned by test, because an honest control that nothing
+tests is one refactor from becoming a dishonest one.
+
+⚠ **So why did the owner read `l1` off the screen?** Not established, and not guessed at here. What
+is established is that the Inspector cannot produce that reading from an element holding `live-1`.
+The most likely remaining explanation is that the plate he had selected was not the plate the error
+named — see [[B-185]]'s neighbourhood and the note under "What was NOT reproduced" below.
+
+### What changed
+
+- **`routeKey` is OPTIONAL on the element** — and only there. `LookSource.routeKey` stays required:
+  a plate may not yet have a source, a DECLARATION always names one. Widening the shared
+  `LiveSourceIdSchema` instead would have let a group declare an empty source.
+- **`defaultLiveSource` drops the parameter entirely**, and **`nextLiveSourceId` is deleted** rather
+  than left unused, with its (expired) argument recorded where it stood.
+- **A new refusal, `live-source-unassigned`**, in DOCUMENT scope so it fires with or without a
+  group. It replaces two messages that were both false about this state: the device-id refusal
+  (_"is not symbolic (“undefined”)"_) and the undeclared one (_"references source “”"_, after a
+  `?? ''`). Both describe a plate that HAS a source and got it wrong.
+- **Both refusals name the remedy** — the panel, the row, and the choice — resolved once from
+  `scene.lookGroups`, because which row exists differs by template (`source` picker with a group,
+  free-text `source id` without). `look-source-undeclared` names BOTH legitimate remedies: fix the
+  plate, or declare the name.
+- **The Inspector gains the unassigned state** as its own selectable entry (`— no source —`), via a
+  `''` sentinel that cannot collide (`LiveSourceIdSchema` is `.min(1)`) and never reaches the store.
+- **The bars label reads `no source`** — which is what the old `live-1` default only pretended to
+  say.
+
+### 🔴 What is NOT changed
+
+- **The rule is not weakened.** No tolerance, no severity downgrade, no suppression in the root
+  scope. `look-source-undeclared` keeps its reasoning and its `error` severity.
+- **No one-click fix button.** The owner considered and declined it: it needs an undoable scene
+  mutation and is a separate item if ever wanted.
+- **Existing data is not repaired.** An undeclared `routeKey` is the author's to fix, and rendering
+  the Inspector performs no write — pinned by test.
+- **The check is not extended into look compositions.** Opened as its own composition a look has no
+  group in scope, so §B.1 never runs there; whether it should is a separate decision, noted and not
+  taken.
+
+### ⚠ What was NOT reproduced, and is therefore NOT filed
+
+The brief also asked for the canvas error mark to be filed as marking the wrong element — the dashed
+red rect wrapping the whole 1920×1080 frame rather than the offending nested plate. **It did not
+reproduce.** Measured with a plate at `(100,100,640,360)` nested inside an instanced look
+composition: `flattenElements(scene, 'document')` returns `inst-a` at the full frame **and**
+`nested-plate` at its own composed rect, the preflight carries `elementId: "nested-plate"`, and
+`ErrorMarkOverlay` therefore draws at `{x:100, y:100, width:640, height:360}` — the plate, correctly.
+
+No bug is filed for it, because filing one would reserve a number for a defect nobody has shown to
+exist. What would settle it is the owner's actual scene file; the likeliest innocent explanation is
+that the offending plate in his template genuinely is full-frame.
+
+- **Cross-refs:** [[B-184]] (the colour of the very refusal this item produces — same session, same
+  panel); [[B-186]] (why `tsc` did not catch the two stale call sites this change created);
+  [[D-137]] (the Live Source element and its creation path); [[B-141]] / [[B-143]] / [[B-144]] —
+  _"the system knows something and does not say it"_. ⭐ **This item is one step worse than that
+  family and is worth distinguishing from it:** the surface did not stay quiet, it **stated
+  something the author had not chosen and then blamed him for it.**
+- The number was verified free before this heading was written: highest `B-` heading across every
+  ref was `B-182`; `B-183` … `B-190` returned **zero** hits tree-wide (no forward references this
+  time); `git stash list` empty; `git worktree list --porcelain` showed this checkout only.
+
+---
+
+## [~] B-184 — one fact, two colours: the Looks panel draws an EXPORT REFUSAL in amber while the status bar draws the same refusal in red ⟨priority: medium⟩ — FIXED on `dev` (`openspec/changes/plate-source-unassigned`)
+
+**What:** the right-hand Looks panel printed `1 ISSUE — EXPORT WILL REFUSE` with its issue rows in
+`colors.caution` (amber), while `StatusBar.tsx` printed `1 error` in red for the same preflight
+issues. **The owner's call: it must be red.** Amber for a hard export refusal understates it — the
+author cannot export at all.
+
+**Why this is not a taste question.** The theme's own tokens already decide it:
+
+- `caution` — _"a legitimate state the operator should NOTICE, but which is not an error"_;
+- `danger` — _"red is reserved for real errors"_.
+
+These rows are `severity: 'error'` issues that block the export. The amber was contradicting the
+token that carried it.
+
+**Checked before changing anything, as the brief required:** `danger` appears **nowhere** in
+`LooksSection.css.ts` (its only colours were `accent`, `border`, `caution`, `textMuted`), so the
+panel does not reserve red for something else. No new colour is introduced and no third state
+invented.
+
+⚠ The summary line gets its own `issueSummary` style rather than a recoloured `groupLabel`:
+`groupLabel` is the neutral heading for **every** group in this panel, and recolouring it would turn
+all of them red.
+
+⚠ Noted and not fixed: `StatusBar.tsx:71-72` hard-codes `#fda4af` / `#fcd34d` rather than using the
+`danger` / `caution` tokens. Out of scope here; it produces the right colours today.
+
+- **Cross-refs:** [[B-183]] (filed together; that item's refusal is what this panel prints);
+  [[D-157]] (the canvas error mark, whose own docstring reserves `danger` for real errors).
+
+---
+
+## [ ] B-185 — under an aspect lock the resize HANDLE slides out from under the pointer, by far more than the snap threshold; the owner has now objected twice and the anchoring is a decision he has not been offered ⟨priority: medium — a DECISION is wanted, not a patch⟩
+
+**What:** immediately after [[B-181]] shipped, the owner reported _"dragging the edges is not
+fixed."_ Three separate readings were measured against an aspect-locked plate before anything was
+touched, because the report and [[B-181]]'s own measurement could both be true about different
+things.
+
+### The three readings, each answered by value
+
+Fixture: plate `(100, 100, 640, 360)`, 16:9 lock, zoom 1 unless stated.
+
+**1. Does the grabbed edge land under the pointer? — YES, exactly. Not a defect.**
+
+| handle | pointer (driven axis) | committed edge   | error |
+| ------ | --------------------- | ---------------- | ----- |
+| `r`    | 900 / 1300 / 400      | 900 / 1300 / 400 | **0** |
+| `l`    | 300 / 40              | 300 / 40         | **0** |
+| `t`    | 40 / 300              | 40 / 300         | **0** |
+| `b`    | 700 / 300             | 700 / 300        | **0** |
+
+Held under stress too — element `scale` `1.5/0.8`, anchor `.5/.5`, and both together: error `0` to
+nine decimals on all four handles. [[B-181]] did its job.
+
+**3. Is abutting two boxes still hard? — NO. It is exact, at every zoom.**
+
+Dragging the plate's right edge to a neighbour's left edge at `x = 1000`: the target is taken for
+pointer x ∈ `[994, 1006]` and the committed right edge is **exactly `1000`**, gap `0`, guide drawn
+at `1000`. Repeated at zoom **0.25, 0.5, 1, 2 and 4** with the pointer ±3 SCREEN px off the target:
+**flush every time.** The other direction (the neighbour's `l` handle back to the plate's right edge
+at `740`) is flush for pointer x ∈ `[735, 745]`.
+
+⇒ The owner's original 2026-08-25 complaint — _"you have to zoom in a lot"_ — **is fixed.**
+
+**2. Where does the HANDLE's drawn midpoint end up? — THIS is what he is describing.**
+
+Under a lock the derived extent grows from a pinned corner, so the handle's midpoint slides along
+the cross axis even though the edge is exact:
+
+| handle → pointer | committed rect       | handle midpoint | cross-axis drift |
+| ---------------- | -------------------- | --------------- | ---------------- |
+| `r` → 900        | (100,100,800,450)    | (900, 325)      | **+45**          |
+| `r` → 1300       | (100,100,1200,675)   | (1300, 437.5)   | **+157.5**       |
+| `r` → 400        | (100,100,300,168.75) | (400, 184.375)  | **−95.6**        |
+| `t` → 300        | (100,300,284.4,160)  | (242.2, 300)    | **−177.8**       |
+| `b` → 700        | (100,100,1066.7,600) | (633.3, 700)    | **+213.3**       |
+
+🔴 **The drift EXCEEDS THE SNAP THRESHOLD in every case measured — by 2.4× to 30×.** `thr` is 7
+scene px at zoom 1; the smallest drift measured was 16.9 px. It crosses `thr` almost immediately:
+for `r`/`l` at 16:9 a width change of ~**25 px** is enough, and for `t`/`b` a height change of
+~**8 px**. By the commissioning brief's own criterion that makes this a **functional** matter, not a
+preference — which is why it is filed rather than closed.
+
+⚠ **Stated honestly, because it cuts the other way too:** the drift is **parallel to the driven
+edge**, never across it, so it can never make the edge take the wrong target — readings 1 and 3
+prove that. What it does do is put the handle graphic far from the cursor, and when SHRINKING it
+puts the cursor **off the box entirely** (`r` → 400: box bottom `268.75`, cursor `280`).
+
+### `B-175`'s pin contract for a locked EDGE handle — measured, since every option below touches it
+
+`RESIZE_CFG` pins a **CORNER**, not the opposite edge: `r`→`tl`, `l`→`tr`, `t`→`bl`, `b`→`tl`.
+Verified against the committed rects above — `r`→900 keeps `tl` at `(100,100)`; `l`→300 keeps `tr`
+at `(740,100)`; `t`→40 keeps `bl` at `(100,460)`; `b`→700 keeps `tl` at `(100,100)`. **That is
+exactly why the drift is `Δcross / 2`:** the cross axis is anchored at one end, so all of its growth
+happens in one direction and the midpoint moves by half of it.
+
+### The three anchorings, each with its cost
+
+1. **Keep the opposite corner pinned (today).** The handle slides away from the pointer by
+   `Δcross/2`. ⭐ **Its unstated virtue, which the other two lose:** in a top-aligned row of plates,
+   dragging any plate's `r` keeps the row's TOP alignment and makes only the bottom ragged.
+2. **Centre the derived extent on the grabbed handle's own midpoint.** The handle stays under the
+   pointer. **Cost:** the box grows BOTH ways on the cross axis, so a neighbour that was flush on
+   that axis is pushed — and `B-175`'s pin degrades from a corner to an edge. For a multibox layout
+   this is strictly worse than 1: it breaks alignment on both sides instead of one.
+3. **Anchor the derived extent to the nearest pinned corner.** 🔴 **Not a free compromise.** "Nearest"
+   flips as the cursor crosses the box's midline, so the box JUMPS mid-drag — the exact failure
+   `lockExtents`'s own docstring records as the reason `D-155` resolves the lock once at press
+   ("swapping which axis is preserved part-way through a drag changes the solution the box is
+   tracking, so the box relocates under a pointer that did not change direction").
+
+**Which I would pick, and why:** **1 — keep the geometry** — because it is the only one that
+preserves an alignment invariant a multibox layout depends on, and options 2 and 3 pay for cursor
+tracking with layout damage and a mid-drag jump respectively. ⚠ **But that does not close the
+complaint**, and there is a fourth lever the brief did not list: **draw the edge handle at the
+cursor's position ALONG the edge during an active drag.** That answers exactly what the owner sees —
+the square running away from his mouse — at zero geometric cost, since it changes only where a
+decoration is painted. **I would put 1 + the fourth lever to him together.**
+
+🔴 **Nothing is implemented.** The owner chooses on his return; a swap made on a naked-eye report is
+what this repo keeps paying for.
+
+- **Cross-refs:** [[B-181]] (the edge-space snap, which readings 1 and 3 confirm is working);
+  [[B-175]] (the fixed-corner pin, stated above); [[D-155]] (the aspect lock and `lockExtents`).
+- The number was verified free before this heading was written, in the same sweep as [[B-183]].
+
+---
+
+## [ ] B-186 — the Designer's tests are NEVER typechecked: `tsconfig.json` includes `src/**` only, so a call site with a removed argument compiles green ⟨priority: medium⟩
+
+**What:** `apps/designer/tsconfig.json` has `"include": ["src/**/*", "vite.config.ts"]`. The
+`tests/**` tree is not in it, so `pnpm typecheck` never looks at a single designer test.
+
+**How it was found — by a `git grep`, not by `tsc`.** [[B-183]] removed the 4th parameter from
+`defaultLiveSource`. Two call sites kept passing one:
+
+- `apps/designer/tests/live-source-inspector.dom.test.ts:132` — `defaultLiveSource('live-1', 100, 100, 'guest-1')`
+- `apps/designer/tests/live-source-preflight.test.ts:372` — `defaultLiveSource('el-1', 0, 0, 'guest-1')`
+
+`pnpm typecheck` reported **38 successful, 38 total**. At runtime JS discards the extra argument, so
+both elements silently became UNASSIGNED — the tests kept passing while asserting something other
+than what they say.
+
+⚠ **This is the MIRROR IMAGE of the notch CLAUDE.md already records** for `tools/caspar-bridge`
+(session BS: typecheck was widened to `tests/**` while turbo's `typecheck` inputs still hashed
+`src/**` only). Here the halves are swapped: turbo's `typecheck` inputs **do** hash `tests/**`, but
+the tsconfig does not INCLUDE them — so the cache key is honest about a check that never runs.
+
+**Why it is filed rather than fixed:** widening the `include` will surface whatever has accumulated
+across ~137 test files that have never been typechecked, and that is a change with its own diff and
+its own gate — not something to bolt onto a behaviour fix. ⚠ **Whoever takes it must widen the
+tsconfig and confirm turbo's `typecheck` inputs still cover every path the wider check now reads, in
+the SAME commit** (CLAUDE.md's rule: widen what a task READS and widen its `inputs` together).
+
+⚠ **Check the other apps and packages before assuming this is one file's problem** — the sweep that
+found it only looked at `apps/designer`.
+
+- **Cross-refs:** [[B-183]] (the change whose stale call sites exposed it).
+- The number was verified free before this heading was written, in the same sweep as [[B-183]].

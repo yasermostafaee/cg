@@ -3294,3 +3294,138 @@ on the playout machine, may be remote, and AMCP does not expose it.
   (the two times this repo shipped that trap), [[B-070]] (the `errorCode` vocabulary Part A
   finally reads), [[B-081]]/[[R-006]] (the reassuring-claim-wins rule the pill muting follows),
   [[B-171]] (why the bridge decides and the renderer renders).
+
+---
+
+## [ ] R-059 — the operator can override a live plate's FIT MODE from CG Control, staged onto UPDATE, remembered PER LOOK ⟨priority: medium⟩
+
+**What:** a live plate's fit mode (`contain` / `cover`) is authored per element and resolved per look
+([[C-028]], wired by [[B-178]]), default `contain`. The operator in CG Control cannot change it. The
+owner wants them able to:
+
+> the person watching air is the one who sees a guest wrongly cropped.
+
+### 🔴 The premise, verified against the code before this item was written
+
+The existing record says the mode is _"choosable in the Designer and overridable by the operator"_
+([caspar.md](caspar.md):1801). **That is TRUE, and the attachment point already exists** — this item
+EXPOSES one rather than introducing one:
+
+| piece                                | where                                                 |
+| ------------------------------------ | ----------------------------------------------------- |
+| the override field on the assignment | `packages/shared-ipc/src/channels/sources.ts:405`     |
+| the bridge collecting it             | `tools/caspar-bridge/src/caspar-runtime.ts:4068-4069` |
+| the resolver, WITH provenance        | `tools/caspar-bridge/src/live-plate-fit.ts:277-284`   |
+
+`resolvePlateFitMode(override, authored)` already returns `{ mode, from: 'override' \| 'authored' \|
+'default' }`, and its field docstring already argues why the operator outranks the author for the
+MODE where `D-147` has the source outranking the author for the ASPECT.
+
+### 🔴 …but it is keyed WITHOUT a look, and that is the whole cost of this item
+
+`TemplateSourceAssignmentSchema` is `{ templateId, plateId, sourceId, fitMode? }`
+(`sources.ts:374-405`). **There is no look dimension anywhere in it**, and the bridge folds it into
+`fitOverrides.set(a.plateId, a.fitMode)` — one value per plate, **in force in EVERY look.**
+
+⇒ **Decision 2 below is therefore a STORAGE-SHAPE change, not a surface.** Anyone picking this up
+expecting "just add a control to CG Control" will ship an override that leaks between looks and will
+have satisfied the owner's example exactly backwards. This is the single most important line in the
+item.
+
+⚠ **This repo has already made this mistake once, in this same file, about this same feature.**
+`sources.ts:880-899` records PVW's overlay being handed a `(plateId) => name` callback with _"no look
+dimension in it at all"_ — a per-look binding flattened on the way to the surface. And [[R-048]]'s
+per-plate emergency patch is documented as _"outermost, in force in EVERY look"_, which is the
+CORRECT shape for an emergency patch and the WRONG shape for this.
+
+### Owner decisions, 2026-08-29 — decided, with reasons
+
+**1. STAGED, applied by UPDATE. Never live-on-change.** It marks the row dirty and lands on UPDATE,
+exactly like every other row edit.
+
+- _Reason:_ this config reaches air, and **nothing lands unconfirmed.**
+- _Rejected:_ applying live; and a dual staged+live path — **two doors onto one fact is the shape
+  that produced [[B-164]]**.
+- ⚠ It must use the **same single dirty boolean** as the row's other staged edits, never a second
+  fact. See CLAUDE.md golden rule 7 (one boolean, read once) and [[B-139]] — that predicate's
+  baseline collapses when its optional third argument is omitted. **`B-139` is `[~]`, implemented but
+  not archived; do not assume it is fixed — verify before relying on it.**
+
+**2. 🔴 The override is remembered PER LOOK. It neither leaks between looks nor is discarded by a
+switch.** The owner's example, which is the whole shape of the feature:
+
+> On a two-box look the operator changes the fit mode of one of the two boxes. Switching to the
+> one-box look, that look's box shows **its own** mode. Switching back to the two-box look, the box
+> comes back with **the mode the operator last set there**.
+
+⇒ storage is a **per-(look, plate) map**, never one value per plate. A look switch is a **swap of
+which set is in force** — never a reset, never an inheritance.
+
+⭐ The override then lives at exactly the granularity the mode already resolves at ([[B-178]]: a
+look-group template carries the authored mode PER LOOK), which is why it is cheap and why an override
+can never be inherited by a look whose box is a different shape.
+
+**Precedence to state and to test:** element authored mode → resolved per look → **the operator's
+override for THAT look (wins)**.
+
+**3. The in-force mode must be VISIBLE as an override and CLEARABLE back to the authored mode.**
+Inside one look the operator still has to know the mode came from their own past decision rather than
+from the author, and be able to undo it.
+
+- This is the [[B-141]] / [[B-143]] / [[B-144]] family — _"the system knows something and does not say
+  it"_.
+- ⚠ The take readout already prints the MODE ([[B-178]]'s work). **The item requires it to print the
+  ORIGIN as well** — and `resolvePlateFitMode`'s `from` field already carries exactly that, so this is
+  a matter of not throwing it away on the way to the surface.
+
+### Open questions — RECORDED, not answered
+
+- **Where the per-look map lives, and whether it survives a bridge restart.** With the assignment in
+  the ledger, or in the row's staged state? ⚠ Note the shape [[R-053]] describes for the analogous
+  case — _"a per-item, per-plate map in the bridge, resolved inside the ONE resolver"_, emptied by
+  specific events and repaired by `restore()` after bridge-process death. Record what the code makes
+  possible; do not decide by assumption.
+- **What clears an override** — unassigning the plate, changing the source, taking the row down?
+- **An override staged in look X, not yet applied, when the operator switches to look Y.**
+  🔴 **The precedent this was said to have DOES NOT EXIST.** The commissioning prompt cited
+  [[R-054]] as having decided that a tab switch with unapplied edits KEEPS the edits and marks it
+  dirty. It did not: `runtime.md:2835` lists _"Does the modal keep per-tab dirty state, and what
+  happens on tab switch with an unapplied edit?"_ as an **open question**, under a line that says
+  explicitly _"A tab switch must decide which behaviour it inherits."_ So this is an open question
+  here too, and it is now open in **two** places that must be answered consistently — flagged rather
+  than invented.
+- Whether [[R-048]]'s per-plate emergency patch and this per-look override can coexist without a
+  precedence ambiguity. They answer the same question at different scopes.
+
+### What this item does NOT touch
+
+- **`resolvePlateAspect`'s chain and [[D-147]] are NOT touched.** The ASPECT chain runs the opposite
+  way round (the source outranks the author, because an aspect is a measurable property of the feed);
+  the MODE chain has the operator outranking the author, because a mode is a presentation choice.
+  `sources.ts:392-398` argues this at length. **Neither chain is a template for the other and they
+  must not be collapsed.**
+- ⚠ **Adjacent and NOT the same thing: [[B-179]]** — `expectedAspect` asserts a property of the FEED
+  and therefore cannot vary per look. This item's value CAN vary per look precisely because it is not
+  a property of the feed. Cross-referenced, not merged.
+- ⚠ **Also not this item:** the outstanding OPERATOR action that an existing installation must
+  re-import its templates or the take readout says `default` ([[B-178]]).
+
+### Why it is filed under `R-` in [runtime.md](runtime.md)
+
+Most of the work is CG Control SURFACE even though the mechanism sits in the bridge — the same
+placement [[R-053]] has, whose refusal and fit chain live in `tools/caspar-bridge/src/live-plate-fit.ts`
+while the item sits here. ⚠ The storage-shape half above may well land bridge-side; the item is still
+named by where the operator meets it.
+
+- **Cross-refs:** [[C-028]] (the fit mode itself, archived); [[B-178]] (the per-look resolution this
+  builds on, and the re-import caveat); [[B-179]] (adjacent, not merged); [[B-139]] (the dirty
+  predicate decision 1 must reuse); [[R-054]] (the tab-switch question, still OPEN — see above);
+  [[R-048]] (the per-plate emergency patch, the shape to NOT copy); [[R-053]] (the per-plate map
+  shape, and the `R-` placement precedent); [[D-147]] (the aspect chain, deliberately untouched);
+  [[B-141]] / [[B-143]] / [[B-144]] (the family decision 3 belongs to); [[B-164]] (why the dual
+  staged+live path was rejected).
+- **Number verification:** highest `R-` HEADING across **every** ref was `R-058`; `R-059` … `R-064`
+  returned **no headings anywhere**, and every `R-059` occurrence tree-wide is
+  [b-number-registry.md](b-number-registry.md)'s own retired "next free" pointer, never an item.
+  `git stash list` empty; `git worktree list --porcelain` showed this checkout only.
+  **Nothing is implemented by this item.**

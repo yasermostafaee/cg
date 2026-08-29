@@ -5182,3 +5182,24 @@ to explain, so there is nothing for a click to say.
   highest `D-` heading was **`D-156`**; `D-001` … `D-156` contiguous with no gaps; a whole-tree
   `git grep` for `D-157` returned only [b-number-registry.md](b-number-registry.md)'s own "next free"
   pointers, never a heading; `D-158` returned nothing at all.
+
+### ⚠ Why this is still `[~]` and not `[x]` — audited 2026-08-29, tick deliberately NOT flipped
+
+Asked directly whether this item is finished. It is finished as WORK and is not finished as
+BOOKKEEPING, and in this repo those are two different marks:
+
+| checked                                                   | result                                                                                                                                                              |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openspec/changes/designer-export-block-visible/tasks.md` | **19 ticked, 0 unticked**                                                                                                                                           |
+| the Linux `e2e`                                           | **DISCHARGED** — run [32957665797](https://github.com/yasermostafaee/cg/actions/runs/32957665797) on `340e98c7`, `E2E (Playwright)` **RAN** and concluded `success` |
+| `92d0fd9c` (the discharge record) on `origin/dev`         | yes — verified ancestor                                                                                                                                             |
+| the change directory                                      | **still in `openspec/changes/`**, not `openspec/changes/archive/`                                                                                                   |
+
+⇒ **`[x]` means ARCHIVED here** (workflow step 7), and archiving is the one step CLAUDE.md says
+must wait for the owner's confirmation. Nothing else remains: the moment that confirmation comes,
+`pnpm openspec archive designer-export-block-visible -y` folds the spec in and this flips to `[x]`
+in the same docs-only commit.
+
+⚠ Recorded rather than silently left, because a `[~]` with every task ticked and its e2e discharged
+looks indistinguishable from a `[~]` that is genuinely unfinished — and the next reader would spend
+the same audit working out which one it is.
