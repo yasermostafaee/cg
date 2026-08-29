@@ -191,6 +191,16 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
   for (const flat of flattened) {
     const el = flat.element;
     if (el.type !== 'video-placeholder') continue;
+    /*
+      ⭐ `B-183` — an UNASSIGNED plate DECLARES NOTHING, so it contributes no entry.
+
+      A declaration's whole content is `sourceId`; a plate that has not been pointed at a
+      source has no id to put there, and inventing one is exactly the defect `B-183` removes.
+      Skipping here is not a silent swallow: `live-source-unassigned` refuses the EXPORT with
+      a message that names the plate, so the author is told by the surface built for it rather
+      than by a missing line in a carrier they never read.
+    */
+    if (el.routeKey === undefined) continue;
     const roles = dynamicRoles.get(el.id);
     // ⚠ `keySourceId` / `keyDynamic` are DELIBERATELY NOT EMITTED (owner,
     // 2026-08-10; design.md §1a). A template declares ONE symbolic id, and
@@ -336,15 +346,19 @@ export function collectLookCarrier(scene: Scene): {
   for (const flat of flattenElements(scene, 'document')) {
     const el = flat.element;
     if (el.type !== 'video-placeholder') continue;
-    if (!declared.has(el.routeKey)) continue;
-    if (!firstPlateFor.has(el.routeKey)) firstPlateFor.set(el.routeKey, el.id);
+    // `B-183` — narrowed once, at the top, so the four reads below cannot disagree about
+    // whether this plate has a source. An UNASSIGNED plate serves no declared source and is
+    // therefore not a candidate for any look; the export refuses it separately.
+    const routeKey = el.routeKey;
+    if (routeKey === undefined || !declared.has(routeKey)) continue;
+    if (!firstPlateFor.has(routeKey)) firstPlateFor.set(routeKey, el.id);
     const ownerInstanceId = flat.ancestry.map((a) => a.id).find((id) => lookByInstance.has(id));
     const owner = ownerInstanceId === undefined ? undefined : lookByInstance.get(ownerInstanceId);
     const inLooks = owner === undefined ? group.looks : [owner];
     for (const look of inLooks) {
       const rects = rectsByLook.get(look.id);
-      if (rects === undefined || el.routeKey in rects) continue;
-      rects[el.routeKey] = flat.rect;
+      if (rects === undefined || routeKey in rects) continue;
+      rects[routeKey] = flat.rect;
       /*
         ⚠ WRITTEN ONLY WHEN THE AUTHOR STATED ONE. An absent entry is the third state —
         "nobody said" — and it must reach the bridge as an absence rather than as a defaulted
@@ -356,7 +370,7 @@ export function collectLookCarrier(scene: Scene): {
       */
       if (el.fitMode !== undefined) {
         const fits = fitsByLook.get(look.id);
-        if (fits !== undefined) fits[el.routeKey] = el.fitMode;
+        if (fits !== undefined) fits[routeKey] = el.fitMode;
       }
     }
   }

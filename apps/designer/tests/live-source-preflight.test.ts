@@ -369,7 +369,9 @@ describe('D-137 — a device-shaped id is refused at preflight, naming the eleme
 });
 
 describe('D-137 — the binding rule', () => {
-  const el = defaultLiveSource('el-1', 0, 0, 'guest-1');
+  // `B-183` — the factory hands over no source; this rule is about a BOUND plate, so the
+  // source is stated here rather than inherited from a default that no longer exists.
+  const el = { ...defaultLiveSource('el-1', 0, 0), routeKey: 'guest-1' };
   const field = { id: 'f1', label: 'Guest', type: 'text' } as never;
 
   it('a text field on a Live Source resolves to the FILL role', () => {
@@ -389,15 +391,47 @@ describe('D-137 — the binding rule', () => {
   });
 });
 
-describe('D-137 — the default factory', () => {
-  it('produces a schema-valid element with a symbolic id and matching aspect', () => {
+/**
+ * ⭐ **`B-183` — THIS BLOCK'S CONTRACT WAS DELIBERATELY INVERTED, and the inversion is the
+ * feature.**
+ *
+ * It used to assert `routeKey === 'live-1'` and that *"a fresh element must not itself be a
+ * preflight error"*. Both are now false ON PURPOSE:
+ *
+ * - a new plate is **UNASSIGNED** — `live-N` was the `+ Source` input's PLACEHOLDER TEXT, a
+ *   suggestion the author had not accepted, and nothing declared it;
+ * - so a fresh plate **IS** exactly one error, `live-source-unassigned`, which is the whole
+ *   point: the owner's principle is **nothing lands unconfirmed**, and the refusal is how the
+ *   author is told there is a choice to make.
+ *
+ * ⚠ The old second assertion is not merely relaxed to "no error of the old kind" — that would
+ * pass against a plate silently defaulted to the first declared source, which is the
+ * alternative the owner REJECTED. It is replaced by an exact-match on the new code, so a
+ * regression to any silent default reddens here.
+ */
+describe('B-183 — the default factory hands over NO source', () => {
+  it('omits routeKey entirely, and keeps the aspect self-consistent', () => {
     const el = defaultLiveSource('el-9', 40, 60);
     expect(el.type).toBe('video-placeholder');
-    expect(el.routeKey).toBe('live-1');
+    expect(el.routeKey).toBeUndefined();
     // Self-consistent out of the box: a 16:9 box declaring a 16:9 source.
     expect(el.expectedAspect).toBeCloseTo(el.transform.size.w / el.transform.size.h, 6);
-    // A fresh element must not itself be a preflight error.
-    expect(liveSourceIssues(scene([el as unknown as Element]))).toEqual([]);
+  });
+
+  it('is refused as UNASSIGNED — one issue, naming the plate and the control', () => {
+    const el = defaultLiveSource('el-9', 40, 60);
+    const issues = liveSourceIssues(scene([el as unknown as Element]));
+    expect(issues.map((i) => i.code)).toEqual(['live-source-unassigned']);
+    const only = issues[0];
+    expect(only?.severity).toBe('error');
+    expect(only?.elementId).toBe('el-9');
+    // 🔴 The message must NOT be the device-id refusal, which is what an unguarded
+    // `safeParse(undefined)` produced — it named a value the author never typed.
+    expect(only?.message).not.toContain('not symbolic');
+    expect(only?.message).not.toContain('undefined');
+    // B3 — it names the state AND the remedy: with no look group, the free-text row.
+    expect(only?.message).toContain('has no source');
+    expect(only?.message).toContain('"source id" box');
   });
 });
 

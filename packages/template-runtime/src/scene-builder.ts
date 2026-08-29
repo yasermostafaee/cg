@@ -1672,7 +1672,20 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
 
   const label = ctx.doc.createElement('div');
   label.dataset['cgLiveSourceLabel'] = '';
-  label.textContent = element.routeKey;
+  /*
+    ⭐ `B-183` — an UNASSIGNED plate says so ON THE BARS.
+
+    The label's job has always been to tell the author what this hole is pointed at, and the
+    old `live-1` default was justified in `element-defaults.ts` precisely because it was
+    "visible on the canvas … which is what tells the author there is something to set". Now
+    that a new plate points at NOTHING, that sentence is only honoured by saying nothing is
+    set — an empty label would leave the bars looking finished.
+
+    ⚠ The plate paints NOTHING on air (the hole is transparent and the picture is composited
+    behind it), so this text is an authoring-preview affordance and never reaches broadcast
+    output. The export refuses an unassigned plate before it can.
+  */
+  label.textContent = element.routeKey ?? 'no source';
   label.style.position = 'absolute';
   label.style.left = '0';
   label.style.right = '0';

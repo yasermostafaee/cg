@@ -254,6 +254,16 @@ function IssuesPart({ scene }: { scene: Scene }): JSX.Element | null {
   const issues = liveSourceIssues(scene).filter(
     (i) =>
       i.code === 'look-source-undeclared' ||
+      /*
+        ⭐ `B-183` — LISTED HERE BECAUSE THE SPLIT WOULD OTHERWISE SHRINK THIS PANEL.
+
+        A plate pointed at nothing used to arrive as `look-source-undeclared` (its absent
+        routeKey read as `""`, which no group declares) and so appeared in this list.
+        `B-183` gives that state its own truthful code, and without this line the very
+        plate a fresh draw produces would have vanished from the panel the author works in
+        — a surface regression hidden inside a message fix.
+      */
+      i.code === 'live-source-unassigned' ||
       i.code === 'look-source-duplicate' ||
       i.code === 'look-second-group' ||
       (i.code === 'live-source-overlap' && i.message.includes('look "')),
@@ -262,7 +272,9 @@ function IssuesPart({ scene }: { scene: Scene }): JSX.Element | null {
   if (unique.length === 0) return null;
   return (
     <div role="alert" aria-label="Look issues">
-      <p className={cls.groupLabel}>
+      {/* `B-184` — `issueSummary`, not `groupLabel`: this heading states an export REFUSAL and
+          is drawn in `danger`, matching the status bar's red count for the same facts. */}
+      <p className={cls.issueSummary}>
         {unique.length} issue{unique.length === 1 ? '' : 's'} — export will refuse
       </p>
       {unique.slice(0, 6).map((m) => (

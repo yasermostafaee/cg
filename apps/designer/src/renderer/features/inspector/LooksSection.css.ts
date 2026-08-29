@@ -39,6 +39,22 @@ export const groupLabel = style({
   margin: '0.5rem 0 0.2rem',
 });
 
+/**
+ * ⭐ `B-184` — the issue block's HEADING, in `danger`.
+ *
+ * Its own style rather than `groupLabel` recoloured: `groupLabel` is the neutral heading for
+ * every other group in this panel, and turning it red would turn all of them red. Same
+ * metrics on purpose, so only the colour distinguishes it.
+ */
+export const issueSummary = style({
+  fontSize: '0.62rem',
+  fontWeight: 600,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  color: colors.danger,
+  margin: '0.5rem 0 0.2rem',
+});
+
 const rowBase = {
   borderRadius: '0.25rem',
   marginBottom: '0.3rem',
@@ -80,9 +96,22 @@ export const addField = style({ flex: 1, minWidth: 0 });
 
 export const rowBody = style({ padding: '0.1rem 0.25rem 0.25rem' });
 
+/**
+ * ⭐ `B-184` — an EXPORT REFUSAL is drawn in `danger`, not `caution`.
+ *
+ * These rows are `severity: 'error'` preflight issues: the author cannot export at all while
+ * one stands. They were amber while the status bar drew the same facts red, so one condition
+ * had two colours and the softer one was in the panel the author actually works in.
+ *
+ * 🔴 The theme's own tokens already decide this. `caution` is documented as *"a legitimate
+ * state the operator should NOTICE, but which is not an error"*, and `danger`'s comment
+ * reserves red for *"real errors"*. A hard export refusal is the second, so the amber was
+ * contradicting the token that carried it — no new colour is introduced here, and no third
+ * state is invented.
+ */
 export const issue = style({
   fontSize: '0.64rem',
-  color: colors.caution,
+  color: colors.danger,
   margin: '0.2rem 0',
   lineHeight: 1.4,
 });

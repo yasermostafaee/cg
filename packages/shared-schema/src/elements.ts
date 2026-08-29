@@ -1174,8 +1174,33 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    * separate concerns.
    */
   fitMode: LiveFitModeSchema.optional(),
-  /** The FILL source's symbolic id, e.g. `guest-1`. */
-  routeKey: LiveSourceIdSchema,
+  /**
+   * The FILL source's symbolic id, e.g. `guest-1` — **or absent, meaning UNASSIGNED.**
+   *
+   * ⭐ **`B-183` — a new plate points at NOTHING until the author says otherwise.** It used
+   * to default to `live-1` (and, from the canvas tool, to `nextLiveSourceId`'s first free
+   * `live-N`), which is the placeholder text of the Looks panel's `+ Source` input — a
+   * SUGGESTION the author had not accepted. Nothing declared it, so every freshly drawn
+   * plate was born referencing an undeclared source, and the group-scope preflight then
+   * reported it as the author's mistake. The owner's principle: **nothing lands
+   * unconfirmed.**
+   *
+   * 🔴 **Optional on the ELEMENT only — `LookSource.routeKey` stays REQUIRED.** A plate may
+   * not yet have a source; a DECLARATION always names one. Widening the shared
+   * {@link LiveSourceIdSchema} instead would let a group declare an empty source, which is
+   * the one thing this must not permit.
+   *
+   * ⚠ **Absent is not "invalid", and it is not "declared".** The export refuses it — see
+   * `live-source-unassigned` in `live-source-preflight.ts`, whose message is separate from
+   * `look-source-undeclared` precisely because "you have not chosen yet" and "you chose
+   * something that does not exist" are different mistakes with different remedies.
+   *
+   * Two rejected alternatives, recorded so they are not relitigated: defaulting to the
+   * FIRST DECLARED source silently binds two plates to one input and the error is never
+   * seen; keeping `live-N` and auto-declaring it means drawing a box edits the group's
+   * source list without being asked.
+   */
+  routeKey: LiveSourceIdSchema.optional(),
   /**
    * ⚠ DEPRECATED (owner, 2026-08-10; `live-source-multibox` design.md §1a).
    *

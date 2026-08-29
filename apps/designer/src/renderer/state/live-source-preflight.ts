@@ -228,12 +228,50 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
     })),
   ];
 
+  /*
+    ⭐ `B-183` — WHERE THE AUTHOR GOES TO FIX IT, resolved once and shared by both messages
+    below, because the control's own label differs by template.
+
+    A message that states a rule and stops leaves the author to work out the remedy; both
+    refusals here now name the panel, the row, and what belongs in it. Which row exists
+    depends on whether the project declares a multi-frame group — `StyleSection` renders the
+    `source` PICKER when it does and the free-text `source id` box when it does not — so
+    naming the wrong one would be worse than naming none.
+  */
+  const hasLookGroup = (scene.lookGroups ?? []).length > 0;
+  const chooseASource = hasLookGroup
+    ? 'Pick one in the Inspector\'s "Live Source" panel, from the "source" list — it offers ' +
+      'the sources the multi-frame group declares.'
+    : 'Set one in the Inspector\'s "Live Source" panel, in the "source id" box — a symbolic ' +
+      'name such as "guest-1", never a device.';
+
   const seen = new Set<string>();
   for (const doc of docs) {
     const flat = collectFlat(doc.layers, seen);
     for (const entry of flat) {
       const { element, box } = entry;
-      if (!LiveSourceIdSchema.safeParse(element.routeKey).success) {
+      /*
+        ⭐ `B-183` — "NOT CHOSEN YET" AND "CHOSE SOMETHING WRONG" ARE DIFFERENT MISTAKES.
+
+        This test used to be the first thing a plate met, and with `routeKey` now optional an
+        unassigned plate would fail it and be told its id *"is not symbolic (“undefined”)"* —
+        a message about a typo, shown for a deliberate state, naming a value the author never
+        typed. The two are split so each says the true thing and names its own remedy.
+
+        🔴 Checked in DOCUMENT scope, so it fires whether or not the template declares a
+        group. `look-source-undeclared` is group-scoped by nature; being pointed at nothing is
+        not — a plate with no source can never be seated by anyone.
+      */
+      if (element.routeKey === undefined) {
+        issues.push({
+          severity: 'error',
+          code: 'live-source-unassigned',
+          message:
+            `Live Source "${label(element)}" has no source: it is not pointed at anything, so ` +
+            `nothing would ever be composited behind it. ${chooseASource}`,
+          elementId: element.id,
+        });
+      } else if (!LiveSourceIdSchema.safeParse(element.routeKey).success) {
         issues.push({
           severity: 'error',
           code: 'live-source-device-id',
@@ -456,7 +494,17 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
     // undeclared plate would be invisible to the carrier: never declared, never seated —
     // the 4.6 cancel-and-vanish failure by another door.
     for (const f of flatPlates) {
-      const routeKey = (f.element as { routeKey?: string }).routeKey ?? '';
+      const routeKey = (f.element as { routeKey?: string }).routeKey;
+      /*
+        ⭐ `B-183` — AN UNASSIGNED PLATE IS NOT AN UNDECLARED ONE, and is skipped here.
+
+        This read `?? ''` and then asked whether `''` was declared, so a plate with no source
+        was reported as *referencing source ""* — a claim about a reference that does not
+        exist. `live-source-unassigned` (document scope, above) owns that state and says the
+        true thing about it. Skipping is not a hole: the unassigned check runs for EVERY
+        plate, group or no group, so the plate is still refused — once, with the right words.
+      */
+      if (routeKey === undefined) continue;
       if (!declared.has(routeKey)) {
         issues.push({
           severity: 'error',
@@ -465,7 +513,15 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
             `Live Source "${label(f.element)}" references source "${routeKey}", which the ` +
             `multi-frame group does not declare. Declared sources: ${declaredList}. A group ` +
             `declares each source ONCE and every plate references a declared one — an ` +
-            `undeclared plate would never be seated, and nothing else would say so.`,
+            `undeclared plate would never be seated, and nothing else would say so. ` +
+            // `B-183` / B3 — the message names the REMEDY, and there are legitimately two:
+            // the plate is wrong, or the declaration is missing. Naming only the first would
+            // push an author who meant the name toward retyping it somewhere it still is not
+            // declared. No one-click fix — the owner declined it (it needs an undoable scene
+            // mutation and is its own item).
+            `Either pick a declared source in the Inspector's "Live Source" panel, from the ` +
+            `"source" list — or, if "${routeKey}" is the name you meant, declare it with ` +
+            `"+ Source" in the Looks panel.`,
           elementId: f.element.id,
         });
       }

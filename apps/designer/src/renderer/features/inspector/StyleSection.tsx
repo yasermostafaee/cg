@@ -605,6 +605,19 @@ function ImageSections({
  * consumer only in phase 6, where the bridge refuses a take whose mapped source
  * disagrees with it.
  */
+/**
+ * `B-183` — the UI-only sentinel for "this plate has no source".
+ *
+ * The scene stores absence as `routeKey: undefined`; a `<select>` needs a string. `''` is
+ * safe as that string because {@link LiveSourceIdSchema} is `.min(1)` — no real id can ever
+ * equal it — and it is converted back at the single commit point, so it never reaches the
+ * store. Kept beside the control that uses it rather than exported: a second reader would be
+ * a second place the sentinel's meaning lives.
+ */
+const UNASSIGNED = '';
+/** What the author reads for {@link UNASSIGNED}. Em-dashes, so it cannot be mistaken for an id. */
+const UNASSIGNED_LABEL = '— no source —';
+
 function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const id = element.id;
   // The scene ref is stable between edits, so deriving the group in the render body
@@ -618,6 +631,17 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
   const [rejectSeq, setRejectSeq] = useState(0);
   const commitId = (raw: string): void => {
     const value = raw.trim();
+    /*
+      `B-183` — CLEARING THE FIELD UNASSIGNS, it does not fail validation.
+
+      Without this the author has a control that can reach every state except the one a plate
+      now starts in, and emptying the box would be met with "“” is not a Live Source id" —
+      a refusal aimed at a typo, for a deliberate act.
+    */
+    if (value === UNASSIGNED) {
+      designerStore.updateElement(id, { routeKey: undefined } as Partial<Element>);
+      return;
+    }
     if (!LiveSourceIdSchema.safeParse(value).success) {
       designerStore.showNotice(
         `“${value}” is not a Live Source id. Use letters, digits, “_” and “-”, starting ` +
@@ -634,6 +658,26 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
   // stays structural (the same source in two looks is one seat). A dangling legacy value
   // is shown as itself, labeled undeclared, so the select never lies about the scene.
   const declared = projectLookGroup(sceneForPicker)?.sources.map((src) => src.routeKey);
+  /*
+    ⭐ `B-183` — THE UNASSIGNED STATE IS REPRESENTABLE IN THE CONTROL, because it is now
+    representable in the scene.
+
+    The empty string is the sentinel and it CANNOT collide: `LiveSourceIdSchema` is
+    `.min(1)`, so no real source id is ever `''`. It never reaches the scene — the commit
+    below turns it back into `undefined`, which is what the schema stores.
+
+    🔴 **The select shows what the element HOLDS, in all three states**, and substitutes
+    nothing: a declared id plain, a dangling id as itself labeled `(undeclared)` (which
+    predates this change and was verified still true before it), and no source at all as
+    its own option. Falling back to the first declared entry would silently bind the plate
+    to an input the author never chose — the owner's rejected alternative, and the reason
+    that option is named in the schema's docstring rather than left to be rediscovered.
+  */
+  const holds = element.routeKey ?? UNASSIGNED;
+  const optionsFor = (list: readonly string[]): readonly string[] =>
+    list.includes(holds) ? list : [holds, ...list];
+  const labelFor = (k: string, list: readonly string[]): string =>
+    k === UNASSIGNED ? UNASSIGNED_LABEL : list.includes(k) ? k : `${k} (undeclared)`;
   return (
     <>
       <CollapseSection title="Live Source" defaultExpanded>
@@ -641,23 +685,20 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
           <TextField
             label="source id"
             ariaLabel="Live Source source id"
-            value={element.routeKey}
+            value={holds}
             resetKey={`${id}-${String(rejectSeq)}`}
             onCommit={commitId}
           />
         ) : (
           <SelectField
             label="source"
-            value={element.routeKey}
-            options={
-              declared.includes(element.routeKey) ? declared : [element.routeKey, ...declared]
-            }
-            labels={(declared.includes(element.routeKey)
-              ? declared
-              : [element.routeKey, ...declared]
-            ).map((k) => (declared.includes(k) ? k : `${k} (undeclared)`))}
+            value={holds}
+            options={optionsFor(declared)}
+            labels={optionsFor(declared).map((k) => labelFor(k, declared))}
             onCommit={(value) => {
-              designerStore.updateElement(id, { routeKey: value } as Partial<Element>);
+              designerStore.updateElement(id, {
+                routeKey: value === UNASSIGNED ? undefined : value,
+              } as Partial<Element>);
             }}
           />
         )}

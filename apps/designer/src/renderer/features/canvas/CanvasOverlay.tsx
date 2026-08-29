@@ -96,35 +96,21 @@ function logoSize(image: AssetMeta): { width: number; height: number } {
   return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
 }
 
-/**
- * D-137 — the first free `live-N` id, swept across the WHOLE scene: the root layers
- * AND every composition, recursing into containers.
- *
- * Scene-wide and not composition-local on purpose. A source id is resolved by the
- * BRIDGE against one installation-wide mapping, so two holes carrying `live-1` in
- * two different compositions still name ONE producer. Scoping the sweep to the open
- * composition would hand out a duplicate that looks unique while you are authoring
- * and is not once both are on air.
- *
- * The id is only a starting point — the author renames it in the Inspector, and
- * nothing forbids a deliberate duplicate (two windows showing the same feed is a
- * real shot). This picks a default that is not a collision.
- */
-function nextLiveSourceId(scene: Scene): string {
-  const taken = new Set<string>();
-  const walk = (children: readonly Element[]): void => {
-    for (const el of children) {
-      if (el.type === 'video-placeholder') taken.add(el.routeKey);
-      else if (el.type === 'container') walk(el.children);
-    }
-  };
-  for (const layer of scene.layers) walk(layer.children);
-  for (const comp of scene.compositions ?? [])
-    for (const layer of comp.layers) walk(layer.children);
-  let n = 1;
-  while (taken.has(`live-${String(n)}`)) n += 1;
-  return `live-${String(n)}`;
-}
+/*
+  ⭐ `B-183` — `nextLiveSourceId` WAS HERE AND IS DELETED, not merely unused.
+
+  It swept the scene for the first free `live-N` and handed it to every newly drawn plate.
+  The id looked authoritative and was a GUESS: `live-N` is the placeholder text of the Looks
+  panel's `+ Source` input, so the tool was accepting a suggestion on the author's behalf and
+  nothing declared the result. A new plate is now UNASSIGNED (see the creation path below),
+  and there is no id to pick.
+
+  Recorded rather than silently removed because its docstring made a real argument — a
+  scene-wide rather than composition-local sweep, because the bridge resolves ids against one
+  installation-wide mapping. That argument still holds for ids the AUTHOR chooses, and
+  `look-source-duplicate` is where it now lives. Reintroducing a generator here would
+  reintroduce `B-183`.
+*/
 
 /**
  * D-040 — insert the canvas logo tool's target as a `source: 'shared'` image:
@@ -602,16 +588,23 @@ export function CanvasOverlay({
       return;
     }
     if (tool === 'live-source') {
-      // D-137 — the Live Source's creation path, which did not exist before this
-      // change (design.md §11, C2). The id is made UNIQUE per existing hole in the
-      // open composition (`live-1`, `live-2`, …): a multi-box show places several,
-      // and two holes sharing an id would map to ONE producer with nothing saying
-      // so — the bars carry the id as their label, so a duplicate is at least
-      // visible, but a collision should not be the default the tool hands you.
+      /*
+        D-137 — the Live Source's creation path (design.md §11, C2).
+
+        ⭐ **`B-183` — the new plate is UNASSIGNED, and choosing its source is the author's
+        first act.** This used to hand it `nextLiveSourceId(scene)`, the first free `live-N`.
+        That id is the PLACEHOLDER TEXT of the Looks panel's `+ Source` input — a suggestion,
+        not an acceptance — and nothing declared it, so drawing a box created a plate already
+        referencing an undeclared source and the group-scope preflight reported it as the
+        author's mistake. The owner never typed `live-1`; the tool did.
+
+        The uniqueness argument the deleted generator rested on ("two holes sharing an id
+        would map to ONE producer") is not lost: it now applies to ids the author actually
+        chose, and `look-source-duplicate` is the rule that states it. An unassigned plate
+        cannot collide with anything.
+      */
       const id = `el-${String(Date.now())}`;
-      designerStore.addElement(
-        defaultLiveSource(id, scenePoint.x, scenePoint.y, nextLiveSourceId(scene)),
-      );
+      designerStore.addElement(defaultLiveSource(id, scenePoint.x, scenePoint.y));
       designerStore.setTool('cursor');
       return;
     }

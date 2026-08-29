@@ -127,9 +127,13 @@ const labels = (c: HTMLDivElement): string[] =>
     .map((el) => el.getAttribute('aria-label') ?? '')
     .filter((l) => l !== '');
 
+// `B-183` — `defaultLiveSource` no longer takes a `routeKey`; a new plate is UNASSIGNED. The
+// source is set here explicitly because these tests are about which CONTROLS the Inspector
+// offers, and an unassigned plate would change the `source` row out from under them.
 const live = (stroke?: { width: number; color: string }): Element =>
   ({
-    ...defaultLiveSource('live-1', 100, 100, 'guest-1'),
+    ...defaultLiveSource('live-1', 100, 100),
+    routeKey: 'guest-1',
     ...(stroke === undefined ? {} : { stroke }),
   }) as Element;
 const shape = (): Element => defaultShape('sh-1', 100, 100);

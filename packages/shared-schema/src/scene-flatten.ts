@@ -591,7 +591,9 @@ export function sceneMaskHoles(
   const punchRect = (f: FlatElement): LiveSourceRect => {
     const el = f.element;
     if (el.type !== 'video-placeholder') return f.rect;
-    const fit = fits?.get(el.routeKey);
+    // `B-183` — an UNASSIGNED plate names no source, so no bridge fact can be keyed to it.
+    // Absent reads exactly like "no facts for this plate", which is the branch below.
+    const fit = el.routeKey === undefined ? undefined : fits?.get(el.routeKey);
     // No facts for this plate ⇒ the SCENE's own statement. `expectedAspect` is what the
     // author declared this hole is designed for, which is the honest answer for an
     // authoring preview and for a page the bridge has not spoken to yet; absent, the
