@@ -1816,3 +1816,47 @@ Deleting the declaration deletes the first. **`B-179` must be answered before th
 adopted here as decided-by-consequence — and this item does neither, it records the dependency.
 
 ⇒ **Next free after this session is `B-189`.**
+
+### 2026-08-29 (last) — `SOURCE-DECLARATION-DROP-02`: NO NUMBER TAKEN
+
+**Claimed: nothing.** This session IMPLEMENTED [[B-188]] (`openspec/changes/derive-look-sources`) and
+re-scoped [[B-179]] and [[B-187]] to match. Three existing items were edited; no heading was added.
+
+**Derivation, run anyway because the rule is to derive rather than to remember:** highest `B-` HEADING
+across every ref is **`B-188`** — unchanged, because nothing new was filed. ⇒ **Next free is still
+`B-189`**, and `B-` stays contiguous `B-001` … `B-188`.
+
+🔴 **The blocking condition the previous entry recorded is DISCHARGED, and not in the way that
+entry expected.** It said [[B-179]] _"must be answered before this is adopted"_, because deleting the
+declaration deletes candidate (a). The owner answered it by **rejecting `B-179`'s own premise**:
+
+> _"aspect and fit are per-plate right now and have nothing to do with the source — which I think is
+> correct."_
+
+So there was no per-source property to rehome. (a) went with the declaration, (b) — the hoist from
+the element — shipped, and `B-179`'s findings 1 and 2 are FIXED by consequence: the author's
+`expectedAspect` reaches the carrier for a look-group template again, re-arming the take's
+aspect-mismatch refusal. Its Acceptance bullet 3 is REJECTED with the premise, and said so in the item
+rather than dropped.
+
+### ⚠ One premise of THIS session's brief failed verification, and it is recorded for the same reason the last two were
+
+**"Remove `dynamic`"** was ambiguous between two fields with the same name, and the ambiguity matters:
+
+- `LookSource.dynamic` — the DECLARATION's field. Deleted, with the declaration.
+- `LiveSourceDeclaration.dynamic` — the exported CARRIER's field, required on the wire, written by
+  both export paths and by `MockRuntime`. **KEPT.**
+
+The previous entry's finding that the carrier's copy has zero readers still stands and is still
+filed — but deleting a required field from the wire contract is a different change from deleting an
+authoring-side one, and it was not in scope. **What WAS closed is the asymmetry:** the groupless path
+computed the carrier flag from field bindings while the group path hardcoded `false`, so every
+look-group template ever exported carried `dynamic: false` regardless. Both paths now compute it the
+same way, from the plate element.
+
+⭐ **Reporting note, because the shape recurs.** The brief asked for discrimination to be proved by
+reverting. It was, and the result is **42 red across 6 files** — of which **three are structural
+crashes, not behavioural disagreements**: the reverted preflight indexes a `sources` array the new
+fixtures no longer write, so three POSITIVE CONTROLS died on a `TypeError` rather than on a value.
+Those three prove nothing either way and are excluded from the evidence. A rounded "42 red, all
+controls green" would have been the easy sentence and the false one.

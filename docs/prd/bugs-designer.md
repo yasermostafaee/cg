@@ -3304,10 +3304,42 @@ found it only looked at `apps/designer`.
 
 ---
 
-## [ ] B-187 — a new Live Source plate starts UNASSIGNED even where a default could not be wrong, so a six-plate layout is six manual assignments ⟨priority: medium⟩
+## [ ] B-187 — a new Live Source plate starts UNASSIGNED even where a default could not be wrong, so a six-plate layout is six manual assignments ⟨priority: medium — the TWO-HALF rule COLLAPSED to one by [[B-188]]; still unimplemented⟩
 
 **What:** [[B-183]] stopped the tool inventing a source id. It stopped it in BOTH cases, and only one
 of them was the defect. The owner is now assigning every plate by hand.
+
+### 🔴 SUPERSEDED IN PART, 2026-08-29 — the two halves are now ONE, and the surviving rule is the GROUPLESS one
+
+**[[B-188]] shipped (`openspec/changes/derive-look-sources`): the multi-frame group no longer declares
+sources.** The source list is derived from the plates, and `look-source-undeclared` is deleted. So
+the entire distinction this item was built on — _"a declaration list EXISTS, so a guessed name can
+contradict it"_ — **no longer describes anything.** There is nothing anywhere for a guess to
+contradict.
+
+🔴 **THE RULE, restated as one:**
+
+> A new plate takes a **generated label** — the same rule with a group and without one, because
+> there is no declaration in either case. ⚠ The label must not COLLIDE with a key another plate
+> already uses IN THE SAME LOOK, because one source is one seat and
+> `look-source-duplicate` — which survives `B-188` untouched — would refuse it.
+
+**What that costs and what it buys, stated plainly.** The old GROUPED half claimed the six-plate
+layout for free by consuming the author's own declared names in order; a generated label cannot do
+that, so the owner's six plates get six generated ids he will still want to rename. 🔴 **But renaming
+is now N plate edits and nothing else** — `B-188` retired the no-rename policy along with the
+declaration, because nothing can be left dangling when the list IS the plates. That is the trade this
+item now faces, and it is a different trade from the one it was filed under.
+
+⚠ **Still UNIMPLEMENTED.** `defaultLiveSource` still produces no `routeKey`, and the open questions
+below still stand — except the collision one, which is now answerable: a generated label can only
+collide with another PLATE's key, never with a declaration that no longer exists.
+
+### ⚠ The original two-half rule, kept for its reasoning
+
+_The text below is what was filed on 2026-08-29 before `B-188` shipped. It is retained because the
+GROUPLESS half's argument survives intact and is now the whole rule; the GROUPED half's argument is
+what `B-188` dissolved._
 
 > **GROUPED** — a new plate takes the **next declared source not already used by another plate IN THE
 > SAME LOOK**, in declaration order. When all are taken, or none are declared → **unassigned**, and the
@@ -3315,15 +3347,14 @@ of them was the defect. The owner is now assigning every plate by hand.
 >
 > **GROUPLESS** — a **generated label is legitimate**, because there is no declaration to contradict.
 
-### 🔴 Why the two halves differ — this asymmetry IS the item
+Both halves obeyed the owner's standing principle, **"nothing lands unconfirmed"**, by different
+routes, because the two situations differed in what a guess could be wrong ABOUT:
 
-Both halves obey the owner's standing principle, **"nothing lands unconfirmed"**, and they obey it by
-different routes because the two situations differ in what a guess can be wrong ABOUT:
-
-- **Grouped** — a declaration list EXISTS, so a guessed name can contradict it. That contradiction is
-  precisely the orphan [[B-183]] fixed. But choosing an ALREADY-DECLARED source contradicts nothing:
-  the author declared it, and taking the next FREE one means **two plates never land on one input**.
-- **Groupless** — there is **no declaration list at all** to contradict. Verified in the owner's own
+- **Grouped** — a declaration list EXISTED, so a guessed name could contradict it. That contradiction
+  is precisely the orphan [[B-183]] fixed. But choosing an ALREADY-DECLARED source contradicted
+  nothing: the author declared it, and taking the next FREE one meant **two plates never landed on
+  one input**.
+- **Groupless** — there was **no declaration list at all** to contradict. Verified in the owner's own
   export: `live1.vcg` carries `lookGroups: []` and `compositions: []` and the export SUCCEEDED. A
   generated label there is not a claim about anything the author wrote.
 
@@ -3401,14 +3432,16 @@ reproduced from its stated fields rather than read from the ZIP:
   is the [[B-141]] / [[B-143]] / [[B-144]] family — _"the system knows something and does not say it"_.
   A default the author never typed, presented indistinguishably from one they did, is that pattern
   exactly, and it is the reason `B-183` exists at all.
-- **What generates the groupless label, and can it collide with a name a group later declares?** A
-  plate labelled `live-1` in a groupless composition becomes undeclared the moment a group is created
-  that does not declare `live-1`.
+- 🔴 **ANSWERED by [[B-188]]: it cannot.** The question was _"can a generated label collide with a
+  name a group later declares?"_ — a group declares nothing now, so a plate labelled `live-1` stays
+  valid whatever group is created later. What a generator must still avoid is another PLATE's key in
+  the same look, which `look-source-duplicate` refuses.
 - Does _"already used in this look"_ count plates in **nested compositions**, or only direct children?
   (⚠ The look's plates ARE nested — a look is an instanced composition — so this is not academic.)
 
-- **Cross-refs:** [[B-183]] (the removal this partly re-scopes, and the orphan the grouped half must not
-  recreate); [[C-028]] / [[B-178]] (the per-look resolution precedent — the authored fit mode already
+- **Cross-refs:** [[B-188]] (SUPERSEDES the two-half rule — there is no declaration, so the grouped
+  half's premise is gone); [[B-183]] (the removal this partly re-scopes, and the orphan the grouped
+  half must not recreate); [[C-028]] / [[B-178]] (the per-look resolution precedent — the authored fit mode already
   resolves PER LOOK, which is the same granularity the grouped half's "in the same look" reads at);
   [[B-141]] / [[B-143]] / [[B-144]] (the family the third open question belongs to); [[R-059]] (the
   staged-vs-live question, answered there for a different act); [[B-186]] (the Designer's tests are not
@@ -3420,13 +3453,59 @@ reproduced from its stated fields rather than read from the ZIP:
 
 ---
 
-## [ ] B-188 — the group's source DECLARATION stores a fact the plates already carry, and `look-source-undeclared` is the cost of storing it twice ⟨priority: medium — an architectural decision, ADOPT WITH CONDITIONS; nothing implemented⟩
+## [~] B-188 — the group's source DECLARATION stores a fact the plates already carry, and `look-source-undeclared` is the cost of storing it twice ⟨priority: medium — ADOPTED and IMPLEMENTED; `openspec/changes/derive-look-sources`⟩
 
 **The proposal, in the owner's words:**
 
 > _"Instead of declaring sources for a multi-box group in the Designer, we should just define a source
 > id for each frame, like a plain plate. The source isn't a fixed thing — the operator decides it in
 > CG Control."_
+
+### 🔴 IMPLEMENTED 2026-08-29 (`SOURCE-DECLARATION-DROP-02`) — the owner answered all three, and the change shipped
+
+`openspec/changes/derive-look-sources`. **The three conditions, with the owner's answers verbatim:**
+
+- **(a) [[B-179]] — its PREMISE IS REJECTED, so the blocking condition is discharged rather than
+  satisfied.** The owner: _"aspect and fit are per-plate right now and have nothing to do with the
+  source — which I think is correct."_ `expectedAspect` is the author's intention for the BOX, not
+  a claim about the feed; the real feed wins when known (`resolvePlateAspect`: source `format` —
+  source `aspect` — element `expectedAspect` — `assumed`), and [[C-028]] already settled fit per
+  element. 🔴 **So there was no per-source property to rehome, and `B-179` is FIXED by consequence
+  rather than deleted** — see its own entry, re-scoped, not silently dropped.
+- **(b) ORDER — document order of FIRST USE.** The scene's own layers, then each composition in
+  array order. **Stable under APPEND, not under deletion**, and pinned as a test in both directions.
+  Assignments survive either way: CG Control keys them on `{templateId, plateId}`, never on index.
+- **(c) THE TYPO TRADE — accepted, with the soft warning.** `live-source-near-miss`,
+  `severity: 'warning'`, in DOCUMENT scope. 🔴 **It must never be promoted to an error** — the
+  whole point is to keep the check's benefit without recreating a second copy of the truth. The rule
+  is one Damerau edit on the NORMALISED forms (lower-cased, `-`/`_` removed), MINUS a numbering
+  exclusion: `l1` vs `l2` share the skeleton `l#` and are silent, because a warning that shouts at
+  the owner's own convention is one authors learn to ignore.
+
+**What else the implementation settled, beyond the three answers:**
+
+- The Inspector's control is now the FREE-TEXT box in both cases, with the keys in use offered
+  through a datalist. A picker could only ever offer what other plates had already chosen, so under
+  a derived model there would be no way to create the first source at all. **Typing is how a source
+  comes into existence.**
+- `dynamic` is deleted with the declaration, and the ASYMMETRY §1 recorded went with it: the carrier
+  flag is computed from field bindings on BOTH paths now, not from bindings on one and a hardcoded
+  `false` on the other.
+- 🔴 **Section 1's open question about `live-look-bindings.ts` is ANSWERED, by reading it.**
+  `resolveLookBindings` iterates `carrier.sources` — the already-derived export — and dedupes
+  seats on `producerArg`, the WIRE argument. The declaration appears nowhere in that file, so two
+  looks sharing a key still resolve to ONE seat. Had that been false the change would have stopped.
+- ⚠ **A trap the deletion opened and closed in the same commit:** `look-source-duplicate` read
+  `routeKey ?? ''`, bucketing every UNASSIGNED plate under one empty key. That was harmless only
+  because the loop then required the key to be DECLARED, and `''` never was. Removing the
+  declaration removed the guard, so two unset plates would have been reported as a duplicate of an
+  EMPTY source id — [[B-183]]'s exact defect, through the door this change opened. Skipped now,
+  and pinned by a test.
+
+**Discrimination was proved by reverting**, and the result is reported as measured: 42 red across 6
+files, of which THREE are structural crashes rather than behavioural disagreements (the reverted
+preflight indexes a `sources` array the new fixtures no longer write). See the change's `tasks.md`
+4.9 — the honest count is there, not a rounded one.
 
 ### 🔴 VERDICT: **ADOPT, WITH THREE CONDITIONS.** The declaration is not load-bearing downstream.
 

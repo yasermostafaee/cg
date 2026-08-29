@@ -7089,7 +7089,7 @@ that were never checked):
 
 ---
 
-## [ ] B-179 — `expectedAspect` is dropped for every look-group template, which DISARMS the aspect-mismatch refusal, and the aspect that reaches air is the CATALOG's guess with nothing checking it ⟨priority: high⟩
+## [~] B-179 — `expectedAspect` is dropped for every look-group template, which DISARMS the aspect-mismatch refusal, and the aspect that reaches air is the CATALOG's guess with nothing checking it ⟨priority: high — FIXED by `derive-look-sources`; the CHOICE between (a) and (b) was settled by the owner, and one Acceptance bullet is REJECTED with it⟩
 
 **What:** two joined findings from the [[B-178]] investigation, filed here rather than folded into
 it because their fix is a different shape and touches a refusal that stops takes on air.
@@ -7138,6 +7138,49 @@ across that package returns nothing). So the catalog's declared `format` is an u
 that drives real geometry, and [[B-143]]'s `assumed` flag — the one fact that would say so — still
 has no readers.
 
+### 🔴 RE-SCOPED AND FIXED 2026-08-29 (`SOURCE-DECLARATION-DROP-02`) — the owner rejected this item's own premise, and the fix follows from that
+
+**This item did not choose between (a) and (b). The owner did, by rejecting the reasoning that made
+(a) attractive** — which is why this is a RE-SCOPE and not a tick. His words:
+
+> _"aspect and fit are per-plate right now and have nothing to do with the source — which I think is
+> correct."_
+
+**What that overturns, precisely.** The section below argues `expectedAspect` _"asserts a property of
+the FEED"_ and therefore cannot be per-look, so it belongs on the DECLARATION. The owner reads it as
+the author's intention for the BOX. The code supports his reading: `resolvePlateAspect` runs source
+`format` — source `aspect` — element `expectedAspect` — `assumed`, so **the real feed already
+outranks the author whenever the installation states a format** (verified in
+`tools/caspar-bridge/src/live-plate-fit.ts`). The author's number is a fallback and a VALIDATION
+input, never an assertion the system trusts over the feed. [[C-028]] had already settled the fit the
+same way, per element.
+
+🔴 **(a) IS GONE, not rejected on its merits.** [[B-188]] deleted the multi-frame group's source
+declaration outright, so _"a writer on the declaration"_ has no declaration to write to. **(b) — the
+HOIST — is what shipped:** `collectLookCarrier` reads `expectedAspect` off the plate ELEMENT that
+first serves each key in document order — the same element the carrier's `elementId` already names,
+so the entry describes one element rather than two halves of two. `dynamic` moved the same way, to
+the same `dynamicRoleIndex` the groupless path already used.
+
+**Findings 1 and 2 are therefore FIXED.** The author's `expectedAspect` reaches the carrier for a
+look-group template, so the take's mismatch refusal — which fires only when BOTH the source's
+aspect and the author's are present — is **armed again** for the configuration the product's
+flagship feature uses.
+
+🔴 **Acceptance bullet 3 is DELIBERATELY NOT IMPLEMENTED, and it falls with the premise.** It
+read: _"WHEN two plates serving one routeKey assert DIFFERENT aspects THEN that is named at authoring
+time, not resolved silently by document order."_ That refusal only makes sense if an aspect is a fact
+about an external feed that two looks may not contradict. Under the owner's reading it is two boxes
+carrying two authored intentions, which is not a contradiction — and the feed's own format wins
+over both when it is known. **Document order resolves it, and that is stated rather than silent:** it
+is documented at the carrier, pinned by a test, and named here.
+
+⚠ **What is NOT fixed, and is unchanged by any of this:** the rest of this item's second half
+stands. The bridge still never learns a live source's real dimensions, the catalog's declared
+`format` is still an unverified assertion driving real geometry, and [[B-143]]'s `assumed` flag still
+has no readers. Re-arming the refusal means the author's number is now CHECKED against the
+installation's claim — it does not make that claim true.
+
 ### The fix is NOT [[B-178]]'s
 
 🔴 **`expectedAspect` must NOT become per-look.** It asserts a property of the **FEED** — "this source
@@ -7147,7 +7190,8 @@ why `looks.ts`'s header keeps it on the declaration _"so two looks cannot disagr
 asserts"_. [[B-178]]'s `fitMode` moved per-look because it describes how a feed is placed in a BOX,
 and a look is precisely a change of box. **The two facts differ in kind, so they differ in carrier.**
 
-**Two candidate fixes, and this item deliberately does not choose:**
+**Two candidate fixes — SETTLED above; kept for the reasoning, which is why (a) looked
+right at the time:**
 
 - **(a) a writer on the declaration** — expose `expectedAspect` in the look-group sources editor, so
   the author states it once for the group, where it belongs. Simple; but it is a SECOND place to
