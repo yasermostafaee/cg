@@ -6508,7 +6508,15 @@ stated so it can be argued with.
   it), [[B-171]] (the wording item — a sentence nobody can finish reading and a sentence that is
   wrong are different defects over the same surface).
 
-## [ ] B-174 — the PAGE/MIXER skew is VISIBLE TO THE NAKED EYE on the plant, against a bench figure that says it is sub-frame ⟨priority: high — a measured 2.2–8.3 ms is being contradicted by air, and no item held this phenomenon⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+## [ ] B-174 — the PAGE/MIXER skew is VISIBLE TO THE NAKED EYE on the plant, and the bench figure that made it look impossible measured a DIFFERENT QUANTITY ⟨priority: high — the page half was never measured to a painted frame, and the parts that WERE measured already predict a 1–2 frame skew⟩ — OPEN, filed 2026-08-24 from the two-server plant run; **RE-SCOPED 2026-08-29 (`SKEW-MEASURE-01`) — see the re-scope section below before reading the original framing**
+
+> ⚠ **This heading first read _"against a bench figure that says it is sub-frame … a measured 2.2–8.3 ms
+> is being contradicted by air"_.** That framing is a **category error and is corrected below**: the
+> 2.2–8.3 ms figure ends at `window.update`, a JS entry point, and lives in **§9.4** — a section headed
+> _"Demoted to optional"_ whose own first sentence is _"this decides nothing"_ — not in §9.2 as it was
+> cited. **Nothing contradicts anything; the quantity this item is about was never measured.** The
+> original text is kept verbatim below, because the owner's sighting and the mechanism it records are
+> both sound and only the framing was wrong.
 
 **What the owner confirmed, on the plant.** The page/mixer skew is **visible to the naked eye**.
 That is qualitative confirmation that the phenomenon is real; **the frame count is still missing,
@@ -6562,6 +6570,154 @@ in this session.
 - **Cross-refs:** [[B-155]] (the other artefact in the same window, and the item whose plant
   protocol this shares — read its "what a green suite is not evidence of" section first),
   [[B-167]] (a THIRD way this window goes wrong, by the fills not moving at all).
+
+### 🔴 RE-SCOPED 2026-08-29 (`SKEW-MEASURE-01`) — the "contradiction" is a CATEGORY ERROR, and the bench figure never said what this item quoted it as saying
+
+**Nothing about the owner's sighting is in doubt.** What is wrong is the framing: this item was filed
+as _"a measured 2.2–8.3 ms is being contradicted by air"_. **There is nothing to contradict — nobody
+ever measured the quantity this item is about.** Four findings, each verified in the tree:
+
+1. 🔴 **The citation is to the wrong section.** The figure is in **§9.4**, not §9.2. §9.2 is
+   _"`MIXER FILL … <duration> <tween>` on 2.5.0: ACCEPTED, and which names"_ — the tween vocabulary —
+   and contains **zero** occurrences of `window.update`, `2.2` or `8.3`
+   (`openspec/changes/multibox-layout-switch/design.md`, §9.2 spans 37 lines; checked by extracting
+   the section and grepping it).
+2. 🔴 **§9.4 disclaims itself.** Its heading is _"**Demoted to optional** — `CG ADD` → first painted
+   frame"_ and its first sentence is _"Family 2 is eliminated, so **this decides nothing**. Recorded
+   because it was taken"_. The `CG UPDATE` figure is an aside inside a section that says it decides
+   nothing.
+3. 🔴 **The endpoint is a JS entry point, not a frame.** §9.4 says `CG UPDATE` → `window.update`
+   **2.2–8.3 ms (median ≈5 ms, sub-frame)**. The mixer half lands on a **channel frame**; the page
+   half must still pass style, layout, paint, CEF's off-screen render and CEF's handoff. **The two
+   are different quantities and were never comparable.**
+   ⭐ **And the same section proves the harness COULD have measured paint**: its headline reading is
+   `CG ADD` → **first painted frame**, median **70.2 ms**, using the double-`requestAnimationFrame`
+   "first committed frame" definition §9.6 describes. Paint was measured for the OTHER quantity and
+   not for this one.
+4. ⚠ **"under a quarter of a 20 ms frame at 50i" is wrong on its own terms**, and it was added by the
+   quoting comment rather than by §9.4. §9.2 establishes **25 fps** (_"Measured duration ≈ 2000 ms for
+   50 frames confirms 25 fps (frames, not fields)"_), §9.3 tabulates _"in frames @ 25 fps"_, and §9.6
+   names the channel `1080i5000`. At 1080i50 the **frame** period is **40 ms**; 20 ms is the **field**
+   period. (This error runs in the claim's favour, which is why nobody caught it.)
+
+⇒ **This item does not owe an explanation of a contradiction. It owes the measurement that was never
+taken:** `CG UPDATE` → the page's first COMMITTED FRAME, and then to air.
+
+### What was ruled OUT, in code rather than on the owner's scene
+
+- **A tween on one side only: DEAD, in code.** `CommandBuilder.mixerFit`
+  (`tools/caspar-bridge/src/command-builder.ts:316`) emits exactly
+  `MIXER <t> FILL <rect>` and `MIXER <t> CLIP <rect>` — **no duration, no tween, ever**. The page side
+  sets `mask-*` properties directly (`packages/template-runtime/src/live-source-punch.ts:26-33`) with
+  **no CSS transition declared**. So neither side eases, and §9.2's 36 px / 580–835 px curve-mismatch
+  trap — real, and worth keeping for the day either side animates — **cannot be this artefact.** This
+  is stronger than the owner's export showed: his scene has no `tween` and all looks are `cut`, which
+  rules it out _there_; the code rules it out _everywhere_.
+- **"The mask rebuild is the lag": DEAD, measured.** The holes ARE computed in the browser (nothing
+  mask-shaped is serialised — confirmed, `liveSourceMask` / `MaskHole[]` are declared in `scene.ts`
+  and built by `sceneMaskHoles`, and the owner's export contains no `mask`). But the whole recompute
+  is **sub-millisecond**. Measured on the owner's scene shape (3 looks; 1, 2 and 3 plates), jsdom,
+  medians:
+
+  | scene      | `flattenElements` | `liveArrangementView` | `sceneMaskHoles` | total       |
+  | ---------- | ----------------- | --------------------- | ---------------- | ----------- |
+  | +0 decor   | 0.014 ms          | 0.008 ms              | 0.011 ms         | **0.03 ms** |
+  | +50 decor  | 0.013 ms          | 0.059 ms              | 0.022 ms         | **0.09 ms** |
+  | +200 decor | 0.032 ms          | 0.203 ms              | 0.062 ms         | **0.30 ms** |
+  | +500 decor | 0.074 ms          | 0.561 ms              | 0.117 ms         | **0.75 ms** |
+
+  Against a 40 ms frame, **the compute is not the lag at any plausible scene size.**
+  ⚠ It _does_ recompute more than it needs — `liveArrangementView` calls `flattenElements(scene)` on
+  **every** repunch to build an `authored` map that depends only on the static scene
+  (`packages/template-runtime/src/arrangement-view.ts:41`) — so it is a real (small) waste and the
+  reason the middle column grows with scene size. **Worth tidying; not worth blaming.**
+  ⚠ **A hypothesis this session raised and KILLED before publishing it:** `repunch`'s comment says it
+  "reads the page's CURRENT layout back", which reads like a forced synchronous reflow between a DOM
+  write and a read. It is not — `liveArrangementView` reads `node.style.*` (**inline** style), never
+  `getBoundingClientRect` / `getComputedStyle`, and the runtime contains no such call on this path.
+  **No forced layout occurs.**
+
+- **"Something serialises ahead of `#tellPageLook`": the transport claim HOLDS.** Both halves send at
+  priority `'urgent'` — the reconcile's `mixerFit` lines at `caspar-runtime.ts:5626` and `:5736`, and
+  `#tellPageLook` at `:4943` — so nothing of lower priority queues between them.
+
+### 🔴 What IS left, enumerated hop by hop — and it already predicts a visible skew
+
+**MIXER path:** `MIXER FILL`/`CLIP` ACKed → applied at the next channel frame. §9.3 measured a
+3→2-box cut's five commands at **median 8.16 ms, range 6.86–17.93 ms** command-side — comfortably
+inside one 40 ms frame, so **the picture switches in ONE frame.**
+
+**PAGE path**, in order, with what is known about each:
+
+| #   | hop                                                                                           | cost                          |
+| --- | --------------------------------------------------------------------------------------------- | ----------------------------- |
+| a   | the bridge AWAITS every reconcile ACK before `#tellPageLook` is called at all                 | **6.86–17.93 ms** (§9.3)      |
+| b   | `CG UPDATE` on the wire → `window.update`                                                     | **2.2–8.3 ms** (§9.4)         |
+| c   | JS: `applyArrangementToNodes` + `liveArrangementView` + `sceneMaskHoles` + 8–10 `setProperty` | **≈0.1 ms** (measured, above) |
+| d   | style recalc + layout + paint → first COMMITTED frame                                         | see below                     |
+| e   | CEF's off-screen render tick                                                                  | 🔴 **NOT MEASURED**           |
+| f   | CEF → CasparCG frame handoff                                                                  | 🔴 **NOT MEASURED**           |
+| g   | lands at the next channel frame boundary                                                      | quantised to 40 ms            |
+
+**(a) + (b) alone is 9.1–26.2 ms** — between a quarter and two-thirds of a 40 ms frame — **spent
+before the page has been told anything.** That is the term this item's quoted figure omitted
+entirely, and it is bigger than the figure it quoted.
+
+**(d), measured locally in the repo's Chromium** (system Chrome; the bundled build is not installed
+here, the geo-block CLAUDE.md records), writing the exact `mask-*` property set the runtime writes,
+on a 1920×1080 page with 120 decor nodes, endpoint = double-`requestAnimationFrame` **first committed
+frame** — the same definition §9.6 used:
+
+| plates | JS write | write → committed frame  |
+| ------ | -------- | ------------------------ |
+| 1      | 0.00 ms  | **26.70 ms** (p95 26.90) |
+| 3      | 0.00 ms  | **26.80 ms** (p95 26.90) |
+| 6      | 0.10 ms  | **26.80 ms** (p95 28.20) |
+
+🔴 **Read this correctly: ~26.8 ms is the FRAME CADENCE, not the work.** At a 60 Hz vsync a
+write-then-double-rAF lands 1–2 intervals later (16.7–33.3 ms), and the number is **flat across 1, 3
+and 6 plates** — which is the proof that the style/layout/paint _work_ is small and that the wait is
+quantisation. **The page's hole update is therefore quantised to the page's own frame clock**, and
+that quantisation, not the compute, is the page half's dominant term.
+
+⇒ **Predicted, from measured parts only:** mixer lands on frame N; the page is told 9–26 ms into that
+frame, does ~0.1 ms of work, and then waits for its own next committed frame and CEF's handoff — so
+the holes land on **frame N+1, and N+2 whenever (a)+(b) plus the page tick crosses a second
+boundary.** At 1080i50 that is **40–80 ms**. **That is plainly visible, and it is consistent with
+everything the owner reports.** Nothing here requires the bench figure to have been wrong — only for
+it to have been about something else.
+
+### Candidate fixes, with costs — NONE implemented, the owner chooses
+
+| candidate                                                                                     | cost                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Delay the mixer** by a fixed offset so the fills land with the holes                        | Cheapest, and it is a GUESS calibrated to one plant: the page-side term is a frame quantisation plus an unmeasured CEF handoff, so the right offset is neither constant nor knowable from the bridge. Wrong offset = skew in the other direction, which looks identical and is no better.                                                                                                                                         |
+| **Page acknowledgement gating the mixer** — page confirms it has painted, then the fills move | Correct in principle and the only one that adapts. Costs a new page→bridge round trip on the switch path, ADDS its own latency to a window this item exists to shorten, and needs a defined failure mode when the ack never comes (fall back to today's order, or the switch does not happen). ⚠ Reversing the ORDER is what `setActiveLook` argues against on air-safety grounds — a gate must preserve "fills only on success". |
+| **One tweened timeline driving both**                                                         | Structurally the real answer, and the most expensive: it needs a shared origin and a shared tick, which `live-source-multibox` §6 states the two sides do not have. §9.2's curve table is the prerequisite (`linear` on both sides is the only exactly-matchable pair, 0.0 px). Turns a cut into an animation, which is a product change, not a fix.                                                                              |
+
+**Which I would pick, in two lines:** none of the three yet — **the frame count decides between them,
+and it is one recording away.** If forced today: the **page acknowledgement**, because it is the only
+candidate that does not encode a per-plant constant, and because its cost is a round trip on a path
+that is already awaiting several.
+
+### The ONE plant recording that closes this, `B-155` and the audio measurement together
+
+Same visit, same capture, channel read EMPTY before and after, `2.5.0` build asserted:
+
+1. **SDI/channel-side capture at 1080i50**, frame-stepped — this item's whole deliverable is the count
+   of frames in which fills and holes disagree, reproduced twice.
+2. **A `PLAY`-free look switch** — that separates this item from [[B-155]] by construction: `PLAY` in
+   the window ⇒ `B-155`; only `MIXER FILL` then `CG UPDATE` ⇒ this item. Capture one of each and both
+   items are answered from one recording.
+3. **The AMCP trace alongside**, timestamped on one clock (the committed harness already does this),
+   so each visible frame can be attributed to a command.
+4. ⚠ The brief also names an outstanding **audio walk** as riding this visit. **A distinct PRD anchor
+   for it was not found** by this session — whoever plans the visit should confirm it exists before
+   counting on it; `B-155`'s owed plant measurement was verified and does share this recording.
+
+**Env for the measurements above:** local, 2026-08-29. jsdom for the compute table; system Chrome
+(Playwright, `channel: 'chrome'`) for the paint table, at 60 Hz — **not CEF, and not at the channel
+rate**, which is exactly why (e) and (f) remain unmeasured.
 
 ## [ ] B-177 — a DeckLink input admits ONE producer, `CLEAR` returns before the destroy, and the failure arrives disguised as `404 File not found.` ⟨priority: high — the seating path re-`PLAY`s live layers, and the disguise sends the diagnosis to the wrong place⟩ — OPEN, filed 2026-08-25 from the DeckLink plant walk
 

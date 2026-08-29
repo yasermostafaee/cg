@@ -1742,3 +1742,30 @@ raised in DOCUMENT scope precisely so it does not depend on a group. No number t
 is recorded inside `B-187`.
 
 ⇒ **Next free after this session is `B-188`.**
+
+### 2026-08-29 (later) — no number taken: `B-174` RE-SCOPED in place, from `SKEW-MEASURE-01`
+
+**No new number.** The phenomenon already had one; what was wrong was its framing, so `B-174` was
+corrected in place rather than superseded by a fresh item. Recorded here because a reader diffing the
+log would otherwise see a session that measured a great deal and claimed nothing.
+
+**What changed:** `B-174` was filed as _"a measured 2.2–8.3 ms is being contradicted by air"_. It is
+not a contradiction — it is a **category error**, and the citation was wrong twice over:
+
+- the figure is in **§9.4**, not §9.2 (§9.2 is the tween vocabulary and contains **zero** occurrences
+  of `window.update`, `2.2` or `8.3`);
+- **§9.4 is headed _"Demoted to optional"_ and opens _"this decides nothing"_**;
+- its endpoint is `window.update`, a **JS entry point**, while the mixer half lands on a **channel
+  frame** — and the very same section measured a PAINTED-frame quantity (`CG ADD` → first painted
+  frame, median **70.2 ms**), so the harness could measure paint and simply did not, for this one;
+- the quoting comment's _"a 20 ms frame at 50i"_ is wrong on the document's own terms — §9.2/§9.3
+  establish **25 fps** and §9.6 names `1080i5000`, so the **frame** period is **40 ms**.
+
+⭐ **The lesson, and it is the reason this is in the claim log rather than only in the item:** a figure
+was quoted across three files (`caspar-runtime.ts`, `B-174`, `B-178`) with a section number attached,
+and **the section number was never followed**. The quote propagated; the citation rotted. `B-174` was
+then filed AGAINST that quote, so a mis-citation became a bug item's whole premise. **Follow the
+citation before building on the number** — the same discipline the phantom-number entries in this file
+record for item numbers, applied to measurements.
+
+⇒ **Next free is unchanged: `B-188`.**
