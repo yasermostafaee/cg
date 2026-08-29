@@ -201,10 +201,10 @@ describe('B-183 — a new plate is created UNASSIGNED', () => {
     expect(optionsOf(sel as HTMLSelectElement)).toEqual(['|— no source —', 'l1|l1', 'l2|l2']);
   });
 
-  it('is refused with live-source-unassigned, and the message names the picker', () => {
+  it('is refused with live-source-unset, and the message names the picker', () => {
     seed(defaultLiveSource('p1', 0, 0) as unknown as Element);
     const mine = issuesNow().filter((i) => i.elementId === 'p1');
-    expect(mine.map((i) => i.code)).toEqual(['live-source-unassigned']);
+    expect(mine.map((i) => i.code)).toEqual(['live-source-unset']);
     const m = mine[0]?.message ?? '';
     expect(m).toContain('has no source');
     // B3 — WITH a group the remedy is the picker, and the message says so.
@@ -218,7 +218,7 @@ describe('B-183 — a new plate is created UNASSIGNED', () => {
   it('names the FREE-TEXT row instead when the template declares no group', () => {
     seedNoGroup(defaultLiveSource('p1', 0, 0) as unknown as Element);
     const mine = issuesNow().filter((i) => i.elementId === 'p1');
-    expect(mine.map((i) => i.code)).toEqual(['live-source-unassigned']);
+    expect(mine.map((i) => i.code)).toEqual(['live-source-unset']);
     expect(mine[0]?.message).toContain('"source id" box');
     expect(mine[0]?.message).not.toContain('"source" list');
   });
@@ -244,7 +244,7 @@ describe('B-183 — a new plate is created UNASSIGNED', () => {
       issuesNow()
         .filter((i) => i.elementId === 'p1')
         .map((i) => i.code),
-    ).toEqual(['live-source-unassigned']);
+    ).toEqual(['live-source-unset']);
   });
 });
 

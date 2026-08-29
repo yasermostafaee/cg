@@ -263,7 +263,7 @@ function IssuesPart({ scene }: { scene: Scene }): JSX.Element | null {
         plate a fresh draw produces would have vanished from the panel the author works in
         — a surface regression hidden inside a message fix.
       */
-      i.code === 'live-source-unassigned' ||
+      i.code === 'live-source-unset' ||
       i.code === 'look-source-duplicate' ||
       i.code === 'look-second-group' ||
       (i.code === 'live-source-overlap' && i.message.includes('look "')),

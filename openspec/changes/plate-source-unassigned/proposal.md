@@ -40,7 +40,7 @@ lies about the scene"_) was true. What it could not render was the state this ch
    DECLARATION always names one.
 2. **A new plate is created UNASSIGNED.** `defaultLiveSource` drops the parameter entirely, and
    `nextLiveSourceId` is **deleted** rather than left unused.
-3. **A new refusal, `live-source-unassigned`**, in DOCUMENT scope so it fires with or without a
+3. **A new refusal, `live-source-unset`**, in DOCUMENT scope so it fires with or without a
    look group. It replaces two wrong messages an absent value used to produce: the device-id
    refusal (_"is not symbolic (“undefined”)"_) and `look-source-undeclared` (_"references source
    “”"_).

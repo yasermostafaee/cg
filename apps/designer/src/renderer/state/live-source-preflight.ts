@@ -261,11 +261,21 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
         🔴 Checked in DOCUMENT scope, so it fires whether or not the template declares a
         group. `look-source-undeclared` is group-scoped by nature; being pointed at nothing is
         not — a plate with no source can never be seated by anyone.
+
+        ⚠ **THE CODE IS `live-source-unset`, NOT `live-source-unassigned`, AND THAT IS NOT A
+        STYLE CHOICE.** `live-source-unassigned` is ALREADY TAKEN, by the bridge
+        (`tools/caspar-bridge/src/live-plate-assignment.ts:36`, `LIVE_PLATE_UNASSIGNED`), where
+        it means something genuinely different: the plate HAS a `routeKey` and the OPERATOR has
+        not mapped it to a catalog source in CG Control. Different actor, different surface,
+        different remedy — "the author has not chosen a source" vs "the operator has not
+        assigned an input". `ExportIssue.code` is a bare `z.string()`, so nothing would have
+        stopped the two colliding, and a reader grepping either subsystem would have landed in
+        the other. Do not "tidy" this back to `unassigned`.
       */
       if (element.routeKey === undefined) {
         issues.push({
           severity: 'error',
-          code: 'live-source-unassigned',
+          code: 'live-source-unset',
           message:
             `Live Source "${label(element)}" has no source: it is not pointed at anything, so ` +
             `nothing would ever be composited behind it. ${chooseASource}`,
@@ -500,7 +510,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
 
         This read `?? ''` and then asked whether `''` was declared, so a plate with no source
         was reported as *referencing source ""* — a claim about a reference that does not
-        exist. `live-source-unassigned` (document scope, above) owns that state and says the
+        exist. `live-source-unset` (document scope, above) owns that state and says the
         true thing about it. Skipping is not a hole: the unassigned check runs for EVERY
         plate, group or no group, so the plate is still refused — once, with the right words.
       */

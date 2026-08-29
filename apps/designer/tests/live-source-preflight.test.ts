@@ -400,7 +400,7 @@ describe('D-137 — the binding rule', () => {
  *
  * - a new plate is **UNASSIGNED** — `live-N` was the `+ Source` input's PLACEHOLDER TEXT, a
  *   suggestion the author had not accepted, and nothing declared it;
- * - so a fresh plate **IS** exactly one error, `live-source-unassigned`, which is the whole
+ * - so a fresh plate **IS** exactly one error, `live-source-unset`, which is the whole
  *   point: the owner's principle is **nothing lands unconfirmed**, and the refusal is how the
  *   author is told there is a choice to make.
  *
@@ -421,7 +421,7 @@ describe('B-183 — the default factory hands over NO source', () => {
   it('is refused as UNASSIGNED — one issue, naming the plate and the control', () => {
     const el = defaultLiveSource('el-9', 40, 60);
     const issues = liveSourceIssues(scene([el as unknown as Element]));
-    expect(issues.map((i) => i.code)).toEqual(['live-source-unassigned']);
+    expect(issues.map((i) => i.code)).toEqual(['live-source-unset']);
     const only = issues[0];
     expect(only?.severity).toBe('error');
     expect(only?.elementId).toBe('el-9');

@@ -3087,7 +3087,7 @@ named — see [[B-185]]'s neighbourhood and the note under "What was NOT reprodu
   `LiveSourceIdSchema` instead would have let a group declare an empty source.
 - **`defaultLiveSource` drops the parameter entirely**, and **`nextLiveSourceId` is deleted** rather
   than left unused, with its (expired) argument recorded where it stood.
-- **A new refusal, `live-source-unassigned`**, in DOCUMENT scope so it fires with or without a
+- **A new refusal, `live-source-unset`**, in DOCUMENT scope so it fires with or without a
   group. It replaces two messages that were both false about this state: the device-id refusal
   (_"is not symbolic (“undefined”)"_) and the undeclared one (_"references source “”"_, after a
   `?? ''`). Both describe a plate that HAS a source and got it wrong.

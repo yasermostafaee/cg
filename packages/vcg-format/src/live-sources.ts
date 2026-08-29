@@ -196,7 +196,7 @@ export function collectLiveSources(scene: Scene): LiveSourceDeclaration[] {
 
       A declaration's whole content is `sourceId`; a plate that has not been pointed at a
       source has no id to put there, and inventing one is exactly the defect `B-183` removes.
-      Skipping here is not a silent swallow: `live-source-unassigned` refuses the EXPORT with
+      Skipping here is not a silent swallow: `live-source-unset` refuses the EXPORT with
       a message that names the plate, so the author is told by the surface built for it rather
       than by a missing line in a carrier they never read.
     */

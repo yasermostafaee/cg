@@ -71,7 +71,7 @@ An absent `routeKey` used to fall into two checks that both then said something 
 | `look-source-undeclared` | _"references source “”"_ (after `?? ''`)                 |
 
 Both describe a plate that **has** a source and got it wrong. Neither describes one that has none.
-So `live-source-unassigned` is a separate code, and each of the two old checks now declines the
+So `live-source-unset` is a separate code, and each of the two old checks now declines the
 state that is not its own.
 
 🔴 **In DOCUMENT scope, not group scope.** `look-source-undeclared` is group-scoped by nature — it
@@ -111,7 +111,7 @@ all of them red.
 
 ## 6. One surface regression this change had to avoid
 
-Splitting `live-source-unassigned` out of `look-source-undeclared` would have quietly removed the
+Splitting `live-source-unset` out of `look-source-undeclared` would have quietly removed the
 newly drawn plate from the Looks panel, whose filter lists codes explicitly. The very plate a fresh
 draw produces would have vanished from the panel the author works in — a surface regression hidden
 inside a message fix. The new code is added to that filter in the same commit.

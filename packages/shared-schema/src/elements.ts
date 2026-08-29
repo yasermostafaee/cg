@@ -1191,7 +1191,7 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    * the one thing this must not permit.
    *
    * ⚠ **Absent is not "invalid", and it is not "declared".** The export refuses it — see
-   * `live-source-unassigned` in `live-source-preflight.ts`, whose message is separate from
+   * `live-source-unset` in `live-source-preflight.ts`, whose message is separate from
    * `look-source-undeclared` precisely because "you have not chosen yet" and "you chose
    * something that does not exist" are different mistakes with different remedies.
    *
