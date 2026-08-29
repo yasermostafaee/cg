@@ -1707,3 +1707,38 @@ should not have to rediscover it: the per-assignment `fitMode` override is alrea
 dimension** — so the existing override is one value per plate, in force in EVERY look. The owner's
 decision that it be remembered PER LOOK is therefore a storage-shape change, not a surface. The item
 leads with that.
+
+### 2026-08-29 (later) — `B-187`, from `PLATE-DEFAULT-SOURCE-FILE-01`
+
+**Claimed:** `B-187` ([bugs-designer.md](bugs-designer.md)) — a default source for a new plate, in two
+halves (grouped: next free DECLARED source in the look; groupless: a generated label is legitimate).
+**Docs only; nothing implemented.**
+
+**Derivation:** highest `B-` HEADING across every ref (`^## \[.\] B-\d{3}`) was **`B-186`**; `B-187` …
+`B-193` returned **no headings anywhere**, and the only tree-wide hits in that range are prose — this
+file's own 2026-08-29 note and `B-183`'s number-verification bullet, both merely saying the range was
+clear. `git stash list` empty; one worktree. ⇒ `B-` stays contiguous `B-001` … `B-187`, no gaps.
+
+### ⭐ It is filed as a RE-SCOPE, not as a new capability, and the log should say which
+
+`B-183` (this morning) deleted `nextLiveSourceId` outright and removed `defaultLiveSource`'s `routeKey`
+parameter. Its evidence was entirely about the GROUPED case — a plate holding `live-1` under a group
+declaring `l1`/`l2` — and the fix was applied to both cases. `B-187`'s groupless half restores what
+that over-removed; only its grouped half is new.
+
+⚠ **Worth recording as a pattern in its own right:** `B-183` was filed, fixed, gated and discharged
+inside one day, and the same day produced a follow-up saying half of it went too far. Nothing about
+`B-183` was wrong — the orphan was real and the fix holds — but a fix scoped by the evidence in front
+of it removed a capability the evidence never touched. **The tell was available at the time:** `B-183`'s
+own item records `lookGroups` being absent as the case where `look-source-undeclared` cannot run, and
+did not ask what the DEFAULT should be in that same case.
+
+### ⚠ A number was NOT taken for the export hole, because the hole is not real
+
+The brief required a sourceless plate exporting quietly to be filed as its own item **if** it existed.
+Measured instead: on a `lookGroups: []` scene, `Exporter.preflight` returns `["live-source-unset"]` at
+`severity: 'error'` — the set `produce` throws on — so the export is blocked. `live-source-unset` is
+raised in DOCUMENT scope precisely so it does not depend on a group. No number taken; the measurement
+is recorded inside `B-187`.
+
+⇒ **Next free after this session is `B-188`.**

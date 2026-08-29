@@ -3301,3 +3301,119 @@ found it only looked at `apps/designer`.
 
 - **Cross-refs:** [[B-183]] (the change whose stale call sites exposed it).
 - The number was verified free before this heading was written, in the same sweep as [[B-183]].
+
+---
+
+## [ ] B-187 — a new Live Source plate starts UNASSIGNED even where a default could not be wrong, so a six-plate layout is six manual assignments ⟨priority: medium⟩
+
+**What:** [[B-183]] stopped the tool inventing a source id. It stopped it in BOTH cases, and only one
+of them was the defect. The owner is now assigning every plate by hand.
+
+> **GROUPED** — a new plate takes the **next declared source not already used by another plate IN THE
+> SAME LOOK**, in declaration order. When all are taken, or none are declared → **unassigned**, and the
+> Export refuses exactly as it does today. 🔴 **Never invent a name here.**
+>
+> **GROUPLESS** — a **generated label is legitimate**, because there is no declaration to contradict.
+
+### 🔴 Why the two halves differ — this asymmetry IS the item
+
+Both halves obey the owner's standing principle, **"nothing lands unconfirmed"**, and they obey it by
+different routes because the two situations differ in what a guess can be wrong ABOUT:
+
+- **Grouped** — a declaration list EXISTS, so a guessed name can contradict it. That contradiction is
+  precisely the orphan [[B-183]] fixed. But choosing an ALREADY-DECLARED source contradicts nothing:
+  the author declared it, and taking the next FREE one means **two plates never land on one input**.
+- **Groupless** — there is **no declaration list at all** to contradict. Verified in the owner's own
+  export: `live1.vcg` carries `lookGroups: []` and `compositions: []` and the export SUCCEEDED. A
+  generated label there is not a claim about anything the author wrote.
+
+⭐ **And a groupless label commits nothing ON AIR — verified, not assumed.** `plateId` is documented as
+_"the template's DECLARED `sourceId`, read as the PLATE IDENTIFIER"_
+(`packages/shared-ipc/src/channels/sources.ts:370`), and `collectLiveSources` emits
+`sourceId: el.routeKey` (`packages/vcg-format/src/live-sources.ts:221`). So the label is a **mapping
+key the operator must still bind in CG Control** before anything reaches a producer. Nothing lands
+until they do.
+
+### ⚠ This is PARTLY A RE-SCOPE OF [[B-183]], and it should be read that way
+
+[[B-183]] deleted `nextLiveSourceId` **outright** — its own words: _"`nextLiveSourceId` is **deleted**
+rather than left unused"_, and `defaultLiveSource` _"drops the `routeKey` parameter entirely (not
+merely its default), so the next caller cannot reopen the door"_.
+
+**That removal is what the owner is now feeling, and the grouped/groupless split is the line that
+should have been drawn then.** `B-183`'s evidence was entirely about the GROUPED case — a plate holding
+`live-1` under a group declaring `l1`/`l2` — and the fix was applied to both. The groupless half of
+this item restores a capability `B-183` over-removed; the grouped half is genuinely new.
+
+⚠ **Do NOT implement the groupless half by reviving `nextLiveSourceId` as it was.** It swept
+`live-N` scene-wide with no notion of a group, so the moment a group is added it would start handing
+out undeclared names again — `B-183` by the back door. Whatever generates the label must know whether a
+group is in scope. (See the open question on collisions below.)
+
+### What was MEASURED first — all four, by value (Task A1)
+
+| #   | question                                                      | measured                                                                                                                                                  |
+| --- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | a new plate INSIDE a group                                    | `defaultLiveSource('p1',100,100).routeKey` ⇒ **`undefined`**                                                                                              |
+| 2   | a new plate with NO `lookGroups`                              | **identical** — the canvas tool calls the same factory with no 4th argument and **does not branch on whether a group exists**, so 1 and 2 have one answer |
+| 3   | does an UNSET `routeKey` block EXPORT with no group in scope? | **YES — the hole is not real**                                                                                                                            |
+| 4   | is a groupless plate's `routeKey` what the operator maps?     | **YES** (see the two anchors above)                                                                                                                       |
+
+**Q3 in full, because the brief asked for it to be ruled out or filed separately.** On a scene with
+`lookGroups: []` holding one unset plate, `Exporter.preflight` returns `["live-source-unset"]` at
+`severity: 'error'` — which is exactly the set `produce` filters and throws on
+(`Exporter.ts:370`) ⇒ **export IS BLOCKED**. `live-source-unset` is raised in DOCUMENT scope, before
+and independently of the group block, precisely so it does not depend on a group being present.
+
+⚠ **Control, and it reproduces the owner's own file exactly:** the same groupless scene with
+`routeKey: "l1"` yields `codes = []` — which is why `live1.vcg` exported. ⇒ **No sourceless plate is
+exporting quietly, and no separate item is filed.**
+
+### ⚠ Rejected, with reasons — recorded so they are not relitigated
+
+- **Always the first declared source** — silently binds two plates to one input, and the error is never
+  seen. (The same alternative [[B-183]] rejected, for the same reason.)
+- **Keeping `live-N` inside a group** — recreates the orphan [[B-183]] fixed.
+- **Restricting the grouped half to "exactly one free source"** — the owner's `livegroup.vcg` declares
+  `l1`/`l2`/`l3` across three looks holding 1, 2 and 3 plates; under that restriction **five of the six
+  plates would still be manual**, which is the complaint unfixed.
+
+### The owner's evidence, attributed
+
+⚠ Recorded as HIS reading, not as something re-derived here — **the two `.vcg` files were not available
+to this session**, so `livegroup.vcg`'s contents below are his report and the `live1.vcg` shape was
+reproduced from its stated fields rather than read from the ZIP:
+
+- `live1.vcg` — one plate, `routeKey: "l1"`, `lookGroups: []`, `compositions: []`, export SUCCEEDED.
+- `livegroup.vcg` — `group-1` declares `l1`, `l2`, `l3`; three looks holding 1, 2 and 3 plates; every
+  look consumed the declared sources **in declaration order**, all six assigned by hand. **The rule
+  above reproduces all six.**
+
+### Open questions — RECORDED, not answered
+
+- Is the auto-assignment **STAGED** like every other edit, or applied at creation? (⚠ [[R-059]] takes
+  the staged answer for the fit-mode override; whether a CREATION default is the same kind of act is a
+  separate question, not a corollary.)
+- What happens when a declared source is later **removed** — does the plate revert to unassigned, or
+  keep a now-undeclared value and go red under `look-source-undeclared`?
+- **Does the surface show that a value came from a DEFAULT rather than from the author?** ⚠ [[B-183]]
+  already made the control mark an INVALID value (`(undeclared)`); this is the adjacent question and it
+  is the [[B-141]] / [[B-143]] / [[B-144]] family — _"the system knows something and does not say it"_.
+  A default the author never typed, presented indistinguishably from one they did, is that pattern
+  exactly, and it is the reason `B-183` exists at all.
+- **What generates the groupless label, and can it collide with a name a group later declares?** A
+  plate labelled `live-1` in a groupless composition becomes undeclared the moment a group is created
+  that does not declare `live-1`.
+- Does _"already used in this look"_ count plates in **nested compositions**, or only direct children?
+  (⚠ The look's plates ARE nested — a look is an instanced composition — so this is not academic.)
+
+- **Cross-refs:** [[B-183]] (the removal this partly re-scopes, and the orphan the grouped half must not
+  recreate); [[C-028]] / [[B-178]] (the per-look resolution precedent — the authored fit mode already
+  resolves PER LOOK, which is the same granularity the grouped half's "in the same look" reads at);
+  [[B-141]] / [[B-143]] / [[B-144]] (the family the third open question belongs to); [[R-059]] (the
+  staged-vs-live question, answered there for a different act); [[B-186]] (the Designer's tests are not
+  typechecked — relevant to whoever implements this).
+- **Number:** highest `B-` HEADING across **every** ref was `B-186`; `B-187` … `B-193` returned **no
+  headings anywhere** and no forward references (the only tree-wide hits for that range are this
+  registry's and `B-183`'s own prose about the range being clear). `git stash list` empty;
+  `git worktree list --porcelain` showed this checkout only. **Nothing is implemented by this item.**
