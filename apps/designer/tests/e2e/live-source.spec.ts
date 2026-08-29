@@ -84,11 +84,33 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.newProject('LiveSource');
     await app.addLiveSource({ x: 200, y: 160 });
 
-    // It exists on the canvas, and its default id is the symbolic `live-1`.
-    await expect(holes(app)).toHaveCount(1);
-    await expect(app.liveSourceIdInput).toHaveValue('live-1');
+    /*
+      ⭐ `B-183` — IT EXISTS ON THE CANVAS AND POINTS AT NOTHING.
 
-    // Rename it — the bars' label follows, which is what makes several holes on one
+      This asserted `toHaveValue('live-1')`. That default was the placeholder text of the
+      Looks panel's `+ Source` input — a suggestion the author had not accepted, which
+      nothing declared — so a freshly drawn plate was born referencing an undeclared
+      source and the preflight then blamed the author for it. The owner's principle:
+      nothing lands unconfirmed.
+    */
+    await expect(holes(app)).toHaveCount(1);
+    await expect(app.liveSourceIdInput).toHaveValue('');
+    // And the bars SAY so, rather than looking finished.
+    await expect(label(app)).toHaveText('no source');
+
+    /*
+      🔴 So a freshly drawn hole is NOT exportable — that is the feature, not a regression.
+
+      ⚠ Asserted on the PILL only, deliberately. Opening the Issues modal to read the message
+      DESELECTS the plate (measured — the next `setLiveSourceId` then timed out waiting for an
+      Inspector input that is not rendered for an empty selection), and re-selecting it here
+      would be plumbing in service of a string this suite is not the right place to pin. The
+      message is asserted BY VALUE in `plate-source-unassigned.dom.test.ts`, and the modal's
+      own mechanics are covered by the `D-157` tests below.
+    */
+    await expect(errorPill(app)).toHaveCount(1);
+
+    // Choose one — the bars' label follows, which is what makes several holes on one
     // frame distinguishable at a glance.
     await app.setLiveSourceId('guest-1');
     await expect(label(app)).toHaveText('guest-1');
@@ -100,7 +122,7 @@ test.describe('Live Source (D-137 phase 1)', () => {
       app.inspector.getByRole('textbox', { name: 'Live Source key source id' }),
     ).toHaveCount(0);
 
-    // No preflight error at any point: a freshly drawn hole is exportable.
+    // `B-183` — and choosing a source CLEARS it: the refusal is a prompt, not a wall.
     await expect(errorPill(app)).toHaveCount(0);
   });
 
@@ -209,6 +231,10 @@ test.describe('Live Source (D-137 phase 1)', () => {
   test('the Inspector offers nothing a plate cannot honour', async ({ app }) => {
     await app.newProject('LiveSourceAffordances');
     await app.addLiveSource({ x: 200, y: 160 });
+    // `B-183` — a new plate is UNASSIGNED, so it is a preflight error until a source is
+    // chosen. This test is about which CONTROLS the Inspector offers, so the source is set
+    // to keep the composition clean; the unassigned state has its own test above.
+    await app.setLiveSourceId('guest-1');
 
     // No keyframe diamond on ANY transform field — the rect is composed once at
     // import and sent as a static MIXER FILL, so an animated hole would slide off
@@ -268,6 +294,20 @@ test.describe('Live Source (D-137 phase 1)', () => {
   }) => {
     await app.newProject('ExportBlockMarks');
     await app.addLiveSource({ x: 200, y: 160 });
+    /*
+      ⭐ `B-183` — THE FIRST PLATE GETS A SOURCE; THE SECOND DELIBERATELY DOES NOT.
+
+      A plate now points at nothing until the author chooses, so with both left unassigned the
+      marks could never reach zero: after the undo the SURVIVING plate still carries its own
+      `live-source-unset` error, and this test failed exactly there (`expected 0, received 1`).
+
+      Assigning only the FIRST is what keeps the undo honest. Setting a source on the second
+      would add a history entry between the two the test relies on, so the single `undo()`
+      below would revert that id instead of removing the plate — and the test would then be
+      asserting undo granularity rather than the marks. The second plate is removed wholesale,
+      so whether it had a source never mattered.
+    */
+    await app.setLiveSourceId('guest-1');
     await app.addLiveSource({ x: 230, y: 190 });
     await expect(holes(app)).toHaveCount(2);
 
@@ -320,6 +360,10 @@ test.describe('Live Source (D-137 phase 1)', () => {
   }) => {
     await app.newProject('ExportBlockClean');
     await app.addLiveSource({ x: 120, y: 120 });
+    // `B-183` — "clean" now REQUIRES a chosen source: a plate points at nothing until the
+    // author says otherwise, and this test is the positive control for the MARKS, so its
+    // composition has to actually be clean.
+    await app.setLiveSourceId('guest-1');
 
     await expect(app.page.locator('[data-testid^="canvas-error-mark-"]')).toHaveCount(0);
     const exportBtn = app.page.getByRole('button', { name: 'Export .vcg' });
@@ -333,6 +377,8 @@ test.describe('Live Source (D-137 phase 1)', () => {
   }) => {
     await app.newProject('LiveSourceAspect');
     await app.addLiveSource({ x: 200, y: 160 });
+    // `B-183` — set the source so the ASPECT is the only thing under test here.
+    await app.setLiveSourceId('guest-1');
 
     // D-147 — a new plate shows its aspect as a NAMED preset, with the decimal
     // beside it: `16:9` and `1.78` are two spellings of one number and the field
@@ -409,6 +455,8 @@ test.describe('Live Source (D-137 phase 1)', () => {
   test('C-028 — the fit mode is authored per plate, and defaults to `contain`', async ({ app }) => {
     await app.newProject('LiveSourceFitMode');
     await app.addLiveSource({ x: 200, y: 160 });
+    // `B-183` — set the source so the FIT MODE is the only thing under test here.
+    await app.setLiveSourceId('guest-1');
 
     // Scenario: "An existing plate defaults to `contain`". A fresh plate stores NO value
     // and the control reads the default — absent is `contain`, never `cover`.
@@ -475,10 +523,28 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.setInspectorNumber('X position', 1000);
     await app.setInspectorNumber('Y position', 0);
 
-    // The tool hands out `live-1`, `live-2`: two holes sharing an id would map to ONE
-    // producer with nothing saying so.
+    /*
+      ⭐ `B-183` — THE TOOL NO LONGER HANDS OUT IDS, SO INDEPENDENCE IS THE AUTHOR'S.
+
+      This asserted `['live-1', 'live-2']` on the grounds that "two holes sharing an id
+      would map to ONE producer with nothing saying so". That reasoning still holds and is
+      now enforced where it belongs — on ids the author actually chose (`look-source-duplicate`)
+      — rather than by a generator inventing undeclared names nobody had accepted.
+
+      Both plates therefore start unassigned, SAY so on their bars, and are refused until the
+      author names them. Independence is then asserted on the chosen ids.
+    */
+    const before = await holes(app).locator('[data-cg-live-source-label]').allTextContents();
+    expect(before).toEqual(['no source', 'no source']);
+    await expect(errorPill(app)).toHaveCount(1);
+
+    await app.selectElementById(ids[0]!);
+    await app.setLiveSourceId('guest-1');
+    await app.selectElementById(ids[1]!);
+    await app.setLiveSourceId('guest-2');
+
     const labels = await holes(app).locator('[data-cg-live-source-label]').allTextContents();
-    expect(labels.sort()).toEqual(['live-1', 'live-2']);
+    expect(labels.sort()).toEqual(['guest-1', 'guest-2']);
     await expect(errorPill(app)).toHaveCount(0);
   });
 });

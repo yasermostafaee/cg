@@ -29,7 +29,7 @@
 
 ## 2. `B-183` — the refusal, and the remedy
 
-- [x] 2.1 New `live-source-unassigned`, DOCUMENT scope, so it fires with or without a group
+- [x] 2.1 New `live-source-unset`, DOCUMENT scope, so it fires with or without a group
 - [x] 2.2 `live-source-device-id` no longer claims an absent id "is not symbolic (“undefined”)"
 - [x] 2.3 `look-source-undeclared` no longer claims an absent id "references source “”"
 - [x] 2.4 Both messages name the panel, the row and the choice — resolved ONCE from
@@ -59,7 +59,7 @@
 - [x] 5.1 No tolerance, no severity downgrade, no suppression in the root scope
 - [x] 5.2 `look-source-undeclared` keeps its reasoning and its `error` severity
 - [x] 5.3 The check is NOT extended into look compositions — filed as a note, not implemented
-- [x] 5.4 🔴 `live-source-unassigned` added to the Looks panel's filter, so the split did not
+- [x] 5.4 🔴 `live-source-unset` added to the Looks panel's filter, so the split did not
       silently shrink that panel's coverage
 
 ## 6. Tests
@@ -81,6 +81,38 @@
 - [x] 6.7 🔴 **Discrimination proved by reverting.** Whole mechanism reverted ⇒ **9 of 68 RED**
       (7/9 new file, 2/42 preflight). The 2 still-green in the new file are both positive controls;
       `looks-issues.dom.test.ts` (5) and `look-preflight.test.ts` (12) stayed entirely green
+- [x] 6.8 🔴 **The E2E fallout — SEVEN specs; six found by `git grep`, the seventh only by
+      running the suite (6.11).** Not one of them could redden a local gate. This is
+      golden rule 9 exactly: the deliverable was partly a STRING and a DEFAULT, so nothing local
+      could redden (`pnpm gate` does not run Playwright, `P-028`). Two asserted the old contract
+      outright — `toHaveValue('live-1')` with _"a freshly drawn hole is exportable"_, and
+      `['live-1','live-2']` — and are rewritten to the new one. Four more drew a plate, never set
+      an id, and asserted no error pill; each gets one explicit `setLiveSourceId` with its reason
+- [x] 6.9 ⚠ **Deliberately NOT fixed by teaching the `addLiveSource` fixture to assign an id.**
+      One edit instead of six, and it would make the helper stop mirroring what the real tool
+      does — a fixture that quietly differs from the product is how a suite stops being evidence
+- [x] 6.10 Checked and unaffected: `looks.spec.ts` assigns through the `source` picker with
+      DECLARED ids (`selectOption` matches by value, and the new "no source" entry is merely an
+      extra option); `arrangements.spec.ts` makes no export or issue assertion at all
+- [x] 6.11 🔴 **THE GREP WAS NECESSARY AND NOT SUFFICIENT — a SEVENTH spec broke, and only
+      RUNNING the suite found it.** The grep predicate was "asserts no error pill", and
+      `D-157 — overlapping boxes are MARKED … and the marks clear when fixed` asserts neither a
+      pill nor a string: it undoes back to one plate and expects **zero** marks. With both
+      plates unassigned the survivor still carried its own error, so it failed
+      `expected 0, received 1`. The real predicate was never "mentions the old string" but
+      **"depends on the SET of preflight issues"**, which a grep cannot express.
+      ⭐ **The lesson is not that the grep was wrong — it caught six the run would have found
+      one at a time — but that a non-authoritative Windows run STILL EARNS ITS KEEP.** It
+      discharges nothing (that rule is unchanged), and it is not evidence about Linux; it is
+      the cheapest way to learn that a predicate was too narrow
+- [x] 6.12 That test is fixed WITHOUT touching undo granularity: only the FIRST plate is given a
+      source. Assigning the second would insert a history entry between the two the test relies
+      on, so its single `undo()` would revert an id instead of removing a plate — and the test
+      would silently become an assertion about undo rather than about the marks
+- [x] 6.13 The rewritten first spec asserts the refusal on the PILL only. Opening the Issues
+      modal to read the message DESELECTS the plate — measured, the next `setLiveSourceId`
+      timed out on an Inspector input that is not rendered for an empty selection — and the
+      message is already pinned by value at unit level
 
 ## 7. Gate
 
